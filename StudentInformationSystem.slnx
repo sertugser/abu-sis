@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="SIS.API/SIS.API.csproj" />
+  <Project Path="SIS.Application/SIS.Application.csproj" />
+  <Project Path="SIS.Domain/SIS.Domain.csproj" />
+  <Project Path="SIS.Infrastructure/SIS.Infrastructure.csproj" />
+  <Project Path="SIS.Tests/SIS.Tests.csproj" />
+</Solution>

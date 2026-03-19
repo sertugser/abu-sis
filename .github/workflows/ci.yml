@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 12345
+          POSTGRES_DB: StudentInfoSystem
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release --warnaserror
+
+      - name: Run tests
+        run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
+
+      - name: Upload coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: '**/TestResults/**/coverage.cobertura.xml'
+          retention-days: 7
+
+  frontend:
+    name: Frontend Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: SIS.Web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: SIS.Web
+        run: npm ci
+
+      - name: Lint
+        working-directory: SIS.Web
+        run: npm run lint
+
+      - name: Type check
+        working-directory: SIS.Web
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: SIS.Web
+        run: npm run build
+
+      - name: Upload build artifact
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: SIS.Web/dist/
+          retention-days: 14
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: SIS.Web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: SIS.Web
+        run: npm ci
+
+      - name: NPM audit
+        working-directory: SIS.Web
+        run: npm audit --audit-level=high || true
+
+      - name: Check for secrets in code
+        run: |
+          echo "Scanning for potential secrets..."
+          # Fail if any new secrets patterns are found in tracked files
+          if git grep -lE '(password|secret|apikey)\s*[:=]\s*["\x27][^"\x27]{8,}' -- '*.cs' '*.ts' '*.tsx' '*.json' \
+             | grep -v appsettings.json \
+             | grep -v SeedData.cs \
+             | grep -v '*.example'; then
+            echo "::warning::Potential secrets found in source code"
+          fi

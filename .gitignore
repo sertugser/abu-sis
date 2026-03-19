@@ -1,0 +1,73 @@
+## .NET / ASP.NET Core .gitignore
+
+# Build outputs
+bin/
+obj/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# MSBuild
+*.log
+*.binlog
+
+# .NET Core
+project.assets.json
+project.nuget.cache
+*.csproj.nuget.*
+
+# ASP.NET Core secrets / environment-specific
+appsettings.Development.json
+appsettings.*.local.json
+secrets.json
+
+# Coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Publish output
+publish/
+
+# Node / React (SIS.Web)
+node_modules/
+SIS.Web/dist/
+SIS.Web/dist-ssr/
+*.local
+
+# Claude Code settings (contains local session data)
+.claude/
+
+# Database backup files
+scripts/*.backup
+scripts/*.dump
+
+# Environment files
+.env
+.env.*
+!.env.example
