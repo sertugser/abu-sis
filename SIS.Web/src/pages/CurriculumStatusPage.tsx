@@ -4,19 +4,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { useCurriculumStatus } from '../hooks/useCurriculumStatus';
 import { AlertCircle, Printer, BookX, AlertTriangle } from 'lucide-react';
 import type { CurriculumCourseStatusDto, CurriculumSemesterDto } from '../types/curriculum';
 
-const GRADE_COLORS: Record<string, string> = {
-  AA: 'text-success', BA: 'text-success', BB: 'text-success',
-  CB: 'text-primary', CC: 'text-primary',
-  DC: 'text-warning', DD: 'text-warning',
-  FF: 'text-destructive', NA: 'text-destructive', U: 'text-destructive',
-  S: 'text-success',
-  '--': 'text-muted-foreground',
-};
 
 function getGradeBadgeVariant(grade: string | null, status: string | null): 'success' | 'warning' | 'destructive' | 'secondary' | 'outline' {
   if (!grade || !status) return 'outline';
@@ -167,7 +158,6 @@ function SemesterTable({ semester }: { semester: CurriculumSemesterDto }) {
 
 function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
   const hasPrereqWarning = course.prerequisites.length > 0 && !course.prerequisitesMet;
-  const gradeColor = course.grade ? (GRADE_COLORS[course.grade] || 'text-foreground') : '';
 
   return (
     <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">

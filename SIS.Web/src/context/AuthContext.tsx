@@ -16,20 +16,30 @@ interface AuthState {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const storedToken = localStorage.getItem('sis_token');
+    const expiresAt = localStorage.getItem('sis_token_expires');
+    if (storedToken && expiresAt && new Date(expiresAt) > new Date()) {
+      const payload = decodeJwt(storedToken);
+      return extractUser(payload);
+    }
+    return null;
+  });
+  const [token, setToken] = useState<string | null>(() => {
+    const storedToken = localStorage.getItem('sis_token');
+    const expiresAt = localStorage.getItem('sis_token_expires');
+    if (storedToken && expiresAt && new Date(expiresAt) > new Date()) {
+      return storedToken;
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const storedToken = localStorage.getItem('sis_token');
     const expiresAt = localStorage.getItem('sis_token_expires');
 
-    if (storedToken && expiresAt && new Date(expiresAt) > new Date()) {
-      const payload = decodeJwt(storedToken);
-      const userData = extractUser(payload);
-      setUser(userData);
-      setToken(storedToken);
-    } else {
+    if (!storedToken || !expiresAt || new Date(expiresAt) <= new Date()) {
       localStorage.removeItem('sis_token');
       localStorage.removeItem('sis_token_expires');
       localStorage.removeItem('sis_roles');
@@ -72,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
