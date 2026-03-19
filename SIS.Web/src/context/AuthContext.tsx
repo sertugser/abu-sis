@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { login as loginApi } from '../api/auth.api';
 import { decodeJwt, extractUser } from '../lib/jwt';
 import { queryClient } from '../lib/queryClient';
@@ -33,19 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return null;
   });
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
+  const [isLoading] = useState(() => {
     const storedToken = localStorage.getItem('sis_token');
     const expiresAt = localStorage.getItem('sis_token_expires');
-
     if (!storedToken || !expiresAt || new Date(expiresAt) <= new Date()) {
       localStorage.removeItem('sis_token');
       localStorage.removeItem('sis_token_expires');
       localStorage.removeItem('sis_roles');
     }
-    setIsLoading(false);
-  }, []);
+    return false;
+  });
 
   const login = async (email: string, password: string): Promise<string | null> => {
     // Onceki oturumun cache'ini temizle — farkli kullanicilarin verileri karismasin
