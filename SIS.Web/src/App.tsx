@@ -11,6 +11,7 @@ import RegistrationPlanPage from './pages/RegistrationPlanPage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import CurriculumStatusPage from './pages/CurriculumStatusPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
+import GradeEntryPage from './pages/GradeEntryPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -33,6 +34,7 @@ export default function App() {
                   <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
                   {/* Instructor routes */}
                   <Route path="derslerim" element={<InstructorSectionsPage />} />
+                  <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
               </Route>

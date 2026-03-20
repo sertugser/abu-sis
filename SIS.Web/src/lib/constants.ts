@@ -7,6 +7,7 @@ export const ROUTES = {
   MUFREDAT_DURUM: '/mufredat-durum',
   // Instructor routes
   INSTRUCTOR_SECTIONS: '/derslerim',
+  GRADE_ENTRY: '/not-girisi',
 } as const;
 
 export const QUERY_KEYS = {
@@ -16,6 +17,9 @@ export const QUERY_KEYS = {
   myRegistrations: ['myRegistrations'] as const,
   studentInfo: ['studentInfo'] as const,
   curriculumStatus: ['curriculumStatus'] as const,
+  gradeComponents: (sectionId: number) => ['gradeComponents', sectionId] as const,
+  grades: (sectionId: number) => ['grades', sectionId] as const,
+  gradingCriteria: (sectionId: number) => ['gradingCriteria', sectionId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
