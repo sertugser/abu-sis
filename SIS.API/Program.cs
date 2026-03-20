@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.GpaCalculation.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -14,6 +15,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
 
 builder.Services.AddCors(options =>
 {
@@ -67,6 +70,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+
+// Register GPA Calculation service
+builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 
 var app = builder.Build();
 

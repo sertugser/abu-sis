@@ -14,6 +14,7 @@ public class CourseSection
     public int? ClassroomId { get; set; }
     public Classroom? Classroom { get; set; }
     public bool IsActive { get; set; }
+    public bool IsFinalized { get; set; }
     // Schedule stored as JSON: list of {DayOfWeek, StartTime, EndTime}
     public string ScheduleJson { get; set; } = "[]";
     public ICollection<CourseRegistration> Registrations { get; set; } = new List<CourseRegistration>();

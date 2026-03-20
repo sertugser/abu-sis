@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInstructorSections, useSectionStudents } from '../hooks/useInstructorSections';
-import { BookOpen, Users, ChevronDown, ChevronUp, Mail } from 'lucide-react';
+import { BookOpen, Users, ChevronDown, ChevronUp, Mail, ClipboardEdit } from 'lucide-react';
 
 export default function InstructorSectionsPage() {
   const { data, isLoading } = useInstructorSections();
@@ -83,6 +85,7 @@ function SectionCard({ section, isExpanded, onToggle }: SectionCardProps) {
   const { data: studentData, isLoading: studentsLoading } = useSectionStudents(
     isExpanded ? section.sectionId : null
   );
+  const navigate = useNavigate();
 
   const occupancyPercent = section.capacity > 0 ? Math.round((section.enrolledCount / section.capacity) * 100) : 0;
 
@@ -110,6 +113,14 @@ function SectionCard({ section, isExpanded, onToggle }: SectionCardProps) {
             </div>
           </div>
           <div className="flex items-center gap-4 ml-4">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={(e) => { e.stopPropagation(); navigate(`/not-girisi/${section.sectionId}`); }}
+              className="shrink-0"
+            >
+              <ClipboardEdit className="h-4 w-4 mr-1" /> Not Girişi
+            </Button>
             {/* Occupancy bar */}
             <div className="text-right">
               <div className="flex items-center gap-2">
@@ -135,7 +146,7 @@ function SectionCard({ section, isExpanded, onToggle }: SectionCardProps) {
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-10" />)}
               </div>
             ) : !studentData || studentData.students.length === 0 ? (
-              <p className="py-4 text-sm text-muted-foreground">Bu seksiyonda kayıtlı öğrenci bulunmamaktadır.</p>
+              <p className="py-4 text-sm text-muted-foreground">Bu sectionda kayıtlı öğrenci bulunmamaktadır.</p>
             ) : (
               <div className="mt-4">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">

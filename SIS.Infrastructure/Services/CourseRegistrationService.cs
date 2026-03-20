@@ -33,7 +33,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "SectionExists", Message = "Ders seksiyonu bulunamadi." }
+                    new() { Rule = "SectionExists", Message = "Ders sectionu bulunamadi." }
                 }
             };
             return response;
@@ -79,7 +79,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "CourseAlreadySelected", Message = "Bu dersin baska bir seksiyonu zaten planda veya kayitli.", CourseSectionId = courseSectionId }
+                    new() { Rule = "CourseAlreadySelected", Message = "Bu dersin baska bir sectionu zaten planda veya kayitli.", CourseSectionId = courseSectionId }
                 }
             };
             return response;
