@@ -11,7 +11,7 @@ import type {
 // Bileşen CRUD
 export async function getComponents(sectionId: number): Promise<GradeComponent[]> {
   const { data } = await apiClient.get(`/instructor/section/${sectionId}/components`);
-  return data;
+  return data.components;
 }
 
 export async function addComponent(

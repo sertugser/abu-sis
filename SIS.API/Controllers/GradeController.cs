@@ -36,7 +36,7 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         var components = await _context.GradeComponents
             .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
@@ -73,7 +73,7 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin bilesen degistirilemez. Once sonuclandirmayi iptal edin." });
@@ -127,7 +127,7 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin bilesen silinemez. Once sonuclandirmayi iptal edin." });
@@ -165,7 +165,7 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         var components = await _context.GradeComponents
             .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
@@ -251,7 +251,7 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin not girilemez. Once sonuclandirmayi iptal edin." });
@@ -336,10 +336,10 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         if (section.IsFinalized)
-            return BadRequest(new { error = "Bu seksiyon zaten sonuclandirilmis." });
+            return BadRequest(new { error = "Bu section zaten sonuclandirilmis." });
 
         // 1. Bileşenleri kontrol et
         var components = await _context.GradeComponents
@@ -429,7 +429,7 @@ public class GradeController : ControllerBase
 
         return Ok(new
         {
-            message = $"Seksiyon sonuclandirildi. {results.Count} ogrencinin notu kesinlesti.",
+            message = $"Section sonuclandirildi. {results.Count} ogrencinin notu kesinlesti.",
             Results = results
         });
     }
@@ -443,10 +443,10 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         if (!section.IsFinalized)
-            return BadRequest(new { error = "Bu seksiyon zaten sonuclandirilmamis." });
+            return BadRequest(new { error = "Bu section zaten sonuclandirilmamis." });
 
         // Harf notlarını temizle
         var registrations = await _context.CourseRegistrations
@@ -490,7 +490,7 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         var criteria = await _context.GradingCriteria
             .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
@@ -520,7 +520,7 @@ public class GradeController : ControllerBase
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         // Aralıkların tutarlılığını kontrol et (AA > BA > BB > ... > DD)
         if (dto.AAMin <= dto.BAMin || dto.BAMin <= dto.BBMin || dto.BBMin <= dto.CBMin
@@ -553,7 +553,7 @@ public class GradeController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        return Ok(new { message = "Not araliklari guncellendi. Sonuclandirilmis seksiyonlar etkilenmez, yeniden sonuclandirma gerekir." });
+        return Ok(new { message = "Not araliklari guncellendi. Sonuclandirilmis sectionlar etkilenmez, yeniden sonuclandirma gerekir." });
     }
 
     // ══════════════════════════════════════════════════════════

@@ -318,7 +318,7 @@ public class CourseController : ControllerBase
             .FirstOrDefaultAsync(cs => cs.Id == id);
 
         if (section == null)
-            return NotFound(new { error = "Ders seksiyonu bulunamadi." });
+            return NotFound(new { error = "Ders sectionu bulunamadi." });
 
         string instructorName = string.Empty;
         if (section.Instructor != null)

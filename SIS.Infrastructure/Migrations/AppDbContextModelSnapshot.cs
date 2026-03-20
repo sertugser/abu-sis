@@ -410,6 +410,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsFinalized")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ScheduleJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -529,6 +532,85 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("Faculties");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AcademicTermId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicTermId");
+
+                    b.HasIndex("CourseId");
+
+                    b.ToTable("GradeComponents");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.GradingCriteria", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AcademicTermId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DDMin")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicTermId");
+
+                    b.HasIndex("CourseId", "AcademicTermId")
+                        .IsUnique();
+
+                    b.ToTable("GradingCriteria");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Instructor", b =>
                 {
                     b.Property<int>("Id")
@@ -622,6 +704,34 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Students");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentGrade", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CourseRegistrationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GradeComponentId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Score")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GradeComponentId");
+
+                    b.HasIndex("CourseRegistrationId", "GradeComponentId")
+                        .IsUnique();
+
+                    b.ToTable("StudentGrades");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.StudentProgram", b =>
@@ -931,6 +1041,44 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Faculty");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "AcademicTerm")
+                        .WithMany()
+                        .HasForeignKey("AcademicTermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AcademicTerm");
+
+                    b.Navigation("Course");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.GradingCriteria", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "AcademicTerm")
+                        .WithMany()
+                        .HasForeignKey("AcademicTermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AcademicTerm");
+
+                    b.Navigation("Course");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Instructor", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Department", "Department")
@@ -962,6 +1110,25 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Advisor");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentGrade", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.CourseRegistration", "CourseRegistration")
+                        .WithMany()
+                        .HasForeignKey("CourseRegistrationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.GradeComponent", "GradeComponent")
+                        .WithMany("StudentGrades")
+                        .HasForeignKey("GradeComponentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CourseRegistration");
+
+                    b.Navigation("GradeComponent");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.StudentProgram", b =>
@@ -1021,6 +1188,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.Faculty", b =>
                 {
                     b.Navigation("Departments");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
+                {
+                    b.Navigation("StudentGrades");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Instructor", b =>

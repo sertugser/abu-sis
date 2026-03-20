@@ -112,7 +112,7 @@ public class InstructorController : ControllerBase
             .FirstOrDefaultAsync(cs => cs.Id == id && cs.InstructorId == instructor.Id);
 
         if (section == null)
-            return NotFound(new { error = "Bu seksiyon sizin dersleriniz arasinda bulunamadi." });
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         var registrations = await _context.CourseRegistrations
             .Include(cr => cr.Student)

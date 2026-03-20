@@ -54,7 +54,7 @@ export default function InstructorDashboardPage() {
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Verilen Ders</p>
                 <p className="text-2xl font-bold text-foreground font-heading">{sectionsData?.totalSections ?? 0}</p>
-                <p className="text-xs text-muted-foreground">aktif seksiyonlar</p>
+                <p className="text-xs text-muted-foreground">aktif sectionlar</p>
               </div>
             </div>
           </CardContent>

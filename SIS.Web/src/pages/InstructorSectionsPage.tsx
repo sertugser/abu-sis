@@ -146,7 +146,7 @@ function SectionCard({ section, isExpanded, onToggle }: SectionCardProps) {
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-10" />)}
               </div>
             ) : !studentData || studentData.students.length === 0 ? (
-              <p className="py-4 text-sm text-muted-foreground">Bu seksiyonda kayıtlı öğrenci bulunmamaktadır.</p>
+              <p className="py-4 text-sm text-muted-foreground">Bu sectionda kayıtlı öğrenci bulunmamaktadır.</p>
             ) : (
               <div className="mt-4">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">

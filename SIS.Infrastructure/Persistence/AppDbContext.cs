@@ -25,6 +25,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<Classroom> Classrooms => Set<Classroom>();
+    public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
+    public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
+    public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -220,6 +223,58 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             e.HasOne(cr => cr.CourseSection)
              .WithMany(cs => cs.Registrations)
              .HasForeignKey(cr => cr.CourseSectionId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── GradeComponent ─────────────────────────────────────
+        builder.Entity<GradeComponent>(e =>
+        {
+            e.Property(gc => gc.Weight).HasPrecision(5, 2);
+
+            e.HasOne(gc => gc.Course)
+             .WithMany()
+             .HasForeignKey(gc => gc.CourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(gc => gc.AcademicTerm)
+             .WithMany()
+             .HasForeignKey(gc => gc.AcademicTermId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── StudentGrade ──────────────────────────────────────
+        builder.Entity<StudentGrade>(e =>
+        {
+            // Bir öğrenci bir bileşenden tek not alır
+            e.HasIndex(sg => new { sg.CourseRegistrationId, sg.GradeComponentId }).IsUnique();
+
+            e.Property(sg => sg.Score).HasPrecision(5, 2);
+
+            e.HasOne(sg => sg.CourseRegistration)
+             .WithMany()
+             .HasForeignKey(sg => sg.CourseRegistrationId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(sg => sg.GradeComponent)
+             .WithMany(gc => gc.StudentGrades)
+             .HasForeignKey(sg => sg.GradeComponentId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── GradingCriteria ─────────────────────────────────────
+        builder.Entity<GradingCriteria>(e =>
+        {
+            // Bir ders bir dönemde tek aralık tanımına sahip olur
+            e.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId }).IsUnique();
+
+            e.HasOne(gc => gc.Course)
+             .WithMany()
+             .HasForeignKey(gc => gc.CourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(gc => gc.AcademicTerm)
+             .WithMany()
+             .HasForeignKey(gc => gc.AcademicTermId)
              .OnDelete(DeleteBehavior.Restrict);
         });
 
