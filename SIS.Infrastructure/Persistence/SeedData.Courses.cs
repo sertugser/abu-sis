@@ -439,17 +439,34 @@ public static partial class SeedData
                 ("YM-L","TE-VI",false,7), ("YM-L","NDE-III",false,7),
             };
 
-            foreach (var (p, c, comp, sem) in ccData)
-            {
-                if (!courses.ContainsKey(c)) continue;
-                context.Set<CurriculumCourse>().Add(new CurriculumCourse
-                {
-                    CurriculumId = curricula[p],
-                    CourseId = courses[c],
-                    IsCompulsory = comp,
-                    SuggestedSemester = sem
-                });
-            }
+            var existingCurriculumCourses = new HashSet<(int CurriculumId, int CourseId)>(
+    context.Set<CurriculumCourse>()
+        .Select(x => new ValueTuple<int, int>(x.CurriculumId, x.CourseId))
+        .ToList()
+);
+
+foreach (var (p, c, comp, sem) in ccData)
+{
+    if (!courses.ContainsKey(c)) continue;
+    if (!curricula.ContainsKey(p)) continue;
+
+    var curriculumId = curricula[p];
+    var courseId = courses[c];
+    var key = (curriculumId, courseId);
+
+    if (existingCurriculumCourses.Contains(key))
+        continue;
+
+    context.Set<CurriculumCourse>().Add(new CurriculumCourse
+    {
+        CurriculumId = curriculumId,
+        CourseId = courseId,
+        IsCompulsory = comp,
+        SuggestedSemester = sem
+    });
+
+    existingCurriculumCourses.Add(key);
+}
             await context.SaveChangesAsync();
         }
 

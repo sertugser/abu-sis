@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using System.Globalization;
 
 namespace SIS.Infrastructure.Persistence;
 
@@ -34,13 +35,13 @@ public static partial class SeedData
                     Name = t.Name,
                     Year = t.Year,
                     Semester = t.Sem,
-                    RegistrationStart = DateTime.Parse(t.RegStart, null, System.Globalization.DateTimeStyles.AssumeUniversal),
-                    RegistrationEnd = DateTime.Parse(t.RegEnd, null, System.Globalization.DateTimeStyles.AssumeUniversal),
-                    AddDropStart = DateTime.Parse(t.AddStart, null, System.Globalization.DateTimeStyles.AssumeUniversal),
-                    AddDropEnd = DateTime.Parse(t.AddEnd, null, System.Globalization.DateTimeStyles.AssumeUniversal),
+                    RegistrationStart = ParseUtcDate(t.RegStart),
+                    RegistrationEnd = ParseUtcDate(t.RegEnd),
+                    AddDropStart = ParseUtcDate(t.AddStart),
+                    AddDropEnd = ParseUtcDate(t.AddEnd),
                     WithdrawalDeadlineWeek = 7,
-                    TermStart = DateTime.Parse(t.TermStart, null, System.Globalization.DateTimeStyles.AssumeUniversal),
-                    TermEnd = DateTime.Parse(t.TermEnd, null, System.Globalization.DateTimeStyles.AssumeUniversal),
+                    TermStart = ParseUtcDate(t.TermStart),
+                    TermEnd = ParseUtcDate(t.TermEnd),
                     IsActive = t.Active
                 });
             }
@@ -75,4 +76,9 @@ public static partial class SeedData
             await context.SaveChangesAsync();
         }
     }
+
+    private static DateTime ParseUtcDate(string value) =>
+        DateTime.SpecifyKind(
+            DateTime.ParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture),
+            DateTimeKind.Utc);
 }
