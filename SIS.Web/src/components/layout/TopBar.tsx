@@ -10,13 +10,17 @@ const pageTitles: Record<string, string> = {
   '/alinan-dersler': 'Alınan Dersler',
   '/mufredat-durum': 'Müfredat Durum',
   '/derslerim': 'Derslerim',
+  '/program-planlama': 'Program Planlama',
+  '/not-girisi': 'Not Girişi',
 };
 
 export default function TopBar() {
   const { data: term } = useActiveTerm();
   const location = useLocation();
 
-  const pageTitle = pageTitles[location.pathname] || 'Sayfa';
+  const pageTitle = location.pathname.startsWith('/not-girisi/')
+    ? 'Not Girişi'
+    : pageTitles[location.pathname] || 'Sayfa';
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-xl px-6 lg:px-8">
