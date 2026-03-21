@@ -1,0 +1,105 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using SIS.Domain.Entities;
+using SIS.Domain.Enums;
+
+namespace SIS.Infrastructure.Persistence;
+
+public static partial class SeedData
+{
+    private static async Task SeedRolesAsync(RoleManager<IdentityRole<int>> roleManager)
+    {
+        string[] roles = { "Student", "Instructor", "AcademicAdvisor",
+                           "AdministrativeStaff", "DepartmentManager", "SystemAdministrator" };
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                var result = await roleManager.CreateAsync(new IdentityRole<int> { Name = role });
+                if (!result.Succeeded)
+                    throw new InvalidOperationException(
+                        $"Failed to create role '{role}': {string.Join(", ", result.Errors.Select(e => e.Description))}");
+            }
+        }
+    }
+
+    private static async Task SeedAcademicStructureAsync(AppDbContext context)
+    {
+        // Faculty
+        if (!context.Faculties.Any())
+        {
+            context.Faculties.Add(new Faculty { Name = "Mühendislik Fakültesi", Code = "MUH" });
+            await context.SaveChangesAsync();
+        }
+        var faculty = context.Faculties.First(f => f.Code == "MUH");
+
+        // Departments
+        var deptData = new (string Name, string Code)[]
+        {
+            ("Bilgisayar Mühendisliği", "BM"),
+            ("Bilgisayar Mühendisliği (Türkçe)", "BMTR"),
+            ("Bilişim Sistemleri Mühendisliği", "BSM"),
+            ("Endüstri Mühendisliği", "EM"),
+            ("Elektrik Elektronik Mühendisliği", "EEM"),
+            ("Yazılım Mühendisliği", "YM"),
+        };
+        foreach (var (name, code) in deptData)
+        {
+            if (!context.Departments.Any(d => d.Code == code))
+            {
+                context.Departments.Add(new Department { Name = name, Code = code, FacultyId = faculty.Id });
+            }
+        }
+        await context.SaveChangesAsync();
+
+        // Programs
+        var progData = new (string Name, string Code, string DeptCode)[]
+        {
+            ("Bilgisayar Mühendisliği Lisans", "BM-L", "BM"),
+            ("Bilgisayar Mühendisliği (Türkçe) Lisans", "BMTR-L", "BMTR"),
+            ("Bilisim Sistemleri Muhendisligi Lisans", "BSM-L", "BSM"),
+            ("Endüstri Mühendisliği Lisans", "EM-L", "EM"),
+            ("Elektrik Elektronik Mühendisliği Lisans", "EEM-L", "EEM"),
+            ("Yazılım Mühendisliği Lisans", "YM-L", "YM"),
+        };
+        foreach (var (name, code, deptCode) in progData)
+        {
+            if (!context.AcademicPrograms.Any(p => p.Code == code))
+            {
+                var dept = context.Departments.First(d => d.Code == deptCode);
+                context.AcademicPrograms.Add(new AcademicProgram
+                {
+                    Name = name,
+                    Code = code,
+                    DepartmentId = dept.Id,
+                    DegreeLevel = DegreeLevel.Bachelor,
+                    EducationType = EducationType.Semester,
+                    MaxStudyDurationSemesters = 14,
+                    TotalRequiredEcts = 240
+                });
+            }
+        }
+        await context.SaveChangesAsync();
+
+        // Curricula (one per program)
+        var currData = new (string ProgCode, string Version)[]
+        {
+            ("BM-L", "2024"), ("BMTR-L", "2024"), ("BSM-L", "2024"),
+            ("EM-L", "2023"), ("EEM-L", "2024"), ("YM-L", "2024"),
+        };
+        foreach (var (progCode, version) in currData)
+        {
+            var prog = context.AcademicPrograms.First(p => p.Code == progCode);
+            if (!context.Curricula.Any(c => c.ProgramId == prog.Id))
+            {
+                context.Curricula.Add(new Curriculum
+                {
+                    ProgramId = prog.Id,
+                    Version = version,
+                    IsActive = true
+                });
+            }
+        }
+        await context.SaveChangesAsync();
+    }
+}
