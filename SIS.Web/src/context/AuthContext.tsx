@@ -17,8 +17,8 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const storedToken = localStorage.getItem('sis_token');
-    const expiresAt = localStorage.getItem('sis_token_expires');
+    const storedToken = sessionStorage.getItem('sis_token');
+    const expiresAt = sessionStorage.getItem('sis_token_expires');
     if (storedToken && expiresAt && new Date(expiresAt) > new Date()) {
       const payload = decodeJwt(storedToken);
       return extractUser(payload);
@@ -26,20 +26,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   });
   const [token, setToken] = useState<string | null>(() => {
-    const storedToken = localStorage.getItem('sis_token');
-    const expiresAt = localStorage.getItem('sis_token_expires');
+    const storedToken = sessionStorage.getItem('sis_token');
+    const expiresAt = sessionStorage.getItem('sis_token_expires');
     if (storedToken && expiresAt && new Date(expiresAt) > new Date()) {
       return storedToken;
     }
     return null;
   });
   const [isLoading] = useState(() => {
-    const storedToken = localStorage.getItem('sis_token');
-    const expiresAt = localStorage.getItem('sis_token_expires');
+    const storedToken = sessionStorage.getItem('sis_token');
+    const expiresAt = sessionStorage.getItem('sis_token_expires');
     if (!storedToken || !expiresAt || new Date(expiresAt) <= new Date()) {
-      localStorage.removeItem('sis_token');
-      localStorage.removeItem('sis_token_expires');
-      localStorage.removeItem('sis_roles');
+      sessionStorage.removeItem('sis_token');
+      sessionStorage.removeItem('sis_token_expires');
+      sessionStorage.removeItem('sis_roles');
     }
     return false;
   });
@@ -50,9 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const response = await loginApi({ email, password });
     if (response.success) {
-      localStorage.setItem('sis_token', response.token);
-      localStorage.setItem('sis_token_expires', response.expiresAt);
-      localStorage.setItem('sis_roles', JSON.stringify(response.roles));
+      sessionStorage.setItem('sis_token', response.token);
+      sessionStorage.setItem('sis_token_expires', response.expiresAt);
+      sessionStorage.setItem('sis_roles', JSON.stringify(response.roles));
       const payload = decodeJwt(response.token);
       const userData = extractUser(payload);
       setUser(userData);
@@ -63,9 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('sis_token');
-    localStorage.removeItem('sis_token_expires');
-    localStorage.removeItem('sis_roles');
+    sessionStorage.removeItem('sis_token');
+    sessionStorage.removeItem('sis_token_expires');
+    sessionStorage.removeItem('sis_roles');
     setUser(null);
     setToken(null);
     // Tum cache'i temizle — eski kullanicinin verileri kalmasin
