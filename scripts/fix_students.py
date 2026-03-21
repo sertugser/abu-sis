@@ -1,3 +1,4 @@
+# TEST CODEX
 import psycopg2, sys, io, random
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 conn = psycopg2.connect(host='localhost', port=5432, dbname='StudentInfoSystem', user='postgres', password='12345', client_encoding='UTF8')

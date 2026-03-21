@@ -118,18 +118,13 @@ public class RegistrationValidationService : IRegistrationValidationService
 
         // Build set of currently failed course IDs (for use in multiple checks)
         var failedCourseIds = allPastRegistrations
-            .Where(r => r.Grade == GradeCode.FF || r.Grade == GradeCode.NA || r.Grade == GradeCode.U)
+            .Where(r => RegistrationRulePolicy.IsFailedGrade(r.Grade))
             .Select(r => r.CourseSection.Course.Id)
             .Distinct()
             .ToList();
 
         var passedCourseIds = allPastRegistrations
-            .Where(r => r.Grade != null
-                && r.Grade != GradeCode.FF
-                && r.Grade != GradeCode.NA
-                && r.Grade != GradeCode.U
-                && r.Grade != GradeCode.W
-                && r.Grade != GradeCode.I)
+            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
             .Select(r => r.CourseSection.Course.Id)
             .Distinct()
             .ToList();
@@ -149,12 +144,7 @@ public class RegistrationValidationService : IRegistrationValidationService
                 {
                     var passedPrereq = allPastRegistrations.Any(r =>
                         r.CourseSection.Course.Id == prereq.RequiredCourseId &&
-                        r.Grade != null &&
-                        r.Grade != GradeCode.FF &&
-                        r.Grade != GradeCode.NA &&
-                        r.Grade != GradeCode.U &&
-                        r.Grade != GradeCode.W &&
-                        r.Grade != GradeCode.I);
+                        RegistrationRulePolicy.IsPassedGrade(r.Grade));
 
                     // Also check course equivalencies
                     if (!passedPrereq)
@@ -169,12 +159,7 @@ public class RegistrationValidationService : IRegistrationValidationService
 
                         passedPrereq = allPastRegistrations.Any(r =>
                             equivalentCourseIds.Contains(r.CourseSection.Course.Id) &&
-                            r.Grade != null &&
-                            r.Grade != GradeCode.FF &&
-                            r.Grade != GradeCode.NA &&
-                            r.Grade != GradeCode.U &&
-                            r.Grade != GradeCode.W &&
-                            r.Grade != GradeCode.I);
+                            RegistrationRulePolicy.IsPassedGrade(r.Grade));
                     }
 
                     if (!passedPrereq)
@@ -256,13 +241,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         var existingEcts = existingRegistrations.Sum(r => r.CourseSection.Course.Ects);
         var totalEcts = requestedEcts + existingEcts;
 
-        int ectsLimit;
-        if (student.Cgpa >= 2.50m)
-            ectsLimit = 48;
-        else if (student.Cgpa >= 2.00m)
-            ectsLimit = 42;
-        else
-            ectsLimit = 30;
+        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa);
 
         if (totalEcts > ectsLimit)
         {
@@ -274,7 +253,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         }
 
         // === CHECK 7: CGPA Restriction (FR-56B) ===
-        if (student.Cgpa < 1.70m && student.CompletedSemesters > 1)
+        if (RegistrationRulePolicy.HasLowCgpaRestriction(student.Cgpa, student.CompletedSemesters))
         {
             var studentProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
 
@@ -297,16 +276,18 @@ public class RegistrationValidationService : IRegistrationValidationService
                         r.CourseSection.Course.Id == courseId &&
                         (r.Grade == GradeCode.DD || r.Grade == GradeCode.DC));
 
-                    // Check if it's from the student's current or lower semester
                     var currCourse = curriculumCourses.FirstOrDefault(cc => cc.CourseId == courseId);
-                    var isLowerOrSameSemester = currCourse != null && currCourse.SuggestedSemester <= student.CompletedSemesters;
 
                     // Check if it's a non-departmental course (different department)
-                    var isNonDepartmental = section.Course.DepartmentId != null &&
-                        studentProgram.Program != null &&
-                        section.Course.DepartmentId != studentProgram.Program.DepartmentId;
+                    var isAllowed = RegistrationRulePolicy.IsAllowedUnderLowCgpaRestriction(
+                        section.Course,
+                        currCourse?.SuggestedSemester,
+                        student.CompletedSemesters,
+                        studentProgram.Program?.DepartmentId,
+                        isFailed,
+                        isDDDC);
 
-                    if (!isFailed && !isDDDC && !isLowerOrSameSemester && !isNonDepartmental)
+                    if (!isAllowed)
                     {
                         errors.Add(new ValidationError
                         {
