@@ -888,6 +888,9 @@ function AvailabilityManagerCard({
   onEdit: (availability: InstructorAvailability) => void;
   onDeleteRequest: (availability: InstructorAvailability) => void;
 }) {
+  const hasWeekend = availabilities.some(a => a.dayOfWeek === 0 || a.dayOfWeek === 6);
+  const activeDays = hasWeekend ? [1, 2, 3, 4, 5, 6, 0] : [1, 2, 3, 4, 5];
+  
   return (
     <Card>
       <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -912,9 +915,13 @@ function AvailabilityManagerCard({
         )}
 
         {isLoading && (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <Skeleton key={index} className="h-32 rounded-xl" />
+          <div className="grid grid-cols-5 gap-4">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="space-y-3">
+                <Skeleton className="h-10 rounded-md w-full mb-4" />
+                <Skeleton className="h-24 rounded-lg" />
+                <Skeleton className="h-24 rounded-lg hidden md:block" />
+              </div>
             ))}
           </div>
         )}
@@ -950,65 +957,105 @@ function AvailabilityManagerCard({
         )}
 
         {!isLoading && !errorMessage && availabilities.length > 0 && (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {availabilities.map(availability => (
-              <AvailabilityRuleCard
-                key={availability.id}
-                availability={availability}
-                onEdit={() => onEdit(availability)}
-                onDelete={() => onDeleteRequest(availability)}
-              />
-            ))}
+          <div className="overflow-x-auto pb-4">
+            <div className={cn("grid gap-4", hasWeekend ? "grid-cols-7 min-w-[1000px]" : "grid-cols-5 min-w-[800px]")}>
+              {activeDays.map(dayId => {
+                const dayAvailabilities = availabilities
+                  .filter(a => a.dayOfWeek === dayId)
+                  .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+                return (
+                  <div key={dayId} className="flex flex-col rounded-xl border border-border bg-muted/10 overflow-hidden">
+                    <div className="bg-muted p-3 text-center border-b border-border">
+                      <h3 className="font-semibold text-sm text-foreground">{DAY_LABELS[dayId]}</h3>
+                    </div>
+                    <div className="p-3 flex flex-col gap-3 min-h-[150px]">
+                      {dayAvailabilities.length > 0 ? (
+                        dayAvailabilities.map(availability => (
+                          <div 
+                            key={availability.id} 
+                            className={cn(
+                              "rounded-lg p-3 text-sm border shadow-sm flex flex-col relative group cursor-pointer transition-all hover:scale-[1.02]",
+                              availability.isAvailable 
+                                ? availability.isPreferred 
+                                  ? "bg-primary/5 border-primary/30 hover:bg-primary/10" 
+                                  : "bg-card border-border hover:bg-muted/50" 
+                                : "bg-muted/50 border-border opacity-70"
+                            )}
+                            onClick={() => onEdit(availability)}
+                          >
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="font-medium text-foreground">
+                                {formatTimeRange(availability.startTime, availability.endTime)}
+                              </span>
+                              {availability.isAvailable ? (
+                                availability.isPreferred && (
+                                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                                )
+                              ) : (
+                                <AlertCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                <Badge variant={availability.isAvailable ? 'success' : 'secondary'} className="text-[10px] px-1.5 py-0 h-5">
+                                  {availability.isAvailable ? 'Uygun' : 'Kapalı'}
+                                </Badge>
+                                {availability.isPreferred && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-primary/50 text-primary hover:bg-transparent">Tercihli</Badge>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="mt-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                className="h-7 px-2 flex-1 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEdit(availability);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" /> Düzenle
+                              </Button>
+                              <Button 
+                                variant="destructive" 
+                                size="sm" 
+                                className="h-7 px-2 w-7 p-0 flex-none"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteRequest(availability);
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs text-muted-foreground italic opacity-50 bg-card rounded-lg border border-dashed border-border flex-1 min-h-[80px]">
+                          Tanım yok
+                        </div>
+                      )}
+                      
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="w-full h-8 text-xs text-muted-foreground hover:text-primary border border-dashed border-transparent hover:border-primary/30 mt-auto"
+                        onClick={() => onCreate()}
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Ekle
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function AvailabilityRuleCard({
-  availability,
-  onEdit,
-  onDelete,
-}: {
-  availability: InstructorAvailability;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            {formatDay(availability.dayOfWeek)} · {formatTimeRange(availability.startTime, availability.endTime)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {availability.isAvailable
-              ? 'Bu aralıkta öneri üretilebilir.'
-              : 'Bu aralıkta planlama yapılmaması gerekir.'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Badge variant={availability.isAvailable ? 'success' : 'secondary'}>
-            {availability.isAvailable ? 'Uygun' : 'Kapalı'}
-          </Badge>
-          {availability.isPreferred && (
-            <Badge variant="outline">Tercihli</Badge>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-4 flex gap-2">
-        <Button variant="outline" size="sm" onClick={onEdit}>
-          <Pencil className="h-3.5 w-3.5" />
-          Düzenle
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onDelete}>
-          <Trash2 className="h-3.5 w-3.5" />
-          Sil
-        </Button>
-      </div>
-    </div>
   );
 }
 
