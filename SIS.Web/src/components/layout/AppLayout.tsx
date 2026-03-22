@@ -8,7 +8,7 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar isCollapsed={isSidebarCollapsed} />
+      <Sidebar />
 
       <div
         className="flex flex-1 flex-col lg:pl-[var(--sidebar-width)]"
