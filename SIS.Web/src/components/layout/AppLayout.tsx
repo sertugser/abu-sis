@@ -8,11 +8,14 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar />
+      <Sidebar isCollapsed={isSidebarCollapsed} />
 
       <div
-        className="flex flex-1 flex-col lg:pl-[var(--sidebar-width)]"
-        style={{ ['--sidebar-width' as string]: isSidebarCollapsed ? '88px' : '280px' }}
+        className="flex flex-1 flex-col"
+        style={{
+          paddingLeft: isSidebarCollapsed ? '72px' : '260px',
+          transition: 'padding-left 200ms cubic-bezier(0.25, 0.1, 0.25, 1)',
+        }}
       >
         <TopBar
           isSidebarCollapsed={isSidebarCollapsed}

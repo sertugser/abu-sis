@@ -246,7 +246,11 @@ function getRoleLabel(roles: string[]): string {
   return 'Öğrenci Bilgi Sistemi';
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  isCollapsed?: boolean;
+}
+
+export default function Sidebar({ isCollapsed = false }: SidebarProps) {
   const { user, logout } = useAuth();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
@@ -254,6 +258,7 @@ export default function Sidebar() {
   const menuGroups = getMenuGroupsForRole(roles);
 
   const toggleGroup = (id: string) => {
+    if (isCollapsed) return;
     setOpenGroup(prev => prev === id ? null : id);
   };
 
@@ -262,12 +267,18 @@ export default function Sidebar() {
     : '??';
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-[260px] flex-col bg-sidebar border-r border-border">
+    <aside className={cn(
+      "fixed inset-y-0 left-0 z-40 hidden lg:flex flex-col bg-sidebar border-r border-border overflow-hidden",
+      isCollapsed ? "w-[72px]" : "w-[260px]"
+    )} style={{ transition: 'width 200ms cubic-bezier(0.25, 0.1, 0.25, 1)' }}>
 
-      <div className="p-5 pb-2">
+      <div className={cn("pb-2 overflow-hidden whitespace-nowrap", isCollapsed ? "px-3 pt-5" : "p-5")}>
         <div className="flex items-center gap-3">
-          <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
-          <div className="flex flex-col items-start justify-center">
+          <img src={logo} alt="Logo" className="h-9 w-9 shrink-0 object-contain" />
+          <div className={cn(
+            "flex-1 flex flex-col items-start justify-center min-w-0 transition-opacity duration-200",
+            isCollapsed ? "opacity-0" : "opacity-100"
+          )}>
             <h1 className="font-heading text-[13px] font-bold text-[#003366] leading-none uppercase tracking-tight">
               Ankara Bilim
             </h1>
@@ -277,18 +288,20 @@ export default function Sidebar() {
           </div>
         </div>
 
-
-        <div className="mt-4 flex flex-col gap-0.5">
-          <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
-            {getRoleLabel(roles)}
-          </p>
-        </div>
+        {!isCollapsed && (
+          <div className="mt-4 flex flex-col gap-0.5">
+            <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
+              {getRoleLabel(roles)}
+            </p>
+          </div>
+        )}
 
         <Separator className="mt-4" />
       </div>
 
+
       <ScrollArea className="flex-1 px-3">
-        <nav className="space-y-0.5 py-2">
+        <nav className={cn("space-y-0.5 py-2", isCollapsed && "px-0")}>
           {menuGroups.map(group => {
             const isOpen = openGroup === group.id;
             const Icon = group.icon;
@@ -297,24 +310,31 @@ export default function Sidebar() {
               <div key={group.id} className="mb-1">
                 <button
                   onClick={() => toggleGroup(group.id)}
+                  title={isCollapsed ? group.label : undefined}
                   className={cn(
-                    'group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
+                    'group flex w-full items-center rounded-md py-2 text-sm font-medium transition-all duration-200',
+                    isCollapsed ? 'justify-center px-2' : 'gap-3 px-3',
                     isOpen
                       ? 'bg-primary/10 text-primary shadow-sm'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   <Icon className="h-[18px] w-[18px] shrink-0" />
-                  <span className="flex-1 text-left truncate">{group.label}</span>
-                  <ChevronRight
-                    className={cn(
-                      'h-4 w-4 shrink-0 opacity-50 transition-transform duration-200',
-                      isOpen && 'rotate-90 opacity-100'
-                    )}
-                  />
+                  <span className={cn(
+                    "flex-1 text-left truncate transition-opacity duration-200",
+                    isCollapsed ? "opacity-0 w-0" : "opacity-100"
+                  )}>{group.label}</span>
+                  {!isCollapsed && (
+                    <ChevronRight
+                      className={cn(
+                        'h-4 w-4 shrink-0 opacity-50 transition-transform duration-200',
+                        isOpen && 'rotate-90 opacity-100'
+                      )}
+                    />
+                  )}
                 </button>
 
-                {isOpen && (
+                {isOpen && !isCollapsed && (
                   <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
                     {group.children.map(child => (
                       <NavLink
@@ -341,18 +361,21 @@ export default function Sidebar() {
         </nav>
       </ScrollArea>
 
-      <div className="mt-auto border-t p-4 bg-muted/30">
-        <div className="flex items-center gap-3">
+      <div className={cn("mt-auto border-t bg-muted/30 overflow-hidden whitespace-nowrap", isCollapsed ? "p-2" : "p-4")}>
+        <div className={cn("flex items-center", isCollapsed ? "flex-col gap-2" : "gap-3")}>
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#003366] text-white text-xs font-bold shadow-sm">
             {initials}
           </div>
-          <div className="flex-1 min-w-0">
+          <div className={cn(
+            "flex-1 min-w-0 transition-opacity duration-200",
+            isCollapsed ? "opacity-0 w-0 h-0" : "opacity-100"
+          )}>
             <p className="text-sm font-semibold text-foreground truncate">{user?.name}</p>
             <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
           </div>
           <button
             onClick={logout}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
             title="Güvenli Çıkış"
           >
             <LogOut className="h-4 w-4" />

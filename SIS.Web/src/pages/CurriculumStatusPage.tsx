@@ -37,7 +37,7 @@ export default function CurriculumStatusPage() {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertDescription>Mufredat bilgisi yuklenirken hata olustu.</AlertDescription>
+        <AlertDescription>Müfredat bilgisi yüklenirken hata oluştu.</AlertDescription>
       </Alert>
     );
   }
@@ -49,7 +49,6 @@ export default function CurriculumStatusPage() {
   const allCourses = data.semesters.flatMap(semester => semester.courses);
   const failedCourseCount = allCourses.filter(course => course.gradeStatus === 'failed').length;
   const currentCourseCount = allCourses.filter(course => course.gradeStatus === 'current').length;
-  const prerequisiteRiskCount = allCourses.filter(course => course.prerequisites.length > 0 && !course.prerequisitesMet).length;
   const filteredSemesters = data.semesters
     .map(semester => ({
       ...semester,
@@ -67,34 +66,23 @@ export default function CurriculumStatusPage() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="font-heading text-xl font-extrabold text-foreground tracking-tight">
-            Mufredat Durumu
+            Müfredat Durumu
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {data.studentName} — {data.programName} Mufredat {data.curriculumVersion}
-          </p>
         </div>
         <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2 print:hidden">
           <Printer className="h-4 w-4" />
-          Mufredat Durum Yazdir
+          Müfredat Durum Yazdır
         </Button>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <SummaryCard label="Genel Kredi" value={data.totalCredits} />
-        <SummaryCard label="Genel AKTS" value={data.totalEcts} />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <SummaryCard label="Genel Ort." value={data.cgpa.toFixed(2)} highlight={data.cgpa < 2.0 ? 'destructive' : undefined} />
-        <SummaryCard label="Basarili AKTS" value={data.passedEcts} highlight="success" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <SummaryCard label="Basarili Olunan Kredi" value={data.passedCredits} highlight="success" />
-        <SummaryCard label="Basarili Olunan AKTS" value={data.passedEcts} highlight="success" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <SummaryCard label="Basarisiz Ders" value={failedCourseCount} highlight={failedCourseCount > 0 ? 'destructive' : undefined} />
-        <SummaryCard label="Devam Eden Ders" value={currentCourseCount} />
-        <SummaryCard label="On Kosul Riski" value={prerequisiteRiskCount} highlight={prerequisiteRiskCount > 0 ? 'destructive' : undefined} />
+        <SummaryCard label="Toplam Kredi" value={data.totalCredits} />
+        <SummaryCard label="Toplam AKTS" value={data.totalEcts} />
+        <SummaryCard label="Başarılı Kredi" value={data.passedCredits} highlight="success" />
+        <SummaryCard label="Başarısız Ders" value={failedCourseCount} highlight={failedCourseCount > 0 ? 'destructive' : undefined} />
+        <SummaryCard label="Devam Eden" value={currentCourseCount} />
       </div>
 
       <Card className="print:hidden">
@@ -104,7 +92,7 @@ export default function CurriculumStatusPage() {
             <Input
               value={searchTerm}
               onChange={event => setSearchTerm(event.target.value)}
-              placeholder="Ders kodu veya ders adi ile filtrele"
+              placeholder="Ders kodu veya ders adı ile filtrele"
               className="pl-9"
             />
           </div>
@@ -121,7 +109,7 @@ export default function CurriculumStatusPage() {
         <div className="text-center py-16">
           <BookX className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
           <h3 className="font-heading text-lg font-semibold text-foreground">
-            {data.semesters.length === 0 ? 'Mufredat bulunamadi' : 'Filtreye uyan ders bulunamadi'}
+            {data.semesters.length === 0 ? 'Müfredat bulunamadı' : 'Filtreye uyan ders bulunamadı'}
           </h3>
         </div>
       )}
@@ -161,16 +149,16 @@ function SemesterTable({ semester }: { semester: CurriculumSemesterDto }) {
               <tr className="border-b border-border bg-muted/30">
                 {/* Left side — curriculum */}
                 <th className="text-left px-3 py-2 font-medium text-muted-foreground w-24">Ders Kodu</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Mufredat Ders Adi</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Müfredat Ders Adı</th>
                 <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Z</th>
                 <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Krd</th>
                 <th className="text-center px-2 py-2 font-medium text-muted-foreground w-14">AKTS</th>
                 {/* Divider */}
                 <th className="w-px bg-border"></th>
                 {/* Right side — taken */}
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground w-20">Donemi</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground w-20">Dönemi</th>
                 <th className="text-left px-3 py-2 font-medium text-muted-foreground w-24">Ders Kodu</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ders Adi</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ders Adı</th>
                 <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Z/S</th>
                 <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Krd</th>
                 <th className="text-center px-2 py-2 font-medium text-muted-foreground w-14">AKTS</th>
@@ -187,8 +175,8 @@ function SemesterTable({ semester }: { semester: CurriculumSemesterDto }) {
 
         {/* Semester summary */}
         <div className="px-4 py-2 border-t border-border bg-muted/20 text-xs text-muted-foreground">
-          Mufredat Toplam Kredi:{semester.totalCredits} AKTS:{semester.totalEcts} Ders
-          Say:{semester.courseCount} Zorunlu:{semester.compulsoryCount} Secmeli:{semester.electiveCount}
+          Müfredat Toplam Kredi:{semester.totalCredits} AKTS:{semester.totalEcts} Ders
+          Say:{semester.courseCount} Zorunlu:{semester.compulsoryCount} Seçmeli:{semester.electiveCount}
         </div>
       </CardContent>
     </Card>
@@ -205,7 +193,7 @@ function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
         <span className="flex items-center gap-1.5">
           {course.code}
           {hasPrereqWarning && (
-            <span title={`On Kosul: ${course.prerequisites.join(', ')}`}>
+            <span title={`Ön Koşul: ${course.prerequisites.join(', ')}`}>
               <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
             </span>
           )}
@@ -256,7 +244,7 @@ function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
       ) : (
         <>
           <td className="px-3 py-2" colSpan={7}>
-            <span className="text-xs text-muted-foreground/50 italic">Henuz alinmadi</span>
+            <span className="text-xs text-muted-foreground/50 italic">Henüz alınmadı</span>
           </td>
         </>
       )}
