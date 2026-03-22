@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getRoleLabel } from '../../lib/utils';
 import { ROUTES } from '../../lib/constants';
 import {
   LayoutGrid,
@@ -281,10 +280,6 @@ return (
         
         <div className="mt-4 flex flex-col gap-0.5">
           <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
-            Öğrenci Bilgi Sistemi
-          </p>
-          
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider opacity-80">
             {getRoleLabel(roles)}
           </p>
         </div>
