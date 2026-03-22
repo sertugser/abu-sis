@@ -61,6 +61,70 @@ public class GpaCalculationService : IGpaCalculationService
         return Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero);
     }
 
+    public async Task<List<TermGpaHistoryItemDto>> GetTermGpaHistoryAsync(int studentId)
+    {
+        var registrations = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Course)
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Term)
+            .Where(cr => cr.StudentId == studentId
+                && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
+                && cr.Grade != null)
+            .ToListAsync();
+
+        if (registrations.Count == 0)
+        {
+            return new List<TermGpaHistoryItemDto>();
+        }
+
+        var orderedTermGroups = registrations
+            .GroupBy(cr => cr.CourseSection.TermId)
+            .Select(group => new
+            {
+                Term = group.First().CourseSection.Term,
+                Registrations = group
+                    .OrderBy(cr => cr.CourseSection.Course.Code)
+                    .ThenBy(cr => cr.Id)
+                    .ToList()
+            })
+            .OrderBy(entry => entry.Term.Year)
+            .ThenBy(entry => entry.Term.Semester)
+            .ToList();
+
+        var latestGradesByCourse = new Dictionary<int, Domain.Entities.CourseRegistration>();
+        var history = new List<TermGpaHistoryItemDto>(orderedTermGroups.Count);
+
+        foreach (var termGroup in orderedTermGroups)
+        {
+            foreach (var registration in termGroup.Registrations
+                .OrderBy(registration => registration.CourseSection.CourseId)
+                .ThenBy(registration => registration.Id))
+            {
+                latestGradesByCourse[registration.CourseSection.CourseId] = registration;
+            }
+
+            var sgpa = CalculateAverage(termGroup.Registrations);
+            var cgpa = CalculateAverage(latestGradesByCourse.Values);
+
+            history.Add(new TermGpaHistoryItemDto
+            {
+                TermId = termGroup.Term.Id,
+                TermName = termGroup.Term.Name,
+                Year = termGroup.Term.Year,
+                Semester = termGroup.Term.Semester.ToString(),
+                CourseCount = termGroup.Registrations.Count,
+                TotalCredits = termGroup.Registrations.Sum(registration =>
+                    registration.CourseSection.Course.TheoryHours + registration.CourseSection.Course.LabHours),
+                TotalEcts = termGroup.Registrations.Sum(registration => registration.CourseSection.Course.Ects),
+                Sgpa = sgpa,
+                Cgpa = cgpa
+            });
+        }
+
+        return history;
+    }
+
     /// <summary>
     /// Hem ANO hem AGNO hesaplar ve Student tablosunu günceller.
     /// </summary>
@@ -143,5 +207,41 @@ public class GpaCalculationService : IGpaCalculationService
         }
 
         return (totalAkts, totalPoints);
+    }
+
+    private static decimal CalculateAverage(IEnumerable<Domain.Entities.CourseRegistration> registrations)
+    {
+        var totalAkts = 0;
+        decimal totalPoints = 0;
+
+        foreach (var registration in registrations)
+        {
+            if (registration.Grade is not { } grade)
+            {
+                continue;
+            }
+
+            var point = GradePointMap.GetPoint(grade);
+            if (point == null)
+            {
+                continue;
+            }
+
+            var akts = registration.CourseSection.Course.Ects;
+            if (akts <= 0)
+            {
+                continue;
+            }
+
+            totalAkts += akts;
+            totalPoints += akts * point.Value;
+        }
+
+        if (totalAkts == 0)
+        {
+            return 0;
+        }
+
+        return Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero);
     }
 }

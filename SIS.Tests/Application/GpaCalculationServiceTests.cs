@@ -181,6 +181,24 @@ public class GpaCalculationServiceTests : IDisposable
         cgpa.Should().Be(0m);
     }
 
+    [Fact]
+    public async Task GetTermGpaHistory_Emre_ReturnsChronologicalAnoAndAgno()
+    {
+        var history = await _service.GetTermGpaHistoryAsync(EmreId);
+
+        history.Should().HaveCount(4);
+        history.Select(item => item.TermId).Should().ContainInOrder(Term3Id, Term4Id, Term1Id, Term2Id);
+
+        history[0].Sgpa.Should().Be(2.39m);
+        history[0].Cgpa.Should().Be(2.39m);
+        history[1].Sgpa.Should().Be(1.63m);
+        history[1].Cgpa.Should().Be(2.03m);
+        history[2].Sgpa.Should().Be(1.31m);
+        history[2].Cgpa.Should().Be(1.76m);
+        history[3].Sgpa.Should().Be(1.27m);
+        history[3].Cgpa.Should().Be(1.62m);
+    }
+
     // ══════════════════════════════════════════════════════════
     //  RecalculateAndUpdate TESTİ
     // ══════════════════════════════════════════════════════════

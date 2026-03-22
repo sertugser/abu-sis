@@ -7,7 +7,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,DepartmentManager,SystemAdministrator")]
+[Authorize(Roles = "AdministrativeStaff,SystemAdministrator")]
 public class SchedulingController : ControllerBase
 {
     private readonly ISchedulingService _schedulingService;

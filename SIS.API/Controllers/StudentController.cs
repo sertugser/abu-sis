@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Common.DTOs;
+using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -14,10 +15,12 @@ namespace SIS.API.Controllers;
 public class StudentController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IGpaCalculationService _gpaCalculationService;
 
-    public StudentController(AppDbContext context)
+    public StudentController(AppDbContext context, IGpaCalculationService gpaCalculationService)
     {
         _context = context;
+        _gpaCalculationService = gpaCalculationService;
     }
 
     /// <summary>
@@ -315,5 +318,27 @@ public class StudentController : ControllerBase
         };
 
         return Ok(dto);
+    }
+
+    /// <summary>
+    /// GET api/student/term-gpa-history — returns the student's term-based ANO/AGNO timeline.
+    /// </summary>
+    [HttpGet("term-gpa-history")]
+    [Authorize(Roles = "Student")]
+    public async Task<IActionResult> GetTermGpaHistory()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
+
+        var student = await _context.Students
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+
+        if (student == null)
+            return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
+
+        var history = await _gpaCalculationService.GetTermGpaHistoryAsync(student.Id);
+        return Ok(history);
     }
 }

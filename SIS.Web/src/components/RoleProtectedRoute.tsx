@@ -2,7 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 interface RoleProtectedRouteProps {
-  allowedRoles: string[];
+  allowedRoles: readonly string[];
 }
 
 export default function RoleProtectedRoute({ allowedRoles }: RoleProtectedRouteProps) {

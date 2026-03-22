@@ -13,6 +13,8 @@ public static partial class SeedData
         // 1. ADMIN
         // ============================================================
         await EnsureUserAsync(userManager, "admin@ankarabilim.edu.tr", "System", "Admin", "Admin123!", "SystemAdministrator");
+        await EnsureUserAsync(userManager, "idari@ankarabilim.edu.tr", "Akademik", "Personel", "Idari123!", "AdministrativeStaff");
+        await EnsureUserAsync(userManager, "danisman@ankarabilim.edu.tr", "Akademik", "Danisman", "Danisman123!", "AcademicAdvisor");
 
         // ============================================================
         // 2. INSTRUCTORS (36 total)
@@ -76,6 +78,8 @@ public static partial class SeedData
             }
         }
         await context.SaveChangesAsync();
+
+        await EnsureUserAsync(userManager, "ender.sevinc@ankarabilim.edu.tr", "Ender", "Sevinç", "Ogretmen123!", "DepartmentManager");
 
         // ============================================================
         // 3. STUDENTS (18 total)
@@ -176,8 +180,16 @@ public static partial class SeedData
             if (!result.Succeeded)
                 throw new InvalidOperationException(
                     $"Failed to create user '{email}': {string.Join(", ", result.Errors.Select(e => e.Description))}");
-            await userManager.AddToRoleAsync(user, role);
         }
+
+        if (!await userManager.IsInRoleAsync(user, role))
+        {
+            var addRoleResult = await userManager.AddToRoleAsync(user, role);
+            if (!addRoleResult.Succeeded)
+                throw new InvalidOperationException(
+                    $"Failed to assign role '{role}' to '{email}': {string.Join(", ", addRoleResult.Errors.Select(e => e.Description))}");
+        }
+
         return user;
     }
 }
