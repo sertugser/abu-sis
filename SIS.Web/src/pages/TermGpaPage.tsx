@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { AlertCircle, BarChart3, CalendarRange, GraduationCap, TrendingUp } from 'lucide-react';
+import { AlertCircle, BarChart3, CalendarRange, TrendingUp } from 'lucide-react';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useTermGpaHistory } from '../hooks/useTermGpaHistory';
 import type { StudentTermGpaDto } from '../types/student';
@@ -67,7 +67,7 @@ export default function TermGpaPage() {
   const totalCourses = history.reduce((sum, term) => sum + term.courseCount, 0);
   const totalEcts = history.reduce((sum, term) => sum + term.totalEcts, 0);
   const bestSgpa = history.length > 0 ? Math.max(...history.map(term => term.sgpa)) : 0;
-  const bestCgpa = history.length > 0 ? Math.max(...history.map(term => term.cgpa)) : 0;
+
 
   if (history.length === 0) {
     return (
@@ -109,10 +109,6 @@ export default function TermGpaPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Akademik Performans Özeti</p>
                 <div>
                   <h1 className="font-heading text-3xl font-extrabold tracking-tight">Dönem Ortalamaları</h1>
-                  <p className="mt-2 max-w-3xl text-[15px] leading-7 text-slate-200/90">
-                    ANO ve AGNO geçmişiniz, mevcut not hesaplama kurallarıyla oluşturulan resmi dönem verileri üzerinden
-                    rapor formatında sunulur.
-                  </p>
                 </div>
               </div>
 
@@ -120,10 +116,6 @@ export default function TermGpaPage() {
                 <Badge variant="secondary" className="border border-white/10 bg-white/10 text-white">
                   <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
                   {latestTerm?.termName ?? 'Dönem bilgisi yok'}
-                </Badge>
-                <Badge variant="secondary" className="border border-white/10 bg-white/10 text-white">
-                  <GraduationCap className="mr-1.5 h-3.5 w-3.5" />
-                  Güncel AGNO: {student.cgpa.toFixed(2)}
                 </Badge>
               </div>
             </div>
@@ -140,7 +132,7 @@ export default function TermGpaPage() {
 
       <ReportChartSection
         title="Dönem Ortalamaları"
-        description="Her dönemin ANO değeri tek bakışta okunabilecek geniş bir sütun grafikte gösterilir."
+        description=""
         legendLabel="ANO"
         legendTone="sgpa"
         history={history}
@@ -149,7 +141,7 @@ export default function TermGpaPage() {
 
       <ReportChartSection
         title="Genel Ortalamalar"
-        description="Dönem sonu AGNO değerleri ayrı blokta izlenir; böylece dönem performansı ile kümülatif sonuç karışmaz."
+        description=""
         legendLabel="AGNO"
         legendTone="cgpa"
         history={history}
@@ -159,9 +151,6 @@ export default function TermGpaPage() {
       <Card className="overflow-hidden">
         <CardHeader className="border-b border-border/70 bg-gradient-to-r from-primary/[0.04] to-transparent">
           <CardTitle>Dönem Bazlı Resmi Özet</CardTitle>
-          <CardDescription>
-            Dönem sayısı, kredi yükü, AKTS ve ortalama bilgileri tablo halinde birlikte listelenir.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -204,13 +193,6 @@ export default function TermGpaPage() {
             </Table>
           </div>
 
-          <div className="border-t border-border/70 bg-muted/10 px-6 py-4">
-            <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
-              <FooterInfo label="En Yüksek ANO" value={bestSgpa.toFixed(2)} />
-              <FooterInfo label="En Yüksek AGNO" value={bestCgpa.toFixed(2)} />
-              <FooterInfo label="Toplam AKTS" value={String(totalEcts)} />
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
@@ -302,15 +284,6 @@ function LegendBadge({ label, tone }: { label: string; tone: 'sgpa' | 'cgpa' }) 
       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
       {label}
     </span>
-  );
-}
-
-function FooterInfo({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-white px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-bold text-foreground">{value}</p>
-    </div>
   );
 }
 

@@ -1,4 +1,4 @@
-import { CalendarDays, Clock3, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -29,10 +29,6 @@ export default function AcademicCalendarPage() {
           <h1 className="font-heading text-2xl font-extrabold tracking-tight text-foreground">
             Akademik Takvim
           </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            2025-2026 Bahar dönemi akademik takvimi, Ankara Bilim Üniversitesi resmi öğrenci sayfasındaki
-            duyuruya göre düzenlenmiştir.
-          </p>
         </div>
 
         <a
@@ -122,57 +118,6 @@ export default function AcademicCalendarPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Clock3 className="h-4 w-4 text-success" />
-              Şu an öne çıkanlar
-            </CardTitle>
-            <CardDescription>Bugün itibarıyla aktif olan veya en yakın tarihte başlayacak kalemler.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[...currentEvents, ...upcomingEvents.slice(0, 3)].map(event => (
-              <div key={event.id} className="rounded-xl border bg-card px-4 py-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium text-foreground">{event.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {event.startLabel} - {event.endLabel}
-                    </p>
-                  </div>
-                  <StatusBadge status={getEventStatus(event)} />
-                </div>
-              </div>
-            ))}
-            {currentEvents.length === 0 && upcomingEvents.length === 0 && (
-              <p className="text-sm text-muted-foreground">Takvim üzerinde yeni bir aksiyon görünmüyor.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="h-4 w-4 text-primary" />
-              Kullanım Notu
-            </CardTitle>
-            <CardDescription>Öğrenci ekranında sık takip edilen başlıklar için kısa yönlendirme.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              Ders kayıt ve danışman onayı tarihleri kaçırılmaması gereken ilk kritik aralıklar olarak öne çıkar.
-            </p>
-            <p>
-              Ara sınav, dönem sonu ve bütünleme tarihleri resmi takvimde ilan edilen günlere göre takip edilmelidir.
-            </p>
-            <p>
-              Resmi tatil ve bayram günleri de aynı tabloda yer aldığı için ders veya sınav planlaması yaparken doğrudan
-              bu ekran referans alınabilir.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

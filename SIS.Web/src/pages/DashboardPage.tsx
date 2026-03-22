@@ -43,9 +43,6 @@ export default function DashboardPage() {
         <h1 className="font-heading text-2xl font-extrabold text-foreground tracking-tight">
           Hoş Geldiniz, <span className="text-primary">{student.firstName}</span>
         </h1>
-        <p className="text-muted-foreground mt-1">
-          {student.programName} — {classYear}. Sınıf, {currentSemester}. Dönem
-        </p>
       </div>
 
       
