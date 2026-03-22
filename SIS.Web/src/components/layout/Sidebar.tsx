@@ -1,15 +1,7 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ROUTES } from '../../lib/constants';
-import {
-  ADVISOR_ROLES,
-  getPrimaryRole,
-  hasAnyRole,
-  INSTRUCTOR_ROLES,
-  MANAGEMENT_ROLES,
-  STUDENT_ROLES,
-} from '../../lib/roles';
 import {
   LayoutGrid,
   BookOpen,
@@ -25,6 +17,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import logo from '/logo.png';
 
 interface MenuGroup {
   id: string;
@@ -40,10 +33,10 @@ const studentMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.KULLANIM_KILAVUZU, label: 'Kullanım Kılavuzu' },
+      { to: '/kullanim-kilavuzu', label: 'Kullanım Kılavuzu' },
       { to: '/ozluk-bilgileri', label: 'Özlük Bilgileri' },
       { to: '/genel-bilgiler', label: 'Genel Bilgiler' },
-      { to: ROUTES.AKADEMIK_TAKVIM, label: 'Akademik Takvim' },
+      { to: '/akademik-takvim', label: 'Akademik Takvim' },
       { to: '/danisman-bilgileri', label: 'Danışman Bilgileri' },
       { to: ROUTES.ALINAN_DERSLER, label: 'Alınan Dersler' },
       { to: '/acilan-bolum-dersleri', label: 'Açılan Bölüm Dersleri' },
@@ -63,12 +56,12 @@ const studentMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DERS_KAYIT, label: 'Ders Kayıt' },
       { to: '/ders-ekle-birak', label: 'Ders Ekle/Bırak' },
-      { to: ROUTES.DONEM_ORTALAMALARI, label: 'Dönem Ortalamaları' },
+      { to: '/donem-ortalamalari', label: 'Dönem Ortalamaları' },
       { to: '/not-listesi', label: 'Not Listesi' },
       { to: '/transkript', label: 'Transkript' },
       { to: '/transkript-senaryosu', label: 'Transkript Senaryosu' },
       { to: '/diger-belgeler', label: 'Diğer Belgeler' },
-      { to: ROUTES.MUFREDAT_DURUM, label: 'Müfredat Durum' },
+      { to: '/mufredat-durum', label: 'Müfredat Durum' },
       { to: '/mufredat-bilgi-paketi', label: 'Müfredat Bilgi Paketi' },
       { to: '/staj-basvurusu', label: 'Staj Başvurusu' },
       { to: '/devamsizlik-durumu', label: 'Devamsızlık Durumu' },
@@ -123,28 +116,18 @@ const studentMenuGroups: MenuGroup[] = [
   },
 ];
 
-function buildOperationsMenuGroups(options: {
-  hasInstructor: boolean;
-  hasManagement: boolean;
-}): MenuGroup[] {
-  const { hasInstructor, hasManagement } = options;
-
-  const quickLinks = [
-    { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-    ...(hasInstructor ? [{ to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' }] : []),
-    ...(hasInstructor ? [{ to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Program Planlama' }] : []),
-    ...(hasInstructor ? [{ to: ROUTES.GRADE_ENTRY, label: 'Not Girişi' }] : []),
-    ...(hasManagement ? [{ to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama Merkezi' }] : []),
-    ...(hasManagement ? [{ to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' }] : []),
-    ...(hasManagement ? [{ to: ROUTES.MANAGEMENT_CURRICULUM, label: 'Müfredat Görünümü' }] : []),
-  ];
-
+function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup[] {
   return [
     {
       id: 'sik-kullanilanlar',
       label: 'Sık Kullanılanlar',
       icon: LayoutGrid,
-      children: quickLinks,
+      children: [
+        { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
+        { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
+        ...(includeScheduling ? [{ to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Program Planlama' }] : []),
+        { to: '/not-girisi', label: 'Not Girişi' },
+      ],
     },
     {
       id: 'ogrenci-islemleri',
@@ -213,7 +196,7 @@ function buildOperationsMenuGroups(options: {
       icon: GraduationCap,
       children: [
         { to: '/bolum-ogrenci-islemleri', label: 'Öğrenci İşlemleri' },
-        { to: hasManagement ? ROUTES.MANAGEMENT_CLASS_LISTS : '/sinif-listeleri-yonlendirme', label: 'Sınıf Listeleri' },
+        { to: '/sinif-listeleri', label: 'Sınıf Listeleri' },
         { to: '/bolum-ders-islemleri', label: 'Bölüm Ders İşlemleri' },
         { to: '/bolum-ders-ac-mufredat', label: 'Ders Aç (Müfredat)' },
         { to: '/bolum-ders-ac-hareket', label: 'Ders Aç (Hareket)' },
@@ -249,145 +232,101 @@ function buildOperationsMenuGroups(options: {
 }
 
 function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
-  const menuGroups: MenuGroup[] = [];
-  const hasStudent = hasAnyRole(roles, STUDENT_ROLES);
-  const hasInstructor = hasAnyRole(roles, INSTRUCTOR_ROLES);
-  const hasManagement = hasAnyRole(roles, MANAGEMENT_ROLES);
-  const hasAdvisor = hasAnyRole(roles, ADVISOR_ROLES);
-
-  if (hasStudent) {
-    menuGroups.push(...studentMenuGroups);
+  if (roles.includes('Instructor') || roles.includes('AcademicAdvisor')) {
+    return buildInstructorMenuGroups(roles.includes('Instructor'));
   }
-
-  if (hasInstructor || hasManagement || hasAdvisor) {
-    menuGroups.push(...buildOperationsMenuGroups({ hasInstructor, hasManagement }));
-  }
-
-  return menuGroups.length > 0 ? menuGroups : studentMenuGroups;
+  return studentMenuGroups;
 }
 
 function getRoleLabel(roles: string[]): string {
-  const primaryRole = getPrimaryRole(roles);
-
-  if (primaryRole === 'Instructor') return 'Öğretim Üyesi Paneli';
-  if (primaryRole === 'AcademicAdvisor') return 'Danışman Paneli';
-  if (primaryRole === 'DepartmentManager') return 'Bölüm Başkanı Paneli';
-  if (primaryRole === 'AdministrativeStaff') return 'Akademik İşler Paneli';
-  if (primaryRole === 'SystemAdministrator') return 'Yönetici Paneli';
+  if (roles.includes('Instructor')) return 'Öğretim Üyesi Paneli';
+  if (roles.includes('AcademicAdvisor')) return 'Danışman Paneli';
+  if (roles.includes('DepartmentManager')) return 'Bölüm Başkanı Paneli';
+  if (roles.includes('SystemAdministrator')) return 'Yönetici Paneli';
   return 'Öğrenci Bilgi Sistemi';
 }
 
-interface SidebarProps {
-  isCollapsed: boolean;
-}
-
-export default function Sidebar({ isCollapsed }: SidebarProps) {
+export default function Sidebar() {
   const { user, logout } = useAuth();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const location = useLocation();
 
   const roles = user?.roles ?? [];
   const menuGroups = getMenuGroupsForRole(roles);
 
   const toggleGroup = (id: string) => {
-    setOpenGroup(prev => (prev === id ? null : id));
+    setOpenGroup(prev => prev === id ? null : id);
   };
 
   const initials = user?.name
-    ? user.name.split(' ').map(name => name[0]).join('').toUpperCase().slice(0, 2)
+    ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '??';
 
-  const isRouteInGroup = (group: MenuGroup) =>
-    group.children.some(child =>
-      child.to === '/'
-        ? location.pathname === '/'
-        : location.pathname === child.to || location.pathname.startsWith(`${child.to}/`)
-    );
-
-  const hasAnyActiveGroup = menuGroups.some(isRouteInGroup);
-
   return (
-    <aside
-      className={cn(
-        'fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-white/10 bg-[linear-gradient(180deg,#13233f_0%,#182b4b_58%,#132139_100%)] text-slate-100 shadow-[18px_0_50px_rgba(15,23,42,0.18)] transition-[width] duration-300 lg:flex',
-        isCollapsed ? 'w-[88px]' : 'w-[280px]',
-      )}
-    >
-      <div className="p-5 pb-4">
-        <div
-          className={cn(
-            'rounded-2xl border border-white/10 bg-white/5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
-            isCollapsed ? 'px-0' : 'px-4',
-          )}
-        >
-          <div className={cn('flex items-center gap-3', isCollapsed && 'justify-center')}>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-primary shadow-sm">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            {!isCollapsed && (
-              <div className="min-w-0">
-                <h1 className="font-heading text-sm font-bold tracking-tight text-white">
-                  Ankara Bilim Üniversitesi
-                </h1>
-                <p className="mt-0.5 text-xs text-slate-300">{getRoleLabel(roles)}</p>
-              </div>
-            )}
+    <aside className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-[260px] flex-col bg-sidebar border-r border-border">
+
+      <div className="p-5 pb-2">
+        <div className="flex items-center gap-3">
+          <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
+          <div className="flex flex-col items-start justify-center">
+            <h1 className="font-heading text-[13px] font-bold text-[#003366] leading-none uppercase tracking-tight">
+              Ankara Bilim
+            </h1>
+            <h1 className="font-heading text-[11px] font-bold text-[#003366]/90 leading-none uppercase tracking-tighter mt-1">
+              Üniversitesi
+            </h1>
           </div>
         </div>
-        <Separator className="mt-4 bg-white/10" />
+
+
+        <div className="mt-4 flex flex-col gap-0.5">
+          <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
+            {getRoleLabel(roles)}
+          </p>
+        </div>
+
+        <Separator className="mt-4" />
       </div>
 
-      <ScrollArea className={cn('flex-1', isCollapsed ? 'px-2' : 'px-3')}>
-        <nav className="space-y-0.5 py-1">
-          {menuGroups.map((group, index) => {
-            const isGroupActive = isRouteInGroup(group);
-            const isOpen = openGroup
-              ? openGroup === group.id
-              : hasAnyActiveGroup
-                ? isGroupActive
-                : index === 0;
+      <ScrollArea className="flex-1 px-3">
+        <nav className="space-y-0.5 py-2">
+          {menuGroups.map(group => {
+            const isOpen = openGroup === group.id;
             const Icon = group.icon;
 
             return (
-              <div key={group.id}>
+              <div key={group.id} className="mb-1">
                 <button
                   onClick={() => toggleGroup(group.id)}
-                  title={group.label}
                   className={cn(
-                    'group flex w-full items-center rounded-xl text-sm font-medium transition-colors duration-150',
-                    isCollapsed ? 'justify-center px-2 py-3.5' : 'gap-3 px-3.5 py-3',
-                    isOpen || isGroupActive
-                      ? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
-                      : 'text-slate-300 hover:bg-white/5 hover:text-white',
+                    'group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
+                    isOpen
+                      ? 'bg-primary/10 text-primary shadow-sm'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   <Icon className="h-[18px] w-[18px] shrink-0" />
-                  {!isCollapsed && (
-                    <>
-                      <span className="flex-1 text-left truncate">{group.label}</span>
-                      <ChevronRight
-                        className={cn(
-                          'h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
-                          isOpen && 'rotate-90',
-                        )}
-                      />
-                    </>
-                  )}
+                  <span className="flex-1 text-left truncate">{group.label}</span>
+                  <ChevronRight
+                    className={cn(
+                      'h-4 w-4 shrink-0 opacity-50 transition-transform duration-200',
+                      isOpen && 'rotate-90 opacity-100'
+                    )}
+                  />
                 </button>
 
-                {!isCollapsed && isOpen && (
-                  <div className="mt-1 ml-[21px] border-l border-white/10 pl-3 space-y-1 pb-1">
+                {isOpen && (
+                  <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
                     {group.children.map(child => (
                       <NavLink
-                        key={`${group.id}-${child.label}-${child.to}`}
+                        key={child.to}
                         to={child.to}
                         end={child.to === '/'}
                         className={({ isActive }) =>
                           cn(
-                            'block rounded-lg px-3 py-2 text-[13px] transition-colors duration-150',
+                            'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150',
                             isActive
-                              ? 'bg-white/12 font-semibold text-white'
-                              : 'text-slate-300 hover:bg-white/5 hover:text-white',
+                              ? 'text-primary font-semibold bg-primary/5'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                           )
                         }
                       >
@@ -402,27 +341,19 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
         </nav>
       </ScrollArea>
 
-      <div className="p-4">
-        <Separator className="mb-4 bg-white/10" />
-        <div
-          className={cn(
-            'rounded-2xl border border-white/10 bg-white/5 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]',
-            isCollapsed ? 'flex flex-col items-center gap-3' : 'flex items-center gap-3',
-          )}
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-primary shadow-sm">
+      <div className="mt-auto border-t p-4 bg-muted/30">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#003366] text-white text-xs font-bold shadow-sm">
             {initials}
           </div>
-          {!isCollapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-white">{user?.name}</p>
-              <p className="truncate text-xs text-slate-300">{user?.email}</p>
-            </div>
-          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">{user?.name}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
+          </div>
           <button
             onClick={logout}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 transition-colors duration-150 hover:bg-white/10 hover:text-white"
-            title="Çıkış Yap"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            title="Güvenli Çıkış"
           >
             <LogOut className="h-4 w-4" />
           </button>
