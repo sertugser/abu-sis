@@ -48,17 +48,29 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stats — top row */}
+      {/* Stats — top row (Turkuaz, Canlı Mavi ve Gök Mavisi) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-primary" mono />
-        <StatCard label="GANO" value={student.cgpa.toFixed(2)} sub={`ECTS Limiti: ${ectsLimit}`} accentColor="border-l-accent" />
-        <StatCard label="Sınıf / Dönem" value={`${classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-info" />
+        {/* İSTEDİĞİN DÜZELTME 1 👇: 
+           Öğrenci No: Lacivert yerine Turkuaz yaptık (Daha önce Fakülte'deydi). 👉 border-l-teal-500 */}
+        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-teal-500" mono />
+        
+        {/* GANO: Canlı Bir Mavi (Aynı kalıyor, şık duruyor) */}
+        <StatCard label="GANO" value={student.cgpa.toFixed(2)} sub={`ECTS Limiti: ${ectsLimit}`} accentColor="border-l-blue-500" />
+        
+        {/* Sınıf / Dönem: Açık Mavi (Aynı kalıyor) */}
+        <StatCard label="Sınıf / Dönem" value={`${classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-cyan-500" />
       </div>
 
-      {/* Info — second row */}
+      {/* Info — second row (Koyu Mavi, Okul Laciverti ve Canlı Yeşil) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-        <StatCard label="Program" value={student.programName} sub={student.departmentName} accentColor="border-l-primary" valueSize="text-base" />
-        <StatCard label="Fakülte" value={student.facultyName} accentColor="border-l-muted-foreground" valueSize="text-base" />
+        {/* Program: Koyu Mavi (Aynı kalıyor) */}
+        <StatCard label="Program" value={student.programName} sub={student.departmentName} accentColor="border-l-indigo-700" valueSize="text-base" />
+        
+        {/* İSTEDİĞİN DÜZELTME 2 👇: 
+           Fakülte: Turkuaz yerine OKUL LACİVERTİ yaptık (Daha önce Öğrenci No'daydı). 👉 border-l-[#003366] */}
+        <StatCard label="Fakülte" value={student.facultyName} accentColor="border-l-[#003366]" valueSize="text-base" />
+        
+        {/* Durum: Zaten Yeşil (Aynı kalıyor) */}
         <Card className="border-l-4 border-l-success hover:-translate-y-0.5 hover:shadow-md transition-all">
           <CardContent className="p-5">
             <div className="space-y-2">
