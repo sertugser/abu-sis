@@ -261,9 +261,9 @@ export default function Sidebar() {
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '??';
 
-return (
+  return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-[260px] flex-col bg-sidebar border-r border-border">
-      
+
       <div className="p-5 pb-2">
         <div className="flex items-center gap-3">
           <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
@@ -277,16 +277,16 @@ return (
           </div>
         </div>
 
-        
+
         <div className="mt-4 flex flex-col gap-0.5">
           <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
             {getRoleLabel(roles)}
           </p>
         </div>
-        
+
         <Separator className="mt-4" />
       </div>
-      
+
       <ScrollArea className="flex-1 px-3">
         <nav className="space-y-0.5 py-2">
           {menuGroups.map(group => {
