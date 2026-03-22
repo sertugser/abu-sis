@@ -17,6 +17,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import logo from '/logo.png';
 
 interface MenuGroup {
   id: string;
@@ -262,30 +263,44 @@ export default function Sidebar() {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-[260px] flex-col bg-sidebar border-r border-border">
-      {/* Header / Branding */}
-      <div className="p-5 pb-4">
-        <h1 className="font-heading text-sm font-bold text-primary tracking-tight">
-          Ankara Bilim Üniversitesi
-        </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">{getRoleLabel(roles)}</p>
+
+      <div className="p-5 pb-2">
+        <div className="flex items-center gap-3">
+          <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
+          <div className="flex flex-col items-start justify-center">
+            <h1 className="font-heading text-[13px] font-bold text-[#003366] leading-none uppercase tracking-tight">
+              Ankara Bilim
+            </h1>
+            <h1 className="font-heading text-[11px] font-bold text-[#003366]/90 leading-none uppercase tracking-tighter mt-1">
+              Üniversitesi
+            </h1>
+          </div>
+        </div>
+
+
+        <div className="mt-4 flex flex-col gap-0.5">
+          <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
+            {getRoleLabel(roles)}
+          </p>
+        </div>
+
         <Separator className="mt-4" />
       </div>
 
-      {/* Navigation */}
       <ScrollArea className="flex-1 px-3">
-        <nav className="space-y-0.5 py-1">
+        <nav className="space-y-0.5 py-2">
           {menuGroups.map(group => {
             const isOpen = openGroup === group.id;
             const Icon = group.icon;
 
             return (
-              <div key={group.id}>
+              <div key={group.id} className="mb-1">
                 <button
                   onClick={() => toggleGroup(group.id)}
                   className={cn(
-                    'group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150',
+                    'group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
                     isOpen
-                      ? 'bg-primary/8 text-primary'
+                      ? 'bg-primary/10 text-primary shadow-sm'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
@@ -293,15 +308,14 @@ export default function Sidebar() {
                   <span className="flex-1 text-left truncate">{group.label}</span>
                   <ChevronRight
                     className={cn(
-                      'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
-                      isOpen && 'rotate-90'
+                      'h-4 w-4 shrink-0 opacity-50 transition-transform duration-200',
+                      isOpen && 'rotate-90 opacity-100'
                     )}
                   />
                 </button>
 
-                {/* Submenu items */}
                 {isOpen && (
-                  <div className="mt-0.5 ml-[21px] border-l-[2px] border-border pl-3 space-y-0.5 pb-1">
+                  <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
                     {group.children.map(child => (
                       <NavLink
                         key={child.to}
@@ -309,9 +323,9 @@ export default function Sidebar() {
                         end={child.to === '/'}
                         className={({ isActive }) =>
                           cn(
-                            'block rounded-md px-3 py-1.5 text-[13px] transition-colors duration-150',
+                            'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150',
                             isActive
-                              ? 'text-primary font-medium bg-primary/5'
+                              ? 'text-primary font-semibold bg-primary/5'
                               : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                           )
                         }
@@ -327,21 +341,19 @@ export default function Sidebar() {
         </nav>
       </ScrollArea>
 
-      {/* User section */}
-      <div className="p-4">
-        <Separator className="mb-4" />
+      <div className="mt-auto border-t p-4 bg-muted/30">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#003366] text-white text-xs font-bold shadow-sm">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+            <p className="text-sm font-semibold text-foreground truncate">{user?.name}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
           </div>
           <button
             onClick={logout}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150"
-            title="Çıkış Yap"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            title="Güvenli Çıkış"
           >
             <LogOut className="h-4 w-4" />
           </button>

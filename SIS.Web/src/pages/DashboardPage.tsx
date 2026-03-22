@@ -48,17 +48,27 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stats — top row */}
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-primary" mono />
-        <StatCard label="GANO" value={student.cgpa.toFixed(2)} sub={`ECTS Limiti: ${ectsLimit}`} accentColor="border-l-accent" />
-        <StatCard label="Sınıf / Dönem" value={`${classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-info" />
+        
+        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-teal-500" mono />
+        
+        
+        <StatCard label="GANO" value={student.cgpa.toFixed(2)} sub={`ECTS Limiti: ${ectsLimit}`} accentColor="border-l-blue-500" />
+        
+        
+        <StatCard label="Sınıf / Dönem" value={`${classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-cyan-500" />
       </div>
 
-      {/* Info — second row */}
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-        <StatCard label="Program" value={student.programName} sub={student.departmentName} accentColor="border-l-primary" valueSize="text-base" />
-        <StatCard label="Fakülte" value={student.facultyName} accentColor="border-l-muted-foreground" valueSize="text-base" />
+        
+        <StatCard label="Program" value={student.programName} sub={student.departmentName} accentColor="border-l-indigo-700" valueSize="text-base" />
+        
+        
+        <StatCard label="Fakülte" value={student.facultyName} accentColor="border-l-[#003366]" valueSize="text-base" />
+        
+        
         <Card className="border-l-4 border-l-success hover:-translate-y-0.5 hover:shadow-md transition-all">
           <CardContent className="p-5">
             <div className="space-y-2">
@@ -74,7 +84,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Active term */}
+      
       {term && (
         <Card>
           <CardContent className="p-5">
