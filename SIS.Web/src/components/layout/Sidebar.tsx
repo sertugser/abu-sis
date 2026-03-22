@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { getRoleLabel } from '../../lib/utils';
 import { ROUTES } from '../../lib/constants';
 import {
   LayoutGrid,
@@ -263,7 +264,7 @@ export default function Sidebar() {
 
 return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-[260px] flex-col bg-sidebar border-r border-border">
-      {/* Header / Branding */}
+      
       <div className="p-5 pb-2">
         <div className="flex items-center gap-3">
           <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
@@ -277,17 +278,20 @@ return (
           </div>
         </div>
 
-        {/* Sistem Adı ve Dinamik Rol - Tek Blokta Hizalı */}
+        
         <div className="mt-4 flex flex-col gap-0.5">
           <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
             Öğrenci Bilgi Sistemi
+          </p>
+          
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider opacity-80">
+            {getRoleLabel(roles)}
           </p>
         </div>
         
         <Separator className="mt-4" />
       </div>
-
-      {/* Navigation - Kaydırılabilir Alan */}
+      
       <ScrollArea className="flex-1 px-3">
         <nav className="space-y-0.5 py-2">
           {menuGroups.map(group => {
@@ -342,7 +346,6 @@ return (
         </nav>
       </ScrollArea>
 
-      {/* User Section - Alt Kısım */}
       <div className="mt-auto border-t p-4 bg-muted/30">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#003366] text-white text-xs font-bold shadow-sm">
