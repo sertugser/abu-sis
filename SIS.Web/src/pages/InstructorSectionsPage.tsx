@@ -3,14 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/lib/constants';
 import { useInstructorSections, useSectionStudents } from '../hooks/useInstructorSections';
-import { BookOpen, Users, ChevronDown, ChevronUp, Mail, ClipboardEdit, Calendar } from 'lucide-react';
+import { BookOpen, Users, ChevronDown, ChevronUp, Mail, ClipboardEdit, Calendar, Search } from 'lucide-react';
 
 export default function InstructorSectionsPage() {
   const { data, isLoading } = useInstructorSections();
   const [expandedSection, setExpandedSection] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   if (isLoading) {
     return (
@@ -28,6 +30,12 @@ export default function InstructorSectionsPage() {
       </div>
     );
   }
+
+  const filteredSections = data.sections.filter(section => {
+    if (!searchTerm.trim()) return true;
+    const normalizedSearch = searchTerm.toLowerCase();
+    return `${section.courseCode} ${section.courseName} ${section.classroomName} ${section.schedule}`.toLowerCase().includes(normalizedSearch);
+  });
 
   return (
     <div className="space-y-6">
@@ -48,8 +56,28 @@ export default function InstructorSectionsPage() {
         </div>
       </div>
 
+      <Card>
+        <CardContent className="p-4">
+          <div className="relative">
+            <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              placeholder="Ders kodu, ders adi, derslik veya programa gore ara"
+              className="pl-9"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="space-y-4">
-        {data.sections.map(section => (
+        {filteredSections.length === 0 ? (
+          <Card>
+            <CardContent className="py-16 text-center text-muted-foreground">
+              Filtreye uyan ders bulunamadi.
+            </CardContent>
+          </Card>
+        ) : filteredSections.map(section => (
           <SectionCard
             key={section.sectionId}
             section={section}

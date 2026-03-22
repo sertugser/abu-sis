@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -77,6 +78,7 @@ builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 
 var app = builder.Build();
 

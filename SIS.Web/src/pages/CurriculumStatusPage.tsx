@@ -1,11 +1,12 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useCurriculumStatus } from '../hooks/useCurriculumStatus';
-import { AlertCircle, Printer, BookX, AlertTriangle } from 'lucide-react';
+import { AlertCircle, Printer, BookX, AlertTriangle, Search } from 'lucide-react';
 import type { CurriculumCourseStatusDto, CurriculumSemesterDto } from '../types/curriculum';
 
 
@@ -20,6 +21,7 @@ function getGradeBadgeVariant(grade: string | null, status: string | null): 'suc
 export default function CurriculumStatusPage() {
   const { data, isLoading, error } = useCurriculumStatus();
   const printRef = useRef<HTMLDivElement>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   if (isLoading) {
     return (
@@ -43,6 +45,21 @@ export default function CurriculumStatusPage() {
   const handlePrint = () => {
     window.print();
   };
+
+  const allCourses = data.semesters.flatMap(semester => semester.courses);
+  const failedCourseCount = allCourses.filter(course => course.gradeStatus === 'failed').length;
+  const currentCourseCount = allCourses.filter(course => course.gradeStatus === 'current').length;
+  const prerequisiteRiskCount = allCourses.filter(course => course.prerequisites.length > 0 && !course.prerequisitesMet).length;
+  const filteredSemesters = data.semesters
+    .map(semester => ({
+      ...semester,
+      courses: semester.courses.filter(course => {
+        if (!searchTerm.trim()) return true;
+        const normalizedSearch = searchTerm.toLowerCase();
+        return `${course.code} ${course.name} ${course.takenCourseCode ?? ''} ${course.takenCourseName ?? ''}`.toLowerCase().includes(normalizedSearch);
+      }),
+    }))
+    .filter(semester => semester.courses.length > 0);
 
   return (
     <div className="space-y-6" ref={printRef}>
@@ -74,16 +91,38 @@ export default function CurriculumStatusPage() {
         <SummaryCard label="Basarili Olunan AKTS" value={data.passedEcts} highlight="success" />
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <SummaryCard label="Basarisiz Ders" value={failedCourseCount} highlight={failedCourseCount > 0 ? 'destructive' : undefined} />
+        <SummaryCard label="Devam Eden Ders" value={currentCourseCount} />
+        <SummaryCard label="On Kosul Riski" value={prerequisiteRiskCount} highlight={prerequisiteRiskCount > 0 ? 'destructive' : undefined} />
+      </div>
+
+      <Card className="print:hidden">
+        <CardContent className="p-4">
+          <div className="relative">
+            <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              placeholder="Ders kodu veya ders adi ile filtrele"
+              className="pl-9"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Semester Tables */}
-      {data.semesters.map(sem => (
+      {filteredSemesters.map(sem => (
         <SemesterTable key={sem.semesterNumber} semester={sem} />
       ))}
 
       {/* Empty semesters not in curriculum */}
-      {data.semesters.length === 0 && (
+      {filteredSemesters.length === 0 && (
         <div className="text-center py-16">
           <BookX className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-          <h3 className="font-heading text-lg font-semibold text-foreground">Mufredat bulunamadi</h3>
+          <h3 className="font-heading text-lg font-semibold text-foreground">
+            {data.semesters.length === 0 ? 'Mufredat bulunamadi' : 'Filtreye uyan ders bulunamadi'}
+          </h3>
         </div>
       )}
     </div>

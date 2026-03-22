@@ -17,5 +17,6 @@ public static partial class SeedData
         await SeedUsersAsync(context, userManager);
         await SeedInstructorAvailabilitiesAsync(context);
         await SeedRegistrationsAsync(context);
+        await SeedSectionSchedulesAsync(context);
     }
 }

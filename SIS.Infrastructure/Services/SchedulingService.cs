@@ -30,6 +30,12 @@ public class SchedulingService : ISchedulingService
         return validation.Conflicts;
     }
 
+    public async Task<List<SchedulingConflictDto>> GetConflictsByDepartmentAsync(int departmentId, int? termId = null, CancellationToken cancellationToken = default)
+    {
+        var validation = await ValidateExistingByDepartmentAsync(departmentId, termId, cancellationToken);
+        return validation.Conflicts;
+    }
+
     public async Task<ScheduleValidationResultDto> ValidateAsync(ScheduleValidationRequestDto request, CancellationToken cancellationToken = default)
     {
         var result = new ScheduleValidationResultDto { IsValid = true };
@@ -55,7 +61,7 @@ public class SchedulingService : ISchedulingService
             return result;
         }
 
-        var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, cancellationToken);
+        var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
 
         result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
@@ -81,10 +87,37 @@ public class SchedulingService : ISchedulingService
             return result;
         }
 
-        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, cancellationToken);
+        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
         var evaluation = EvaluateExistingConflicts(snapshot);
 
         evaluation.Notes.Insert(0, $"Degerlendirilen donem: {snapshot.TermName}");
+        return evaluation;
+    }
+
+    public async Task<ScheduleValidationResultDto> ValidateExistingByDepartmentAsync(int departmentId, int? termId = null, CancellationToken cancellationToken = default)
+    {
+        var result = new ScheduleValidationResultDto { IsValid = true };
+        if (departmentId <= 0)
+        {
+            result.IsValid = false;
+            result.Notes.Add("Gecerli bir departmentId gonderilmelidir.");
+            return result;
+        }
+
+        var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
+        if (resolvedTerm == null)
+        {
+            result.IsValid = false;
+            result.Notes.Add(termId.HasValue
+                ? "Belirtilen akademik donem bulunamadi."
+                : "Aktif akademik donem bulunamadi.");
+            return result;
+        }
+
+        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, departmentId, cancellationToken);
+        var evaluation = EvaluateExistingConflicts(snapshot);
+        evaluation.Notes.Insert(0, $"Degerlendirilen donem: {snapshot.TermName}");
+        evaluation.Notes.Insert(1, $"Kapsam: {snapshot.ScopeName}");
         return evaluation;
     }
 
@@ -153,7 +186,7 @@ public class SchedulingService : ISchedulingService
             return response;
         }
 
-        var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, cancellationToken);
+        var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var currentParse = ParseScheduleJson(section.ScheduleJson);
         var durationMinutes = ResolveDesiredSlotDurations(section, currentParse.Slots);
         var slotCombinations = BuildSuggestedSlotCombinations(durationMinutes, currentParse.Slots, availabilities);
@@ -220,22 +253,38 @@ public class SchedulingService : ISchedulingService
         return response;
     }
 
-    private async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, CancellationToken cancellationToken)
+    private async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
     {
-        var sections = await _context.CourseSections
+        var sectionsQuery = _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
             .Where(cs => cs.TermId == termId && cs.IsActive)
-            .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value)
-            .ToListAsync(cancellationToken);
+            .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value);
+
+        if (departmentId.HasValue)
+        {
+            sectionsQuery = sectionsQuery.Where(cs =>
+                cs.Course.DepartmentId == departmentId.Value
+                || (cs.Instructor != null && cs.Instructor.DepartmentId == departmentId.Value));
+        }
+
+        var sections = await sectionsQuery.ToListAsync(cancellationToken);
 
         var termName = await _context.AcademicTerms
             .AsNoTracking()
             .Where(t => t.Id == termId)
             .Select(t => t.Name)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
+        var scopeName = departmentId.HasValue
+            ? await _context.Departments
+                .AsNoTracking()
+                .Where(department => department.Id == departmentId.Value)
+                .Select(department => department.Name)
+                .FirstOrDefaultAsync(cancellationToken) ?? "Bolum"
+            : "Tum sistem";
 
         var instructorIds = sections
             .Where(section => section.InstructorId.HasValue)
@@ -254,6 +303,7 @@ public class SchedulingService : ISchedulingService
         {
             TermId = termId,
             TermName = termName,
+            ScopeName = scopeName,
             Sections = snapshots
         };
     }
@@ -1217,6 +1267,7 @@ public class SchedulingService : ISchedulingService
     {
         public int TermId { get; init; }
         public string TermName { get; init; } = string.Empty;
+        public string ScopeName { get; init; } = string.Empty;
         public List<SectionSnapshot> Sections { get; init; } = new();
     }
 
