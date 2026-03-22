@@ -4,8 +4,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ROUTES } from '@/lib/constants';
 import { useInstructorSections, useSectionStudents } from '../hooks/useInstructorSections';
-import { BookOpen, Users, ChevronDown, ChevronUp, Mail, ClipboardEdit } from 'lucide-react';
+import { BookOpen, Users, ChevronDown, ChevronUp, Mail, ClipboardEdit, Calendar } from 'lucide-react';
 
 export default function InstructorSectionsPage() {
   const { data, isLoading } = useInstructorSections();
@@ -113,6 +114,17 @@ function SectionCard({ section, isExpanded, onToggle }: SectionCardProps) {
             </div>
           </div>
           <div className="flex items-center gap-4 ml-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`${ROUTES.INSTRUCTOR_SCHEDULING}?sectionId=${section.sectionId}`);
+              }}
+              className="shrink-0"
+            >
+              <Calendar className="h-4 w-4 mr-1" /> Program
+            </Button>
             <Button
               size="sm"
               variant="default"

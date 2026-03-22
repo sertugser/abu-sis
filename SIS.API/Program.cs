@@ -7,6 +7,7 @@ using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.Scheduling.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -75,6 +76,7 @@ builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
+builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 
 var app = builder.Build();
 
