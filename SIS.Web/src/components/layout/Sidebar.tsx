@@ -14,7 +14,6 @@ import {
   GraduationCap,
   Users,
 } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import logo from '/logo.png';
@@ -126,7 +125,6 @@ function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup[] {
         { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
         { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
         ...(includeScheduling ? [{ to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Program Planlama' }] : []),
-        { to: '/not-girisi', label: 'Not Girişi' },
       ],
     },
     {
@@ -232,8 +230,10 @@ function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup[] {
 }
 
 function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
-  if (roles.includes('Instructor') || roles.includes('AcademicAdvisor')) {
-    return buildInstructorMenuGroups(roles.includes('Instructor'));
+  if (roles.includes('Instructor') || roles.includes('AcademicAdvisor') || roles.includes('DepartmentManager')) {
+    return buildInstructorMenuGroups(
+      roles.includes('Instructor')
+    );
   }
   return studentMenuGroups;
 }
@@ -246,11 +246,16 @@ function getRoleLabel(roles: string[]): string {
   return 'Öğrenci Bilgi Sistemi';
 }
 
+const EXPANDED_W = 260;
+const COLLAPSED_W = 72;
+const DURATION = 'duration-200';
+
 interface SidebarProps {
   isCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
-export default function Sidebar({ isCollapsed = false }: SidebarProps) {
+export default function Sidebar({ isCollapsed = false, onToggleSidebar }: SidebarProps) {
   const { user, logout } = useAuth();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
@@ -258,7 +263,11 @@ export default function Sidebar({ isCollapsed = false }: SidebarProps) {
   const menuGroups = getMenuGroupsForRole(roles);
 
   const toggleGroup = (id: string) => {
-    if (isCollapsed) return;
+    if (isCollapsed) {
+      onToggleSidebar?.();
+      setOpenGroup(id);
+      return;
+    }
     setOpenGroup(prev => prev === id ? null : id);
   };
 
@@ -266,120 +275,135 @@ export default function Sidebar({ isCollapsed = false }: SidebarProps) {
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '??';
 
+  // Collapsed = text invisible, layout unchanged
+  const textCls = cn('transition-opacity', DURATION, isCollapsed ? 'opacity-0' : 'opacity-100');
+
   return (
-    <aside className={cn(
-      "fixed inset-y-0 left-0 z-40 hidden lg:flex flex-col bg-sidebar border-r border-border overflow-hidden",
-      isCollapsed ? "w-[72px]" : "w-[260px]"
-    )} style={{ transition: 'width 200ms cubic-bezier(0.25, 0.1, 0.25, 1)' }}>
-
-      <div className={cn("pb-2 overflow-hidden whitespace-nowrap", isCollapsed ? "px-3 pt-5" : "p-5")}>
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="Logo" className="h-9 w-9 shrink-0 object-contain" />
-          <div className={cn(
-            "flex-1 flex flex-col items-start justify-center min-w-0 transition-opacity duration-200",
-            isCollapsed ? "opacity-0" : "opacity-100"
-          )}>
-            <h1 className="font-heading text-[13px] font-bold text-[#003366] leading-none uppercase tracking-tight">
-              Ankara Bilim
-            </h1>
-            <h1 className="font-heading text-[11px] font-bold text-[#003366]/90 leading-none uppercase tracking-tighter mt-1">
-              Üniversitesi
-            </h1>
+    <aside
+      className="fixed inset-y-0 left-0 z-40 hidden lg:flex flex-col bg-sidebar border-r border-border overflow-hidden"
+      style={{
+        width: isCollapsed ? COLLAPSED_W : EXPANDED_W,
+        transition: `width 200ms cubic-bezier(0.25, 0.1, 0.25, 1)`,
+      }}
+    >
+      {/* Inner wrapper — always 260px, aside clips overflow */}
+      <div
+        className="flex flex-col h-full"
+        style={{ width: EXPANDED_W, minWidth: EXPANDED_W }}
+      >
+        {/* ── Header ── */}
+        <div className="shrink-0 px-5 pt-5">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="shrink-0 rounded-lg hover:bg-muted/50 transition-colors p-0.5"
+              title={isCollapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
+            >
+              <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
+            </button>
+            <div className={cn('min-w-0 overflow-hidden', textCls)}>
+              <h1 className="font-heading text-[13px] font-bold text-[#003366] leading-none tracking-tight">
+                ANKARA BİLİM
+              </h1>
+              <h1 className="font-heading text-[11px] font-bold text-[#003366]/90 leading-none tracking-tighter mt-1">
+                ÜNİVERSİTESİ
+              </h1>
+            </div>
           </div>
-        </div>
 
-        {!isCollapsed && (
-          <div className="mt-4 flex flex-col gap-0.5">
-            <p className="text-[11px] font-bold text-[#003366] uppercase tracking-[0.1em]">
-              {getRoleLabel(roles)}
+          <div className={cn(
+            'overflow-hidden transition-all', DURATION,
+            isCollapsed ? 'max-h-0 mt-0 opacity-0' : 'max-h-8 mt-3 opacity-100'
+          )}>
+            <p className="text-[11px] font-bold text-[#003366] tracking-[0.1em] whitespace-nowrap">
+              {getRoleLabel(roles).toLocaleUpperCase('tr-TR')}
             </p>
           </div>
-        )}
 
-        <Separator className="mt-4" />
-      </div>
+          <Separator className={cn('transition-all', DURATION, isCollapsed ? 'mt-3' : 'mt-3')} />
+        </div>
 
+        {/* ── Nav ── */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3">
+          <nav className="py-2 space-y-0.5">
+            {menuGroups.map(group => {
+              const isOpen = openGroup === group.id;
+              const Icon = group.icon;
 
-      <ScrollArea className="flex-1 px-3">
-        <nav className={cn("space-y-0.5 py-2", isCollapsed && "px-0")}>
-          {menuGroups.map(group => {
-            const isOpen = openGroup === group.id;
-            const Icon = group.icon;
-
-            return (
-              <div key={group.id} className="mb-1">
-                <button
-                  onClick={() => toggleGroup(group.id)}
-                  title={isCollapsed ? group.label : undefined}
-                  className={cn(
-                    'group flex w-full items-center rounded-md py-2 text-sm font-medium transition-all duration-200',
-                    isCollapsed ? 'justify-center px-2' : 'gap-3 px-3',
-                    isOpen
-                      ? 'bg-primary/10 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
-                >
-                  <Icon className="h-[18px] w-[18px] shrink-0" />
-                  <span className={cn(
-                    "flex-1 text-left truncate transition-opacity duration-200",
-                    isCollapsed ? "opacity-0 w-0" : "opacity-100"
-                  )}>{group.label}</span>
-                  {!isCollapsed && (
+              return (
+                <div key={group.id} className="mb-1">
+                  <button
+                    onClick={() => toggleGroup(group.id)}
+                    title={group.label}
+                    className={cn(
+                      'group flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
+                      isOpen
+                        ? 'bg-primary/10 text-primary shadow-sm'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    <span className={cn('flex-1 text-left truncate', textCls)}>
+                      {group.label}
+                    </span>
                     <ChevronRight
                       className={cn(
-                        'h-4 w-4 shrink-0 opacity-50 transition-transform duration-200',
-                        isOpen && 'rotate-90 opacity-100'
+                        'h-4 w-4 shrink-0 transition-all', DURATION,
+                        isCollapsed ? 'opacity-0' : isOpen ? 'rotate-90 opacity-100' : 'opacity-50'
                       )}
                     />
+                  </button>
+
+                  {isOpen && !isCollapsed && (
+                    <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
+                      {group.children.map(child => (
+                        <NavLink
+                          key={child.to}
+                          to={child.to}
+                          end={child.to === '/'}
+                          className={({ isActive }) =>
+                            cn(
+                              'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
+                              isActive
+                                ? 'text-primary font-semibold bg-primary/5'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                            )
+                          }
+                        >
+                          {child.label}
+                        </NavLink>
+                      ))}
+                    </div>
                   )}
-                </button>
+                </div>
+              );
+            })}
+          </nav>
+        </div>
 
-                {isOpen && !isCollapsed && (
-                  <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
-                    {group.children.map(child => (
-                      <NavLink
-                        key={child.to}
-                        to={child.to}
-                        end={child.to === '/'}
-                        className={({ isActive }) =>
-                          cn(
-                            'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150',
-                            isActive
-                              ? 'text-primary font-semibold bg-primary/5'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                          )
-                        }
-                      >
-                        {child.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-      </ScrollArea>
-
-      <div className={cn("mt-auto border-t bg-muted/30 overflow-hidden whitespace-nowrap", isCollapsed ? "p-2" : "p-4")}>
-        <div className={cn("flex items-center", isCollapsed ? "flex-col gap-2" : "gap-3")}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#003366] text-white text-xs font-bold shadow-sm">
-            {initials}
+        {/* ── Bottom user ── */}
+        <div className="shrink-0 mt-auto border-t bg-muted/30 p-4 whitespace-nowrap">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#003366] text-white text-xs font-bold shadow-sm">
+              {initials}
+            </div>
+            <div className={cn('flex-1 min-w-0', textCls)}>
+              <p className="text-sm font-semibold text-foreground truncate">{user?.name}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
+            </div>
+            <button
+              onClick={logout}
+              className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all',
+                DURATION,
+                isCollapsed && 'opacity-0 pointer-events-none'
+              )}
+              title="Güvenli Çıkış"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
-          <div className={cn(
-            "flex-1 min-w-0 transition-opacity duration-200",
-            isCollapsed ? "opacity-0 w-0 h-0" : "opacity-100"
-          )}>
-            <p className="text-sm font-semibold text-foreground truncate">{user?.name}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
-          </div>
-          <button
-            onClick={logout}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-            title="Güvenli Çıkış"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
         </div>
       </div>
     </aside>

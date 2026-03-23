@@ -1,7 +1,7 @@
 import { useActiveTerm } from '../../hooks/useActiveTerm';
 import { Badge } from '@/components/ui/badge';
-import { useLocation } from 'react-router-dom';
-import { Calendar, CircleDot, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Calendar, CircleDot } from 'lucide-react';
 
 const pageTitles: Record<string, string> = {
   '/': 'Ana Sayfa',
@@ -20,15 +20,12 @@ const pageTitles: Record<string, string> = {
   '/mufredat-gorunumu': 'Müfredat Görünümü',
 };
 
-interface TopBarProps {
-  isSidebarCollapsed?: boolean;
-  onToggleSidebar?: () => void;
-}
-
-export default function TopBar({ isSidebarCollapsed, onToggleSidebar }: TopBarProps) {
+export default function TopBar() {
   const { data: term } = useActiveTerm();
   const location = useLocation();
+  const navigate = useNavigate();
 
+  const isHome = location.pathname === '/';
   const pageTitle = location.pathname.startsWith('/not-girisi/')
     ? 'Not Girişi'
     : pageTitles[location.pathname] || 'Sayfa';
@@ -36,18 +33,12 @@ export default function TopBar({ isSidebarCollapsed, onToggleSidebar }: TopBarPr
   return (
     <header className="sticky top-0 z-30 flex h-20 items-center gap-4 border-b border-border/70 bg-white/90 shadow-[0_10px_35px_rgba(15,23,42,0.05)] backdrop-blur-xl px-6 lg:px-8">
       <div className="flex items-center gap-3">
-        {onToggleSidebar && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="hidden lg:flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150"
-            title={isSidebarCollapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
-          >
-            {isSidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
-          </button>
-        )}
         <div className="hidden sm:block h-10 w-1 rounded-full bg-gradient-to-b from-primary via-primary-light to-accent" />
-        <h2 className="font-heading text-[1.35rem] font-bold text-foreground">
+        <h2
+          onClick={isHome ? undefined : () => navigate('/')}
+          className={`font-heading text-[1.35rem] font-bold text-foreground ${isHome ? '' : 'cursor-pointer hover:text-primary transition-colors'}`}
+          title={isHome ? undefined : 'Ana Sayfaya Dön'}
+        >
           {pageTitle}
         </h2>
       </div>
