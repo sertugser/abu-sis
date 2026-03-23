@@ -9,6 +9,8 @@ using SIS.Application.CourseRegistration.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Scheduling.Services;
+using SIS.Application.StudentEligibility.Services;
+using SIS.Application.AcademicLevel.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -79,6 +81,8 @@ builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
+builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
+builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 
 var app = builder.Build();
 
@@ -103,6 +107,7 @@ if (app.Environment.IsDevelopment())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
     await SeedData.SeedAsync(context, userManager, roleManager);
+    await SeedData.AssignInstructorCoursesAsync(context);
 }
 
 app.Run();
