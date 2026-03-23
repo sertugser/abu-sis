@@ -13,7 +13,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -38,7 +38,6 @@ import { ROUTES } from '@/lib/constants';
 import {
   AlertCircle,
   AlertTriangle,
-  BookOpen,
   Building2,
   Calendar,
   CheckCircle2,
@@ -609,7 +608,6 @@ export default function InstructorSchedulingPage() {
                       availabilities={availabilities}
                       isLoading={availabilityQuery.isLoading}
                       errorMessage={availabilityErrorMessage}
-                      onCreate={openCreateAvailabilityDialog}
                     />
                   </div>
                 )}
@@ -969,12 +967,10 @@ function AvailabilitySummaryCard({
   availabilities,
   isLoading,
   errorMessage,
-  onCreate,
 }: {
   availabilities: InstructorAvailability[];
   isLoading: boolean;
   errorMessage: string | null;
-  onCreate: () => void;
 }) {
   return (
     <Card className="h-fit">

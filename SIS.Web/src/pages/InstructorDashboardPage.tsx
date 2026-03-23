@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInstructorProfile } from '../hooks/useInstructorProfile';
 import { useInstructorSections } from '../hooks/useInstructorSections';
+import type { InstructorSection } from '../api/instructor.api';
 import { ROUTES } from '../lib/constants';
 import { Clock, AlertCircle, BookOpen, ChevronRight } from 'lucide-react';
 
@@ -91,7 +92,7 @@ export default function InstructorDashboardPage() {
               <p className="text-muted-foreground text-sm">Bugün dersiniz bulunmuyor.</p>
             ) : (
               <div className="space-y-2">
-                {todaySections.map((section: any) => (
+                {todaySections.map((section: InstructorSection) => (
                   <div key={section.sectionId} className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -127,7 +128,7 @@ export default function InstructorDashboardPage() {
               <p className="text-muted-foreground text-sm">Tüm derslerinizin notları kesinleştirilmiş.</p>
             ) : (
               <div className="space-y-2">
-                {awaitingGrade.slice(0, 4).map((section: any) => (
+                {awaitingGrade.slice(0, 4).map((section: InstructorSection) => (
                   <div key={section.sectionId} className="flex items-center justify-between p-2.5 rounded-md bg-amber-50 dark:bg-amber-500/5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="font-mono text-sm font-semibold text-amber-700 dark:text-amber-400">{section.courseCode}</span>
