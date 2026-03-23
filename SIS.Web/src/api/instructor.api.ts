@@ -24,6 +24,7 @@ export interface InstructorSection {
   classroomName: string;
   schedule: string;
   isActive: boolean;
+  isFinalized: boolean;
   activeStudents: number;
 }
 

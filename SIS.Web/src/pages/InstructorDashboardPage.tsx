@@ -1,24 +1,55 @@
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInstructorProfile } from '../hooks/useInstructorProfile';
 import { useInstructorSections } from '../hooks/useInstructorSections';
-import { useActiveTerm } from '../hooks/useActiveTerm';
-import { formatDate } from '../lib/utils';
-import { BookOpen, Users, GraduationCap } from 'lucide-react';
+import { ROUTES } from '../lib/constants';
+import { Clock, AlertCircle, BookOpen, ChevronRight } from 'lucide-react';
+
+const TURKISH_DAYS: Record<string, number> = {
+  'pazartesi': 1, 'sali': 2, 'salı': 2, 'carsamba': 3, 'çarşamba': 3,
+  'persembe': 4, 'perşembe': 4, 'cuma': 5, 'cumartesi': 6, 'pazar': 0,
+};
+
+function getTodaysSections(sections: { schedule: string; [k: string]: unknown }[]) {
+  const todayJs = new Date().getDay(); // 0=Sun, 1=Mon...
+  return sections.filter(s => {
+    if (!s.schedule) return false;
+    return s.schedule.split(',').some(slot => {
+      const dayName = slot.trim().split(' ')[0]?.toLowerCase();
+      return TURKISH_DAYS[dayName] === todayJs;
+    });
+  });
+}
+
+function getTodayScheduleTime(schedule: string): string {
+  const todayJs = new Date().getDay();
+  const slots = schedule.split(',');
+  for (const slot of slots) {
+    const parts = slot.trim().split(' ');
+    const dayName = parts[0]?.toLowerCase();
+    if (TURKISH_DAYS[dayName] === todayJs) {
+      return parts[1] || '';
+    }
+  }
+  return '';
+}
 
 export default function InstructorDashboardPage() {
+  const navigate = useNavigate();
   const { data: profile, isLoading: profileLoading } = useInstructorProfile();
   const { data: sectionsData, isLoading: sectionsLoading } = useInstructorSections();
-  const { data: term } = useActiveTerm();
 
   if (profileLoading || sectionsLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
         </div>
+        <Skeleton className="h-48 rounded-xl" />
       </div>
     );
   }
@@ -31,119 +62,137 @@ export default function InstructorDashboardPage() {
     );
   }
 
+  const sections = sectionsData?.sections ?? [];
+  const todaySections = getTodaysSections(sections);
+  const awaitingGrade = sections.filter(s => !s.isFinalized);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Welcome */}
       <div>
         <h1 className="font-heading text-2xl font-extrabold text-foreground tracking-tight">
           Hoş Geldiniz, <span className="text-primary">{profile.title} {profile.firstName} {profile.lastName}</span>
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-[15px]">
           {profile.departmentName} — {profile.facultyName}
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-        <Card className="border-l-4 border-l-primary hover:-translate-y-0.5 hover:shadow-md transition-all">
+      {/* Action cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Today's classes */}
+        <Card className="border-l-4 border-l-primary hover:shadow-md transition-all">
           <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <BookOpen className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Verilen Ders</p>
-                <p className="text-2xl font-bold text-foreground font-heading">{sectionsData?.totalSections ?? 0}</p>
-                <p className="text-xs text-muted-foreground">aktif sectionlar</p>
-              </div>
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-5 w-5 text-primary" />
+              <h3 className="font-heading text-[15px] font-semibold text-foreground">Bugünkü Dersler</h3>
             </div>
+            {todaySections.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Bugün dersiniz bulunmuyor.</p>
+            ) : (
+              <div className="space-y-2">
+                {todaySections.map((section: any) => (
+                  <div key={section.sectionId} className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-primary">{section.courseCode}</span>
+                        <span className="text-sm text-foreground truncate">{section.courseName}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {getTodayScheduleTime(section.schedule)}
+                        {section.classroomName && ` • ${section.classroomName}`}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="font-mono shrink-0 ml-2">
+                      {section.activeStudents}/{section.capacity}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-accent hover:-translate-y-0.5 hover:shadow-md transition-all">
+        {/* Awaiting grade entry */}
+        <Card
+          className="border-l-4 border-l-amber-500 hover:shadow-md transition-all cursor-pointer"
+          onClick={() => navigate(ROUTES.INSTRUCTOR_SECTIONS)}
+        >
           <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
-                <Users className="h-5 w-5 text-accent" />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Toplam Öğrenci</p>
-                <p className="text-2xl font-bold text-foreground font-heading">{sectionsData?.totalStudents ?? 0}</p>
-                <p className="text-xs text-muted-foreground">kayıtlı öğrenci</p>
-              </div>
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <h3 className="font-heading text-[15px] font-semibold text-foreground">Not Girişi Bekleyen</h3>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-info hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-                <GraduationCap className="h-5 w-5 text-blue-500" />
+            {awaitingGrade.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Tüm derslerinizin notları kesinleştirilmiş.</p>
+            ) : (
+              <div className="space-y-2">
+                {awaitingGrade.slice(0, 4).map((section: any) => (
+                  <div key={section.sectionId} className="flex items-center justify-between p-2.5 rounded-md bg-amber-50 dark:bg-amber-500/5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-mono text-sm font-semibold text-amber-700 dark:text-amber-400">{section.courseCode}</span>
+                      <span className="text-sm text-foreground truncate">{section.courseName}</span>
+                    </div>
+                    <Badge variant="outline" className="font-mono shrink-0 ml-2 border-amber-300 text-amber-700 dark:text-amber-400">
+                      {section.activeStudents} öğrenci
+                    </Badge>
+                  </div>
+                ))}
+                {awaitingGrade.length > 4 && (
+                  <p className="text-xs text-muted-foreground">+{awaitingGrade.length - 4} ders daha</p>
+                )}
               </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Unvan</p>
-                <p className="text-lg font-bold text-foreground font-heading">{profile.title}</p>
-                <p className="text-xs text-muted-foreground">{profile.email}</p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* My Sections quick view */}
-      {sectionsData && sectionsData.sections.length > 0 && (
+      {/* Course list */}
+      {sections.length > 0 && (
         <Card>
           <CardContent className="p-5">
-            <h3 className="font-heading text-sm font-semibold text-foreground mb-4">
-              Bu Dönem Verilen Dersler — {sectionsData.term}
-            </h3>
-            <div className="space-y-3">
-              {sectionsData.sections.map(section => (
-                <div key={section.sectionId} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-primary">{section.courseCode}</span>
-                      <span className="text-sm text-foreground truncate">{section.courseName}</span>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading text-[15px] font-semibold text-foreground">
+                Bu Dönem Derslerim — {sectionsData?.term}
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => navigate(ROUTES.INSTRUCTOR_SECTIONS)} className="text-xs gap-1">
+                Tümünü Gör <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {sections.map(section => (
+                <div
+                  key={section.sectionId}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                  onClick={() => navigate(`${ROUTES.GRADE_ENTRY}/${section.sectionId}`)}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                      <BookOpen className="h-4 w-4 text-primary" />
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>{section.schedule || 'Program belirlenmedi'}</span>
-                      {section.classroomName && <span>• {section.classroomName}</span>}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-primary">{section.courseCode}</span>
+                        <span className="text-sm text-foreground truncate">{section.courseName}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {section.schedule || 'Program belirlenmedi'}
+                        {section.classroomName && ` • ${section.classroomName}`}
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 ml-4">
+                  <div className="flex items-center gap-2 ml-4 shrink-0">
                     <Badge variant="outline" className="font-mono">
                       {section.activeStudents}/{section.capacity}
                     </Badge>
-                    <Badge variant={section.isActive ? 'success' : 'secondary'}>
-                      {section.isActive ? 'Aktif' : 'Pasif'}
-                    </Badge>
+                    {section.isFinalized ? (
+                      <Badge variant="success">Kesinleşti</Badge>
+                    ) : (
+                      <Badge variant="secondary">Bekliyor</Badge>
+                    )}
                   </div>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Active term */}
-      {term && (
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="font-heading text-sm font-semibold text-foreground mb-4">Aktif Dönem Bilgisi</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Dönem</span>
-                <p className="font-medium mt-0.5">{term.name}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Kayıt Tarihleri</span>
-                <p className="font-medium mt-0.5">{formatDate(term.registrationStart)} — {formatDate(term.registrationEnd)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Ek/Bırak Tarihleri</span>
-                <p className="font-medium mt-0.5">{formatDate(term.addDropStart)} — {formatDate(term.addDropEnd)}</p>
-              </div>
             </div>
           </CardContent>
         </Card>

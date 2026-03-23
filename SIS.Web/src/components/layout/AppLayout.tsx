@@ -8,7 +8,10 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar isCollapsed={isSidebarCollapsed} />
+      <Sidebar
+        isCollapsed={isSidebarCollapsed}
+        onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
+      />
 
       <div
         className="flex flex-1 flex-col"
@@ -17,14 +20,9 @@ export default function AppLayout() {
           transition: 'padding-left 200ms cubic-bezier(0.25, 0.1, 0.25, 1)',
         }}
       >
-        <TopBar
-          isSidebarCollapsed={isSidebarCollapsed}
-          onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
-        />
-        <main className="flex-1 p-6 lg:p-8">
-          <div className="mx-auto max-w-6xl">
-            <Outlet />
-          </div>
+        <TopBar />
+        <main className="flex-1 flex flex-col px-6 py-5 lg:px-8">
+          <Outlet />
         </main>
       </div>
     </div>
