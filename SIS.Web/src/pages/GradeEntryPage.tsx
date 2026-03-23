@@ -1,21 +1,12 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -32,10 +23,8 @@ import {
   XCircle,
   Settings,
   AlertTriangle,
-  ClipboardEdit,
   Users,
-  GraduationCap,
-  Weight,
+  Search,
 } from 'lucide-react';
 import {
   useGrades,
@@ -50,16 +39,17 @@ import {
 } from '../hooks/useGradeData';
 import type { GradingCriteria, FinalizePreviewItem } from '../types/grade';
 
+/* ── Harf notu stilleri ── */
 const GRADE_STYLE: Record<string, { bg: string; text: string }> = {
-  AA: { bg: 'bg-success/10', text: 'text-success' },
-  BA: { bg: 'bg-success/10', text: 'text-success' },
-  BB: { bg: 'bg-accent/10', text: 'text-accent' },
-  CB: { bg: 'bg-accent/10', text: 'text-accent' },
-  CC: { bg: 'bg-accent/10', text: 'text-accent' },
-  DC: { bg: 'bg-warning/10', text: 'text-warning' },
-  DD: { bg: 'bg-warning/10', text: 'text-warning' },
-  FF: { bg: 'bg-destructive/10', text: 'text-destructive' },
-  NA: { bg: 'bg-destructive/10', text: 'text-destructive' },
+  AA: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  BA: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+  BB: { bg: 'bg-blue-50', text: 'text-blue-600' },
+  CB: { bg: 'bg-blue-50', text: 'text-blue-500' },
+  CC: { bg: 'bg-sky-50', text: 'text-sky-600' },
+  DC: { bg: 'bg-amber-50', text: 'text-amber-600' },
+  DD: { bg: 'bg-orange-50', text: 'text-orange-600' },
+  FF: { bg: 'bg-red-50', text: 'text-red-600' },
+  NA: { bg: 'bg-red-50', text: 'text-red-600' },
 };
 
 function resolveGrade(score: number, criteria: GradingCriteria): string {
@@ -77,11 +67,13 @@ function GradeChip({ grade }: { grade: string }) {
   const style = GRADE_STYLE[grade];
   if (!style) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className={`inline-flex items-center justify-center min-w-[2.25rem] px-2 py-0.5 rounded-md text-xs font-bold font-mono ${style.bg} ${style.text}`}>
+    <span className={`inline-flex items-center justify-center min-w-[2.5rem] px-2.5 py-1 rounded-md text-xs font-bold font-mono ${style.bg} ${style.text}`}>
       {grade}
     </span>
   );
 }
+
+/* ══════════════════════════════════════════════════════════ */
 
 export default function GradeEntryPage() {
   const { sectionId } = useParams<{ sectionId: string }>();
@@ -101,36 +93,32 @@ export default function GradeEntryPage() {
 
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [scores, setScores] = useState<Record<number, string>>({});
-  const [showAddComponent, setShowAddComponent] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showAddDialog, setShowAddDialog] = useState(false);
   const [newComponent, setNewComponent] = useState({ name: '', weight: '' });
   const [showCriteriaDialog, setShowCriteriaDialog] = useState(false);
   const [editCriteria, setEditCriteria] = useState<GradingCriteria | null>(null);
   const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
   const [finalizeResults, setFinalizeResults] = useState<FinalizePreviewItem[] | null>(null);
 
+  /* ── Loading ── */
   if (gradesLoading) {
     return (
-      <div className="space-y-5 animate-fade-in">
-        <Skeleton className="h-24 rounded-xl" />
-        <div className="flex gap-5">
-          <div className="w-72 shrink-0 space-y-4">
-            <Skeleton className="h-48 rounded-xl" />
-            <Skeleton className="h-56 rounded-xl" />
-          </div>
-          <Skeleton className="h-96 flex-1 rounded-xl" />
-        </div>
+      <div className="flex flex-col gap-4 flex-1">
+        <Skeleton className="h-16 rounded-xl" />
+        <Skeleton className="h-12 rounded-xl" />
+        <Skeleton className="h-96 flex-1 rounded-xl" />
       </div>
     );
   }
 
+  /* ── Error / Not Found ── */
   if (!gradesData) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 animate-fade-in">
-        <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-          <XCircle className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h2 className="font-heading text-lg font-bold text-foreground">Erişim Sağlanamadı</h2>
-        <p className="text-muted-foreground text-sm mt-1 mb-6">Bu section bulunamadı veya erişim yetkiniz yok.</p>
+      <div className="flex flex-col items-center justify-center py-24">
+        <XCircle className="h-12 w-12 text-muted-foreground mb-4" />
+        <p className="text-lg font-medium text-foreground">Erişim Sağlanamadı</p>
+        <p className="text-sm text-muted-foreground mt-1 mb-6">Bu ders bulunamadı veya erişim yetkiniz yok.</p>
         <Button variant="outline" onClick={() => navigate('/derslerim')}>
           <ArrowLeft className="h-4 w-4 mr-1.5" /> Derslerime Dön
         </Button>
@@ -142,6 +130,19 @@ export default function GradeEntryPage() {
   const currentCriteria = criteria ?? { aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45 };
   const activeComponentId = selectedComponentId ?? components?.[0]?.id ?? null;
   const totalWeight = components?.reduce((sum, c) => sum + c.weight, 0) ?? 0;
+  const activeComponent = components?.find(c => c.id === activeComponentId);
+
+  /* ── Handlers ── */
+  const selectComponent = (compId: number) => {
+    setSelectedComponentId(compId);
+    const newScores: Record<number, string> = {};
+    gradesData.students.forEach(s => {
+      const score = s.scores[compId];
+      newScores[s.studentId] = score != null ? String(score) : '';
+    });
+    setScores(newScores);
+    setSearchTerm('');
+  };
 
   const handleSave = () => {
     if (!activeComponentId) return;
@@ -158,7 +159,7 @@ export default function GradeEntryPage() {
       { name: newComponent.name, weight: Number(newComponent.weight), order: 0 },
       {
         onSuccess: () => {
-          setShowAddComponent(false);
+          setShowAddDialog(false);
           setNewComponent({ name: '', weight: '' });
         },
       }
@@ -167,9 +168,7 @@ export default function GradeEntryPage() {
 
   const handleFinalize = () => {
     finalizeMut.mutate(undefined, {
-      onSuccess: (data) => {
-        setFinalizeResults(data.results);
-      },
+      onSuccess: (data) => setFinalizeResults(data.results),
       onError: (err: unknown) => {
         const error = err as { response?: { data?: { error?: string } } };
         alert(error.response?.data?.error ?? 'Kesinleştirme hatası');
@@ -193,336 +192,270 @@ export default function GradeEntryPage() {
     });
   };
 
+  /* ── Filter students ── */
+  const filteredStudents = gradesData.students.filter(s => {
+    if (!searchTerm.trim()) return true;
+    const q = searchTerm.toLowerCase();
+    return `${s.studentNumber} ${s.firstName} ${s.lastName}`.toLowerCase().includes(q);
+  });
+
+  /* ── Grade scale data ── */
   const gradeScale = [
-    { label: 'AA', min: currentCriteria.aaMin, variant: 'success' as const },
-    { label: 'BA', min: currentCriteria.baMin, variant: 'success' as const },
-    { label: 'BB', min: currentCriteria.bbMin, variant: 'accent' as const },
-    { label: 'CB', min: currentCriteria.cbMin, variant: 'accent' as const },
-    { label: 'CC', min: currentCriteria.ccMin, variant: 'accent' as const },
-    { label: 'DC', min: currentCriteria.dcMin, variant: 'warning' as const },
-    { label: 'DD', min: currentCriteria.ddMin, variant: 'warning' as const },
+    { label: 'AA', min: currentCriteria.aaMin },
+    { label: 'BA', min: currentCriteria.baMin },
+    { label: 'BB', min: currentCriteria.bbMin },
+    { label: 'CB', min: currentCriteria.cbMin },
+    { label: 'CC', min: currentCriteria.ccMin },
+    { label: 'DC', min: currentCriteria.dcMin },
+    { label: 'DD', min: currentCriteria.ddMin },
+    { label: 'FF', min: 0 },
   ];
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      {/* ═══ HEADER CARD ═══ */}
-      <Card className="overflow-hidden border-0 shadow-sm">
-        <div className="bg-gradient-to-r from-primary/[0.03] via-transparent to-accent/[0.03]">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xl font-extrabold text-primary tracking-tight">
-                    {gradesData.courseCode}
-                  </span>
-                  <span className="text-xl font-heading font-bold text-foreground">
-                    {gradesData.courseName}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 mt-1.5">
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Users className="h-3.5 w-3.5" />
-                    {gradesData.students.length} öğrenci
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <GraduationCap className="h-3.5 w-3.5" />
-                    Section {sectionId}
-                  </span>
-                </div>
-              </div>
+    <div className="flex flex-col gap-4 flex-1">
 
-              <div className="flex items-center gap-3">
-                <Badge
-                  variant={isFinalized ? 'success' : 'warning'}
-                  className="px-3 py-1 text-xs"
-                >
-                  {isFinalized ? 'Kesinleştirilmiş' : 'Kesinleştirilmemiş'}
-                </Badge>
-                {isFinalized ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleUnfinalize}
-                    disabled={unfinalizeMut.isPending}
-                    className="gap-1.5"
-                  >
-                    <XCircle className="h-4 w-4" /> Geri Al
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => setShowFinalizeDialog(true)}
-                    className="gap-1.5"
-                  >
-                    <CheckCircle className="h-4 w-4" /> Kesinleştir
-                  </Button>
-                )}
-              </div>
+      {/* ═══ HEADER BAR ═══ */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-lg font-bold text-primary">{gradesData.courseCode}</span>
+              <span className="text-lg font-semibold text-foreground">{gradesData.courseName}</span>
             </div>
-          </CardContent>
-        </div>
-      </Card>
-
-      {/* ═══ MAIN LAYOUT ═══ */}
-      <div className="flex gap-5">
-        {/* ─── SOL PANEL ─── */}
-        <div className="w-72 shrink-0 space-y-4 stagger-children">
-          {/* Bileşenler */}
-          <Card>
-            <CardHeader className="pb-3 px-4 pt-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Bileşenler
-                </CardTitle>
-                <div className="flex items-center gap-1.5">
-                  <Weight className="h-3 w-3 text-muted-foreground" />
-                  <span className={`text-xs font-mono font-bold ${totalWeight === 100 ? 'text-success' : totalWeight > 100 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                    %{totalWeight}
-                  </span>
-                </div>
-              </div>
-              <Progress
-                value={Math.min(totalWeight, 100)}
-                className="h-1.5 mt-2"
-              />
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="space-y-1.5">
-                {components?.map(comp => {
-                  const isActive = activeComponentId === comp.id;
-                  return (
-                    <div
-                      key={comp.id}
-                      onClick={() => {
-                        setSelectedComponentId(comp.id);
-                        const newScores: Record<number, string> = {};
-                        gradesData.students.forEach(s => {
-                          const score = s.scores[comp.id];
-                          newScores[s.studentId] = score != null ? String(score) : '';
-                        });
-                        setScores(newScores);
-                      }}
-                      className={`group flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 ${
-                        isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'hover:bg-muted/80'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-1 h-8 rounded-full shrink-0 transition-colors ${isActive ? 'bg-primary-foreground/30' : 'bg-primary/20'}`} />
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold truncate">{comp.name}</div>
-                          <div className={`text-xs ${isActive ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
-                            Ağırlık: %{comp.weight}
-                          </div>
-                        </div>
-                      </div>
-                      {!isFinalized && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteComponentMut.mutate(comp.id); }}
-                          className={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all ${
-                            isActive
-                              ? 'hover:bg-primary-foreground/15 text-primary-foreground/60 hover:text-primary-foreground'
-                              : 'hover:bg-destructive/10 text-muted-foreground hover:text-destructive'
-                          }`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {!isFinalized && (
-                  <button
-                    onClick={() => setShowAddComponent(true)}
-                    className="w-full flex items-center justify-center gap-1.5 border border-dashed border-muted-foreground/25 rounded-lg py-2.5 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/[0.02] transition-all duration-200"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Bileşen Ekle
-                  </button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Harf Aralığı */}
-          <Card>
-            <CardHeader className="pb-3 px-4 pt-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Harf Aralığı
-                </CardTitle>
-                {!isFinalized && (
-                  <button
-                    onClick={() => { setEditCriteria({ ...currentCriteria }); setShowCriteriaDialog(true); }}
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary-light transition-colors"
-                  >
-                    <Settings className="h-3 w-3" />
-                    Düzenle
-                  </button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="space-y-1">
-                {gradeScale.map(({ label, min, variant }) => (
-                  <div key={label} className="flex items-center justify-between py-1">
-                    <Badge variant={variant} className="min-w-[2.25rem] justify-center font-mono text-xs font-bold">
-                      {label}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground font-mono">
-                      ≥ {min}
-                    </span>
-                  </div>
-                ))}
-                <Separator className="my-1.5" />
-                <div className="flex items-center justify-between py-1">
-                  <Badge variant="destructive" className="min-w-[2.25rem] justify-center font-mono text-xs font-bold">
-                    FF
-                  </Badge>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    &lt; {currentCriteria.ddMin}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            <div className="flex items-center gap-3 mt-0.5">
+              <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Users className="h-3.5 w-3.5" />
+                {gradesData.students.length} öğrenci
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <Badge
+                variant={isFinalized ? 'success' : 'secondary'}
+                className="text-xs"
+              >
+                {isFinalized ? 'Kesinleştirilmiş' : 'Kesinleştirilmemiş'}
+              </Badge>
+            </div>
+          </div>
         </div>
 
-        {/* ─── SAĞ PANEL: NOT TABLOSU ─── */}
-        <div className="flex-1 min-w-0">
-          <Card className="h-full">
-            {!activeComponentId ? (
-              /* Empty State */
-              <div className="flex flex-col items-center justify-center py-20 px-8">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/10 flex items-center justify-center mb-5">
-                  <ClipboardEdit className="h-9 w-9 text-primary/40" />
-                </div>
-                <h3 className="font-heading text-lg font-bold text-foreground">
-                  Not Girişine Hazır
-                </h3>
-                <p className="text-sm text-muted-foreground text-center mt-2 max-w-sm leading-relaxed">
-                  Sol panelden bir not bileşeni seçin veya yeni bileşen ekleyerek not girişine başlayın.
-                </p>
-                {!isFinalized && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAddComponent(true)}
-                    className="mt-5 gap-1.5"
-                  >
-                    <Plus className="h-4 w-4" />
-                    İlk Bileşeni Ekle
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Tablo Header */}
-                <CardHeader className="pb-0 px-5 pt-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-1.5 h-6 rounded-full bg-primary" />
-                      <CardTitle className="text-base font-heading">
-                        {components?.find(c => c.id === activeComponentId)?.name} Notları
-                      </CardTitle>
-                      <Badge variant="outline" className="text-xs font-mono">
-                        %{components?.find(c => c.id === activeComponentId)?.weight}
-                      </Badge>
-                    </div>
-                    {!isFinalized && (
-                      <Button
-                        size="sm"
-                        onClick={handleSave}
-                        disabled={submitGradesMut.isPending}
-                        className="gap-1.5"
-                      >
-                        <Save className="h-4 w-4" />
-                        {submitGradesMut.isPending ? 'Kaydediliyor...' : 'Kaydet'}
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-
-                <CardContent className="p-5 pt-4">
-                  <div className="rounded-lg border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableHead className="w-12 text-center font-semibold">#</TableHead>
-                          <TableHead className="font-semibold">Ad Soyad</TableHead>
-                          <TableHead className="font-semibold">Öğrenci No</TableHead>
-                          <TableHead className="w-28 text-center font-semibold">Puan</TableHead>
-                          <TableHead className="w-20 text-center font-semibold">Harf</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {gradesData.students.map((student, index) => {
-                          const scoreStr = scores[student.studentId] ?? '';
-                          const scoreNum = scoreStr !== '' ? Number(scoreStr) : null;
-                          const letterGrade = scoreNum != null && !isNaN(scoreNum)
-                            ? resolveGrade(Math.round(scoreNum), currentCriteria)
-                            : null;
-
-                          return (
-                            <TableRow key={student.studentId}>
-                              <TableCell className="text-center text-muted-foreground font-mono text-xs">
-                                {index + 1}
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {student.firstName} {student.lastName}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground">
-                                {student.studentNumber}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {isFinalized ? (
-                                  <span className="font-mono text-sm font-semibold">{scoreStr || '—'}</span>
-                                ) : (
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    value={scoreStr}
-                                    onChange={(e) => setScores(prev => ({ ...prev, [student.studentId]: e.target.value }))}
-                                    className="w-20 mx-auto text-center h-8 font-mono"
-                                  />
-                                )}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {letterGrade ? <GradeChip grade={letterGrade} /> : <span className="text-muted-foreground text-sm">—</span>}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  {gradesData.students.length === 0 && (
-                    <div className="text-center py-12 text-muted-foreground text-sm">
-                      Bu sectionda kayıtlı öğrenci bulunmamaktadır.
-                    </div>
-                  )}
-                </CardContent>
-              </>
-            )}
-          </Card>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setEditCriteria({ ...currentCriteria }); setShowCriteriaDialog(true); }}
+            className="gap-1.5 text-sm"
+            disabled={isFinalized}
+          >
+            <Settings className="h-4 w-4" />
+            Harf Aralığı
+          </Button>
+          {isFinalized ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUnfinalize}
+              disabled={unfinalizeMut.isPending}
+              className="gap-1.5 text-sm"
+            >
+              <XCircle className="h-4 w-4" /> Geri Al
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => setShowFinalizeDialog(true)}
+              className="gap-1.5 text-sm"
+            >
+              <CheckCircle className="h-4 w-4" /> Kesinleştir
+            </Button>
+          )}
         </div>
       </div>
 
+      {/* ═══ TAB BAR — Exam Types ═══ */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {components?.map(comp => {
+          const isActive = activeComponentId === comp.id;
+          return (
+            <button
+              key={comp.id}
+              onClick={() => selectComponent(comp.id)}
+              className={`relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                isActive
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-muted/50 text-foreground hover:bg-muted'
+              }`}
+            >
+              <span>{comp.name}</span>
+              <span className={`font-mono text-xs ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                %{comp.weight}
+              </span>
+              {!isFinalized && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteComponentMut.mutate(comp.id); }}
+                  className={`ml-1 p-0.5 rounded transition-colors ${
+                    isActive
+                      ? 'hover:bg-primary-foreground/15 text-primary-foreground/50 hover:text-primary-foreground'
+                      : 'hover:bg-destructive/10 text-muted-foreground/50 hover:text-destructive'
+                  }`}
+                  title="Sil"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </button>
+          );
+        })}
+
+        {!isFinalized && (
+          <button
+            onClick={() => setShowAddDialog(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-medium border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            Ekle
+          </button>
+        )}
+
+        {/* Weight indicator */}
+        <div className="ml-auto flex items-center gap-2">
+          <span className={`text-sm font-mono font-semibold ${
+            totalWeight === 100 ? 'text-emerald-600' : totalWeight > 100 ? 'text-red-600' : 'text-muted-foreground'
+          }`}>
+            Toplam: %{totalWeight}
+            {totalWeight === 100 && ' ✓'}
+          </span>
+        </div>
+      </div>
+
+      {/* ═══ MAIN CONTENT — Grade Table ═══ */}
+      <Card className="flex-1">
+        <CardContent className="p-0">
+          {!activeComponentId ? (
+            /* ── Empty state — no exam types defined ── */
+            <div className="flex flex-col items-center justify-center py-20">
+              <p className="text-base font-medium text-foreground mb-2">Henüz değerlendirme eklenmemiş</p>
+              <p className="text-sm text-muted-foreground mb-5">
+                Vize, Final, Ödev gibi değerlendirme türlerini ekleyerek not girişine başlayın.
+              </p>
+              {!isFinalized && (
+                <Button variant="outline" onClick={() => setShowAddDialog(true)} className="gap-1.5">
+                  <Plus className="h-4 w-4" /> İlk Değerlendirmeyi Ekle
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* ── Search + Save toolbar ── */}
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/20">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      placeholder="Öğrenci ara..."
+                      className="pl-9 w-64 h-9 text-sm"
+                    />
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {activeComponent?.name} — %{activeComponent?.weight} ağırlık
+                  </span>
+                </div>
+                {!isFinalized && (
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={submitGradesMut.isPending}
+                    className="gap-1.5"
+                  >
+                    <Save className="h-4 w-4" />
+                    {submitGradesMut.isPending ? 'Kaydediliyor...' : 'Kaydet'}
+                  </Button>
+                )}
+              </div>
+
+              {/* ── Grade Table ── */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-[15px]">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground w-14">#</th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Öğrenci No</th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Ad Soyad</th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground w-32">Puan</th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground w-24">Harf</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredStudents.map((student, index) => {
+                      const scoreStr = scores[student.studentId] ?? '';
+                      const scoreNum = scoreStr !== '' ? Number(scoreStr) : null;
+                      const letterGrade = scoreNum != null && !isNaN(scoreNum)
+                        ? resolveGrade(Math.round(scoreNum), currentCriteria)
+                        : null;
+
+                      return (
+                        <tr key={student.studentId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                          <td className="py-3 px-4 text-center text-muted-foreground font-mono text-sm">
+                            {index + 1}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-sm">
+                            {student.studentNumber}
+                          </td>
+                          <td className="py-3 px-4 font-medium">
+                            {student.firstName} {student.lastName}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {isFinalized ? (
+                              <span className="font-mono text-sm font-semibold">{scoreStr || '—'}</span>
+                            ) : (
+                              <Input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={scoreStr}
+                                onChange={(e) => setScores(prev => ({ ...prev, [student.studentId]: e.target.value }))}
+                                className="w-24 mx-auto text-center h-9 font-mono text-[15px]"
+                              />
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {letterGrade ? <GradeChip grade={letterGrade} /> : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {filteredStudents.length === 0 && searchTerm.trim() && (
+                <div className="py-12 text-center text-muted-foreground text-sm">
+                  Aramayla eşleşen öğrenci bulunamadı.
+                </div>
+              )}
+
+              {gradesData.students.length === 0 && (
+                <div className="py-12 text-center text-muted-foreground text-sm">
+                  Bu derste kayıtlı öğrenci bulunmamaktadır.
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ═══ DIALOGS ═══ */}
 
-      {/* Bileşen Ekleme */}
-      <Dialog open={showAddComponent} onOpenChange={setShowAddComponent}>
+      {/* Değerlendirme Ekleme */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Yeni Bileşen Ekle</DialogTitle>
+            <DialogTitle>Yeni Değerlendirme Ekle</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Bileşen Adı</Label>
+              <Label className="text-sm font-medium">Değerlendirme Adı</Label>
               <Input
                 placeholder="Vize, Final, Ödev, Proje..."
                 value={newComponent.name}
@@ -542,7 +475,7 @@ export default function GradeEntryPage() {
             </div>
           </div>
           <DialogFooter className="pt-2">
-            <Button variant="outline" onClick={() => setShowAddComponent(false)}>İptal</Button>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>İptal</Button>
             <Button onClick={handleAddComponent} disabled={addComponentMut.isPending} className="gap-1.5">
               <Plus className="h-4 w-4" /> Ekle
             </Button>
@@ -554,11 +487,27 @@ export default function GradeEntryPage() {
       <Dialog open={showCriteriaDialog} onOpenChange={setShowCriteriaDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Harf Aralığı Düzenle</DialogTitle>
+            <DialogTitle>Harf Notu Aralıkları</DialogTitle>
           </DialogHeader>
           {editCriteria && (
-            <div className="space-y-3 pt-2">
-              <p className="text-xs text-muted-foreground">Her harf notu için minimum puan değerini belirleyin. Değerler azalan sırada olmalıdır.</p>
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">
+                Her harf notu için minimum puan değerini belirleyin.
+              </p>
+
+              {/* Current scale preview */}
+              <div className="grid grid-cols-4 gap-2">
+                {gradeScale.map(({ label, min }) => (
+                  <div key={label} className="flex items-center gap-2 py-1">
+                    <GradeChip grade={label} />
+                    <span className="text-xs text-muted-foreground font-mono">≥ {min}</span>
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              {/* Editable fields */}
               <div className="grid grid-cols-2 gap-3">
                 {([
                   { key: 'aaMin' as const, label: 'AA' },
@@ -597,19 +546,19 @@ export default function GradeEntryPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {finalizeResults ? (
-                <><CheckCircle className="h-5 w-5 text-success" /> Kesinleştirildi</>
+                <><CheckCircle className="h-5 w-5 text-emerald-500" /> Notlar Kesinleştirildi</>
               ) : (
-                <><AlertTriangle className="h-5 w-5 text-warning" /> Kesinleştirme Onayı</>
+                <><AlertTriangle className="h-5 w-5 text-amber-500" /> Kesinleştirme Onayı</>
               )}
             </DialogTitle>
           </DialogHeader>
 
           {!finalizeResults ? (
             <div className="space-y-4 pt-1">
-              <div className="rounded-lg bg-warning/5 border border-warning/20 p-4">
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
                 <p className="text-sm text-foreground leading-relaxed">
                   Bu işlem tüm öğrencilerin ağırlıklı ortalamalarını hesaplayıp harf notlarını belirleyecektir.
-                  Eksik notu olan öğrenciler <span className="font-mono font-bold text-destructive">NA</span> alacaktır.
+                  Eksik notu olan öğrenciler <span className="font-mono font-bold text-red-600">NA</span> alacaktır.
                   Tüm öğrencilerin <span className="font-semibold">CGPA/SGPA</span> değerleri güncellenecektir.
                 </p>
               </div>
@@ -627,33 +576,33 @@ export default function GradeEntryPage() {
           ) : (
             <div className="space-y-4 pt-1">
               <div className="rounded-lg border overflow-hidden max-h-80 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30 hover:bg-muted/30">
-                      <TableHead className="font-semibold">Öğrenci</TableHead>
-                      <TableHead className="text-center font-semibold">Ağ. Ortalama</TableHead>
-                      <TableHead className="text-center font-semibold">Harf Notu</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b">
+                      <th className="text-left py-2.5 px-4 font-medium text-muted-foreground">Öğrenci</th>
+                      <th className="text-center py-2.5 px-4 font-medium text-muted-foreground">Ağ. Ortalama</th>
+                      <th className="text-center py-2.5 px-4 font-medium text-muted-foreground">Harf Notu</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {finalizeResults.map(r => {
                       const student = gradesData.students.find(s => s.studentId === r.studentId);
                       return (
-                        <TableRow key={r.studentId}>
-                          <TableCell className="font-medium">
+                        <tr key={r.studentId} className="border-b last:border-0">
+                          <td className="py-2.5 px-4 font-medium">
                             {student ? `${student.firstName} ${student.lastName}` : `#${r.studentId}`}
-                          </TableCell>
-                          <TableCell className="text-center font-mono text-sm">
+                          </td>
+                          <td className="py-2.5 px-4 text-center font-mono">
                             {r.weightedAverage.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-center">
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
                             <GradeChip grade={r.letterGrade} />
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       );
                     })}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setShowFinalizeDialog(false); setFinalizeResults(null); }}>
