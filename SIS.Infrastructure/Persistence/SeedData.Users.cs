@@ -79,7 +79,11 @@ public static partial class SeedData
         }
         await context.SaveChangesAsync();
 
+        // Department Managers (also have Instructor role from above)
         await EnsureUserAsync(userManager, "ender.sevinc@ankarabilim.edu.tr", "Ender", "Sevinç", "Ogretmen123!", "DepartmentManager");
+        await EnsureUserAsync(userManager, "hakan.caglar@ankarabilim.edu.tr", "Hakan", "Çağlar", "Ogretmen123!", "DepartmentManager");
+        await EnsureUserAsync(userManager, "ayhan.akbas@ankarabilim.edu.tr", "Ayhan", "Akbaş", "Ogretmen123!", "DepartmentManager");
+        await EnsureUserAsync(userManager, "yavuzselim.ozdemir@ankarabilim.edu.tr", "Yavuz Selim", "Özdemir", "Ogretmen123!", "DepartmentManager");
 
         // ============================================================
         // 3. STUDENTS (1000 total)

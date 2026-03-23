@@ -88,6 +88,7 @@ public class InstructorController : ControllerBase
             ClassroomName = s.Classroom?.Name ?? "",
             Schedule = FormatSchedule(s.ScheduleJson),
             IsActive = s.IsActive,
+            IsFinalized = s.IsFinalized,
             ActiveStudents = s.Registrations.Count(r => r.Status == Domain.Enums.RegistrationStatus.Active)
         })
         .OrderBy(s => s.CourseCode)

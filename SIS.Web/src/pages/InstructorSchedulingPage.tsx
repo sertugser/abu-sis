@@ -310,7 +310,7 @@ export default function InstructorSchedulingPage() {
   if (sectionsErrorMessage) {
     return (
       <div className="space-y-6">
-        <PageHeader />
+
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Program ekranı yüklenemedi</AlertTitle>
@@ -334,7 +334,7 @@ export default function InstructorSchedulingPage() {
   if (!sectionsData || sections.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader />
+
         <Card>
           <CardContent className="flex flex-col items-center justify-center gap-4 py-14 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
@@ -358,82 +358,44 @@ export default function InstructorSchedulingPage() {
   return (
     <>
       <div className="space-y-6">
-        <PageHeader />
-
-        <Card className="overflow-hidden">
-          <CardHeader className="gap-4 border-b border-border bg-muted/30">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-3">
-                <div>
-                  <CardTitle>Section Seçimi</CardTitle>
-                  <CardDescription>
-                    Çakışma analizi ve öneri işlemleri yalnızca size atanmış dersler için çalışır.
-                  </CardDescription>
-                </div>
-                <div className="relative">
-                  <select
-                    value={selectedSection?.sectionId ?? ''}
-                    onChange={handleSectionChange}
-                    className="min-w-[280px] appearance-none rounded-lg border border-border bg-card px-4 py-2 pr-10 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {sections.map(section => (
-                      <option key={section.sectionId} value={section.sectionId}>
-                        {section.courseCode} — {section.courseName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">{sectionsData.term}</Badge>
-                <Badge variant={selectedSection?.isActive ? 'success' : 'secondary'}>
-                  {selectedSection?.isActive ? 'Aktif Section' : 'Pasif Section'}
-                </Badge>
-                <Badge variant="outline">
-                  {sectionsData.totalSections} ders / {sectionsData.totalStudents} öğrenci
-                </Badge>
-                <Badge
-                  variant={availabilityQuery.isLoading ? 'outline' : availabilities.length > 0 ? 'success' : 'warning'}
-                >
-                  {availabilityQuery.isLoading
-                    ? 'Müsaitlik yükleniyor'
-                    : `${availabilities.length} müsaitlik kuralı`}
-                </Badge>
-              </div>
-            </div>
-          </CardHeader>
+        {/* Section selector bar */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-4">
+            <select
+              value={selectedSection?.sectionId ?? ''}
+              onChange={handleSectionChange}
+              className="min-w-[300px] appearance-none rounded-lg border border-border bg-card px-4 py-2 text-[15px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {sections.map(section => (
+                <option key={section.sectionId} value={section.sectionId}>
+                  {section.courseCode} — {section.courseName}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {selectedSection && (
-            <CardContent className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
-              <SummaryItem
-                icon={<BookOpen className="h-4 w-4 text-primary" />}
-                label="Ders"
-                value={`${selectedSection.courseCode} — ${selectedSection.courseName}`}
-                detail={`${selectedSection.theoryHours}T + ${selectedSection.labHours}U · ${selectedSection.ects} AKTS`}
-              />
-              <SummaryItem
-                icon={<Calendar className="h-4 w-4 text-primary" />}
-                label="Mevcut Program"
-                value={selectedSection.schedule || 'Henüz tanımlanmadı'}
-                detail="Doğrulama mevcut schedule kaydı üzerinden yapılır."
-              />
-              <SummaryItem
-                icon={<Building2 className="h-4 w-4 text-primary" />}
-                label="Derslik"
-                value={selectedSection.classroomName || 'Henüz atanmadı'}
-                detail="Öneri akışı kapasiteye en yakın uygun dersliği arar."
-              />
-              <SummaryItem
-                icon={<Users className="h-4 w-4 text-primary" />}
-                label="Doluluk"
-                value={`${selectedSection.activeStudents}/${selectedSection.capacity}`}
-                detail={`${selectedSection.availableSeats} boş kontenjan`}
-              />
-            </CardContent>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="text-sm py-1 px-3">
+                <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                {selectedSection.schedule || 'Program belirlenmedi'}
+              </Badge>
+              <Badge variant="outline" className="text-sm py-1 px-3">
+                <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                {selectedSection.classroomName || 'Derslik atanmadı'}
+              </Badge>
+              <Badge variant="outline" className="text-sm py-1 px-3">
+                <Users className="h-3.5 w-3.5 mr-1.5" />
+                {selectedSection.activeStudents}/{selectedSection.capacity}
+              </Badge>
+              <Badge variant="outline" className="text-sm py-1 px-3">
+                {selectedSection.ects} AKTS
+              </Badge>
+            </div>
           )}
-        </Card>
+        </div>
 
+        {/* Availability - FULL WIDTH */}
         <AvailabilityManagerCard
           availabilities={availabilities}
           isLoading={availabilityQuery.isLoading}
@@ -445,6 +407,8 @@ export default function InstructorSchedulingPage() {
           onDeleteRequest={setPendingDeleteAvailability}
         />
 
+        {/* Analysis / Suggestion tabs - FULL WIDTH */}
+        <div className="space-y-4">
         <div className="inline-flex rounded-xl border border-border bg-card p-1">
           <PanelButton
             isActive={activePanel === 'analysis'}
@@ -461,14 +425,9 @@ export default function InstructorSchedulingPage() {
         {activePanel === 'analysis' && selectedSection && (
           <div className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <CardTitle>Çakışma Analizi</CardTitle>
-                  <CardDescription>
-                    Seçili section&apos;ın mevcut programı; derslik, öğretim üyesi, müsaitlik, kapasite ve haftalık yük kurallarıyla karşılaştırılır.
-                  </CardDescription>
-                </div>
-                <Button onClick={handleValidate} disabled={validateMutation.isPending}>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Çakışma Analizi</CardTitle>
+                <Button onClick={handleValidate} disabled={validateMutation.isPending} size="sm">
                   {validateMutation.isPending ? (
                     <>
                       <RefreshCcw className="h-4 w-4 animate-spin" />
@@ -477,7 +436,7 @@ export default function InstructorSchedulingPage() {
                   ) : (
                     <>
                       <CheckCircle2 className="h-4 w-4" />
-                      Mevcut Programı Doğrula
+                      Doğrula
                     </>
                   )}
                 </Button>
@@ -486,7 +445,7 @@ export default function InstructorSchedulingPage() {
                 {!validateMutation.isPending && !validateMutation.data && !validationErrorMessage && (
                   <EmptyPanelState
                     title="Analiz henüz çalıştırılmadı"
-                    description="Mevcut ders programınızın başka section’larla çakışıp çakışmadığını görmek için doğrulamayı başlatın."
+                    description="Programınızı doğrulamak için yukarıdaki butonu kullanın."
                   />
                 )}
 
@@ -540,23 +499,18 @@ export default function InstructorSchedulingPage() {
         {activePanel === 'suggestion' && selectedSection && (
           <div className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <CardTitle>Program Önerisi</CardTitle>
-                  <CardDescription>
-                    Sistem, size ait section için müsaitlik pencerelerine ve mevcut term schedule’larına göre conflict olmayan bir öneri üretmeye çalışır.
-                  </CardDescription>
-                </div>
-                <Button onClick={handleSuggest} disabled={suggestMutation.isPending}>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Program Önerisi</CardTitle>
+                <Button onClick={handleSuggest} disabled={suggestMutation.isPending} size="sm">
                   {suggestMutation.isPending ? (
                     <>
                       <RefreshCcw className="h-4 w-4 animate-spin" />
-                      Öneri Hazırlanıyor
+                      Hazırlanıyor
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4" />
-                      Uygun Program Öner
+                      Öneri Al
                     </>
                   )}
                 </Button>
@@ -565,7 +519,7 @@ export default function InstructorSchedulingPage() {
                 {!suggestMutation.isPending && !suggestMutation.data && !suggestionErrorMessage && (
                   <EmptyPanelState
                     title="Henüz öneri üretilmedi"
-                    description="Öneri akışı; kapasiteye uygun derslikleri ve instructor availability pencerelerini kullanarak deterministik bir çözüm dener."
+                    description="Müsaitliğinize uygun program önerisi almak için butonu kullanın."
                   />
                 )}
 
@@ -610,25 +564,20 @@ export default function InstructorSchedulingPage() {
                       <Card>
                         <CardHeader>
                           <CardTitle>Öneri Özeti</CardTitle>
-                          <CardDescription>
-                            Sonuçlar yalnızca bilgilendirme içindir; kalıcı bir atama yapılmaz.
-                          </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div className="grid gap-4 md:grid-cols-2">
                             <SummaryItem
                               icon={<Building2 className="h-4 w-4 text-primary" />}
                               label="Önerilen Derslik"
-                              value={suggestMutation.data.suggestedClassroomName || 'Öneri bulunamadı'}
-                              detail={suggestMutation.data.suggestedClassroomId
-                                ? `Derslik No: ${suggestMutation.data.suggestedClassroomId}`
-                                : 'Uygun derslik eşleşmesi yok'}
+                              value={suggestMutation.data.suggestedClassroomName || 'Bulunamadı'}
+                              detail=""
                             />
                             <SummaryItem
                               icon={<Clock3 className="h-4 w-4 text-primary" />}
                               label="Haftalık Yük Etkisi"
                               value={formatWeeklyImpact(suggestMutation.data.estimatedWeeklyHoursImpact)}
-                              detail="Yeni önerinin mevcut haftalık yük üzerindeki tahmini etkisi"
+                              detail=""
                             />
                           </div>
 
@@ -668,6 +617,7 @@ export default function InstructorSchedulingPage() {
             </Card>
           </div>
         )}
+        </div>{/* end analysis/suggestion */}
       </div>
 
       <AvailabilityDialog
@@ -713,22 +663,6 @@ export default function InstructorSchedulingPage() {
   );
 }
 
-function PageHeader() {
-  return (
-    <div className="space-y-2">
-      <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-        <Calendar className="h-3.5 w-3.5" />
-        Öğretim Üyesi Paneli / Program Planlama
-      </div>
-      <div>
-        <h1 className="font-heading text-2xl font-extrabold tracking-tight text-foreground">Program Planlama</h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          Section programınızı doğrulayın, conflict detaylarını görün, haftalık müsaitliğinizi yönetin ve uygun derslik/saat önerileri alın.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function PanelButton({
   isActive,
@@ -768,24 +702,21 @@ function SummaryItem({
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {icon}
         {label}
       </div>
       <p className="text-sm font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
     </div>
   );
 }
 
 function EmptyPanelState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-muted/20 px-5 py-10 text-center">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
-        <Sparkles className="h-5 w-5 text-muted-foreground" />
-      </div>
-      <h3 className="font-heading text-lg font-semibold text-foreground">{title}</h3>
-      <p className="mx-auto mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
+    <div className="rounded-xl border border-dashed border-border bg-muted/10 px-5 py-8 text-center">
+      <p className="text-sm font-medium text-muted-foreground">{title}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
     </div>
   );
 }
@@ -814,10 +745,7 @@ function ConflictTable({ conflicts }: { conflicts: SchedulingConflict[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Conflict Listesi</CardTitle>
-        <CardDescription>
-          Her kayıt, seçili section için tespit edilen ayrı bir conflict tipini gösterir.
-        </CardDescription>
+        <CardTitle>Çakışma Listesi</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
@@ -893,16 +821,11 @@ function AvailabilityManagerCard({
   
   return (
     <Card>
-      <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <CardTitle>Müsaitlik Yönetimi</CardTitle>
-          <CardDescription>
-            Program önerileri bu haftalık pencereler içinden üretilir. Tercihli işaretlenen kayıtlar aynı derecede uygun seçenekler arasında önce denenir.
-          </CardDescription>
-        </div>
-        <Button onClick={onCreate}>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Haftalık Müsaitlik</CardTitle>
+        <Button onClick={onCreate} size="sm">
           <Plus className="h-4 w-4" />
-          Müsaitlik Ekle
+          Ekle
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -941,24 +864,14 @@ function AvailabilityManagerCard({
         )}
 
         {!isLoading && !errorMessage && availabilities.length === 0 && (
-          <Alert variant="warning">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Henüz müsaitlik tanımı yok</AlertTitle>
-            <AlertDescription className="space-y-3">
-              <p>
-                Program önerisinin çalışabilmesi için haftalık uygunluk pencerelerinizi tanımlayın. İsterseniz birkaç sabit pencereyle başlayıp sonradan düzenleyebilirsiniz.
-              </p>
-              <Button variant="outline" onClick={onCreate}>
-                <Plus className="h-4 w-4" />
-                İlk Müsaitliği Ekle
-              </Button>
-            </AlertDescription>
-          </Alert>
+          <div className="py-8 text-center text-muted-foreground text-sm">
+            Henüz müsaitlik tanımı yok. Eklemek için yukarıdaki butonu kullanın.
+          </div>
         )}
 
         {!isLoading && !errorMessage && availabilities.length > 0 && (
-          <div className="overflow-x-auto pb-4">
-            <div className={cn("grid gap-4", hasWeekend ? "grid-cols-7 min-w-[1000px]" : "grid-cols-5 min-w-[800px]")}>
+          <div>
+            <div className={cn("grid gap-3", hasWeekend ? "grid-cols-7" : "grid-cols-5")}>
               {activeDays.map(dayId => {
                 const dayAvailabilities = availabilities
                   .filter(a => a.dayOfWeek === dayId)
@@ -984,17 +897,10 @@ function AvailabilityManagerCard({
                             )}
                             onClick={() => onEdit(availability)}
                           >
-                            <div className="flex justify-between items-center mb-1">
+                            <div className="mb-1">
                               <span className="font-medium text-foreground">
                                 {formatTimeRange(availability.startTime, availability.endTime)}
                               </span>
-                              {availability.isAvailable ? (
-                                availability.isPreferred && (
-                                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
-                                )
-                              ) : (
-                                <AlertCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              )}
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
                               <div className="flex flex-wrap gap-1.5 mt-1">
@@ -1007,10 +913,10 @@ function AvailabilityManagerCard({
                               </div>
                             </div>
                             
-                            <div className="mt-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button 
-                                variant="secondary" 
-                                size="sm" 
+                            <div className="mt-2 flex gap-1">
+                              <Button
+                                variant="secondary"
+                                size="sm"
                                 className="h-7 px-2 flex-1 text-xs"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1019,23 +925,23 @@ function AvailabilityManagerCard({
                               >
                                 <Pencil className="h-3 w-3 mr-1" /> Düzenle
                               </Button>
-                              <Button 
-                                variant="destructive" 
-                                size="sm" 
-                                className="h-7 px-2 w-7 p-0 flex-none"
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-7 px-2 flex-none text-xs"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onDeleteRequest(availability);
                                 }}
                               >
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className="h-3 w-3 mr-1" /> Sil
                               </Button>
                             </div>
                           </div>
                         ))
                       ) : (
-                        <div className="h-full flex items-center justify-center text-xs text-muted-foreground italic opacity-50 bg-card rounded-lg border border-dashed border-border flex-1 min-h-[80px]">
-                          Tanım yok
+                        <div className="h-full flex items-center justify-center text-xs text-muted-foreground opacity-40 flex-1 min-h-[60px]">
+                          —
                         </div>
                       )}
                       
@@ -1073,10 +979,7 @@ function AvailabilitySummaryCard({
   return (
     <Card className="h-fit">
       <CardHeader>
-        <CardTitle>Availability Özeti</CardTitle>
-        <CardDescription>
-          Öneri motoru bu pencereleri kullanır. Daha fazla kontrol için üstteki müsaitlik yönetimi kartını kullanabilirsiniz.
-        </CardDescription>
+        <CardTitle>Müsaitlik Özeti</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {isLoading && (
@@ -1095,19 +998,9 @@ function AvailabilitySummaryCard({
         )}
 
         {!isLoading && !errorMessage && availabilities.length === 0 && (
-          <Alert variant="warning">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Müsaitlik tanımı bulunamadı</AlertTitle>
-            <AlertDescription className="space-y-3">
-              <p>
-                Availability kaydı olmadan sistem conflict olmayan öneri üretmekte zorlanır.
-              </p>
-              <Button variant="outline" onClick={onCreate}>
-                <Plus className="h-4 w-4" />
-                Müsaitlik Ekle
-              </Button>
-            </AlertDescription>
-          </Alert>
+          <div className="py-6 text-center text-muted-foreground text-sm">
+            Müsaitlik tanımı yok.
+          </div>
         )}
 
         {!isLoading && !errorMessage && availabilities.length > 0 && (
@@ -1175,9 +1068,9 @@ function AvailabilityDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Müsaitlik Kaydını Düzenle' : 'Yeni Müsaitlik Ekle'}</DialogTitle>
+          <DialogTitle>{isEditing ? 'Müsaitlik Düzenle' : 'Müsaitlik Ekle'}</DialogTitle>
           <DialogDescription>
-            Haftalık müsaitlik pencerelerinizi tanımlayarak öneri motorunun derslik ve saat kombinasyonlarını daha isabetli üretmesini sağlayabilirsiniz.
+            Haftalık uygunluk pencerenizi belirleyin.
           </DialogDescription>
         </DialogHeader>
 
