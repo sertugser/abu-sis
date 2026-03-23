@@ -17,12 +17,20 @@ public static partial class SeedData
         var allCurrCourses = context.Set<CurriculumCourse>()
             .Include(cc => cc.Course)
             .ToList();
+        var allPrereqs = context.CoursePrerequisites.ToList();
         var terms = context.AcademicTerms
             .OrderBy(t => t.Year).ThenBy(t => t.Semester)
             .ToList();
         var instructors = context.Instructors.ToList();
-        var curricula = context.Curricula.ToList();
-        var activeTerm = terms.First(t => t.IsActive);
+        var curricula = context.Curricula.Include(c => c.Program).ToList();
+
+        var pastTerms = terms.Where(t => !t.IsActive)
+            .OrderBy(t => t.Year).ThenBy(t => t.Semester).ToList();
+
+        var rng = new Random(42);
+        var sectionCache = new Dictionary<(int courseId, int termId), List<CourseSection>>();
+        var instructorsByDept = instructors.GroupBy(i => i.DepartmentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         foreach (var student in students)
         {
@@ -36,41 +44,56 @@ public static partial class SeedData
                 .ToList();
 
             var deptId = curriculum.Program?.DepartmentId ?? instructors.First().DepartmentId;
-            var deptInstructors = instructors.Where(i => i.DepartmentId == deptId).ToList();
-            if (!deptInstructors.Any()) deptInstructors = instructors.Take(1).ToList();
+            var deptInstructors = instructorsByDept.GetValueOrDefault(deptId, instructors.Take(1).ToList());
+            int instrIdx = 0;
 
             var targetCgpa = student.Cgpa;
-            var completedSemesters = student.CompletedSemesters;
-
-            // Determine grade pattern based on GPA category
             var gradePattern = GetGradePattern(targetCgpa);
             int gradeIndex = 0;
 
             decimal totalQualityPoints = 0;
             int totalGpaEcts = 0;
-            int currSemester = 0;
-
-            // Past semester terms (chronological, excluding active)
-            var pastTerms = terms.Where(t => !t.IsActive).OrderBy(t => t.Year).ThenBy(t => t.Semester).ToList();
+            decimal lastSemQualityPoints = 0;
+            int lastSemGpaEcts = 0;
 
             var entryYear = sp.EnrollmentDate.Year;
             var studentTerms = pastTerms
                 .Where(t => t.Year >= entryYear || (t.Year == entryYear - 1 && t.Semester == SemesterType.Spring))
-                .Take(completedSemesters)
+                .Take(student.CompletedSemesters)
                 .ToList();
 
-            // Instructor index for deterministic assignment
-            int instrIdx = 0;
+            // Track passed and failed courses
+            var passedCourseIds = new HashSet<int>();
+            var failedCourses = new List<int>();
 
+            // Withdrawal scenario: ~5% of borderline students
+            bool isBorderline = targetCgpa >= 2.00m && targetCgpa < 2.50m;
+            bool hasWithdrawn = isBorderline && rng.Next(20) == 0;
+            int withdrawSemester = hasWithdrawn ? rng.Next(1, student.CompletedSemesters + 1) : -1;
+            bool withdrawUsed = false;
+
+            int currSemester = 0;
             foreach (var term in studentTerms)
             {
                 currSemester++;
-                var semCourses = myCourses.Where(cc => cc.SuggestedSemester == currSemester).ToList();
+                lastSemQualityPoints = 0;
+                lastSemGpaEcts = 0;
 
-                foreach (var cc in semCourses)
+                var semCourses = myCourses
+                    .Where(cc => cc.SuggestedSemester == currSemester)
+                    .ToList();
+
+                // 1. Retake failed courses from previous semesters
+                var retakeList = failedCourses.ToList();
+                foreach (var failedCourseId in retakeList)
                 {
+                    var prereqs = allPrereqs.Where(p => p.CourseId == failedCourseId).ToList();
+                    if (prereqs.Any(p => !passedCourseIds.Contains(p.RequiredCourseId)))
+                        continue;
+
+                    var course = allCurrCourses.First(cc => cc.CourseId == failedCourseId).Course;
                     GradeCode grade;
-                    if (cc.Course.IsNonGpa)
+                    if (course.IsNonGpa)
                     {
                         grade = GradeCode.S;
                     }
@@ -78,14 +101,91 @@ public static partial class SeedData
                     {
                         grade = gradePattern[gradeIndex % gradePattern.Length];
                         gradeIndex++;
+                        var pt = GradePointMap.GetPoint(grade) ?? 0;
+                        totalQualityPoints += pt * course.Ects;
+                        totalGpaEcts += course.Ects;
+                        lastSemQualityPoints += pt * course.Ects;
+                        lastSemGpaEcts += course.Ects;
+                    }
 
+                    if (grade != GradeCode.FF && grade != GradeCode.NA)
+                    {
+                        passedCourseIds.Add(failedCourseId);
+                        failedCourses.Remove(failedCourseId);
+                    }
+
+                    var section = FindOrCreateSection(context, failedCourseId, term.Id,
+                        deptInstructors, ref instrIdx, sectionCache);
+
+                    context.CourseRegistrations.Add(new CourseRegistration
+                    {
+                        StudentId = student.Id,
+                        CourseSectionId = section.Id,
+                        Status = RegistrationStatus.Completed,
+                        Grade = grade,
+                        IsRepeated = true,
+                        MandatoryAttendance = false,
+                        CourseWithdrawalCount = 0,
+                        CreatedAt = term.RegistrationStart,
+                        UpdatedAt = term.TermEnd
+                    });
+                }
+
+                // 2. New courses for this semester
+                foreach (var cc in semCourses)
+                {
+                    // Check prerequisites
+                    var prereqs = allPrereqs.Where(p => p.CourseId == cc.CourseId).ToList();
+                    if (prereqs.Any(p => !passedCourseIds.Contains(p.RequiredCourseId)))
+                        continue;
+
+                    // Withdrawal scenario
+                    if (hasWithdrawn && !withdrawUsed && currSemester == withdrawSemester)
+                    {
+                        withdrawUsed = true;
+                        var wSection = FindOrCreateSection(context, cc.CourseId, term.Id,
+                            deptInstructors, ref instrIdx, sectionCache);
+
+                        context.CourseRegistrations.Add(new CourseRegistration
+                        {
+                            StudentId = student.Id,
+                            CourseSectionId = wSection.Id,
+                            Status = RegistrationStatus.Withdrawn,
+                            Grade = GradeCode.W,
+                            IsRepeated = false,
+                            MandatoryAttendance = false,
+                            CourseWithdrawalCount = 1,
+                            CreatedAt = term.RegistrationStart,
+                            UpdatedAt = term.TermEnd
+                        });
+                        student.WithdrawalCount = 1;
+                        continue;
+                    }
+
+                    GradeCode grade;
+                    if (cc.Course.IsNonGpa)
+                    {
+                        grade = GradeCode.S;
+                        passedCourseIds.Add(cc.CourseId);
+                    }
+                    else
+                    {
+                        grade = gradePattern[gradeIndex % gradePattern.Length];
+                        gradeIndex++;
                         var pt = GradePointMap.GetPoint(grade) ?? 0;
                         totalQualityPoints += pt * cc.Course.Ects;
                         totalGpaEcts += cc.Course.Ects;
+                        lastSemQualityPoints += pt * cc.Course.Ects;
+                        lastSemGpaEcts += cc.Course.Ects;
+
+                        if (grade == GradeCode.FF || grade == GradeCode.NA)
+                            failedCourses.Add(cc.CourseId);
+                        else
+                            passedCourseIds.Add(cc.CourseId);
                     }
 
-                    var section = CreateSectionDeterministic(context, cc.Course.Id, term.Id, deptInstructors, ref instrIdx);
-                    await context.SaveChangesAsync();
+                    var section = FindOrCreateSection(context, cc.CourseId, term.Id,
+                        deptInstructors, ref instrIdx, sectionCache);
 
                     context.CourseRegistrations.Add(new CourseRegistration
                     {
@@ -102,97 +202,83 @@ public static partial class SeedData
                 }
             }
 
-            // Active term registrations (no grades)
-            var nextSem = currSemester + 1;
-            var activeCourses = myCourses.Where(cc => cc.SuggestedSemester == nextSem).ToList();
-            if (!activeCourses.Any() && myCourses.Any())
-                activeCourses = myCourses.Where(cc => cc.SuggestedSemester == currSemester).Take(3).ToList();
-
-            foreach (var cc in activeCourses)
-            {
-                var section = CreateSectionDeterministic(context, cc.Course.Id, activeTerm.Id, deptInstructors, ref instrIdx, isActive: true);
-                await context.SaveChangesAsync();
-
-                context.CourseRegistrations.Add(new CourseRegistration
-                {
-                    StudentId = student.Id,
-                    CourseSectionId = section.Id,
-                    Status = RegistrationStatus.Active,
-                    Grade = null,
-                    IsRepeated = false,
-                    MandatoryAttendance = false,
-                    CourseWithdrawalCount = 0,
-                    CreatedAt = activeTerm.RegistrationStart
-                });
-            }
-
-            // Update student GPA from actual registrations
+            // Update student GPA from actual grades
             if (totalGpaEcts > 0)
-            {
-                var calcCgpa = Math.Round(totalQualityPoints / totalGpaEcts, 2);
-                student.Cgpa = calcCgpa;
-                student.Sgpa = calcCgpa;
-            }
+                student.Cgpa = Math.Round(totalQualityPoints / totalGpaEcts, 2);
+            if (lastSemGpaEcts > 0)
+                student.Sgpa = Math.Round(lastSemQualityPoints / lastSemGpaEcts, 2);
 
             await context.SaveChangesAsync();
         }
     }
 
     /// <summary>
-    /// Gerçekçi not dağılımları — her pattern 12 not içerir, AKTS ağırlıklı ortalama
-    /// hedef aralığa düşer. Farklı derslerin AKTS'leri farklı olduğu için öğrenciler
-    /// arasında doğal varyasyon oluşur.
-    ///
-    /// Başarılı  (>2.00): AA,BA,BB,CB,BB,AA,BA,BB,CB,BA,BB,AA  → ~3.29
-    /// Sınırda (1.70–2.00): CC,DC,CB,CC,DC,DD,CC,DC,CC,CB,DC,CC → ~1.83
-    /// Başarısız  (<1.70): DC,CC,DD,DC,CC,DD,DC,DC,DD,CC,DC,DD  → ~1.46
+    /// Three-band grade patterns (12 grades each, cycling):
+    /// Successful  (≥2.50): ~3.29 avg
+    /// Borderline (2.00–2.49): ~2.13 avg
+    /// Low        (&lt;2.00): ~0.96 avg (includes FF/NA for repeat scenarios)
     /// </summary>
     private static GradeCode[] GetGradePattern(decimal targetCgpa) => targetCgpa switch
     {
-        // AA(4)+BA(3.5)+BB(3)+CB(2.5)+BB(3)+AA(4)+BA(3.5)+BB(3)+CB(2.5)+BA(3.5)+BB(3)+AA(4) = 39.5 → 39.5/12 = 3.29
-        > 2.00m =>
+        >= 2.50m =>
         [
             GradeCode.AA, GradeCode.BA, GradeCode.BB, GradeCode.CB,
             GradeCode.BB, GradeCode.AA, GradeCode.BA, GradeCode.BB,
             GradeCode.CB, GradeCode.BA, GradeCode.BB, GradeCode.AA
         ],
-        // CC(2)+DC(1.5)+CB(2.5)+CC(2)+DC(1.5)+DD(1)+CC(2)+DC(1.5)+CC(2)+CB(2.5)+DC(1.5)+CC(2) = 22 → 22/12 = 1.83
-        >= 1.70m =>
+        >= 2.00m =>
         [
-            GradeCode.CC, GradeCode.DC, GradeCode.CB, GradeCode.CC,
-            GradeCode.DC, GradeCode.DD, GradeCode.CC, GradeCode.DC,
-            GradeCode.CC, GradeCode.CB, GradeCode.DC, GradeCode.CC
+            GradeCode.CC, GradeCode.CB, GradeCode.CC, GradeCode.CC,
+            GradeCode.DC, GradeCode.CB, GradeCode.CC, GradeCode.CB,
+            GradeCode.DC, GradeCode.CC, GradeCode.CB, GradeCode.CC
         ],
-        // DC(1.5)+CC(2)+DD(1)+DC(1.5)+CC(2)+DD(1)+DC(1.5)+DC(1.5)+DD(1)+CC(2)+DC(1.5)+DD(1) = 17.5 → 17.5/12 = 1.46
         _ =>
         [
-            GradeCode.DC, GradeCode.CC, GradeCode.DD, GradeCode.DC,
-            GradeCode.CC, GradeCode.DD, GradeCode.DC, GradeCode.DC,
-            GradeCode.DD, GradeCode.CC, GradeCode.DC, GradeCode.DD
+            GradeCode.DC, GradeCode.FF, GradeCode.DD, GradeCode.CC,
+            GradeCode.NA, GradeCode.DD, GradeCode.DC, GradeCode.FF,
+            GradeCode.CC, GradeCode.DD, GradeCode.DC, GradeCode.NA
         ],
     };
 
-    private static CourseSection CreateSectionDeterministic(
+    /// <summary>
+    /// Find an existing section with available capacity, or create a new one.
+    /// Saves immediately when creating a new section so section.Id is available for FK references.
+    /// </summary>
+    private static CourseSection FindOrCreateSection(
         AppDbContext context, int courseId, int termId,
-        List<Instructor> instructors, ref int instrIdx, bool isActive = false)
+        List<Instructor> instructors, ref int instrIdx,
+        Dictionary<(int courseId, int termId), List<CourseSection>> sectionCache)
     {
-        // Reuse existing section if available
-        var existing = context.CourseSections.Local
-            .FirstOrDefault(s => s.CourseId == courseId && s.TermId == termId);
-        if (existing != null)
+        var key = (courseId, termId);
+
+        if (sectionCache.TryGetValue(key, out var cached))
         {
-            existing.EnrolledCount++;
-            return existing;
+            var available = cached.FirstOrDefault(s => s.EnrolledCount < s.Capacity);
+            if (available != null)
+            {
+                available.EnrolledCount++;
+                return available;
+            }
+        }
+        else
+        {
+            var dbSections = context.CourseSections
+                .Where(s => s.CourseId == courseId && s.TermId == termId)
+                .ToList();
+
+            if (dbSections.Count > 0)
+            {
+                sectionCache[key] = dbSections;
+                var available = dbSections.FirstOrDefault(s => s.EnrolledCount < s.Capacity);
+                if (available != null)
+                {
+                    available.EnrolledCount++;
+                    return available;
+                }
+            }
         }
 
-        var dbExisting = context.CourseSections
-            .FirstOrDefault(s => s.CourseId == courseId && s.TermId == termId);
-        if (dbExisting != null)
-        {
-            dbExisting.EnrolledCount++;
-            return dbExisting;
-        }
-
+        // All sections full or none exist — create new
         var instructor = instructors[instrIdx % instructors.Count];
         instrIdx++;
 
@@ -203,11 +289,17 @@ public static partial class SeedData
             InstructorId = instructor.Id,
             Capacity = 40,
             EnrolledCount = 1,
-            IsActive = isActive,
+            IsActive = false,
             IsFinalized = false,
             ScheduleJson = "[]"
         };
         context.CourseSections.Add(section);
+        context.SaveChanges(); // immediate save for FK resolution
+
+        if (!sectionCache.ContainsKey(key))
+            sectionCache[key] = [];
+        sectionCache[key].Add(section);
+
         return section;
     }
 }
