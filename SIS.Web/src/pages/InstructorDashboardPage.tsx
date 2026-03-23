@@ -14,7 +14,7 @@ const TURKISH_DAYS: Record<string, number> = {
   'persembe': 4, 'perşembe': 4, 'cuma': 5, 'cumartesi': 6, 'pazar': 0,
 };
 
-function getTodaysSections(sections: { schedule: string; [k: string]: unknown }[]) {
+function getTodaysSections(sections: InstructorSection[]) {
   const todayJs = new Date().getDay(); // 0=Sun, 1=Mon...
   return sections.filter(s => {
     if (!s.schedule) return false;
