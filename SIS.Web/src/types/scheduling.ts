@@ -86,3 +86,45 @@ export interface ScheduleSuggestion {
   notes: string[];
   instructorAvailabilities: InstructorAvailability[];
 }
+
+export interface ClassroomOccupation {
+  classroomName: string;
+  courseCode: string;
+  courseName: string;
+  enrolledCount: number;
+  capacity: number;
+}
+
+export interface ClassroomHeatmapCell {
+  day: number;
+  hour: number;
+  occupancy: number;
+  usedClassrooms: number;
+  details: string;
+  occupations: ClassroomOccupation[];
+}
+
+export interface ClassroomScheduleSlot {
+  day: number;
+  startHour: number;
+  endHour: number;
+  courseName: string;
+  courseCode: string;
+}
+
+export interface ClassroomInfo {
+  id: number;
+  name: string;
+  capacity: number;
+  type: string;
+  schedules: ClassroomScheduleSlot[];
+}
+
+export interface ClassroomDashboard {
+  totalClassrooms: number;
+  occupancyRate: number;
+  conflictsCount: number;
+  emptySlots: number;
+  heatmap: ClassroomHeatmapCell[];
+  classrooms: ClassroomInfo[];
+}

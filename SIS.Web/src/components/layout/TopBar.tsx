@@ -3,22 +3,25 @@ import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CircleDot } from 'lucide-react';
 
+import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
+
+const allMenuGroups = [
+  ...studentMenuGroups,
+  ...buildInstructorMenuGroups(true),
+];
+
 const pageTitles: Record<string, string> = {
   '/': 'Ana Sayfa',
-  '/kullanim-kilavuzu': 'Kullanım Kılavuzu',
-  '/akademik-takvim': 'Akademik Takvim',
-  '/ders-kayit': 'Ders Kayıt',
-  '/plan': 'Kayıt Planı',
-  '/alinan-dersler': 'Alınan Dersler',
-  '/donem-ortalamalari': 'Dönem Ortalamaları',
-  '/mufredat-durum': 'Müfredat Durum',
-  '/derslerim': 'Derslerim',
-  '/program-planlama': 'Program Planlama',
-  '/not-girisi': 'Not Girişi',
-  '/planlama-merkezi': 'Planlama Merkezi',
-  '/sinif-listeleri': 'Sınıf Listeleri',
-  '/mufredat-gorunumu': 'Müfredat Görünümü',
 };
+
+// Menülerden gelen yolları dinamik olarak ekle
+allMenuGroups.forEach(group => {
+  group.children.forEach(child => {
+    if (!pageTitles[child.to]) {
+      pageTitles[child.to] = child.label;
+    }
+  });
+});
 
 export default function TopBar() {
   const { data: term } = useActiveTerm();

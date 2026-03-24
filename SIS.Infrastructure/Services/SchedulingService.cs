@@ -465,6 +465,7 @@ public class SchedulingService : ISchedulingService
             TheoryHours = section.Course.TheoryHours,
             LabHours = section.Course.LabHours,
             Capacity = section.Capacity,
+            EnrolledCount = section.EnrolledCount,
             ClassroomId = classroom?.Id,
             ClassroomName = classroom?.Name ?? string.Empty,
             ClassroomCapacity = classroom?.Capacity ?? 0,
@@ -1282,6 +1283,7 @@ public class SchedulingService : ISchedulingService
         public int TheoryHours { get; init; }
         public int LabHours { get; init; }
         public int Capacity { get; init; }
+        public int EnrolledCount { get; init; }
         public int? ClassroomId { get; init; }
         public string ClassroomName { get; init; } = string.Empty;
         public int ClassroomCapacity { get; init; }
@@ -1473,5 +1475,130 @@ public class SchedulingService : ISchedulingService
         }
 
         return result;
+    }
+    public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(int? termId = null, CancellationToken cancellationToken = default)
+    {
+        var result = new ClassroomDashboardDto();
+        var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
+        if (resolvedTerm == null)
+        {
+            return result;
+        }
+
+        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
+        var evaluation = EvaluateExistingConflicts(snapshot);
+        result.ConflictsCount = evaluation.Conflicts?.Count ?? 0;
+
+        var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(cancellationToken);
+        result.TotalClassrooms = classrooms.Count;
+
+        // Her derslik için o donemdeki dersleri haritala
+        var classroomSchedules = snapshot.Sections
+            .Where(s => s.ClassroomId.HasValue)
+            .GroupBy(s => s.ClassroomId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.SelectMany(s => s.ScheduleSlots.Select(slot => new ClassroomScheduleSlotDto
+                {
+                    Day = (int)slot.Day,
+                    StartHour = slot.StartTime.Hour,
+                    EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
+                    CourseCode = s.CourseCode,
+                    CourseName = s.CourseName
+                })).ToList()
+            );
+
+        result.Classrooms = classrooms.Select(c => new ClassroomInfoDto
+        {
+            Id = c.Id,
+            Name = c.Name,
+            Capacity = c.Capacity,
+            Type = c.Type.ToString(),
+            Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
+        }).OrderBy(c => c.Name).ToList();
+
+        var heatmapMap = new Dictionary<(int day, int hour), int>();
+        for (int day = 0; day < 5; day++)
+        {
+            for (int hour = 8; hour <= 17; hour++)
+            {
+                heatmapMap[(day, hour)] = 0;
+            }
+        }
+
+        var occupationMap = new Dictionary<(int day, int hour), List<ClassroomOccupationDto>>();
+        foreach (var section in snapshot.Sections)
+        {
+            if (section.ClassroomId.HasValue)
+            {
+                foreach (var slot in section.ScheduleSlots)
+                {
+                    int dayIndex = (int)slot.Day - 1;
+                    if (dayIndex >= 0 && dayIndex <= 4)
+                    {
+                        int startHour = slot.StartTime.Hour;
+                        int endHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1;
+                        
+                        for (int h = startHour; h <= endHour && h <= 17; h++)
+                        {
+                            if (h >= 8) 
+                            {
+                                var key = (dayIndex, h);
+                                if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
+                                heatmapMap[key]++;
+                                
+                                if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
+                                occupationMap[key].Add(new ClassroomOccupationDto
+                                {
+                                    ClassroomName = section.ClassroomName,
+                                    CourseCode = section.CourseCode,
+                                    CourseName = section.CourseName,
+                                    EnrolledCount = section.EnrolledCount,
+                                    Capacity = section.ClassroomCapacity
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        int totalSlots = result.TotalClassrooms * 5 * 10; 
+        int usedSlots = heatmapMap.Values.Sum();
+        result.EmptySlots = Math.Max(0, totalSlots - usedSlots);
+        result.OccupancyRate = totalSlots > 0 ? Math.Round((double)usedSlots / totalSlots * 100) : 0;
+
+        foreach (var kvp in heatmapMap)
+        {
+            var day = kvp.Key.day;
+            var hour = kvp.Key.hour;
+            var used = kvp.Value;
+            var total = result.TotalClassrooms;
+            
+            result.Heatmap.Add(new ClassroomHeatmapCellDto
+            {
+                Day = day,
+                Hour = hour,
+                UsedClassrooms = used,
+                Occupancy = total > 0 ? Math.Min(1, (double)used / total) : 0,
+                Details = $"{GetDayName(day)} {hour:D2}:00 — {used}/{total} derslik dolu",
+                Occupations = occupationMap.TryGetValue((day, hour), out var occList) ? occList : new()
+            });
+        }
+
+        return result;
+    }
+
+    private string GetDayName(int day)
+    {
+        return day switch
+        {
+            0 => "Pazartesi",
+            1 => "Salı",
+            2 => "Çarşamba",
+            3 => "Perşembe",
+            4 => "Cuma",
+            _ => "Bilinmeyen"
+        };
     }
 }

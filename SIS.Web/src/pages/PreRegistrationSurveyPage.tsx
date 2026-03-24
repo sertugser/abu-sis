@@ -45,26 +45,9 @@ export default function PreRegistrationSurveyPage() {
     setSelections(prev => ({ ...prev, [courseId]: p }));
   };
 
-  const selectedCount = Object.values(selections).filter(v => v !== null).length;
-  const totalEcts = MOCK_COURSES.filter(c => selections[c.id] === 'kesin' || selections[c.id] === 'muhtemel')
-    .reduce((sum, c) => sum + c.ects, 0);
-
   return (
     <div className="space-y-6">
-      {/* Başlık */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            📋 Ön Kayıt Anketi
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            2025-2026 Güz Dönemi &middot; Son Tarih: 15 Temmuz 2025
-          </p>
-        </div>
-        <Badge variant="outline" className="text-sm px-3 py-1">
-          {selectedCount}/{MOCK_COURSES.length} ders seçildi &middot; ~{totalEcts} AKTS
-        </Badge>
-      </div>
+      {/* Sayfa içeriği başlangıcı */}
 
       {submitted && (
         <Card className="border-emerald-300 bg-emerald-50/50">
