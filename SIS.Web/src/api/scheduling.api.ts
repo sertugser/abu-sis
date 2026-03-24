@@ -1,6 +1,6 @@
 import axios from 'axios';
 import apiClient from './axios';
-import type { BatchAutoScheduleRequest, BatchAutoScheduleResult } from '../types/scheduling';
+import type { BatchAutoScheduleRequest, BatchAutoScheduleResult, ClassroomDashboard, SchedulingConflict } from '../types/scheduling';
 
 export async function batchAutoSchedule(request: BatchAutoScheduleRequest): Promise<BatchAutoScheduleResult> {
   const { data } = await apiClient.post('/scheduling/batch-auto-schedule', request);
@@ -41,4 +41,18 @@ export function getSchedulingManagementErrorMessage(error: unknown, fallbackMess
   }
 
   return apiMessage ?? fallbackMessage;
+}
+
+export async function getClassroomDashboard(termId?: number): Promise<ClassroomDashboard> {
+  const { data } = await apiClient.get<ClassroomDashboard>('/scheduling/dashboard', {
+    params: { termId }
+  });
+  return data;
+}
+
+export async function getSchedulingConflicts(termId?: number): Promise<SchedulingConflict[]> {
+  const { data } = await apiClient.get<SchedulingConflict[]>('/scheduling/conflicts', {
+    params: { termId }
+  });
+  return data;
 }

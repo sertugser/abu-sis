@@ -18,14 +18,14 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import logo from '/logo.png';
 
-interface MenuGroup {
+export interface MenuGroup {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   children: { to: string; label: string }[];
 }
 
-const studentMenuGroups: MenuGroup[] = [
+export const studentMenuGroups: MenuGroup[] = [
   {
     id: 'genel',
     label: 'Genel İşlemler',
@@ -116,7 +116,7 @@ const studentMenuGroups: MenuGroup[] = [
   },
 ];
 
-function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup[] {
+export function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup[] {
   return [
     {
       id: 'sik-kullanilanlar',

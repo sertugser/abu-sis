@@ -9,6 +9,16 @@ export interface HeatmapCell {
   occupancy: number; // 0.0 – 1.0 doluluk oranı
   /** Hover'da gösterilecek ek bilgi */
   details?: string;
+  /** Hücre içinde gösterilecek metin (opsiyonel) */
+  label?: string;
+  /** Detaylı derslik işgalleri */
+  occupations?: {
+    classroomName: string;
+    courseCode: string;
+    courseName: string;
+    enrolledCount: number;
+    capacity: number;
+  }[];
 }
 
 interface HeatmapGridProps {
@@ -36,7 +46,7 @@ function getTextColor(v: number): string {
 
 /* ────────────────────── Bileşen ────────────────────── */
 
-export default function HeatmapGrid({ data, title = 'Haftalık Doluluk Haritası', className }: HeatmapGridProps) {
+export default function HeatmapGrid({ data, title = 'Dönemsel Doluluk Haritası', className }: HeatmapGridProps) {
   const [hovered, setHovered] = useState<{ day: number; hour: number } | null>(null);
 
   // Hızlı erişim için map
@@ -46,8 +56,8 @@ export default function HeatmapGrid({ data, title = 'Haftalık Doluluk Haritası
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <span>🗓️</span> {title}
+        <CardTitle className="flex items-center gap-2 text-primary">
+           {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -83,13 +93,45 @@ export default function HeatmapGrid({ data, title = 'Haftalık Doluluk Haritası
                     onMouseEnter={() => setHovered({ day: dayIdx, hour })}
                     onMouseLeave={() => setHovered(null)}
                   >
-                    %{Math.round(occ * 100)}
+                    {cell?.label || (occ > 0 ? `%${Math.round(occ * 100)}` : '')}
 
                     {/* Hover tooltip — beyaz popup */}
-                    {isHov && cell?.details && (
+                    {isHov && (cell?.details || cell?.occupations?.length) && (
                       <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                        <div className="bg-white text-gray-800 border border-gray-200 rounded-lg shadow-xl px-3 py-2 text-xs font-medium whitespace-nowrap">
-                          {cell.details}
+                        <div className="bg-white text-gray-800 border border-gray-200 rounded-lg shadow-xl px-4 py-3 text-xs font-medium min-w-[200px]">
+                          <div className="font-bold border-b pb-1.5 mb-2 text-primary flex justify-between items-center">
+                            <span>{cell?.details?.split(' — ')[0] || 'Ders Programı'}</span>
+                            <span className="text-[10px] text-muted-foreground font-normal ml-4 italic">
+                              {cell?.occupations?.length || 0} Derslik Dolu
+                            </span>
+                          </div>
+                          
+                          {cell?.occupations && cell.occupations.length > 0 ? (
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                              {cell.occupations.map((occ, idx) => (
+                                <div key={idx} className="flex flex-col border-b border-gray-50 last:border-0 pb-1.5 last:pb-0">
+                                  <div className="flex justify-between items-start gap-3">
+                                    <span className="font-semibold text-gray-900">{occ.classroomName}</span>
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 rounded-sm font-bold">
+                                        %{Math.round((occ.enrolledCount / (occ.capacity || 1)) * 100)}
+                                      </span>
+                                      <span className="text-[9px] text-muted-foreground">
+                                        {occ.enrolledCount}/{occ.capacity}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
+                                    {occ.courseCode} - {occ.courseName}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-muted-foreground italic">
+                              {cell?.details || 'Ders bulunmuyor'}
+                            </div>
+                          )}
                         </div>
                         {/* Arrow */}
                         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px]">
