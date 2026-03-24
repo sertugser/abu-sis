@@ -49,7 +49,6 @@ export default function ClassroomManagementPage() {
         occupancy: number;
         label: string;
         details: string;
-        occupations?: any[];
       };
       const grid: GridSlot[] = [];
       const schedules = cls.schedules || [];
