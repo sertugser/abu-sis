@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using SIS.API.Controllers;
+using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 
@@ -23,14 +24,15 @@ public class SchedulingControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/[controller]");
-        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,SystemAdministrator");
+        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,DepartmentManager,SystemAdministrator");
     }
 
     [Fact]
     public async Task GetConflicts_InvalidTermId_ReturnsBadRequest()
     {
         var serviceMock = new Mock<ISchedulingService>(MockBehavior.Strict);
-        var controller = new SchedulingController(serviceMock.Object);
+        var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
 
         var result = await controller.GetConflicts(0, CancellationToken.None);
 
@@ -50,7 +52,8 @@ public class SchedulingControllerTests
             .Setup(service => service.ValidateAsync(It.IsAny<ScheduleValidationRequestDto>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
-        var controller = new SchedulingController(serviceMock.Object);
+        var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
 
         var result = await controller.Validate(new ScheduleValidationRequestDto { SectionId = 5 }, CancellationToken.None);
 
@@ -72,7 +75,8 @@ public class SchedulingControllerTests
             .Setup(service => service.SuggestAsync(It.IsAny<ScheduleSuggestionRequestDto>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
-        var controller = new SchedulingController(serviceMock.Object);
+        var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
 
         var result = await controller.Suggest(new ScheduleSuggestionRequestDto { SectionId = 7 }, CancellationToken.None);
 
