@@ -195,6 +195,7 @@ function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup[] {
       children: [
         { to: '/bolum-ogrenci-islemleri', label: 'Öğrenci İşlemleri' },
         { to: '/sinif-listeleri', label: 'Sınıf Listeleri' },
+        { to: ROUTES.MANAGEMENT_BATCH_SCHEDULING, label: 'Toplu Programlama' },
         { to: '/bolum-ders-islemleri', label: 'Bölüm Ders İşlemleri' },
         { to: '/bolum-ders-ac-mufredat', label: 'Ders Aç (Müfredat)' },
         { to: '/bolum-ders-ac-hareket', label: 'Ders Aç (Hareket)' },

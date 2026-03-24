@@ -1,6 +1,7 @@
 import axios from 'axios';
 import apiClient from './axios';
 import type {
+  ApplyScheduleRequest,
   InstructorAvailability,
   ScheduleSuggestion,
   ScheduleValidationResult,
@@ -29,6 +30,18 @@ export async function suggestInstructorSectionSchedule(sectionId: number): Promi
     estimatedWeeklyHoursImpact: typeof data?.estimatedWeeklyHoursImpact === 'number' ? data.estimatedWeeklyHoursImpact : 0,
     notes: Array.isArray(data?.notes) ? data.notes : [],
     instructorAvailabilities: Array.isArray(data?.instructorAvailabilities) ? data.instructorAvailabilities : [],
+  };
+}
+
+export async function applyInstructorSectionSchedule(
+  sectionId: number,
+  request: ApplyScheduleRequest,
+): Promise<ScheduleValidationResult> {
+  const { data } = await apiClient.post(`/instructor/section/${sectionId}/schedule/apply`, request);
+  return {
+    isValid: Boolean(data?.isValid),
+    conflicts: Array.isArray(data?.conflicts) ? data.conflicts : [],
+    notes: Array.isArray(data?.notes) ? data.notes : [],
   };
 }
 
@@ -74,6 +87,10 @@ export function getSchedulingErrorMessage(error: unknown, fallbackMessage: strin
   }
 
   if (status === 404) {
+    if (!apiMessage && fallbackMessage === 'Program uygulanamadı.') {
+      return 'Program uygulama endpointi bulunamadı. API sunucusunu yeniden başlatıp tekrar deneyin.';
+    }
+
     return apiMessage ?? 'Seçilen ders bulunamadı veya size ait değil.';
   }
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/lib/constants';
 import {
+  applyInstructorSectionSchedule,
   createInstructorAvailability,
   deleteInstructorAvailability,
   getInstructorAvailabilities,
@@ -8,7 +9,7 @@ import {
   updateInstructorAvailability,
   validateInstructorSectionSchedule,
 } from '../api/instructorScheduling.api';
-import type { UpsertInstructorAvailabilityRequest } from '../types/scheduling';
+import type { ApplyScheduleRequest, UpsertInstructorAvailabilityRequest } from '../types/scheduling';
 
 export function useInstructorAvailabilities() {
   return useQuery({
@@ -27,6 +28,23 @@ export function useValidateInstructorSchedule() {
 export function useSuggestInstructorSchedule() {
   return useMutation({
     mutationFn: ({ sectionId }: { sectionId: number }) => suggestInstructorSectionSchedule(sectionId),
+  });
+}
+
+export function useApplyInstructorSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      sectionId,
+      request,
+    }: {
+      sectionId: number;
+      request: ApplyScheduleRequest;
+    }) => applyInstructorSectionSchedule(sectionId, request),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['instructorSections'] });
+    },
   });
 }
 

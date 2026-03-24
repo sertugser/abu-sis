@@ -18,6 +18,7 @@ import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
 import AcademicOperationsPage from './pages/AcademicOperationsPage';
+import SchedulingDashboardPage from './pages/SchedulingDashboardPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES } from './lib/roles';
@@ -55,6 +56,7 @@ export default function App() {
                     <Route path="planlama-merkezi" element={<AcademicOperationsPage mode="planning" />} />
                     <Route path="sinif-listeleri" element={<AcademicOperationsPage mode="class-lists" />} />
                     <Route path="mufredat-gorunumu" element={<AcademicOperationsPage mode="curriculum" />} />
+                    <Route path="toplu-programlama" element={<SchedulingDashboardPage />} />
                   </Route>
 
                   <Route path="*" element={<NotFoundPage />} />

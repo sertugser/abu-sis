@@ -21,6 +21,7 @@ public class DepartmentSectionClassListDto
     public string InstructorName { get; set; } = string.Empty;
     public string ClassroomName { get; set; } = string.Empty;
     public string ScheduleSummary { get; set; } = string.Empty;
+    public string ScheduleJson { get; set; } = "[]";
     public int Capacity { get; set; }
     public int EnrolledCount { get; set; }
     public int ActiveStudentCount { get; set; }

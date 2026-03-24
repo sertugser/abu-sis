@@ -52,6 +52,7 @@ import {
 import { getSchedulingErrorMessage } from '../api/instructorScheduling.api';
 import { useInstructorSections } from '../hooks/useInstructorSections';
 import {
+  useApplyInstructorSchedule,
   useCreateInstructorAvailability,
   useDeleteInstructorAvailability,
   useInstructorAvailabilities,
@@ -59,14 +60,17 @@ import {
   useUpdateInstructorAvailability,
   useValidateInstructorSchedule,
 } from '../hooks/useInstructorScheduling';
+import WeeklyTimetableGrid, { type TimetableEntry } from '../components/scheduling/WeeklyTimetableGrid';
+import { parseScheduleJson } from '../lib/scheduleUtils';
 import type {
   InstructorAvailability,
   ScheduleSlot,
+  ScheduleSuggestion,
   SchedulingConflict,
   UpsertInstructorAvailabilityRequest,
 } from '../types/scheduling';
 
-type PanelKey = 'analysis' | 'suggestion';
+type PanelKey = 'analysis' | 'suggestion' | 'timetable';
 
 type AvailabilityFormState = {
   dayOfWeek: string;
@@ -124,6 +128,7 @@ export default function InstructorSchedulingPage() {
   const availabilityQuery = useInstructorAvailabilities();
   const validateMutation = useValidateInstructorSchedule();
   const suggestMutation = useSuggestInstructorSchedule();
+  const applyMutation = useApplyInstructorSchedule();
   const createAvailabilityMutation = useCreateInstructorAvailability();
   const updateAvailabilityMutation = useUpdateInstructorAvailability();
   const deleteAvailabilityMutation = useDeleteInstructorAvailability();
@@ -135,6 +140,7 @@ export default function InstructorSchedulingPage() {
 
   const resetValidation = validateMutation.reset;
   const resetSuggestion = suggestMutation.reset;
+  const resetApply = applyMutation.reset;
   const isSavingAvailability = createAvailabilityMutation.isPending || updateAvailabilityMutation.isPending;
   const isDeletingAvailability = deleteAvailabilityMutation.isPending;
 
@@ -156,7 +162,8 @@ export default function InstructorSchedulingPage() {
   useEffect(() => {
     resetValidation();
     resetSuggestion();
-  }, [selectedSection?.sectionId, resetValidation, resetSuggestion]);
+    resetApply();
+  }, [selectedSection?.sectionId, resetValidation, resetSuggestion, resetApply]);
 
   const sectionsErrorMessage = isError
     ? getSchedulingErrorMessage(error, 'Ders programı bilgileri yüklenemedi.')
@@ -193,6 +200,7 @@ export default function InstructorSchedulingPage() {
       return;
     }
 
+    resetApply();
     validateMutation.mutate({ sectionId: selectedSection.sectionId });
   };
 
@@ -201,8 +209,35 @@ export default function InstructorSchedulingPage() {
       return;
     }
 
+    resetApply();
     suggestMutation.mutate({ sectionId: selectedSection.sectionId });
   };
+
+  const handleApplySuggestion = (suggestion: ScheduleSuggestion) => {
+    if (!suggestion.isFeasible || !selectedSection) {
+      return;
+    }
+
+    applyMutation.mutate(
+      {
+        sectionId: selectedSection.sectionId,
+        request: {
+          sectionId: selectedSection.sectionId,
+          classroomId: suggestion.suggestedClassroomId,
+          scheduleSlots: suggestion.suggestedSlots,
+        },
+      },
+      {
+        onSuccess: () => {
+          refetch();
+        },
+      },
+    );
+  };
+
+  const applyErrorMessage = applyMutation.isError
+    ? getSchedulingErrorMessage(applyMutation.error, 'Program uygulanamadı.')
+    : null;
 
   const handleAvailabilityDialogChange = (open: boolean) => {
     if (!open) {
@@ -419,6 +454,11 @@ export default function InstructorSchedulingPage() {
             label="Program Önerisi"
             onClick={() => setActivePanel('suggestion')}
           />
+          <PanelButton
+            isActive={activePanel === 'timetable'}
+            label="Haftalık Görünüm"
+            onClick={() => setActivePanel('timetable')}
+          />
         </div>
 
         {activePanel === 'analysis' && selectedSection && (
@@ -600,6 +640,65 @@ export default function InstructorSchedulingPage() {
                               </p>
                             )}
                           </div>
+
+                          {suggestMutation.data.isFeasible && (
+                            <div className="pt-2 border-t border-border space-y-3">
+                              {applyMutation.data && !applyMutation.data.isValid && (
+                                <Alert variant="destructive">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <AlertTitle>Program uygulanamadı</AlertTitle>
+                                  <AlertDescription>
+                                    <ul className="space-y-1">
+                                      {applyMutation.data.notes.map(note => (
+                                        <li key={note}>{note}</li>
+                                      ))}
+                                    </ul>
+                                  </AlertDescription>
+                                </Alert>
+                              )}
+
+                              {applyErrorMessage && (
+                                <Alert variant="destructive">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <AlertTitle>Uygulama hatası</AlertTitle>
+                                  <AlertDescription>{applyErrorMessage}</AlertDescription>
+                                </Alert>
+                              )}
+
+                              {applyMutation.data?.isValid && (
+                                <Alert variant="success">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  <AlertTitle>Program uygulandı</AlertTitle>
+                                  <AlertDescription>
+                                    Önerilen program başarıyla kaydedildi.
+                                  </AlertDescription>
+                                </Alert>
+                              )}
+
+                              <Button
+                                onClick={() => handleApplySuggestion(suggestMutation.data!)}
+                                disabled={applyMutation.isPending || applyMutation.data?.isValid === true}
+                                className="w-full"
+                              >
+                                {applyMutation.isPending ? (
+                                  <>
+                                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                                    Uygulanıyor
+                                  </>
+                                ) : applyMutation.data?.isValid === true ? (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    Uygulandı
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    Öneriyi Uygula
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     </div>
@@ -614,6 +713,16 @@ export default function InstructorSchedulingPage() {
               </CardContent>
             </Card>
           </div>
+        )}
+        {activePanel === 'timetable' && (
+          <WeeklyTimetableGrid
+            entries={buildTimetableEntries(
+              sections,
+              collectConflictSectionIds(validateMutation.data?.conflicts ?? []),
+            )}
+            availabilities={availabilities}
+            title="Haftalık Ders Programı"
+          />
         )}
         </div>{/* end analysis/suggestion */}
       </div>
@@ -1240,4 +1349,51 @@ function toAvailabilityPayload(form: AvailabilityFormState): UpsertInstructorAva
     isAvailable: form.isAvailable,
     isPreferred: form.isPreferred,
   };
+}
+
+function buildTimetableEntries(
+  sections: Array<{
+    sectionId: number;
+    courseCode: string;
+    courseName: string;
+    classroomName: string;
+    scheduleJson?: string;
+  }>,
+  conflictSectionIds: Set<number>,
+): TimetableEntry[] {
+  const entries: TimetableEntry[] = [];
+
+  for (const section of sections) {
+    const slots = parseScheduleJson(section.scheduleJson);
+    if (slots.length === 0) {
+      continue;
+    }
+
+    entries.push({
+      id: String(section.sectionId),
+      label: section.courseName,
+      courseCode: section.courseCode,
+      classroomName: section.classroomName || undefined,
+      slots,
+      hasConflict: conflictSectionIds.has(section.sectionId),
+    });
+  }
+
+  return entries;
+}
+
+function collectConflictSectionIds(conflicts: SchedulingConflict[]) {
+  const sectionIds = new Set<number>();
+
+  for (const conflict of conflicts) {
+    if (typeof conflict.sectionId === 'number' && conflict.sectionId > 0) {
+      sectionIds.add(conflict.sectionId);
+    }
+
+    if (typeof conflict.relatedSectionId === 'number' && conflict.relatedSectionId > 0) {
+      sectionIds.add(conflict.relatedSectionId);
+    }
+  }
+
+  return sectionIds;
 }
