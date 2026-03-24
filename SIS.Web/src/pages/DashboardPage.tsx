@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { formatDate, getEctsLimit } from '../lib/utils';
+import { formatDate } from '../lib/utils';
 import { STUDENT_STATUS_LABELS } from '../lib/constants';
 
 export default function DashboardPage() {
@@ -32,9 +32,7 @@ export default function DashboardPage() {
     );
   }
 
-  const ectsLimit = getEctsLimit(student.cgpa);
   const currentSemester = student.completedSemesters + 1;
-  const classYear = Math.min(Math.floor(student.completedSemesters / 2) + 1, 4);
 
   return (
     <div className="space-y-8">
@@ -45,28 +43,31 @@ export default function DashboardPage() {
         </h1>
       </div>
 
-      
+      {/* Row 1 */}
+      {/* Row 1 — daily essentials */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-        
-        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-teal-500" mono />
-        
-        
-        <StatCard label="GANO" value={student.cgpa.toFixed(2)} sub={`ECTS Limiti: ${ectsLimit}`} accentColor="border-l-blue-500" />
-        
-        
-        <StatCard label="Sınıf / Dönem" value={`${classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-cyan-500" />
+        <StatCard label="GANO" value={student.cgpa.toFixed(2)} sub={`DANO: ${student.sgpa.toFixed(2)} · ECTS Limiti: ${student.ectsLimit}`} accentColor="border-l-blue-600" />
+        <StatCard label="Sınıf / Dönem" value={`${student.classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-indigo-500" />
+        <Card className="border-l-4 border-l-slate-400 hover:-translate-y-0.5 hover:shadow-md transition-all">
+          <CardContent className="p-5">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Danışman</p>
+              {student.advisorName ? (
+                <>
+                  <p className="text-base font-bold text-foreground font-heading">{student.advisorTitle} {student.advisorName}</p>
+                  <p className="text-xs text-muted-foreground">Akademik Danışman</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">Atanmamış</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      
+      {/* Row 2 — reference info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-        
-        <StatCard label="Program" value={student.programName} sub={student.departmentName} accentColor="border-l-indigo-700" valueSize="text-base" />
-        
-        
-        <StatCard label="Fakülte" value={student.facultyName} accentColor="border-l-[#003366]" valueSize="text-base" />
-        
-        
-        <Card className="border-l-4 border-l-success hover:-translate-y-0.5 hover:shadow-md transition-all">
+        <Card className="border-l-4 border-l-emerald-500 hover:-translate-y-0.5 hover:shadow-md transition-all">
           <CardContent className="p-5">
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Durum</p>
@@ -79,9 +80,13 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-slate-300" mono />
+
+        <StatCard label="Program / Fakülte" value={student.programName} sub={`${student.departmentName} — ${student.facultyName}`} accentColor="border-l-violet-400" valueSize="text-base" />
       </div>
 
-      
+      {/* Active term */}
       {term && (
         <Card>
           <CardContent className="p-5">

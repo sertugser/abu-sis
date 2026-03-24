@@ -17,4 +17,8 @@ public class StudentInfoDto
     public string FacultyName { get; set; } = string.Empty;
     public int WithdrawalCount { get; set; }
     public int ProgramId { get; set; }
+    public int ClassYear { get; set; }
+    public int EctsLimit { get; set; }
+    public string? AdvisorName { get; set; }
+    public string? AdvisorTitle { get; set; }
 }

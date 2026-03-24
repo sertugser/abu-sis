@@ -38,6 +38,7 @@ public class StudentController : ControllerBase
                 .ThenInclude(sp => sp.Program)
                     .ThenInclude(p => p.Department)
                         .ThenInclude(d => d.Faculty)
+            .Include(s => s.Advisor)
             .FirstOrDefaultAsync(s => s.UserId == userId);
 
         if (student == null)
@@ -48,6 +49,37 @@ public class StudentController : ControllerBase
             return NotFound(new { error = "Kullanici bilgisi bulunamadi." });
 
         var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+
+        // Class year: enrollment-date based, adjusted for frozen semesters
+        var classYear = 1;
+        if (activeProgram != null)
+        {
+            var now = DateTime.UtcNow;
+            var currentAcademicYear = now.Month >= 9 ? now.Year : now.Year - 1;
+            var enrollDate = activeProgram.EnrollmentDate;
+            var enrollAcademicYear = enrollDate.Month >= 9 ? enrollDate.Year : enrollDate.Year - 1;
+            var elapsedYears = currentAcademicYear - enrollAcademicYear + 1;
+            var frozenYears = (int)Math.Floor(student.FrozenSemesterCount / 2.0);
+            var maxYears = activeProgram.Program?.DegreeLevel == DegreeLevel.Associate ? 2 : 4;
+            classYear = Math.Clamp(elapsedYears - frozenYears, 1, maxYears);
+        }
+
+        // ECTS limit based on CGPA
+        var ectsLimit = student.Cgpa >= 2.50m ? 48 :
+                        student.Cgpa >= 2.00m ? 42 : 30;
+
+        // Advisor info
+        string? advisorName = null;
+        string? advisorTitle = null;
+        if (student.Advisor != null)
+        {
+            var advisorUser = await _context.Users.FindAsync(student.Advisor.UserId);
+            if (advisorUser != null)
+            {
+                advisorName = $"{advisorUser.FirstName} {advisorUser.LastName}";
+                advisorTitle = student.Advisor.Title;
+            }
+        }
 
         var dto = new StudentInfoDto
         {
@@ -65,7 +97,11 @@ public class StudentController : ControllerBase
             DepartmentName = activeProgram?.Program?.Department?.Name ?? string.Empty,
             FacultyName = activeProgram?.Program?.Department?.Faculty?.Name ?? string.Empty,
             WithdrawalCount = student.WithdrawalCount,
-            ProgramId = activeProgram?.ProgramId ?? 0
+            ProgramId = activeProgram?.ProgramId ?? 0,
+            ClassYear = classYear,
+            EctsLimit = ectsLimit,
+            AdvisorName = advisorName,
+            AdvisorTitle = advisorTitle
         };
 
         return Ok(dto);

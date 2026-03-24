@@ -11,7 +11,6 @@ import { useMyRegistrations } from '../hooks/useMyRegistrations';
 import { useDropCourse } from '../hooks/useDropCourse';
 import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { useStudentInfo } from '../hooks/useStudentInfo';
-import { getEctsLimit } from '../lib/utils';
 import type { ValidationError } from '../types/registration';
 import { Link } from 'react-router-dom';
 import { Trash2, Send, CheckCircle2, ClipboardList, BookOpen, Loader2 } from 'lucide-react';
@@ -26,7 +25,7 @@ export default function RegistrationPlanPage() {
 
   const planItems = registrations?.filter(r => r.status === 'Draft') || [];
   const totalEcts = planItems.reduce((sum, r) => sum + r.ects, 0);
-  const ectsLimit = student ? getEctsLimit(student.cgpa) : 30;
+  const ectsLimit = student?.ectsLimit ?? 30;
   const ectsPercent = Math.min((totalEcts / ectsLimit) * 100, 100);
 
   const handleRemove = (registrationId: number) => {
