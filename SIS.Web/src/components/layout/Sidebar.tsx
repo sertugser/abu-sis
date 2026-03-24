@@ -8,7 +8,6 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import logo from '/logo.png';
-
 import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
 
@@ -50,7 +49,6 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   const toggleGroup = (id: string) => {
     if (isCollapsed) {
       onToggleSidebar?.();
-      setOpenGroup(id);
       return;
     }
     setOpenGroup(prev => prev === id ? null : id);
@@ -71,42 +69,44 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
         transition: `width 200ms cubic-bezier(0.25, 0.1, 0.25, 1)`,
       }}
     >
-      {/* Inner wrapper — always 260px, aside clips overflow */}
-      <div
-        className="flex flex-col h-full"
-        style={{ width: EXPANDED_W, minWidth: EXPANDED_W }}
-      >
-        {/* ── Header ── */}
-        <div className="shrink-0 px-5 pt-5">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onToggleSidebar}
-              className="shrink-0 rounded-lg hover:bg-muted/50 transition-colors p-0.5"
-              title={isCollapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
-            >
-              <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
-            </button>
-            <div className={cn('min-w-0 overflow-hidden', textCls)}>
-              <h1 className="font-heading text-[13px] font-bold text-[#003366] leading-none tracking-tight">
+      {/* ── Header — outside inner wrapper so it respects aside width ── */}
+      <div className="shrink-0 h-20 flex items-center border-b border-border/70">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className={cn(
+            'flex items-center w-full h-full hover:bg-muted/50 transition-colors',
+            isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'
+          )}
+          title={isCollapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
+        >
+          <img src={logo} alt="Logo" className="h-10 w-10 shrink-0 object-contain" />
+          {!isCollapsed && (
+            <div className="min-w-0">
+              <h1 className="font-heading text-sm font-bold text-[#003366] leading-tight tracking-wide">
                 ANKARA BİLİM
               </h1>
-              <h1 className="font-heading text-[11px] font-bold text-[#003366]/90 leading-none tracking-tighter mt-1">
+              <h1 className="font-heading text-xs font-bold text-[#003366]/80 leading-tight tracking-wide mt-0.5">
                 ÜNİVERSİTESİ
               </h1>
             </div>
-          </div>
+          )}
+        </button>
+      </div>
 
-          <div className={cn(
-            'overflow-hidden transition-all', DURATION,
-            isCollapsed ? 'max-h-0 mt-0 opacity-0' : 'max-h-8 mt-3 opacity-100'
-          )}>
-            <p className="text-[11px] font-bold text-[#003366] tracking-[0.1em] whitespace-nowrap">
-              {getRoleLabel(roles).toLocaleUpperCase('tr-TR')}
-            </p>
-          </div>
-
-          <Separator className={cn('transition-all', DURATION, isCollapsed ? 'mt-3' : 'mt-3')} />
+      {/* Inner wrapper — always 260px, aside clips overflow */}
+      <div
+        className="flex flex-col flex-1 min-h-0"
+        style={{ width: EXPANDED_W, minWidth: EXPANDED_W }}
+      >
+        {/* Role label */}
+        <div className={cn(
+          'shrink-0 overflow-hidden transition-all', DURATION,
+          isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-10 px-5 pt-3 pb-1 opacity-100'
+        )}>
+          <p className="text-[11px] font-semibold text-primary tracking-[0.08em] whitespace-nowrap">
+            {getRoleLabel(roles).toLocaleUpperCase('tr-TR')}
+          </p>
         </div>
 
         {/* ── Nav ── */}
@@ -123,9 +123,11 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                     title={group.label}
                     className={cn(
                       'group flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
-                      isOpen
+                      isOpen && isCollapsed
                         ? 'bg-primary/10 text-primary shadow-sm'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        : isOpen && !isCollapsed
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
                     <Icon className="h-[18px] w-[18px] shrink-0" />
