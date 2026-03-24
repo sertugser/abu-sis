@@ -78,11 +78,12 @@ const CLASSROOM_TYPES = ['Lecture', 'Lab', 'Computer', 'Seminar'];
 /* ────────────────────── Sayfa ────────────────────── */
 
 export default function ClassroomManagementPage() {
-  const heatmapData = useMemo(generateMockHeatmap, []);
+  const heatmapData = useMemo(() => generateMockHeatmap(), []);
   const [typeFilters, setTypeFilters] = useState<Record<string, boolean>>({});
 
-  const toggleType = (t: string) =>
+  const toggleType = (t: string) => {
     setTypeFilters(prev => ({ ...prev, [t]: !prev[t] }));
+  };
 
   // Heatmap verisini filtrelere göre dinamik güncelle
   const displayHeatmapData = useMemo(() => {
