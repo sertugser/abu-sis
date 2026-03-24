@@ -19,6 +19,10 @@ import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
 import AcademicOperationsPage from './pages/AcademicOperationsPage';
 import SchedulingDashboardPage from './pages/SchedulingDashboardPage';
+import ClassroomManagementPage from './pages/ClassroomManagementPage';
+import SectionApprovalPage from './pages/SectionApprovalPage';
+import TermClosingWizard from './pages/TermClosingWizard';
+import PreRegistrationSurveyPage from './pages/PreRegistrationSurveyPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES } from './lib/roles';
@@ -43,6 +47,7 @@ export default function App() {
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
                     <Route path="donem-ortalamalari" element={<TermGpaPage />} />
                     <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
+                    <Route path="on-kayit-anketi" element={<PreRegistrationSurveyPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={INSTRUCTOR_ROLES} />}>
@@ -57,6 +62,9 @@ export default function App() {
                     <Route path="sinif-listeleri" element={<AcademicOperationsPage mode="class-lists" />} />
                     <Route path="mufredat-gorunumu" element={<AcademicOperationsPage mode="curriculum" />} />
                     <Route path="toplu-programlama" element={<SchedulingDashboardPage />} />
+                    <Route path="merkezi-derslik-yonetimi" element={<ClassroomManagementPage />} />
+                    <Route path="sube-acma-onayi" element={<SectionApprovalPage />} />
+                    <Route path="donem-kapatma" element={<TermClosingWizard />} />
                   </Route>
 
                   <Route path="*" element={<NotFoundPage />} />
