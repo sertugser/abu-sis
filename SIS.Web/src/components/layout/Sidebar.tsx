@@ -5,7 +5,6 @@ import {
   ChevronRight,
   LogOut,
 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import logo from '/logo.png';
 import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
