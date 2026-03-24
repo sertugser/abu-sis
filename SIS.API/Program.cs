@@ -11,6 +11,7 @@ using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.AcademicLevel.Services;
+using SIS.Application.AcademicProgression.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -83,6 +84,7 @@ builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
+builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 
 var app = builder.Build();
 

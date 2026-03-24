@@ -16,6 +16,11 @@ export const ROUTES = {
   MANAGEMENT_CLASS_LISTS: '/sinif-listeleri',
   MANAGEMENT_CURRICULUM: '/mufredat-gorunumu',
   MANAGEMENT_BATCH_SCHEDULING: '/toplu-programlama',
+  // New pages from technical analysis
+  CLASSROOM_MANAGEMENT: '/merkezi-derslik-yonetimi',
+  SECTION_APPROVAL: '/sube-acma-onayi',
+  TERM_CLOSING: '/donem-kapatma',
+  PRE_REGISTRATION_SURVEY: '/on-kayit-anketi',
 } as const;
 
 export const QUERY_KEYS = {
