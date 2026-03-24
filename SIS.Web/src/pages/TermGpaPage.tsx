@@ -326,15 +326,6 @@ function TermGpaBarChart({
   );
 }
 
-function getTermAxisLabel(term: StudentTermGpaDto) {
-  const firstYear = String(term.year).slice(-2);
-  const secondYear = String(term.year + 1).slice(-2);
-  const semesterLabel =
-    term.semester === 'Fall' ? 'Güz' : term.semester === 'Spring' ? 'Bahar' : 'Yaz';
-
-  return `${firstYear}-${secondYear} ${semesterLabel}`;
-}
-
 function formatSemester(semester: string) {
   if (semester === 'Fall') return 'Güz';
   if (semester === 'Spring') return 'Bahar';
