@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -10,15 +10,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { AlertCircle, BarChart3, CalendarRange, TrendingUp } from 'lucide-react';
+import { AlertCircle, BarChart3, TrendingUp } from 'lucide-react';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useTermGpaHistory } from '../hooks/useTermGpaHistory';
 import type { StudentTermGpaDto } from '../types/student';
 
-const CHART_WIDTH = 1240;
-const CHART_HEIGHT = 380;
-const CHART_PADDING = { top: 24, right: 28, bottom: 78, left: 72 };
-const GRID_VALUES = Array.from({ length: 11 }, (_, index) => Number((index * 0.4).toFixed(1)));
+const CHART_HEIGHT = 300;
+const CHART_PADDING = { top: 20, right: 20, bottom: 80, left: 48 };
+const GRID_VALUES = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
 const REPORT_COLORS = {
   sgpa: {
     base: '#27457f',
@@ -41,10 +40,12 @@ export default function TermGpaPage() {
   if (studentQuery.isLoading || historyQuery.isLoading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-48 rounded-3xl" />
-        <Skeleton className="h-[420px] rounded-3xl" />
-        <Skeleton className="h-[420px] rounded-3xl" />
-        <Skeleton className="h-[320px] rounded-3xl" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-[380px] rounded-xl" />
+        <Skeleton className="h-[380px] rounded-xl" />
+        <Skeleton className="h-[280px] rounded-xl" />
       </div>
     );
   }
@@ -68,61 +69,30 @@ export default function TermGpaPage() {
   const totalEcts = history.reduce((sum, term) => sum + term.totalEcts, 0);
   const bestSgpa = history.length > 0 ? Math.max(...history.map(term => term.sgpa)) : 0;
 
-
   if (history.length === 0) {
     return (
-      <div className="space-y-6">
-        <Card className="overflow-hidden border-0 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-          <CardContent className="relative p-0">
-            <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(19,35,63,1)_0%,rgba(24,43,75,0.98)_58%,rgba(17,32,58,1)_100%)]" />
-            <div className="relative px-8 py-8 text-white">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Akademik Performans Özeti</p>
-              <h1 className="mt-3 font-heading text-3xl font-extrabold tracking-tight">Dönem Ortalamaları</h1>
-              <p className="mt-2 max-w-3xl text-[15px] leading-7 text-slate-200/90">
-                {student.firstName} {student.lastName} için henüz harf notu oluşmuş dönem verisi bulunmuyor.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="py-20 text-center">
-            <BarChart3 className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40" />
-            <h3 className="font-heading text-lg font-semibold text-foreground">Henüz dönem verisi yok</h3>
-            <p className="mt-1 text-muted-foreground">
-              Harf notu oluşmuş dersleriniz tamamlandığında ANO ve AGNO geçmişi burada görüntülenecek.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="py-20 text-center">
+          <BarChart3 className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40" />
+          <h3 className="font-heading text-lg font-semibold text-foreground">Henüz dönem verisi yok</h3>
+          <p className="mt-1 text-muted-foreground">
+            {student.firstName} {student.lastName} için harf notu oluşmuş dönem verisi bulunmuyor.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* Summary banner */}
       <Card className="overflow-hidden border-0 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
         <CardContent className="relative p-0">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(20,184,166,0.14),transparent_24%),linear-gradient(135deg,rgba(19,35,63,1)_0%,rgba(24,43,75,0.98)_58%,rgba(17,32,58,1)_100%)]" />
-          <div className="relative space-y-7 px-8 py-8 text-white">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Akademik Performans Özeti</p>
-                <div>
-                  <h1 className="font-heading text-3xl font-extrabold tracking-tight">Dönem Ortalamaları</h1>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 self-start">
-                <Badge variant="secondary" className="border border-white/10 bg-white/10 text-white">
-                  <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
-                  {latestTerm?.termName ?? 'Dönem bilgisi yok'}
-                </Badge>
-              </div>
-            </div>
-
-            <div className="grid gap-0 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.06] backdrop-blur-sm lg:grid-cols-4">
-              <SummaryStripItem label="Güncel AGNO" value={student.cgpa.toFixed(2)} note="Sistemde kayıtlı genel not ortalaması" emphasize />
-              <SummaryStripItem label="Son Dönem ANO" value={latestTerm ? latestTerm.sgpa.toFixed(2) : '0.00'} note={latestTerm?.termName ?? 'Dönem verisi yok'} />
+          <div className="relative px-8 py-6">
+            <div className="grid gap-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-sm lg:grid-cols-4">
+              <SummaryStripItem label="Güncel AGNO" value={student.cgpa.toFixed(2)} note="Genel not ortalaması" emphasize />
+              <SummaryStripItem label="Son Dönem ANO" value={latestTerm ? latestTerm.sgpa.toFixed(2) : '0.00'} note={latestTerm?.termName ?? '—'} />
               <SummaryStripItem label="Toplam AKTS" value={String(totalEcts)} note={`${totalCourses} ders işlendi`} />
               <SummaryStripItem label="İzlenen Dönem" value={String(history.length)} note={`En yüksek ANO: ${bestSgpa.toFixed(2)}`} />
             </div>
@@ -130,27 +100,28 @@ export default function TermGpaPage() {
         </CardContent>
       </Card>
 
+      {/* ANO chart */}
       <ReportChartSection
-        title="Dönem Ortalamaları"
-        description=""
+        title="ANO Grafiği (Dönem Not Ortalaması)"
         legendLabel="ANO"
         legendTone="sgpa"
         history={history}
         metric="sgpa"
       />
 
+      {/* AGNO chart */}
       <ReportChartSection
-        title="Genel Ortalamalar"
-        description=""
+        title="AGNO Grafiği (Genel Not Ortalaması)"
         legendLabel="AGNO"
         legendTone="cgpa"
         history={history}
         metric="cgpa"
       />
 
+      {/* Detail table */}
       <Card className="overflow-hidden">
         <CardHeader className="border-b border-border/70 bg-gradient-to-r from-primary/[0.04] to-transparent">
-          <CardTitle>Dönem Bazlı Resmi Özet</CardTitle>
+          <CardTitle>Dönem Bazlı Özet</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -192,7 +163,6 @@ export default function TermGpaPage() {
               </TableBody>
             </Table>
           </div>
-
         </CardContent>
       </Card>
     </div>
@@ -221,14 +191,12 @@ function SummaryStripItem({
 
 function ReportChartSection({
   title,
-  description,
   legendLabel,
   legendTone,
   history,
   metric,
 }: {
   title: string;
-  description: string;
   legendLabel: string;
   legendTone: 'sgpa' | 'cgpa';
   history: StudentTermGpaDto[];
@@ -240,11 +208,7 @@ function ReportChartSection({
     <Card className="overflow-hidden">
       <CardHeader className="border-b border-border/70 bg-gradient-to-r from-muted/30 to-transparent">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </div>
-
+          <CardTitle>{title}</CardTitle>
           <div className="flex flex-wrap gap-2">
             <LegendBadge label={legendLabel} tone={legendTone} />
             <Badge variant="secondary" className="gap-1.5">
@@ -256,7 +220,7 @@ function ReportChartSection({
       </CardHeader>
       <CardContent className="p-6">
         <div
-          className="rounded-3xl border px-5 py-5 md:px-6 md:py-6"
+          className="rounded-xl border px-4 py-4 md:px-6 md:py-5"
           style={{
             backgroundColor: REPORT_COLORS[legendTone].surface,
             borderColor: REPORT_COLORS[legendTone].border,
@@ -296,72 +260,64 @@ function TermGpaBarChart({
   metric: 'sgpa' | 'cgpa';
   ariaLabel: string;
 }) {
-  const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+  const barCount = Math.max(history.length, 1);
+  const innerWidth = 900 - CHART_PADDING.left - CHART_PADDING.right;
   const innerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
-  const columnWidth = innerWidth / Math.max(history.length, 1);
-  const barWidth = Math.min(114, Math.max(72, columnWidth * 0.52));
+  const columnWidth = innerWidth / barCount;
+  const barWidth = Math.min(64, Math.max(32, columnWidth * 0.55));
   const palette = REPORT_COLORS[metric];
+  const labelY = CHART_HEIGHT - CHART_PADDING.bottom + 16;
 
-  const getY = (value: number) => CHART_PADDING.top + ((4 - value) / 4) * innerHeight;
+  const getY = (val: number) => CHART_PADDING.top + ((4 - val) / 4) * innerHeight;
 
   return (
-    <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-[360px] w-full" role="img" aria-label={ariaLabel}>
+    <svg
+      viewBox={`0 0 900 ${CHART_HEIGHT}`}
+      className="w-full"
+      role="img"
+      aria-label={ariaLabel}
+    >
+      {/* Grid lines + Y axis labels */}
       {GRID_VALUES.map(value => {
         const y = getY(value);
-
         return (
           <g key={value}>
-            <line
-              x1={CHART_PADDING.left}
-              x2={CHART_WIDTH - CHART_PADDING.right}
-              y1={y}
-              y2={y}
-              stroke="rgba(148,163,184,0.24)"
-            />
-            <text x={CHART_PADDING.left - 12} y={y + 4} textAnchor="end" fontSize="12" fill="#6b7280">
-              {value.toFixed(1)}
-            </text>
+            <line x1={CHART_PADDING.left} x2={900 - CHART_PADDING.right} y1={y} y2={y} stroke="rgba(148,163,184,0.18)" />
+            <text x={CHART_PADDING.left - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#94a3b8">{value.toFixed(1)}</text>
           </g>
         );
       })}
 
+      {/* Bars */}
       {history.map((term, index) => {
         const value = metric === 'sgpa' ? term.sgpa : term.cgpa;
-        const x = CHART_PADDING.left + index * columnWidth + (columnWidth - barWidth) / 2;
+        const cx = CHART_PADDING.left + index * columnWidth + columnWidth / 2;
+        const x = cx - barWidth / 2;
         const y = getY(value);
         const barHeight = innerHeight - ((4 - value) / 4) * innerHeight;
-        const fill = index === history.length - 1 ? palette.latest : palette.base;
+        const isLast = index === history.length - 1;
 
         return (
           <g key={term.termId}>
             <rect
-              x={x}
-              y={y}
+              x={x} y={y}
               width={barWidth}
               height={Math.max(barHeight, 0)}
-              rx="10"
-              fill={fill}
-              fillOpacity={index === history.length - 1 ? 0.96 : 0.78}
+              rx={5}
+              fill={isLast ? palette.latest : palette.base}
+              fillOpacity={isLast ? 0.96 : 0.78}
             />
-            <text
-              x={x + barWidth / 2}
-              y={y + barHeight / 2 + 6}
-              textAnchor="middle"
-              fontSize="16"
-              fontWeight="700"
-              fill="#ffffff"
-            >
-              {formatCompactGpa(value)}
+            {barHeight > 28 && (
+              <text x={cx} y={y + barHeight / 2 + 5} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">
+                {value.toFixed(2)}
+              </text>
+            )}
+            {/* Term label — two lines: year + semester */}
+            <text x={cx} y={labelY} textAnchor="middle" fontSize="11" fontWeight="600" fill="#475569">
+              {String(term.year).slice(-2)}-{String(term.year + 1).slice(-2)}
             </text>
-            <text
-              x={x + barWidth / 2}
-              y={CHART_HEIGHT - 18}
-              textAnchor="middle"
-              fontSize="12"
-              fill={fill}
-              transform={`rotate(-38 ${x + barWidth / 2} ${CHART_HEIGHT - 18})`}
-            >
-              {getTermAxisLabel(term)}
+            <text x={cx} y={labelY + 14} textAnchor="middle" fontSize="10" fill="#94a3b8">
+              {term.semester === 'Fall' ? 'Güz' : term.semester === 'Spring' ? 'Bahar' : 'Yaz'}
             </text>
           </g>
         );
@@ -377,11 +333,6 @@ function getTermAxisLabel(term: StudentTermGpaDto) {
     term.semester === 'Fall' ? 'Güz' : term.semester === 'Spring' ? 'Bahar' : 'Yaz';
 
   return `${firstYear}-${secondYear} ${semesterLabel}`;
-}
-
-function formatCompactGpa(value: number) {
-  const fixed = value.toFixed(2);
-  return fixed.endsWith('00') ? String(Number(fixed)) : fixed.replace(/0$/, '');
 }
 
 function formatSemester(semester: string) {
