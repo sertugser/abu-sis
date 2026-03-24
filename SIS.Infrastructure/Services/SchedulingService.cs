@@ -12,7 +12,8 @@ public class SchedulingService : ISchedulingService
 {
     private static readonly JsonSerializerOptions ScheduleJsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
     private static readonly TimeSpan SuggestionStep = TimeSpan.FromMinutes(30);
@@ -1325,5 +1326,152 @@ public class SchedulingService : ISchedulingService
         public DayOfWeek? DayOfWeek { get; init; }
         public TimeOnly StartTime { get; init; }
         public TimeOnly EndTime { get; init; }
+    }
+
+    public async Task<ScheduleValidationResultDto> ApplyAsync(ApplyScheduleRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var validationRequest = new ScheduleValidationRequestDto
+        {
+            SectionId = request.SectionId,
+            ClassroomId = request.ClassroomId,
+            ScheduleSlots = request.ScheduleSlots,
+        };
+
+        var validation = await ValidateAsync(validationRequest, cancellationToken);
+
+        if (!validation.IsValid)
+        {
+            validation.Notes.Add("Conflict tespit edildiginden program uygulanmadi.");
+            return validation;
+        }
+
+        var section = await _context.CourseSections
+            .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, cancellationToken);
+
+        if (section == null)
+        {
+            return new ScheduleValidationResultDto
+            {
+                IsValid = false,
+                Notes = { "Section bulunamadi." }
+            };
+        }
+
+        var slots = request.ScheduleSlots.Select(s => new ScheduleSlot
+        {
+            Day = s.Day,
+            StartTime = s.StartTime,
+            EndTime = s.EndTime,
+        }).ToList();
+
+        section.ScheduleJson = JsonSerializer.Serialize(slots, ScheduleJsonOptions);
+
+        section.ClassroomId = request.ClassroomId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        validation.Notes.Add("Program basariyla uygulanarak kaydedildi.");
+        return validation;
+    }
+
+    public async Task<BatchAutoScheduleResultDto> BatchAutoScheduleAsync(BatchAutoScheduleRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var result = new BatchAutoScheduleResultDto();
+
+        var resolvedTerm = await ResolveTermAsync(request.TermId, cancellationToken);
+        if (resolvedTerm == null)
+        {
+            result.Notes.Add(request.TermId.HasValue
+                ? "Belirtilen akademik donem bulunamadi."
+                : "Aktif akademik donem bulunamadi.");
+            return result;
+        }
+
+        result.Notes.Add($"Donem: {resolvedTerm.Name}");
+
+        var sectionsQuery = _context.CourseSections
+            .Include(cs => cs.Course)
+            .Include(cs => cs.Classroom)
+            .Where(cs => cs.TermId == resolvedTerm.Id && cs.IsActive && cs.InstructorId != null);
+
+        if (request.DepartmentId.HasValue)
+        {
+            sectionsQuery = sectionsQuery.Where(cs => cs.Course.DepartmentId == request.DepartmentId.Value);
+        }
+
+        var sections = await sectionsQuery.ToListAsync(cancellationToken);
+
+        var unscheduled = sections
+            .Where(cs => string.IsNullOrWhiteSpace(cs.ScheduleJson) || cs.ScheduleJson == "[]")
+            .OrderByDescending(cs => cs.EnrolledCount)
+            .ToList();
+
+        result.TotalSections = unscheduled.Count;
+
+        if (unscheduled.Count == 0)
+        {
+            result.Notes.Add("Programsiz section bulunamadi, tum section'lar zaten programli.");
+            return result;
+        }
+
+        result.Notes.Add($"{unscheduled.Count} programsiz section bulundu.");
+
+        foreach (var section in unscheduled)
+        {
+            var item = new BatchAutoScheduleItemDto
+            {
+                SectionId = section.Id,
+                CourseCode = section.Course.Code,
+                CourseName = section.Course.Name,
+            };
+
+            var suggestRequest = new ScheduleSuggestionRequestDto
+            {
+                SectionId = section.Id,
+                InstructorId = section.InstructorId,
+            };
+
+            var suggestion = await SuggestAsync(suggestRequest, cancellationToken);
+
+            if (!suggestion.IsFeasible || suggestion.SuggestedSlots.Count == 0)
+            {
+                item.Success = false;
+                item.FailureReason = suggestion.Notes.Count > 0
+                    ? string.Join(" ", suggestion.Notes)
+                    : "Uygun slot kombinasyonu bulunamadi.";
+                result.FailedCount++;
+                result.Results.Add(item);
+                continue;
+            }
+
+            var applyRequest = new ApplyScheduleRequestDto
+            {
+                SectionId = section.Id,
+                ClassroomId = suggestion.SuggestedClassroomId,
+                ScheduleSlots = suggestion.SuggestedSlots,
+            };
+
+            var applyResult = await ApplyAsync(applyRequest, cancellationToken);
+
+            if (applyResult.IsValid)
+            {
+                item.Success = true;
+                item.ClassroomName = suggestion.SuggestedClassroomName;
+                item.Slots = suggestion.SuggestedSlots;
+                result.ScheduledCount++;
+            }
+            else
+            {
+                item.Success = false;
+                item.FailureReason = applyResult.Conflicts.Count > 0
+                    ? applyResult.Conflicts[0].Message
+                    : "Uygulama sirasinda conflict tespit edildi.";
+                result.FailedCount++;
+            }
+
+            result.Results.Add(item);
+        }
+
+        return result;
     }
 }

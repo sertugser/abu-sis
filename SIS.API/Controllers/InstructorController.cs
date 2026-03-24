@@ -87,6 +87,7 @@ public class InstructorController : ControllerBase
             AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),
             ClassroomName = s.Classroom?.Name ?? "",
             Schedule = FormatSchedule(s.ScheduleJson),
+            ScheduleJson = s.ScheduleJson,
             IsActive = s.IsActive,
             IsFinalized = s.IsFinalized,
             ActiveStudents = s.Registrations.Count(r => r.Status == Domain.Enums.RegistrationStatus.Active)
@@ -273,6 +274,28 @@ public class InstructorController : ControllerBase
         _context.InstructorAvailabilities.Remove(entity);
         await _context.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    /// <summary>
+    /// POST api/instructor/section/{id}/schedule/apply — apply a schedule suggestion to the instructor's section.
+    /// </summary>
+    [HttpPost("section/{id}/schedule/apply")]
+    public async Task<IActionResult> ApplySectionSchedule(
+        int id,
+        [FromBody] ApplyScheduleRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var instructor = await GetInstructorAsync();
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        if (!await InstructorOwnsSectionAsync(instructor.Id, id, cancellationToken))
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        request.SectionId = id;
+
+        var result = await _schedulingService.ApplyAsync(request, cancellationToken);
+        return Ok(result);
     }
 
     /// <summary>

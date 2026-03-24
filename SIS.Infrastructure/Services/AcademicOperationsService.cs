@@ -189,6 +189,7 @@ public class AcademicOperationsService : IAcademicOperationsService
                     InstructorName = instructorName,
                     ClassroomName = section.Classroom?.Name ?? string.Empty,
                     ScheduleSummary = FormatSchedule(section.ScheduleJson),
+                    ScheduleJson = section.ScheduleJson,
                     Capacity = section.Capacity,
                     EnrolledCount = section.EnrolledCount,
                     ActiveStudentCount = activeRegistrations.Count,

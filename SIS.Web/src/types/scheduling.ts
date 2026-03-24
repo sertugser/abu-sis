@@ -22,6 +22,12 @@ export interface UpsertInstructorAvailabilityRequest {
   isPreferred: boolean;
 }
 
+export interface ApplyScheduleRequest {
+  sectionId: number;
+  classroomId: number | null;
+  scheduleSlots: ScheduleSlot[];
+}
+
 export interface SchedulingConflict {
   conflictType: string;
   sectionId: number;
@@ -42,6 +48,30 @@ export interface ScheduleValidationResult {
   isValid: boolean;
   conflicts: SchedulingConflict[];
   notes: string[];
+}
+
+export interface BatchAutoScheduleRequest {
+  termId?: number | null;
+  departmentId?: number | null;
+}
+
+export interface BatchAutoScheduleResult {
+  totalSections: number;
+  scheduledCount: number;
+  failedCount: number;
+  skippedCount: number;
+  results: BatchAutoScheduleItem[];
+  notes: string[];
+}
+
+export interface BatchAutoScheduleItem {
+  sectionId: number;
+  courseCode: string;
+  courseName: string;
+  success: boolean;
+  classroomName: string | null;
+  slots: ScheduleSlot[] | null;
+  failureReason: string | null;
 }
 
 export interface ScheduleSuggestion {

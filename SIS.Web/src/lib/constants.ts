@@ -15,6 +15,7 @@ export const ROUTES = {
   MANAGEMENT_PLANNING: '/planlama-merkezi',
   MANAGEMENT_CLASS_LISTS: '/sinif-listeleri',
   MANAGEMENT_CURRICULUM: '/mufredat-gorunumu',
+  MANAGEMENT_BATCH_SCHEDULING: '/toplu-programlama',
 } as const;
 
 export const QUERY_KEYS = {
