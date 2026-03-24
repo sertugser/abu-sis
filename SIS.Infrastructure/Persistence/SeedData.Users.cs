@@ -217,7 +217,7 @@ public static partial class SeedData
                     globalStudentIndex++;
 
                     var user = await EnsureUserAsync(userManager, email, firstName, lastName, "Ogrenci123!", "Student");
-                    if (!context.Students.Any(st => st.UserId == user.Id))
+                    if (!context.Students.Any(st => st.UserId == user.Id || st.NationalId == nationalId || st.StudentNumber == studentNum))
                     {
                         var advisor = deptInstructors[advisorIdx % deptInstructors.Count];
                         advisorIdx++;
