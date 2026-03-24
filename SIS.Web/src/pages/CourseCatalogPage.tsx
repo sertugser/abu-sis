@@ -19,7 +19,7 @@ import { useDropCourse } from '../hooks/useDropCourse';
 import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { getEctsLimit, formatDate } from '../lib/utils';
+import { formatDate } from '../lib/utils';
 import type { ValidationError } from '../types/registration';
 import {
   AlertCircle, AlertTriangle, BookX, Trash2, Send, CheckCircle2,
@@ -65,7 +65,7 @@ export default function CourseCatalogPage() {
   const confirmedItems = registrations?.filter(r => ['Active', 'PendingAdvisorApproval'].includes(r.status)) || [];
   const allSelectedItems = [...confirmedItems, ...planItems];
   const totalEcts = allSelectedItems.reduce((sum, r) => sum + r.ects, 0);
-  const ectsLimit = student ? getEctsLimit(student.cgpa) : 30;
+  const ectsLimit = student?.ectsLimit ?? 30;
   const ectsPercent = Math.min((totalEcts / ectsLimit) * 100, 100);
   const totalHours = allSelectedItems.reduce((sum, r) => sum + r.theoryHours + r.labHours, 0);
 

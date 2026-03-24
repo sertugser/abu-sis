@@ -14,6 +14,10 @@ export interface StudentInfoDto {
   facultyName: string;
   withdrawalCount: number;
   programId: number;
+  classYear: number;
+  ectsLimit: number;
+  advisorName: string | null;
+  advisorTitle: string | null;
 }
 
 export interface StudentTermGpaDto {
