@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CircleDot } from 'lucide-react';
 
-import { studentMenuGroups, buildInstructorMenuGroups } from './Sidebar';
+import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
 
 const allMenuGroups = [
   ...studentMenuGroups,

@@ -43,7 +43,15 @@ export default function ClassroomManagementPage() {
       if (!cls) return [];
 
       // Boş grid oluştur (8-17 arası)
-      const grid: any[] = [];
+      type GridSlot = {
+        day: number;
+        hour: number;
+        occupancy: number;
+        label: string;
+        details: string;
+        occupations?: any[];
+      };
+      const grid: GridSlot[] = [];
       const schedules = cls.schedules || [];
 
       for (let day = 0; day < 5; day++) {
