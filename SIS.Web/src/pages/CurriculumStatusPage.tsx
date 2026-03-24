@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useCurriculumStatus } from '../hooks/useCurriculumStatus';
+import { useStudentInfo } from '../hooks/useStudentInfo';
 import { AlertCircle, Printer, BookX, AlertTriangle, Search } from 'lucide-react';
-import type { CurriculumCourseStatusDto, CurriculumSemesterDto } from '../types/curriculum';
+import type { CurriculumStatusDto, CurriculumCourseStatusDto, CurriculumSemesterDto } from '../types/curriculum';
+import type { StudentInfoDto } from '../types/student';
 
 
-function getGradeBadgeVariant(grade: string | null, status: string | null): 'success' | 'warning' | 'destructive' | 'secondary' | 'outline' {
+function getGradeBadgeVariant(grade: string | null, status: string | null): 'success' | 'destructive' | 'secondary' | 'outline' {
   if (!grade || !status) return 'outline';
   if (status === 'current') return 'secondary';
   if (status === 'passed') return 'success';
@@ -20,7 +22,7 @@ function getGradeBadgeVariant(grade: string | null, status: string | null): 'suc
 
 export default function CurriculumStatusPage() {
   const { data, isLoading, error } = useCurriculumStatus();
-  const printRef = useRef<HTMLDivElement>(null);
+  const studentQuery = useStudentInfo();
   const [searchTerm, setSearchTerm] = useState('');
 
   if (isLoading) {
@@ -48,7 +50,6 @@ export default function CurriculumStatusPage() {
 
   const allCourses = data.semesters.flatMap(semester => semester.courses);
   const failedCourseCount = allCourses.filter(course => course.gradeStatus === 'failed').length;
-  const currentCourseCount = allCourses.filter(course => course.gradeStatus === 'current').length;
   const filteredSemesters = data.semesters
     .map(semester => ({
       ...semester,
@@ -61,81 +62,77 @@ export default function CurriculumStatusPage() {
     .filter(semester => semester.courses.length > 0);
 
   return (
-    <div className="space-y-6" ref={printRef}>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-xl font-extrabold text-foreground tracking-tight">
-            Müfredat Durumu
-          </h1>
+    <>
+      {/* ══════ Screen Layout ══════ */}
+      <div className="space-y-6 print:hidden">
+        {/* Summary Bar */}
+        <Card>
+          <CardContent className="px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1.5 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Genel Kredi: </span>
+                  <span className="font-bold text-foreground">{data.totalCredits}</span>
+                  <span className="text-muted-foreground ml-3">AKTS: </span>
+                  <span className="font-bold text-foreground">{data.totalEcts}</span>
+                  <span className="text-muted-foreground ml-3">Genel Ort: </span>
+                  <span className={`font-bold ${data.cgpa < 2.0 ? 'text-destructive' : 'text-primary'}`}>{data.cgpa.toFixed(2)}</span>
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Başarılı Olunan Kredi: </span>
+                  <span className="font-bold text-success">{data.passedCredits}</span>
+                  <span className="text-muted-foreground ml-3">AKTS: </span>
+                  <span className="font-bold text-success">{data.passedEcts}</span>
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Başarısız Ders: </span>
+                  <span className={`font-bold ${failedCourseCount > 0 ? 'text-destructive' : 'text-foreground'}`}>{failedCourseCount}</span>
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2 shrink-0">
+                <Printer className="h-4 w-4" />
+                Müfredat Durum Yazdır
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+          <Input
+            value={searchTerm}
+            onChange={event => setSearchTerm(event.target.value)}
+            placeholder="Ders kodu veya ders adı ile filtrele"
+            className="pl-9"
+          />
         </div>
-        <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2 print:hidden">
-          <Printer className="h-4 w-4" />
-          Müfredat Durum Yazdır
-        </Button>
-      </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <SummaryCard label="Genel Ort." value={data.cgpa.toFixed(2)} highlight={data.cgpa < 2.0 ? 'destructive' : undefined} />
-        <SummaryCard label="Toplam Kredi" value={data.totalCredits} />
-        <SummaryCard label="Toplam AKTS" value={data.totalEcts} />
-        <SummaryCard label="Başarılı Kredi" value={data.passedCredits} highlight="success" />
-        <SummaryCard label="Başarısız Ders" value={failedCourseCount} highlight={failedCourseCount > 0 ? 'destructive' : undefined} />
-        <SummaryCard label="Devam Eden" value={currentCourseCount} />
-      </div>
+        {/* Semester Tables */}
+        {filteredSemesters.map(sem => (
+          <SemesterTable key={sem.semesterNumber} semester={sem} />
+        ))}
 
-      <Card className="print:hidden">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-            <Input
-              value={searchTerm}
-              onChange={event => setSearchTerm(event.target.value)}
-              placeholder="Ders kodu veya ders adı ile filtrele"
-              className="pl-9"
-            />
+        {filteredSemesters.length === 0 && (
+          <div className="text-center py-16">
+            <BookX className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
+            <h3 className="font-heading text-lg font-semibold text-foreground">
+              {data.semesters.length === 0 ? 'Müfredat bulunamadı' : 'Filtreye uyan ders bulunamadı'}
+            </h3>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
-      {/* Semester Tables */}
-      {filteredSemesters.map(sem => (
-        <SemesterTable key={sem.semesterNumber} semester={sem} />
-      ))}
-
-      {/* Empty semesters not in curriculum */}
-      {filteredSemesters.length === 0 && (
-        <div className="text-center py-16">
-          <BookX className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-          <h3 className="font-heading text-lg font-semibold text-foreground">
-            {data.semesters.length === 0 ? 'Müfredat bulunamadı' : 'Filtreye uyan ders bulunamadı'}
-          </h3>
-        </div>
-      )}
-    </div>
+      {/* ══════ Print Layout ══════ */}
+      <PrintLayout data={data} student={studentQuery.data} />
+    </>
   );
 }
 
-function SummaryCard({ label, value, highlight }: {
-  label: string;
-  value: string | number;
-  highlight?: 'success' | 'destructive';
-}) {
-  const valueColor = highlight === 'success' ? 'text-success' : highlight === 'destructive' ? 'text-destructive' : 'text-foreground';
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-        <p className={`text-xl font-bold ${valueColor} mt-1`}>{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function SemesterTable({ semester }: { semester: CurriculumSemesterDto }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden print-no-break">
       <CardContent className="p-0">
         {/* Semester header */}
         <div className="bg-primary px-4 py-2">
@@ -144,52 +141,73 @@ function SemesterTable({ semester }: { semester: CurriculumSemesterDto }) {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed print-table-auto">
+            <colgroup>
+              {/* Left side — 49.8% */}
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '28.8%' }} />
+              <col style={{ width: '4%' }} />
+              <col style={{ width: '4%' }} />
+              <col style={{ width: '5%' }} />
+              {/* Divider — 0.4% */}
+              <col style={{ width: '0.4%' }} />
+              {/* Right side — 49.8% */}
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '21.8%' }} />
+              <col style={{ width: '3.5%' }} />
+              <col style={{ width: '3.5%' }} />
+              <col style={{ width: '4%' }} />
+              <col style={{ width: '4%' }} />
+            </colgroup>
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 {/* Left side — curriculum */}
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground w-24">Ders Kodu</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ders Kodu</th>
                 <th className="text-left px-3 py-2 font-medium text-muted-foreground">Müfredat Ders Adı</th>
-                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Z</th>
-                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Krd</th>
-                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-14">AKTS</th>
+                <th className="text-center px-1 py-2 font-medium text-muted-foreground">Z/S</th>
+                <th className="text-center px-1 py-2 font-medium text-muted-foreground">Krd</th>
+                <th className="text-center px-1 py-2 font-medium text-muted-foreground">AKTS</th>
                 {/* Divider */}
-                <th className="w-px bg-border"></th>
+                <th className="bg-primary/20 p-0"></th>
                 {/* Right side — taken */}
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground w-20">Dönemi</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground w-24">Ders Kodu</th>
+                <th className="text-left px-2 py-2 font-medium text-muted-foreground">Dönem</th>
+                <th className="text-left px-2 py-2 font-medium text-muted-foreground">Ders Kodu</th>
                 <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ders Adı</th>
-                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Z/S</th>
-                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-10">Krd</th>
-                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-14">AKTS</th>
-                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-14">Harf</th>
+                <th className="text-center px-1 py-2 font-medium text-muted-foreground">Z/S</th>
+                <th className="text-center px-1 py-2 font-medium text-muted-foreground">Krd</th>
+                <th className="text-center px-1 py-2 font-medium text-muted-foreground">AKTS</th>
+                <th className="text-center px-1 py-2 font-medium text-muted-foreground">Harf</th>
               </tr>
             </thead>
             <tbody>
-              {semester.courses.map(course => (
-                <CourseRow key={course.courseId} course={course} />
+              {semester.courses.map((course, index) => (
+                <CourseRow key={course.courseId} course={course} isEven={index % 2 === 0} />
               ))}
             </tbody>
           </table>
         </div>
 
         {/* Semester summary */}
-        <div className="px-4 py-2 border-t border-border bg-muted/20 text-xs text-muted-foreground">
-          Müfredat Toplam Kredi:{semester.totalCredits} AKTS:{semester.totalEcts} Ders
-          Say:{semester.courseCount} Zorunlu:{semester.compulsoryCount} Seçmeli:{semester.electiveCount}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2 border-t border-border bg-muted/20 text-xs text-muted-foreground">
+          <span>Kredi: {semester.totalCredits}</span>
+          <span>AKTS: {semester.totalEcts}</span>
+          <span>Ders: {semester.courseCount}</span>
+          <span>Zorunlu: {semester.compulsoryCount}</span>
+          <span>Seçmeli: {semester.electiveCount}</span>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
+function CourseRow({ course, isEven }: { course: CurriculumCourseStatusDto; isEven: boolean }) {
   const hasPrereqWarning = course.prerequisites.length > 0 && !course.prerequisitesMet;
 
   return (
-    <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+    <tr className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${isEven ? 'bg-muted/10' : ''}`}>
       {/* Left side — curriculum */}
-      <td className="px-3 py-2 font-mono text-sm font-semibold text-primary whitespace-nowrap">
+      <td className="px-3 py-2 font-mono text-sm font-bold text-foreground whitespace-nowrap">
         <span className="flex items-center gap-1.5">
           {course.code}
           {hasPrereqWarning && (
@@ -210,7 +228,7 @@ function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
         )}
       </td>
       <td className="text-center px-2 py-2">
-        <span className={`text-xs font-bold ${course.isCompulsory ? 'text-primary' : 'text-accent'}`}>
+        <span className={`text-xs font-bold uppercase ${course.isCompulsory ? 'text-primary' : 'text-accent'}`}>
           {course.isCompulsory ? 'Z' : 'S'}
         </span>
       </td>
@@ -218,7 +236,7 @@ function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
       <td className="text-center px-2 py-2 font-mono text-sm">{course.ects}</td>
 
       {/* Divider */}
-      <td className="w-px bg-border"></td>
+      <td className="bg-primary/20 p-0"></td>
 
       {/* Right side — taken */}
       {course.takenTermLabel ? (
@@ -227,7 +245,7 @@ function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
           <td className="px-3 py-2 font-mono text-sm font-medium">{course.takenCourseCode}</td>
           <td className="px-3 py-2 text-sm">{course.takenCourseName}</td>
           <td className="text-center px-2 py-2">
-            <span className={`text-xs font-bold ${course.takenIsCompulsory ? 'text-primary' : 'text-accent'}`}>
+            <span className={`text-xs font-bold uppercase ${course.takenIsCompulsory ? 'text-primary' : 'text-accent'}`}>
               {course.takenIsCompulsory ? 'Z' : 'S'}
             </span>
           </td>
@@ -235,19 +253,179 @@ function CourseRow({ course }: { course: CurriculumCourseStatusDto }) {
           <td className="text-center px-2 py-2 font-mono text-sm">{course.takenEcts}</td>
           <td className="text-center px-2 py-2">
             {course.grade && (
-              <Badge variant={getGradeBadgeVariant(course.grade, course.gradeStatus)} className="text-xs font-bold">
+              <Badge
+                variant={getGradeBadgeVariant(course.grade, course.gradeStatus)}
+                className={`w-10 justify-center text-xs font-bold ${
+                  course.gradeStatus === 'passed'
+                    ? 'bg-green-600/15 text-foreground border-green-600/30'
+                    : course.gradeStatus === 'failed'
+                      ? 'bg-red-600/15 text-foreground border-red-600/30'
+                      : ''
+                }`}
+              >
                 {course.grade}
               </Badge>
             )}
           </td>
         </>
       ) : (
-        <>
-          <td className="px-3 py-2" colSpan={7}>
-            <span className="text-xs text-muted-foreground/50 italic">Henüz alınmadı</span>
-          </td>
-        </>
+        <td className="px-3 py-2" colSpan={7}>
+          <span className="text-sm text-muted-foreground italic">Henüz alınmadı</span>
+        </td>
       )}
     </tr>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Print-only layout — official report document
+   ═══════════════════════════════════════════════════════════════ */
+
+const P = {
+  navy: '#1a2e4a',
+  navyLight: '#2c4a70',
+  green: '#166534',
+  red: '#b91c1c',
+  blue: '#1d4ed8',
+  gray: '#6b7280',
+  grayLight: '#e5e7eb',
+  rowAlt: '#f6f8fb',
+  headerBg: '#edf1f7',
+  divider: '#94a3b8',
+} as const;
+
+const gradeColor = (status: string | null) =>
+  status === 'passed' ? P.green : status === 'failed' ? P.red : status === 'current' ? P.blue : '#000';
+
+const thStyle: React.CSSProperties = {
+  padding: '2px 3px', fontSize: '7px', fontWeight: 600,
+  borderBottom: `1px solid ${P.navy}`, whiteSpace: 'nowrap', color: P.navy,
+};
+const tdStyle: React.CSSProperties = {
+  padding: '1.5px 3px', fontSize: '7px',
+  borderBottom: `0.5px solid ${P.grayLight}`, overflow: 'hidden', textOverflow: 'ellipsis',
+};
+
+function PrintLayout({ data, student }: { data: CurriculumStatusDto; student?: StudentInfoDto }) {
+  const today = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  return (
+    <div className="hidden print:block" style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#1f2937', lineHeight: 1.3, width: '100%', margin: 0, padding: 0 }}>
+
+      {/* ── Document header ── */}
+      <div style={{ textAlign: 'center', marginBottom: '6px', borderBottom: `2px solid ${P.navy}`, paddingBottom: '5px' }}>
+        <div style={{ fontSize: '12px', fontWeight: 800, color: P.navy, letterSpacing: '0.5px' }}>
+          ANKARA BİLİM ÜNİVERSİTESİ
+        </div>
+        <div style={{ fontSize: '9px', fontWeight: 700, color: P.navyLight, marginTop: '1px' }}>
+          MÜFREDAT DURUM BELGESİ
+        </div>
+        <div style={{ fontSize: '7px', color: P.gray, marginTop: '2px' }}>
+          Oluşturulma Tarihi: {today}
+        </div>
+      </div>
+
+      {/* ── Student info grid ── */}
+      <table style={{ width: '100%', fontSize: '7.5px', marginBottom: '6px', borderCollapse: 'collapse' }}>
+        <tbody>
+          <tr>
+            <td style={{ padding: '2px 0', color: P.gray, width: '12%' }}>Bölüm</td>
+            <td style={{ padding: '2px 0', fontWeight: 600, width: '38%' }}>: {student?.departmentName ?? '—'}</td>
+            <td style={{ padding: '2px 0', color: P.gray, width: '22%', textAlign: 'right', paddingRight: '8px' }}>Başarılan Kredi / Toplam Kredi</td>
+            <td style={{ padding: '2px 0', fontWeight: 700, width: '28%' }}>
+              : <span style={{ color: P.green }}>{data.passedCredits}</span> / {data.totalCredits}
+            </td>
+          </tr>
+          <tr>
+            <td style={{ padding: '2px 0', color: P.gray }}>Program</td>
+            <td style={{ padding: '2px 0', fontWeight: 600 }}>: {data.programName}</td>
+            <td style={{ padding: '2px 0', color: P.gray, textAlign: 'right', paddingRight: '8px' }}>Başarılan AKTS / Toplam AKTS</td>
+            <td style={{ padding: '2px 0', fontWeight: 700 }}>
+              : <span style={{ color: P.green }}>{data.passedEcts}</span> / {data.totalEcts}
+            </td>
+          </tr>
+          <tr>
+            <td style={{ padding: '2px 0', color: P.gray }}>Öğrenim Tipi</td>
+            <td style={{ padding: '2px 0', fontWeight: 600 }}>: {data.curriculumVersion}</td>
+            <td style={{ padding: '2px 0', color: P.gray, textAlign: 'right', paddingRight: '8px' }}>Genel Not Ortalaması</td>
+            <td style={{ padding: '2px 0', fontWeight: 700 }}>
+              : <span style={{ color: data.cgpa < 2.0 ? P.red : P.navy }}>{data.cgpa.toFixed(2)}</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* ── Semesters ── */}
+      {data.semesters.map(sem => (
+        <div key={sem.semesterNumber} style={{ marginBottom: '4px' }}>
+          {/* Semester bar */}
+          <div style={{
+            background: `linear-gradient(135deg, ${P.navy}, ${P.navyLight})`,
+            color: '#fff', fontSize: '7.5px', fontWeight: 700,
+            padding: '2px 6px', letterSpacing: '0.3px',
+          }}>
+            {sem.label}
+          </div>
+
+          {/* Table */}
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: P.headerBg }}>
+                <th style={{ ...thStyle, textAlign: 'left', width: '7%' }}>Ders Kodu</th>
+                <th style={{ ...thStyle, textAlign: 'left', width: '22%' }}>Müfredat Ders Adı</th>
+                <th style={{ ...thStyle, textAlign: 'center', width: '3%' }}>Z/S</th>
+                <th style={{ ...thStyle, textAlign: 'center', width: '3.5%' }}>Krd</th>
+                <th style={{ ...thStyle, textAlign: 'center', width: '4%' }}>AKTS</th>
+                <th style={{ width: '0.3%', backgroundColor: P.divider, padding: 0 }}></th>
+                <th style={{ ...thStyle, textAlign: 'left', width: '5.5%' }}>Dönem</th>
+                <th style={{ ...thStyle, textAlign: 'left', width: '7%' }}>Ders Kodu</th>
+                <th style={{ ...thStyle, textAlign: 'left', width: '22%' }}>Alınan Ders Adı</th>
+                <th style={{ ...thStyle, textAlign: 'center', width: '3%' }}>Z/S</th>
+                <th style={{ ...thStyle, textAlign: 'center', width: '3.5%' }}>Krd</th>
+                <th style={{ ...thStyle, textAlign: 'center', width: '4%' }}>AKTS</th>
+                <th style={{ ...thStyle, textAlign: 'center', width: '4%' }}>Harf</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sem.courses.map((course, i) => (
+                <tr key={course.courseId} style={{ backgroundColor: i % 2 === 1 ? P.rowAlt : '#fff' }}>
+                  <td style={{ ...tdStyle, fontWeight: 700, color: P.navy, fontFamily: 'monospace' }}>{course.code}</td>
+                  <td style={tdStyle}>{course.name}</td>
+                  <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 600, color: course.isCompulsory ? P.navy : '#0d9488' }}>
+                    {course.isCompulsory ? 'Z' : 'S'}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{course.credits}</td>
+                  <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{course.ects}</td>
+                  <td style={{ backgroundColor: P.divider, padding: 0, borderBottom: `0.5px solid ${P.grayLight}` }}></td>
+                  {course.takenTermLabel ? (
+                    <>
+                      <td style={{ ...tdStyle, color: P.gray, fontSize: '6.5px' }}>{course.takenTermLabel}</td>
+                      <td style={{ ...tdStyle, fontWeight: 700, fontFamily: 'monospace' }}>{course.takenCourseCode}</td>
+                      <td style={tdStyle}>{course.takenCourseName}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 600, color: course.takenIsCompulsory ? P.navy : '#0d9488' }}>
+                        {course.takenIsCompulsory ? 'Z' : 'S'}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{course.takenCredits}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{course.takenEcts}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, color: gradeColor(course.gradeStatus) }}>
+                        {course.grade}
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={7} style={{ ...tdStyle, color: '#9ca3af', fontStyle: 'italic' }}>Henüz alınmadı</td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+
+      {/* ── Footer ── */}
+      <div style={{ marginTop: '8px', paddingTop: '4px', borderTop: `1px solid ${P.grayLight}`, fontSize: '6.5px', color: P.gray, display: 'flex', justifyContent: 'space-between' }}>
+        <span>Bu belge Ankara Bilim Üniversitesi Öğrenci Bilgi Sistemi tarafından oluşturulmuştur.</span>
+        <span>{data.studentName} — {data.programName}</span>
+      </div>
+    </div>
   );
 }
