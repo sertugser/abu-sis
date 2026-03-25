@@ -137,10 +137,10 @@ export default function ClassroomManagementPage() {
     <div className="space-y-6">
       {/* Üst kartlar */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard label="Toplam Derslik" value={totalClassrooms} icon={<Building className="h-6 w-6" />} />
-        <StatCard label="Doluluk" value={`%${occupancy}`} icon={<LayoutDashboard className="h-6 w-6 text-amber-600" />} color="text-amber-600" />
-        <StatCard label="Çakışma" value={conflictsCount} icon={<AlertCircle className="h-6 w-6 text-red-500" />} color="text-red-500" />
-        <StatCard label="Boş Slot" value={emptySlots} icon={<CheckCircle className="h-6 w-6 text-emerald-600" />} color="text-emerald-600" />
+        <StatCard label="Toplam Derslik" value={totalClassrooms} note="Sistemdeki tüm derslikler" icon={<Building className="h-6 w-6" />} />
+        <StatCard label="Doluluk Oranı" value={`%${occupancy}`} note="Bu dönem genel kullanım" icon={<LayoutDashboard className="h-6 w-6 text-amber-600" />} color="text-amber-600" />
+        <StatCard label="Çakışma Sayısı" value={conflictsCount} note={conflictsCount > 0 ? 'Çözüm bekleyen çakışmalar' : 'Çakışma yok'} icon={<AlertCircle className="h-6 w-6 text-red-500" />} color="text-red-500" />
+        <StatCard label="Boş Slot" value={emptySlots} note="Haftalık kullanılabilir aralık" icon={<CheckCircle className="h-6 w-6 text-emerald-600" />} color="text-emerald-600" />
       </div>
 
       {/* Filtre + Fiziki Derslikler + Heatmap */}
@@ -315,11 +315,13 @@ export default function ClassroomManagementPage() {
 function StatCard({
   label,
   value,
+  note,
   icon,
   color,
 }: {
   label: string;
   value: string | number;
+  note?: string;
   icon: React.ReactNode;
   color?: string;
 }) {
@@ -328,8 +330,9 @@ function StatCard({
       <CardContent className="flex items-center gap-4 p-5">
         <div className="shrink-0">{icon}</div>
         <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className={cn('text-xl font-bold', color)}>{value}</p>
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <p className={cn('text-2xl font-bold', color)}>{value}</p>
+          {note && <p className="text-[11px] text-muted-foreground/70 mt-0.5">{note}</p>}
         </div>
       </CardContent>
     </Card>
