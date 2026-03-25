@@ -251,20 +251,20 @@ export default function AcademicCalendarPage() {
 
 const FILTER_COLORS: Record<string, { active: string; inactive: string }> = {
   success: {
-    active: 'bg-emerald-500 text-white shadow-md scale-105', // Aktifken parlasın ve büyüsün
-    inactive: 'bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/40', // Yazıyı beyaza yakın yeşil yaptık
+    active: 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-300',
+    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
   },
   info: {
-    active: 'bg-sky-500 text-white shadow-md scale-105',
-    inactive: 'bg-sky-500/20 text-sky-100 hover:bg-sky-500/40',
+    active: 'bg-sky-500 text-white shadow-md ring-2 ring-sky-300',
+    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
   },
   secondary: {
-    active: 'bg-slate-400 text-white shadow-md scale-105',
-    inactive: 'bg-white/10 text-slate-200 hover:bg-white/20',
+    active: 'bg-slate-400 text-white shadow-md ring-2 ring-slate-300',
+    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
   },
   outline: {
-    active: 'bg-amber-500 text-white shadow-md scale-105',
-    inactive: 'bg-amber-500/20 text-amber-100 hover:bg-amber-500/40',
+    active: 'bg-amber-500 text-white shadow-md ring-2 ring-amber-300',
+    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
   },
 };
 

@@ -107,18 +107,16 @@ export default function MyCoursesPage() {
         return (
           <Card key={term.termId} className="border border-[#003366]/20 shadow-md overflow-hidden">
             <CardContent className="p-0">
-             
+
               <div className="flex items-center justify-between px-5 py-3 bg-[#003366]">
                 <h3 className="font-heading text-sm font-extrabold text-white uppercase tracking-wider">
                   {term.termName}
                 </h3>
                 <div className="flex gap-2">
-                
-                  <span className="text-[10px] bg-white/10 text-white border border-white/20 px-2 py-1 rounded font-bold uppercase">
-                    {term.courses.length} ders
+                  <span className="text-[11px] text-white/90 bg-white/15 border border-white/30 px-2.5 py-1 rounded-md font-semibold">
+                    {term.courses.length} DERS
                   </span>
-               
-                  <span className="text-[10px] bg-white text-[#003366] px-2 py-1 rounded font-extrabold uppercase shadow-sm">
+                  <span className="text-[11px] text-[#003366] bg-white px-2.5 py-1 rounded-md font-extrabold shadow-sm">
                     {termEcts} ECTS
                   </span>
                 </div>
