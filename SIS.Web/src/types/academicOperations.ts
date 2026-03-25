@@ -27,6 +27,14 @@ export interface CourseDemandForecast {
   notes: string[];
 }
 
+export interface DepartmentCapacitySummary {
+  totalCurrentSections: number;
+  totalRecommendedSections: number;
+  sectionDelta: number;
+  coursesNeedingMoreSections: number;
+  coursesWithExcessCapacity: number;
+}
+
 export interface DepartmentForecastSummary {
   departmentId: number;
   departmentName: string;
@@ -35,6 +43,7 @@ export interface DepartmentForecastSummary {
   totalRecommendedSections: number;
   courseSummaries: CourseDemandForecast[];
   notes: string[];
+  capacitySummary: DepartmentCapacitySummary;
 }
 
 export interface AcademicPlanningSummary {
@@ -117,6 +126,20 @@ export interface DepartmentCurriculumOverview {
   totalEcts: number;
   programs: ProgramCurriculumOverview[];
   notes: string[];
+}
+
+export interface LevelDistributionDto {
+  level: number;
+  label: string;
+  count: number;
+  percentage: number;
+}
+
+export interface BulkAcademicLevelDto {
+  totalStudents: number;
+  discrepancyCount: number;
+  officialDistribution: LevelDistributionDto[];
+  academicDistribution: LevelDistributionDto[];
 }
 
 export type PlanningConflict = SchedulingConflict;

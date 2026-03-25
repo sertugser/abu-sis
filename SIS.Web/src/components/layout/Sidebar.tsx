@@ -6,6 +6,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { IMPLEMENTED_ROUTES } from '../../lib/constants';
 import logo from '/logo.png';
 import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
@@ -143,23 +144,28 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
 
                   {isOpen && !isCollapsed && (
                     <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
-                      {group.children.map(child => (
-                        <NavLink
-                          key={child.to}
-                          to={child.to}
-                          end={child.to === '/'}
-                          className={({ isActive }) =>
-                            cn(
-                              'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
-                              isActive
-                                ? 'text-primary font-semibold bg-primary/5'
-                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                            )
-                          }
-                        >
-                          {child.label}
-                        </NavLink>
-                      ))}
+                      {group.children.map(child => {
+                        const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                        return (
+                          <NavLink
+                            key={child.to}
+                            to={child.to}
+                            end={child.to === '/'}
+                            className={({ isActive }) =>
+                              cn(
+                                'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
+                                isDead
+                                  ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                                  : isActive
+                                    ? 'text-primary font-semibold bg-primary/5'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                              )
+                            }
+                          >
+                            {child.label}
+                          </NavLink>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
