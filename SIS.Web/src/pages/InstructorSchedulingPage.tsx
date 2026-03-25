@@ -245,10 +245,6 @@ export default function InstructorSchedulingPage() {
     return (
       <>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold tracking-tight">Müsaitlik Yönetimi</h1>
-          </div>
-
           <Card>
             <CardContent className="flex flex-col items-center justify-center gap-4 py-14 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
@@ -321,10 +317,6 @@ export default function InstructorSchedulingPage() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Müsaitlik Yönetimi</h1>
-        </div>
-
         {/* Availability CRUD Card */}
         <AvailabilityManagerCard
           availabilities={availabilities}
