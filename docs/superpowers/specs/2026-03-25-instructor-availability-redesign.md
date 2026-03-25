@@ -36,11 +36,26 @@ Simplify the page to **"Müsaitlik Yönetimi"** (Availability Management) with t
 - `CONFLICT_META` constant
 - `PanelKey` type
 
+### Sub-Components & Helpers to Remove
+- `PanelButton` — tab button component
+- `SummaryItem` — used only in suggestion panel
+- `EmptyPanelState` — used only in analysis/suggestion panels
+- `NotesAlert` — used only in analysis/suggestion panels
+- `ConflictTable` — used only in analysis panel
+- `AvailabilitySummaryCard` — used only in suggestion panel sidebar
+- `formatConflictTime` — used only by ConflictTable
+- `formatSlot` — used only in suggestion panel
+- `formatWeeklyImpact` — used only in suggestion panel
+- `collectConflictSectionIds` — used only for timetable conflict highlighting
+
 ### Imports to Remove
 - `useValidateInstructorSchedule`, `useSuggestInstructorSchedule`, `useApplyInstructorSchedule` from hooks
-- `useSearchParams` from react-router-dom (no longer tracking sectionId in URL)
-- `getSchedulingErrorMessage` from API (only used for scheduling errors, availability errors stay)
+- `useSearchParams` from react-router-dom (no longer tracking sectionId in URL). `useNavigate` stays (used in error/empty states).
 - Icons no longer used after removal: `AlertCircle`, `CheckCircle2`, `Sparkles`, `Building2`, `Users`
+- Type imports: `ScheduleSuggestion`, `SchedulingConflict` from types/scheduling. `ScheduleSlot` stays (used by timetable).
+
+### Import that STAYS
+- `getSchedulingErrorMessage` — used by availability error handling (create/update/delete/query), not just scheduling
 
 ## What Stays
 
@@ -58,7 +73,7 @@ Simplify the page to **"Müsaitlik Yönetimi"** (Availability Management) with t
 - All availability CRUD mutations and handlers
 - `useInstructorSections()` query (needed for timetable entries)
 - `useInstructorAvailabilities()` query
-- `availabilityQuery`, `createAvailabilityMutation`, `updateAvailabilityMutation`, `deleteAvailabilityMutation`
+- Availability mutations: `createAvailabilityMutation`, `updateAvailabilityMutation`, `deleteAvailabilityMutation`
 
 ### Hooks & API (no changes)
 - `useInstructorAvailabilities`, `useCreateInstructorAvailability`, `useUpdateInstructorAvailability`, `useDeleteInstructorAvailability` — all stay
@@ -107,8 +122,9 @@ Simplify the page to **"Müsaitlik Yönetimi"** (Availability Management) with t
 | File | Change |
 |------|--------|
 | `SIS.Web/src/pages/InstructorSchedulingPage.tsx` | Remove scheduling logic, tabs, section selector; keep availability + timetable |
-| `SIS.Web/src/lib/constants.ts` | Update route path |
+| `SIS.Web/src/lib/constants.ts` | Update `ROUTES.INSTRUCTOR_SCHEDULING` path and `IMPLEMENTED_ROUTES` set |
 | `SIS.Web/src/components/layout/SidebarMenuGroups.ts` | Update label |
+| `SIS.Web/src/App.tsx` | Update route path from `program-planlama` to `musaitlik-yonetimi` |
 
 ## Files NOT Modified
 
@@ -127,3 +143,10 @@ The timetable needs all instructor sections to display. Current flow stays the s
 3. Sections are mapped to `TimetableEntry[]` for the grid
 4. `useInstructorAvailabilities()` provides availability backgrounds
 5. Grid renders read-only — no click handlers, no apply buttons
+6. `buildTimetableEntries` called without conflict data (empty set for `conflictSectionIds`) since validate is removed
+
+## Cleanup Notes
+
+- `handleAvailabilitySubmit` and `handleDeleteAvailability` onSuccess callbacks currently call `resetValidation()` and `resetSuggestion()` — these lines must be removed
+- Empty-sections message ("program analizi veya öneri üretimi yapılamıyor") must be updated to reference availability management instead
+- The `includeScheduling` conditional flag in sidebar stays as-is (controls whether the menu item appears at all)
