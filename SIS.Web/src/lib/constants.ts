@@ -15,12 +15,11 @@ export const ROUTES = {
   MANAGEMENT_PLANNING: '/planlama-merkezi',
   MANAGEMENT_CLASS_LISTS: '/sinif-listeleri',
   MANAGEMENT_CURRICULUM: '/mufredat-gorunumu',
-  MANAGEMENT_BATCH_SCHEDULING: '/toplu-programlama',
   // New pages from technical analysis
   CLASSROOM_MANAGEMENT: '/merkezi-derslik-yonetimi',
-  SECTION_APPROVAL: '/sube-acma-onayi',
   TERM_CLOSING: '/donem-kapatma',
   PRE_REGISTRATION_SURVEY: '/on-kayit-anketi',
+  FACULTY_PLANNING: '/fakulte-planlama',
 } as const;
 
 export const QUERY_KEYS = {
@@ -40,6 +39,11 @@ export const QUERY_KEYS = {
   gradeComponents: (sectionId: number) => ['gradeComponents', sectionId] as const,
   grades: (sectionId: number) => ['grades', sectionId] as const,
   gradingCriteria: (sectionId: number) => ['gradingCriteria', sectionId] as const,
+  sectionApprovals: (departmentId?: number, termId?: number) => ['sectionApprovals', departmentId, termId] as const,
+  facultyPlanningOverview: (facultyId: number, termId: number) => ['facultyPlanning', 'overview', facultyId, termId] as const,
+  facultyPlanningSections: (facultyId: number, termId: number, departmentId?: number, status?: string, page?: number) =>
+    ['facultyPlanning', 'sections', facultyId, termId, departmentId, status, page] as const,
+  facultyPlanningConflicts: (facultyId: number, termId: number) => ['facultyPlanning', 'conflicts', facultyId, termId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -77,9 +81,8 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/planlama-merkezi',
   '/sinif-listeleri',
   '/mufredat-gorunumu',
-  '/toplu-programlama',
+  '/fakulte-planlama',
   '/merkezi-derslik-yonetimi',
-  '/sube-acma-onayi',
   '/donem-kapatma',
 ]);
 
