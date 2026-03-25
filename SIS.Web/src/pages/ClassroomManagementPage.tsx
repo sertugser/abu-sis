@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, LayoutDashboard, CalendarRange, AlertCircle, CheckCircle, Pencil, Search, Building } from 'lucide-react';
+import { Loader2, LayoutDashboard, CalendarRange, AlertCircle, CheckCircle, Pencil, Search, Building, ArrowLeft } from 'lucide-react';
+import type { ClassroomInfo } from '../types/scheduling';
 import HeatmapGrid from '@/components/scheduling/HeatmapGrid';
 import { cn } from '@/lib/utils';
 import { useActiveTerm } from '@/hooks/useActiveTerm';
@@ -229,22 +230,19 @@ export default function ClassroomManagementPage() {
           </Card>
         </div>
 
-        {/* Sağ Sütun: Heatmap */}
+        {/* Sağ Sütun: Heatmap veya Derslik Detayı */}
         <div className="min-w-0">
-          <HeatmapGrid 
-            data={displayHeatmapData} 
-            className="h-full" 
-            title={selectedClassroom 
-              ? `${dashboard?.classrooms.find(c => c.id === selectedClassroom)?.name} - Ders Programı` 
-              : 'Dönemsel Doluluk Haritası'
-            }
-          />
-          {selectedClassroom && (
-            <div className="mt-2 flex justify-end">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedClassroom(null)} className="text-xs text-muted-foreground hover:text-primary">
-                Genel Doluluk Görünümüne Dön
-              </Button>
-            </div>
+          {selectedClassroom ? (
+            <ClassroomDetailPanel
+              classroom={dashboard?.classrooms.find(c => c.id === selectedClassroom) ?? null}
+              onBack={() => setSelectedClassroom(null)}
+            />
+          ) : (
+            <HeatmapGrid
+              data={displayHeatmapData}
+              className="h-full"
+              title="Dönemsel Doluluk Haritası"
+            />
           )}
         </div>
       </div>
@@ -334,6 +332,68 @@ function StatCard({
           <p className={cn('text-2xl font-bold', color)}>{value}</p>
           {note && <p className="text-[11px] text-muted-foreground/70 mt-0.5">{note}</p>}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ClassroomDetailPanel({
+  classroom,
+  onBack,
+}: {
+  classroom: ClassroomInfo | null;
+  onBack: () => void;
+}) {
+  if (!classroom) return null;
+
+  const schedules = [...classroom.schedules].sort((a, b) => a.day - b.day || a.startHour - b.startHour);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-3 pb-4">
+        <Button variant="ghost" size="sm" onClick={onBack} className="h-8 w-8 p-0">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <CardTitle className="text-lg">{classroom.name}</CardTitle>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Kapasite: {classroom.capacity} kişi · Tip: {classroom.type}
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {schedules.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm border rounded-xl border-dashed">
+            Bu dersliğe henüz ders atanmamış.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="pl-4">Gün</TableHead>
+                  <TableHead>Saat</TableHead>
+                  <TableHead>Ders Kodu</TableHead>
+                  <TableHead>Ders Adı</TableHead>
+                  <TableHead className="pr-4">Öğretim Üyesi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {schedules.map((slot, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell className="pl-4 font-medium">{DAY_LABELS[slot.day] ?? `Gün ${slot.day}`}</TableCell>
+                    <TableCell>{String(slot.startHour).padStart(2, '0')}:00 – {String(slot.endHour + 1).padStart(2, '0')}:00</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="font-mono">{slot.courseCode}</Badge>
+                    </TableCell>
+                    <TableCell>{slot.courseName}</TableCell>
+                    <TableCell className="pr-4">{slot.instructorName || <span className="text-muted-foreground italic">Atanmamış</span>}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

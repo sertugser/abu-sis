@@ -1504,7 +1504,8 @@ public class SchedulingService : ISchedulingService
                     StartHour = slot.StartTime.Hour,
                     EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
                     CourseCode = s.CourseCode,
-                    CourseName = s.CourseName
+                    CourseName = s.CourseName,
+                    InstructorName = s.InstructorName
                 })).ToList()
             );
 
