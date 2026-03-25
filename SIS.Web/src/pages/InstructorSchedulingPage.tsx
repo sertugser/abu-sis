@@ -405,8 +405,8 @@ function AvailabilityManagerCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Haftalık Müsaitlik</CardTitle>
+      <CardHeader className="flex flex-col items-center gap-3 pb-4">
+        <CardTitle className="text-lg">Haftalık Müsaitlik</CardTitle>
         <Button onClick={onCreate} size="sm">
           <Plus className="h-4 w-4" />
           Ekle
@@ -455,7 +455,7 @@ function AvailabilityManagerCard({
 
         {!isLoading && !errorMessage && availabilities.length > 0 && (
           <div>
-            <div className={cn("grid gap-3", hasWeekend ? "grid-cols-7" : "grid-cols-5")}>
+            <div className={cn("grid gap-4", hasWeekend ? "grid-cols-7" : "grid-cols-5")}>
               {activeDays.map(dayId => {
                 const dayAvailabilities = availabilities
                   .filter(a => a.dayOfWeek === dayId)
@@ -463,10 +463,10 @@ function AvailabilityManagerCard({
 
                 return (
                   <div key={dayId} className="flex flex-col rounded-xl border border-border bg-muted/10 overflow-hidden">
-                    <div className="bg-muted p-3 text-center border-b border-border">
+                    <div className="bg-muted px-4 py-3 text-center border-b border-border">
                       <h3 className="font-semibold text-sm text-foreground">{DAY_LABELS[dayId]}</h3>
                     </div>
-                    <div className="p-3 flex flex-col gap-3 min-h-[150px]">
+                    <div className="p-4 flex flex-col gap-3 min-h-[160px]">
                       {dayAvailabilities.length > 0 ? (
                         dayAvailabilities.map(availability => (
                           <div

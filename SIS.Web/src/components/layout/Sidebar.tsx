@@ -91,7 +91,12 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           </button>
         ) : (
           <div className="flex h-full w-full items-center justify-between px-5">
-            <img src={logo} alt="Logo" className="h-10 w-10 shrink-0 object-contain" />
+            <div className="flex items-center gap-2.5">
+              <img src={logo} alt="Logo" className="h-10 w-10 shrink-0 object-contain" />
+              <span className="text-sm font-semibold leading-tight text-foreground">
+                Ankara Bilim<br />Üniversitesi
+              </span>
+            </div>
 
             <button
               type="button"
