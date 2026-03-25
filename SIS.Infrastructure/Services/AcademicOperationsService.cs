@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SIS.Application.AcademicOperations.DTOs;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -21,15 +22,18 @@ public class AcademicOperationsService : IAcademicOperationsService
     private readonly AppDbContext _context;
     private readonly IEnrollmentForecastService _forecastService;
     private readonly ISchedulingService _schedulingService;
+    private readonly ILogger<AcademicOperationsService> _logger;
 
     public AcademicOperationsService(
         AppDbContext context,
         IEnrollmentForecastService forecastService,
-        ISchedulingService schedulingService)
+        ISchedulingService schedulingService,
+        ILogger<AcademicOperationsService> logger)
     {
         _context = context;
         _forecastService = forecastService;
         _schedulingService = schedulingService;
+        _logger = logger;
     }
 
     public async Task<AcademicOperationsContextDto> GetContextAsync(int userId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default)
@@ -97,6 +101,7 @@ public class AcademicOperationsService : IAcademicOperationsService
         int? termId,
         int userId,
         IReadOnlyCollection<string> roles,
+        string? search = null,
         CancellationToken cancellationToken = default)
     {
         var scope = await ResolveAccessibleDepartmentsAsync(userId, roles, cancellationToken);
@@ -111,7 +116,7 @@ public class AcademicOperationsService : IAcademicOperationsService
         if (department == null || term == null)
             return null;
 
-        var sections = await _context.CourseSections
+        var sectionsQuery = _context.CourseSections
             .AsNoTracking()
             .Include(section => section.Course)
             .Include(section => section.Instructor)
@@ -121,7 +126,18 @@ public class AcademicOperationsService : IAcademicOperationsService
             .Where(section => section.TermId == term.Id)
             .Where(section =>
                 section.Course.DepartmentId == departmentId
-                || (section.Instructor != null && section.Instructor.DepartmentId == departmentId))
+                || (section.Instructor != null && section.Instructor.DepartmentId == departmentId));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim().ToLower();
+            sectionsQuery = sectionsQuery.Where(section =>
+                section.Course.Code.ToLower().Contains(normalizedSearch)
+                || section.Course.Name.ToLower().Contains(normalizedSearch)
+                || (section.Classroom != null && section.Classroom.Name.ToLower().Contains(normalizedSearch)));
+        }
+
+        var sections = await sectionsQuery
             .OrderBy(section => section.Course.Code)
             .ThenBy(section => section.Id)
             .ToListAsync(cancellationToken);
@@ -401,7 +417,7 @@ public class AcademicOperationsService : IAcademicOperationsService
         return "Akademik Operasyonlar";
     }
 
-    private static string FormatSchedule(string scheduleJson)
+    private string FormatSchedule(string scheduleJson)
     {
         if (string.IsNullOrWhiteSpace(scheduleJson) || scheduleJson == "[]")
             return string.Empty;
@@ -417,8 +433,9 @@ public class AcademicOperationsService : IAcademicOperationsService
                 .ThenBy(slot => slot.StartTime)
                 .Select(slot => $"{DayOfWeekToTurkish(slot.Day)} {slot.StartTime:HH:mm}-{slot.EndTime:HH:mm}"));
         }
-        catch
+        catch (JsonException ex)
         {
+            _logger.LogWarning(ex, "Schedule JSON parse edilemedi: {ScheduleJson}", scheduleJson);
             return string.Empty;
         }
     }
@@ -426,21 +443,200 @@ public class AcademicOperationsService : IAcademicOperationsService
     private static string BuildSemesterLabel(int semesterNumber)
     {
         var classYear = (semesterNumber - 1) / 2 + 1;
-        var termLabel = semesterNumber % 2 == 1 ? "Guz" : "Bahar";
-        return $"{classYear}. Sinif {termLabel}";
+        var termLabel = semesterNumber % 2 == 1 ? "Güz" : "Bahar";
+        return $"{classYear}. Sınıf {termLabel}";
     }
 
     private static string DayOfWeekToTurkish(DayOfWeek day) => day switch
     {
         DayOfWeek.Monday => "Pazartesi",
-        DayOfWeek.Tuesday => "Sali",
-        DayOfWeek.Wednesday => "Carsamba",
-        DayOfWeek.Thursday => "Persembe",
+        DayOfWeek.Tuesday => "Salı",
+        DayOfWeek.Wednesday => "Çarşamba",
+        DayOfWeek.Thursday => "Perşembe",
         DayOfWeek.Friday => "Cuma",
         DayOfWeek.Saturday => "Cumartesi",
         DayOfWeek.Sunday => "Pazar",
         _ => day.ToString()
     };
+
+    // ── Section Approval ──────────────────────────────────────
+
+    public async Task<List<CourseSectionApprovalDto>> GetApprovalsAsync(int departmentId, int termId, CancellationToken cancellationToken = default)
+    {
+        return await _context.CourseSectionApprovals
+            .AsNoTracking()
+            .Where(a => a.DepartmentId == departmentId && a.TermId == termId)
+            .Select(a => new CourseSectionApprovalDto
+            {
+                Id = a.Id,
+                CourseId = a.CourseId,
+                CourseCode = a.Course.Code,
+                CourseName = a.Course.Name,
+                RecommendedSectionCount = a.RecommendedSectionCount,
+                ApprovedSectionCount = a.ApprovedSectionCount,
+                PredictedDemand = a.PredictedDemand,
+                Status = a.Status,
+                Note = a.Note,
+                CreatedAt = a.CreatedAt,
+                DecidedAt = a.DecidedAt
+            })
+            .OrderBy(a => a.CourseCode)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<CourseSectionApprovalDto> ApproveCourseSectionsAsync(
+        int departmentId, int termId, ApproveCourseSectionsRequest request, string userId, CancellationToken cancellationToken = default)
+    {
+        if (request.SectionCount <= 0)
+            throw new ArgumentException("Şube sayısı en az 1 olmalıdır.");
+
+        var approval = await GetOrCreateApprovalAsync(departmentId, termId, request.CourseId, cancellationToken);
+
+        approval.Status = SectionApprovalStatus.Approved;
+        approval.ApprovedSectionCount = request.SectionCount;
+        approval.Note = request.Note;
+        approval.DecidedByUserId = userId;
+        approval.DecidedAt = DateTime.UtcNow;
+
+        // Otomatik section oluştur
+        await CreateSectionsForApprovalAsync(approval, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return MapApprovalToDto(approval);
+    }
+
+    public async Task<CourseSectionApprovalDto> RejectCourseSectionsAsync(
+        int departmentId, int termId, RejectCourseSectionsRequest request, string userId, CancellationToken cancellationToken = default)
+    {
+        var approval = await GetOrCreateApprovalAsync(departmentId, termId, request.CourseId, cancellationToken);
+
+        approval.Status = SectionApprovalStatus.Rejected;
+        approval.ApprovedSectionCount = null;
+        approval.Note = request.Note;
+        approval.DecidedByUserId = userId;
+        approval.DecidedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return MapApprovalToDto(approval);
+    }
+
+    public async Task<BulkApprovalResultDto> BulkApproveAsync(
+        int departmentId, int termId, BulkApprovalRequest request, string userId, CancellationToken cancellationToken = default)
+    {
+        var result = new BulkApprovalResultDto();
+        var totalSectionsCreated = 0;
+
+        foreach (var item in request.Approvals)
+        {
+            try
+            {
+                var dto = await ApproveCourseSectionsAsync(departmentId, termId, item, userId, cancellationToken);
+                result.ApprovedCount++;
+                totalSectionsCreated += dto.ApprovedSectionCount ?? 0;
+            }
+            catch (Exception ex)
+            {
+                result.Errors.Add($"{item.CourseId}: {ex.Message}");
+            }
+        }
+
+        result.SectionsCreated = totalSectionsCreated;
+        return result;
+    }
+
+    private async Task<CourseSectionApproval> GetOrCreateApprovalAsync(int departmentId, int termId, int courseId, CancellationToken cancellationToken)
+    {
+        var existing = await _context.CourseSectionApprovals
+            .Include(a => a.Course)
+            .FirstOrDefaultAsync(a => a.CourseId == courseId && a.DepartmentId == departmentId && a.TermId == termId, cancellationToken);
+
+        if (existing != null)
+        {
+            // Eğer daha önce onaylanmışsa ve tekrar onaylanıyorsa, eski section'ları kaldır
+            if (existing.Status == SectionApprovalStatus.Approved)
+            {
+                var oldSections = await _context.CourseSections
+                    .Where(s => s.CourseId == courseId && s.TermId == termId && s.EnrolledCount == 0 && !s.IsFinalized)
+                    .ToListAsync(cancellationToken);
+
+                _context.CourseSections.RemoveRange(oldSections);
+            }
+
+            return existing;
+        }
+
+        // Forecast'ten tahmini veri çek
+        var forecast = await _forecastService.GetCourseDemandForecastAsync(courseId);
+
+        var approval = new CourseSectionApproval
+        {
+            CourseId = courseId,
+            DepartmentId = departmentId,
+            TermId = termId,
+            RecommendedSectionCount = forecast?.RecommendedSectionCount ?? 1,
+            PredictedDemand = forecast?.TotalPredictedDemand ?? 0
+        };
+
+        // Course navigation property'yi yükle
+        approval.Course = (await _context.Courses.FindAsync([courseId], cancellationToken))!;
+
+        _context.CourseSectionApprovals.Add(approval);
+        return approval;
+    }
+
+    private async Task CreateSectionsForApprovalAsync(CourseSectionApproval approval, CancellationToken cancellationToken)
+    {
+        var sectionCount = approval.ApprovedSectionCount ?? 1;
+        var totalDemand = approval.PredictedDemand;
+
+        // Derslik kapasitesine göre bölme: tüm dersliklerin ortalama kapasitesini hesapla
+        var avgClassroomCapacity = await _context.Classrooms
+            .Select(c => c.Capacity)
+            .DefaultIfEmpty(40)
+            .AverageAsync(cancellationToken);
+
+        var capacityPerSection = (int)Math.Ceiling(avgClassroomCapacity);
+
+        // Talep derslik kapasitesinden küçükse, talep bazlı böl
+        if (totalDemand > 0 && totalDemand / sectionCount < capacityPerSection)
+        {
+            capacityPerSection = (int)Math.Ceiling((double)totalDemand / sectionCount);
+        }
+
+        for (var i = 0; i < sectionCount; i++)
+        {
+            _context.CourseSections.Add(new CourseSection
+            {
+                CourseId = approval.CourseId,
+                TermId = approval.TermId,
+                Capacity = capacityPerSection,
+                EnrolledCount = 0,
+                IsActive = true,
+                IsFinalized = false,
+                ScheduleJson = "[]"
+            });
+        }
+    }
+
+    private static CourseSectionApprovalDto MapApprovalToDto(CourseSectionApproval approval)
+    {
+        return new CourseSectionApprovalDto
+        {
+            Id = approval.Id,
+            CourseId = approval.CourseId,
+            CourseCode = approval.Course.Code,
+            CourseName = approval.Course.Name,
+            RecommendedSectionCount = approval.RecommendedSectionCount,
+            ApprovedSectionCount = approval.ApprovedSectionCount,
+            PredictedDemand = approval.PredictedDemand,
+            Status = approval.Status,
+            Note = approval.Note,
+            CreatedAt = approval.CreatedAt,
+            DecidedAt = approval.DecidedAt
+        };
+    }
 
     private sealed class DepartmentScopeResolution
     {

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
@@ -490,6 +491,6 @@ public class EnrollmentForecastServiceTests
             .Setup(service => service.CalculateCgpaAsync(It.IsAny<int>()))
             .ReturnsAsync((int studentId) => cgpasByStudentId.TryGetValue(studentId, out var cgpa) ? cgpa : 0m);
 
-        return new EnrollmentForecastService(context, gpaServiceMock.Object);
+        return new EnrollmentForecastService(context, gpaServiceMock.Object, new MemoryCache(new MemoryCacheOptions()));
     }
 }

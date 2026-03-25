@@ -391,6 +391,9 @@ export default function InstructorSchedulingPage() {
 
   return (
     <>
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+        Derslik ataması Fakülte Planlama sayfasından yapılmaktadır.
+      </div>
       <div className="space-y-6">
         {/* Section selector bar */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
