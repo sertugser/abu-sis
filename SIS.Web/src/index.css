@@ -158,6 +158,38 @@
   animation: slide-up 0.2s ease-out;
 }
 
+/* ── Print Styling ── */
+@media print {
+  @page { size: A4; margin: 5mm; }
+
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide sidebar, topbar, and screen-only elements */
+  aside, header.sticky, nav, .print\:hidden {
+    display: none !important;
+  }
+
+  /* Kill ALL layout wrappers — inline styles included */
+  body > div,
+  body > div > div,
+  body > div > div > div,
+  main {
+    all: unset !important;
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .print-no-break { break-inside: avoid; page-break-inside: avoid; }
+}
+
 /* ── Scrollbar Styling ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
