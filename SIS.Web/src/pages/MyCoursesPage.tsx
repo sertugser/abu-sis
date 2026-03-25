@@ -44,7 +44,7 @@ export default function MyCoursesPage() {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertDescription>Ders gecmisi yuklenirken hata olustu.</AlertDescription>
+        <AlertDescription>Ders geçmişi yüklenirken hata oluştu.</AlertDescription>
       </Alert>
     );
   }
@@ -53,8 +53,8 @@ export default function MyCoursesPage() {
     return (
       <div className="text-center py-16">
         <GraduationCap className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-        <h3 className="font-heading text-lg font-semibold text-foreground">Ders gecmisi bulunamadi</h3>
-        <p className="text-muted-foreground mt-1">Henuz tamamlanmis bir doneminiz bulunmamaktadir.</p>
+        <h3 className="font-heading text-lg font-semibold text-foreground">Ders geçmişi bulunamadı!</h3>
+        <p className="text-muted-foreground mt-1">Henüz tamamlanmış bir döneminiz bulunmamaktadır.</p>
       </div>
     );
   }
@@ -68,25 +68,36 @@ export default function MyCoursesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Term filter */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="relative">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-start py-2">
+        
+        <div className="relative min-w-[200px]">
           <select
             value={selectedTermId}
             onChange={e => setSelectedTermId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            className="appearance-none bg-card border border-border rounded-lg px-4 py-2 pr-10 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            className="w-full appearance-none bg-card border border-border rounded-lg px-4 py-2 pr-10 text-sm font-bold text-[#003366] hover:border-[#003366]/30 focus:outline-none focus:ring-2 focus:ring-[#003366]/10 cursor-pointer transition-all shadow-sm"
           >
-            <option value="all">Tum Donemler</option>
+            <option value="all">Tüm Dönemler</option>
             {history.map(t => (
               <option key={t.termId} value={t.termId}>{t.termName}</option>
             ))}
           </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#003366] pointer-events-none" />
         </div>
-        <div className="flex gap-3 text-sm text-muted-foreground">
-          <span>{totalCourses} ders</span>
-          <span>|</span>
-          <span>{totalEcts} ECTS</span>
+
+        
+        <div className="flex items-center gap-3">
+          
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-full shadow-sm">
+             <div className="w-1.5 h-1.5 rounded-full bg-[#003366]/40" />
+             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Müfredat</span>
+             <span className="text-xs font-extrabold text-[#003366]">{totalCourses} Ders</span>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#003366]/5 border border-[#003366]/10 rounded-full shadow-sm">
+             <div className="w-1.5 h-1.5 rounded-full bg-[#003366]" />
+             <span className="text-[10px] font-bold text-[#003366]/70 uppercase tracking-tight">Kredi</span>
+             <span className="text-xs font-extrabold text-[#003366]">{totalEcts} ECTS</span>
+          </div>
         </div>
       </div>
 
@@ -94,25 +105,33 @@ export default function MyCoursesPage() {
       {filteredTerms.map(term => {
         const termEcts = term.courses.reduce((s, c) => s + c.ects, 0);
         return (
-          <Card key={term.termId}>
+          <Card key={term.termId} className="border border-[#003366]/20 shadow-md overflow-hidden">
             <CardContent className="p-0">
-              {/* Term header */}
-              <div className="flex items-center justify-between px-5 py-3 bg-muted/50 border-b border-border">
-                <h3 className="font-heading text-sm font-semibold text-foreground">{term.termName}</h3>
-                <div className="flex gap-3">
-                  <Badge variant="secondary">{term.courses.length} ders</Badge>
-                  <Badge variant="default">{termEcts} ECTS</Badge>
+             
+              <div className="flex items-center justify-between px-5 py-3 bg-[#003366]">
+                <h3 className="font-heading text-sm font-extrabold text-white uppercase tracking-wider">
+                  {term.termName}
+                </h3>
+                <div className="flex gap-2">
+                
+                  <span className="text-[10px] bg-white/10 text-white border border-white/20 px-2 py-1 rounded font-bold uppercase">
+                    {term.courses.length} ders
+                  </span>
+               
+                  <span className="text-[10px] bg-white text-[#003366] px-2 py-1 rounded font-extrabold uppercase shadow-sm">
+                    {termEcts} ECTS
+                  </span>
                 </div>
               </div>
 
               {/* Courses table */}
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-28">Ders Kodu</TableHead>
-                    <TableHead>Ders Adi</TableHead>
+                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    <TableHead className="w-28 font-bold text-foreground">Ders Kodu</TableHead>
+                    <TableHead>Ders Adı</TableHead>
                     <TableHead className="text-center w-20">ECTS</TableHead>
-                    <TableHead className="hidden md:table-cell">Ogretim Uyesi</TableHead>
+                    <TableHead className="hidden md:table-cell">Ögretim Üyesi</TableHead>
                     <TableHead className="text-center w-20">Not</TableHead>
                     <TableHead className="text-center w-24 hidden sm:table-cell">Durum</TableHead>
                   </TableRow>
