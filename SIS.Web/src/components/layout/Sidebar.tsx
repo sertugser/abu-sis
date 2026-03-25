@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import {
   ChevronRight,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IMPLEMENTED_ROUTES } from '../../lib/constants';
@@ -71,27 +73,36 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     >
       {/* ── Header — outside inner wrapper so it respects aside width ── */}
       <div className="shrink-0 h-20 flex items-center border-b border-border/70">
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          className={cn(
-            'flex items-center w-full h-full hover:bg-muted/50 transition-colors',
-            isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'
-          )}
-          title={isCollapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
-        >
-          <img src={logo} alt="Logo" className="h-10 w-10 shrink-0 object-contain" />
-          {!isCollapsed && (
-            <div className="min-w-0">
-              <h1 className="font-heading text-sm font-bold text-[#003366] leading-tight tracking-wide">
-                ANKARA BİLİM
-              </h1>
-              <h1 className="font-heading text-xs font-bold text-[#003366]/80 leading-tight tracking-wide mt-0.5">
-                ÜNİVERSİTESİ
-              </h1>
-            </div>
-          )}
-        </button>
+        {isCollapsed ? (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="group relative flex h-full w-full items-center justify-center transition-colors hover:bg-muted/50"
+            title="Menüyü genişlet"
+          >
+            <img
+              src={logo}
+              alt="Logo"
+              className="h-10 w-10 shrink-0 object-contain transition-all duration-200 group-hover:scale-75 group-hover:opacity-0"
+            />
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <PanelLeftOpen className="h-5 w-5 scale-75 text-foreground opacity-0 transition-all duration-200 group-hover:scale-100 group-hover:opacity-100" />
+            </span>
+          </button>
+        ) : (
+          <div className="flex h-full w-full items-center justify-between px-5">
+            <img src={logo} alt="Logo" className="h-10 w-10 shrink-0 object-contain" />
+
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Menüyü daralt"
+            >
+              <PanelLeftClose className="h-5 w-5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Inner wrapper — always 260px, aside clips overflow */}
