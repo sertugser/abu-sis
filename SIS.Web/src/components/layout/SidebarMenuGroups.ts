@@ -117,7 +117,7 @@ export function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup
       children: [
         { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
         { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
-        ...(includeScheduling ? [{ to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Program Planlama' }] : []),
+        ...(includeScheduling ? [{ to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Müsaitlik Yönetimi' }] : []),
       ],
     },
     {

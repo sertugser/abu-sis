@@ -10,7 +10,7 @@ export const ROUTES = {
   MUFREDAT_DURUM: '/mufredat-durum',
   // Instructor routes
   INSTRUCTOR_SECTIONS: '/derslerim',
-  INSTRUCTOR_SCHEDULING: '/program-planlama',
+  INSTRUCTOR_SCHEDULING: '/musaitlik-yonetimi',
   GRADE_ENTRY: '/not-girisi',
   MANAGEMENT_PLANNING: '/planlama-merkezi',
   MANAGEMENT_CLASS_LISTS: '/sinif-listeleri',
@@ -77,7 +77,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/on-kayit-anketi',
   '/derslerim',
   '/not-girisi',
-  '/program-planlama',
+  '/musaitlik-yonetimi',
   '/planlama-merkezi',
   '/sinif-listeleri',
   '/mufredat-gorunumu',
