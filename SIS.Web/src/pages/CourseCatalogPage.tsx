@@ -146,7 +146,7 @@ export default function CourseCatalogPage() {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertDescription>Dersler yuklenirken hata olustu.</AlertDescription>
+        <AlertDescription>Dersler yüklenirken hata oluştu.</AlertDescription>
       </Alert>
     );
   }
@@ -155,27 +155,27 @@ export default function CourseCatalogPage() {
     <div className="space-y-6">
       {/* Student Info Card */}
       {student && (
-        <Card>
+        <Card className="border border-[#003366]/20 shadow-md overflow-hidden">
           <CardContent className="p-0">
-            <div className="bg-primary/5 px-5 py-2.5 border-b border-border">
-              <h3 className="font-heading text-sm font-semibold text-primary flex items-center gap-2">
-                <GraduationCap className="h-4 w-4" />
-                Ders Kayit Ogrenci Bilgileri
+            <div className="bg-[#003366] px-5 py-2.5">
+              <h3 className="font-heading text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-tight">
+                <GraduationCap className="h-4 w-4 text-white/80" />
+                Ders Kayıt Öğrenci Bilgileri
               </h3>
             </div>
             <div className="p-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                <InfoRow icon={User} label="Ogrenci No / Adi Soyadi" value={`${student.studentNumber} / ${student.firstName} ${student.lastName}`} />
-                <InfoRow icon={GraduationCap} label="Fakulte - Program" value={`${student.facultyName} - ${student.programName}`} />
-                <InfoRow icon={Calendar} label="Sinif / Donem" value={`${classYear}. Sinif, ${student.completedSemesters + 1}. Donem`} />
+                <InfoRow icon={User} label="Ögrenci No / Adı Soyadı" value={`${student.studentNumber} / ${student.firstName} ${student.lastName}`} />
+                <InfoRow icon={GraduationCap} label="Fakülte - Program" value={`${student.facultyName} - ${student.programName}`} />
+                <InfoRow icon={Calendar} label="Sınıf / Dönem" value={`${classYear}. Sınıf, ${student.completedSemesters + 1}. Dönem`} />
                 <InfoRow label="Genel Ortalama" value={student.cgpa.toFixed(2)} valueClass={student.cgpa < 2.0 ? 'text-destructive font-bold' : 'text-success font-bold'} />
               </div>
               {term && (
                 <>
                   <Separator className="my-3" />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                    <InfoRow icon={Calendar} label="Kayit Tarihleri" value={`${formatDate(term.registrationStart)} - ${formatDate(term.registrationEnd)}`} />
-                    <InfoRow icon={Clock} label="Ek/Birak Tarihleri" value={`${formatDate(term.addDropStart)} - ${formatDate(term.addDropEnd)}`} />
+                    <InfoRow icon={Calendar} label="Kayıt Tarihleri" value={`${formatDate(term.registrationStart)} - ${formatDate(term.registrationEnd)}`} />
+                    <InfoRow icon={Clock} label="Ek/Bırak Tarihleri" value={`${formatDate(term.addDropStart)} - ${formatDate(term.addDropEnd)}`} />
                   </div>
                 </>
               )}
@@ -186,26 +186,28 @@ export default function CourseCatalogPage() {
 
       {/* Registration Status */}
       {allSelectedItems.length > 0 && (
-        <Card>
+        <Card className="border border-[#003366]/20 shadow-md overflow-hidden">
           <CardContent className="p-0">
-            <div className="bg-primary/5 px-5 py-2.5 border-b border-border">
-              <h3 className="font-heading text-sm font-semibold text-primary">Ders Kayit Durumu</h3>
+            <div className="bg-[#003366] px-5 py-2.5">
+              <h3 className="font-heading text-sm font-extrabold text-white uppercase tracking-tight">
+                Ders Kayıt Durumu
+              </h3>
             </div>
             <div className="px-5 py-3 flex flex-wrap gap-x-12 gap-y-2 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Kesinlestirme Durumu:</span>
+                <span className="text-muted-foreground">Kesinleştirme Durumu:</span>
                 {isFinalized ? (
-                  <Badge variant="success">Kesinlestirildi</Badge>
+                  <Badge variant="success">Kesinleştirildi</Badge>
                 ) : planItems.length > 0 ? (
-                  <Badge variant="warning">Kesinlestirilmedi</Badge>
+                  <Badge variant="warning">Kesinleştirilmedi</Badge>
                 ) : (
                   <Badge variant="secondary">Bekleniyor</Badge>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Danisman Onay Durumu:</span>
+                <span className="text-muted-foreground">Danışman Onay Durumu:</span>
                 {hasAdvisorApproval && confirmedItems.length > 0 ? (
-                  <Badge variant="success">Onaylandi</Badge>
+                  <Badge variant="success">Onaylandı</Badge>
                 ) : confirmedItems.some(r => r.status === 'PendingAdvisorApproval') ? (
                   <Badge variant="warning">Onay Bekleniyor</Badge>
                 ) : (
@@ -221,7 +223,7 @@ export default function CourseCatalogPage() {
       {submitSuccess && (
         <Alert variant="success">
           <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>Kayit basariyla kesinlestirildi!</AlertDescription>
+          <AlertDescription>Kayıt başarıyla kesinleştirildi!</AlertDescription>
         </Alert>
       )}
 
@@ -230,14 +232,14 @@ export default function CourseCatalogPage() {
       {!term?.isRegistrationOpen && !term?.isAddDropOpen && (
         <Alert variant="warning">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>Kayit donemi su anda kapalidir. Dersler goruntulenebilir ancak plana eklenemez.</AlertDescription>
+          <AlertDescription>Kayıt dönemi şu anda kapalıdır. Dersler görüntülenebilir ancak plana eklenemez.</AlertDescription>
         </Alert>
       )}
 
       {addToPlan.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Plana eklenirken hata olustu. Lutfen tekrar deneyin.</AlertDescription>
+          <AlertDescription>Plana eklenirken hata oluştu. Lütfen tekrar deneyin.</AlertDescription>
         </Alert>
       )}
 
@@ -246,7 +248,7 @@ export default function CourseCatalogPage() {
         <Alert variant="destructive">
           <RotateCcw className="h-4 w-4" />
           <AlertDescription>
-            <strong>{alttanCourses.length} ders</strong>ten basarisiz (FF/NA) notunuz var ve tekrar almaniz gerekmektedir:{' '}
+            <strong>{alttanCourses.length} ders</strong>ten başarısız (FF/NA) notunuz var ve tekrar almanız gerekmektedir:{' '}
             {alttanCourses.map(c => `${c.code} (${c.previousGrade})`).join(', ')}
           </AlertDescription>
         </Alert>
@@ -254,11 +256,13 @@ export default function CourseCatalogPage() {
 
       {/* Selected Courses Table */}
       {allSelectedItems.length > 0 && (
-        <Card>
+        <Card className="border border-[#003366] shadow-md overflow-hidden">
           <CardContent className="p-0">
-            <div className="bg-primary/5 px-5 py-2.5 border-b border-border flex items-center gap-2">
-              <ClipboardList className="h-4 w-4 text-primary" />
-              <h3 className="font-heading text-sm font-semibold text-primary">Secilen Dersler</h3>
+            <div className="bg-[#003366] px-5 py-2.5 flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-white/80" />
+              <h3 className="font-heading text-sm font-extrabold text-white uppercase tracking-tight">
+                Seçilen Dersler
+              </h3>
             </div>
 
             <div className="overflow-x-auto">
@@ -266,14 +270,14 @@ export default function CourseCatalogPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/30">
                     <TableHead className="w-28">Ders Kodu</TableHead>
-                    <TableHead>Ders Adi</TableHead>
+                    <TableHead>Ders Adı</TableHead>
                     <TableHead className="text-center w-14">Z/S</TableHead>
                     <TableHead className="text-center w-16">T+U</TableHead>
                     <TableHead className="text-center w-16">AKTS</TableHead>
                     <TableHead className="text-center w-14 hidden md:table-cell">Snf</TableHead>
-                    <TableHead className="w-24 hidden sm:table-cell">Alis</TableHead>
+                    <TableHead className="w-24 hidden sm:table-cell">Alış</TableHead>
                     <TableHead className="text-center w-24">Durum</TableHead>
-                    <TableHead className="text-right w-16">Islem</TableHead>
+                    <TableHead className="text-right w-16">İşlem</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -353,12 +357,12 @@ export default function CourseCatalogPage() {
                   {submitRegistration.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Gonderiliyor...
+                      Gönderiliyor...
                     </>
                   ) : (
                     <>
                       <Send className="h-4 w-4" />
-                      Kaydi Kesinlestir
+                      Kaydı Kesinleştir
                     </>
                   )}
                 </Button>
@@ -369,15 +373,17 @@ export default function CourseCatalogPage() {
       )}
 
       {/* Course Catalog Filters */}
-      <Card>
+      <Card className="border border-[#003366]/20 shadow-md overflow-hidden">
         <CardContent className="p-0">
-          <div className="bg-primary/5 px-5 py-2.5 border-b border-border">
-            <h3 className="font-heading text-sm font-semibold text-primary">Acik Dersler</h3>
+          <div className="bg-[#003366] px-5 py-2.5">
+            <h3 className="font-heading text-sm font-extrabold text-white uppercase tracking-tight">
+              Açık Dersler
+            </h3>
           </div>
           <div className="px-5 py-3 flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-1.5">
               <FilterButton active={viewFilter === 'all'} onClick={() => setViewFilter('all')}>
-                Tumu ({statusCounts.total})
+                Tümü ({statusCounts.total})
               </FilterButton>
               {statusCounts.alttan > 0 && (
                 <FilterButton active={viewFilter === 'alttan'} onClick={() => setViewFilter('alttan')} variant="destructive">
@@ -385,10 +391,10 @@ export default function CourseCatalogPage() {
                 </FilterButton>
               )}
               <FilterButton active={viewFilter === 'new'} onClick={() => setViewFilter('new')}>
-                Alinmamis ({statusCounts.new_})
+                Alınmamış ({statusCounts.new_})
               </FilterButton>
               <FilterButton active={viewFilter === 'taken'} onClick={() => setViewFilter('taken')}>
-                Onceden Alinan ({statusCounts.taken})
+                Önceden Alınan ({statusCounts.taken})
               </FilterButton>
             </div>
 
@@ -401,7 +407,7 @@ export default function CourseCatalogPage() {
                 className="h-7 text-xs rounded-lg border border-border bg-background px-2 outline-none focus:ring-1 focus:ring-primary"
               >
                 {[1, 2, 3, 4].map(y => (
-                  <option key={y} value={y}>{y}. Sinif</option>
+                  <option key={y} value={y}>{y}. Sınıf</option>
                 ))}
               </select>
             </div>
@@ -409,11 +415,11 @@ export default function CourseCatalogPage() {
             <div className="flex items-center gap-1.5">
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="radio" name="termType" value="all" checked={termTypeFilter === 'all'} onChange={() => setTermTypeFilter('all')} className="accent-primary w-3 h-3" />
-                <span className="text-xs text-muted-foreground">Tumu</span>
+                <span className="text-xs text-muted-foreground">Tümü</span>
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="radio" name="termType" value="guz" checked={termTypeFilter === 'guz'} onChange={() => setTermTypeFilter('guz')} className="accent-primary w-3 h-3" />
-                <span className="text-xs text-muted-foreground">Guz</span>
+                <span className="text-xs text-muted-foreground">Güz</span>
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="radio" name="termType" value="bahar" checked={termTypeFilter === 'bahar'} onChange={() => setTermTypeFilter('bahar')} className="accent-primary w-3 h-3" />
@@ -444,11 +450,11 @@ export default function CourseCatalogPage() {
       ) : (
         <div className="text-center py-16">
           <BookX className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-          <h3 className="font-heading text-lg font-semibold text-foreground">Ders bulunamadi</h3>
+          <h3 className="font-heading text-lg font-semibold text-foreground">Ders bulunamadı</h3>
           <p className="text-muted-foreground mt-1">
             {viewFilter !== 'all' || termTypeFilter !== 'all'
-              ? 'Secilen filtrelere uygun ders bulunmamaktadir.'
-              : 'Bu donem icin acik ders bulunmamaktadir.'}
+              ? 'Seçilen filtrelere uygun ders bulunmamaktadır.'
+              : 'Bu dönem için açık ders bulunmamaktadır.'}
           </p>
         </div>
       )}
