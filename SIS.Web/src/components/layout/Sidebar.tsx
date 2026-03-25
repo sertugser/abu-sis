@@ -13,8 +13,6 @@ import logo from '/logo.png';
 import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
 
-// Moved to SidebarMenuGroups.ts
-
 function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
   if (roles.includes('Instructor') || roles.includes('AcademicAdvisor') || roles.includes('DepartmentManager')) {
     return buildInstructorMenuGroups(
@@ -60,7 +58,6 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '??';
 
-  // Collapsed = text invisible, layout unchanged
   const textCls = cn('transition-opacity', DURATION, isCollapsed ? 'opacity-0' : 'opacity-100');
 
   return (
@@ -71,7 +68,6 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
         transition: `width 200ms cubic-bezier(0.25, 0.1, 0.25, 1)`,
       }}
     >
-      {/* ── Header — outside inner wrapper so it respects aside width ── */}
       <div className="shrink-0 h-20 flex items-center border-b border-border/70">
         {isCollapsed ? (
           <button
@@ -91,7 +87,17 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           </button>
         ) : (
           <div className="flex h-full w-full items-center justify-between px-5">
-            <img src={logo} alt="Logo" className="h-10 w-10 shrink-0 object-contain" />
+            <div className="flex items-center gap-3 overflow-hidden">
+              <img src={logo} alt="Logo" className="h-10 w-10 shrink-0 object-contain" />
+              <div className="flex flex-col transition-all duration-300">
+                <span className="text-[#003366] font-bold leading-none text-[13px] whitespace-nowrap">
+                  ANKARA BİLİM
+                </span>
+                <span className="text-[#003366] font-medium text-[10px] whitespace-nowrap">
+                  ÜNİVERSİTESİ
+                </span>
+              </div>
+            </div>
 
             <button
               type="button"
@@ -105,12 +111,10 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
         )}
       </div>
 
-      {/* Inner wrapper — always 260px, aside clips overflow */}
       <div
         className="flex flex-col flex-1 min-h-0"
         style={{ width: EXPANDED_W, minWidth: EXPANDED_W }}
       >
-        {/* Role label */}
         <div className={cn(
           'shrink-0 overflow-hidden transition-all', DURATION,
           isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-10 px-5 pt-3 pb-1 opacity-100'
@@ -120,7 +124,6 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           </p>
         </div>
 
-        {/* ── Nav ── */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-3">
           <nav className="py-2 space-y-0.5">
             {menuGroups.map(group => {
@@ -185,7 +188,6 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           </nav>
         </div>
 
-        {/* ── Bottom user ── */}
         <div className="shrink-0 mt-auto border-t bg-muted/30 p-4 whitespace-nowrap">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#003366] text-white text-xs font-bold shadow-sm">

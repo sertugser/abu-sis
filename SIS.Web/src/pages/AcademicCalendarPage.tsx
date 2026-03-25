@@ -72,128 +72,138 @@ export default function AcademicCalendarPage() {
 
   return (
     <div className="space-y-6">
-      {/* Highlight block — active + next upcoming */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-primary" />
-              <h2 className="font-heading text-base font-bold text-foreground">Yaklaşan Etkinlikler</h2>
+
+      <Card className="border border-[#003366] shadow-md overflow-hidden bg-card">
+        <CardContent className="p-0">
+          <div className="flex items-center justify-between px-5 py-3 bg-[#003366]">
+            <div className="flex items-center gap-2.5">
+              <CalendarDays className="h-5 w-5 text-white/90" />
+              <h2 className="font-heading text-base font-extrabold tracking-tight text-white uppercase leading-none">
+                Yaklaşan Etkinlikler
+              </h2>
             </div>
             <a
               href={ACADEMIC_CALENDAR_SOURCE_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-muted shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/10 hover:border-white/30 shrink-0"
             >
               Resmi kaynak
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
-          </div>
+          </div> 
 
-          {highlightEvents.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Yaklaşan etkinlik bulunmuyor.
-            </p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {highlightEvents.map(({ event, status }) => {
-                const days = getDaysUntil(event);
-                const isActive = status === 'active';
+          <div className="p-5">
+            {highlightEvents.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Yaklaşan etkinlik bulunmuyor.
+              </p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {highlightEvents.map(({ event, status }) => {
+                  const days = getDaysUntil(event);
+                  const isActive = status === 'active';
 
-                return (
-                  <div
-                    key={event.id}
-                    className={cn(
-                      'flex items-start gap-4 rounded-xl border p-4 transition-colors',
-                      isActive
-                        ? 'border-success/30 bg-success/5'
-                        : 'border-info/30 bg-info/5'
-                    )}
-                  >
-                    <div className={cn(
-                      'flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[56px] text-center shrink-0',
-                      isActive ? 'bg-success text-white' : 'bg-info text-white'
-                    )}>
-                      {isActive ? (
-                        <>
-                          <span className="text-[10px] font-semibold uppercase leading-none">Şu an</span>
-                          <span className="text-lg font-bold leading-tight mt-0.5">aktif</span>
-                        </>
-                      ) : days !== null ? (
-                        <>
-                          <span className="text-lg font-bold leading-tight">{days}</span>
-                          <span className="text-[10px] font-semibold uppercase leading-none mt-0.5">gün</span>
-                        </>
-                      ) : (
-                        <span className="text-xs font-semibold">—</span>
+                  return (
+                    <div
+                      key={event.id}
+                      className={cn(
+                        'flex items-start gap-4 rounded-xl border p-4 transition-all duration-200 hover:shadow-sm',
+                        isActive
+                          ? 'border-success/30 bg-success/5'
+                          : 'border-[#003366]/30 bg-card'
                       )}
+                    >
+                      <div className={cn(
+                        'flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[56px] text-center shrink-0 border shadow-inner',
+                        isActive 
+                          ? 'bg-success text-white border-success' 
+                          : 'bg-sky-50 text-[#003366] border-[#003366]/40' // ANKARA BİLİM AÇIK MAVİSİ VE LACİVERT YAZI
+                      )}>
+                        {isActive ? (
+                          <>
+                            <span className="text-[10px] font-semibold uppercase leading-none">Şu an</span>
+                            <span className="text-lg font-bold leading-tight mt-0.5">aktif</span>
+                          </>
+                        ) : days !== null ? (
+                          <>
+                            <span className="text-lg font-bold leading-tight">{days}</span>
+                            <span className="text-[10px] font-semibold uppercase leading-none mt-0.5">gün</span>
+                          </>
+                        ) : (
+                          <span className="text-xs font-semibold">—</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-foreground leading-snug">{event.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {event.startLabel} — {event.endLabel}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm text-foreground leading-snug">{event.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {event.startLabel} — {event.endLabel}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Full table */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <CardTitle>{ACTIVE_TERM_LABEL} Dönemi</CardTitle>
-              <CardDescription>
-                Tüm takvim kalemleri resmi ilan sırasına göre listelenmiştir.
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterBadge
-                label="Devam eden"
-                variant="success"
-                isActive={activeFilter === 'active'}
-                count={eventsWithStatus.filter(e => e.status === 'active').length}
-                onClick={() => toggleFilter('active')}
-              />
-              <FilterBadge
-                label="Yaklaşan"
-                variant="info"
-                isActive={activeFilter === 'upcoming'}
-                count={eventsWithStatus.filter(e => e.status === 'upcoming').length}
-                onClick={() => toggleFilter('upcoming')}
-              />
-              <FilterBadge
-                label="Tamamlandı"
-                variant="secondary"
-                isActive={activeFilter === 'completed'}
-                count={eventsWithStatus.filter(e => e.status === 'completed').length}
-                onClick={() => toggleFilter('completed')}
-              />
-              <FilterBadge
-                label="Tarih bekleniyor"
-                variant="outline"
-                isActive={activeFilter === 'pending'}
-                count={eventsWithStatus.filter(e => e.status === 'pending').length}
-                onClick={() => toggleFilter('pending')}
-              />
-            </div>
+     
+      <Card className="border border-[#003366] shadow-md overflow-hidden bg-card">
+        
+        <div className="px-5 py-3 bg-[#003366] flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-white/10">
+          <div>
+            <h3 className="font-heading text-base font-extrabold text-white uppercase tracking-tight">
+              {ACTIVE_TERM_LABEL} Dönemi
+            </h3>
+            <p className="text-[11px] text-white/70 font-medium">
+              Tüm takvim kalemleri resmi ilan sırasına göre listelenmiştir.
+            </p>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-hidden rounded-xl border">
+          
+         
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterBadge
+              label="Devam eden"
+              variant="success"
+              isActive={activeFilter === 'active'}
+              count={eventsWithStatus.filter(e => e.status === 'active').length}
+              onClick={() => toggleFilter('active')}
+            />
+            <FilterBadge
+              label="Yaklaşan"
+              variant="info"
+              isActive={activeFilter === 'upcoming'}
+              count={eventsWithStatus.filter(e => e.status === 'upcoming').length}
+              onClick={() => toggleFilter('upcoming')}
+            />
+            <FilterBadge
+              label="Tamamlandı"
+              variant="secondary"
+              isActive={activeFilter === 'completed'}
+              count={eventsWithStatus.filter(e => e.status === 'completed').length}
+              onClick={() => toggleFilter('completed')}
+            />
+            <FilterBadge
+              label="Tarih bekleniyor"
+              variant="outline"
+              isActive={activeFilter === 'pending'}
+              count={eventsWithStatus.filter(e => e.status === 'pending').length}
+              onClick={() => toggleFilter('pending')}
+            />
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          <div className="overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/60 hover:bg-muted/60">
-                  <TableHead className="w-[48%]">Takvim Adı</TableHead>
-                  <TableHead>Başlangıç Tarihi</TableHead>
-                  <TableHead>Bitiş Tarihi</TableHead>
-                  <TableHead className="w-[140px]">Durum</TableHead>
+                  <TableHead className="w-[48%] font-bold">Takvim Adı</TableHead>
+                  <TableHead className="font-bold">Başlangıç Tarihi</TableHead>
+                  <TableHead className="font-bold">Bitiş Tarihi</TableHead>
+                  <TableHead className="w-[140px] font-bold">Durum</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -241,20 +251,20 @@ export default function AcademicCalendarPage() {
 
 const FILTER_COLORS: Record<string, { active: string; inactive: string }> = {
   success: {
-    active: 'bg-success text-white shadow-sm',
-    inactive: 'bg-success/15 text-success hover:bg-success/25',
+    active: 'bg-emerald-500 text-white shadow-md scale-105', // Aktifken parlasın ve büyüsün
+    inactive: 'bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/40', // Yazıyı beyaza yakın yeşil yaptık
   },
   info: {
-    active: 'bg-info text-white shadow-sm',
-    inactive: 'bg-info/15 text-info hover:bg-info/25',
+    active: 'bg-sky-500 text-white shadow-md scale-105',
+    inactive: 'bg-sky-500/20 text-sky-100 hover:bg-sky-500/40',
   },
   secondary: {
-    active: 'bg-muted-foreground text-white shadow-sm',
-    inactive: 'bg-muted text-muted-foreground hover:bg-muted-foreground/15',
+    active: 'bg-slate-400 text-white shadow-md scale-105',
+    inactive: 'bg-white/10 text-slate-200 hover:bg-white/20',
   },
   outline: {
-    active: 'bg-warning text-warning-foreground shadow-sm',
-    inactive: 'bg-warning/15 text-warning-foreground hover:bg-warning/25',
+    active: 'bg-amber-500 text-white shadow-md scale-105',
+    inactive: 'bg-amber-500/20 text-amber-100 hover:bg-amber-500/40',
   },
 };
 

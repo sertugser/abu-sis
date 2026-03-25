@@ -43,12 +43,14 @@ export default function DashboardPage() {
         </h1>
       </div>
 
-      {/* Row 1 */}
       {/* Row 1 — daily essentials */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
+        
         <StatCard label="GANO" value={student.cgpa.toFixed(2)} sub={`DANO: ${student.sgpa.toFixed(2)} · ECTS Limiti: ${student.ectsLimit}`} accentColor="border-l-blue-600" />
-        <StatCard label="Sınıf / Dönem" value={`${student.classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-indigo-500" />
-        <Card className="border-l-4 border-l-slate-400 hover:-translate-y-0.5 hover:shadow-md transition-all">
+        
+        <StatCard label="Sınıf / Dönem" value={`${student.classYear}. Sınıf`} sub={`${currentSemester}. Dönem`} accentColor="border-l-amber-500" />
+        
+        <Card className="border-l-4 border-l-indigo-500 hover:-translate-y-0.5 hover:shadow-md transition-all">
           <CardContent className="p-5">
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Danışman</p>
@@ -81,7 +83,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-slate-300" mono />
+        <StatCard label="Öğrenci No" value={student.studentNumber} accentColor="border-l-[#003366]" mono />
 
         <StatCard label="Program / Fakülte" value={student.programName} sub={`${student.departmentName} — ${student.facultyName}`} accentColor="border-l-violet-400" valueSize="text-base" />
       </div>
