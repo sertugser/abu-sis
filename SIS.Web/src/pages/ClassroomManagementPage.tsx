@@ -131,7 +131,7 @@ export default function ClassroomManagementPage() {
   const totalClassrooms = dashboard?.totalClassrooms ?? 0;
   const occupancy = dashboard?.occupancyRate ?? 0;
   const conflictsCount = dashboard?.conflictsCount ?? 0;
-  const emptySlots = dashboard?.emptySlots ?? 0;
+  const assignedClassrooms = dashboard?.classrooms?.filter(c => c.schedules.length > 0).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -140,7 +140,7 @@ export default function ClassroomManagementPage() {
         <StatCard label="Toplam Derslik" value={totalClassrooms} note="Sistemdeki tüm derslikler" icon={<Building className="h-6 w-6" />} />
         <StatCard label="Doluluk Oranı" value={`%${occupancy}`} note="Bu dönem genel kullanım" icon={<LayoutDashboard className="h-6 w-6 text-amber-600" />} color="text-amber-600" />
         <StatCard label="Çakışma Sayısı" value={conflictsCount} note={conflictsCount > 0 ? 'Çözüm bekleyen çakışmalar' : 'Çakışma yok'} icon={<AlertCircle className="h-6 w-6 text-red-500" />} color="text-red-500" />
-        <StatCard label="Boş Slot" value={emptySlots} note="Haftalık kullanılabilir aralık" icon={<CheckCircle className="h-6 w-6 text-emerald-600" />} color="text-emerald-600" />
+        <StatCard label="Atanmış Derslik" value={`${assignedClassrooms}/${totalClassrooms}`} note="Ders programı olan derslikler" icon={<CheckCircle className="h-6 w-6 text-emerald-600" />} color="text-emerald-600" />
       </div>
 
       {/* Filtre + Fiziki Derslikler + Heatmap */}
