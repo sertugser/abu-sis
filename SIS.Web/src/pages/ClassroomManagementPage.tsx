@@ -17,6 +17,22 @@ const SEVERITY_MAP = {
 
 const CLASSROOM_TYPES = ['Lecture', 'Lab', 'Computer', 'Seminar'];
 
+const CONFLICT_TYPE_LABELS: Record<string, string> = {
+  ClassroomConflict: 'Derslik Çakışması',
+  InstructorConflict: 'Öğretim Üyesi Çakışması',
+  InstructorAvailabilityConflict: 'Müsaitlik İhlali',
+};
+
+const DAY_LABELS: Record<number, string> = {
+  1: 'Pazartesi',
+  2: 'Salı',
+  3: 'Çarşamba',
+  4: 'Perşembe',
+  5: 'Cuma',
+  6: 'Cumartesi',
+  0: 'Pazar',
+};
+
 export default function ClassroomManagementPage() {
   const { data: activeTerm } = useActiveTerm();
   const { data: dashboard, isLoading: isDashboardLoading } = useClassroomDashboard(activeTerm?.id);
@@ -261,11 +277,11 @@ export default function ClassroomManagementPage() {
                       <Badge variant={sevInfo.badge} className="text-[10px]">
                         {sevInfo.label}
                       </Badge>
-                      <span className="font-semibold text-sm">{conflict.conflictType}</span>
+                      <span className="font-semibold text-sm">{CONFLICT_TYPE_LABELS[conflict.conflictType] ?? conflict.conflictType}</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {conflict.courseCode} {conflict.courseName}
-                      {conflict.day !== null && ` | Gün: ${conflict.day}`}
+                      {conflict.day !== null && ` | ${DAY_LABELS[conflict.day] ?? `Gün ${conflict.day}`}`}
                     </p>
                     <p className="text-sm mt-0.5">{conflict.message}</p>
                   </div>
