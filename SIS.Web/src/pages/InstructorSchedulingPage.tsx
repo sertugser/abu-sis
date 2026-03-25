@@ -129,9 +129,12 @@ export default function InstructorSchedulingPage() {
     setIsAvailabilityDialogOpen(open);
   };
 
-  const openCreateAvailabilityDialog = () => {
+  const openCreateAvailabilityDialog = (dayOfWeek?: number) => {
     setEditingAvailability(null);
-    setAvailabilityForm(DEFAULT_AVAILABILITY_FORM);
+    setAvailabilityForm({
+      ...DEFAULT_AVAILABILITY_FORM,
+      dayOfWeek: String(dayOfWeek ?? 1),
+    });
     setAvailabilityFormError(null);
     setIsAvailabilityDialogOpen(true);
   };
@@ -396,7 +399,7 @@ function AvailabilityManagerCard({
   errorMessage: string | null;
   mutationErrorMessage: string | null;
   onRetry: () => void;
-  onCreate: () => void;
+  onCreate: (dayOfWeek?: number) => void;
   onEdit: (availability: InstructorAvailability) => void;
   onDeleteRequest: (availability: InstructorAvailability) => void;
 }) {
@@ -405,12 +408,8 @@ function AvailabilityManagerCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-col items-center gap-3 pb-4">
+      <CardHeader className="flex items-center pb-4">
         <CardTitle className="text-lg">Haftalık Müsaitlik</CardTitle>
-        <Button onClick={onCreate} size="sm">
-          <Plus className="h-4 w-4" />
-          Ekle
-        </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         {mutationErrorMessage && (
@@ -533,7 +532,7 @@ function AvailabilityManagerCard({
                         variant="ghost"
                         size="sm"
                         className="w-full h-8 text-xs text-muted-foreground hover:text-primary border border-dashed border-transparent hover:border-primary/30 mt-auto"
-                        onClick={() => onCreate()}
+                        onClick={() => onCreate(dayId)}
                       >
                         <Plus className="h-3 w-3 mr-1" /> Ekle
                       </Button>
