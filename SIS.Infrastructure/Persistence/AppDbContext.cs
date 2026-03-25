@@ -29,6 +29,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
     public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
+    public DbSet<CourseSectionApproval> CourseSectionApprovals => Set<CourseSectionApproval>();
+    public DbSet<SchedulingAuditLog> SchedulingAuditLogs => Set<SchedulingAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -220,6 +222,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
              .WithMany()
              .HasForeignKey(cs => cs.ClassroomId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.Property(cs => cs.RowVersion)
+             .IsRowVersion();
         });
 
         // ── CourseRegistration ───────────────────────────────────
@@ -288,6 +293,38 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
              .WithMany()
              .HasForeignKey(gc => gc.AcademicTermId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── CourseSectionApproval ──────────────────────────────
+        builder.Entity<CourseSectionApproval>(e =>
+        {
+            e.HasIndex(a => new { a.CourseId, a.DepartmentId, a.TermId }).IsUnique();
+
+            e.HasOne(a => a.Course)
+             .WithMany()
+             .HasForeignKey(a => a.CourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(a => a.Department)
+             .WithMany()
+             .HasForeignKey(a => a.DepartmentId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(a => a.Term)
+             .WithMany()
+             .HasForeignKey(a => a.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── SchedulingAuditLog ──────────────────────────────────
+        builder.Entity<SchedulingAuditLog>(entity =>
+        {
+            entity.HasOne(e => e.Section)
+                .WithMany()
+                .HasForeignKey(e => e.SectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.SectionId, e.CreatedAt });
         });
 
         // ── AcademicTerm ───────────────────────────────────────
