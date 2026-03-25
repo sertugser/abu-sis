@@ -188,8 +188,10 @@ export function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup
       icon: GraduationCap,
       children: [
         { to: '/bolum-ogrenci-islemleri', label: 'Öğrenci İşlemleri' },
-        { to: '/donem-kapatma', label: 'Dönem Kapatma İşlemleri' },
+        { to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama Merkezi' },
         { to: '/sinif-listeleri', label: 'Sınıf Listeleri' },
+        { to: ROUTES.MANAGEMENT_CURRICULUM, label: 'Müfredat Görünümü' },
+        { to: '/donem-kapatma', label: 'Dönem Kapatma İşlemleri' },
         { to: '/sube-acma-onayi', label: 'Şube Açma Onayı' },
         { to: ROUTES.MANAGEMENT_BATCH_SCHEDULING, label: 'Toplu Programlama' },
         { to: '/bolum-ders-islemleri', label: 'Bölüm Ders İşlemleri' },

@@ -36,6 +36,7 @@ export const QUERY_KEYS = {
   academicPlanningSummary: (departmentId?: number, termId?: number) => ['academicPlanningSummary', departmentId, termId] as const,
   departmentClassLists: (departmentId?: number, termId?: number) => ['departmentClassLists', departmentId, termId] as const,
   departmentCurriculumOverview: (departmentId?: number) => ['departmentCurriculumOverview', departmentId] as const,
+  departmentAcademicLevels: (departmentId?: number) => ['departmentAcademicLevels', departmentId] as const,
   gradeComponents: (sectionId: number) => ['gradeComponents', sectionId] as const,
   grades: (sectionId: number) => ['grades', sectionId] as const,
   gradingCriteria: (sectionId: number) => ['gradingCriteria', sectionId] as const,
@@ -58,6 +59,29 @@ export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructi
   Dropped: 'destructive',
   Withdrawn: 'outline',
 };
+
+/** Routes that have actual page implementations in App.tsx */
+export const IMPLEMENTED_ROUTES = new Set([
+  '/',
+  '/kullanim-kilavuzu',
+  '/akademik-takvim',
+  '/ders-kayit',
+  '/plan',
+  '/alinan-dersler',
+  '/donem-ortalamalari',
+  '/mufredat-durum',
+  '/on-kayit-anketi',
+  '/derslerim',
+  '/not-girisi',
+  '/program-planlama',
+  '/planlama-merkezi',
+  '/sinif-listeleri',
+  '/mufredat-gorunumu',
+  '/toplu-programlama',
+  '/merkezi-derslik-yonetimi',
+  '/sube-acma-onayi',
+  '/donem-kapatma',
+]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {
   Active: 'Aktif',

@@ -390,13 +390,13 @@ public class AcademicOperationsService : IAcademicOperationsService
     private static string ResolveRoleLabel(IReadOnlyCollection<string> roles)
     {
         if (roles.Contains("SystemAdministrator"))
-            return "Yonetim Merkezi";
+            return "Sistem Yönetimi";
 
         if (roles.Contains("AdministrativeStaff"))
-            return "Akademik Isler";
+            return "Akademik İşler";
 
         if (roles.Contains("DepartmentManager"))
-            return "Bolum Planlama";
+            return "Bölüm Başkanlığı";
 
         return "Akademik Operasyonlar";
     }

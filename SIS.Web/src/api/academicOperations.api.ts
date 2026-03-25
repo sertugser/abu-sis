@@ -3,6 +3,7 @@ import apiClient from './axios';
 import type {
   AcademicOperationsContext,
   AcademicPlanningSummary,
+  BulkAcademicLevelDto,
   DepartmentClassList,
   DepartmentCurriculumOverview,
 } from '../types/academicOperations';
@@ -29,6 +30,25 @@ export async function getDepartmentClassLists(departmentId: number, termId?: num
 export async function getDepartmentCurriculumOverview(departmentId: number): Promise<DepartmentCurriculumOverview> {
   const { data } = await apiClient.get<DepartmentCurriculumOverview>('/academicoperations/curriculum-overview', {
     params: { departmentId },
+  });
+  return data;
+}
+
+export async function getDepartmentAcademicLevels(departmentId: number): Promise<BulkAcademicLevelDto> {
+  const { data } = await apiClient.get<BulkAcademicLevelDto>(`/academicLevel/department/${departmentId}`);
+  return data;
+}
+
+export interface GradeLockReadiness {
+  totalSections: number;
+  missingGradeCount: number;
+  allGradesEntered: boolean;
+  notes: string[];
+}
+
+export async function getGradeLockReadiness(departmentId: number, termId?: number): Promise<GradeLockReadiness> {
+  const { data } = await apiClient.get<GradeLockReadiness>(`/academicprogression/grade-lock-readiness/${departmentId}`, {
+    params: { termId },
   });
   return data;
 }

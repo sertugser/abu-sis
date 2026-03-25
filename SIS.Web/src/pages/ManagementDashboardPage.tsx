@@ -1,167 +1,635 @@
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/lib/constants';
+import { useAuth } from '../context/AuthContext';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
-import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
-import { AlertCircle, BookOpenCheck, CalendarRange, ClipboardList, Network } from 'lucide-react';
+import {
+  useAcademicOperationsContext,
+  useAcademicPlanningSummary,
+  useDepartmentAcademicLevels,
+  useDepartmentClassLists,
+  useGradeLockReadiness,
+} from '../hooks/useAcademicOperations';
+import { getAcademicOperationsErrorMessage, type GradeLockReadiness } from '../api/academicOperations.api';
+import { buildInstructorMenuGroups } from '../components/layout/SidebarMenuGroups';
+import type { DepartmentForecastSummary } from '../types/academicOperations';
+import type { ScheduleValidationResult } from '../types/scheduling';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  BookOpenCheck,
+  CalendarRange,
+  Check,
+  CheckCircle2,
+  ClipboardList,
+  GraduationCap,
+  Layers,
+  Network,
+  Pencil,
+  RotateCcw,
+  TrendingUp,
+  Users,
+  XCircle,
+} from 'lucide-react';
 
-const QUICK_LINKS = [
-  {
-    title: 'Planlama Merkezi',
-    description: 'Tahminleme, şube ihtiyacı ve mevcut term schedule doğrulamasını birlikte görüntüleyin.',
-    to: ROUTES.MANAGEMENT_PLANNING,
-    icon: Network,
-  },
-  {
-    title: 'Sınıf Listeleri',
-    description: 'Bölümde açılan sectionları ve kayıtlı öğrencileri ders bazında inceleyin.',
-    to: ROUTES.MANAGEMENT_CLASS_LISTS,
-    icon: ClipboardList,
-  },
-  {
-    title: 'Müfredat Görünümü',
-    description: 'Program bazında aktif müfredat yapısını, semester dağılımını ve kredi yükünü gösterin.',
-    to: ROUTES.MANAGEMENT_CURRICULUM,
-    icon: BookOpenCheck,
-  },
-] as const;
+/* ─────────────────────────── Main Page ─────────────────────────── */
 
 export default function ManagementDashboardPage() {
+  const { user } = useAuth();
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
 
-  if (contextQuery.isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-72" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map(index => <Skeleton key={index} className="h-28 rounded-xl" />)}
-        </div>
-        <Skeleton className="h-72 rounded-xl" />
-      </div>
-    );
-  }
+  const context = contextQuery.data ?? null;
+  const departmentId = context?.defaultDepartmentId ?? null;
+  const termId = activeTerm?.id;
 
-  if (contextQuery.isError || !contextQuery.data) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Yonetim gorunumu acilamadi</AlertTitle>
-        <AlertDescription>
-          {getAcademicOperationsErrorMessage(contextQuery.error, 'Akademik operasyon verileri yuklenemedi.')}
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  const planningQuery = useAcademicPlanningSummary(departmentId, termId, !!departmentId && !!termId);
+  const classListQuery = useDepartmentClassLists(departmentId, termId, !!departmentId && !!termId);
+  const gradeQuery = useGradeLockReadiness(departmentId, termId, !!departmentId && !!termId);
+  const levelsQuery = useDepartmentAcademicLevels(departmentId, !!departmentId);
 
-  const context = contextQuery.data;
+  const forecast = context ? (planningQuery.data?.forecastSummary ?? null) : null;
+  const validation = context ? planningQuery.data?.scheduleValidation : undefined;
+  const classList = context ? classListQuery.data : undefined;
+  const gradeLock = context ? gradeQuery.data : undefined;
+
+  const activeDept = context?.accessibleDepartments.find(d => d.departmentId === departmentId);
+  const departmentName = activeDept?.departmentName ?? '';
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-heading text-2xl font-extrabold text-foreground tracking-tight">
-          {context.roleLabel}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Planlama, sinif listeleri ve mufredat gorunumleri tek akista demo yapilabilecek sekilde hazir.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard
-          title="Erisilebilir Bolum"
-          value={String(context.accessibleDepartments.length)}
-          description={context.canViewAllDepartments ? 'Tum bolumler goruntulenebilir' : 'Rol kapsaminda sinirli erisim'}
-        />
-        <StatCard
-          title="Aktif Donem"
-          value={activeTerm?.name ?? 'Tanimsiz'}
-          description={activeTerm ? 'Planlama ozetleri bu doneme gore hesaplanir' : 'Aktif term kaydi bulunamadi'}
-        />
-        <StatCard
-          title="Rol Kapsami"
-          value={context.canViewAllDepartments ? 'Merkezi' : 'Bolum Bazli'}
-          description={context.roleLabel}
-        />
-      </div>
-
-      {context.notes.length > 0 && (
-        <Alert>
-          <CalendarRange className="h-4 w-4" />
-          <AlertTitle>Sistem notlari</AlertTitle>
-          <AlertDescription className="space-y-1">
-            {context.notes.map(note => (
-              <p key={note}>{note}</p>
+    <div className="space-y-6">
+      {/* ── Hero Banner — renders immediately from JWT ── */}
+      <div className="bg-gradient-to-r from-primary via-primary-light to-accent rounded-2xl overflow-hidden px-6 py-5 sm:px-8 sm:py-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="font-heading text-xl font-bold text-white">
+              Hoş geldiniz, {user?.name ?? ''}
+            </h1>
+            <p className="text-sm text-white/80">
+              {context?.roleLabel ?? ''}
+              {departmentName ? ` · ${departmentName}` : ''}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {activeTerm != null && (
+              <span className="bg-white/15 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm text-white font-medium">
+                {activeTerm.name}
+              </span>
+            )}
+          </div>
+        </div>
+        {context != null && context.accessibleDepartments.length > 1 && (
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {context.accessibleDepartments.map(dept => (
+              <span
+                key={dept.departmentId}
+                className={`rounded-md px-2.5 py-1 text-xs text-white font-medium ${
+                  dept.departmentId === departmentId ? 'bg-white/25' : 'bg-white/10'
+                }`}
+              >
+                {dept.departmentCode}
+              </span>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Context loading / error / no-department states ── */}
+      {contextQuery.isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5].map(i => (
+            <Skeleton key={i} className="h-40 rounded-xl" />
+          ))}
+        </div>
+      ) : contextQuery.isError || !context ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Yönetim görünümü açılamadı</AlertTitle>
+          <AlertDescription>
+            {getAcademicOperationsErrorMessage(contextQuery.error, 'Veriler yüklenemedi.')}
           </AlertDescription>
         </Alert>
+      ) : departmentId === null ? (
+        <Alert variant="warning">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Bölüm atamanız bulunamadı</AlertTitle>
+          <AlertDescription>
+            Lütfen sistem yöneticisi ile iletişime geçin.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <div className="space-y-6">
+          {/* ── Status Cards — problems first ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
+            <CapacityStatusCard
+              forecast={forecast}
+              isLoading={planningQuery.isLoading}
+              isError={planningQuery.isError}
+            />
+            <ScheduleHealthCard
+              validation={validation}
+              isLoading={planningQuery.isLoading}
+              isError={planningQuery.isError}
+            />
+            <GradeEntryCard
+              gradeLock={gradeLock}
+              isLoading={gradeQuery.isLoading}
+              isError={gradeQuery.isError}
+            />
+          </div>
+
+          {/* ── Overview Stats ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <CompactStatCard
+              icon={Users}
+              iconBg="bg-primary/8 text-primary"
+              value={
+                classListQuery.isLoading || levelsQuery.isLoading
+                  ? undefined
+                  : `${classList?.totalStudents ?? 0} / ${levelsQuery.data?.totalStudents ?? 0}`
+              }
+              label="Derse Kayıtlı / Toplam Öğrenci"
+              isError={classListQuery.isError && levelsQuery.isError}
+            />
+            <CompactStatCard
+              icon={Layers}
+              iconBg="bg-accent/10 text-accent"
+              value={classListQuery.isLoading ? undefined : (classList?.totalSections ?? 0)}
+              label="Aktif Şube"
+              isError={classListQuery.isError}
+            />
+          </div>
+
+          {/* ── Quick Access ── */}
+          <QuickAccessSection />
+        </div>
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Hizli Erisim</CardTitle>
-          <CardDescription>En kritik demo ekranlari tek tikla hazir.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          {QUICK_LINKS.map(link => {
-            const Icon = link.icon;
-
-            return (
-              <Card key={link.to} className="border border-border/70 shadow-none">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground">{link.title}</h3>
-                      <p className="text-sm text-muted-foreground">{link.description}</p>
-                    </div>
-                  </div>
-                  <Button asChild className="w-full">
-                    <Link to={link.to}>Ekrani Ac</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Erisilebilir Bolumler</CardTitle>
-          <CardDescription>Operasyon sayfalarinda kullanabileceginiz kapsam.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {context.accessibleDepartments.length > 0 ? (
-            context.accessibleDepartments.map(department => (
-              <Badge key={department.departmentId} variant="outline" className="py-1.5 px-3">
-                {department.departmentCode} - {department.departmentName}
-              </Badge>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">Bu rol icin erisilebilir bolum bulunamadi.</p>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
-function StatCard({ title, value, description }: { title: string; value: string; description: string }) {
+/* ────────────────── Capacity Status Card ────────────────── */
+
+function CapacityStatusCard({
+  forecast,
+  isLoading,
+  isError,
+}: {
+  forecast: DepartmentForecastSummary | null;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  const delta = forecast?.capacitySummary?.sectionDelta ?? 0;
+  const isBalanced = delta === 0;
+  const isDeficient = delta > 0;
+  const coursesNeedingMore = forecast?.capacitySummary?.coursesNeedingMoreSections ?? 0;
+
+  const borderColor = !forecast
+    ? 'border-l-border'
+    : isDeficient
+      ? 'border-l-[var(--color-destructive)]'
+      : isBalanced
+        ? 'border-l-[var(--color-success)]'
+        : 'border-l-[var(--color-warning)]';
+
   return (
-    <Card className="border-l-4 border-l-primary">
-      <CardContent className="p-5">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</p>
-        <p className="mt-2 text-2xl font-heading font-bold text-foreground">{value}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+    <Card className={`border-l-4 ${borderColor}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <TrendingUp className="h-4.5 w-4.5 text-primary" />
+          Kapasite Durumu
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : isError ? (
+          <p className="text-sm text-muted-foreground">Veri yüklenemedi</p>
+        ) : !forecast ? (
+          <p className="text-sm text-muted-foreground">Tahmin verisi henüz oluşturulmadı</p>
+        ) : isBalanced ? (
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-success" />
+            <p className="text-sm font-medium text-success">Kapasite dengeli</p>
+          </div>
+        ) : isDeficient ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-destructive" />
+              <div>
+                <p className="font-heading text-2xl font-bold text-destructive">{delta}</p>
+                <p className="text-sm text-muted-foreground">şube eksik</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {coursesNeedingMore} ders ek şube bekliyor
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-warning" />
+            <div>
+              <p className="font-heading text-2xl font-bold text-warning">{Math.abs(delta)}</p>
+              <p className="text-sm text-muted-foreground">fazla kapasite</p>
+            </div>
+          </div>
+        )}
+
+        {forecast && (
+          <Link
+            to={ROUTES.MANAGEMENT_PLANNING}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          >
+            Planlama Merkezi <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+/* ────────────────── Compact Stat Card ────────────────── */
+
+function CompactStatCard({
+  icon: Icon,
+  iconBg,
+  value,
+  label,
+  isError,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  iconBg: string;
+  value: number | string | undefined;
+  label: string;
+  isError?: boolean;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center gap-3">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconBg}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            {isError ? (
+              <p className="text-sm text-muted-foreground">Veri yüklenemedi</p>
+            ) : value === undefined ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <p className="font-heading text-3xl font-bold text-foreground">{value}</p>
+            )}
+            <p className="text-sm text-muted-foreground">{label}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ────────────────── Schedule Health Card ────────────────── */
+
+function ScheduleHealthCard({
+  validation,
+  isLoading,
+  isError,
+}: {
+  validation: ScheduleValidationResult | undefined;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  const conflictCount = validation?.conflicts?.length ?? 0;
+  const hasConflicts = conflictCount > 0;
+  const borderColor = hasConflicts
+    ? 'border-l-[var(--color-destructive)]'
+    : 'border-l-[var(--color-success)]';
+
+  return (
+    <Card className={`border-l-4 ${borderColor}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <CalendarRange className="h-4.5 w-4.5 text-primary" />
+          Program Sağlığı
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : isError ? (
+          <p className="text-sm text-muted-foreground">Veri yüklenemedi</p>
+        ) : !hasConflicts ? (
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-success" />
+            <p className="text-sm font-medium text-success">Çakışma tespit edilmedi</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-destructive" />
+              <div>
+                <p className="font-heading text-2xl font-bold text-destructive">{conflictCount}</p>
+                <p className="text-sm text-muted-foreground">çakışma</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              {validation?.conflicts.slice(0, 2).map((c, i) => (
+                <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                  {c.message}
+                </p>
+              ))}
+              {conflictCount > 2 && (
+                <Link
+                  to={ROUTES.MANAGEMENT_BATCH_SCHEDULING}
+                  className="text-xs text-primary hover:underline"
+                >
+                  ve {conflictCount - 2} daha...
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+
+        <Link
+          to={ROUTES.MANAGEMENT_BATCH_SCHEDULING}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        >
+          Toplu Programlama <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ────────────────── Grade Entry Card ────────────────── */
+
+function GradeEntryCard({
+  gradeLock,
+  isLoading,
+  isError,
+}: {
+  gradeLock: GradeLockReadiness | undefined;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  const allGradesEntered = gradeLock?.allGradesEntered ?? false;
+  const missingGradeCount = gradeLock?.missingGradeCount ?? 0;
+  const totalSections = gradeLock?.totalSections ?? 0;
+
+  const hasData = gradeLock != null;
+  const borderColor = allGradesEntered
+    ? 'border-l-[var(--color-success)]'
+    : 'border-l-[var(--color-destructive)]';
+
+  return (
+    <Card className={`border-l-4 ${borderColor}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <GraduationCap className="h-4.5 w-4.5 text-primary" />
+          Not Girişi
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : isError || !hasData ? (
+          <p className="text-sm text-muted-foreground">Veri yüklenemedi</p>
+        ) : allGradesEntered ? (
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-success" />
+            <p className="text-sm font-medium text-success">Tüm notlar girilmiş</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-destructive" />
+              <div>
+                <p className="font-heading text-2xl font-bold text-destructive">{missingGradeCount}</p>
+                <p className="text-sm text-muted-foreground">eksik not kaydı</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalSections} şube analiz edildi
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ────────────────── Quick Access Section ────────────────── */
+
+const QUICK_LINKS_STORAGE_KEY = 'sis-dashboard-quick-links';
+
+const DEFAULT_QUICK_LINKS = [
+  ROUTES.MANAGEMENT_PLANNING,
+  ROUTES.MANAGEMENT_CLASS_LISTS,
+  ROUTES.MANAGEMENT_CURRICULUM,
+  ROUTES.MANAGEMENT_BATCH_SCHEDULING,
+  ROUTES.TERM_CLOSING,
+];
+
+/** Icon overrides for well-known routes */
+const ROUTE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  [ROUTES.MANAGEMENT_PLANNING]: Network,
+  [ROUTES.MANAGEMENT_CLASS_LISTS]: ClipboardList,
+  [ROUTES.MANAGEMENT_CURRICULUM]: BookOpenCheck,
+  [ROUTES.MANAGEMENT_BATCH_SCHEDULING]: CalendarRange,
+  [ROUTES.TERM_CLOSING]: GraduationCap,
+  [ROUTES.SECTION_APPROVAL]: CheckCircle2,
+  [ROUTES.INSTRUCTOR_SECTIONS]: Layers,
+};
+
+interface QuickLinkOption {
+  to: string;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  group: string;
+}
+
+function buildAllLinkOptions(): QuickLinkOption[] {
+  const groups = buildInstructorMenuGroups(true);
+  return groups.flatMap(g =>
+    g.children
+      .filter(c => c.to !== ROUTES.DASHBOARD) // exclude "Ana Sayfa"
+      .map(c => ({
+        to: c.to,
+        title: c.label,
+        icon: ROUTE_ICONS[c.to] ?? (g.icon as React.ComponentType<{ className?: string }>),
+        group: g.label,
+      })),
+  );
+}
+
+function getStoredQuickLinks(): string[] {
+  try {
+    const stored = localStorage.getItem(QUICK_LINKS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as unknown;
+      if (Array.isArray(parsed) && parsed.every(x => typeof x === 'string')) return parsed;
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_QUICK_LINKS;
+}
+
+function QuickAccessSection() {
+  const [selectedRoutes, setSelectedRoutes] = useState(getStoredQuickLinks);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>([]);
+
+  const allOptions = buildAllLinkOptions();
+
+  const openEditor = useCallback(() => {
+    setDraft([...selectedRoutes]);
+    setDialogOpen(true);
+  }, [selectedRoutes]);
+
+  const toggleRoute = useCallback((route: string) => {
+    setDraft(prev =>
+      prev.includes(route) ? prev.filter(r => r !== route) : [...prev, route],
+    );
+  }, []);
+
+  const saveChanges = useCallback(() => {
+    localStorage.setItem(QUICK_LINKS_STORAGE_KEY, JSON.stringify(draft));
+    setSelectedRoutes(draft);
+    setDialogOpen(false);
+  }, [draft]);
+
+  const resetDefaults = useCallback(() => {
+    setDraft([...DEFAULT_QUICK_LINKS]);
+  }, []);
+
+  // Build displayed links from selected routes, preserving order
+  const displayedLinks = selectedRoutes
+    .map(route => allOptions.find(o => o.to === route))
+    .filter((o): o is QuickLinkOption => o != null);
+
+  // Group options by category for the editor dialog
+  const groupedOptions = allOptions.reduce<Record<string, QuickLinkOption[]>>((acc, opt) => {
+    (acc[opt.group] ??= []).push(opt);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-muted-foreground">Hızlı Erişim</p>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs text-muted-foreground" onClick={openEditor}>
+              <Pencil className="h-3.5 w-3.5" />
+              Düzenle
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Hızlı Erişimi Düzenle</DialogTitle>
+              <DialogDescription>
+                Ana sayfada görmek istediğiniz kısayolları seçin.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {Object.entries(groupedOptions).map(([group, options]) => (
+                <div key={group}>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    {group}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {options.map(opt => {
+                      const isSelected = draft.includes(opt.to);
+                      return (
+                        <button
+                          key={opt.to}
+                          type="button"
+                          onClick={() => toggleRoute(opt.to)}
+                          className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-primary/10 text-primary font-medium'
+                              : 'hover:bg-muted/50 text-foreground'
+                          }`}
+                        >
+                          <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
+                            isSelected
+                              ? 'bg-primary border-primary text-white'
+                              : 'border-border'
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3" />}
+                          </div>
+                          {opt.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t">
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={resetDefaults}>
+                <RotateCcw className="h-3.5 w-3.5" />
+                Varsayılana Dön
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
+                  İptal
+                </Button>
+                <Button size="sm" onClick={saveChanges}>
+                  Kaydet ({draft.length})
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {displayedLinks.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">
+          Henüz kısayol eklenmedi. <button type="button" onClick={openEditor} className="text-primary hover:underline cursor-pointer">Düzenle</button> butonuyla ekleyebilirsiniz.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          {displayedLinks.map(link => (
+            <QuickLinkCard key={link.to} icon={link.icon} title={link.title} to={link.to} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuickLinkCard({
+  icon: Icon,
+  title,
+  to,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  to: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="flex flex-1 min-w-[180px] items-center gap-3 rounded-xl border border-border/70 p-4 transition-colors hover:bg-muted/50 hover:border-primary/30 group"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary group-hover:bg-primary/15 transition-colors">
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="font-semibold text-foreground text-sm">{title}</p>
+      <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </Link>
   );
 }
