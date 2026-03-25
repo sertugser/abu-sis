@@ -207,7 +207,7 @@ public class SchedulingServiceTests : IDisposable
         var result = await _service.SuggestAsync(new ScheduleSuggestionRequestDto { SectionId = 2 });
 
         result.IsFeasible.Should().BeFalse();
-        result.Notes.Should().Contain(note => note.Contains("Conflict olmayan", StringComparison.OrdinalIgnoreCase));
+        result.Notes.Should().Contain(note => note.Contains("Çakışma olmayan", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
