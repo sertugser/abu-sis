@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  AlertCircle, AlertTriangle, Building2, Calendar, Check, CheckCircle2,
-  ChevronDown, Minus, Plus, RefreshCcw, Search, X, Zap,
+  AlertCircle, AlertTriangle, Check, CheckCircle2,
+  X, Zap,
 } from 'lucide-react';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
@@ -19,7 +19,7 @@ import {
   useFacultyPlanningSections, useUnassignSection,
 } from '../hooks/useFacultyPlanning';
 import type {
-  AutoSchedulePreviewItem, FacultyPlanningSection,
+  FacultyPlanningSection,
 } from '../types/facultyPlanning';
 import type { SchedulingConflict } from '../types/scheduling';
 
@@ -40,7 +40,6 @@ export default function FacultyPlanningPage() {
   // Resolve facultyId from user's department context
   // For now, derive from first accessible department; backend resolves faculty from department
   const departments = contextQuery.data?.accessibleDepartments ?? [];
-  const defaultDeptId = contextQuery.data?.defaultDepartmentId ?? null;
 
   // Faculty ID will come from a faculty-level API or be derived
   // Placeholder: use 1 until faculty selector is built from /api/faculty-planning/overview

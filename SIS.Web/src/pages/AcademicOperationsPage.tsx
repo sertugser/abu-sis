@@ -30,20 +30,6 @@ import { AlertCircle, BookCopy, Check, CheckCircle2, ChevronDown, ChevronLeft, C
 
 type OperationsMode = 'planning' | 'class-lists' | 'curriculum';
 
-const PAGE_META: Record<OperationsMode, { title: string; description: string }> = {
-  planning: {
-    title: 'Planlama Merkezi',
-    description: 'Tahminleme, şube ihtiyacı ve mevcut program doğrulaması aynı ekranda izlenir.',
-  },
-  'class-lists': {
-    title: 'Sınıf Listeleri',
-    description: 'Bölümde açılan şubeler ve öğrenci listeleri ders bazında görüntülenir.',
-  },
-  curriculum: {
-    title: 'Müfredat Görünümü',
-    description: 'Program bazında müfredat yapısı, dönem dağılımı ve kredi yükleri izlenir.',
-  },
-};
 
 const MODE_LINKS: { mode: OperationsMode; to: string; label: string }[] = [
   { mode: 'planning', to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama' },
@@ -64,7 +50,6 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const location = useLocation();
-  const meta = PAGE_META[mode];
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
 
@@ -126,7 +111,6 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
     );
   }
 
-  const context = contextQuery.data;
   const selectedDepartment = departments.find(department => department.departmentId === currentDepartmentId) ?? null;
 
   return (
