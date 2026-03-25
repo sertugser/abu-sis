@@ -42,7 +42,6 @@ export default function ClassroomManagementPage() {
       const cls = dashboard.classrooms.find(c => c.id === selectedClassroom);
       if (!cls) return [];
 
-      // Boş grid oluştur (8-17 arası)
       type GridSlot = {
         day: number;
         hour: number;
@@ -68,32 +67,33 @@ export default function ClassroomManagementPage() {
       return grid;
     }
 
-    // Genel görünüm (tüm sınıflar)
+    // Filtre aktif mi?
     const activeFiltersCount = Object.values(typeFilters).filter(Boolean).length;
     const isAnyFilterActive = activeFiltersCount > 0 && activeFiltersCount < CLASSROOM_TYPES.length;
-    
+
     if (!isAnyFilterActive) return dashboard.heatmap;
 
+    // Seçili tiplerdeki derslik isimlerini bul
+    const filteredClassroomNames = new Set(
+      dashboard.classrooms
+        .filter(c => typeFilters[c.type])
+        .map(c => c.name)
+    );
+    const filteredTotal = filteredClassroomNames.size || 1;
+
     return dashboard.heatmap.map(cell => {
-      // Filtreleme yapıldığında doluluk oranını simüle ediyoruz (aslında backend'den filtrelenmiş gelmesi daha iyi olur ama şu an UI bazlı yapıyoruz)
-      const multiplier = (activeFiltersCount / CLASSROOM_TYPES.length) * (0.5 + ((cell.day + cell.hour) % 3) * 0.25);
-      const newOcc = Math.max(0, cell.occupancy * multiplier);
-      const newUsed = Math.round(newOcc * dashboard.totalClassrooms);
+      const filteredOccupations = (cell.occupations ?? [])
+        .filter(o => filteredClassroomNames.has(o.classroomName));
+      const used = filteredOccupations.length;
       return {
         ...cell,
-        occupancy: newOcc,
-        usedClassrooms: newUsed,
+        occupancy: Math.min(1, used / filteredTotal),
+        usedClassrooms: used,
+        occupations: filteredOccupations,
+        details: `${used}/${filteredTotal} derslik dolu`,
       };
     });
   }, [dashboard, typeFilters, selectedClassroom]);
-
-  const handleSuggestAlternative = (id: number) => {
-    alert(`Çakışma section #${id} için YZ alternatifleri hesaplanıyor...\nUygun derslik ve hoca programı taranıyor.`);
-  };
-
-  const handleEdit = (id: number) => {
-    alert(`Section #${id} manuel düzenleme paneli açılıyor.`);
-  };
 
   if (isDashboardLoading || isConflictsLoading) {
     return (
@@ -270,11 +270,11 @@ export default function ClassroomManagementPage() {
                     <p className="text-sm mt-0.5">{conflict.message}</p>
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => handleSuggestAlternative(conflict.sectionId)}>
+                    <Button size="sm" variant="outline" disabled title="Yakında eklenecek">
                       <Search className="w-4 h-4 mr-1" />
                       Alternatif Öner
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleEdit(conflict.sectionId)}>
+                    <Button size="sm" variant="outline" disabled title="Yakında eklenecek">
                       <Pencil className="w-4 h-4 mr-1" />
                       Düzenle
                     </Button>

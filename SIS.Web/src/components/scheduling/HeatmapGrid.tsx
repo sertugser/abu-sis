@@ -95,47 +95,44 @@ export default function HeatmapGrid({ data, title = 'Dönemsel Doluluk Haritası
                   >
                     {cell?.label || (occ > 0 ? `%${Math.round(occ * 100)}` : '')}
 
-                    {/* Hover tooltip — beyaz popup */}
+                    {/* Hover tooltip */}
                     {isHov && (cell?.details || cell?.occupations?.length) && (
-                      <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                        <div className="bg-white text-gray-800 border border-gray-200 rounded-lg shadow-xl px-4 py-3 text-xs font-medium min-w-[200px]">
+                      <div
+                        className={cn(
+                          'absolute z-50 pointer-events-none',
+                          hour <= 9 ? 'top-full mt-2' : 'bottom-full mb-2',
+                          dayIdx <= 1 ? 'left-0' : dayIdx >= 3 ? 'right-0' : 'left-1/2 -translate-x-1/2',
+                        )}
+                      >
+                        <div className="bg-white text-gray-800 border border-gray-200 rounded-lg shadow-xl px-4 py-3 text-xs font-medium w-[240px]">
                           <div className="font-bold border-b pb-1.5 mb-2 text-primary flex justify-between items-center">
                             <span>{cell?.details?.split(' — ')[0] || 'Ders Programı'}</span>
-                            <span className="text-[10px] text-muted-foreground font-normal ml-4 italic">
+                            <span className="text-[10px] text-muted-foreground font-normal ml-2 italic">
                               {cell?.occupations?.length || 0} Derslik Dolu
                             </span>
                           </div>
-                          
+
                           {cell?.occupations && cell.occupations.length > 0 ? (
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                            <div className="space-y-2 max-h-[200px] overflow-y-auto">
                               {cell.occupations.map((occ, idx) => (
-                                <div key={idx} className="flex flex-col border-b border-gray-50 last:border-0 pb-1.5 last:pb-0">
-                                  <div className="flex justify-between items-start gap-3">
-                                    <span className="font-semibold text-gray-900">{occ.classroomName}</span>
-                                    <div className="flex flex-col items-end">
-                                      <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 rounded-sm font-bold">
-                                        %{Math.round((occ.enrolledCount / (occ.capacity || 1)) * 100)}
-                                      </span>
-                                      <span className="text-[9px] text-muted-foreground">
-                                        {occ.enrolledCount}/{occ.capacity}
-                                      </span>
-                                    </div>
+                                <div key={idx} className="flex flex-col border-b border-gray-100 last:border-0 pb-1.5 last:pb-0">
+                                  <div className="flex justify-between items-center gap-2">
+                                    <span className="font-semibold text-gray-900 truncate">{occ.classroomName}</span>
+                                    <span className="text-[10px] text-muted-foreground shrink-0">
+                                      {occ.enrolledCount}/{occ.capacity}
+                                    </span>
                                   </div>
-                                  <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
-                                    {occ.courseCode} - {occ.courseName}
+                                  <div className="text-[10px] text-muted-foreground truncate">
+                                    {occ.courseCode} — {occ.courseName}
                                   </div>
                                 </div>
                               ))}
                             </div>
                           ) : (
                             <div className="text-muted-foreground italic">
-                              {cell?.details || 'Ders bulunmuyor'}
+                              {cell?.details || 'Boş'}
                             </div>
                           )}
-                        </div>
-                        {/* Arrow */}
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px]">
-                          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white drop-shadow-sm" />
                         </div>
                       </div>
                     )}
