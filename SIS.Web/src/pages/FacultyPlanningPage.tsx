@@ -197,8 +197,8 @@ function SectionListTab({
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const sectionsQuery = useFacultyPlanningSections(facultyId, termId, filterDept, filterStatus, page);
-  const assignMutation = useAssignSection(facultyId, termId ?? 0);
-  const unassignMutation = useUnassignSection(facultyId, termId ?? 0);
+  const assignMutation = useAssignSection();
+  const unassignMutation = useUnassignSection();
 
   if (!termId) return <Card><CardContent className="py-8 text-center text-muted-foreground">Aktif dönem bulunamadı.</CardContent></Card>;
 
@@ -276,7 +276,7 @@ function SectionRow({ section: s, expanded, onToggle, onAssign, onUnassign, isAs
   section: FacultyPlanningSection;
   expanded: boolean;
   onToggle: () => void;
-  onAssign: (classroomId?: number, slots?: any[], instructorId?: number) => void;
+  onAssign: (classroomId?: number, slots?: { day: number; startTime: string; endTime: string }[], instructorId?: number) => void;
   onUnassign: () => void;
   isAssigning: boolean;
 }) {
@@ -350,7 +350,7 @@ function SectionRow({ section: s, expanded, onToggle, onAssign, onUnassign, isAs
 
 function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: number | null }) {
   const previewMutation = useAutoSchedulePreview();
-  const applyMutation = useApplySchedule(facultyId, termId ?? 0);
+  const applyMutation = useApplySchedule();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   if (!termId) return null;
@@ -374,7 +374,7 @@ function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: num
 
   const toggleSelect = (id: number) => setSelectedIds(prev => {
     const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) { next.delete(id); } else { next.add(id); }
     return next;
   });
 

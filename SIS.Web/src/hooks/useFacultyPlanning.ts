@@ -29,7 +29,7 @@ export function useFacultyPlanningSections(
   });
 }
 
-export function useAssignSection(_facultyId: number, _termId: number) {
+export function useAssignSection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: AssignSectionRequest) => assignSection(req),
@@ -39,7 +39,7 @@ export function useAssignSection(_facultyId: number, _termId: number) {
   });
 }
 
-export function useUnassignSection(_facultyId: number, _termId: number) {
+export function useUnassignSection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (sectionId: number) => unassignSection(sectionId),
@@ -55,7 +55,7 @@ export function useAutoSchedulePreview() {
   });
 }
 
-export function useApplySchedule(_facultyId: number, _termId: number) {
+export function useApplySchedule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: ApplyScheduleRequest) => applySchedule(req),
