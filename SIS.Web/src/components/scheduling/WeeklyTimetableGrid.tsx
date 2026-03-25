@@ -62,8 +62,8 @@ export default function WeeklyTimetableGrid({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
+      <CardHeader className="flex items-center">
+        <CardTitle className="text-lg">{title}</CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         {entries.length === 0 && availabilities.length === 0 && (

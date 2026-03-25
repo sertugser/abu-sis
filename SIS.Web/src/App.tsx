@@ -53,7 +53,7 @@ export default function App() {
                     <Route path="derslerim" element={<InstructorSectionsPage />} />
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
-                    <Route path="program-planlama" element={<InstructorSchedulingPage />} />
+                    <Route path="musaitlik-yonetimi" element={<InstructorSchedulingPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>

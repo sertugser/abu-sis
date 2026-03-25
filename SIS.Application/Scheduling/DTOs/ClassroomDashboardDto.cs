@@ -28,4 +28,5 @@ public class ClassroomScheduleSlotDto
     public int EndHour { get; set; }
     public string CourseName { get; set; } = string.Empty;
     public string CourseCode { get; set; } = string.Empty;
+    public string InstructorName { get; set; } = string.Empty;
 }

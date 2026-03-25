@@ -1,5 +1,5 @@
-import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,52 +25,30 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import {
-  AlertCircle,
   AlertTriangle,
-  Building2,
   Calendar,
-  CheckCircle2,
-  Clock3,
   Pencil,
   Plus,
   RefreshCcw,
-  Sparkles,
   Trash2,
-  Users,
 } from 'lucide-react';
 import { getSchedulingErrorMessage } from '../api/instructorScheduling.api';
 import { useInstructorSections } from '../hooks/useInstructorSections';
 import {
-  useApplyInstructorSchedule,
   useCreateInstructorAvailability,
   useDeleteInstructorAvailability,
   useInstructorAvailabilities,
-  useSuggestInstructorSchedule,
   useUpdateInstructorAvailability,
-  useValidateInstructorSchedule,
 } from '../hooks/useInstructorScheduling';
 import WeeklyTimetableGrid, { type TimetableEntry } from '../components/scheduling/WeeklyTimetableGrid';
 import { parseScheduleJson } from '../lib/scheduleUtils';
 import type {
   InstructorAvailability,
-  ScheduleSlot,
-  ScheduleSuggestion,
-  SchedulingConflict,
   UpsertInstructorAvailabilityRequest,
 } from '../types/scheduling';
-
-type PanelKey = 'analysis' | 'suggestion' | 'timetable';
 
 type AvailabilityFormState = {
   dayOfWeek: string;
@@ -98,19 +76,8 @@ const DEFAULT_AVAILABILITY_FORM: AvailabilityFormState = {
   isPreferred: true,
 };
 
-const CONFLICT_META: Record<string, { label: string; variant: 'destructive' | 'warning' | 'outline' }> = {
-  ClassroomConflict: { label: 'Derslik Çakışması', variant: 'destructive' },
-  InstructorConflict: { label: 'Öğretim Üyesi Çakışması', variant: 'destructive' },
-  CapacityConflict: { label: 'Kapasite Sorunu', variant: 'warning' },
-  InstructorAvailabilityConflict: { label: 'Müsaitlik Dışı', variant: 'warning' },
-  WeeklyLoadConflict: { label: 'Haftalık Yük Aşımı', variant: 'warning' },
-  InvalidScheduleJson: { label: 'Program Verisi Sorunu', variant: 'outline' },
-};
-
 export default function InstructorSchedulingPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activePanel, setActivePanel] = useState<PanelKey>('analysis');
   const [isAvailabilityDialogOpen, setIsAvailabilityDialogOpen] = useState(false);
   const [editingAvailability, setEditingAvailability] = useState<InstructorAvailability | null>(null);
   const [availabilityForm, setAvailabilityForm] = useState<AvailabilityFormState>(DEFAULT_AVAILABILITY_FORM);
@@ -126,44 +93,15 @@ export default function InstructorSchedulingPage() {
   } = useInstructorSections();
 
   const availabilityQuery = useInstructorAvailabilities();
-  const validateMutation = useValidateInstructorSchedule();
-  const suggestMutation = useSuggestInstructorSchedule();
-  const applyMutation = useApplyInstructorSchedule();
   const createAvailabilityMutation = useCreateInstructorAvailability();
   const updateAvailabilityMutation = useUpdateInstructorAvailability();
   const deleteAvailabilityMutation = useDeleteInstructorAvailability();
 
-  const selectedSectionId = Number(searchParams.get('sectionId'));
   const sections = sectionsData?.sections ?? [];
-  const selectedSection = sections.find(section => section.sectionId === selectedSectionId) ?? sections[0] ?? null;
   const availabilities = availabilityQuery.data ?? [];
 
-  const resetValidation = validateMutation.reset;
-  const resetSuggestion = suggestMutation.reset;
-  const resetApply = applyMutation.reset;
   const isSavingAvailability = createAvailabilityMutation.isPending || updateAvailabilityMutation.isPending;
   const isDeletingAvailability = deleteAvailabilityMutation.isPending;
-
-  useEffect(() => {
-    if (!selectedSection) {
-      return;
-    }
-
-    const currentSectionParam = searchParams.get('sectionId');
-    if (currentSectionParam === String(selectedSection.sectionId)) {
-      return;
-    }
-
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.set('sectionId', String(selectedSection.sectionId));
-    setSearchParams(nextSearchParams, { replace: true });
-  }, [searchParams, selectedSection, setSearchParams]);
-
-  useEffect(() => {
-    resetValidation();
-    resetSuggestion();
-    resetApply();
-  }, [selectedSection?.sectionId, resetValidation, resetSuggestion, resetApply]);
 
   const sectionsErrorMessage = isError
     ? getSchedulingErrorMessage(error, 'Ders programı bilgileri yüklenemedi.')
@@ -181,64 +119,6 @@ export default function InstructorSchedulingPage() {
         ? getSchedulingErrorMessage(deleteAvailabilityMutation.error, 'Müsaitlik kaydı silinemedi.')
         : null;
 
-  const validationErrorMessage = validateMutation.isError
-    ? getSchedulingErrorMessage(validateMutation.error, 'Program doğrulaması tamamlanamadı.')
-    : null;
-
-  const suggestionErrorMessage = suggestMutation.isError
-    ? getSchedulingErrorMessage(suggestMutation.error, 'Program önerisi alınamadı.')
-    : null;
-
-  const handleSectionChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.set('sectionId', event.target.value);
-    setSearchParams(nextSearchParams);
-  };
-
-  const handleValidate = () => {
-    if (!selectedSection) {
-      return;
-    }
-
-    resetApply();
-    validateMutation.mutate({ sectionId: selectedSection.sectionId });
-  };
-
-  const handleSuggest = () => {
-    if (!selectedSection) {
-      return;
-    }
-
-    resetApply();
-    suggestMutation.mutate({ sectionId: selectedSection.sectionId });
-  };
-
-  const handleApplySuggestion = (suggestion: ScheduleSuggestion) => {
-    if (!suggestion.isFeasible || !selectedSection) {
-      return;
-    }
-
-    applyMutation.mutate(
-      {
-        sectionId: selectedSection.sectionId,
-        request: {
-          sectionId: selectedSection.sectionId,
-          classroomId: suggestion.suggestedClassroomId,
-          scheduleSlots: suggestion.suggestedSlots,
-        },
-      },
-      {
-        onSuccess: () => {
-          refetch();
-        },
-      },
-    );
-  };
-
-  const applyErrorMessage = applyMutation.isError
-    ? getSchedulingErrorMessage(applyMutation.error, 'Program uygulanamadı.')
-    : null;
-
   const handleAvailabilityDialogChange = (open: boolean) => {
     if (!open) {
       setEditingAvailability(null);
@@ -249,9 +129,12 @@ export default function InstructorSchedulingPage() {
     setIsAvailabilityDialogOpen(open);
   };
 
-  const openCreateAvailabilityDialog = () => {
+  const openCreateAvailabilityDialog = (dayOfWeek?: number) => {
     setEditingAvailability(null);
-    setAvailabilityForm(DEFAULT_AVAILABILITY_FORM);
+    setAvailabilityForm({
+      ...DEFAULT_AVAILABILITY_FORM,
+      dayOfWeek: String(dayOfWeek ?? 1),
+    });
     setAvailabilityFormError(null);
     setIsAvailabilityDialogOpen(true);
   };
@@ -297,8 +180,6 @@ export default function InstructorSchedulingPage() {
 
     const onSuccess = () => {
       handleAvailabilityDialogChange(false);
-      resetValidation();
-      resetSuggestion();
     };
 
     if (editingAvailability) {
@@ -323,8 +204,6 @@ export default function InstructorSchedulingPage() {
     deleteAvailabilityMutation.mutate(pendingDeleteAvailability.id, {
       onSuccess: () => {
         setPendingDeleteAvailability(null);
-        resetValidation();
-        resetSuggestion();
       },
     });
   };
@@ -367,72 +246,81 @@ export default function InstructorSchedulingPage() {
 
   if (!sectionsData || sections.length === 0) {
     return (
-      <div className="space-y-6">
+      <>
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center gap-4 py-14 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+                <Calendar className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="font-heading text-xl font-semibold text-foreground">Atanmış ders bulunamadı</h2>
+                <p className="max-w-xl text-sm text-muted-foreground">
+                  Bu dönem size atanmış ders bulunamadı. Müsaitlik bilgilerinizi yine de tanımlayabilirsiniz.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center gap-4 py-14 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-              <Calendar className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div className="space-y-1">
-              <h2 className="font-heading text-xl font-semibold text-foreground">Atanmış ders bulunamadı</h2>
-              <p className="max-w-xl text-sm text-muted-foreground">
-                Bu dönem size atanmış section olmadığı için program analizi veya öneri üretimi yapılamıyor.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => navigate('/')}>
-              Ana Sayfaya Dön
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          <AvailabilityManagerCard
+            availabilities={availabilities}
+            isLoading={availabilityQuery.isLoading}
+            errorMessage={availabilityErrorMessage}
+            mutationErrorMessage={availabilityMutationErrorMessage}
+            onRetry={() => availabilityQuery.refetch()}
+            onCreate={openCreateAvailabilityDialog}
+            onEdit={openEditAvailabilityDialog}
+            onDeleteRequest={setPendingDeleteAvailability}
+          />
+        </div>
+
+        <AvailabilityDialog
+          isOpen={isAvailabilityDialogOpen}
+          isPending={isSavingAvailability}
+          errorMessage={availabilityFormError ?? availabilityMutationErrorMessage}
+          isEditing={Boolean(editingAvailability)}
+          form={availabilityForm}
+          onOpenChange={handleAvailabilityDialogChange}
+          onFieldChange={handleAvailabilityFieldChange}
+          onSubmit={handleAvailabilitySubmit}
+        />
+
+        <AlertDialog
+          open={Boolean(pendingDeleteAvailability)}
+          onOpenChange={(open) => {
+            if (!open && !isDeletingAvailability) {
+              setPendingDeleteAvailability(null);
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Müsaitlik kaydı silinsin mi?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingDeleteAvailability
+                  ? `${formatDay(pendingDeleteAvailability.dayOfWeek)} ${formatTimeRange(
+                    pendingDeleteAvailability.startTime,
+                    pendingDeleteAvailability.endTime,
+                  )} penceresi kaldırılacak.`
+                  : 'Bu işlem geri alınamaz.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeletingAvailability}>İptal</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteAvailability} disabled={isDeletingAvailability}>
+                {isDeletingAvailability ? 'Siliniyor' : 'Sil'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
     );
   }
 
   return (
     <>
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-        Derslik ataması Fakülte Planlama sayfasından yapılmaktadır.
-      </div>
       <div className="space-y-6">
-        {/* Section selector bar */}
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <select
-              value={selectedSection?.sectionId ?? ''}
-              onChange={handleSectionChange}
-              className="min-w-[300px] appearance-none rounded-lg border border-border bg-card px-4 py-2 text-[15px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {sections.map(section => (
-                <option key={section.sectionId} value={section.sectionId}>
-                  {section.courseCode} — {section.courseName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {selectedSection && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="text-sm py-1 px-3">
-                <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                {selectedSection.schedule || 'Program belirlenmedi'}
-              </Badge>
-              <Badge variant="outline" className="text-sm py-1 px-3">
-                <Building2 className="h-3.5 w-3.5 mr-1.5" />
-                {selectedSection.classroomName || 'Derslik atanmadı'}
-              </Badge>
-              <Badge variant="outline" className="text-sm py-1 px-3">
-                <Users className="h-3.5 w-3.5 mr-1.5" />
-                {selectedSection.activeStudents}/{selectedSection.capacity}
-              </Badge>
-              <Badge variant="outline" className="text-sm py-1 px-3">
-                {selectedSection.ects} AKTS
-              </Badge>
-            </div>
-          )}
-        </div>
-
-        {/* Availability - FULL WIDTH */}
+        {/* Availability CRUD Card */}
         <AvailabilityManagerCard
           availabilities={availabilities}
           isLoading={availabilityQuery.isLoading}
@@ -444,290 +332,12 @@ export default function InstructorSchedulingPage() {
           onDeleteRequest={setPendingDeleteAvailability}
         />
 
-        {/* Analysis / Suggestion tabs - FULL WIDTH */}
-        <div className="space-y-4">
-        <div className="inline-flex rounded-xl border border-border bg-card p-1">
-          <PanelButton
-            isActive={activePanel === 'analysis'}
-            label="Çakışma Analizi"
-            onClick={() => setActivePanel('analysis')}
-          />
-          <PanelButton
-            isActive={activePanel === 'suggestion'}
-            label="Program Önerisi"
-            onClick={() => setActivePanel('suggestion')}
-          />
-          <PanelButton
-            isActive={activePanel === 'timetable'}
-            label="Haftalık Görünüm"
-            onClick={() => setActivePanel('timetable')}
-          />
-        </div>
-
-        {activePanel === 'analysis' && selectedSection && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Çakışma Analizi</CardTitle>
-                <Button onClick={handleValidate} disabled={validateMutation.isPending} size="sm">
-                  {validateMutation.isPending ? (
-                    <>
-                      <RefreshCcw className="h-4 w-4 animate-spin" />
-                      Doğrulanıyor
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Doğrula
-                    </>
-                  )}
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!validateMutation.isPending && !validateMutation.data && !validationErrorMessage && (
-                  <EmptyPanelState
-                    title="Analiz henüz çalıştırılmadı"
-                    description="Programınızı doğrulamak için yukarıdaki butonu kullanın."
-                  />
-                )}
-
-                {validateMutation.isPending && (
-                  <div className="space-y-3">
-                    <Skeleton className="h-24 rounded-xl" />
-                    <Skeleton className="h-64 rounded-xl" />
-                  </div>
-                )}
-
-                {validationErrorMessage && (
-                  <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Doğrulama tamamlanamadı</AlertTitle>
-                    <AlertDescription>{validationErrorMessage}</AlertDescription>
-                  </Alert>
-                )}
-
-                {validateMutation.data && (
-                  <>
-                    <NotesAlert notes={validateMutation.data.notes} />
-
-                    <Alert variant={validateMutation.data.isValid ? 'success' : 'warning'}>
-                      {validateMutation.data.isValid ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4" />
-                      )}
-                      <AlertTitle>
-                        {validateMutation.data.isValid
-                          ? 'Program geçerli görünüyor'
-                          : `${validateMutation.data.conflicts.length} adet conflict bulundu`}
-                      </AlertTitle>
-                      <AlertDescription>
-                        {validateMutation.data.isValid
-                          ? 'Seçili section için mevcut kurallar altında conflict tespit edilmedi.'
-                          : 'Conflict listesini inceleyerek derslik, saat veya müsaitlik kaynaklı sorunları görebilirsiniz.'}
-                      </AlertDescription>
-                    </Alert>
-
-                    {validateMutation.data.conflicts.length > 0 && (
-                      <ConflictTable conflicts={validateMutation.data.conflicts} />
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {activePanel === 'suggestion' && selectedSection && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Program Önerisi</CardTitle>
-                <Button onClick={handleSuggest} disabled={suggestMutation.isPending} size="sm">
-                  {suggestMutation.isPending ? (
-                    <>
-                      <RefreshCcw className="h-4 w-4 animate-spin" />
-                      Hazırlanıyor
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4" />
-                      Öneri Al
-                    </>
-                  )}
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!suggestMutation.isPending && !suggestMutation.data && !suggestionErrorMessage && (
-                  <EmptyPanelState
-                    title="Henüz öneri üretilmedi"
-                    description="Müsaitliğinize uygun program önerisi almak için butonu kullanın."
-                  />
-                )}
-
-                {suggestMutation.isPending && (
-                  <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                    <Skeleton className="h-72 rounded-xl" />
-                    <Skeleton className="h-72 rounded-xl" />
-                  </div>
-                )}
-
-                {suggestionErrorMessage && (
-                  <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Öneri alınamadı</AlertTitle>
-                    <AlertDescription>{suggestionErrorMessage}</AlertDescription>
-                  </Alert>
-                )}
-
-                {suggestMutation.data && (
-                  <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-                    <div className="space-y-4">
-                      <NotesAlert notes={suggestMutation.data.notes} />
-
-                      <Alert variant={suggestMutation.data.isFeasible ? 'success' : 'warning'}>
-                        {suggestMutation.data.isFeasible ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4" />
-                        )}
-                        <AlertTitle>
-                          {suggestMutation.data.isFeasible
-                            ? 'Conflict olmayan bir öneri bulundu'
-                            : 'Uygun çözüm bulunamadı'}
-                        </AlertTitle>
-                        <AlertDescription>
-                          {suggestMutation.data.isFeasible
-                            ? 'Önerilen derslik ve slotlar mevcut kurallar altında conflict üretmiyor.'
-                            : 'Sistem, mevcut müsaitlik ve term schedule’ları içinde geçerli bir kombinasyon bulamadı.'}
-                        </AlertDescription>
-                      </Alert>
-
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Öneri Özeti</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <SummaryItem
-                              icon={<Building2 className="h-4 w-4 text-primary" />}
-                              label="Önerilen Derslik"
-                              value={suggestMutation.data.suggestedClassroomName || 'Bulunamadı'}
-                              detail=""
-                            />
-                            <SummaryItem
-                              icon={<Clock3 className="h-4 w-4 text-primary" />}
-                              label="Haftalık Yük Etkisi"
-                              value={formatWeeklyImpact(suggestMutation.data.estimatedWeeklyHoursImpact)}
-                              detail=""
-                            />
-                          </div>
-
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-primary" />
-                              <h3 className="text-sm font-semibold text-foreground">Önerilen Slotlar</h3>
-                            </div>
-
-                            {suggestMutation.data.suggestedSlots.length > 0 ? (
-                              <div className="flex flex-wrap gap-2">
-                                {suggestMutation.data.suggestedSlots.map((slot, index) => (
-                                  <Badge key={`${slot.day}-${slot.startTime}-${slot.endTime}-${index}`} variant="outline" className="px-3 py-1">
-                                    {formatSlot(slot)}
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">
-                                Bu section için conflict olmayan slot üretilemedi.
-                              </p>
-                            )}
-                          </div>
-
-                          {suggestMutation.data.isFeasible && (
-                            <div className="pt-2 border-t border-border space-y-3">
-                              {applyMutation.data && !applyMutation.data.isValid && (
-                                <Alert variant="destructive">
-                                  <AlertTriangle className="h-4 w-4" />
-                                  <AlertTitle>Program uygulanamadı</AlertTitle>
-                                  <AlertDescription>
-                                    <ul className="space-y-1">
-                                      {applyMutation.data.notes.map(note => (
-                                        <li key={note}>{note}</li>
-                                      ))}
-                                    </ul>
-                                  </AlertDescription>
-                                </Alert>
-                              )}
-
-                              {applyErrorMessage && (
-                                <Alert variant="destructive">
-                                  <AlertTriangle className="h-4 w-4" />
-                                  <AlertTitle>Uygulama hatası</AlertTitle>
-                                  <AlertDescription>{applyErrorMessage}</AlertDescription>
-                                </Alert>
-                              )}
-
-                              {applyMutation.data?.isValid && (
-                                <Alert variant="success">
-                                  <CheckCircle2 className="h-4 w-4" />
-                                  <AlertTitle>Program uygulandı</AlertTitle>
-                                  <AlertDescription>
-                                    Önerilen program başarıyla kaydedildi.
-                                  </AlertDescription>
-                                </Alert>
-                              )}
-
-                              <Button
-                                onClick={() => handleApplySuggestion(suggestMutation.data!)}
-                                disabled={applyMutation.isPending || applyMutation.data?.isValid === true}
-                                className="w-full"
-                              >
-                                {applyMutation.isPending ? (
-                                  <>
-                                    <RefreshCcw className="h-4 w-4 animate-spin" />
-                                    Uygulanıyor
-                                  </>
-                                ) : applyMutation.data?.isValid === true ? (
-                                  <>
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    Uygulandı
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    Öneriyi Uygula
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <AvailabilitySummaryCard
-                      availabilities={availabilities}
-                      isLoading={availabilityQuery.isLoading}
-                      errorMessage={availabilityErrorMessage}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-        {activePanel === 'timetable' && (
-          <WeeklyTimetableGrid
-            entries={buildTimetableEntries(
-              sections,
-              collectConflictSectionIds(validateMutation.data?.conflicts ?? []),
-            )}
-            availabilities={availabilities}
-            title="Haftalık Ders Programı"
-          />
-        )}
-        </div>{/* end analysis/suggestion */}
+        {/* Weekly Timetable (read-only) */}
+        <WeeklyTimetableGrid
+          entries={buildTimetableEntries(sections, new Set())}
+          availabilities={availabilities}
+          title="Haftalık Ders Programı"
+        />
       </div>
 
       <AvailabilityDialog
@@ -774,139 +384,6 @@ export default function InstructorSchedulingPage() {
 }
 
 
-function PanelButton({
-  isActive,
-  label,
-  onClick,
-}: {
-  isActive: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-        isActive
-          ? 'bg-primary text-primary-foreground shadow-sm'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function SummaryItem({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {icon}
-        {label}
-      </div>
-      <p className="text-sm font-semibold text-foreground">{value}</p>
-      {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
-    </div>
-  );
-}
-
-function EmptyPanelState({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-muted/10 px-5 py-8 text-center">
-      <p className="text-sm font-medium text-muted-foreground">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function NotesAlert({ notes }: { notes: string[] }) {
-  if (notes.length === 0) {
-    return null;
-  }
-
-  return (
-    <Alert variant="info">
-      <AlertCircle className="h-4 w-4" />
-      <AlertTitle>Sistem notları</AlertTitle>
-      <AlertDescription>
-        <ul className="space-y-1">
-          {notes.map(note => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-function ConflictTable({ conflicts }: { conflicts: SchedulingConflict[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Çakışma Listesi</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Conflict</TableHead>
-              <TableHead>Gün / Saat</TableHead>
-              <TableHead>Derslik</TableHead>
-              <TableHead>İlgili Section</TableHead>
-              <TableHead>Açıklama</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {conflicts.map((conflict, index) => {
-              const meta = CONFLICT_META[conflict.conflictType] ?? {
-                label: conflict.conflictType,
-                variant: 'outline' as const,
-              };
-
-              return (
-                <TableRow key={`${conflict.conflictType}-${conflict.relatedSectionId}-${index}`}>
-                  <TableCell>
-                    <div className="space-y-2">
-                      <Badge variant={meta.variant}>{meta.label}</Badge>
-                      <div className="text-xs text-muted-foreground">
-                        {conflict.courseCode} — {conflict.courseName}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-foreground">
-                    {formatConflictTime(conflict)}
-                  </TableCell>
-                  <TableCell className="text-sm text-foreground">
-                    {conflict.classroomName || 'Belirtilmedi'}
-                  </TableCell>
-                  <TableCell className="text-sm text-foreground">
-                    {conflict.relatedSectionId ? `Section ${conflict.relatedSectionId}` : '—'}
-                  </TableCell>
-                  <TableCell className="max-w-[460px] text-sm text-muted-foreground">
-                    {conflict.message}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
 function AvailabilityManagerCard({
   availabilities,
   isLoading,
@@ -922,21 +399,17 @@ function AvailabilityManagerCard({
   errorMessage: string | null;
   mutationErrorMessage: string | null;
   onRetry: () => void;
-  onCreate: () => void;
+  onCreate: (dayOfWeek?: number) => void;
   onEdit: (availability: InstructorAvailability) => void;
   onDeleteRequest: (availability: InstructorAvailability) => void;
 }) {
   const hasWeekend = availabilities.some(a => a.dayOfWeek === 0 || a.dayOfWeek === 6);
   const activeDays = hasWeekend ? [1, 2, 3, 4, 5, 6, 0] : [1, 2, 3, 4, 5];
-  
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Haftalık Müsaitlik</CardTitle>
-        <Button onClick={onCreate} size="sm">
-          <Plus className="h-4 w-4" />
-          Ekle
-        </Button>
+      <CardHeader className="flex items-center pb-4">
+        <CardTitle className="text-lg">Haftalık Müsaitlik</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {mutationErrorMessage && (
@@ -981,7 +454,7 @@ function AvailabilityManagerCard({
 
         {!isLoading && !errorMessage && availabilities.length > 0 && (
           <div>
-            <div className={cn("grid gap-3", hasWeekend ? "grid-cols-7" : "grid-cols-5")}>
+            <div className={cn("grid gap-4", hasWeekend ? "grid-cols-7" : "grid-cols-5")}>
               {activeDays.map(dayId => {
                 const dayAvailabilities = availabilities
                   .filter(a => a.dayOfWeek === dayId)
@@ -989,20 +462,20 @@ function AvailabilityManagerCard({
 
                 return (
                   <div key={dayId} className="flex flex-col rounded-xl border border-border bg-muted/10 overflow-hidden">
-                    <div className="bg-muted p-3 text-center border-b border-border">
+                    <div className="bg-muted px-4 py-3 text-center border-b border-border">
                       <h3 className="font-semibold text-sm text-foreground">{DAY_LABELS[dayId]}</h3>
                     </div>
-                    <div className="p-3 flex flex-col gap-3 min-h-[150px]">
+                    <div className="p-4 flex flex-col gap-3 min-h-[160px]">
                       {dayAvailabilities.length > 0 ? (
                         dayAvailabilities.map(availability => (
-                          <div 
-                            key={availability.id} 
+                          <div
+                            key={availability.id}
                             className={cn(
                               "rounded-lg p-3 text-sm border shadow-sm flex flex-col relative group cursor-pointer transition-all hover:scale-[1.02]",
-                              availability.isAvailable 
-                                ? availability.isPreferred 
-                                  ? "bg-primary/5 border-primary/30 hover:bg-primary/10" 
-                                  : "bg-card border-border hover:bg-muted/50" 
+                              availability.isAvailable
+                                ? availability.isPreferred
+                                  ? "bg-primary/5 border-primary/30 hover:bg-primary/10"
+                                  : "bg-card border-border hover:bg-muted/50"
                                 : "bg-muted/50 border-border opacity-70"
                             )}
                             onClick={() => onEdit(availability)}
@@ -1022,7 +495,7 @@ function AvailabilityManagerCard({
                                 )}
                               </div>
                             </div>
-                            
+
                             <div className="mt-2 flex gap-1">
                               <Button
                                 variant="secondary"
@@ -1054,12 +527,12 @@ function AvailabilityManagerCard({
                           —
                         </div>
                       )}
-                      
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         className="w-full h-8 text-xs text-muted-foreground hover:text-primary border border-dashed border-transparent hover:border-primary/30 mt-auto"
-                        onClick={() => onCreate()}
+                        onClick={() => onCreate(dayId)}
                       >
                         <Plus className="h-3 w-3 mr-1" /> Ekle
                       </Button>
@@ -1069,84 +542,6 @@ function AvailabilityManagerCard({
               })}
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function AvailabilitySummaryCard({
-  availabilities,
-  isLoading,
-  errorMessage,
-}: {
-  availabilities: InstructorAvailability[];
-  isLoading: boolean;
-  errorMessage: string | null;
-}) {
-  return (
-    <Card className="h-fit">
-      <CardHeader>
-        <CardTitle>Müsaitlik Özeti</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {isLoading && (
-          <>
-            <Skeleton className="h-24 rounded-xl" />
-            <Skeleton className="h-24 rounded-xl" />
-          </>
-        )}
-
-        {!isLoading && errorMessage && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Müsaitlik özeti yüklenemedi</AlertTitle>
-            <AlertDescription>{errorMessage}</AlertDescription>
-          </Alert>
-        )}
-
-        {!isLoading && !errorMessage && availabilities.length === 0 && (
-          <div className="py-6 text-center text-muted-foreground text-sm">
-            Müsaitlik tanımı yok.
-          </div>
-        )}
-
-        {!isLoading && !errorMessage && availabilities.length > 0 && (
-          <>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="success">{availabilities.length} aktif kural</Badge>
-              <Badge variant="outline">
-                {availabilities.filter(availability => availability.isPreferred).length} tercihli pencere
-              </Badge>
-            </div>
-
-            {availabilities.slice(0, 6).map(availability => (
-              <div
-                key={availability.id}
-                className="rounded-xl border border-border bg-muted/20 p-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {formatDay(availability.dayOfWeek)} · {formatTimeRange(availability.startTime, availability.endTime)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {availability.isPreferred ? 'Öncelikli pencere' : 'Standart pencere'}
-                    </p>
-                  </div>
-                  <Badge variant={availability.isPreferred ? 'outline' : 'success'}>
-                    {availability.isPreferred ? 'Tercihli' : 'Uygun'}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-
-            {availabilities.length > 6 && (
-              <p className="text-xs text-muted-foreground">
-                Tüm kayıtları görmek ve düzenlemek için üstteki yönetim alanını kullanın.
-              </p>
-            )}
-          </>
         )}
       </CardContent>
     </Card>
@@ -1278,18 +673,6 @@ function AvailabilityDialog({
   );
 }
 
-function formatConflictTime(conflict: SchedulingConflict) {
-  if (conflict.day === null || conflict.startTime === null || conflict.endTime === null) {
-    return 'Saat bilgisi bulunmuyor';
-  }
-
-  return `${formatDay(conflict.day)} · ${formatTimeRange(conflict.startTime, conflict.endTime)}`;
-}
-
-function formatSlot(slot: ScheduleSlot) {
-  return `${formatDay(slot.day)} ${formatTimeRange(slot.startTime, slot.endTime)}`;
-}
-
 function formatDay(day: number | null | undefined) {
   if (day === null || day === undefined) {
     return 'Belirtilmedi';
@@ -1308,19 +691,6 @@ function formatTime(value: string | null | undefined) {
   }
 
   return value.slice(0, 5);
-}
-
-function formatWeeklyImpact(impact: number) {
-  if (impact === 0) {
-    return 'Değişim yok';
-  }
-
-  const formatted = Math.abs(impact).toLocaleString('tr-TR', {
-    minimumFractionDigits: Number.isInteger(impact) ? 0 : 1,
-    maximumFractionDigits: 2,
-  });
-
-  return `${impact > 0 ? '+' : '-'}${formatted} saat`;
 }
 
 function normalizeTimeForInput(value: string) {
@@ -1383,20 +753,4 @@ function buildTimetableEntries(
   }
 
   return entries;
-}
-
-function collectConflictSectionIds(conflicts: SchedulingConflict[]) {
-  const sectionIds = new Set<number>();
-
-  for (const conflict of conflicts) {
-    if (typeof conflict.sectionId === 'number' && conflict.sectionId > 0) {
-      sectionIds.add(conflict.sectionId);
-    }
-
-    if (typeof conflict.relatedSectionId === 'number' && conflict.relatedSectionId > 0) {
-      sectionIds.add(conflict.relatedSectionId);
-    }
-  }
-
-  return sectionIds;
 }

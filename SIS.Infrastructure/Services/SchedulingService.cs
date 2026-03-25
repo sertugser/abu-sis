@@ -44,7 +44,7 @@ public class SchedulingService : ISchedulingService
         if (request.SectionId <= 0)
         {
             result.IsValid = false;
-            result.Notes.Add("Gecerli bir sectionId gonderilmelidir.");
+            result.Notes.Add("Geçerli bir section ID gönderilmelidir.");
             return result;
         }
 
@@ -58,7 +58,7 @@ public class SchedulingService : ISchedulingService
         if (section == null)
         {
             result.IsValid = false;
-            result.Notes.Add("Section bulunamadi.");
+            result.Notes.Add("Section bulunamadı.");
             return result;
         }
 
@@ -83,8 +83,8 @@ public class SchedulingService : ISchedulingService
         {
             result.IsValid = false;
             result.Notes.Add(termId.HasValue
-                ? "Belirtilen akademik donem bulunamadi."
-                : "Aktif akademik donem bulunamadi.");
+                ? "Belirtilen akademik dönem bulunamadı."
+                : "Aktif akademik dönem bulunamadı.");
             return result;
         }
 
@@ -101,7 +101,7 @@ public class SchedulingService : ISchedulingService
         if (departmentId <= 0)
         {
             result.IsValid = false;
-            result.Notes.Add("Gecerli bir departmentId gonderilmelidir.");
+            result.Notes.Add("Geçerli bir bölüm ID gönderilmelidir.");
             return result;
         }
 
@@ -110,8 +110,8 @@ public class SchedulingService : ISchedulingService
         {
             result.IsValid = false;
             result.Notes.Add(termId.HasValue
-                ? "Belirtilen akademik donem bulunamadi."
-                : "Aktif akademik donem bulunamadi.");
+                ? "Belirtilen akademik dönem bulunamadı."
+                : "Aktif akademik dönem bulunamadı.");
             return result;
         }
 
@@ -132,7 +132,7 @@ public class SchedulingService : ISchedulingService
 
         if (request.SectionId <= 0)
         {
-            response.Notes.Add("Gecerli bir sectionId gonderilmelidir.");
+            response.Notes.Add("Geçerli bir section ID gönderilmelidir.");
             return response;
         }
 
@@ -145,14 +145,14 @@ public class SchedulingService : ISchedulingService
 
         if (section == null)
         {
-            response.Notes.Add("Section bulunamadi.");
+            response.Notes.Add("Section bulunamadı.");
             return response;
         }
 
         var instructorId = request.InstructorId ?? section.InstructorId;
         if (!instructorId.HasValue)
         {
-            response.Notes.Add("Oneri uretilebilmesi icin section uzerinde bir ogretim uyesi tanimli olmali veya request ile instructorId gonderilmelidir.");
+            response.Notes.Add("Öneri üretilebilmesi için section üzerinde bir öğretim üyesi tanımlı olmalı veya istek ile instructorId gönderilmelidir.");
             return response;
         }
 
@@ -162,7 +162,7 @@ public class SchedulingService : ISchedulingService
 
         if (instructor == null)
         {
-            response.Notes.Add("Ogretim uyesi bulunamadi.");
+            response.Notes.Add("Öğretim üyesi bulunamadı.");
             return response;
         }
 
@@ -183,7 +183,7 @@ public class SchedulingService : ISchedulingService
 
         if (availabilities.Count == 0)
         {
-            response.Notes.Add("Instructor availability kaydi olmadigi icin availability disinda oneride bulunulamadi.");
+            response.Notes.Add("Öğretim üyesi müsaitlik kaydı olmadığı için uygunluk dışında öneride bulunulamadı.");
             return response;
         }
 
@@ -194,7 +194,7 @@ public class SchedulingService : ISchedulingService
 
         if (slotCombinations.Count == 0)
         {
-            response.Notes.Add("Instructor availability icinde uygun slot kombinasyonu uretilemedi.");
+            response.Notes.Add("Öğretim üyesi müsaitlik aralığında uygun slot kombinasyonu üretilemedi.");
             return response;
         }
 
@@ -210,7 +210,7 @@ public class SchedulingService : ISchedulingService
 
         if (classrooms.Count == 0)
         {
-            response.Notes.Add("Section kontenjanini karsilayan uygun bir derslik bulunamadi.");
+            response.Notes.Add("Section kontenjanını karşılayan uygun bir derslik bulunamadı.");
             return response;
         }
 
@@ -243,14 +243,14 @@ public class SchedulingService : ISchedulingService
                 response.EstimatedWeeklyHoursImpact = candidateWeeklyHours - currentWeeklyHours;
                 response.Notes.AddRange(candidate.Notes);
                 response.Notes.Add(slotCombination.PreferenceScore == 0
-                    ? "Slotlar preferred availability pencereleriyle uyumludur."
-                    : "Slotlar available availability pencereleri icinden secildi.");
+                    ? "Slotlar tercihli müsaitlik pencereleriyle uyumludur."
+                    : "Slotlar uygun müsaitlik pencereleri içinden seçildi.");
                 response.Notes.Add($"Derslik secimi kapasite uyumu esas alinarak yapildi ({classroom.Capacity}/{requiredCapacity}).");
                 return response;
             }
         }
 
-        response.Notes.Add("Conflict olmayan classroom + slot kombinasyonu bulunamadi.");
+        response.Notes.Add("Çakışma olmayan derslik + slot kombinasyonu bulunamadı.");
         return response;
     }
 
@@ -367,7 +367,7 @@ public class SchedulingService : ISchedulingService
 
             if (instructor == null)
             {
-                notes.Add("Secilen ogretim uyesi bulunamadi.");
+                notes.Add("Seçilen öğretim üyesi bulunamadı.");
             }
             else
             {
@@ -379,13 +379,13 @@ public class SchedulingService : ISchedulingService
 
                 if (availabilities.Count == 0)
                 {
-                    notes.Add("Bu ogretim uyesi icin availability tanimi bulunmuyor; availability conflict kontrolu bilgilendirme notu ile surduruluyor.");
+                    notes.Add("Bu öğretim üyesi için müsaitlik tanımı bulunmuyor; çakışma kontrolü bilgilendirme notu ile sürdürülüyor.");
                 }
             }
         }
         else
         {
-            notes.Add("Section icin ogretim uyesi atanmamis.");
+            notes.Add("Section için öğretim üyesi atanmamış.");
         }
 
         Classroom? classroom = null;
@@ -397,12 +397,12 @@ public class SchedulingService : ISchedulingService
 
             if (classroom == null)
             {
-                notes.Add("Secilen derslik bulunamadi.");
+                notes.Add("Seçilen derslik bulunamadı.");
             }
         }
         else
         {
-            notes.Add("Section icin derslik atanmamis.");
+            notes.Add("Section için derslik atanmamış.");
         }
 
         var scheduleSlots = new List<ScheduleSlot>();
@@ -431,7 +431,7 @@ public class SchedulingService : ISchedulingService
 
         if (scheduleSlots.Count == 0 && parseError == null)
         {
-            notes.Add("Section icin schedule slot tanimi bulunmuyor.");
+            notes.Add("Section için program slot tanımı bulunmuyor.");
         }
 
         return BuildCandidateSnapshot(
@@ -545,14 +545,14 @@ public class SchedulingService : ISchedulingService
                         conflicts.Add(BuildConflict(
                             first,
                             ConflictTypes.ClassroomConflict,
-                            $"Derslik '{first.ClassroomName}' ayni zaman araliginda '{second.CourseCode}' sectionu ile cakisiyor.",
+                            $"Derslik '{first.ClassroomName}' aynı zaman aralığında '{second.CourseCode}' section'u ile çakışıyor.",
                             overlap,
                             second.SectionId));
 
                         conflicts.Add(BuildConflict(
                             second,
                             ConflictTypes.ClassroomConflict,
-                            $"Derslik '{second.ClassroomName}' ayni zaman araliginda '{first.CourseCode}' sectionu ile cakisiyor.",
+                            $"Derslik '{second.ClassroomName}' aynı zaman aralığında '{first.CourseCode}' section'u ile çakışıyor.",
                             overlap,
                             first.SectionId));
                     }
@@ -562,14 +562,14 @@ public class SchedulingService : ISchedulingService
                         conflicts.Add(BuildConflict(
                             first,
                             ConflictTypes.InstructorConflict,
-                            $"Ogretim uyesi '{first.InstructorName}' ayni zaman araliginda '{second.CourseCode}' sectionu ile cakisiyor.",
+                            $"Öğretim üyesi '{first.InstructorName}' aynı zaman aralığında '{second.CourseCode}' section'u ile çakışıyor.",
                             overlap,
                             second.SectionId));
 
                         conflicts.Add(BuildConflict(
                             second,
                             ConflictTypes.InstructorConflict,
-                            $"Ogretim uyesi '{second.InstructorName}' ayni zaman araliginda '{first.CourseCode}' sectionu ile cakisiyor.",
+                            $"Öğretim üyesi '{second.InstructorName}' aynı zaman aralığında '{first.CourseCode}' section'u ile çakışıyor.",
                             overlap,
                             first.SectionId));
                     }
@@ -670,7 +670,7 @@ public class SchedulingService : ISchedulingService
                     conflicts.Add(BuildConflict(
                         candidate,
                         ConflictTypes.ClassroomConflict,
-                        $"Derslik '{candidate.ClassroomName}' ayni zaman araliginda '{existing.CourseCode}' sectionu ile cakisiyor.",
+                        $"Derslik '{candidate.ClassroomName}' aynı zaman aralığında '{existing.CourseCode}' section'u ile çakışıyor.",
                         overlap,
                         existing.SectionId));
                 }
@@ -680,7 +680,7 @@ public class SchedulingService : ISchedulingService
                     conflicts.Add(BuildConflict(
                         candidate,
                         ConflictTypes.InstructorConflict,
-                        $"Ogretim uyesi '{candidate.InstructorName}' ayni zaman araliginda '{existing.CourseCode}' sectionu ile cakisiyor.",
+                        $"Öğretim üyesi '{candidate.InstructorName}' aynı zaman aralığında '{existing.CourseCode}' section'u ile çakışıyor.",
                         overlap,
                         existing.SectionId));
                 }
@@ -919,7 +919,7 @@ public class SchedulingService : ISchedulingService
                 {
                     return new ScheduleParseResult
                     {
-                        ErrorMessage = "ScheduleJson icindeki bir slotta gun bilgisi eksik."
+                        ErrorMessage = "Program JSON içindeki bir slotta gün bilgisi eksik."
                     };
                 }
 
@@ -937,7 +937,7 @@ public class SchedulingService : ISchedulingService
         {
             return new ScheduleParseResult
             {
-                ErrorMessage = "ScheduleJson guvenli sekilde parse edilemedi."
+                ErrorMessage = "Program JSON güvenli şekilde ayrıştırılamadı."
             };
         }
     }
@@ -955,7 +955,7 @@ public class SchedulingService : ISchedulingService
             {
                 return new ScheduleParseResult
                 {
-                    ErrorMessage = "Schedule slot bitis saati baslangic saatinden sonra olmalidir."
+                    ErrorMessage = "Slot bitiş saati başlangıç saatinden sonra olmalıdır."
                 };
             }
         }
@@ -968,7 +968,7 @@ public class SchedulingService : ISchedulingService
                 {
                     return new ScheduleParseResult
                     {
-                        ErrorMessage = "Ayni section icindeki schedule slotlari birbiriyle cakisamaz."
+                        ErrorMessage = "Aynı section içindeki slotlar birbiriyle çakışamaz."
                     };
                 }
             }
@@ -989,7 +989,7 @@ public class SchedulingService : ISchedulingService
                 HasData = false,
                 IsWithinAvailability = true,
                 IsPreferred = false,
-                Message = "Instructor availability tanimi bulunmuyor."
+                Message = "Öğretim üyesi müsaitlik tanımı bulunmuyor."
             };
         }
 
@@ -1004,7 +1004,7 @@ public class SchedulingService : ISchedulingService
                 HasData = true,
                 IsWithinAvailability = false,
                 IsPreferred = false,
-                Message = "Ogretim uyesi bu gun icin available degil."
+                Message = "Öğretim üyesi bu gün için uygun değil."
             };
         }
 
@@ -1015,7 +1015,7 @@ public class SchedulingService : ISchedulingService
                 HasData = true,
                 IsWithinAvailability = false,
                 IsPreferred = false,
-                Message = "Ogretim uyesi bu saat araliginda uygun degil."
+                Message = "Öğretim üyesi bu saat aralığında uygun değil."
             };
         }
 
@@ -1030,7 +1030,7 @@ public class SchedulingService : ISchedulingService
                 HasData = true,
                 IsWithinAvailability = false,
                 IsPreferred = false,
-                Message = "Schedule slot instructor availability penceresi disinda kaliyor."
+                Message = "Ders slotu öğretim üyesinin müsaitlik penceresi dışında kalıyor."
             };
         }
 
@@ -1343,7 +1343,7 @@ public class SchedulingService : ISchedulingService
 
         if (!validation.IsValid)
         {
-            validation.Notes.Add("Conflict tespit edildiginden program uygulanmadi.");
+            validation.Notes.Add("Çakışma tespit edildiğinden program uygulanmadı.");
             return validation;
         }
 
@@ -1355,7 +1355,7 @@ public class SchedulingService : ISchedulingService
             return new ScheduleValidationResultDto
             {
                 IsValid = false,
-                Notes = { "Section bulunamadi." }
+                Notes = { "Section bulunamadı." }
             };
         }
 
@@ -1372,7 +1372,7 @@ public class SchedulingService : ISchedulingService
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        validation.Notes.Add("Program basariyla uygulanarak kaydedildi.");
+        validation.Notes.Add("Program başarıyla uygulanarak kaydedildi.");
         return validation;
     }
 
@@ -1384,8 +1384,8 @@ public class SchedulingService : ISchedulingService
         if (resolvedTerm == null)
         {
             result.Notes.Add(request.TermId.HasValue
-                ? "Belirtilen akademik donem bulunamadi."
-                : "Aktif akademik donem bulunamadi.");
+                ? "Belirtilen akademik dönem bulunamadı."
+                : "Aktif akademik dönem bulunamadı.");
             return result;
         }
 
@@ -1412,7 +1412,7 @@ public class SchedulingService : ISchedulingService
 
         if (unscheduled.Count == 0)
         {
-            result.Notes.Add("Programsiz section bulunamadi, tum section'lar zaten programli.");
+            result.Notes.Add("Programsız section bulunamadı, tüm section'lar zaten programlı.");
             return result;
         }
 
@@ -1440,7 +1440,7 @@ public class SchedulingService : ISchedulingService
                 item.Success = false;
                 item.FailureReason = suggestion.Notes.Count > 0
                     ? string.Join(" ", suggestion.Notes)
-                    : "Uygun slot kombinasyonu bulunamadi.";
+                    : "Uygun slot kombinasyonu bulunamadı.";
                 result.FailedCount++;
                 result.Results.Add(item);
                 continue;
@@ -1467,7 +1467,7 @@ public class SchedulingService : ISchedulingService
                 item.Success = false;
                 item.FailureReason = applyResult.Conflicts.Count > 0
                     ? applyResult.Conflicts[0].Message
-                    : "Uygulama sirasinda conflict tespit edildi.";
+                    : "Uygulama sırasında çakışma tespit edildi.";
                 result.FailedCount++;
             }
 
@@ -1504,7 +1504,8 @@ public class SchedulingService : ISchedulingService
                     StartHour = slot.StartTime.Hour,
                     EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
                     CourseCode = s.CourseCode,
-                    CourseName = s.CourseName
+                    CourseName = s.CourseName,
+                    InstructorName = s.InstructorName
                 })).ToList()
             );
 

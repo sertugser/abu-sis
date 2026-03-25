@@ -110,6 +110,7 @@ export interface ClassroomScheduleSlot {
   endHour: number;
   courseName: string;
   courseCode: string;
+  instructorName: string;
 }
 
 export interface ClassroomInfo {
