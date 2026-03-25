@@ -18,9 +18,8 @@ import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
 import AcademicOperationsPage from './pages/AcademicOperationsPage';
-import SchedulingDashboardPage from './pages/SchedulingDashboardPage';
+import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
-import SectionApprovalPage from './pages/SectionApprovalPage';
 import TermClosingWizard from './pages/TermClosingWizard';
 import PreRegistrationSurveyPage from './pages/PreRegistrationSurveyPage';
 import RoleDashboard from './components/RoleDashboard';
@@ -61,9 +60,8 @@ export default function App() {
                     <Route path="planlama-merkezi" element={<AcademicOperationsPage mode="planning" />} />
                     <Route path="sinif-listeleri" element={<AcademicOperationsPage mode="class-lists" />} />
                     <Route path="mufredat-gorunumu" element={<AcademicOperationsPage mode="curriculum" />} />
-                    <Route path="toplu-programlama" element={<SchedulingDashboardPage />} />
+                    <Route path="fakulte-planlama" element={<FacultyPlanningPage />} />
                     <Route path="merkezi-derslik-yonetimi" element={<ClassroomManagementPage />} />
-                    <Route path="sube-acma-onayi" element={<SectionApprovalPage />} />
                     <Route path="donem-kapatma" element={<TermClosingWizard />} />
                   </Route>
 

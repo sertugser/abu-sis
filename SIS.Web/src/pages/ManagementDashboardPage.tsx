@@ -84,11 +84,6 @@ export default function ManagementDashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {activeTerm != null && (
-              <span className="bg-white/15 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm text-white font-medium">
-                {activeTerm.name}
-              </span>
-            )}
           </div>
         </div>
         {context != null && context.accessibleDepartments.length > 1 && (
@@ -351,7 +346,7 @@ function ScheduleHealthCard({
               ))}
               {conflictCount > 2 && (
                 <Link
-                  to={ROUTES.MANAGEMENT_BATCH_SCHEDULING}
+                  to={ROUTES.FACULTY_PLANNING}
                   className="text-xs text-primary hover:underline"
                 >
                   ve {conflictCount - 2} daha...
@@ -362,10 +357,10 @@ function ScheduleHealthCard({
         )}
 
         <Link
-          to={ROUTES.MANAGEMENT_BATCH_SCHEDULING}
+          to={ROUTES.FACULTY_PLANNING}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
-          Toplu Programlama <ArrowRight className="h-3.5 w-3.5" />
+          Fakülte Planlama <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </CardContent>
     </Card>
@@ -437,7 +432,7 @@ const DEFAULT_QUICK_LINKS = [
   ROUTES.MANAGEMENT_PLANNING,
   ROUTES.MANAGEMENT_CLASS_LISTS,
   ROUTES.MANAGEMENT_CURRICULUM,
-  ROUTES.MANAGEMENT_BATCH_SCHEDULING,
+  ROUTES.FACULTY_PLANNING,
   ROUTES.TERM_CLOSING,
 ];
 
@@ -446,9 +441,8 @@ const ROUTE_ICONS: Record<string, React.ComponentType<{ className?: string }>> =
   [ROUTES.MANAGEMENT_PLANNING]: Network,
   [ROUTES.MANAGEMENT_CLASS_LISTS]: ClipboardList,
   [ROUTES.MANAGEMENT_CURRICULUM]: BookOpenCheck,
-  [ROUTES.MANAGEMENT_BATCH_SCHEDULING]: CalendarRange,
+  [ROUTES.FACULTY_PLANNING]: CalendarRange,
   [ROUTES.TERM_CLOSING]: GraduationCap,
-  [ROUTES.SECTION_APPROVAL]: CheckCircle2,
   [ROUTES.INSTRUCTOR_SECTIONS]: Layers,
 };
 

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.Application.AcademicOperations.DTOs;
 using SIS.Application.AcademicOperations.Services;
 
 namespace SIS.API.Controllers;
@@ -50,7 +51,7 @@ public class AcademicOperationsController : ControllerBase
     }
 
     [HttpGet("class-lists")]
-    public async Task<IActionResult> GetDepartmentClassLists([FromQuery] int departmentId, [FromQuery] int? termId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetDepartmentClassLists([FromQuery] int departmentId, [FromQuery] int? termId, [FromQuery] string? search, CancellationToken cancellationToken)
     {
         if (departmentId <= 0)
             return BadRequest(new { error = "Gecerli bir departmentId gonderilmelidir." });
@@ -64,7 +65,7 @@ public class AcademicOperationsController : ControllerBase
         if (!await HasDepartmentAccessAsync(userId, roles, departmentId, cancellationToken))
             return Forbid();
 
-        var summary = await _academicOperationsService.GetDepartmentClassListAsync(departmentId, termId, userId, roles, cancellationToken);
+        var summary = await _academicOperationsService.GetDepartmentClassListAsync(departmentId, termId, userId, roles, search, cancellationToken);
         if (summary == null)
             return NotFound(new { error = "Bolum sinif listesi bulunamadi." });
 
@@ -88,6 +89,72 @@ public class AcademicOperationsController : ControllerBase
             return NotFound(new { error = "Bolum mufredat ozeti bulunamadi." });
 
         return Ok(summary);
+    }
+
+    // ── Section Approval endpoints ──────────────────────────
+
+    [HttpGet("approvals")]
+    public async Task<IActionResult> GetApprovals([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken cancellationToken)
+    {
+        if (departmentId <= 0 || termId <= 0)
+            return BadRequest(new { error = "Geçerli departmentId ve termId gereklidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out var roles))
+            return Unauthorized();
+
+        if (!await HasDepartmentAccessAsync(userId, roles, departmentId, cancellationToken))
+            return Forbid();
+
+        var approvals = await _academicOperationsService.GetApprovalsAsync(departmentId, termId, cancellationToken);
+        return Ok(approvals);
+    }
+
+    [HttpPost("approvals/approve")]
+    public async Task<IActionResult> ApproveCourseSections([FromQuery] int departmentId, [FromQuery] int termId, [FromBody] ApproveCourseSectionsRequest request, CancellationToken cancellationToken)
+    {
+        if (departmentId <= 0 || termId <= 0)
+            return BadRequest(new { error = "Geçerli departmentId ve termId gereklidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out var roles))
+            return Unauthorized();
+
+        if (!await HasDepartmentAccessAsync(userId, roles, departmentId, cancellationToken))
+            return Forbid();
+
+        var result = await _academicOperationsService.ApproveCourseSectionsAsync(departmentId, termId, request, userId.ToString(), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("approvals/reject")]
+    public async Task<IActionResult> RejectCourseSections([FromQuery] int departmentId, [FromQuery] int termId, [FromBody] RejectCourseSectionsRequest request, CancellationToken cancellationToken)
+    {
+        if (departmentId <= 0 || termId <= 0)
+            return BadRequest(new { error = "Geçerli departmentId ve termId gereklidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out var roles))
+            return Unauthorized();
+
+        if (!await HasDepartmentAccessAsync(userId, roles, departmentId, cancellationToken))
+            return Forbid();
+
+        var result = await _academicOperationsService.RejectCourseSectionsAsync(departmentId, termId, request, userId.ToString(), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("approvals/bulk-approve")]
+    public async Task<IActionResult> BulkApprove([FromQuery] int departmentId, [FromQuery] int termId, [FromBody] BulkApprovalRequest request, CancellationToken cancellationToken)
+    {
+        if (departmentId <= 0 || termId <= 0)
+            return BadRequest(new { error = "Geçerli departmentId ve termId gereklidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out var roles))
+            return Unauthorized();
+
+        if (!await HasDepartmentAccessAsync(userId, roles, departmentId, cancellationToken))
+            return Forbid();
+
+        var result = await _academicOperationsService.BulkApproveAsync(departmentId, termId, request, userId.ToString(), cancellationToken);
+        return Ok(result);
     }
 
     private async Task<bool> HasDepartmentAccessAsync(int userId, IReadOnlyCollection<string> roles, int departmentId, CancellationToken cancellationToken)

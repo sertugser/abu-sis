@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SIS.Application.EnrollmentForecast.DTOs;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
@@ -10,13 +11,18 @@ namespace SIS.Infrastructure.Services;
 
 public class EnrollmentForecastService : IEnrollmentForecastService
 {
+    private const string ForecastContextCacheKey = "ForecastContext";
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
+
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
+    private readonly IMemoryCache _cache;
 
-    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService)
+    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
+        _cache = cache;
     }
 
     public async Task<CourseDemandForecastDto?> GetCourseDemandForecastAsync(int courseId)
@@ -28,7 +34,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         if (course == null)
             return null;
 
-        var forecastContext = await BuildForecastContextAsync();
+        var forecastContext = await GetOrBuildForecastContextAsync();
         return BuildCourseDemandForecast(forecastContext, course);
     }
 
@@ -41,7 +47,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         if (department == null)
             return null;
 
-        var forecastContext = await BuildForecastContextAsync();
+        var forecastContext = await GetOrBuildForecastContextAsync();
 
         var relevantCourseIds = new HashSet<int>(
             forecastContext.Courses.Values
@@ -81,7 +87,13 @@ public class EnrollmentForecastService : IEnrollmentForecastService
                 TotalRecommendedSections = totalRecommended,
                 SectionDelta = totalRecommended - currentSectionCount,
                 CoursesNeedingMoreSections = courseSummaries
-                    .Count(s => s.SectionDistribution.Warnings.Any(w => w.Contains("Kapasite"))),
+                    .Count(s => s.RecommendedSectionCount > (
+                        forecastContext.ActiveTerm != null
+                            ? forecastContext.AllSections.Count(sec =>
+                                sec.CourseId == s.CourseId
+                                && sec.TermId == forecastContext.ActiveTerm.Id
+                                && sec.IsActive)
+                            : 0)),
                 CoursesWithExcessCapacity = courseSummaries
                     .Count(s => s.SectionDistribution.UtilizationRate < 0.50m && s.SectionDistribution.UtilizationRate > 0)
             }
@@ -92,7 +104,17 @@ public class EnrollmentForecastService : IEnrollmentForecastService
     //  FORECAST CONTEXT BUILDER
     // ═══════════════════════════════════════════════════════════════
 
-    private async Task<ForecastContextData> BuildForecastContextAsync()
+    private async Task<ForecastContextData> GetOrBuildForecastContextAsync()
+    {
+        if (_cache.TryGetValue(ForecastContextCacheKey, out ForecastContextData? cached) && cached != null)
+            return cached;
+
+        var data = await BuildForecastContextCoreAsync();
+        _cache.Set(ForecastContextCacheKey, data, CacheDuration);
+        return data;
+    }
+
+    private async Task<ForecastContextData> BuildForecastContextCoreAsync()
     {
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
@@ -913,6 +935,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService
 
         if (activeTerm == null)
             notes.Add("Aktif akademik donem bulunamadigi icin aktif section verisi capacity fallback'leriyle desteklendi.");
+
+        if (eligibleProgramCount == 0)
+            notes.Add("Aktif mufredat kaydi bulunamadigi icin tahminler yalnizca tekrar dersleri ve mevcut kayitlar uzerinden uretildi.");
 
         if (activeStudentCount == 0 || eligibleProgramCount == 0)
             notes.Add("Tahmin havuzunda uygun aktif ogrenci bulunamadigi icin sonuc sifir talep olarak hesaplandi.");

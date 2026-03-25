@@ -14,6 +14,43 @@ export interface AcademicOperationsContext {
   notes: string[];
 }
 
+export interface DemandBreakdown {
+  retakeFF: number;
+  retakeNA: number;
+  retakeU: number;
+  regularOnSchedule: number;
+  behindSchedule: number;
+  upperCourse: number;
+  ectsLimited: number;
+  totalRetake: number;
+  totalEligible: number;
+}
+
+export interface HistoricalEnrollment {
+  termId: number;
+  termName: string;
+  year: number;
+  actualEnrollment: number;
+  sectionCount: number;
+}
+
+export interface ConfidenceRange {
+  lowerBound: number;
+  upperBound: number;
+  margin: number;
+  method: string;
+}
+
+export interface SectionDistribution {
+  recommendedSections: number;
+  effectiveCapacityPerSection: number;
+  totalCapacity: number;
+  utilizationRate: number;
+  surplusCapacity: number;
+  studentsPerSection: number[];
+  warnings: string[];
+}
+
 export interface CourseDemandForecast {
   courseId: number;
   courseCode: string;
@@ -25,6 +62,10 @@ export interface CourseDemandForecast {
   recommendedSectionCount: number;
   capacityBasis: string;
   notes: string[];
+  demandBreakdown: DemandBreakdown;
+  historicalEnrollments: HistoricalEnrollment[];
+  confidence: ConfidenceRange;
+  sectionDistribution: SectionDistribution;
 }
 
 export interface DepartmentCapacitySummary {
@@ -143,3 +184,42 @@ export interface BulkAcademicLevelDto {
 }
 
 export type PlanningConflict = SchedulingConflict;
+
+// Section Approval types
+export type SectionApprovalStatus = 'Pending' | 'Approved' | 'Rejected';
+
+export interface CourseSectionApproval {
+  id: number;
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  recommendedSectionCount: number;
+  approvedSectionCount: number | null;
+  predictedDemand: number;
+  status: SectionApprovalStatus;
+  note: string | null;
+  decidedByUserName: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface ApproveCourseSectionsRequest {
+  courseId: number;
+  sectionCount: number;
+  note?: string;
+}
+
+export interface RejectCourseSectionsRequest {
+  courseId: number;
+  note?: string;
+}
+
+export interface BulkApprovalRequest {
+  approvals: ApproveCourseSectionsRequest[];
+}
+
+export interface BulkApprovalResult {
+  approvedCount: number;
+  sectionsCreated: number;
+  errors: string[];
+}
