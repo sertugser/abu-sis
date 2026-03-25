@@ -12,6 +12,7 @@ using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.AcademicLevel.Services;
 using SIS.Application.AcademicProgression.Services;
+using SIS.Application.FacultyPlanning.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -81,6 +82,7 @@ builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
