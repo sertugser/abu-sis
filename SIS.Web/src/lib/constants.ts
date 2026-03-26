@@ -20,6 +20,7 @@ export const ROUTES = {
   TERM_CLOSING: '/donem-kapatma',
   PRE_REGISTRATION_SURVEY: '/on-kayit-anketi',
   FACULTY_PLANNING: '/fakulte-planlama',
+  COURSE_OPENING: '/ders-acma-islemleri',
 } as const;
 
 export const QUERY_KEYS = {
@@ -44,6 +45,9 @@ export const QUERY_KEYS = {
   facultyPlanningSections: (facultyId: number, termId: number, departmentId?: number, status?: string, page?: number) =>
     ['facultyPlanning', 'sections', facultyId, termId, departmentId, status, page] as const,
   facultyPlanningConflicts: (facultyId: number, termId: number) => ['facultyPlanning', 'conflicts', facultyId, termId] as const,
+  courseOpeningList: (departmentId: number, termId: number) => ['courseOpening', 'list', departmentId, termId] as const,
+  curriculumCoursesForOpening: (departmentId: number, termId: number) => ['courseOpening', 'curriculum', departmentId, termId] as const,
+  departmentInstructors: (departmentId: number) => ['courseOpening', 'instructors', departmentId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -84,6 +88,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/fakulte-planlama',
   '/merkezi-derslik-yonetimi',
   '/donem-kapatma',
+  '/ders-acma-islemleri',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

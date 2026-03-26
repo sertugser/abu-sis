@@ -12,6 +12,7 @@ using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.AcademicLevel.Services;
 using SIS.Application.AcademicProgression.Services;
+using SIS.Application.CourseOpening.Services;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
@@ -87,6 +88,7 @@ builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
+builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
 
 var app = builder.Build();
 
