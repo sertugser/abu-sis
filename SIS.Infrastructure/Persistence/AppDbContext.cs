@@ -31,6 +31,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
     public DbSet<CourseSectionApproval> CourseSectionApprovals => Set<CourseSectionApproval>();
     public DbSet<SchedulingAuditLog> SchedulingAuditLogs => Set<SchedulingAuditLog>();
+    public DbSet<TermClosingProgress> TermClosingProgresses => Set<TermClosingProgress>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -331,6 +332,22 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         builder.Entity<AcademicTerm>(e =>
         {
             e.HasIndex(t => new { t.Year, t.Semester }).IsUnique();
+        });
+
+        // ── TermClosingProgress ────────────────────────────────────────
+        builder.Entity<TermClosingProgress>(e =>
+        {
+            e.HasIndex(p => new { p.DepartmentId, p.TermId, p.Step }).IsUnique();
+
+            e.HasOne(p => p.Department)
+             .WithMany()
+             .HasForeignKey(p => p.DepartmentId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(p => p.Term)
+             .WithMany()
+             .HasForeignKey(p => p.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
