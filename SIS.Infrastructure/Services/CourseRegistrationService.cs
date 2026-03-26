@@ -749,4 +749,202 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         return response;
     }
+
+    public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId)
+    {
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        if (activeTerm == null)
+            return new List<PendingApprovalDto>();
+
+        // Find active students whose advisor is this instructor
+        var advisorStudentIds = await _context.Students
+            .Where(s => s.AdvisorId == advisorInstructorId && s.Status == StudentStatus.Active)
+            .Select(s => s.Id)
+            .ToListAsync();
+
+        if (!advisorStudentIds.Any())
+            return new List<PendingApprovalDto>();
+
+        // Get their PendingAdvisorApproval registrations for the active term
+        var registrations = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Course)
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Instructor)
+            .Where(cr => advisorStudentIds.Contains(cr.StudentId)
+                && cr.CourseSection.TermId == activeTerm.Id
+                && cr.Status == RegistrationStatus.PendingAdvisorApproval)
+            .ToListAsync();
+
+        if (!registrations.Any())
+            return new List<PendingApprovalDto>();
+
+        // Load student user names
+        var studentIds = registrations.Select(r => r.StudentId).Distinct().ToList();
+        var students = await _context.Students
+            .Where(s => studentIds.Contains(s.Id))
+            .ToListAsync();
+
+        var studentUserIds = students.Select(s => s.UserId).Distinct().ToList();
+
+        // Load instructor user ids from the sections
+        var instructorUserIds = registrations
+            .Where(r => r.CourseSection.Instructor != null)
+            .Select(r => r.CourseSection.Instructor!.UserId)
+            .Distinct()
+            .ToList();
+
+        var allUserIds = studentUserIds.Union(instructorUserIds).ToList();
+        var users = await _context.Users
+            .Where(u => allUserIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}");
+
+        var studentDict = students.ToDictionary(s => s.Id);
+
+        // Group by student, build PendingApprovalDto
+        var result = registrations
+            .GroupBy(r => r.StudentId)
+            .Select(g =>
+            {
+                var student = studentDict[g.Key];
+                users.TryGetValue(student.UserId, out var studentName);
+
+                var regItems = g.Select(r =>
+                {
+                    var instructor = r.CourseSection.Instructor;
+                    var instructorName = string.Empty;
+                    if (instructor != null && users.TryGetValue(instructor.UserId, out var iName))
+                        instructorName = $"{instructor.Title} {iName}".Trim();
+
+                    return new PendingRegistrationItemDto
+                    {
+                        RegistrationId = r.Id,
+                        CourseSectionId = r.CourseSectionId,
+                        CourseCode = r.CourseSection.Course.Code,
+                        CourseName = r.CourseSection.Course.Name,
+                        Ects = r.CourseSection.Course.Ects,
+                        Schedule = r.CourseSection.ScheduleJson,
+                        InstructorName = instructorName,
+                        IsRepeated = r.IsRepeated,
+                        Status = r.Status.ToString()
+                    };
+                }).ToList();
+
+                return new PendingApprovalDto
+                {
+                    StudentId = student.Id,
+                    StudentNumber = student.StudentNumber,
+                    StudentName = studentName ?? string.Empty,
+                    Cgpa = student.Cgpa,
+                    CompletedSemesters = student.CompletedSemesters,
+                    IsScholarshipStudent = student.IsScholarshipStudent,
+                    Registrations = regItems,
+                    TotalEcts = regItems.Sum(r => r.Ects),
+                    SubmittedAt = g.Max(r => r.UpdatedAt ?? r.CreatedAt)
+                };
+            })
+            .OrderBy(dto => dto.StudentName)
+            .ToList();
+
+        return result;
+    }
+
+    public async Task<ApprovalResponseDto> ApproveStudentRegistrationsAsync(int advisorInstructorId, ApprovalActionDto dto)
+    {
+        // Verify the student's advisor is this instructor
+        var student = await _context.Students.FindAsync(dto.StudentId);
+        if (student == null || student.AdvisorId != advisorInstructorId)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = "Bu ogrencinin danismani degilsiniz veya ogrenci bulunamadi.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        if (activeTerm == null)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = "Aktif donem bulunamadi.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        // Find PendingAdvisorApproval registrations for this student in active term
+        var registrations = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection)
+            .Where(cr => cr.StudentId == dto.StudentId
+                && cr.CourseSection.TermId == activeTerm.Id
+                && cr.Status == RegistrationStatus.PendingAdvisorApproval)
+            .ToListAsync();
+
+        foreach (var reg in registrations)
+        {
+            reg.Status = RegistrationStatus.Active;
+            reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return new ApprovalResponseDto
+        {
+            Success = true,
+            Message = $"{registrations.Count} kayit onaylandi.",
+            AffectedRegistrations = registrations.Count
+        };
+    }
+
+    public async Task<ApprovalResponseDto> RejectStudentRegistrationsAsync(int advisorInstructorId, ApprovalActionDto dto)
+    {
+        // Verify the student's advisor is this instructor
+        var student = await _context.Students.FindAsync(dto.StudentId);
+        if (student == null || student.AdvisorId != advisorInstructorId)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = "Bu ogrencinin danismani degilsiniz veya ogrenci bulunamadi.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        if (activeTerm == null)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = "Aktif donem bulunamadi.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        // Find PendingAdvisorApproval registrations (Include CourseSection for EnrolledCount)
+        var registrations = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection)
+            .Where(cr => cr.StudentId == dto.StudentId
+                && cr.CourseSection.TermId == activeTerm.Id
+                && cr.Status == RegistrationStatus.PendingAdvisorApproval)
+            .ToListAsync();
+
+        foreach (var reg in registrations)
+        {
+            reg.Status = RegistrationStatus.Dropped;
+            reg.UpdatedAt = DateTime.UtcNow;
+            reg.CourseSection.EnrolledCount = Math.Max(0, reg.CourseSection.EnrolledCount - 1);
+        }
+
+        await _context.SaveChangesAsync();
+
+        return new ApprovalResponseDto
+        {
+            Success = true,
+            Message = $"{registrations.Count} kayit reddedildi.",
+            AffectedRegistrations = registrations.Count
+        };
+    }
 }

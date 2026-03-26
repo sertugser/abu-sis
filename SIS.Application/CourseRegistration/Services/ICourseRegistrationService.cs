@@ -10,4 +10,9 @@ public interface ICourseRegistrationService
     Task<List<CourseHistoryTermDto>> GetCourseHistoryAsync(int studentId);
     Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId);
     Task<RegistrationResponseDto> WithdrawCourseAsync(int studentId, int registrationId);
+
+    // Advisor approval methods
+    Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId);
+    Task<ApprovalResponseDto> ApproveStudentRegistrationsAsync(int advisorInstructorId, ApprovalActionDto dto);
+    Task<ApprovalResponseDto> RejectStudentRegistrationsAsync(int advisorInstructorId, ApprovalActionDto dto);
 }
