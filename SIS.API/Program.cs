@@ -13,6 +13,7 @@ using SIS.Application.StudentEligibility.Services;
 using SIS.Application.AcademicLevel.Services;
 using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
+using SIS.Application.TermClosing.Services;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
@@ -89,6 +90,7 @@ builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
+builder.Services.AddScoped<ITermClosingService, TermClosingService>();
 
 var app = builder.Build();
 
