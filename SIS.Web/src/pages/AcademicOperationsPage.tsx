@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -19,7 +18,6 @@ import {
   useApproveCourseSections,
   useBulkApproveCourseSections,
   useDepartmentClassLists,
-  useDepartmentCurriculumOverview,
   useRejectCourseSections,
   useSectionApprovals,
 } from '../hooks/useAcademicOperations';
@@ -28,14 +26,12 @@ import type {
   CourseDemandForecast,
   CourseSectionApproval,
   DepartmentSectionClassList,
-  ProgramCurriculumOverview,
 } from '../types/academicOperations';
 import type { SchedulingConflict } from '../types/scheduling';
 import {
   AlertCircle,
   AlertTriangle,
   BarChart3,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -48,12 +44,11 @@ import {
   X,
 } from 'lucide-react';
 
-type OperationsMode = 'planning' | 'class-lists' | 'curriculum';
+type OperationsMode = 'planning' | 'class-lists';
 
 const MODE_LINKS: { mode: OperationsMode; to: string; label: string; icon: typeof Users }[] = [
   { mode: 'planning', to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama', icon: BarChart3 },
   { mode: 'class-lists', to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sinif Listeleri', icon: Users },
-  { mode: 'curriculum', to: ROUTES.MANAGEMENT_CURRICULUM, label: 'Mufredat', icon: BookOpen },
 ];
 
 const CONFLICT_CFG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'outline' }> = {
@@ -104,7 +99,6 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
 
   const planningQuery = useAcademicPlanningSummary(currentDepartmentId, activeTerm?.id, mode === 'planning');
   const classListsQuery = useDepartmentClassLists(currentDepartmentId, activeTerm?.id, mode === 'class-lists', debouncedSearch || undefined);
-  const curriculumQuery = useDepartmentCurriculumOverview(currentDepartmentId, mode === 'curriculum');
 
   const handleDepartmentChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const next = new URLSearchParams(searchParams);
@@ -200,15 +194,6 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
               isLoading={classListsQuery.isLoading}
               errorMessage={classListsQuery.isError ? getAcademicOperationsErrorMessage(classListsQuery.error, 'Sinif listeleri yuklenemedi.') : null}
               classLists={classListsQuery.data ?? null}
-              searchTerm={searchTerm}
-              onSearchTermChange={setSearchTerm}
-            />
-          )}
-          {mode === 'curriculum' && (
-            <CurriculumMode
-              isLoading={curriculumQuery.isLoading}
-              errorMessage={curriculumQuery.isError ? getAcademicOperationsErrorMessage(curriculumQuery.error, 'Mufredat verisi yuklenemedi.') : null}
-              overview={curriculumQuery.data ?? null}
               searchTerm={searchTerm}
               onSearchTermChange={setSearchTerm}
             />
@@ -879,152 +864,6 @@ function SectionRow({ section, isExpanded, onToggle }: {
         </TableRow>
       )}
     </>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   MUFREDAT — Reference: "Is our curriculum balanced?"
-
-   Layout:
-   1. Search (only if multiple programs)
-   2. Program cards with visual semester ECTS bars
-   ═══════════════════════════════════════════════════════════════════════ */
-
-function CurriculumMode({
-  isLoading, errorMessage, overview, searchTerm, onSearchTermChange,
-}: {
-  isLoading: boolean; errorMessage: string | null;
-  overview: ReturnType<typeof useDepartmentCurriculumOverview>['data'] | null;
-  searchTerm: string; onSearchTermChange: (v: string) => void;
-}) {
-  if (isLoading) return <div className="space-y-3"><Skeleton className="h-10 rounded-lg" /><Skeleton className="h-64 rounded-xl" /><Skeleton className="h-64 rounded-xl" /></div>;
-  if (errorMessage) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Hata</AlertTitle><AlertDescription>{errorMessage}</AlertDescription></Alert>;
-  if (!overview) return <Card><CardContent className="py-16 text-center text-gray-500">Mufredat verisi bulunamadi.</CardContent></Card>;
-
-  const filtered = overview.programs.filter(p => {
-    if (!searchTerm.trim()) return true;
-    return `${p.programCode} ${p.programName} ${p.curriculumVersion}`.toLowerCase().includes(searchTerm.toLowerCase());
-  });
-
-  return (
-    <div className="space-y-4">
-      {/* Search — only show if useful */}
-      {overview.programs.length > 2 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            <span className="font-semibold text-gray-900">{overview.programCount}</span> program ·{' '}
-            <span className="font-semibold text-gray-900">{overview.activeCurriculumCount}</span> aktif mufredat ·{' '}
-            {overview.totalCourses} ders · {overview.totalEcts} AKTS
-          </p>
-          <div className="relative">
-            <Search className="h-3.5 w-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <Input
-              value={searchTerm}
-              onChange={e => onSearchTermChange(e.target.value)}
-              placeholder="Program ara..."
-              className="pl-8 h-8 w-48 text-sm"
-            />
-          </div>
-        </div>
-      )}
-
-      {filtered.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">Eslesen mufredat bulunamadi.</p>
-      ) : (
-        <div className="space-y-4">
-          {filtered.map(p => (
-            <CurriculumCard key={`${p.programId}-${p.curriculumId}`} program={p} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CurriculumCard({ program }: { program: ProgramCurriculumOverview }) {
-  const maxEcts = Math.max(...program.semesterSummaries.map(s => s.ects), 1);
-  const avgEcts = program.semesterSummaries.length > 0
-    ? Math.round(program.totalEcts / program.semesterSummaries.length)
-    : 0;
-
-  return (
-    <Card className={cn(program.isActiveCurriculum ? 'border-l-4 border-l-primary' : 'opacity-70')}>
-      {/* Header */}
-      <div className="px-5 pt-4 pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold">{program.programName}</span>
-            <span className="font-mono text-xs text-gray-500">{program.programCode}</span>
-            <Badge variant={program.isActiveCurriculum ? 'success' : 'secondary'} className="text-[10px]">
-              {program.isActiveCurriculum ? 'Aktif' : 'Arsiv'}
-            </Badge>
-            <span className="text-xs text-gray-500">v{program.curriculumVersion}</span>
-          </div>
-          <div className="flex gap-4 text-xs text-gray-500">
-            <span><span className="font-semibold text-gray-900">{program.totalCourses}</span> ders</span>
-            <span><span className="font-semibold text-gray-900">{program.totalEcts}</span> AKTS</span>
-            <span><span className="font-semibold text-gray-900">{program.compulsoryCourseCount}</span>Z / <span className="font-semibold text-gray-900">{program.electiveCourseCount}</span>S</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Semester bars */}
-      <CardContent className="pt-0 pb-4">
-        <div className="space-y-1">
-          {program.semesterSummaries.map(sem => {
-            const ectsPct = (sem.ects / maxEcts) * 100;
-            const isOverAvg = sem.ects > avgEcts * 1.2;
-            const isUnderAvg = sem.ects < avgEcts * 0.8;
-            return (
-              <TooltipProvider key={sem.semesterNumber}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-2 group cursor-default py-0.5">
-                      <span className="w-24 text-xs text-gray-500 truncate text-right">{sem.label}</span>
-                      <div className="flex-1 h-7 rounded bg-gray-100 overflow-hidden relative">
-                        <div
-                          className={cn(
-                            'h-full rounded transition-all duration-300',
-                            isOverAvg ? 'bg-amber-200' :
-                            isUnderAvg ? 'bg-sky-200' :
-                            'bg-sky-100'
-                          )}
-                          style={{ width: `${ectsPct}%` }}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-between px-2.5 text-[11px]">
-                          <span className={cn(
-                            'font-bold',
-                            isOverAvg ? 'text-amber-800' : isUnderAvg ? 'text-sky-700' : 'text-gray-700'
-                          )}>
-                            {sem.ects} AKTS
-                          </span>
-                          <span className="text-gray-600">
-                            {sem.courseCount} ders ({sem.compulsoryCourseCount}Z+{sem.electiveCourseCount}S)
-                          </span>
-                        </div>
-                      </div>
-                      <span className="w-10 text-right text-[11px] font-semibold tabular-nums">{sem.credits} kr</span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p className="font-medium">{sem.label}</p>
-                    <p>{sem.courseCount} ders · {sem.credits} kredi · {sem.ects} AKTS</p>
-                    <p>Zorunlu {sem.compulsoryCourseCount} · Secmeli {sem.electiveCourseCount}</p>
-                    {isOverAvg && <p className="text-amber-600">Ortalamanin %20 ustunde</p>}
-                    {isUnderAvg && <p className="text-blue-600">Ortalamanin %20 altinda</p>}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })}
-        </div>
-        <Separator className="my-2" />
-        <div className="flex items-center justify-between text-[11px] text-gray-500">
-          <span>{program.semesterSummaries.length} donem · ort {avgEcts} AKTS/donem</span>
-          <span>{program.totalCourses} ders · {program.totalEcts} AKTS · {program.totalCredits} kredi</span>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 

@@ -189,9 +189,7 @@ export function buildInstructorMenuGroups(includeScheduling: boolean): MenuGroup
       children: [
         { to: '/bolum-ogrenci-islemleri', label: 'Öğrenci İşlemleri' },
         { to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama Merkezi' },
-        { to: '/sinif-listeleri', label: 'Sınıf Listeleri' },
-        { to: ROUTES.MANAGEMENT_CURRICULUM, label: 'Müfredat Görünümü' },
-        { to: '/donem-kapatma', label: 'Dönem Kapatma İşlemleri' },
+{ to: '/donem-kapatma', label: 'Dönem Kapatma İşlemleri' },
         { to: ROUTES.FACULTY_PLANNING, label: 'Fakülte Planlama' },
         { to: '/bolum-ders-islemleri', label: 'Bölüm Ders İşlemleri' },
         { to: '/bolum-ders-ac-mufredat', label: 'Ders Aç (Müfredat)' },

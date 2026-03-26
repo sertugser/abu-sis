@@ -14,8 +14,7 @@ export const ROUTES = {
   GRADE_ENTRY: '/not-girisi',
   MANAGEMENT_PLANNING: '/planlama-merkezi',
   MANAGEMENT_CLASS_LISTS: '/sinif-listeleri',
-  MANAGEMENT_CURRICULUM: '/mufredat-gorunumu',
-  // New pages from technical analysis
+// New pages from technical analysis
   CLASSROOM_MANAGEMENT: '/merkezi-derslik-yonetimi',
   TERM_CLOSING: '/donem-kapatma',
   PRE_REGISTRATION_SURVEY: '/on-kayit-anketi',
@@ -85,7 +84,6 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/musaitlik-yonetimi',
   '/planlama-merkezi',
   '/sinif-listeleri',
-  '/mufredat-gorunumu',
   '/fakulte-planlama',
   '/merkezi-derslik-yonetimi',
   '/donem-kapatma',
