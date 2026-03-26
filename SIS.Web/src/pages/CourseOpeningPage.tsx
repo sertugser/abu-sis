@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,13 +34,6 @@ export default function CourseOpeningPage() {
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showBulkDialog, setShowBulkDialog] = useState(false);
-
-  // Set default dept when context loads
-  useEffect(() => {
-    if (selectedDeptId === null && departments.length > 0) {
-      setSelectedDeptId(departments[0].departmentId);
-    }
-  }, [departments, selectedDeptId]);
 
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const termId = activeTerm?.id ?? null;
