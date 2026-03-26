@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -55,16 +55,17 @@ export default function CourseOpeningPage() {
   }, [forecastData]);
 
   // Group opened sections by semester
+  const openedSections = openedQuery.data?.sections;
   const sectionsBySemester = React.useMemo(() => {
-    if (!openedQuery.data?.sections) return [];
-    const map = new Map<number, typeof openedQuery.data.sections>();
-    for (const section of openedQuery.data.sections) {
+    if (!openedSections) return [];
+    const map = new Map<number, typeof openedSections>();
+    for (const section of openedSections) {
       const sem = section.suggestedSemester || 0;
       if (!map.has(sem)) map.set(sem, []);
       map.get(sem)!.push(section);
     }
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
-  }, [openedQuery.data]);
+  }, [openedSections]);
 
   const getSemesterLabel = (sem: number) => {
     if (sem === 0) return 'Diger Dersler';
@@ -562,13 +563,11 @@ function BulkOpenDialog({
 
   // Select all compulsory courses by default on first load
   const [initialized, setInitialized] = useState(false);
-  useEffect(() => {
-    if (!initialized && unopenedCourses.length > 0) {
-      const compulsoryIds = new Set(unopenedCourses.filter(c => c.isCompulsory).map(c => c.courseId));
-      setSelectedIds(compulsoryIds);
-      setInitialized(true);
-    }
-  }, [initialized, unopenedCourses]);
+  if (!initialized && unopenedCourses.length > 0) {
+    const compulsoryIds = new Set(unopenedCourses.filter(c => c.isCompulsory).map(c => c.courseId));
+    setSelectedIds(compulsoryIds);
+    setInitialized(true);
+  }
 
   const toggleCourse = (courseId: number) => {
     setSelectedIds(prev => {

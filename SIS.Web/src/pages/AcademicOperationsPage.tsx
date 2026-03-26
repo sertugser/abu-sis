@@ -667,8 +667,6 @@ function ClassListsMode({
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
 
-  useEffect(() => setPage(0), [searchTerm]);
-
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-10 rounded-lg" /><Skeleton className="h-96 rounded-xl" /></div>;
   if (errorMessage) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Hata</AlertTitle><AlertDescription>{errorMessage}</AlertDescription></Alert>;
   if (!classLists) return <Card><CardContent className="py-16 text-center text-gray-500">Veri bulunamadi.</CardContent></Card>;
