@@ -20,10 +20,10 @@ export function useOpenedCourses(departmentId: number | null, termId: number | n
   });
 }
 
-export function useCurriculumCoursesForOpening(departmentId: number | null, termId: number | null) {
+export function useCurriculumCoursesForOpening(departmentId: number | null, termId: number | null, showAll = false) {
   return useQuery({
-    queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId ?? 0, termId ?? 0),
-    queryFn: () => getCurriculumCoursesForOpening(departmentId!, termId!),
+    queryKey: [...QUERY_KEYS.curriculumCoursesForOpening(departmentId ?? 0, termId ?? 0), showAll],
+    queryFn: () => getCurriculumCoursesForOpening(departmentId!, termId!, showAll),
     enabled: departmentId !== null && termId !== null,
     staleTime: 60 * 1000,
   });

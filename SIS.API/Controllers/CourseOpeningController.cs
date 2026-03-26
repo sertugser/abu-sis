@@ -27,12 +27,12 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpGet("curriculum-courses")]
-    public async Task<IActionResult> GetCurriculumCoursesForOpening([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
+    public async Task<IActionResult> GetCurriculumCoursesForOpening([FromQuery] int departmentId, [FromQuery] int termId, [FromQuery] bool showAll = false, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, ct);
+        var result = await _courseOpeningService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, showAll, ct);
         return Ok(result);
     }
 

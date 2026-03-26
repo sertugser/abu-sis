@@ -263,29 +263,49 @@ public class AcademicProgressionService : IAcademicProgressionService
 
         if (sections.Count == 0)
         {
-            result.AllGradesEntered = true;
-            result.Notes.Add("Bu bolumde aktif section bulunamadi.");
+            result.AllGradesEntered = false;
+            result.HasActiveRegistrations = false;
+            result.Notes.Add("Bu bölümde aktif şube bulunamadı.");
             return result;
         }
 
         var sectionIds = sections.Select(s => s.Id).ToList();
 
+        // Toplam aktif ders kaydı sayısı
+        var totalActiveRegistrations = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(r => sectionIds.Contains(r.CourseSectionId)
+                && r.Status == RegistrationStatus.Active)
+            .CountAsync(cancellationToken);
+
+        result.TotalActiveRegistrations = totalActiveRegistrations;
+        result.HasActiveRegistrations = totalActiveRegistrations > 0;
+
+        if (totalActiveRegistrations == 0)
+        {
+            result.AllGradesEntered = false;
+            result.Notes.Add($"Dönem: {resolvedTerm.Name}");
+            result.Notes.Add($"Toplam şube: {sections.Count}");
+            result.Notes.Add("Henüz aktif ders kaydı bulunmuyor.");
+            return result;
+        }
+
         // Aktif ders kaydı olan ama henüz not girilmemiş öğrenci sayısı
         var registrationsWithoutGrade = await _context.CourseRegistrations
             .AsNoTracking()
             .Where(r => sectionIds.Contains(r.CourseSectionId)
-                && (r.Status == RegistrationStatus.Active)
+                && r.Status == RegistrationStatus.Active
                 && r.Grade == null)
             .CountAsync(cancellationToken);
 
         result.MissingGradeCount = registrationsWithoutGrade;
         result.AllGradesEntered = registrationsWithoutGrade == 0;
 
-        result.Notes.Add($"Donem: {resolvedTerm.Name}");
-        result.Notes.Add($"Toplam section: {sections.Count}");
+        result.Notes.Add($"Dönem: {resolvedTerm.Name}");
+        result.Notes.Add($"Toplam şube: {sections.Count}");
         result.Notes.Add(registrationsWithoutGrade == 0
-            ? "Tum notlar girilmis, donem kapatmaya hazir."
-            : $"{registrationsWithoutGrade} kayit icin not girisi eksik.");
+            ? "Tüm notlar girilmiş, dönem kapatmaya hazır."
+            : $"{registrationsWithoutGrade} kayıt için not girişi eksik.");
 
         return result;
     }

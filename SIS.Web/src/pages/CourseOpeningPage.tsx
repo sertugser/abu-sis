@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,8 @@ import {
   useCloseSection,
 } from '../hooks/useCourseOpening';
 import type { CurriculumCourseForOpeningDto } from '../types/courseOpening';
+import { useDepartmentForecast } from '../hooks/useForecast';
+import type { CourseDemandForecastDto } from '../types/forecast';
 
 export default function CourseOpeningPage() {
   const contextQuery = useAcademicOperationsContext();
@@ -39,6 +41,38 @@ export default function CourseOpeningPage() {
   const termId = activeTerm?.id ?? null;
 
   const openedQuery = useOpenedCourses(deptId, termId);
+  const { data: forecastData } = useDepartmentForecast(deptId);
+
+  // Build courseId -> forecast map
+  const forecastMap = React.useMemo(() => {
+    const map = new Map<number, CourseDemandForecastDto>();
+    if (forecastData?.courseSummaries) {
+      for (const cs of forecastData.courseSummaries) {
+        map.set(cs.courseId, cs);
+      }
+    }
+    return map;
+  }, [forecastData]);
+
+  // Group opened sections by semester
+  const openedSections = openedQuery.data?.sections;
+  const sectionsBySemester = React.useMemo(() => {
+    if (!openedSections) return [];
+    const map = new Map<number, typeof openedSections>();
+    for (const section of openedSections) {
+      const sem = section.suggestedSemester || 0;
+      if (!map.has(sem)) map.set(sem, []);
+      map.get(sem)!.push(section);
+    }
+    return [...map.entries()].sort((a, b) => a[0] - b[0]);
+  }, [openedSections]);
+
+  const getSemesterLabel = (sem: number) => {
+    if (sem === 0) return 'Diger Dersler';
+    const year = Math.ceil(sem / 2);
+    const isGuz = sem % 2 === 1;
+    return `${year}. Sinif ${isGuz ? 'Guz' : 'Bahar'}`;
+  };
 
   if (contextQuery.isLoading) return <Skeleton className="h-96 rounded-xl" />;
   if (contextQuery.isError) {
@@ -109,11 +143,29 @@ export default function CourseOpeningPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <OpenedSectionsTable
-          data={openedQuery.data!}
-          deptId={deptId!}
-          termId={termId!}
-        />
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">
+              {openedQuery.data!.departmentName} — {openedQuery.data!.termName} ({openedQuery.data!.totalSections} sube)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sectionsBySemester.length > 0 ? (
+              sectionsBySemester.map(([sem, sections]) => (
+                <SemesterSectionGroup
+                  key={sem}
+                  semesterLabel={getSemesterLabel(sem)}
+                  sections={sections}
+                  sectionCount={sections.length}
+                  deptId={deptId!}
+                  termId={termId!}
+                />
+              ))
+            ) : (
+              <div className="text-center py-8 text-slate-500">Henuz ders acilmamis.</div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Tek Ders Ekleme Dialog */}
@@ -121,6 +173,7 @@ export default function CourseOpeningPage() {
         <AddCourseDialog
           departmentId={deptId}
           termId={termId}
+          forecastMap={forecastMap}
           onClose={() => setShowAddDialog(false)}
         />
       )}
@@ -130,6 +183,7 @@ export default function CourseOpeningPage() {
         <BulkOpenDialog
           departmentId={deptId}
           termId={termId}
+          forecastMap={forecastMap}
           onClose={() => setShowBulkDialog(false)}
         />
       )}
@@ -137,14 +191,18 @@ export default function CourseOpeningPage() {
   );
 }
 
-// ── Açılan Dersler Tablosu ──
+// ── Semester Section Group ──
 
-function OpenedSectionsTable({
-  data,
+function SemesterSectionGroup({
+  semesterLabel,
+  sections,
+  sectionCount,
   deptId,
   termId,
 }: {
-  data: { departmentName: string; termName: string; totalSections: number; sections: import('../types/courseOpening').OpenedCourseSectionDto[] };
+  semesterLabel: string;
+  sections: import('../types/courseOpening').OpenedCourseSectionDto[];
+  sectionCount: number;
   deptId: number;
   termId: number;
 }) {
@@ -174,121 +232,116 @@ function OpenedSectionsTable({
   };
 
   const handleClose = (sectionId: number) => {
-    if (confirm('Bu şubeyi kapatmak istediğinize emin misiniz?')) {
+    if (confirm('Bu subeyi kapatmak istediginize emin misiniz?')) {
       closeMutation.mutate(sectionId);
     }
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm">
-          {data.departmentName} — {data.termName} ({data.totalSections} şube)
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {data.sections.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Henüz ders açılmamış.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">Şb.</TableHead>
-                <TableHead>Ders Kodu</TableHead>
-                <TableHead>Ders Adı</TableHead>
-                <TableHead className="w-16">T+U</TableHead>
-                <TableHead className="w-12">K</TableHead>
-                <TableHead className="w-16">AKTS</TableHead>
-                <TableHead className="w-12">Snf</TableHead>
-                <TableHead className="w-28">KO/DO/K</TableHead>
-                <TableHead>Öğretim Elemanı</TableHead>
-                <TableHead className="w-24">İşlemler</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.sections.map(s => (
-                <TableRow key={s.sectionId} className={!s.isActive ? 'opacity-50' : ''}>
-                  <TableCell className="text-center">{s.sectionNumber}</TableCell>
-                  <TableCell>
-                    <span className="font-mono text-xs font-semibold text-primary">{s.courseCode}</span>
-                  </TableCell>
-                  <TableCell className="text-sm">{s.courseName}</TableCell>
-                  <TableCell className="text-center">{s.theoryHours}+{s.labHours}</TableCell>
-                  <TableCell className="text-center">{s.credits}</TableCell>
-                  <TableCell className="text-center">{s.ects}</TableCell>
-                  <TableCell className="text-center">{s.suggestedSemester > 0 ? Math.ceil(s.suggestedSemester / 2) : '—'}</TableCell>
-                  <TableCell className="text-center">
-                    {editingId === s.sectionId ? (
-                      <Input
-                        className="h-7 w-20 text-xs"
-                        value={editCapacity}
-                        onChange={e => setEditCapacity(e.target.value)}
-                      />
-                    ) : (
-                      <span>{s.capacity} / {s.enrolledCount} / {s.registeredCount}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editingId === s.sectionId ? (
-                      <select
-                        className="h-7 w-full rounded border border-input bg-background px-1 text-xs"
-                        value={editInstructorId}
-                        onChange={e => setEditInstructorId(e.target.value)}
+    <div className="mb-6">
+      <div className="flex items-center justify-between bg-slate-100 px-4 py-2 rounded-t-lg border border-b-0 border-slate-200">
+        <h3 className="text-sm font-semibold text-slate-700">
+          {semesterLabel}
+        </h3>
+        <span className="text-xs text-slate-500">{sectionCount} section</span>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12">Sb.</TableHead>
+            <TableHead>Ders Kodu</TableHead>
+            <TableHead>Ders Adi</TableHead>
+            <TableHead className="w-16">T+U</TableHead>
+            <TableHead className="w-12">K</TableHead>
+            <TableHead className="w-16">AKTS</TableHead>
+            <TableHead className="w-12">Snf</TableHead>
+            <TableHead className="w-28">KO/DO/K</TableHead>
+            <TableHead>Ogretim Elemani</TableHead>
+            <TableHead className="w-24">Islemler</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sections.map(s => (
+            <TableRow key={s.sectionId} className={!s.isActive ? 'opacity-50' : ''}>
+              <TableCell className="text-center">{s.sectionNumber}</TableCell>
+              <TableCell>
+                <span className="font-mono text-xs font-semibold text-primary">{s.courseCode}</span>
+              </TableCell>
+              <TableCell className="text-sm">{s.courseName}</TableCell>
+              <TableCell className="text-center">{s.theoryHours}+{s.labHours}</TableCell>
+              <TableCell className="text-center">{s.credits}</TableCell>
+              <TableCell className="text-center">{s.ects}</TableCell>
+              <TableCell className="text-center">{s.suggestedSemester > 0 ? Math.ceil(s.suggestedSemester / 2) : '\u2014'}</TableCell>
+              <TableCell className="text-center">
+                {editingId === s.sectionId ? (
+                  <Input
+                    className="h-7 w-20 text-xs"
+                    value={editCapacity}
+                    onChange={e => setEditCapacity(e.target.value)}
+                  />
+                ) : (
+                  <span>{s.capacity} / {s.enrolledCount} / {s.registeredCount}</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {editingId === s.sectionId ? (
+                  <select
+                    className="h-7 w-full rounded border border-input bg-background px-1 text-xs"
+                    value={editInstructorId}
+                    onChange={e => setEditInstructorId(e.target.value)}
+                  >
+                    <option value="">Seciniz</option>
+                    {(instructorsQuery.data ?? []).map(inst => (
+                      <option key={inst.instructorId} value={inst.instructorId}>{inst.fullName}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-sm">{s.instructorName ?? '\u2014'}</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <div className="flex gap-1">
+                  {editingId === s.sectionId ? (
+                    <>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={updateMutation.isPending}>
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(s)} disabled={!s.isActive}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => handleClose(s.sectionId)}
+                        disabled={closeMutation.isPending || !s.isActive}
                       >
-                        <option value="">Seçiniz</option>
-                        {(instructorsQuery.data ?? []).map(inst => (
-                          <option key={inst.instructorId} value={inst.instructorId}>{inst.fullName}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-sm">{s.instructorName ?? '—'}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {editingId === s.sectionId ? (
-                        <>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={updateMutation.isPending}>
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(s)} disabled={!s.isActive}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-destructive"
-                            onClick={() => handleClose(s.sectionId)}
-                            disabled={closeMutation.isPending || !s.isActive}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
-        {closeMutation.isError && (
-          <Alert variant="destructive" className="mt-3">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {(closeMutation.error as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Şube kapatılamadı.'}
-            </AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
+      {closeMutation.isError && (
+        <Alert variant="destructive" className="mt-3">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {(closeMutation.error as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Sube kapatılamadı.'}
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }
 
@@ -297,13 +350,16 @@ function OpenedSectionsTable({
 function AddCourseDialog({
   departmentId,
   termId,
+  forecastMap,
   onClose,
 }: {
   departmentId: number;
   termId: number;
+  forecastMap: Map<number, CourseDemandForecastDto>;
   onClose: () => void;
 }) {
-  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId);
+  const [showAll, setShowAll] = useState(false);
+  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId, showAll);
   const instructorsQuery = useDepartmentInstructors(departmentId);
   const openMutation = useOpenCourse(departmentId, termId);
 
@@ -347,12 +403,23 @@ function AddCourseDialog({
           <Skeleton className="h-48" />
         ) : (
           <>
-            <Input
-              placeholder="Ders kodu veya adı ile ara..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="mb-3"
-            />
+            <div className="flex items-center gap-3 mb-3">
+              <Input
+                placeholder="Ders kodu veya adı ile ara..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="flex-1"
+              />
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAll}
+                  onChange={e => setShowAll(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Tüm dersler
+              </label>
+            </div>
 
             <div className="max-h-60 overflow-y-auto border rounded-md">
               <Table>
@@ -398,6 +465,30 @@ function AddCourseDialog({
                 </TableBody>
               </Table>
             </div>
+
+            {selectedCourse && forecastMap.get(selectedCourse.courseId) && (() => {
+              const fc = forecastMap.get(selectedCourse.courseId)!;
+              return (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm space-y-1 mt-4 mb-4">
+                  <div className="font-medium text-blue-800">Talep Tahmini</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700">
+                    <span>Toplam Talep:</span>
+                    <span className="font-semibold">{fc.totalPredictedDemand} ogrenci</span>
+                    <span>Zorunlu (sinifta):</span>
+                    <span>{fc.demandBreakdown.regularOnSchedule}</span>
+                    <span>Tekrar (FF/NA):</span>
+                    <span className="text-red-600 font-medium">{fc.demandBreakdown.totalRetake}</span>
+                    <span>Ust siniftan:</span>
+                    <span>{fc.demandBreakdown.upperCourse}</span>
+                    <span>Geride kalan:</span>
+                    <span>{fc.demandBreakdown.behindSchedule}</span>
+                  </div>
+                  <div className="pt-1 border-t border-blue-200 text-blue-700 font-medium">
+                    Onerilen: {fc.recommendedSectionCount} section ({fc.sectionDistribution.effectiveCapacityPerSection} kisi/section)
+                  </div>
+                </div>
+              );
+            })()}
 
             {selectedCourse && (
               <div className="grid grid-cols-3 gap-3 mt-4">
@@ -452,13 +543,16 @@ function AddCourseDialog({
 function BulkOpenDialog({
   departmentId,
   termId,
+  forecastMap,
   onClose,
 }: {
   departmentId: number;
   termId: number;
+  forecastMap: Map<number, CourseDemandForecastDto>;
   onClose: () => void;
 }) {
-  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId);
+  const [showAll, setShowAll] = useState(false);
+  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId, showAll);
   const bulkMutation = useBulkOpenCourses(departmentId, termId);
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -533,6 +627,15 @@ function BulkOpenDialog({
               <span className="text-sm text-muted-foreground mt-5">
                 {selectedIds.size} ders seçili
               </span>
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap cursor-pointer select-none mt-5 ml-auto">
+                <input
+                  type="checkbox"
+                  checked={showAll}
+                  onChange={e => setShowAll(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Tüm dersler
+              </label>
             </div>
 
             <div className="max-h-64 overflow-y-auto border rounded-md">
@@ -543,15 +646,17 @@ function BulkOpenDialog({
                     <TableHead>Ders Kodu</TableHead>
                     <TableHead>Ders Adı</TableHead>
                     <TableHead>AKTS</TableHead>
+                    <TableHead className="px-3 py-2 text-right text-xs font-medium text-slate-500">Talep</TableHead>
+                    <TableHead className="px-3 py-2 text-right text-xs font-medium text-slate-500">Onerilen</TableHead>
                     <TableHead>Snf</TableHead>
-                    <TableHead>Tür</TableHead>
+                    <TableHead>Tur</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {unopenedCourses.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                        Tüm müfredat dersleri zaten açılmış.
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
+                        Tum mufredat dersleri zaten acilmis.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -565,10 +670,12 @@ function BulkOpenDialog({
                         </TableCell>
                         <TableCell className="text-sm">{c.courseName}</TableCell>
                         <TableCell>{c.ects}</TableCell>
-                        <TableCell>{Math.ceil(c.suggestedSemester / 2)}</TableCell>
+                        <TableCell className="px-3 py-2 text-right text-sm tabular-nums">{forecastMap.get(c.courseId)?.totalPredictedDemand ?? '\u2014'}</TableCell>
+                        <TableCell className="px-3 py-2 text-right text-sm font-medium tabular-nums">{forecastMap.get(c.courseId)?.recommendedSectionCount ?? '\u2014'}</TableCell>
+                        <TableCell>{c.suggestedSemester > 0 ? Math.ceil(c.suggestedSemester / 2) : '\u2014'}</TableCell>
                         <TableCell>
                           <Badge variant={c.isCompulsory ? 'default' : 'outline'}>
-                            {c.isCompulsory ? 'Zorunlu' : 'Seçmeli'}
+                            {c.isCompulsory ? 'Zorunlu' : 'Secmeli'}
                           </Badge>
                         </TableCell>
                       </TableRow>

@@ -60,8 +60,7 @@ export default function App() {
                   <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>
                     <Route path="planlama-merkezi" element={<AcademicOperationsPage mode="planning" />} />
                     <Route path="sinif-listeleri" element={<AcademicOperationsPage mode="class-lists" />} />
-                    <Route path="mufredat-gorunumu" element={<AcademicOperationsPage mode="curriculum" />} />
-                    <Route path="fakulte-planlama" element={<FacultyPlanningPage />} />
+<Route path="fakulte-planlama" element={<FacultyPlanningPage />} />
                     <Route path="merkezi-derslik-yonetimi" element={<ClassroomManagementPage />} />
                     <Route path="donem-kapatma" element={<TermClosingWizard />} />
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />

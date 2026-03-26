@@ -30,7 +30,6 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
-  BookOpenCheck,
   CalendarRange,
   Check,
   CheckCircle2,
@@ -379,13 +378,20 @@ function GradeEntryCard({
   isError: boolean;
 }) {
   const allGradesEntered = gradeLock?.allGradesEntered ?? false;
+  const hasActiveRegistrations = gradeLock?.hasActiveRegistrations ?? false;
   const missingGradeCount = gradeLock?.missingGradeCount ?? 0;
   const totalSections = gradeLock?.totalSections ?? 0;
 
   const hasData = gradeLock != null;
-  const borderColor = allGradesEntered
-    ? 'border-l-[var(--color-success)]'
-    : 'border-l-[var(--color-destructive)]';
+
+  // 3 durum: kayıt yok (muted), tüm notlar girilmiş (success), eksik not var (destructive)
+  const borderColor = !hasData || isError
+    ? 'border-l-muted'
+    : !hasActiveRegistrations
+      ? 'border-l-[var(--color-warning)]'
+      : allGradesEntered
+        ? 'border-l-[var(--color-success)]'
+        : 'border-l-[var(--color-destructive)]';
 
   return (
     <Card className={`border-l-4 ${borderColor}`}>
@@ -400,6 +406,21 @@ function GradeEntryCard({
           <Skeleton className="h-16 w-full" />
         ) : isError || !hasData ? (
           <p className="text-sm text-muted-foreground">Veri yüklenemedi</p>
+        ) : totalSections === 0 ? (
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Bu bölümde aktif şube bulunamadı</p>
+          </div>
+        ) : !hasActiveRegistrations ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-warning" />
+              <p className="text-sm font-medium text-warning">Henüz aktif ders kaydı yok</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalSections} şube açık, ancak onaylanmış kayıt bulunmuyor
+            </p>
+          </div>
         ) : allGradesEntered ? (
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-success" />
@@ -431,7 +452,6 @@ const QUICK_LINKS_STORAGE_KEY = 'sis-dashboard-quick-links';
 const DEFAULT_QUICK_LINKS = [
   ROUTES.MANAGEMENT_PLANNING,
   ROUTES.MANAGEMENT_CLASS_LISTS,
-  ROUTES.MANAGEMENT_CURRICULUM,
   ROUTES.FACULTY_PLANNING,
   ROUTES.TERM_CLOSING,
 ];
@@ -440,8 +460,7 @@ const DEFAULT_QUICK_LINKS = [
 const ROUTE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   [ROUTES.MANAGEMENT_PLANNING]: Network,
   [ROUTES.MANAGEMENT_CLASS_LISTS]: ClipboardList,
-  [ROUTES.MANAGEMENT_CURRICULUM]: BookOpenCheck,
-  [ROUTES.FACULTY_PLANNING]: CalendarRange,
+[ROUTES.FACULTY_PLANNING]: CalendarRange,
   [ROUTES.TERM_CLOSING]: GraduationCap,
   [ROUTES.INSTRUCTOR_SECTIONS]: Layers,
 };

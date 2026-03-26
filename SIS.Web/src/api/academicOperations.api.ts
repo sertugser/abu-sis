@@ -46,8 +46,10 @@ export async function getDepartmentAcademicLevels(departmentId: number): Promise
 
 export interface GradeLockReadiness {
   totalSections: number;
+  totalActiveRegistrations: number;
   missingGradeCount: number;
   allGradesEntered: boolean;
+  hasActiveRegistrations: boolean;
   notes: string[];
 }
 

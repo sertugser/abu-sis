@@ -1,15 +1,6 @@
-import { useState } from 'react';
-import { CalendarDays, ExternalLink } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { useState, useMemo, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
   ACADEMIC_CALENDAR_SOURCE_URL,
@@ -17,298 +8,325 @@ import {
   type AcademicCalendarEntry,
 } from '../lib/academicCalendar';
 
+/* ─── Constants ─────────────────────────────────────────────────────── */
+
 const TODAY = new Date();
-const ACTIVE_TERM_LABEL = '2025-2026 Bahar';
-const HIGHLIGHT_COUNT = 4;
+const WEEKDAYS = ['PZT', 'SAL', 'ÇAR', 'PER', 'CUM', 'CMT', 'PAZ'];
+const MONTH_NAMES = [
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+];
+const MAX_LANES = 3;
 
-type EventStatus = 'active' | 'upcoming' | 'completed' | 'pending';
+/* ─── Categories ────────────────────────────────────────────────────── */
 
-function getEventStatus(event: AcademicCalendarEntry): EventStatus {
-  if (!event.startDate || !event.endDate) {
-    return 'pending';
-  }
+type Cat = 'exam' | 'registration' | 'holiday' | 'deadline' | 'result' | 'application' | 'academic';
 
-  const start = new Date(`${event.startDate}T00:00:00+03:00`);
-  const end = new Date(`${event.endDate}T23:59:59+03:00`);
+const CAT_MAP: Record<string, Cat> = {
+  'midterms': 'exam', 'finals': 'exam', 'resit-exams': 'exam',
+  'midterm-makeup': 'exam', 'prep-exemption': 'exam',
+  'course-registration': 'registration', 'graduate-registration': 'registration',
+  'add-drop': 'registration', 'transfer-registration': 'registration',
+  'ramadan-feast': 'holiday', 'eid-al-adha': 'holiday',
+  'national-sovereignty': 'holiday', 'labour-day': 'holiday',
+  'atatürk-commemoration': 'holiday',
+  'withdrawal-deadline': 'deadline', 'freeze-deadline': 'deadline',
+  'midterm-makeup-deadline': 'deadline', 'resit-deadline': 'deadline',
+  'midterm-results': 'result', 'final-results': 'result',
+  'resit-results': 'result', 'transfer-results': 'result', 'graduate-results': 'result',
+  'graduate-applications': 'application', 'horizontal-transfer': 'application',
+  'double-major': 'application', 'international-postgraduate': 'application',
+  'tuition-payment': 'academic', 'classes-start': 'academic', 'classes-end': 'academic',
+};
 
-  if (TODAY >= start && TODAY <= end) {
-    return 'active';
-  }
+const CAT_STYLE: Record<Cat, { bg: string; border: string; text: string; label: string }> = {
+  exam:         { bg: 'bg-red-100',    border: 'border-l-red-500',    text: 'text-red-800',    label: 'SINAV' },
+  registration: { bg: 'bg-blue-100',   border: 'border-l-blue-500',   text: 'text-blue-800',   label: 'KAYIT' },
+  holiday:      { bg: 'bg-green-100',  border: 'border-l-green-500',  text: 'text-green-800',  label: 'TATİL' },
+  deadline:     { bg: 'bg-amber-100',  border: 'border-l-amber-500',  text: 'text-amber-800',  label: 'SON GÜN' },
+  result:       { bg: 'bg-gray-100',   border: 'border-l-gray-400',   text: 'text-gray-700',   label: 'SONUÇ' },
+  application:  { bg: 'bg-teal-100',   border: 'border-l-teal-500',   text: 'text-teal-800',   label: 'BAŞVURU' },
+  academic:     { bg: 'bg-indigo-100', border: 'border-l-indigo-500', text: 'text-indigo-800', label: 'AKADEMİK' },
+};
 
-  if (TODAY < start) {
-    return 'upcoming';
-  }
+/* ─── Date helpers ──────────────────────────────────────────────────── */
 
-  return 'completed';
+function toStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function getDaysUntil(event: AcademicCalendarEntry): number | null {
-  if (!event.startDate) return null;
-  const start = new Date(`${event.startDate}T00:00:00+03:00`);
-  const diff = start.getTime() - TODAY.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
+
+/* ─── Grid types & builders ─────────────────────────────────────────── */
+
+interface Day {
+  day: number;
+  isMonth: boolean;
+  isToday: boolean;
+  str: string;
+}
+
+function buildGrid(year: number, month: number): Day[][] {
+  const first = new Date(year, month, 1);
+  const count = new Date(year, month + 1, 0).getDate();
+  let wd = first.getDay() - 1;          // Monday=0
+  if (wd < 0) wd = 6;
+
+  const flat: Day[] = [];
+
+  // previous-month padding
+  for (let i = wd - 1; i >= 0; i--) {
+    const d = new Date(year, month, -i);
+    flat.push({ day: d.getDate(), isMonth: false, isToday: sameDay(d, TODAY), str: toStr(d) });
+  }
+  // current month
+  for (let i = 1; i <= count; i++) {
+    const d = new Date(year, month, i);
+    flat.push({ day: i, isMonth: true, isToday: sameDay(d, TODAY), str: toStr(d) });
+  }
+  // next-month padding — always fill to exactly 6 rows (42 cells)
+  while (flat.length < 42) {
+    const d = new Date(year, month + 1, flat.length - count - wd + 1);
+    flat.push({ day: d.getDate(), isMonth: false, isToday: sameDay(d, TODAY), str: toStr(d) });
+  }
+
+  const weeks: Day[][] = [];
+  for (let i = 0; i < 42; i += 7) weeks.push(flat.slice(i, i + 7));
+  return weeks;
+}
+
+/* ─── Event bars per week ───────────────────────────────────────────── */
+
+interface Bar {
+  event: AcademicCalendarEntry;
+  cat: Cat;
+  col: number;      // 0-6 start column
+  span: number;     // 1-7
+  lane: number;
+  start: boolean;   // event starts this week
+  end: boolean;     // event ends this week
+}
+
+function weekBars(week: Day[], events: AcademicCalendarEntry[]): Bar[] {
+  const wStart = week[0].str;
+  const wEnd = week[6].str;
+
+  const active = events.filter(
+    e => e.startDate && e.endDate && e.startDate <= wEnd && e.endDate >= wStart,
+  );
+
+  // earlier start first, then longer first → stable lanes for spanning events
+  active.sort((a, b) => {
+    const c = a.startDate!.localeCompare(b.startDate!);
+    return c !== 0 ? c : b.endDate!.localeCompare(a.endDate!);
+  });
+
+  const lanes: number[] = [];              // lanes[i] = last occupied col
+
+  return active.map(ev => {
+    const col = ev.startDate! <= wStart
+      ? 0
+      : Math.max(0, week.findIndex(d => d.str >= ev.startDate!));
+
+    let endCol = 6;
+    if (ev.endDate! < wEnd) {
+      for (let i = 6; i >= 0; i--) {
+        if (week[i].str <= ev.endDate!) { endCol = i; break; }
+      }
+    }
+
+    // lane allocation
+    let lane = 0;
+    while (lane < lanes.length && lanes[lane] >= col) lane++;
+    if (lane >= lanes.length) lanes.push(-1);
+    lanes[lane] = endCol;
+
+    return {
+      event: ev,
+      cat: CAT_MAP[ev.id] || 'academic',
+      col,
+      span: endCol - col + 1,
+      lane,
+      start: ev.startDate! >= wStart,
+      end: ev.endDate! <= wEnd,
+    };
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Component
+   ═══════════════════════════════════════════════════════════════════════ */
 
 export default function AcademicCalendarPage() {
-  const [activeFilter, setActiveFilter] = useState<EventStatus | null>(null);
+  const [vm, setVm] = useState({ y: TODAY.getFullYear(), m: TODAY.getMonth() });
 
-  const eventsWithStatus = SPRING_2025_2026_CALENDAR.map(event => ({
-    event,
-    status: getEventStatus(event),
-  }));
+  const weeks = useMemo(() => buildGrid(vm.y, vm.m), [vm]);
 
-  // Active + first upcoming events for the highlight block
-  const highlightEvents = eventsWithStatus
-    .filter(e => e.status === 'active' || e.status === 'upcoming')
-    .slice(0, HIGHLIGHT_COUNT);
+  const weekData = useMemo(
+    () => weeks.map(w => {
+      const bars = weekBars(w, SPRING_2025_2026_CALENDAR);
+      return { bars, maxLane: bars.reduce((mx, b) => Math.max(mx, b.lane), -1) + 1 };
+    }),
+    [weeks],
+  );
 
-  const filteredEvents = activeFilter
-    ? eventsWithStatus.filter(e => e.status === activeFilter)
-    : eventsWithStatus;
-
-  const toggleFilter = (status: EventStatus) => {
-    setActiveFilter(prev => prev === status ? null : status);
-  };
+  const prev = useCallback(() => setVm(({ y, m }) => m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 }), []);
+  const next = useCallback(() => setVm(({ y, m }) => m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 }), []);
+  const today = useCallback(() => setVm({ y: TODAY.getFullYear(), m: TODAY.getMonth() }), []);
 
   return (
-    <div className="space-y-6">
-
-      <Card className="border border-[#003366] shadow-md overflow-hidden bg-card">
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between px-5 py-3 bg-[#003366]">
-            <div className="flex items-center gap-2.5">
-              <CalendarDays className="h-5 w-5 text-white/90" />
-              <h2 className="font-heading text-base font-extrabold tracking-tight text-white uppercase leading-none">
-                Yaklaşan Etkinlikler
-              </h2>
+    <div className="space-y-4">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h2 className="text-xl font-bold text-[#003366]">
+              {MONTH_NAMES[vm.m]} {vm.y}
+            </h2>
+            <div className="flex gap-1">
+              <button onClick={prev} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-gray-600">
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button onClick={next} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-gray-600">
+                <ChevronRight className="h-5 w-5" />
+              </button>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
             <a
               href={ACADEMIC_CALENDAR_SOURCE_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/10 hover:border-white/30 shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
             >
-              Resmi kaynak
-              <ExternalLink className="h-3.5 w-3.5" />
+              Resmi kaynak <ExternalLink className="h-3.5 w-3.5" />
             </a>
-          </div> 
-
-          <div className="p-5">
-            {highlightEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                Yaklaşan etkinlik bulunmuyor.
-              </p>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {highlightEvents.map(({ event, status }) => {
-                  const days = getDaysUntil(event);
-                  const isActive = status === 'active';
-
-                  return (
-                    <div
-                      key={event.id}
-                      className={cn(
-                        'flex items-start gap-4 rounded-xl border p-4 transition-all duration-200 hover:shadow-sm',
-                        isActive
-                          ? 'border-success/30 bg-success/5'
-                          : 'border-[#003366]/30 bg-card'
-                      )}
-                    >
-                      <div className={cn(
-                        'flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[56px] text-center shrink-0 border shadow-inner',
-                        isActive 
-                          ? 'bg-success text-white border-success' 
-                          : 'bg-sky-50 text-[#003366] border-[#003366]/40' // ANKARA BİLİM AÇIK MAVİSİ VE LACİVERT YAZI
-                      )}>
-                        {isActive ? (
-                          <>
-                            <span className="text-[10px] font-semibold uppercase leading-none">Şu an</span>
-                            <span className="text-lg font-bold leading-tight mt-0.5">aktif</span>
-                          </>
-                        ) : days !== null ? (
-                          <>
-                            <span className="text-lg font-bold leading-tight">{days}</span>
-                            <span className="text-[10px] font-semibold uppercase leading-none mt-0.5">gün</span>
-                          </>
-                        ) : (
-                          <span className="text-xs font-semibold">—</span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-sm text-foreground leading-snug">{event.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {event.startLabel} — {event.endLabel}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-     
-      <Card className="border border-[#003366] shadow-md overflow-hidden bg-card">
-        
-        <div className="px-5 py-3 bg-[#003366] flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-white/10">
-          <div>
-            <h3 className="font-heading text-base font-extrabold text-white uppercase tracking-tight">
-              {ACTIVE_TERM_LABEL} Dönemi
-            </h3>
-            <p className="text-[11px] text-white/70 font-medium">
-              Tüm takvim kalemleri resmi ilan sırasına göre listelenmiştir.
-            </p>
-          </div>
-          
-         
-          <div className="flex flex-wrap items-center gap-2">
-            <FilterBadge
-              label="Devam eden"
-              variant="success"
-              isActive={activeFilter === 'active'}
-              count={eventsWithStatus.filter(e => e.status === 'active').length}
-              onClick={() => toggleFilter('active')}
-            />
-            <FilterBadge
-              label="Yaklaşan"
-              variant="info"
-              isActive={activeFilter === 'upcoming'}
-              count={eventsWithStatus.filter(e => e.status === 'upcoming').length}
-              onClick={() => toggleFilter('upcoming')}
-            />
-            <FilterBadge
-              label="Tamamlandı"
-              variant="secondary"
-              isActive={activeFilter === 'completed'}
-              count={eventsWithStatus.filter(e => e.status === 'completed').length}
-              onClick={() => toggleFilter('completed')}
-            />
-            <FilterBadge
-              label="Tarih bekleniyor"
-              variant="outline"
-              isActive={activeFilter === 'pending'}
-              count={eventsWithStatus.filter(e => e.status === 'pending').length}
-              onClick={() => toggleFilter('pending')}
-            />
+            <button
+              onClick={today}
+              className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Bugün
+            </button>
           </div>
         </div>
+      </div>
 
-        <CardContent className="p-0">
-          <div className="overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/60 hover:bg-muted/60">
-                  <TableHead className="w-[48%] font-bold">Takvim Adı</TableHead>
-                  <TableHead className="font-bold">Başlangıç Tarihi</TableHead>
-                  <TableHead className="font-bold">Bitiş Tarihi</TableHead>
-                  <TableHead className="w-[140px] font-bold">Durum</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredEvents.map(({ event, status }) => (
-                  <TableRow
-                    key={event.id}
+      {/* ── Calendar grid ───────────────────────────────────────────── */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+        {/* Weekday header */}
+        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+          {WEEKDAYS.map(d => (
+            <div key={d} className="text-center text-[11px] font-bold text-gray-400 uppercase tracking-wider py-3 border-r border-gray-100 last:border-r-0">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Week rows */}
+        {weeks.map((week, wi) => {
+          const { bars, maxLane } = weekData[wi];
+          const visible = bars.filter(b => b.lane < MAX_LANES);
+          const overflow = bars.length - visible.length;
+          const eventH = Math.min(maxLane, MAX_LANES) * 28 + (overflow > 0 ? 20 : 0);
+
+          return (
+            <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
+              {/* Day number cells */}
+              <div className="grid grid-cols-7">
+                {week.map((day, di) => (
+                  <div
+                    key={di}
                     className={cn(
-                      'align-top',
-                      status === 'active' && 'bg-success/5',
-                      status === 'upcoming' && 'bg-info/5',
-                      status === 'completed' && 'opacity-60',
-                      status === 'pending' && 'bg-warning/5',
+                      'border-r border-gray-100 last:border-r-0 px-2 pt-2',
+                      !day.isMonth && 'bg-gray-50/60',
                     )}
+                    style={{ minHeight: `${Math.max(110, 34 + eventH)}px` }}
                   >
-                    <TableCell>
-                      <div className="space-y-1">
-                        <p className="font-medium text-foreground">{event.title}</p>
-                        {event.note && (
-                          <p className="text-xs text-muted-foreground">{event.note}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{event.startLabel}</TableCell>
-                    <TableCell>{event.endLabel}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={status} />
-                    </TableCell>
-                  </TableRow>
+                    <span
+                      className={cn(
+                        'inline-flex items-center justify-center w-7 h-7 text-sm rounded-full',
+                        day.isToday && 'bg-[#003366] text-white font-bold',
+                        !day.isToday && day.isMonth && 'text-gray-800 font-medium',
+                        !day.isMonth && 'text-gray-300',
+                      )}
+                    >
+                      {day.day}
+                    </span>
+                  </div>
                 ))}
-                {filteredEvents.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                      Bu filtreye uygun etkinlik bulunamadı.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Event bars (positioned absolutely) */}
+              {visible.map((b, i) => {
+                const s = CAT_STYLE[b.cat];
+                const isContinuation = !b.start;
+                return (
+                  <TooltipProvider key={`${b.event.id}-${wi}-${i}`} delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className={cn(
+                            'absolute cursor-default transition-shadow hover:shadow-md hover:z-10',
+                            isContinuation
+                              ? cn('h-1.5 rounded-full', s.bg.replace('-100', '-300'))
+                              : cn('flex items-center h-6 border-l-[3px] px-2 text-[13px] font-medium truncate rounded', s.bg, s.border, s.text),
+                          )}
+                          style={{
+                            top: isContinuation
+                              ? `${34 + b.lane * 28 + 10}px`
+                              : `${34 + b.lane * 28}px`,
+                            left: `calc(${(b.col / 7) * 100}% + 3px)`,
+                            width: `calc(${(b.span / 7) * 100}% - 6px)`,
+                          }}
+                        >
+                          {!isContinuation && (
+                            <>
+                              <span className="uppercase text-[10px] font-bold opacity-60 mr-1.5 shrink-0 hidden sm:inline">
+                                {s.label}
+                              </span>
+                              <span className="truncate">{b.event.title}</span>
+                            </>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="font-semibold">{b.event.title}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {b.event.startLabel} — {b.event.endLabel}
+                        </p>
+                        {b.event.note && (
+                          <p className="text-xs text-amber-600 mt-1">{b.event.note}</p>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              })}
+
+              {overflow > 0 && (
+                <div
+                  className="absolute left-2 text-xs font-semibold text-[#003366]"
+                  style={{ top: `${34 + MAX_LANES * 28}px` }}
+                >
+                  +{overflow} daha
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Legend ───────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-4 px-1">
+        {(Object.entries(CAT_STYLE) as [Cat, typeof CAT_STYLE[Cat]][]).map(([, s]) => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <div className={cn('w-4 h-3 rounded-sm border-l-[3px]', s.bg, s.border)} />
+            <span className="text-[11px] text-gray-500 font-medium">{s.label}</span>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
     </div>
   );
-}
-
-const FILTER_COLORS: Record<string, { active: string; inactive: string }> = {
-  success: {
-    active: 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-300',
-    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
-  },
-  info: {
-    active: 'bg-sky-500 text-white shadow-md ring-2 ring-sky-300',
-    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
-  },
-  secondary: {
-    active: 'bg-slate-400 text-white shadow-md ring-2 ring-slate-300',
-    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
-  },
-  outline: {
-    active: 'bg-amber-500 text-white shadow-md ring-2 ring-amber-300',
-    inactive: 'bg-white/15 text-white border border-white/30 hover:bg-white/25',
-  },
-};
-
-function FilterBadge({
-  label,
-  variant,
-  isActive,
-  count,
-  onClick,
-}: {
-  label: string;
-  variant: 'success' | 'info' | 'secondary' | 'outline';
-  isActive: boolean;
-  count: number;
-  onClick: () => void;
-}) {
-  const colors = FILTER_COLORS[variant];
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors duration-150',
-        isActive ? colors.active : colors.inactive,
-      )}
-    >
-      {label} ({count})
-    </button>
-  );
-}
-
-function StatusBadge({ status }: { status: EventStatus }) {
-  if (status === 'active') {
-    return <Badge variant="success">Devam ediyor</Badge>;
-  }
-
-  if (status === 'upcoming') {
-    return <Badge variant="info">Yaklaşan</Badge>;
-  }
-
-  if (status === 'pending') {
-    return <Badge variant="outline">Tarih bekleniyor</Badge>;
-  }
-
-  return <Badge variant="secondary">Tamamlandı</Badge>;
 }
