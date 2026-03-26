@@ -6,7 +6,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,SystemAdministrator")]
+[Authorize(Roles = "AdministrativeStaff,DepartmentManager,SystemAdministrator")]
 public class ForecastController : ControllerBase
 {
     private readonly IEnrollmentForecastService _forecastService;

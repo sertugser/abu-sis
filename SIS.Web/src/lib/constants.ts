@@ -48,6 +48,7 @@ export const QUERY_KEYS = {
   courseOpeningList: (departmentId: number, termId: number) => ['courseOpening', 'list', departmentId, termId] as const,
   curriculumCoursesForOpening: (departmentId: number, termId: number) => ['courseOpening', 'curriculum', departmentId, termId] as const,
   departmentInstructors: (departmentId: number) => ['courseOpening', 'instructors', departmentId] as const,
+  forecastDepartmentSummary: (departmentId: number) => ['forecast', 'department', departmentId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {

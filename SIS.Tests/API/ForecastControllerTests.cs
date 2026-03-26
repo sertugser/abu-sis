@@ -23,7 +23,7 @@ public class ForecastControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/[controller]");
-        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,SystemAdministrator");
+        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,DepartmentManager,SystemAdministrator");
     }
 
     [Fact]
