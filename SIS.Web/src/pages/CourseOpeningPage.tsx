@@ -357,7 +357,8 @@ function AddCourseDialog({
   forecastMap: Map<number, CourseDemandForecastDto>;
   onClose: () => void;
 }) {
-  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId);
+  const [showAll, setShowAll] = useState(false);
+  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId, showAll);
   const instructorsQuery = useDepartmentInstructors(departmentId);
   const openMutation = useOpenCourse(departmentId, termId);
 
@@ -401,12 +402,23 @@ function AddCourseDialog({
           <Skeleton className="h-48" />
         ) : (
           <>
-            <Input
-              placeholder="Ders kodu veya adı ile ara..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="mb-3"
-            />
+            <div className="flex items-center gap-3 mb-3">
+              <Input
+                placeholder="Ders kodu veya adı ile ara..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="flex-1"
+              />
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAll}
+                  onChange={e => setShowAll(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Tüm dersler
+              </label>
+            </div>
 
             <div className="max-h-60 overflow-y-auto border rounded-md">
               <Table>
@@ -538,7 +550,8 @@ function BulkOpenDialog({
   forecastMap: Map<number, CourseDemandForecastDto>;
   onClose: () => void;
 }) {
-  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId);
+  const [showAll, setShowAll] = useState(false);
+  const curriculumQuery = useCurriculumCoursesForOpening(departmentId, termId, showAll);
   const bulkMutation = useBulkOpenCourses(departmentId, termId);
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -615,6 +628,15 @@ function BulkOpenDialog({
               <span className="text-sm text-muted-foreground mt-5">
                 {selectedIds.size} ders seçili
               </span>
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap cursor-pointer select-none mt-5 ml-auto">
+                <input
+                  type="checkbox"
+                  checked={showAll}
+                  onChange={e => setShowAll(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Tüm dersler
+              </label>
             </div>
 
             <div className="max-h-64 overflow-y-auto border rounded-md">

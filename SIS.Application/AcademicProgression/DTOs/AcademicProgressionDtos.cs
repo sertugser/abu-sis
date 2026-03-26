@@ -41,7 +41,9 @@ public class GpaRecalculationResultDto
 public class GradeLockResultDto
 {
     public int TotalSections { get; set; }
+    public int TotalActiveRegistrations { get; set; }
     public int MissingGradeCount { get; set; }
     public bool AllGradesEntered { get; set; }
+    public bool HasActiveRegistrations { get; set; }
     public List<string> Notes { get; set; } = new();
 }

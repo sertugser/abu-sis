@@ -98,12 +98,16 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         };
     }
 
-    public async Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, CancellationToken ct)
+    public async Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, CancellationToken ct = default)
     {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct);
+        var semesterParity = term?.Semester == SemesterType.Spring ? 0 : 1; // Spring→even(2,4,6,8), Fall→odd(1,3,5,7)
+
         var curriculumCourses = await _context.CurriculumCourses
             .AsNoTracking()
             .Include(cc => cc.Course)
             .Where(cc => cc.Curriculum.IsActive && cc.Curriculum.Program.DepartmentId == departmentId)
+            .Where(cc => showAll || term == null || term.Semester == SemesterType.Summer || cc.SuggestedSemester % 2 == semesterParity)
             .OrderBy(cc => cc.SuggestedSemester).ThenBy(cc => cc.Course.Code)
             .ToListAsync(ct);
 

@@ -17,9 +17,9 @@ export async function getOpenedCourses(departmentId: number, termId: number): Pr
   return data;
 }
 
-export async function getCurriculumCoursesForOpening(departmentId: number, termId: number): Promise<CurriculumCourseForOpeningDto[]> {
+export async function getCurriculumCoursesForOpening(departmentId: number, termId: number, showAll = false): Promise<CurriculumCourseForOpeningDto[]> {
   const { data } = await apiClient.get<CurriculumCourseForOpeningDto[]>('/course-opening/curriculum-courses', {
-    params: { departmentId, termId },
+    params: { departmentId, termId, showAll },
   });
   return data;
 }
