@@ -636,7 +636,7 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
   const hist = course.historicalEnrollments;
 
   const status = approval?.status ?? 'Pending';
-  const statusConfig = APPROVAL_STATUS_CONFIG[status];
+  const statusConfig = APPROVAL_STATUS_CONFIG[status as keyof typeof APPROVAL_STATUS_CONFIG] ?? APPROVAL_STATUS_CONFIG.Pending;
 
   return (
     <>

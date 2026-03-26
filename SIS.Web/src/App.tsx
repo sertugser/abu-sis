@@ -22,6 +22,7 @@ import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import TermClosingWizard from './pages/TermClosingWizard';
 import PreRegistrationSurveyPage from './pages/PreRegistrationSurveyPage';
+import CourseOpeningPage from './pages/CourseOpeningPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES } from './lib/roles';
@@ -63,6 +64,7 @@ export default function App() {
                     <Route path="fakulte-planlama" element={<FacultyPlanningPage />} />
                     <Route path="merkezi-derslik-yonetimi" element={<ClassroomManagementPage />} />
                     <Route path="donem-kapatma" element={<TermClosingWizard />} />
+                    <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
                   </Route>
 
                   <Route path="*" element={<NotFoundPage />} />
