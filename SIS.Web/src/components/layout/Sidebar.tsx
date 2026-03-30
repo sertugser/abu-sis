@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -21,6 +21,15 @@ import {
   systemAdminMenuGroups,
 } from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
+
+function findActiveGroup(pathname: string, menuGroups: MenuGroup[]): string | null {
+  for (const group of menuGroups) {
+    if (group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)))) {
+      return group.id;
+    }
+  }
+  return menuGroups[0]?.id ?? null;
+}
 
 function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
   if (roles.includes('SystemAdministrator')) return systemAdminMenuGroups;
@@ -58,22 +67,16 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   const roles = user?.roles ?? [];
   const menuGroups = getMenuGroupsForRole(roles);
 
-  function findActiveGroup(pathname: string): string | null {
-    for (const group of menuGroups) {
-      if (group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)))) {
-        return group.id;
-      }
-    }
-    return menuGroups[0]?.id ?? null;
-  }
-
-  const [openGroup, setOpenGroup] = useState<string | null>(() => findActiveGroup(location.pathname));
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  const [openGroup, setOpenGroup] = useState<string | null>(() => findActiveGroup(location.pathname, menuGroups));
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    const active = findActiveGroup(location.pathname);
+  // Sync openGroup when location changes (setState during render — React-approved derived state pattern)
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname);
+    const active = findActiveGroup(location.pathname, menuGroups);
     if (active) setOpenGroup(active);
-  }, [location.pathname]);
+  }
 
   const toggleGroup = (id: string) => {
     if (isCollapsed) {

@@ -40,6 +40,15 @@ function daysUntil(iso: string) {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
 }
 
+function isWithinRange(start: string, end: string): boolean {
+  const now = Date.now();
+  return now >= new Date(start).getTime() && now <= new Date(end).getTime();
+}
+
+function isUpcoming(start: string): boolean {
+  return Date.now() < new Date(start).getTime();
+}
+
 // ─── Quick Link Definitions ──────────────────────────────────────
 
 const ALL_QUICK_LINKS = [
@@ -80,10 +89,7 @@ function TermStatusCard({
   activeTerm: { name: string; termStart: string; termEnd: string } | undefined;
   isLoading: boolean;
 }) {
-  const now = Date.now();
-  const isActive = activeTerm
-    ? now >= new Date(activeTerm.termStart).getTime() && now <= new Date(activeTerm.termEnd).getTime()
-    : false;
+  const isActive = activeTerm ? isWithinRange(activeTerm.termStart, activeTerm.termEnd) : false;
 
   const borderColor = !activeTerm
     ? 'border-l-[var(--color-destructive)]'
@@ -141,11 +147,8 @@ function RegistrationStatusCard({
   activeTerm: { registrationStart: string; registrationEnd: string } | undefined;
   isLoading: boolean;
 }) {
-  const now = Date.now();
-  const open = activeTerm
-    ? now >= new Date(activeTerm.registrationStart).getTime() && now <= new Date(activeTerm.registrationEnd).getTime()
-    : false;
-  const upcoming = activeTerm && !open && now < new Date(activeTerm.registrationStart).getTime();
+  const open = activeTerm ? isWithinRange(activeTerm.registrationStart, activeTerm.registrationEnd) : false;
+  const upcoming = activeTerm && !open && isUpcoming(activeTerm.registrationStart);
 
   const borderColor = open
     ? 'border-l-[var(--color-success)]'
@@ -223,11 +226,8 @@ function AddDropStatusCard({
   activeTerm: { addDropStart: string; addDropEnd: string } | undefined;
   isLoading: boolean;
 }) {
-  const now = Date.now();
-  const open = activeTerm
-    ? now >= new Date(activeTerm.addDropStart).getTime() && now <= new Date(activeTerm.addDropEnd).getTime()
-    : false;
-  const upcoming = activeTerm && !open && now < new Date(activeTerm.addDropStart).getTime();
+  const open = activeTerm ? isWithinRange(activeTerm.addDropStart, activeTerm.addDropEnd) : false;
+  const upcoming = activeTerm && !open && isUpcoming(activeTerm.addDropStart);
 
   const borderColor = open
     ? 'border-l-[var(--color-success)]'
