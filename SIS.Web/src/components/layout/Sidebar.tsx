@@ -1,32 +1,53 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   ChevronRight,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IMPLEMENTED_ROUTES } from '../../lib/constants';
 import logo from '/logo.png';
-import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
+import {
+  studentMenuGroups,
+  instructorMenuGroups,
+  advisorMenuGroups,
+  departmentManagerMenuGroups,
+  administrativeStaffMenuGroups,
+  deanMenuGroups,
+  systemAdminMenuGroups,
+} from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
 
-function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
-  if (roles.includes('Instructor') || roles.includes('AcademicAdvisor') || roles.includes('DepartmentManager')) {
-    return buildInstructorMenuGroups(
-      roles.includes('Instructor')
-    );
+function findActiveGroup(pathname: string, menuGroups: MenuGroup[]): string | null {
+  for (const group of menuGroups) {
+    if (group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)))) {
+      return group.id;
+    }
   }
+  return menuGroups[0]?.id ?? null;
+}
+
+function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
+  if (roles.includes('SystemAdministrator')) return systemAdminMenuGroups;
+  if (roles.includes('Dean')) return deanMenuGroups;
+  if (roles.includes('DepartmentManager')) return departmentManagerMenuGroups;
+  if (roles.includes('AdministrativeStaff')) return administrativeStaffMenuGroups;
+  if (roles.includes('AcademicAdvisor')) return advisorMenuGroups;
+  if (roles.includes('Instructor')) return instructorMenuGroups;
   return studentMenuGroups;
 }
 
 function getRoleLabel(roles: string[]): string {
-  if (roles.includes('Instructor')) return 'Öğretim Üyesi Paneli';
-  if (roles.includes('AcademicAdvisor')) return 'Danışman Paneli';
-  if (roles.includes('DepartmentManager')) return 'Bölüm Başkanı Paneli';
   if (roles.includes('SystemAdministrator')) return 'Yönetici Paneli';
+  if (roles.includes('Dean')) return 'Dekan Paneli';
+  if (roles.includes('DepartmentManager')) return 'Bölüm Başkanı Paneli';
+  if (roles.includes('AdministrativeStaff')) return 'İdari Personel Paneli';
+  if (roles.includes('AcademicAdvisor')) return 'Danışman Paneli';
+  if (roles.includes('Instructor')) return 'Öğretim Üyesi Paneli';
   return 'Öğrenci Bilgi Sistemi';
 }
 
@@ -41,10 +62,21 @@ interface SidebarProps {
 
 export default function Sidebar({ isCollapsed = false, onToggleSidebar }: SidebarProps) {
   const { user, logout } = useAuth();
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const location = useLocation();
 
   const roles = user?.roles ?? [];
   const menuGroups = getMenuGroupsForRole(roles);
+
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  const [openGroup, setOpenGroup] = useState<string | null>(() => findActiveGroup(location.pathname, menuGroups));
+  const [search, setSearch] = useState('');
+
+  // Sync openGroup when location changes (setState during render — React-approved derived state pattern)
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname);
+    const active = findActiveGroup(location.pathname, menuGroups);
+    if (active) setOpenGroup(active);
+  }
 
   const toggleGroup = (id: string) => {
     if (isCollapsed) {
@@ -124,67 +156,127 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           </p>
         </div>
 
+        {/* ── Arama Barı ── */}
+        <div className={cn(
+          'shrink-0 overflow-hidden transition-all', DURATION,
+          isCollapsed ? 'max-h-0 py-0 px-0 opacity-0' : 'max-h-12 px-3 pt-2 pb-1 opacity-100'
+        )}>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Menüde ara..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="h-8 w-full rounded-md border border-border/60 bg-muted/40 pl-8 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50 focus:bg-background transition-colors"
+            />
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-3">
           <nav className="py-2 space-y-0.5">
-            {menuGroups.map(group => {
-              const isOpen = openGroup === group.id;
-              const Icon = group.icon;
+            {search.trim() ? (
+              /* Arama sonuçları — düz liste */
+              (() => {
+                const q = search.trim().toLocaleLowerCase('tr-TR');
+                const results = menuGroups.flatMap(group =>
+                  group.children
+                    .filter(c => c.label.toLocaleLowerCase('tr-TR').includes(q))
+                    .map(c => ({ ...c, groupLabel: group.label }))
+                );
+                return results.length === 0 ? (
+                  <p className="px-3 py-4 text-[13px] text-muted-foreground/60 text-center">
+                    Sonuç bulunamadı
+                  </p>
+                ) : (
+                  results.map(child => {
+                    const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                    return (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        end={child.to === '/'}
+                        onClick={() => setSearch('')}
+                        className={({ isActive }) =>
+                          cn(
+                            'flex flex-col rounded-md px-3 py-2 text-[13px] transition-all duration-150',
+                            isDead
+                              ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                              : isActive
+                                ? 'text-primary font-semibold bg-primary/5'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          )
+                        }
+                      >
+                        <span className="font-medium">{child.label}</span>
+                        <span className="text-[11px] text-muted-foreground/60">{child.groupLabel}</span>
+                      </NavLink>
+                    );
+                  })
+                );
+              })()
+            ) : (
+              /* Normal gruplu görünüm */
+              menuGroups.map(group => {
+                const isOpen = openGroup === group.id;
+                const Icon = group.icon;
 
-              return (
-                <div key={group.id} className="mb-1">
-                  <button
-                    onClick={() => toggleGroup(group.id)}
-                    title={group.label}
-                    className={cn(
-                      'group flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
-                      isOpen && isCollapsed
-                        ? 'bg-primary/10 text-primary shadow-sm'
-                        : isOpen && !isCollapsed
-                          ? 'bg-primary/10 text-primary'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                  >
-                    <Icon className="h-[18px] w-[18px] shrink-0" />
-                    <span className={cn('flex-1 text-left truncate', textCls)}>
-                      {group.label}
-                    </span>
-                    <ChevronRight
+                return (
+                  <div key={group.id} className="mb-1">
+                    <button
+                      onClick={() => toggleGroup(group.id)}
+                      title={group.label}
                       className={cn(
-                        'h-4 w-4 shrink-0 transition-all', DURATION,
-                        isCollapsed ? 'opacity-0' : isOpen ? 'rotate-90 opacity-100' : 'opacity-50'
+                        'group flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
+                        isOpen && isCollapsed
+                          ? 'bg-primary/10 text-primary shadow-sm'
+                          : isOpen && !isCollapsed
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       )}
-                    />
-                  </button>
+                    >
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      <span className={cn('flex-1 text-left truncate', textCls)}>
+                        {group.label}
+                      </span>
+                      <ChevronRight
+                        className={cn(
+                          'h-4 w-4 shrink-0 transition-all', DURATION,
+                          isCollapsed ? 'opacity-0' : isOpen ? 'rotate-90 opacity-100' : 'opacity-50'
+                        )}
+                      />
+                    </button>
 
-                  {isOpen && !isCollapsed && (
-                    <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
-                      {group.children.map(child => {
-                        const isDead = !IMPLEMENTED_ROUTES.has(child.to);
-                        return (
-                          <NavLink
-                            key={child.to}
-                            to={child.to}
-                            end={child.to === '/'}
-                            className={({ isActive }) =>
-                              cn(
-                                'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
-                                isDead
-                                  ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
-                                  : isActive
-                                    ? 'text-primary font-semibold bg-primary/5'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                              )
-                            }
-                          >
-                            {child.label}
-                          </NavLink>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    {isOpen && !isCollapsed && (
+                      <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
+                        {group.children.map(child => {
+                          const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                          return (
+                            <NavLink
+                              key={child.to}
+                              to={child.to}
+                              end={child.to === '/'}
+                              className={({ isActive }) =>
+                                cn(
+                                  'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
+                                  isDead
+                                    ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                                    : isActive
+                                      ? 'text-primary font-semibold bg-primary/5'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                )
+                              }
+                            >
+                              {child.label}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </nav>
         </div>
 

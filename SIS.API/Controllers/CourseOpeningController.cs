@@ -10,7 +10,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/course-opening")]
-[Authorize(Roles = "DepartmentManager,AdministrativeStaff,SystemAdministrator")]
+[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
 public class CourseOpeningController(ICourseOpeningService courseOpeningService, AppDbContext context) : ControllerBase
 {
     private readonly ICourseOpeningService _courseOpeningService = courseOpeningService;

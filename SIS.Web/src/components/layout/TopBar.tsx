@@ -3,11 +3,24 @@ import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CircleDot } from 'lucide-react';
 
-import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
+import {
+  studentMenuGroups,
+  instructorMenuGroups,
+  advisorMenuGroups,
+  departmentManagerMenuGroups,
+  administrativeStaffMenuGroups,
+  deanMenuGroups,
+  systemAdminMenuGroups,
+} from './SidebarMenuGroups';
 
 const allMenuGroups = [
   ...studentMenuGroups,
-  ...buildInstructorMenuGroups(true),
+  ...instructorMenuGroups,
+  ...advisorMenuGroups,
+  ...departmentManagerMenuGroups,
+  ...administrativeStaffMenuGroups,
+  ...deanMenuGroups,
+  ...systemAdminMenuGroups,
 ];
 
 const pageTitles: Record<string, string> = {

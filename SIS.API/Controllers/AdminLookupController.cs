@@ -1,0 +1,54 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SIS.Infrastructure.Persistence;
+
+namespace SIS.API.Controllers;
+
+[ApiController]
+[Route("api/admin")]
+[Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff,AcademicAdvisor")]
+public class AdminLookupController(AppDbContext db) : ControllerBase
+{
+    [HttpGet("departments")]
+    public async Task<IActionResult> GetDepartments()
+    {
+        var departments = await db.Departments
+            .OrderBy(d => d.Name)
+            .Select(d => new { d.Id, d.Name, d.Code })
+            .ToListAsync();
+        return Ok(departments);
+    }
+
+    [HttpGet("programs")]
+    public async Task<IActionResult> GetPrograms([FromQuery] int? departmentId)
+    {
+        var query = db.AcademicPrograms.AsQueryable();
+        if (departmentId.HasValue)
+            query = query.Where(p => p.DepartmentId == departmentId.Value);
+
+        var programs = await query
+            .OrderBy(p => p.Name)
+            .Select(p => new { p.Id, p.Name, p.Code, p.DepartmentId })
+            .ToListAsync();
+        return Ok(programs);
+    }
+
+    [HttpGet("advisors")]
+    public async Task<IActionResult> GetAdvisors()
+    {
+        var advisors = await (
+            from i in db.Instructors
+            join u in db.Users on i.UserId equals u.Id
+            join d in db.Departments on i.DepartmentId equals d.Id
+            orderby u.LastName, u.FirstName
+            select new
+            {
+                i.Id,
+                FullName = i.Title + " " + u.FirstName + " " + u.LastName,
+                DepartmentName = d.Name,
+            }
+        ).ToListAsync();
+        return Ok(advisors);
+    }
+}

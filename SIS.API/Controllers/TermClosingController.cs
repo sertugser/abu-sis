@@ -8,7 +8,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/term-closing")]
-[Authorize(Roles = "DepartmentManager,SystemAdministrator")]
+[Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
 public class TermClosingController : ControllerBase
 {
     private readonly ITermClosingService _service;

@@ -1,0 +1,164 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import apiClient from '../api/axios';
+
+const BASE = '/admin/courses';
+
+export interface CourseListItemDto {
+  id: number;
+  code: string;
+  name: string;
+  ects: number;
+  theoryHours: number;
+  labHours: number;
+  isNonGpa: boolean;
+  departmentId: number | null;
+  departmentName: string | null;
+  prerequisiteCount: number;
+  equivalencyCount: number;
+}
+
+export interface PrerequisiteDto { courseId: number; code: string; name: string; }
+export interface EquivalencyDto { courseId: number; code: string; name: string; }
+export interface CurriculumAssignmentDto {
+  curriculumId: number;
+  programName: string;
+  curriculumVersion: string;
+  isActive: boolean;
+  suggestedSemester: number;
+  isCompulsory: boolean;
+}
+
+export interface CourseDetailDto {
+  id: number;
+  code: string;
+  name: string;
+  ects: number;
+  theoryHours: number;
+  labHours: number;
+  isNonGpa: boolean;
+  departmentId: number | null;
+  departmentName: string | null;
+  prerequisites: PrerequisiteDto[];
+  equivalencies: EquivalencyDto[];
+  curriculumAssignments: CurriculumAssignmentDto[];
+}
+
+export interface CourseFilterParams {
+  search?: string;
+  departmentId?: number;
+}
+
+export interface CreateCourseDto {
+  code: string;
+  name: string;
+  ects: number;
+  theoryHours: number;
+  labHours: number;
+  isNonGpa: boolean;
+  departmentId?: number | null;
+}
+
+export function useAdminCourses(filter?: CourseFilterParams) {
+  return useQuery({
+    queryKey: ['admin', 'courses', filter?.search, filter?.departmentId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CourseListItemDto[]>(BASE, { params: filter });
+      return data;
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useAdminCourseDetail(id: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'courses', 'detail', id],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CourseDetailDto>(`${BASE}/${id}`);
+      return data;
+    },
+    enabled: id !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
+function invalidateCourses(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['admin', 'courses'] });
+}
+
+export function useCreateCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (dto: CreateCourseDto) => {
+      const { data } = await apiClient.post<CourseDetailDto>(BASE, dto);
+      return data;
+    },
+    onSuccess: () => invalidateCourses(qc),
+  });
+}
+
+export function useUpdateCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...dto }: { id: number } & CreateCourseDto) => {
+      const { data } = await apiClient.put<CourseDetailDto>(`${BASE}/${id}`, dto);
+      return data;
+    },
+    onSuccess: () => invalidateCourses(qc),
+  });
+}
+
+export function useDeleteCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await apiClient.delete(`${BASE}/${id}`); },
+    onSuccess: () => invalidateCourses(qc),
+  });
+}
+
+export function useAddPrerequisite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ courseId, requiredCourseId }: { courseId: number; requiredCourseId: number }) => {
+      await apiClient.post(`${BASE}/${courseId}/prerequisites`, { requiredCourseId });
+    },
+    onSuccess: (_, { courseId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'detail', courseId] });
+    },
+  });
+}
+
+export function useRemovePrerequisite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ courseId, requiredCourseId }: { courseId: number; requiredCourseId: number }) => {
+      await apiClient.delete(`${BASE}/${courseId}/prerequisites/${requiredCourseId}`);
+    },
+    onSuccess: (_, { courseId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'detail', courseId] });
+    },
+  });
+}
+
+export function useAddEquivalency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ courseId, equivalentCourseId }: { courseId: number; equivalentCourseId: number }) => {
+      await apiClient.post(`${BASE}/${courseId}/equivalencies`, { equivalentCourseId });
+    },
+    onSuccess: (_, { courseId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'detail', courseId] });
+    },
+  });
+}
+
+export function useRemoveEquivalency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ courseId, equivalentCourseId }: { courseId: number; equivalentCourseId: number }) => {
+      await apiClient.delete(`${BASE}/${courseId}/equivalencies/${equivalentCourseId}`);
+    },
+    onSuccess: (_, { courseId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'detail', courseId] });
+    },
+  });
+}

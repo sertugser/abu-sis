@@ -6,7 +6,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,AcademicAdvisor")]
+[Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor")]
 public class EligibilityController : ControllerBase
 {
     private readonly IStudentEligibilityService _eligibilityService;
@@ -42,7 +42,7 @@ public class EligibilityController : ControllerBase
     /// Belirli bir ogrencinin mufredatindaki tum derslere uygunluk analizini dondurur.
     /// </summary>
     [HttpGet("student/{studentId}")]
-    [Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,AcademicAdvisor,Student")]
+    [Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor,Student")]
     public async Task<IActionResult> GetStudentEligibility(
         int studentId,
         CancellationToken cancellationToken = default)

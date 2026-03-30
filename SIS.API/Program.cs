@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SIS.Application.AcademicOperations.Services;
+using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -91,6 +93,15 @@ builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
 builder.Services.AddScoped<ITermClosingService, TermClosingService>();
+
+// Admin services
+builder.Services.AddScoped<IAdminUserService, AdminUserService>();
+builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
+builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
+builder.Services.AddScoped<IAdminTermService, AdminTermService>();
+builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
+builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
+builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 
 var app = builder.Build();
 

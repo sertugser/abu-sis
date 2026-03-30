@@ -7,5 +7,6 @@ public enum UserRole
     AcademicAdvisor,
     AdministrativeStaff,
     DepartmentManager,
+    Dean,
     SystemAdministrator
 }

@@ -299,7 +299,7 @@ public class EnrollmentForecastServiceTests
                 RegistrationEnd = DateTime.UtcNow.AddDays(7),
                 AddDropStart = DateTime.UtcNow.AddDays(8),
                 AddDropEnd = DateTime.UtcNow.AddDays(14),
-                WithdrawalDeadlineWeek = 7,
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-14),
                 TermEnd = DateTime.UtcNow.AddDays(90),
                 IsActive = true
@@ -314,7 +314,7 @@ public class EnrollmentForecastServiceTests
                 RegistrationEnd = DateTime.UtcNow.AddDays(-190),
                 AddDropStart = DateTime.UtcNow.AddDays(-189),
                 AddDropEnd = DateTime.UtcNow.AddDays(-180),
-                WithdrawalDeadlineWeek = 7,
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-210),
                 TermEnd = DateTime.UtcNow.AddDays(-120),
                 IsActive = false

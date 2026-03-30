@@ -1,22 +1,25 @@
-export const MANAGEMENT_ROLES = ['AdministrativeStaff', 'DepartmentManager', 'SystemAdministrator'] as const;
+export const MANAGEMENT_ROLES = ['SystemAdministrator', 'Dean', 'DepartmentManager', 'AdministrativeStaff'] as const;
+export const DEAN_ROLES = ['Dean', 'SystemAdministrator'] as const;
 export const STUDENT_ROLES = ['Student'] as const;
 export const INSTRUCTOR_ROLES = ['Instructor'] as const;
 export const ADVISOR_ROLES = ['AcademicAdvisor'] as const;
 
 export type AppRole =
   | 'SystemAdministrator'
-  | 'AdministrativeStaff'
+  | 'Dean'
   | 'DepartmentManager'
-  | 'Instructor'
+  | 'AdministrativeStaff'
   | 'AcademicAdvisor'
+  | 'Instructor'
   | 'Student';
 
 const ROLE_PRIORITY: AppRole[] = [
   'SystemAdministrator',
-  'AdministrativeStaff',
+  'Dean',
   'DepartmentManager',
-  'Instructor',
+  'AdministrativeStaff',
   'AcademicAdvisor',
+  'Instructor',
   'Student',
 ];
 
