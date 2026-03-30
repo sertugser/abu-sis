@@ -6,7 +6,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,AcademicAdvisor")]
+[Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor")]
 public class AcademicLevelController : ControllerBase
 {
     private readonly IAcademicLevelService _academicLevelService;
@@ -21,7 +21,7 @@ public class AcademicLevelController : ControllerBase
     /// Uyumsuzluk varsa detayli aciklama icinde gelir.
     /// </summary>
     [HttpGet("student/{studentId}")]
-    [Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,AcademicAdvisor,Student")]
+    [Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor,Student")]
     public async Task<IActionResult> GetStudentAcademicLevel(
         int studentId,
         CancellationToken cancellationToken = default)

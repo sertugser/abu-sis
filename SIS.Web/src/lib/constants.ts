@@ -20,6 +20,13 @@ export const ROUTES = {
   PRE_REGISTRATION_SURVEY: '/on-kayit-anketi',
   FACULTY_PLANNING: '/fakulte-planlama',
   COURSE_OPENING: '/ders-acma-islemleri',
+  // Admin routes
+  USER_MANAGEMENT: '/kullanici-yonetimi',
+  STUDENT_DIRECTORY: '/ogrenci-rehberi',
+  INSTRUCTOR_DIRECTORY: '/personel-listesi',
+  TERM_MANAGEMENT: '/donem-yonetimi',
+  ACADEMIC_STRUCTURE: '/akademik-yapi',
+  COURSE_CATALOG_ADMIN: '/ders-katalogu',
 } as const;
 
 export const QUERY_KEYS = {
@@ -48,6 +55,14 @@ export const QUERY_KEYS = {
   curriculumCoursesForOpening: (departmentId: number, termId: number) => ['courseOpening', 'curriculum', departmentId, termId] as const,
   departmentInstructors: (departmentId: number) => ['courseOpening', 'instructors', departmentId] as const,
   forecastDepartmentSummary: (departmentId: number) => ['forecast', 'department', departmentId] as const,
+  // Admin query keys
+  adminUsers: (search?: string, role?: string, isActive?: boolean, page?: number) =>
+    ['admin', 'users', search, role, isActive, page] as const,
+  adminStudents: (search?: string, programId?: number, departmentId?: number, status?: string, page?: number) =>
+    ['admin', 'students', search, programId, departmentId, status, page] as const,
+  adminInstructors: (search?: string, departmentId?: number) =>
+    ['admin', 'instructors', search, departmentId] as const,
+  adminTerms: ['admin', 'terms'] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -88,6 +103,12 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/merkezi-derslik-yonetimi',
   '/donem-kapatma',
   '/ders-acma-islemleri',
+  '/kullanici-yonetimi',
+  '/ogrenci-rehberi',
+  '/personel-listesi',
+  '/donem-yonetimi',
+  '/akademik-yapi',
+  '/ders-katalogu',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

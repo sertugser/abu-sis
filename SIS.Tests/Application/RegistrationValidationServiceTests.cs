@@ -71,7 +71,7 @@ public class RegistrationValidationServiceTests : IDisposable
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
             AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadlineWeek = 7,
+            WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = DateTime.UtcNow.AddDays(90),
             IsActive = true
@@ -838,7 +838,7 @@ public class RegistrationValidationServiceTests : IDisposable
             RegistrationEnd = DateTime.UtcNow.AddDays(-190),
             AddDropStart = DateTime.UtcNow.AddDays(-189),
             AddDropEnd = DateTime.UtcNow.AddDays(-183),
-            WithdrawalDeadlineWeek = 7,
+            WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-210),
             TermEnd = DateTime.UtcNow.AddDays(-120),
             IsActive = false

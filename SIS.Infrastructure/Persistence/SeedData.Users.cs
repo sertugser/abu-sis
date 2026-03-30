@@ -85,6 +85,9 @@ public static partial class SeedData
         await EnsureUserAsync(userManager, "ayhan.akbas@ankarabilim.edu.tr", "Ayhan", "Akbaş", "Ogretmen123!", "DepartmentManager");
         await EnsureUserAsync(userManager, "yavuzselim.ozdemir@ankarabilim.edu.tr", "Yavuz Selim", "Özdemir", "Ogretmen123!", "DepartmentManager");
 
+        // Dean (also has Instructor role from above — faculty-level authority)
+        await EnsureUserAsync(userManager, "halimhaldun.goktas@ankarabilim.edu.tr", "Halim Haldun", "Göktaş", "Ogretmen123!", "Dean");
+
         // ============================================================
         // 3. STUDENTS (1000 total)
         // ============================================================

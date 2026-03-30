@@ -8,7 +8,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,DepartmentManager,SystemAdministrator")]
+[Authorize(Roles = "AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
 public class AcademicOperationsController : ControllerBase
 {
     private readonly IAcademicOperationsService _academicOperationsService;

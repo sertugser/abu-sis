@@ -609,14 +609,13 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
-        // FR-57: Check withdrawal deadline (WithdrawalDeadlineWeek from term)
-        var weeksSinceTermStart = (DateTime.UtcNow - term.TermStart).TotalDays / 7;
-        if (weeksSinceTermStart > term.WithdrawalDeadlineWeek)
+        // FR-57: Check withdrawal deadline
+        if (DateTime.UtcNow > term.WithdrawalDeadline)
         {
             errors.Add(new ValidationError
             {
                 Rule = "WithdrawalDeadline",
-                Message = $"Ders cekilme suresi doldu. Son cekilme haftasi: {term.WithdrawalDeadlineWeek}. hafta."
+                Message = $"Ders çekilme süresi doldu. Son çekilme tarihi: {term.WithdrawalDeadline:dd.MM.yyyy}."
             });
         }
 

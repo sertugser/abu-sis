@@ -6,7 +6,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
 public class AcademicProgressionController : ControllerBase
 {
     private readonly IAcademicProgressionService _progressionService;

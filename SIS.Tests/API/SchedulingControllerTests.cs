@@ -24,7 +24,7 @@ public class SchedulingControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/[controller]");
-        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,DepartmentManager,SystemAdministrator");
+        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator");
     }
 
     [Fact]

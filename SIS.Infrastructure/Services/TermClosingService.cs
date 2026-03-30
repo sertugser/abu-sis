@@ -355,7 +355,7 @@ public class TermClosingService : ITermClosingService
                 RegistrationEnd = request.RegistrationEnd,
                 AddDropStart = request.RegistrationStart,
                 AddDropEnd = request.RegistrationEnd,
-                WithdrawalDeadlineWeek = request.Semester == SemesterType.Summer ? 4 : 7,
+                WithdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49),
                 TermStart = request.TermStart,
                 TermEnd = request.TermEnd,
                 IsActive = true

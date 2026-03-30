@@ -3,6 +3,7 @@ import AdvisorDashboardPage from '../pages/AdvisorDashboardPage';
 import DashboardPage from '../pages/DashboardPage';
 import InstructorDashboardPage from '../pages/InstructorDashboardPage';
 import ManagementDashboardPage from '../pages/ManagementDashboardPage';
+import SystemAdminDashboardPage from '../pages/SystemAdminDashboardPage';
 import { getPrimaryRole } from '../lib/roles';
 
 export default function RoleDashboard() {
@@ -10,16 +11,20 @@ export default function RoleDashboard() {
   const roles = user?.roles ?? [];
   const primaryRole = getPrimaryRole(roles);
 
-  if (primaryRole === 'SystemAdministrator' || primaryRole === 'AdministrativeStaff' || primaryRole === 'DepartmentManager') {
-    return <ManagementDashboardPage />;
+  if (primaryRole === 'SystemAdministrator') {
+    return <SystemAdminDashboardPage />;
   }
 
-  if (primaryRole === 'Instructor') {
-    return <InstructorDashboardPage />;
+  if (primaryRole === 'Dean' || primaryRole === 'AdministrativeStaff' || primaryRole === 'DepartmentManager') {
+    return <ManagementDashboardPage />;
   }
 
   if (primaryRole === 'AcademicAdvisor') {
     return <AdvisorDashboardPage />;
+  }
+
+  if (primaryRole === 'Instructor') {
+    return <InstructorDashboardPage />;
   }
 
   return <DashboardPage />;
