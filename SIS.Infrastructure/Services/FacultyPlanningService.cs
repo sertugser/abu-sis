@@ -346,6 +346,11 @@ public class FacultyPlanningService : IFacultyPlanningService
             .FirstOrDefaultAsync(cs => cs.Id == sectionId, ct)
             ?? throw new KeyNotFoundException("Sube bulunamadi.");
 
+        var unassignTerm = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+        if (unassignTerm != null && unassignTerm.Status != TermStatus.Planning && unassignTerm.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Atama kaldırma sadece 'Planlama' veya 'Programlama' aşamasında yapılabilir. Mevcut durum: {GetTermStatusLabel(unassignTerm.Status)}");
+
         if (section.IsFinalized)
             throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
 

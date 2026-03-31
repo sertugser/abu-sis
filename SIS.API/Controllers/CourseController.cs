@@ -381,8 +381,8 @@ public class CourseController : ControllerBase
             RegistrationEnd = term.RegistrationEnd,
             AddDropStart = term.AddDropStart,
             AddDropEnd = term.AddDropEnd,
-            IsRegistrationOpen = now >= term.RegistrationStart && now <= term.RegistrationEnd,
-            IsAddDropOpen = now >= term.AddDropStart && now <= term.AddDropEnd
+            IsRegistrationOpen = term.Status == TermStatus.RegistrationOpen,
+            IsAddDropOpen = term.Status == TermStatus.AddDrop
         };
 
         return Ok(dto);

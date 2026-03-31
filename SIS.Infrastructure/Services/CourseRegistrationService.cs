@@ -517,6 +517,22 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
+        // Guard: dönem AddDrop aşamasında olmalı
+        var dropTerm = registration.CourseSection.Term;
+        if (dropTerm.Status != TermStatus.AddDrop && dropTerm.Status != TermStatus.RegistrationOpen)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(dropTerm.Status)}" }
+                }
+            };
+            return response;
+        }
+
         // Check status is droppable
         if (registration.Status != RegistrationStatus.Active
             && registration.Status != RegistrationStatus.PendingAdvisorApproval
@@ -608,6 +624,22 @@ public class CourseRegistrationService : ICourseRegistrationService
                 Errors = new List<ValidationError>
                 {
                     new() { Rule = "RegistrationExists", Message = "Kayit bulunamadi." }
+                }
+            };
+            return response;
+        }
+
+        // Guard: dönem WithdrawalPeriod aşamasında olmalı
+        var withdrawTerm = registration.CourseSection.Term;
+        if (withdrawTerm.Status != TermStatus.WithdrawalPeriod)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "TermStatus", Message = $"Ders çekilme sadece çekilme döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(withdrawTerm.Status)}" }
                 }
             };
             return response;
@@ -925,6 +957,17 @@ public class CourseRegistrationService : ICourseRegistrationService
             {
                 Success = false,
                 Message = "Aktif donem bulunamadi.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        // Guard: dönem RegistrationOpen veya AddDrop olmalı
+        if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(activeTerm.Status)}",
                 AffectedRegistrations = 0
             };
         }

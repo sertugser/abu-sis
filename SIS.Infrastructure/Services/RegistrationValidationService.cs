@@ -95,17 +95,13 @@ public class RegistrationValidationService : IRegistrationValidationService
                 Message = "Aktif akademik donem bulunamadi."
             });
         }
-        else
+        else if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
         {
-            var now = DateTime.UtcNow;
-            if (now < activeTerm.RegistrationStart || now > activeTerm.RegistrationEnd)
+            errors.Add(new ValidationError
             {
-                errors.Add(new ValidationError
-                {
-                    Rule = "RegistrationPeriod",
-                    Message = $"Kayit donemi disindasiniz. Kayit donemi: {activeTerm.RegistrationStart:dd.MM.yyyy} - {activeTerm.RegistrationEnd:dd.MM.yyyy}"
-                });
-            }
+                Rule = "RegistrationPeriod",
+                Message = $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.Status}"
+            });
         }
 
         // If blocking errors so far, return early

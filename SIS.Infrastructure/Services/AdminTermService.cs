@@ -102,6 +102,12 @@ public class AdminTermService : IAdminTermService
         var target = await _context.AcademicTerms.FindAsync(id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
 
+        if (target.Status == TermStatus.Draft)
+            throw new InvalidOperationException("Draft durumundaki dönem aktif edilemez. Önce Planning'e geçirilmelidir.");
+
+        if (target.Status >= TermStatus.Closed)
+            throw new InvalidOperationException("Kapalı veya arşivlenmiş dönem aktif edilemez.");
+
         var allActive = await _context.AcademicTerms
             .Where(t => t.IsActive)
             .ToListAsync();
@@ -114,15 +120,18 @@ public class AdminTermService : IAdminTermService
 
     public async Task TransitionStatusAsync(int id, string targetStatusStr)
     {
-        var target = await _context.AcademicTerms.FindAsync(id)
+        var term = await _context.AcademicTerms.FindAsync(id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
 
         var targetStatus = ParseTermStatus(targetStatusStr);
-        ValidateTransition(target.Status, targetStatus);
+        ValidateTransition(term.Status, targetStatus);
 
-        target.Status = targetStatus;
+        // Geçiş guard'ları
+        await RunTransitionGuardsAsync(term, targetStatus);
 
-        // RegistrationOpen veya sonrasındaki state'e geçişte otomatik IsActive = true
+        term.Status = targetStatus;
+
+        // Published veya sonrasındaki state'e geçişte otomatik IsActive = true
         if (targetStatus >= TermStatus.Published)
         {
             var allActive = await _context.AcademicTerms
@@ -130,14 +139,98 @@ public class AdminTermService : IAdminTermService
                 .ToListAsync();
             foreach (var t in allActive)
                 t.IsActive = false;
-            target.IsActive = true;
+            term.IsActive = true;
         }
 
         // Closed/Archived olunca IsActive = false
         if (targetStatus >= TermStatus.Closed)
-            target.IsActive = false;
+            term.IsActive = false;
+
+        // RegistrationOpen → AddDrop: Submitted/Draft kayıtları otomatik iptal
+        if (targetStatus == TermStatus.AddDrop)
+        {
+            var pendingRegistrations = await _context.CourseRegistrations
+                .Include(cr => cr.CourseSection)
+                .Where(cr => cr.CourseSection.TermId == id
+                    && (cr.Status == RegistrationStatus.Draft || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+                .ToListAsync();
+
+            foreach (var reg in pendingRegistrations)
+            {
+                reg.Status = RegistrationStatus.Dropped;
+                reg.UpdatedAt = DateTime.UtcNow;
+                if (reg.CourseSection.EnrolledCount > 0)
+                    reg.CourseSection.EnrolledCount--;
+            }
+        }
 
         await _context.SaveChangesAsync();
+    }
+
+    private async Task RunTransitionGuardsAsync(AcademicTerm term, TermStatus target)
+    {
+        var errors = new List<string>();
+
+        switch (target)
+        {
+            case TermStatus.Planning:
+                // Guard: Takvim tarihleri girilmiş mi?
+                if (term.TermStart == default || term.TermEnd == default)
+                    errors.Add("Dönem başlangıç ve bitiş tarihleri girilmelidir.");
+                if (term.RegistrationStart == default || term.RegistrationEnd == default)
+                    errors.Add("Kayıt başlangıç ve bitiş tarihleri girilmelidir.");
+                break;
+
+            case TermStatus.Scheduling:
+                // Guard: En az bir CourseSection açılmış mı? Her section'da Instructor atanmış mı?
+                var sections = await _context.CourseSections
+                    .Where(cs => cs.TermId == term.Id && cs.IsActive)
+                    .ToListAsync();
+
+                if (sections.Count == 0)
+                    errors.Add("Scheduling'e geçmek için en az bir ders şubesi açılmış olmalıdır.");
+                else
+                {
+                    var noInstructor = sections.Where(s => !s.InstructorId.HasValue).ToList();
+                    if (noInstructor.Count > 0)
+                        errors.Add($"{noInstructor.Count} şubede öğretim üyesi atanmamış.");
+                }
+                break;
+
+            case TermStatus.Published:
+                // Guard: Tüm aktif section'larda slot+derslik+hoca atanmış mı?
+                var activeSections = await _context.CourseSections
+                    .Where(cs => cs.TermId == term.Id && cs.IsActive)
+                    .ToListAsync();
+
+                if (activeSections.Count == 0)
+                    errors.Add("Yayınlamak için en az bir aktif ders şubesi olmalıdır.");
+
+                var unscheduled = activeSections.Where(s =>
+                    string.IsNullOrEmpty(s.ScheduleJson) || s.ScheduleJson == "[]").ToList();
+                if (unscheduled.Count > 0)
+                    errors.Add($"{unscheduled.Count} şubede zaman/derslik ataması yapılmamış.");
+
+                var noInst = activeSections.Where(s => !s.InstructorId.HasValue).ToList();
+                if (noInst.Count > 0)
+                    errors.Add($"{noInst.Count} şubede öğretim üyesi atanmamış.");
+                break;
+
+            case TermStatus.Closed:
+                // Guard: Tüm aktif section'lar finalize edilmiş mi?
+                var unfinalized = await _context.CourseSections
+                    .Where(cs => cs.TermId == term.Id && cs.IsActive && !cs.IsFinalized)
+                    .CountAsync();
+
+                if (unfinalized > 0)
+                    errors.Add($"{unfinalized} şubede not girişi tamamlanmamış (finalize edilmemiş).");
+                break;
+        }
+
+        if (errors.Count > 0)
+            throw new InvalidOperationException(
+                $"Geçiş engellendi ({GetStatusLabel(term.Status)} → {GetStatusLabel(target)}):\n• " +
+                string.Join("\n• ", errors));
     }
 
     private static void ValidateTransition(TermStatus current, TermStatus target)
@@ -231,8 +324,10 @@ public class AdminTermService : IAdminTermService
 
     public async Task<TermCalendarEventDto> CreateCalendarEventAsync(int termId, CreateCalendarEventDto dto)
     {
-        _ = await _context.AcademicTerms.FindAsync(termId)
+        var calTerm = await _context.AcademicTerms.FindAsync(termId)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {termId}");
+        if (calTerm.Status == TermStatus.Archived)
+            throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği oluşturulamaz.");
 
         var ev = new TermCalendarEvent
         {
@@ -254,6 +349,10 @@ public class AdminTermService : IAdminTermService
 
     public async Task<TermCalendarEventDto> UpdateCalendarEventAsync(int termId, int eventId, UpdateCalendarEventDto dto)
     {
+        var calTerm2 = await _context.AcademicTerms.FindAsync(termId);
+        if (calTerm2?.Status == TermStatus.Archived)
+            throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği düzenlenemez.");
+
         var ev = await _context.TermCalendarEvents
             .FirstOrDefaultAsync(e => e.Id == eventId && e.TermId == termId)
             ?? throw new KeyNotFoundException($"Takvim etkinliği bulunamadı: {eventId}");
@@ -273,6 +372,10 @@ public class AdminTermService : IAdminTermService
 
     public async Task DeleteCalendarEventAsync(int termId, int eventId)
     {
+        var calTerm3 = await _context.AcademicTerms.FindAsync(termId);
+        if (calTerm3?.Status == TermStatus.Archived)
+            throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği silinemez.");
+
         var ev = await _context.TermCalendarEvents
             .FirstOrDefaultAsync(e => e.Id == eventId && e.TermId == termId)
             ?? throw new KeyNotFoundException($"Takvim etkinliği bulunamadı: {eventId}");

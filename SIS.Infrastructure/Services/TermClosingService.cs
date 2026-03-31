@@ -95,6 +95,9 @@ public class TermClosingService : ITermClosingService
         if (term == null)
             return new TermClosingStepResultDto { Success = false, Message = "Aktif donem bulunamadi." };
 
+        if (term.Status != TermStatus.GradeEntry && term.Status != TermStatus.Closed)
+            return new TermClosingStepResultDto { Success = false, Message = $"Not kilitleme sadece 'Not Girişi' veya 'Kapalı' aşamasında yapılabilir. Mevcut: {term.Status}" };
+
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == term.Id
@@ -231,9 +234,11 @@ public class TermClosingService : ITermClosingService
 
     public async Task<GpaRecalculationResultDto> CalculateGpaAsync(int departmentId, int userId, CancellationToken ct = default)
     {
-        var result = await _progressionService.RecalculateDepartmentGpaAsync(departmentId, ct);
-
         var term = await GetActiveTermAsync(ct);
+        if (term != null && term.Status != TermStatus.GradeEntry && term.Status != TermStatus.Closed)
+            return new GpaRecalculationResultDto { Notes = { $"GPA hesaplama sadece 'Not Girişi' veya 'Kapalı' aşamasında yapılabilir. Mevcut: {term.Status}" } };
+
+        var result = await _progressionService.RecalculateDepartmentGpaAsync(departmentId, ct);
         if (term != null)
         {
             var notes = $"{result.RecalculatedCount} ogrenci hesaplandi, {result.ChangedCount} degisiklik.";
@@ -250,6 +255,10 @@ public class TermClosingService : ITermClosingService
 
     public async Task<BatchProgressionResultDto> PromoteAsync(int departmentId, int userId, CancellationToken ct = default)
     {
+        var promoteTerm = await GetActiveTermAsync(ct);
+        if (promoteTerm != null && promoteTerm.Status != TermStatus.GradeEntry && promoteTerm.Status != TermStatus.Closed)
+            return new BatchProgressionResultDto { Notes = { $"Sınıf atlatma sadece 'Not Girişi' veya 'Kapalı' aşamasında yapılabilir. Mevcut: {promoteTerm.Status}" } };
+
         var students = await _context.Students
             .Include(s => s.StudentPrograms)
                 .ThenInclude(sp => sp.Program)
