@@ -105,6 +105,7 @@ builder.Services.AddScoped<IAdminTermService, AdminTermService>();
 builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
+builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 
 var app = builder.Build();
 

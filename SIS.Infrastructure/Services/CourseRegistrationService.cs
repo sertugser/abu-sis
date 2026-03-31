@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.Common.Services;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
@@ -12,11 +13,13 @@ public class CourseRegistrationService : ICourseRegistrationService
 {
     private readonly AppDbContext _context;
     private readonly IRegistrationValidationService _validationService;
+    private readonly ISystemConfigProvider _config;
 
-    public CourseRegistrationService(AppDbContext context, IRegistrationValidationService validationService)
+    public CourseRegistrationService(AppDbContext context, IRegistrationValidationService validationService, ISystemConfigProvider? config = null)
     {
         _context = context;
         _validationService = validationService;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
@@ -765,7 +768,11 @@ public class CourseRegistrationService : ICourseRegistrationService
         var mainProg = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
         if (mainProg?.Program != null)
         {
-            int maxWithdrawals = mainProg.Program.DegreeLevel == DegreeLevel.Associate ? 3 : 6;
+            var isAssociate = mainProg.Program.DegreeLevel == DegreeLevel.Associate;
+            var maxWithdrawalsKey = isAssociate
+                ? "Withdrawal.MaxCount.Associate"
+                : "Withdrawal.MaxCount.Undergraduate";
+            int maxWithdrawals = await _config.GetIntAsync(maxWithdrawalsKey, isAssociate ? 3 : 6);
             if (student.WithdrawalCount >= maxWithdrawals)
             {
                 errors.Add(new ValidationError

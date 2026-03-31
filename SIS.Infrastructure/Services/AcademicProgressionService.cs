@@ -4,6 +4,7 @@ using SIS.Application.AcademicProgression.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -12,14 +13,16 @@ public class AcademicProgressionService : IAcademicProgressionService
 {
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
+    private readonly ISystemConfigProvider _config;
 
     private static readonly string[] ClassLabels =
         { "Hazirlik", "1. Sinif", "2. Sinif", "3. Sinif", "4. Sinif", "5. Sinif", "6. Sinif" };
 
-    public AcademicProgressionService(AppDbContext context, IGpaCalculationService gpaCalculationService)
+    public AcademicProgressionService(AppDbContext context, IGpaCalculationService gpaCalculationService, ISystemConfigProvider? config = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -73,6 +76,8 @@ public class AcademicProgressionService : IAcademicProgressionService
         result.Notes.Add(dryRun
             ? "DRY RUN — degisiklikler uygulanmadi, sadece simulasyon."
             : "GERCEK CALISTIRMA — degisiklikler veritabanina yazildi.");
+
+        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m, cancellationToken);
 
         foreach (var student in students)
         {
@@ -133,10 +138,10 @@ public class AcademicProgressionService : IAcademicProgressionService
             };
 
             // Uyarılar
-            if (cgpa < 1.70m && oldSemesters >= 2)
+            if (cgpa < retentionThreshold && oldSemesters >= 2)
             {
                 dto.Status = "Warning-LowCGPA";
-                dto.Warnings.Add($"CGPA kritik seviyede: {cgpa:F2} (< 1.70)");
+                dto.Warnings.Add($"CGPA kritik seviyede: {cgpa:F2} (< {retentionThreshold:F2})");
                 result.WarningCount++;
             }
             else if (newLevel < oldLevel)
