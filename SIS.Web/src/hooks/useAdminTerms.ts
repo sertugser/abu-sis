@@ -179,6 +179,7 @@ export function useCreateCalendarEvent() {
     },
     onSuccess: (_, { termId }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
+      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
     },
   });
 }
@@ -192,6 +193,7 @@ export function useUpdateCalendarEvent() {
     },
     onSuccess: (_, { termId }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
+      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
     },
   });
 }
@@ -204,6 +206,7 @@ export function useDeleteCalendarEvent() {
     },
     onSuccess: (_, { termId }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
+      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
     },
   });
 }
