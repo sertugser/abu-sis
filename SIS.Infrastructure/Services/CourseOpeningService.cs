@@ -119,12 +119,158 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             .Select(g => new { CourseId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
 
+        // ── Forecast data ──
+
+        // 1. Cross-department demand: other departments that also have these courses in active curricula
+        var crossDeptCourses = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Curriculum).ThenInclude(c => c.Program).ThenInclude(p => p.Department)
+            .Where(cc => cc.Curriculum.IsActive && courseIds.Contains(cc.CourseId)
+                && cc.Curriculum.Program.DepartmentId != departmentId)
+            .ToListAsync(ct);
+
+        var crossDeptByCourse = crossDeptCourses
+            .GroupBy(cc => cc.CourseId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(cc => new
+                {
+                    DeptName = cc.Curriculum.Program.Department.Name,
+                    ProgName = cc.Curriculum.Program.Name,
+                    DeptId = cc.Curriculum.Program.DepartmentId
+                })
+                .Select(dg => new { dg.Key.DeptName, dg.Key.ProgName, dg.Key.DeptId })
+                .ToList());
+
+        // Count active students per department for cross-dept estimate
+        var crossDeptIds = crossDeptCourses.Select(cc => cc.Curriculum.Program.DepartmentId).Distinct().ToList();
+        var studentCountByDept = crossDeptIds.Count > 0
+            ? await _context.Students
+                .AsNoTracking()
+                .Where(s => s.Status == StudentStatus.Active
+                    && s.StudentPrograms.Any(sp => sp.IsActive && sp.Type == StudentProgramType.Main
+                        && crossDeptIds.Contains(sp.Program.DepartmentId)))
+                .SelectMany(s => s.StudentPrograms
+                    .Where(sp => sp.IsActive && sp.Type == StudentProgramType.Main && crossDeptIds.Contains(sp.Program.DepartmentId))
+                    .Select(sp => sp.Program.DepartmentId))
+                .GroupBy(deptId => deptId)
+                .Select(g => new { DeptId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.DeptId, x => x.Count, ct)
+            : new Dictionary<int, int>();
+
+        // 2. Retake count: students with FF/NA/U grades (distinct per student per course)
+        var retakeCounts = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(cr => cr.CourseSection)
+            .Where(cr => courseIds.Contains(cr.CourseSection.CourseId)
+                && cr.Grade != null
+                && (cr.Grade == GradeCode.FF || cr.Grade == GradeCode.NA || cr.Grade == GradeCode.U)
+                && cr.Status != RegistrationStatus.Dropped)
+            .GroupBy(cr => cr.CourseSection.CourseId)
+            .Select(g => new { CourseId = g.Key, Count = g.Select(r => r.StudentId).Distinct().Count() })
+            .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
+
+        // 3. Active students in this department who haven't passed each course
+        var activeStudentIds = await _context.Students
+            .AsNoTracking()
+            .Where(s => s.Status == StudentStatus.Active
+                && s.StudentPrograms.Any(sp => sp.IsActive && sp.Type == StudentProgramType.Main
+                    && sp.Program.DepartmentId == departmentId))
+            .Select(s => s.Id)
+            .ToListAsync(ct);
+
+        var passedByStudent = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(cr => cr.CourseSection)
+            .Where(cr => activeStudentIds.Contains(cr.StudentId)
+                && courseIds.Contains(cr.CourseSection.CourseId)
+                && cr.Grade != null
+                && cr.Grade != GradeCode.FF && cr.Grade != GradeCode.NA
+                && cr.Grade != GradeCode.U && cr.Grade != GradeCode.W && cr.Grade != GradeCode.I)
+            .Select(cr => new { cr.StudentId, cr.CourseSection.CourseId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var passedSet = passedByStudent.ToLookup(x => x.CourseId, x => x.StudentId);
+
+        // 4. Average classroom capacity for recommended section count
+        var department = await _context.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == departmentId, ct);
+        var avgCapacity = 40; // default
+        if (department != null)
+        {
+            var termCapacities = await _context.ClassroomTermAssignments
+                .AsNoTracking()
+                .Include(cta => cta.Classroom)
+                .Where(cta => cta.TermId == termId && cta.FacultyId == department.FacultyId)
+                .Select(cta => cta.Classroom.Capacity)
+                .ToListAsync(ct);
+
+            if (termCapacities.Count > 0)
+                avgCapacity = (int)Math.Round(termCapacities.Average());
+        }
+
+        // 5. Previous term enrollment (same semester type from previous year)
+        Dictionary<int, int> previousEnrollments = new();
+        if (term != null)
+        {
+            var previousTerm = await _context.AcademicTerms
+                .AsNoTracking()
+                .Where(t => t.Id != termId && t.Semester == term.Semester && t.Year == term.Year - 1)
+                .OrderByDescending(t => t.Year)
+                .FirstOrDefaultAsync(ct);
+
+            if (previousTerm != null)
+            {
+                previousEnrollments = await _context.CourseRegistrations
+                    .AsNoTracking()
+                    .Include(cr => cr.CourseSection)
+                    .Where(cr => cr.CourseSection.TermId == previousTerm.Id
+                        && courseIds.Contains(cr.CourseSection.CourseId)
+                        && cr.Status != RegistrationStatus.Dropped)
+                    .GroupBy(cr => cr.CourseSection.CourseId)
+                    .Select(g => new { CourseId = g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
+            }
+        }
+
         return curriculumCourses
             .GroupBy(cc => cc.CourseId)
             .Select(g =>
             {
                 var first = g.First();
                 existingSectionCounts.TryGetValue(first.CourseId, out var sectionCount);
+                retakeCounts.TryGetValue(first.CourseId, out var retakeCount);
+                previousEnrollments.TryGetValue(first.CourseId, out var prevEnrollment);
+
+                // Students who haven't passed this course
+                var passedStudentIds = passedSet[first.CourseId].ToHashSet();
+                var notPassedCount = activeStudentIds.Count(id => !passedStudentIds.Contains(id));
+
+                // Cross-dept estimate for this course
+                var crossDeptEstimate = 0;
+                var crossDeptDemandList = new List<CrossDepartmentDemandDto>();
+                if (crossDeptByCourse.TryGetValue(first.CourseId, out var depts))
+                {
+                    foreach (var d in depts)
+                    {
+                        studentCountByDept.TryGetValue(d.DeptId, out var deptStudentCount);
+                        // Rough estimate: fraction of dept students (assume ~20% take any given cross-dept course)
+                        var estimate = (int)Math.Ceiling(deptStudentCount * 0.2);
+                        crossDeptEstimate += estimate;
+                        crossDeptDemandList.Add(new CrossDepartmentDemandDto
+                        {
+                            DepartmentName = d.DeptName,
+                            ProgramName = d.ProgName,
+                            EstimatedStudentCount = estimate,
+                        });
+                    }
+                }
+
+                var predictedDemand = notPassedCount + retakeCount + crossDeptEstimate;
+                var recommendedSections = predictedDemand > 0
+                    ? (int)Math.Ceiling((double)predictedDemand / avgCapacity)
+                    : 1;
+
                 return new CurriculumCourseForOpeningDto
                 {
                     CourseId = first.CourseId,
@@ -137,6 +283,12 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                     IsCompulsory = first.IsCompulsory,
                     AlreadyOpened = sectionCount > 0,
                     ExistingSectionCount = sectionCount,
+                    PredictedDemand = predictedDemand,
+                    RetakeCount = retakeCount,
+                    RecommendedSectionCount = recommendedSections,
+                    RecommendedCapacity = avgCapacity,
+                    CrossDepartmentDemand = crossDeptDemandList,
+                    PreviousTermEnrollment = prevEnrollment > 0 ? prevEnrollment : null,
                 };
             })
             .OrderBy(c => c.SuggestedSemester).ThenBy(c => c.CourseCode)

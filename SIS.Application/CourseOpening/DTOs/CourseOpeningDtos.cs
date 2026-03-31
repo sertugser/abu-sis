@@ -44,6 +44,25 @@ public class CurriculumCourseForOpeningDto
     public bool IsCompulsory { get; set; }
     public bool AlreadyOpened { get; set; }
     public int ExistingSectionCount { get; set; }
+
+    // Forecast data
+    public int PredictedDemand { get; set; }
+    public int RetakeCount { get; set; }  // FF+NA+U
+    public int RecommendedSectionCount { get; set; }
+    public int RecommendedCapacity { get; set; }
+
+    // Cross-department talep
+    public List<CrossDepartmentDemandDto> CrossDepartmentDemand { get; set; } = new();
+
+    // Önceki dönem verisi
+    public int? PreviousTermEnrollment { get; set; }
+}
+
+public class CrossDepartmentDemandDto
+{
+    public string DepartmentName { get; set; } = "";
+    public string ProgramName { get; set; } = "";
+    public int EstimatedStudentCount { get; set; }
 }
 
 public class InstructorOptionDto
@@ -79,4 +98,26 @@ public class UpdateOpenedSectionRequest
     public int SectionId { get; set; }
     public int? InstructorId { get; set; }
     public int? Capacity { get; set; }
+}
+
+public class InstructorWorkloadDto
+{
+    public int InstructorId { get; set; }
+    public string FullName { get; set; } = "";
+    public string Title { get; set; } = "";
+    public int MaxWeeklyHours { get; set; }
+    public int AssignedWeeklyHours { get; set; }
+    public int RemainingCapacity { get; set; }
+    public List<AssignedSectionDto> AssignedSections { get; set; } = new();
+}
+
+public class AssignedSectionDto
+{
+    public int SectionId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int SectionNumber { get; set; }
+    public int WeeklyHours { get; set; }
+    public int Capacity { get; set; }
+    public int EnrolledCount { get; set; }
 }
