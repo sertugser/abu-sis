@@ -374,7 +374,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // ── TimeSlot ─────────────────────────────────────────────
         builder.Entity<TimeSlot>(e =>
         {
-            e.HasIndex(ts => new { ts.Pattern, ts.StartTime, ts.EndTime }).IsUnique();
+            e.HasIndex(ts => new { ts.TermId, ts.DayOfWeek, ts.StartTime }).IsUnique();
+
+            e.HasOne(ts => ts.Term)
+             .WithMany()
+             .HasForeignKey(ts => ts.TermId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── SectionSchedule ──────────────────────────────────────
