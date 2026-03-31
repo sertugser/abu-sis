@@ -500,13 +500,28 @@ public class EnrollmentForecastServiceTests
         var mock = new Mock<ISystemConfigService>();
         
         mock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<System.Threading.CancellationToken>()))
-            .Returns((string _, int def, System.Threading.CancellationToken _) => Task.FromResult(def));
+            .Returns((string key, int def, System.Threading.CancellationToken _) => Task.FromResult(
+                key switch
+                {
+                    "ECTS_LIMIT_BELOW_2_0" => 30,
+                    "ECTS_LIMIT_2_0_TO_2_49" => 42,
+                    "ECTS_LIMIT_2_5_AND_ABOVE" => 48,
+                    _ => def
+                }
+            ));
         
         mock.Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<System.Threading.CancellationToken>()))
-            .Returns((string _, decimal def, System.Threading.CancellationToken _) => Task.FromResult(def));
+            .Returns((string key, decimal def, System.Threading.CancellationToken _) => Task.FromResult(
+                key switch
+                {
+                    "CGPA_THRESHOLD_RETAINED" => 1.70m,
+                    _ => def
+                }
+            ));
         
         mock.Setup(x => x.GetStringAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<System.Threading.CancellationToken>()))
             .Returns((string _, string def, System.Threading.CancellationToken _) => Task.FromResult(def));
+        
         return mock.Object;
     }
 }
