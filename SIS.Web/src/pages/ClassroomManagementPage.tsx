@@ -21,7 +21,6 @@ const CLASSROOM_TYPES = ['Lecture', 'Lab', 'Computer', 'Seminar'];
 const CONFLICT_TYPE_LABELS: Record<string, string> = {
   ClassroomConflict: 'Derslik Çakışması',
   InstructorConflict: 'Öğretim Üyesi Çakışması',
-  InstructorAvailabilityConflict: 'Müsaitlik İhlali',
 };
 
 const DAY_LABELS: Record<number, string> = {

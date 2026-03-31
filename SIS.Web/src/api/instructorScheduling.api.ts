@@ -2,11 +2,33 @@ import axios from 'axios';
 import apiClient from './axios';
 import type {
   ApplyScheduleRequest,
-  InstructorAvailability,
   ScheduleSuggestion,
   ScheduleValidationResult,
-  UpsertInstructorAvailabilityRequest,
 } from '../types/scheduling';
+
+export interface TimetableEntry {
+  day: number;
+  startTime: string;
+  endTime: string;
+  courseCode: string;
+  courseName: string;
+  classroomName: string | null;
+  sectionId: number;
+  sectionNumber?: number;
+  instructorName?: string;
+}
+
+export async function getInstructorTimetable(
+  instructorId: number,
+  termId?: number,
+): Promise<TimetableEntry[]> {
+  const params: Record<string, number> = {};
+  if (termId) {
+    params.termId = termId;
+  }
+  const { data } = await apiClient.get(`/scheduling/instructor/${instructorId}/timetable`, { params });
+  return Array.isArray(data) ? data : [];
+}
 
 export async function validateInstructorSectionSchedule(sectionId: number): Promise<ScheduleValidationResult> {
   const { data } = await apiClient.post(`/instructor/section/${sectionId}/schedule/validate`, {});
@@ -29,7 +51,6 @@ export async function suggestInstructorSectionSchedule(sectionId: number): Promi
     suggestedSlots: Array.isArray(data?.suggestedSlots) ? data.suggestedSlots : [],
     estimatedWeeklyHoursImpact: typeof data?.estimatedWeeklyHoursImpact === 'number' ? data.estimatedWeeklyHoursImpact : 0,
     notes: Array.isArray(data?.notes) ? data.notes : [],
-    instructorAvailabilities: Array.isArray(data?.instructorAvailabilities) ? data.instructorAvailabilities : [],
   };
 }
 
@@ -43,33 +64,6 @@ export async function applyInstructorSectionSchedule(
     conflicts: Array.isArray(data?.conflicts) ? data.conflicts : [],
     notes: Array.isArray(data?.notes) ? data.notes : [],
   };
-}
-
-export async function getInstructorAvailabilities(): Promise<InstructorAvailability[]> {
-  const { data } = await apiClient.get('/instructor/availability');
-  return Array.isArray(data) ? data : [];
-}
-
-export async function createInstructorAvailability(
-  payload: UpsertInstructorAvailabilityRequest,
-): Promise<InstructorAvailability> {
-  const { data } = await apiClient.post('/instructor/availability', normalizeAvailabilityPayload(payload));
-  return data;
-}
-
-export async function updateInstructorAvailability(
-  availabilityId: number,
-  payload: UpsertInstructorAvailabilityRequest,
-): Promise<InstructorAvailability> {
-  const { data } = await apiClient.put(
-    `/instructor/availability/${availabilityId}`,
-    normalizeAvailabilityPayload(payload),
-  );
-  return data;
-}
-
-export async function deleteInstructorAvailability(availabilityId: number): Promise<void> {
-  await apiClient.delete(`/instructor/availability/${availabilityId}`);
 }
 
 export function getSchedulingErrorMessage(error: unknown, fallbackMessage: string): string {
@@ -103,22 +97,4 @@ export function getSchedulingErrorMessage(error: unknown, fallbackMessage: strin
   }
 
   return apiMessage ?? fallbackMessage;
-}
-
-function normalizeAvailabilityPayload(payload: UpsertInstructorAvailabilityRequest) {
-  return {
-    dayOfWeek: payload.dayOfWeek,
-    startTime: ensureTimeWithSeconds(payload.startTime),
-    endTime: ensureTimeWithSeconds(payload.endTime),
-    isAvailable: payload.isAvailable,
-    isPreferred: payload.isPreferred,
-  };
-}
-
-function ensureTimeWithSeconds(value: string) {
-  if (!value) {
-    return value;
-  }
-
-  return value.length === 5 ? `${value}:00` : value;
 }

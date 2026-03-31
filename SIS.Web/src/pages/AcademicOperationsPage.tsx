@@ -55,7 +55,6 @@ const CONFLICT_CFG: Record<string, { label: string; variant: 'destructive' | 'wa
   ClassroomConflict: { label: 'Derslik', variant: 'destructive' },
   InstructorConflict: { label: 'Ogretim Uyesi', variant: 'destructive' },
   CapacityConflict: { label: 'Kapasite', variant: 'warning' },
-  InstructorAvailabilityConflict: { label: 'Musaitlik', variant: 'warning' },
   WeeklyLoadConflict: { label: 'Yuk Asimi', variant: 'warning' },
   InvalidScheduleJson: { label: 'Veri Hatasi', variant: 'outline' },
 };

@@ -57,7 +57,6 @@ export const studentMenuGroups: MenuGroup[] = [
       { to: '/mufredat-bilgi-paketi', label: 'Müfredat Bilgi Paketi' },
       { to: '/mufredat-durum', label: 'Müfredat Durum' },
       { to: '/not-listesi', label: 'Not Listesi' },
-      { to: '/on-kayit-anketi', label: 'Ön Kayıt Anketi' },
       { to: '/staj-basvurusu', label: 'Staj Başvurusu' },
       { to: '/transkript', label: 'Transkript' },
       { to: '/transkript-senaryosu', label: 'Transkript Senaryosu' },
@@ -121,7 +120,7 @@ export const instructorMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
-      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Müsaitlik Yönetimi' },
+      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
     ],
   },
   {
@@ -156,7 +155,7 @@ export const advisorMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
-      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Müsaitlik Yönetimi' },
+      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
     ],
   },
   {
@@ -236,7 +235,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     icon: BookOpen,
     children: [
       { to: '/not-girisi', label: 'Not Girişi' },
-      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Müsaitlik Yönetimi' },
+      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/merkezi-derslik-yonetimi', label: 'Merkezi Derslik Yönetimi' },
       { to: '/mufredat-islemleri', label: 'Müfredat İşlemleri' },
       { to: '/ders-kontenjan-islemleri', label: 'Ders Kontenjan İşlemleri' },
@@ -327,7 +326,7 @@ export const deanMenuGroups: MenuGroup[] = [
     children: [
       { to: '/not-girisi', label: 'Not Girişi' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
-      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Müsaitlik Yönetimi' },
+      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/mufredat-islemleri', label: 'Müfredat İşlemleri' },
     ],
   },

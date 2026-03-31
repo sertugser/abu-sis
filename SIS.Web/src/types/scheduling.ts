@@ -4,23 +4,6 @@ export interface ScheduleSlot {
   endTime: string;
 }
 
-export interface InstructorAvailability {
-  id: number;
-  instructorId: number;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  isAvailable: boolean;
-  isPreferred: boolean;
-}
-
-export interface UpsertInstructorAvailabilityRequest {
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  isAvailable: boolean;
-  isPreferred: boolean;
-}
 
 export interface ApplyScheduleRequest {
   sectionId: number;
@@ -84,7 +67,6 @@ export interface ScheduleSuggestion {
   suggestedSlots: ScheduleSlot[];
   estimatedWeeklyHoursImpact: number;
   notes: string[];
-  instructorAvailabilities: InstructorAvailability[];
 }
 
 export interface ClassroomOccupation {

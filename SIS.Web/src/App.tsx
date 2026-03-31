@@ -21,7 +21,7 @@ import AcademicOperationsPage from './pages/AcademicOperationsPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import TermClosingWizard from './pages/TermClosingWizard';
-import PreRegistrationSurveyPage from './pages/PreRegistrationSurveyPage';
+
 import CourseOpeningPage from './pages/CourseOpeningPage';
 import UserManagementPage from './pages/UserManagementPage';
 import StudentDirectoryPage from './pages/StudentDirectoryPage';
@@ -53,14 +53,14 @@ export default function App() {
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
                     <Route path="donem-ortalamalari" element={<TermGpaPage />} />
                     <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
-                    <Route path="on-kayit-anketi" element={<PreRegistrationSurveyPage />} />
+
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager']} />}>
                     <Route path="derslerim" element={<InstructorSectionsPage />} />
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
-                    <Route path="musaitlik-yonetimi" element={<InstructorSchedulingPage />} />
+                    <Route path="ders-programim" element={<InstructorSchedulingPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>
