@@ -17,12 +17,12 @@ internal static class RegistrationRulePolicy
         && grade != GradeCode.W
         && grade != GradeCode.I;
 
-    internal static int GetEctsLimit(decimal cgpa) =>
-        cgpa >= 2.50m ? 48 :
-        cgpa >= 2.00m ? 42 : 30;
+    internal static int GetEctsLimit(decimal cgpa, int limitBelow200 = 30, int limit200To249 = 42, int limitAbove250 = 48) =>
+        cgpa >= 2.50m ? limitAbove250 :
+        cgpa >= 2.00m ? limit200To249 : limitBelow200;
 
-    internal static bool HasLowCgpaRestriction(decimal cgpa, int completedSemesters) =>
-        cgpa < 1.70m && completedSemesters > 1;
+    internal static bool HasLowCgpaRestriction(decimal cgpa, int completedSemesters, decimal retentionThreshold = 1.70m) =>
+        cgpa < retentionThreshold && completedSemesters > 1;
 
     internal static bool IsDemandStatus(RegistrationStatus status) =>
         status is RegistrationStatus.Draft
