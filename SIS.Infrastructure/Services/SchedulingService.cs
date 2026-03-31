@@ -63,12 +63,14 @@ public class SchedulingService : ISchedulingService
 
         var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
+        var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
 
         result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
         result.Notes.AddRange(candidate.Notes);
 
-        var conflicts = EvaluateCandidateConflicts(candidate, snapshot);
+        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig);
         result.Conflicts = conflicts;
+        result.Notes.AddRange(softNotes);
         result.IsValid = conflicts.Count == 0;
         return result;
     }
@@ -88,7 +90,7 @@ public class SchedulingService : ISchedulingService
         }
 
         var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
-        var evaluation = EvaluateExistingConflicts(snapshot);
+        var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
 
         evaluation.Notes.Insert(0, $"Degerlendirilen donem: {snapshot.TermName}");
         return evaluation;
@@ -115,7 +117,7 @@ public class SchedulingService : ISchedulingService
         }
 
         var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, departmentId, cancellationToken);
-        var evaluation = EvaluateExistingConflicts(snapshot);
+        var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
         evaluation.Notes.Insert(0, $"Degerlendirilen donem: {snapshot.TermName}");
         evaluation.Notes.Insert(1, $"Kapsam: {snapshot.ScopeName}");
         return evaluation;
@@ -185,6 +187,7 @@ public class SchedulingService : ISchedulingService
         }
 
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
+        var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var currentParse = ParseScheduleJson(section.ScheduleJson);
         var requiredHours = ResolveTotalRequiredHours(section);
         var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentParse.Slots, timeSlots);
@@ -225,7 +228,7 @@ public class SchedulingService : ISchedulingService
                     slotCombination.Slots,
                     new List<string>());
 
-                var conflicts = EvaluateCandidateConflicts(candidate, existingSnapshot);
+                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig);
                 if (conflicts.Count > 0)
                 {
                     continue;
@@ -238,6 +241,7 @@ public class SchedulingService : ISchedulingService
                 response.SuggestedSlots = candidate.ScheduleSlots.Select(MapScheduleSlot).ToList();
                 response.EstimatedWeeklyHoursImpact = candidateWeeklyHours - currentWeeklyHours;
                 response.Notes.AddRange(candidate.Notes);
+                response.Notes.AddRange(softNotes);
                 response.Notes.Add("Slotlar zaman grid'inden uygun kombinasyon olarak seçildi.");
                 response.Notes.Add($"Derslik secimi kapasite uyumu esas alinarak yapildi ({classroom.Capacity}/{requiredCapacity}).");
                 return response;
@@ -408,7 +412,7 @@ public class SchedulingService : ISchedulingService
         }
 
         var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
-        var evaluation = EvaluateExistingConflicts(snapshot);
+        var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
         result.ConflictsCount = evaluation.Conflicts?.Count ?? 0;
 
         var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(cancellationToken);
@@ -760,7 +764,7 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private ScheduleValidationResultDto EvaluateExistingConflicts(TermSnapshot snapshot)
+    private async Task<ScheduleValidationResultDto> EvaluateExistingConflictsAsync(TermSnapshot snapshot, CancellationToken ct)
     {
         var conflicts = new List<SchedulingConflictDto>();
         var notes = new List<string>();
@@ -963,6 +967,72 @@ public class SchedulingService : ISchedulingService
             }
         }
 
+        // ── Soft Constraints ────────────────────────────────────────────
+        var softConfig = await LoadSoftConstraintConfigAsync(ct);
+
+        // S1: Derslik doluluk oranı
+        if (softConfig.S1Enabled)
+        {
+            foreach (var section in snapshot.Sections)
+            {
+                if (!section.ClassroomId.HasValue || section.ClassroomCapacity <= 0)
+                    continue;
+
+                var occupancyRate = section.Capacity * 100 / section.ClassroomCapacity;
+                if (occupancyRate < softConfig.S1MinOccupancy)
+                {
+                    notes.Add($"S1 Uyarı: {section.CourseCode} ({section.ClassroomName}) doluluk oranı düşük (%{occupancyRate}, hedef >=%{softConfig.S1MinOccupancy})");
+                }
+                else if (occupancyRate > softConfig.S1MaxOccupancy)
+                {
+                    notes.Add($"S1 Uyarı: {section.CourseCode} ({section.ClassroomName}) doluluk oranı yüksek (%{occupancyRate}, hedef <=%{softConfig.S1MaxOccupancy})");
+                }
+            }
+        }
+
+        // S2: Hoca günlük yoğunluk dengesi
+        if (softConfig.S2Enabled)
+        {
+            foreach (var instructorGroup in snapshot.Sections
+                         .Where(s => s.InstructorId.HasValue && s.ScheduleSlots.Count > 0)
+                         .GroupBy(s => s.InstructorId!.Value))
+            {
+                var instructorName = instructorGroup.First().InstructorName;
+
+                var slotsByDay = instructorGroup
+                    .SelectMany(s => s.ScheduleSlots)
+                    .GroupBy(slot => slot.Day);
+
+                foreach (var dayGroup in slotsByDay)
+                {
+                    var dailyHours = dayGroup.Sum(slot => (decimal)(slot.EndTime - slot.StartTime).TotalHours);
+                    if (dailyHours > softConfig.S2MaxDailyHours)
+                    {
+                        var dayName = GetDayOfWeekName(dayGroup.Key);
+                        notes.Add($"S2 Uyarı: {instructorName} hocanın {dayName} günündeki ders yükü fazla ({dailyHours:0.#} saat, max {softConfig.S2MaxDailyHours})");
+                    }
+                }
+            }
+        }
+
+        // S3: Slot dağılım dengesi (prime-time yığılma)
+        if (softConfig.S3Enabled)
+        {
+            var slotGroups = snapshot.Sections
+                .SelectMany(s => s.ScheduleSlots.Select(slot => new { slot.Day, slot.StartTime }))
+                .GroupBy(x => (x.Day, x.StartTime));
+
+            foreach (var group in slotGroups)
+            {
+                var count = group.Count();
+                if (count > softConfig.S3MaxSectionsPerSlot)
+                {
+                    var dayName = GetDayOfWeekName(group.Key.Day);
+                    notes.Add($"S3 Uyarı: {dayName} {group.Key.StartTime:HH\\:mm} slotunda {count} section yığılması var (max {softConfig.S3MaxSectionsPerSlot})");
+                }
+            }
+        }
+
         return new ScheduleValidationResultDto
         {
             IsValid = conflicts.Count == 0,
@@ -976,7 +1046,8 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private List<SchedulingConflictDto> EvaluateCandidateConflicts(SectionSnapshot candidate, TermSnapshot snapshot)
+    private (List<SchedulingConflictDto> Conflicts, List<string> SoftNotes) EvaluateCandidateConflicts(
+        SectionSnapshot candidate, TermSnapshot snapshot, SoftConstraintConfig softConfig)
     {
         var conflicts = new List<SchedulingConflictDto>();
 
@@ -989,7 +1060,7 @@ public class SchedulingService : ISchedulingService
                 null,
                 null));
 
-            return conflicts;
+            return (conflicts, new List<string>());
         }
 
         if (candidate.ClassroomId.HasValue && candidate.ClassroomCapacity < candidate.Capacity)
@@ -1126,12 +1197,77 @@ public class SchedulingService : ISchedulingService
             }
         }
 
-        return conflicts
+        // ── Candidate Soft Constraints ────────────────────────────────────
+        var softNotes = new List<string>();
+
+        // S1: Derslik doluluk oranı (candidate)
+        if (softConfig.S1Enabled && candidate.ClassroomId.HasValue && candidate.ClassroomCapacity > 0)
+        {
+            var occupancyRate = candidate.Capacity * 100 / candidate.ClassroomCapacity;
+            if (occupancyRate < softConfig.S1MinOccupancy)
+            {
+                softNotes.Add($"S1 Uyarı: {candidate.CourseCode} ({candidate.ClassroomName}) doluluk oranı düşük (%{occupancyRate}, hedef >=%{softConfig.S1MinOccupancy})");
+            }
+            else if (occupancyRate > softConfig.S1MaxOccupancy)
+            {
+                softNotes.Add($"S1 Uyarı: {candidate.CourseCode} ({candidate.ClassroomName}) doluluk oranı yüksek (%{occupancyRate}, hedef <=%{softConfig.S1MaxOccupancy})");
+            }
+        }
+
+        // S2: Hoca günlük yoğunluk dengesi (candidate + existing)
+        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        {
+            var existingSlots = snapshot.Sections
+                .Where(s => s.InstructorId == candidate.InstructorId)
+                .SelectMany(s => s.ScheduleSlots)
+                .ToList();
+
+            var allSlots = existingSlots.Concat(candidate.ScheduleSlots);
+
+            foreach (var dayGroup in allSlots.GroupBy(slot => slot.Day))
+            {
+                var dailyHours = dayGroup.Sum(slot => (decimal)(slot.EndTime - slot.StartTime).TotalHours);
+                if (dailyHours > softConfig.S2MaxDailyHours)
+                {
+                    var dayName = GetDayOfWeekName(dayGroup.Key);
+                    softNotes.Add($"S2 Uyarı: {candidate.InstructorName} hocanın {dayName} günündeki ders yükü fazla ({dailyHours:0.#} saat, max {softConfig.S2MaxDailyHours})");
+                }
+            }
+        }
+
+        // S3: Slot dağılım dengesi (candidate + existing)
+        if (softConfig.S3Enabled && candidate.ScheduleSlots.Count > 0)
+        {
+            var existingSlotKeys = snapshot.Sections
+                .SelectMany(s => s.ScheduleSlots.Select(slot => (slot.Day, slot.StartTime)))
+                .ToList();
+
+            var candidateSlotKeys = candidate.ScheduleSlots
+                .Select(slot => (slot.Day, slot.StartTime))
+                .ToList();
+
+            var allSlotKeys = existingSlotKeys.Concat(candidateSlotKeys);
+
+            foreach (var group in allSlotKeys.GroupBy(x => x))
+            {
+                var count = group.Count();
+                if (count > softConfig.S3MaxSectionsPerSlot
+                    && candidateSlotKeys.Contains(group.Key))
+                {
+                    var dayName = GetDayOfWeekName(group.Key.Day);
+                    softNotes.Add($"S3 Uyarı: {dayName} {group.Key.StartTime:HH\\:mm} slotunda {count} section yığılması var (max {softConfig.S3MaxSectionsPerSlot})");
+                }
+            }
+        }
+
+        var orderedConflicts = conflicts
             .OrderBy(conflict => conflict.ConflictType)
             .ThenBy(conflict => conflict.Day)
             .ThenBy(conflict => conflict.StartTime)
             .ThenBy(conflict => conflict.RelatedSectionId)
             .ToList();
+
+        return (orderedConflicts, softNotes);
     }
 
     // ── TimeSlot-based suggestion helpers ────────────────────────────────
@@ -1693,7 +1829,64 @@ public class SchedulingService : ISchedulingService
         };
     }
 
+    // ── Soft constraint config helpers ────────────────────────────────────
+
+    private async Task<Dictionary<string, string>> LoadSystemConfigAsync(CancellationToken ct)
+    {
+        return await _context.SystemConfigs.AsNoTracking()
+            .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
+    }
+
+    private async Task<SoftConstraintConfig> LoadSoftConstraintConfigAsync(CancellationToken ct)
+    {
+        var config = await LoadSystemConfigAsync(ct);
+
+        return new SoftConstraintConfig(
+            S1Enabled: GetBool(config, "SoftConstraint.S1.Enabled", true),
+            S1MinOccupancy: GetInt(config, "Classroom.OccupancyTarget.Min", 60),
+            S1MaxOccupancy: GetInt(config, "Classroom.OccupancyTarget.Max", 85),
+            S2Enabled: GetBool(config, "SoftConstraint.S2.Enabled", true),
+            S2MaxDailyHours: GetInt(config, "SoftConstraint.S2.MaxDailyHours", 6),
+            S3Enabled: GetBool(config, "SoftConstraint.S3.Enabled", true),
+            S3MaxSectionsPerSlot: GetInt(config, "SoftConstraint.S3.MaxSectionsPerSlot", 5));
+    }
+
+    private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
+    {
+        return config.TryGetValue(key, out var value)
+            ? bool.TryParse(value, out var result) ? result : defaultValue
+            : defaultValue;
+    }
+
+    private static int GetInt(Dictionary<string, string> config, string key, int defaultValue)
+    {
+        return config.TryGetValue(key, out var value)
+            ? int.TryParse(value, out var result) ? result : defaultValue
+            : defaultValue;
+    }
+
+    private static string GetDayOfWeekName(DayOfWeek day)
+    {
+        return day switch
+        {
+            DayOfWeek.Monday => "Pazartesi",
+            DayOfWeek.Tuesday => "Salı",
+            DayOfWeek.Wednesday => "Çarşamba",
+            DayOfWeek.Thursday => "Perşembe",
+            DayOfWeek.Friday => "Cuma",
+            DayOfWeek.Saturday => "Cumartesi",
+            DayOfWeek.Sunday => "Pazar",
+            _ => day.ToString()
+        };
+    }
+
     // ── Constants & inner types ──────────────────────────────────────────
+
+    private record SoftConstraintConfig(
+        bool S1Enabled, int S1MinOccupancy, int S1MaxOccupancy,
+        bool S2Enabled, int S2MaxDailyHours,
+        bool S3Enabled, int S3MaxSectionsPerSlot);
+
 
     private static class ConflictTypes
     {
