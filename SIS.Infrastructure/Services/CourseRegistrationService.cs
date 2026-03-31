@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Enums;
@@ -12,11 +13,16 @@ public class CourseRegistrationService : ICourseRegistrationService
 {
     private readonly AppDbContext _context;
     private readonly IRegistrationValidationService _validationService;
+    private readonly ISystemConfigService _systemConfig;
 
-    public CourseRegistrationService(AppDbContext context, IRegistrationValidationService validationService)
+    public CourseRegistrationService(
+        AppDbContext context,
+        IRegistrationValidationService validationService,
+        ISystemConfigService systemConfig)
     {
         _context = context;
         _validationService = validationService;
+        _systemConfig = systemConfig;
     }
 
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
@@ -761,17 +767,22 @@ public class CourseRegistrationService : ICourseRegistrationService
             });
         }
 
-        // FR-62: Max withdrawals: 6 for bachelor, 3 for associate
-        var mainProg = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
-        if (mainProg?.Program != null)
+        // FR-62: Max çekilme hakkı — DB'den (SystemConfig tablosu)
+        var mainProg2 = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+        if (mainProg2?.Program != null)
         {
-            int maxWithdrawals = mainProg.Program.DegreeLevel == DegreeLevel.Associate ? 3 : 6;
+            string configKey = mainProg2.Program.DegreeLevel == DegreeLevel.Associate
+                ? "Withdrawal.MaxCount.Associate"
+                : "Withdrawal.MaxCount.Undergraduate";
+            int defaultMax = mainProg2.Program.DegreeLevel == DegreeLevel.Associate ? 3 : 6;
+            int maxWithdrawals = await _systemConfig.GetIntAsync(configKey, defaultMax);
+
             if (student.WithdrawalCount >= maxWithdrawals)
             {
                 errors.Add(new ValidationError
                 {
                     Rule = "MaxWithdrawals",
-                    Message = $"Maksimum ders cekilme hakkini ({maxWithdrawals}) kullandiniz."
+                    Message = $"Maksimum ders çekilme hakkını ({maxWithdrawals}) kullandınız."
                 });
             }
         }

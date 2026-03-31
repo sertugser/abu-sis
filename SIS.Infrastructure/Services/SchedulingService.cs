@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -19,10 +20,12 @@ public class SchedulingService : ISchedulingService
     private static readonly TimeSpan SuggestionStep = TimeSpan.FromMinutes(30);
 
     private readonly AppDbContext _context;
+    private readonly ISystemConfigService _systemConfig;
 
-    public SchedulingService(AppDbContext context)
+    public SchedulingService(AppDbContext context, ISystemConfigService systemConfig)
     {
         _context = context;
+        _systemConfig = systemConfig;
     }
 
     public async Task<List<SchedulingConflictDto>> GetConflictsAsync(int? termId = null, CancellationToken cancellationToken = default)
@@ -202,11 +205,38 @@ public class SchedulingService : ISchedulingService
         var classrooms = await _context.Classrooms
             .AsNoTracking()
             .Where(c => c.Capacity > 0 && c.Capacity >= requiredCapacity)
-            .OrderBy(c => c.Capacity - requiredCapacity)
-            .ThenBy(c => c.Id == section.ClassroomId ? 0 : 1)
-            .ThenBy(c => c.Name)
-            .ThenBy(c => c.Id)
             .ToListAsync(cancellationToken);
+
+        // Fetch thresholds from system config
+        var amphiThreshold = await _systemConfig.GetIntAsync("Classroom.AmphiThreshold", 100);
+        var minOccupancy = await _systemConfig.GetIntAsync("Classroom.OccupancyTarget.Min", 60);
+        var maxOccupancy = await _systemConfig.GetIntAsync("Classroom.OccupancyTarget.Max", 85);
+
+        classrooms = classrooms.OrderBy(c => 
+        {
+            int penalty = 0;
+            
+            bool needsAmphi = requiredCapacity >= amphiThreshold;
+            bool isAmphi = c.Capacity >= amphiThreshold;
+            
+            // Büyük dersi küçük sınıfa koymamak için (zaten query'de elendi)
+            // Ancak küçük dersi amfiye koyarsak çok büyük penaltı ver.
+            if (!needsAmphi && isAmphi) penalty += 1000;
+            
+            // Occupancy penalty
+            double occupancy = (double)requiredCapacity / c.Capacity * 100;
+            if (occupancy < minOccupancy) penalty += (int)((minOccupancy - occupancy) * 10);
+            if (occupancy > maxOccupancy) penalty += (int)((occupancy - maxOccupancy) * 10);
+            
+            // Temel kapasite farkı penalitesi
+            penalty += (c.Capacity - requiredCapacity);
+            
+            return penalty;
+        })
+        .ThenBy(c => c.Id == section.ClassroomId ? 0 : 1)
+        .ThenBy(c => c.Name)
+        .ThenBy(c => c.Id)
+        .ToList();
 
         if (classrooms.Count == 0)
         {
@@ -245,7 +275,9 @@ public class SchedulingService : ISchedulingService
                 response.Notes.Add(slotCombination.PreferenceScore == 0
                     ? "Slotlar tercihli müsaitlik pencereleriyle uyumludur."
                     : "Slotlar uygun müsaitlik pencereleri içinden seçildi.");
-                response.Notes.Add($"Derslik secimi kapasite uyumu esas alinarak yapildi ({classroom.Capacity}/{requiredCapacity}).");
+                
+                double occupancy = (double)requiredCapacity / classroom.Capacity * 100;
+                response.Notes.Add($"Derslik seçimi kapasite uyumu esas alınarak yapıldı ({classroom.Capacity}/{requiredCapacity} doluluk: %{occupancy:F1}).");
                 return response;
             }
         }

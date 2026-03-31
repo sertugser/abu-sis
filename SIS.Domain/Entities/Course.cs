@@ -1,6 +1,8 @@
+using SIS.Domain.Interfaces;
+
 namespace SIS.Domain.Entities;
 
-public class Course
+public class Course : IHasAuditFields
 {
     public int Id { get; set; }
     public string Code { get; set; } = string.Empty;

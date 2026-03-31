@@ -112,17 +112,21 @@ public class AuthService : IAuthService
                 IssuerSigningKey = key
             }, out var validatedToken);
 
-            // Güvenlik: Süresi çok eski token'larla sonsuz yenilemeyi engelle
-            // Sadece son 7 gün içinde expire olmuş token'ları kabul et
+            // Güvenlik: Süresi dolmuş token'larla sonsuz yenilemeyi engelle.
+            // appsettings.json → Jwt:RefreshWindowMinutes (varsayılan: 1440 = 24 saat)
+            // 24 saatten eski expire token → yenileme reddedilir, tekrar giriş zorunlu.
             if (validatedToken is JwtSecurityToken jwt)
             {
-                var maxRefreshWindow = TimeSpan.FromDays(7);
-                if (jwt.ValidTo < DateTime.UtcNow - maxRefreshWindow)
+                var refreshWindowMinutes = double.TryParse(
+                    jwtSettings["RefreshWindowMinutes"], out var rw) ? rw : 1440;
+
+                var maxRefreshDeadline = jwt.ValidTo.AddMinutes(refreshWindowMinutes);
+                if (DateTime.UtcNow > maxRefreshDeadline)
                 {
                     return new AuthResponseDto
                     {
                         Success = false,
-                        Error = "Token süresi çok eski, lütfen tekrar giriş yapın."
+                        Error = "Oturum süresi doldu, lütfen tekrar giriş yapın."
                     };
                 }
             }

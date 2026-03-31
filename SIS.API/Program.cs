@@ -18,6 +18,7 @@ using SIS.Application.CourseOpening.Services;
 using SIS.Application.TermClosing.Services;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Infrastructure.BackgroundServices;
+using SIS.Infrastructure.Interceptors;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -29,6 +30,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor(); // AuditLog interceptor + IDOR kontrolleri için
 
 builder.Services.AddCors(options =>
 {
@@ -40,9 +42,16 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Audit SaveChanges interceptor — Scoped: her HTTP isteği kendi örneğini alır (thread-safe)
+builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+
 // Add EF Core + PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+{
+    var interceptor = serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>();
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .AddInterceptors(interceptor);
+});
 
 // Add Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
@@ -95,6 +104,9 @@ builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
 builder.Services.AddScoped<ITermClosingService, TermClosingService>();
+
+// Centralized config service — SystemConfigs tablosundan önbellekli okuma
+builder.Services.AddScoped<ISystemConfigService, SystemConfigService>();
 
 // Admin services
 builder.Services.AddScoped<IAdminUserService, AdminUserService>();

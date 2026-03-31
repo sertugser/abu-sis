@@ -1,6 +1,8 @@
+using SIS.Domain.Interfaces;
+
 namespace SIS.Domain.Entities;
 
-public class Instructor
+public class Instructor : IHasAuditFields
 {
     public int Id { get; set; }
     public int UserId { get; set; }

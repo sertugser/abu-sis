@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using SIS.Application.Common.Services;
 using SIS.Application.EnrollmentForecast.DTOs;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
@@ -17,12 +18,18 @@ public class EnrollmentForecastService : IEnrollmentForecastService
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly IMemoryCache _cache;
+    private readonly ISystemConfigService _systemConfig;
 
-    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache)
+    public EnrollmentForecastService(
+        AppDbContext context,
+        IGpaCalculationService gpaCalculationService,
+        IMemoryCache cache,
+        ISystemConfigService systemConfig)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _cache = cache;
+        _systemConfig = systemConfig;
     }
 
     public async Task<CourseDemandForecastDto?> GetCourseDemandForecastAsync(int courseId)
@@ -301,7 +308,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         IDictionary<int, decimal> cgpaCache)
     {
         var cgpa = await GetEffectiveCgpaAsync(student, cgpaCache);
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa);
+        var ectsLimit = await RegistrationRulePolicy.GetEctsLimitAsync(cgpa, _systemConfig);
         var completedSemesters = Math.Max(0, student.CompletedSemesters);
         var currentSemester = completedSemesters + 1;
 

@@ -1,8 +1,9 @@
 using SIS.Domain.Enums;
+using SIS.Domain.Interfaces;
 
 namespace SIS.Domain.Entities;
 
-public class CourseRegistration
+public class CourseRegistration : IHasAuditFields
 {
     public int Id { get; set; }
     public int StudentId { get; set; }

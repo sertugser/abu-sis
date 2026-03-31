@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.StudentEligibility.DTOs;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.GpaCalculation.Services;
@@ -12,11 +13,16 @@ public class StudentEligibilityService : IStudentEligibilityService
 {
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
+    private readonly ISystemConfigService _systemConfig;
 
-    public StudentEligibilityService(AppDbContext context, IGpaCalculationService gpaCalculationService)
+    public StudentEligibilityService(
+        AppDbContext context,
+        IGpaCalculationService gpaCalculationService,
+        ISystemConfigService systemConfig)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
+        _systemConfig = systemConfig;
     }
 
     public async Task<CourseEligibilityReportDto?> GetCourseEligibilityReportAsync(
@@ -364,7 +370,7 @@ public class StudentEligibilityService : IStudentEligibilityService
                 .GetValueOrDefault(student.Id, new List<CourseRegistration>());
 
             var cgpa = await GetCgpaAsync(student, cgpaCache);
-            var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa);
+            var ectsLimit = await RegistrationRulePolicy.GetEctsLimitAsync(cgpa, _systemConfig, cancellationToken);
             var completedSemesters = Math.Max(0, student.CompletedSemesters);
             var currentSemester = completedSemesters + 1;
 

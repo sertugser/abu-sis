@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
@@ -12,10 +13,12 @@ namespace SIS.Infrastructure.Services;
 public class RegistrationValidationService : IRegistrationValidationService
 {
     private readonly AppDbContext _context;
+    private readonly ISystemConfigService _systemConfig;
 
-    public RegistrationValidationService(AppDbContext context)
+    public RegistrationValidationService(AppDbContext context, ISystemConfigService systemConfig)
     {
         _context = context;
+        _systemConfig = systemConfig;
     }
 
     public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
@@ -237,7 +240,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         var existingEcts = existingRegistrations.Sum(r => r.CourseSection.Course.Ects);
         var totalEcts = requestedEcts + existingEcts;
 
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa);
+        var ectsLimit = await RegistrationRulePolicy.GetEctsLimitAsync(student.Cgpa, _systemConfig);
 
         if (totalEcts > ectsLimit)
         {

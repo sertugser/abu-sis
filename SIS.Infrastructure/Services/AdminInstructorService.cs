@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
@@ -11,11 +12,16 @@ public class AdminInstructorService : IAdminInstructorService
 {
     private readonly AppDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISystemConfigService _systemConfig;
 
-    public AdminInstructorService(AppDbContext context, UserManager<ApplicationUser> userManager)
+    public AdminInstructorService(
+        AppDbContext context,
+        UserManager<ApplicationUser> userManager,
+        ISystemConfigService systemConfig)
     {
         _context = context;
         _userManager = userManager;
+        _systemConfig = systemConfig;
     }
 
     public async Task<List<AdminInstructorListItemDto>> GetInstructorsAsync(AdminInstructorFilterDto filter)
@@ -135,12 +141,33 @@ public class AdminInstructorService : IAdminInstructorService
             UserId = user.Id,
             DepartmentId = dto.DepartmentId,
             Title = dto.Title,
-            MaxWeeklyHours = dto.MaxWeeklyHours
+            MaxWeeklyHours = dto.MaxWeeklyHours > 0
+                ? dto.MaxWeeklyHours
+                : await ResolveMaxWeeklyHoursAsync(dto.Title)
         };
         _context.Instructors.Add(instructor);
         await _context.SaveChangesAsync();
 
         return (await GetInstructorByIdAsync(instructor.Id))!;
+    }
+
+    /// <summary>
+    /// YÖK unvanından MaxWeeklyHours değerini SystemConfig üzerinden çeker.
+    /// Örnek: "Prof." → Instructor.MaxWeeklyHours.Professor → 12
+    /// Bilinmeyen unvan → varsayılan 20.
+    /// </summary>
+    private async Task<int> ResolveMaxWeeklyHoursAsync(string title)
+    {
+        var key = title.Trim().ToLowerInvariant() switch
+        {
+            var t when t.StartsWith("prof")         => "Instructor.MaxWeeklyHours.Professor",
+            var t when t.StartsWith("doç")          => "Instructor.MaxWeeklyHours.AssociateProfessor",
+            var t when t.StartsWith("dr.")          => "Instructor.MaxWeeklyHours.AssistantProfessor",
+            var t when t.StartsWith("öğr.gör")     => "Instructor.MaxWeeklyHours.Lecturer",
+            var t when t.StartsWith("ogr.gor")     => "Instructor.MaxWeeklyHours.Lecturer",
+            _                                        => "Instructor.MaxWeeklyHours.AssistantProfessor"
+        };
+        return await _systemConfig.GetIntAsync(key, 20);
     }
 
     private static string GenerateInstructorEmail(string firstName, string lastName)

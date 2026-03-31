@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Common.DTOs;
+using SIS.Application.Common.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -16,11 +17,16 @@ public class StudentController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
+    private readonly ISystemConfigService _systemConfig;
 
-    public StudentController(AppDbContext context, IGpaCalculationService gpaCalculationService)
+    public StudentController(
+        AppDbContext context,
+        IGpaCalculationService gpaCalculationService,
+        ISystemConfigService systemConfig)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
+        _systemConfig = systemConfig;
     }
 
     /// <summary>
@@ -64,9 +70,8 @@ public class StudentController : ControllerBase
             classYear = Math.Clamp(elapsedYears - frozenYears, 1, maxYears);
         }
 
-        // ECTS limit based on CGPA
-        var ectsLimit = student.Cgpa >= 2.50m ? 48 :
-                        student.Cgpa >= 2.00m ? 42 : 30;
+        // ECTS limit based on CGPA — DB'den okunur (SistemConfig tablosu)
+        var ectsLimit = await _systemConfig.GetEctsLimitAsync(student.Cgpa);
 
         // Advisor info
         string? advisorName = null;

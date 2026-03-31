@@ -1,3 +1,4 @@
+using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
@@ -17,9 +18,20 @@ internal static class RegistrationRulePolicy
         && grade != GradeCode.W
         && grade != GradeCode.I;
 
+    /// <summary>
+    /// CGPA'ya göre ECTS limitini döner (hardcoded fallback).
+    /// Mümkün olan her yerde GetEctsLimitAsync kullanılmalıdır.
+    /// </summary>
     internal static int GetEctsLimit(decimal cgpa) =>
         cgpa >= 2.50m ? 48 :
         cgpa >= 2.00m ? 42 : 30;
+
+    /// <summary>
+    /// CGPA'ya göre ECTS limitini ISystemConfigService üzerinden (DB'den önbellekli) döner.
+    /// </summary>
+    internal static Task<int> GetEctsLimitAsync(decimal cgpa, ISystemConfigService config,
+        CancellationToken cancellationToken = default)
+        => config.GetEctsLimitAsync(cgpa, cancellationToken);
 
     internal static bool HasLowCgpaRestriction(decimal cgpa, int completedSemesters) =>
         cgpa < 1.70m && completedSemesters > 1;
