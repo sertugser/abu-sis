@@ -487,6 +487,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("RequiredCourseId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsCorequisite")
+                        .HasColumnType("boolean");
+
                     b.HasKey("CourseId", "RequiredCourseId");
 
                     b.HasIndex("RequiredCourseId");
@@ -579,6 +582,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsFinalized")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsScheduleLocked")
                         .HasColumnType("boolean");
 
                     b.Property<uint>("RowVersion")
@@ -785,6 +791,39 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Faculties");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.FacultyScheduleApproval", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ApprovedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId");
+
+                    b.HasIndex("FacultyId", "TermId")
+                        .IsUnique();
+
+                    b.ToTable("FacultyScheduleApprovals");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
@@ -1691,6 +1730,25 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Faculty");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.FacultyScheduleApproval", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Term");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>

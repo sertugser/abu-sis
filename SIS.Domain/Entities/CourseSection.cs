@@ -16,6 +16,7 @@ public class CourseSection
     public int SectionNumber { get; set; }
     public bool IsActive { get; set; }
     public bool IsFinalized { get; set; }
+    public bool IsScheduleLocked { get; set; } // true = otomatik scheduling değiştiremez
     public uint RowVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

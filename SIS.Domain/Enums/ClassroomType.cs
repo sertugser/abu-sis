@@ -5,5 +5,6 @@ public enum ClassroomType
     Lecture,
     Lab,
     Seminar,
-    Computer
+    Computer,
+    Amphitheater
 }

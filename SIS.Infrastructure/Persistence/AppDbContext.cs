@@ -40,6 +40,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
+    public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -491,6 +492,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<Classroom>(e =>
         {
             e.HasIndex(c => c.Name).IsUnique();
+        });
+
+        // ── FacultyScheduleApproval ──────────────────────────────
+        builder.Entity<FacultyScheduleApproval>(e =>
+        {
+            e.HasIndex(fsa => new { fsa.FacultyId, fsa.TermId }).IsUnique();
+
+            e.HasOne(fsa => fsa.Faculty)
+             .WithMany()
+             .HasForeignKey(fsa => fsa.FacultyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(fsa => fsa.Term)
+             .WithMany()
+             .HasForeignKey(fsa => fsa.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── Performance Indexes ──────────────────────────────────
