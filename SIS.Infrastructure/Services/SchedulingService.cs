@@ -199,9 +199,40 @@ public class SchedulingService : ISchedulingService
         }
 
         var requiredCapacity = Math.Max(section.Capacity, 0);
-        var classrooms = await _context.Classrooms
+
+        // Fakülteye atanmış dersliklerden seç (H10 ön-filtre)
+        var courseDeptId = section.Course.DepartmentId;
+        int? facultyId = null;
+        if (courseDeptId.HasValue)
+        {
+            facultyId = await _context.Departments.AsNoTracking()
+                .Where(d => d.Id == courseDeptId.Value)
+                .Select(d => d.FacultyId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var assignedClassroomIds = await _context.ClassroomTermAssignments
             .AsNoTracking()
-            .Where(c => c.Capacity > 0 && c.Capacity >= requiredCapacity)
+            .Where(cta => cta.TermId == section.TermId
+                && (!facultyId.HasValue || cta.FacultyId == facultyId.Value))
+            .Select(cta => cta.ClassroomId)
+            .ToListAsync(cancellationToken);
+
+        IQueryable<Classroom> classroomQuery;
+        if (assignedClassroomIds.Count > 0)
+        {
+            // Fakülteye atanmış dersliklerden seç
+            classroomQuery = _context.Classrooms.AsNoTracking()
+                .Where(c => assignedClassroomIds.Contains(c.Id) && c.Capacity >= requiredCapacity);
+        }
+        else
+        {
+            // Henüz atama yoksa tüm dersliklerden seç (fallback)
+            classroomQuery = _context.Classrooms.AsNoTracking()
+                .Where(c => c.Capacity > 0 && c.Capacity >= requiredCapacity);
+        }
+
+        var classrooms = await classroomQuery
             .OrderBy(c => c.Capacity - requiredCapacity)
             .ThenBy(c => c.Id == section.ClassroomId ? 0 : 1)
             .ThenBy(c => c.Name)
@@ -804,6 +835,20 @@ public class SchedulingService : ISchedulingService
                     null));
             }
 
+            // H4+: Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
+            // AmphiThreshold SystemConfig'den okunuyor (varsayılan 100)
+            if (section.ClassroomId.HasValue
+                && section.Capacity >= 100
+                && section.ClassroomType != ClassroomType.Amphitheater)
+            {
+                conflicts.Add(BuildConflict(
+                    section,
+                    ConflictTypes.ClassroomTypeConflict,
+                    $"Kontenjanı {section.Capacity} olan ders için Amfi derslik gereklidir.",
+                    null,
+                    null));
+            }
+
             // H10: Fakülteye atanmamış derslik kullanımı
             if (section.ClassroomId.HasValue
                 && section.DepartmentId.HasValue
@@ -1082,6 +1127,20 @@ public class SchedulingService : ISchedulingService
                 candidate,
                 ConflictTypes.ClassroomTypeConflict,
                 $"Lab section'u ({candidate.CourseCode}) Lab veya Computer tipinde bir dersliğe atanmalıdır, mevcut tip: {candidate.ClassroomType}.",
+                null,
+                null));
+        }
+
+        // H4+: Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
+        // AmphiThreshold SystemConfig'den okunuyor (varsayılan 100)
+        if (candidate.ClassroomId.HasValue
+            && candidate.Capacity >= 100
+            && candidate.ClassroomType != ClassroomType.Amphitheater)
+        {
+            conflicts.Add(BuildConflict(
+                candidate,
+                ConflictTypes.ClassroomTypeConflict,
+                $"Kontenjanı {candidate.Capacity} olan ders için Amfi derslik gereklidir.",
                 null,
                 null));
         }

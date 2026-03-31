@@ -12,10 +12,12 @@ public class AdminTermService : IAdminTermService
 {
     private readonly AppDbContext _context;
     private readonly ITimeSlotService _timeSlotService;
+    private readonly ISchedulingService _schedulingService;
 
-    public AdminTermService(AppDbContext context, ITimeSlotService timeSlotService)
+    public AdminTermService(AppDbContext context, ITimeSlotService timeSlotService, ISchedulingService schedulingService)
     {
         _timeSlotService = timeSlotService;
+        _schedulingService = schedulingService;
         _context = context;
     }
 
@@ -188,6 +190,11 @@ public class AdminTermService : IAdminTermService
                     errors.Add("Dönem başlangıç ve bitiş tarihleri girilmelidir.");
                 if (term.RegistrationStart == default || term.RegistrationEnd == default)
                     errors.Add("Kayıt başlangıç ve bitiş tarihleri girilmelidir.");
+                // Guard: Derslik ataması yapılmış mı?
+                var hasClassroomAssignment = await _context.ClassroomTermAssignments
+                    .AnyAsync(cta => cta.TermId == term.Id);
+                if (!hasClassroomAssignment)
+                    errors.Add("Derslik-fakülte ataması yapılmadan Planning'e geçilemez.");
                 break;
 
             case TermStatus.Scheduling:
@@ -218,11 +225,26 @@ public class AdminTermService : IAdminTermService
                 var unscheduled = activeSections.Where(s =>
                     string.IsNullOrEmpty(s.ScheduleJson) || s.ScheduleJson == "[]").ToList();
                 if (unscheduled.Count > 0)
-                    errors.Add($"{unscheduled.Count} şubede zaman/derslik ataması yapılmamış.");
+                    errors.Add($"{unscheduled.Count} şubede zaman ataması yapılmamış.");
+
+                var noClassroom = activeSections.Where(s => !s.ClassroomId.HasValue).ToList();
+                if (noClassroom.Count > 0)
+                    errors.Add($"{noClassroom.Count} şubede derslik atanmamış.");
 
                 var noInst = activeSections.Where(s => !s.InstructorId.HasValue).ToList();
                 if (noInst.Count > 0)
                     errors.Add($"{noInst.Count} şubede öğretim üyesi atanmamış.");
+
+                // Guard: Hard constraint doğrulama (0 conflict zorunlu)
+                var validation = await _schedulingService.ValidateExistingAsync(term.Id);
+                if (!validation.IsValid && validation.Conflicts.Count > 0)
+                    errors.Add($"{validation.Conflicts.Count} hard constraint çakışması var. Programda çakışma olmadan yayınlanamaz.");
+
+                // Guard: Dekan onayı
+                var hasApproval = await _context.FacultyScheduleApprovals
+                    .AnyAsync(fsa => fsa.TermId == term.Id);
+                if (!hasApproval)
+                    errors.Add("Ders programı dekan tarafından onaylanmadan yayınlanamaz.");
                 break;
 
             case TermStatus.Closed:
