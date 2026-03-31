@@ -6,6 +6,8 @@ public class BatchAutoScheduleResultDto
     public int ScheduledCount { get; set; }
     public int FailedCount { get; set; }
     public int SkippedCount { get; set; }
+    public double SoftPenaltyScore { get; set; }
+    public int BacktrackingAttempts { get; set; }
     public List<BatchAutoScheduleItemDto> Results { get; set; } = new();
     public List<string> Notes { get; set; } = new();
 }

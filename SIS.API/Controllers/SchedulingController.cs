@@ -115,6 +115,12 @@ public class SchedulingController : ControllerBase
         if (request.DepartmentId.HasValue && request.DepartmentId <= 0)
             return BadRequest(new { error = "Gecerli bir departmentId gonderilmelidir." });
 
+        if (request.FacultyId.HasValue && request.FacultyId <= 0)
+            return BadRequest(new { error = "Gecerli bir facultyId gonderilmelidir." });
+
+        if (request.DepartmentId.HasValue && request.FacultyId.HasValue)
+            return BadRequest(new { error = "departmentId ve facultyId ayni anda gonderilemez." });
+
         if (!TryGetAuthenticatedUser(out var userId, out var roles))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
 
