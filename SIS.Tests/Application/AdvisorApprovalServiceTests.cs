@@ -156,9 +156,15 @@ public class AdvisorApprovalServiceTests : IDisposable
     private static ISystemConfigService GetSystemConfig()
     {
         var mock = new Mock<ISystemConfigService>();
-        mock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>())).Returns((string _, int def) => Task.FromResult(def));
-        mock.Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>())).Returns((string _, decimal def) => Task.FromResult(def));
-        mock.Setup(x => x.GetStringAsync(It.IsAny<string>(), It.IsAny<string>())).Returns((string _, string def) => Task.FromResult(def));
+        
+        mock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<System.Threading.CancellationToken>()))
+            .Returns((string _, int def, System.Threading.CancellationToken _) => Task.FromResult(def));
+        
+        mock.Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<System.Threading.CancellationToken>()))
+            .Returns((string _, decimal def, System.Threading.CancellationToken _) => Task.FromResult(def));
+        
+        mock.Setup(x => x.GetStringAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<System.Threading.CancellationToken>()))
+            .Returns((string _, string def, System.Threading.CancellationToken _) => Task.FromResult(def));
         return mock.Object;
     }
 
