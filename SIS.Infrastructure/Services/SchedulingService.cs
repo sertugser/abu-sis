@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
+using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
@@ -554,8 +555,29 @@ public class SchedulingService : ISchedulingService
 
         var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
 
+        // Load suggested semesters from active curricula for H5
+        var suggestedSemesters = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => cc.Curriculum.IsActive)
+            .Select(cc => new { cc.CourseId, cc.SuggestedSemester })
+            .ToListAsync(cancellationToken);
+        var semesterMap = suggestedSemesters
+            .GroupBy(x => x.CourseId)
+            .ToDictionary(g => g.Key, g => g.Min(x => x.SuggestedSemester));
+
+        // Load classroom-term assignments for H10
+        var classroomAssignments = await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Where(cta => cta.TermId == termId)
+            .ToListAsync(cancellationToken);
+
+        // Load department→faculty mapping for H10
+        var deptFacultyMap = await _context.Departments
+            .AsNoTracking()
+            .ToDictionaryAsync(d => d.Id, d => d.FacultyId, cancellationToken);
+
         var snapshots = sections
-            .Select(section => BuildExistingSectionSnapshot(section, instructorNameMap))
+            .Select(section => BuildExistingSectionSnapshot(section, instructorNameMap, semesterMap))
             .ToList();
 
         return new TermSnapshot
@@ -563,13 +585,16 @@ public class SchedulingService : ISchedulingService
             TermId = termId,
             TermName = termName,
             ScopeName = scopeName,
-            Sections = snapshots
+            Sections = snapshots,
+            ClassroomAssignments = classroomAssignments,
+            DeptFacultyMap = deptFacultyMap
         };
     }
 
     private static SectionSnapshot BuildExistingSectionSnapshot(
         CourseSection section,
-        IReadOnlyDictionary<int, string> instructorNameMap)
+        IReadOnlyDictionary<int, string> instructorNameMap,
+        IReadOnlyDictionary<int, int> semesterMap)
     {
         var parseResult = ParseScheduleJson(section.ScheduleJson);
         var instructorId = section.InstructorId;
@@ -587,11 +612,14 @@ public class SchedulingService : ISchedulingService
             ClassroomId = section.ClassroomId,
             ClassroomName = section.Classroom?.Name ?? string.Empty,
             ClassroomCapacity = section.Classroom?.Capacity ?? 0,
+            ClassroomType = section.Classroom?.Type ?? ClassroomType.Lecture,
             InstructorId = instructorId,
             InstructorName = instructorId.HasValue && instructorNameMap.TryGetValue(instructorId.Value, out var instructorName)
                 ? instructorName
                 : string.Empty,
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
+            DepartmentId = section.Course.DepartmentId,
+            SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
             ScheduleSlots = parseResult.Slots,
             ParseError = parseResult.ErrorMessage,
             Notes = new List<string>()
@@ -678,6 +706,13 @@ public class SchedulingService : ISchedulingService
             notes.Add("Section için program slot tanımı bulunmuyor.");
         }
 
+        // Load suggested semester for H5
+        var suggestedSemester = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => cc.Curriculum.IsActive && cc.CourseId == section.CourseId)
+            .Select(cc => (int?)cc.SuggestedSemester)
+            .MinAsync(cancellationToken);
+
         return BuildCandidateSnapshot(
             section,
             instructor,
@@ -685,7 +720,8 @@ public class SchedulingService : ISchedulingService
             classroom,
             scheduleSlots,
             notes,
-            parseError);
+            parseError,
+            suggestedSemester);
     }
 
     private static SectionSnapshot BuildCandidateSnapshot(
@@ -695,7 +731,8 @@ public class SchedulingService : ISchedulingService
         Classroom? classroom,
         IReadOnlyList<ScheduleSlot> scheduleSlots,
         List<string> notes,
-        string? parseError = null)
+        string? parseError = null,
+        int? suggestedSemester = null)
     {
         return new SectionSnapshot
         {
@@ -711,9 +748,12 @@ public class SchedulingService : ISchedulingService
             ClassroomId = classroom?.Id,
             ClassroomName = classroom?.Name ?? string.Empty,
             ClassroomCapacity = classroom?.Capacity ?? 0,
+            ClassroomType = classroom?.Type ?? ClassroomType.Lecture,
             InstructorId = instructor?.Id,
             InstructorName = instructorName,
             InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
+            DepartmentId = section.Course.DepartmentId,
+            SuggestedSemester = suggestedSemester,
             ScheduleSlots = scheduleSlots.ToList(),
             ParseError = parseError,
             Notes = notes
@@ -745,6 +785,41 @@ public class SchedulingService : ISchedulingService
                     $"Derslik kapasitesi section kontenjanini karsilamiyor ({section.ClassroomCapacity}/{section.Capacity}).",
                     null,
                     null));
+            }
+
+            // H4: Derslik tipi uyumu — Lab dersi Lab/Computer derslikte olmali
+            if (section.ClassroomId.HasValue
+                && section.LabHours > 0 && section.TheoryHours == 0
+                && section.ClassroomType != ClassroomType.Lab && section.ClassroomType != ClassroomType.Computer)
+            {
+                conflicts.Add(BuildConflict(
+                    section,
+                    ConflictTypes.ClassroomTypeConflict,
+                    $"Lab section'u ({section.CourseCode}) Lab veya Computer tipinde bir dersliğe atanmalıdır, mevcut tip: {section.ClassroomType}.",
+                    null,
+                    null));
+            }
+
+            // H10: Fakülteye atanmamış derslik kullanımı
+            if (section.ClassroomId.HasValue
+                && section.DepartmentId.HasValue
+                && snapshot.ClassroomAssignments.Count > 0)
+            {
+                var sectionFacultyId = snapshot.DeptFacultyMap.GetValueOrDefault(section.DepartmentId.Value);
+                if (sectionFacultyId > 0)
+                {
+                    var hasAssignment = snapshot.ClassroomAssignments
+                        .Any(cta => cta.ClassroomId == section.ClassroomId.Value && cta.FacultyId == sectionFacultyId);
+                    if (!hasAssignment)
+                    {
+                        conflicts.Add(BuildConflict(
+                            section,
+                            ConflictTypes.FacultyClassroomConflict,
+                            $"Derslik '{section.ClassroomName}' bu dönemde ilgili fakülteye atanmamış.",
+                            null,
+                            null));
+                    }
+                }
             }
         }
 
@@ -787,6 +862,72 @@ public class SchedulingService : ISchedulingService
                             second,
                             ConflictTypes.InstructorConflict,
                             $"Öğretim üyesi '{second.InstructorName}' aynı zaman aralığında '{first.CourseCode}' section'u ile çakışıyor.",
+                            overlap,
+                            first.SectionId));
+                    }
+
+                    // H5: Aynı bölümün aynı sınıf seviyesindeki zorunlu dersleri aynı slot'ta olamaz
+                    if (first.DepartmentId.HasValue && second.DepartmentId.HasValue
+                        && first.DepartmentId == second.DepartmentId
+                        && first.SuggestedSemester.HasValue && second.SuggestedSemester.HasValue
+                        && (first.SuggestedSemester.Value - 1) / 2 == (second.SuggestedSemester.Value - 1) / 2
+                        && first.CourseId != second.CourseId)
+                    {
+                        conflicts.Add(BuildConflict(
+                            first,
+                            ConflictTypes.CurriculumConflict,
+                            $"Aynı bölüm ve sınıf seviyesindeki '{first.CourseCode}' ile '{second.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
+                            overlap,
+                            second.SectionId));
+
+                        conflicts.Add(BuildConflict(
+                            second,
+                            ConflictTypes.CurriculumConflict,
+                            $"Aynı bölüm ve sınıf seviyesindeki '{second.CourseCode}' ile '{first.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
+                            overlap,
+                            first.SectionId));
+                    }
+
+                    // H6: Aynı dersin bileşenleri (lecture vs lab) birbiriyle çakışmamalı
+                    if (first.CourseId == second.CourseId)
+                    {
+                        var firstIsLab = first.LabHours > 0 && first.TheoryHours == 0;
+                        var secondIsLab = second.LabHours > 0 && second.TheoryHours == 0;
+                        var firstIsLecture = first.TheoryHours > 0;
+                        var secondIsLecture = second.TheoryHours > 0;
+
+                        if ((firstIsLab && secondIsLecture) || (firstIsLecture && secondIsLab))
+                        {
+                            conflicts.Add(BuildConflict(
+                                first,
+                                ConflictTypes.SameCourseComponentConflict,
+                                $"Aynı dersin ({first.CourseCode}) lecture ve lab bileşenleri aynı zaman aralığında çakışıyor.",
+                                overlap,
+                                second.SectionId));
+
+                            conflicts.Add(BuildConflict(
+                                second,
+                                ConflictTypes.SameCourseComponentConflict,
+                                $"Aynı dersin ({second.CourseCode}) lecture ve lab bileşenleri aynı zaman aralığında çakışıyor.",
+                                overlap,
+                                first.SectionId));
+                        }
+                    }
+
+                    // H8: Aynı dersin farklı şubeleri aynı slot'ta olamaz
+                    if (first.CourseId == second.CourseId && first.SectionId != second.SectionId)
+                    {
+                        conflicts.Add(BuildConflict(
+                            first,
+                            ConflictTypes.SameCourseSectionConflict,
+                            $"Aynı dersin ({first.CourseCode}) farklı şubeleri aynı zaman aralığında çakışıyor.",
+                            overlap,
+                            second.SectionId));
+
+                        conflicts.Add(BuildConflict(
+                            second,
+                            ConflictTypes.SameCourseSectionConflict,
+                            $"Aynı dersin ({second.CourseCode}) farklı şubeleri aynı zaman aralığında çakışıyor.",
                             overlap,
                             first.SectionId));
                     }
@@ -861,6 +1002,41 @@ public class SchedulingService : ISchedulingService
                 null));
         }
 
+        // H4: Derslik tipi uyumu — Lab dersi Lab/Computer derslikte olmali
+        if (candidate.ClassroomId.HasValue
+            && candidate.LabHours > 0 && candidate.TheoryHours == 0
+            && candidate.ClassroomType != ClassroomType.Lab && candidate.ClassroomType != ClassroomType.Computer)
+        {
+            conflicts.Add(BuildConflict(
+                candidate,
+                ConflictTypes.ClassroomTypeConflict,
+                $"Lab section'u ({candidate.CourseCode}) Lab veya Computer tipinde bir dersliğe atanmalıdır, mevcut tip: {candidate.ClassroomType}.",
+                null,
+                null));
+        }
+
+        // H10: Fakülteye atanmamış derslik kullanımı
+        if (candidate.ClassroomId.HasValue
+            && candidate.DepartmentId.HasValue
+            && snapshot.ClassroomAssignments.Count > 0)
+        {
+            var candidateFacultyId = snapshot.DeptFacultyMap.GetValueOrDefault(candidate.DepartmentId.Value);
+            if (candidateFacultyId > 0)
+            {
+                var hasAssignment = snapshot.ClassroomAssignments
+                    .Any(cta => cta.ClassroomId == candidate.ClassroomId.Value && cta.FacultyId == candidateFacultyId);
+                if (!hasAssignment)
+                {
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.FacultyClassroomConflict,
+                        $"Derslik '{candidate.ClassroomName}' bu dönemde ilgili fakülteye atanmamış.",
+                        null,
+                        null));
+                }
+            }
+        }
+
         foreach (var existing in snapshot.Sections)
         {
             foreach (var overlap in GetOverlapSlots(candidate.ScheduleSlots, existing.ScheduleSlots))
@@ -881,6 +1057,51 @@ public class SchedulingService : ISchedulingService
                         candidate,
                         ConflictTypes.InstructorConflict,
                         $"Öğretim üyesi '{candidate.InstructorName}' aynı zaman aralığında '{existing.CourseCode}' section'u ile çakışıyor.",
+                        overlap,
+                        existing.SectionId));
+                }
+
+                // H5: Aynı bölümün aynı sınıf seviyesindeki zorunlu dersleri aynı slot'ta olamaz
+                if (candidate.DepartmentId.HasValue && existing.DepartmentId.HasValue
+                    && candidate.DepartmentId == existing.DepartmentId
+                    && candidate.SuggestedSemester.HasValue && existing.SuggestedSemester.HasValue
+                    && (candidate.SuggestedSemester.Value - 1) / 2 == (existing.SuggestedSemester.Value - 1) / 2
+                    && candidate.CourseId != existing.CourseId)
+                {
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.CurriculumConflict,
+                        $"Aynı bölüm ve sınıf seviyesindeki '{candidate.CourseCode}' ile '{existing.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
+                        overlap,
+                        existing.SectionId));
+                }
+
+                // H6: Aynı dersin bileşenleri (lecture vs lab) birbiriyle çakışmamalı
+                if (candidate.CourseId == existing.CourseId)
+                {
+                    var candidateIsLab = candidate.LabHours > 0 && candidate.TheoryHours == 0;
+                    var existingIsLab = existing.LabHours > 0 && existing.TheoryHours == 0;
+                    var candidateIsLecture = candidate.TheoryHours > 0;
+                    var existingIsLecture = existing.TheoryHours > 0;
+
+                    if ((candidateIsLab && existingIsLecture) || (candidateIsLecture && existingIsLab))
+                    {
+                        conflicts.Add(BuildConflict(
+                            candidate,
+                            ConflictTypes.SameCourseComponentConflict,
+                            $"Aynı dersin ({candidate.CourseCode}) lecture ve lab bileşenleri aynı zaman aralığında çakışıyor.",
+                            overlap,
+                            existing.SectionId));
+                    }
+                }
+
+                // H8: Aynı dersin farklı şubeleri aynı slot'ta olamaz
+                if (candidate.CourseId == existing.CourseId && candidate.SectionId != existing.SectionId)
+                {
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.SameCourseSectionConflict,
+                        $"Aynı dersin ({candidate.CourseCode}) farklı şubeleri aynı zaman aralığında çakışıyor.",
                         overlap,
                         existing.SectionId));
                 }
@@ -1481,6 +1702,11 @@ public class SchedulingService : ISchedulingService
         public const string CapacityConflict = "CapacityConflict";
         public const string WeeklyLoadConflict = "WeeklyLoadConflict";
         public const string InvalidScheduleJson = "InvalidScheduleJson";
+        public const string ClassroomTypeConflict = "ClassroomTypeConflict";             // H4
+        public const string CurriculumConflict = "CurriculumConflict";                   // H5
+        public const string SameCourseComponentConflict = "SameCourseComponentConflict"; // H6
+        public const string SameCourseSectionConflict = "SameCourseSectionConflict";     // H8
+        public const string FacultyClassroomConflict = "FacultyClassroomConflict";       // H10
     }
 
     private sealed class TermSnapshot
@@ -1489,6 +1715,8 @@ public class SchedulingService : ISchedulingService
         public string TermName { get; init; } = string.Empty;
         public string ScopeName { get; init; } = string.Empty;
         public List<SectionSnapshot> Sections { get; init; } = new();
+        public List<ClassroomTermAssignment> ClassroomAssignments { get; init; } = new(); // for H10
+        public Dictionary<int, int> DeptFacultyMap { get; init; } = new();                // for H10
     }
 
     private sealed class SectionSnapshot
@@ -1505,9 +1733,12 @@ public class SchedulingService : ISchedulingService
         public int? ClassroomId { get; init; }
         public string ClassroomName { get; init; } = string.Empty;
         public int ClassroomCapacity { get; init; }
+        public ClassroomType ClassroomType { get; init; }         // for H4
         public int? InstructorId { get; init; }
         public string InstructorName { get; init; } = string.Empty;
         public int InstructorMaxWeeklyHours { get; init; }
+        public int? DepartmentId { get; init; }                    // for H5, H8
+        public int? SuggestedSemester { get; init; }               // for H5 (curriculum year)
         public List<ScheduleSlot> ScheduleSlots { get; init; } = new();
         public string? ParseError { get; init; }
         public List<string> Notes { get; init; } = new();
