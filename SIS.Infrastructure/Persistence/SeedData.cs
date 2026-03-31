@@ -16,8 +16,9 @@ public static partial class SeedData
         await SeedTermsAndClassroomsAsync(context);
         await SeedCalendarEventsAsync(context);
         await SeedUsersAsync(context, userManager);
-await SeedRegistrationsAsync(context);
-        await SeedSectionSchedulesAsync(context);
+        // Aktif dönem Draft — section, schedule ve kayıtlar admin tarafından oluşturulmalı
+        // await SeedRegistrationsAsync(context);
+        // await SeedSectionSchedulesAsync(context);
         await SeedTimeSlotsAsync(context);
         await SeedSystemConfigAsync(context);
     }
