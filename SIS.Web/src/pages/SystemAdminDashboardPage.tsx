@@ -59,8 +59,8 @@ const ALL_QUICK_LINKS = [
   { id: 'structure',  icon: Layers,        title: 'Akademik Yapı',    to: ROUTES.ACADEMIC_STRUCTURE },
   { id: 'catalog',    icon: LayoutGrid,    title: 'Ders Kataloğu',    to: ROUTES.COURSE_CATALOG_ADMIN },
   { id: 'opening',    icon: BookOpen,      title: 'Ders Açma',        to: ROUTES.COURSE_OPENING },
-  { id: 'classroom',  icon: Building2,     title: 'Merkezi Derslik',  to: ROUTES.CLASSROOM_MANAGEMENT },
-  { id: 'classlist',  icon: ClipboardList, title: 'Sınıf Listeleri',  to: ROUTES.MANAGEMENT_CLASS_LISTS },
+  { id: 'classroom',  icon: Building2,     title: 'Derslik Doluluk',   to: ROUTES.CLASSROOM_DASHBOARD },
+  { id: 'classlist',  icon: ClipboardList, title: 'Sınıf Listeleri',  to: ROUTES.CLASS_LISTS },
   { id: 'closing',    icon: Settings,      title: 'Dönem Kapatma',    to: ROUTES.TERM_CLOSING },
 ] as const;
 

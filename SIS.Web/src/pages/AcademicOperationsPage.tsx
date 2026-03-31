@@ -47,8 +47,8 @@ import {
 type OperationsMode = 'planning' | 'class-lists';
 
 const MODE_LINKS: { mode: OperationsMode; to: string; label: string; icon: typeof Users }[] = [
-  { mode: 'planning', to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama', icon: BarChart3 },
-  { mode: 'class-lists', to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sinif Listeleri', icon: Users },
+  { mode: 'planning', to: ROUTES.COURSE_APPROVAL, label: 'Planlama', icon: BarChart3 },
+  { mode: 'class-lists', to: ROUTES.CLASS_LISTS, label: 'Sinif Listeleri', icon: Users },
 ];
 
 const CONFLICT_CFG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'outline' }> = {

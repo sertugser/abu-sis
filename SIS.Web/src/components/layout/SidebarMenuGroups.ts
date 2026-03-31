@@ -199,7 +199,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama Merkezi' },
+      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
     ],
   },
@@ -210,7 +210,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     children: [
       { to: '/ders-acma-islemleri', label: 'Ders Açma İşlemleri' },
       { to: '/donem-kapatma', label: 'Dönem Kapatma İşlemleri' },
-      { to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' },
+      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: '/ders-kayit-istatistikleri', label: 'Ders Kayıt İstatistikleri' },
       { to: '/basari-istatistigi', label: 'Başarı İstatistiği' },
       { to: '/sinav-kontrol-islemleri', label: 'Sınav Kontrol İşlemleri' },
@@ -236,10 +236,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     children: [
       { to: '/not-girisi', label: 'Not Girişi' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
-      { to: '/merkezi-derslik-yonetimi', label: 'Merkezi Derslik Yönetimi' },
-      { to: '/mufredat-islemleri', label: 'Müfredat İşlemleri' },
-      { to: '/ders-kontenjan-islemleri', label: 'Ders Kontenjan İşlemleri' },
-      { to: '/subelendirme-islemleri', label: 'Şubelendirme İşlemleri' },
+      { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
     ],
   },
 ];
@@ -252,7 +249,7 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama Merkezi' },
+      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
     ],
   },
   {
@@ -261,7 +258,7 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     icon: Users,
     children: [
       { to: '/ogrenci-rehber', label: 'Öğrenci Rehber' },
-      { to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' },
+      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: '/ogrenci-no-degistirme', label: 'Öğrenci No Değiştirme' },
       { to: '/toplu-ders-kaydi', label: 'Toplu Ders Kaydı' },
       { to: '/ders-kayit-duzenle', label: 'Ders Kayıt Düzenle' },
@@ -276,10 +273,8 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     icon: BookOpen,
     children: [
       { to: '/ders-acma-islemleri', label: 'Ders Açma İşlemleri' },
-      { to: '/merkezi-derslik-yonetimi', label: 'Merkezi Derslik Yönetimi' },
-      { to: ROUTES.FACULTY_PLANNING, label: 'Fakülte Planlama' },
-      { to: '/ders-kontenjan-islemleri', label: 'Ders Kontenjan İşlemleri' },
-      { to: '/subelendirme-islemleri', label: 'Şubelendirme İşlemleri' },
+      { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
+      { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
     ],
   },
 ];
@@ -292,8 +287,8 @@ export const deanMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.FACULTY_PLANNING, label: 'Fakülte Planlama' },
-      { to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama Merkezi' },
+      { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
+      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
     ],
   },
   {
@@ -303,8 +298,8 @@ export const deanMenuGroups: MenuGroup[] = [
     children: [
       { to: '/ders-acma-islemleri', label: 'Ders Açma İşlemleri' },
       { to: '/donem-kapatma', label: 'Dönem Kapatma İşlemleri' },
-      { to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' },
-      { to: '/merkezi-derslik-yonetimi', label: 'Merkezi Derslik Yönetimi' },
+      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
+      { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
       { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
       { to: '/ders-kayit-istatistikleri', label: 'Ders Kayıt İstatistikleri' },
       { to: '/basari-istatistigi', label: 'Başarı İstatistiği' },
@@ -328,7 +323,6 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: '/not-girisi', label: 'Not Girişi' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
-      { to: '/mufredat-islemleri', label: 'Müfredat İşlemleri' },
     ],
   },
 ];
@@ -341,8 +335,8 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama Merkezi' },
-      { to: ROUTES.FACULTY_PLANNING, label: 'Fakülte Planlama' },
+      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
+      { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
     ],
   },
   {
@@ -363,8 +357,9 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem Yönetimi' },
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
-      { to: ROUTES.CLASSROOM_MANAGEMENT, label: 'Merkezi Derslik Yönetimi' },
-      { to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' },
+      { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
+      { to: ROUTES.CLASSROOM_ASSIGNMENT, label: 'Derslik-Fakülte Ataması' },
+      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
       { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
       { to: ROUTES.CLASSROOM_ADMIN, label: 'Derslik Yönetimi' },
@@ -378,17 +373,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.ACADEMIC_STRUCTURE, label: 'Fakülte / Bölüm / Program' },
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
       { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
-    ],
-  },
-  {
-    id: 'ders-islemleri',
-    label: 'Ders İşlemleri',
-    icon: BookOpen,
-    children: [
-      { to: '/ders-kontenjan-islemleri', label: 'Ders Kontenjan İşlemleri' },
-      { to: '/subelendirme-islemleri', label: 'Şubelendirme İşlemleri' },
-      { to: '/mufredat-islemleri', label: 'Müfredat İşlemleri' },
-      { to: '/esdeger-dersler', label: 'Eşdeğer Dersler' },
     ],
   },
 ];
