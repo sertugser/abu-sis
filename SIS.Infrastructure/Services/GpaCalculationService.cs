@@ -36,8 +36,6 @@ public class GpaCalculationService : IGpaCalculationService
 
         foreach (var reg in registrations)
         {
-            if (reg.CourseSection.Course.IsNonGpa) continue;
-
             var point = GradePointMap.GetPoint(reg.Grade!.Value);
             if (point == null) continue; // S, U, W, I, NI → GPA dışı
 
@@ -198,8 +196,6 @@ public class GpaCalculationService : IGpaCalculationService
 
         foreach (var reg in latestPerCourse)
         {
-            if (reg.CourseSection.Course.IsNonGpa) continue;
-
             var point = GradePointMap.GetPoint(reg.Grade!.Value);
             if (point == null) continue; // S, U, W, I, NI → GPA dışı
 
@@ -220,11 +216,6 @@ public class GpaCalculationService : IGpaCalculationService
 
         foreach (var registration in registrations)
         {
-            if (registration.CourseSection.Course.IsNonGpa)
-            {
-                continue;
-            }
-
             if (registration.Grade is not { } grade)
             {
                 continue;
