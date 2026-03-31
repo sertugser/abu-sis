@@ -407,82 +407,84 @@ function TermCalendarSection({ termId }: { termId: number }) {
         </div>
       )}
 
-      {/* Inline form */}
-      {showForm && (
-        <div className="border border-border rounded-lg p-3 bg-background space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            {editingEvent ? 'Etkinliği Düzenle' : 'Yeni Etkinlik'}
-          </p>
+      {/* Event form dialog */}
+      <Dialog open={showForm} onOpenChange={open => !open && closeForm()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingEvent ? 'Etkinliği Düzenle' : 'Yeni Etkinlik Ekle'}</DialogTitle>
+          </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Etkinlik Tipi *</label>
-              <select
-                value={eventForm.eventType}
-                onChange={e => handleEventTypeChange(e.target.value)}
-                className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background text-foreground"
-              >
-                {EVENT_TYPE_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Başlık</label>
-              <Input
-                className="h-8 text-sm"
-                value={eventForm.title}
-                onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
-                placeholder={EVENT_TYPE_DEFAULTS[eventForm.eventType] || 'Etkinlik başlığı'}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Başlangıç Tarihi *</label>
-              <Input
-                type="date" className="h-8 text-sm"
-                value={eventForm.startDate}
-                onChange={e => setEventForm(f => ({ ...f, startDate: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Bitiş Tarihi (opsiyonel)</label>
-              <Input
-                type="date" className="h-8 text-sm"
-                value={eventForm.endDate}
-                onChange={e => setEventForm(f => ({ ...f, endDate: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Not (opsiyonel)</label>
-              <Input
-                className="h-8 text-sm"
-                value={eventForm.note}
-                onChange={e => setEventForm(f => ({ ...f, note: e.target.value }))}
-                placeholder="Ek açıklama..."
-              />
-            </div>
-            <div className="flex items-end pb-1">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={eventForm.isPublic}
-                  onChange={e => setEventForm(f => ({ ...f, isPublic: e.target.checked }))}
-                  className="rounded"
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Etkinlik Tipi *</label>
+                <select
+                  value={eventForm.eventType}
+                  onChange={e => handleEventTypeChange(e.target.value)}
+                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background text-foreground"
+                >
+                  {EVENT_TYPE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Başlık</label>
+                <Input
+                  className="h-8 text-sm"
+                  value={eventForm.title}
+                  onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder={EVENT_TYPE_DEFAULTS[eventForm.eventType] || 'Etkinlik başlığı'}
                 />
-                <span className="text-sm">Herkese açık</span>
-              </label>
+              </div>
             </div>
-          </div>
 
-          {eventFormError && (
-            <p className="text-xs text-destructive">{eventFormError}</p>
-          )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Başlangıç Tarihi *</label>
+                <Input
+                  type="date" className="h-8 text-sm"
+                  value={eventForm.startDate}
+                  onChange={e => setEventForm(f => ({ ...f, startDate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Bitiş Tarihi (opsiyonel)</label>
+                <Input
+                  type="date" className="h-8 text-sm"
+                  value={eventForm.endDate}
+                  onChange={e => setEventForm(f => ({ ...f, endDate: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Not (opsiyonel)</label>
+                <Input
+                  className="h-8 text-sm"
+                  value={eventForm.note}
+                  onChange={e => setEventForm(f => ({ ...f, note: e.target.value }))}
+                  placeholder="Ek açıklama..."
+                />
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={eventForm.isPublic}
+                    onChange={e => setEventForm(f => ({ ...f, isPublic: e.target.checked }))}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Herkese açık</span>
+                </label>
+              </div>
+            </div>
+
+            {eventFormError && (
+              <p className="text-xs text-destructive">{eventFormError}</p>
+            )}
+          </div>
 
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={closeForm}>İptal</Button>
@@ -494,8 +496,8 @@ function TermCalendarSection({ termId }: { termId: number }) {
               {createEvent.isPending || updateEvent.isPending ? 'Kaydediliyor...' : editingEvent ? 'Güncelle' : 'Ekle'}
             </Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
