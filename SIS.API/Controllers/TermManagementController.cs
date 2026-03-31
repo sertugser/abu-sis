@@ -81,6 +81,35 @@ public class TermManagementController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Dönem durumunu bir sonraki aşamaya geçirir.
+    /// Draft → Planning → Scheduling → Published → RegistrationOpen →
+    /// AddDrop → WithdrawalPeriod → GradeEntry → Closed → Archived
+    /// </summary>
+    [HttpPost("{id:int}/transition")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> TransitionStatus(int id, [FromBody] TransitionTermStatusDto dto)
+    {
+        try
+        {
+            await _service.TransitionStatusAsync(id, dto.TargetStatus);
+            var updated = await _service.GetTermByIdAsync(id);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     // ── Calendar Events ──────────────────────────────────────────────────────
 
     [HttpGet("{id:int}/calendar-events")]

@@ -11,6 +11,9 @@ public record AdminTermDto(
     string TermType,        // "Regular" | "Summer" | "Intensive" | "Exemption"
     string TermTypeLabel,   // "Normal" | "Yaz" | "Tekders" | "Muafiyet"
     bool IsActive,
+    string Status,          // TermStatus enum name
+    string StatusLabel,     // Turkish label
+    string[] AllowedTransitions, // Next valid states
     DateTime RegistrationStart,
     DateTime RegistrationEnd,
     DateTime AddDropStart,
@@ -21,6 +24,8 @@ public record AdminTermDto(
     bool IsRegistrationOpen,
     bool IsAddDropOpen
 );
+
+public record TransitionTermStatusDto(string TargetStatus);
 
 public record CreateTermDto(
     string Name,

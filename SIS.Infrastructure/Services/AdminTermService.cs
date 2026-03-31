@@ -103,6 +103,88 @@ public class AdminTermService : IAdminTermService
         await _context.SaveChangesAsync();
     }
 
+    public async Task TransitionStatusAsync(int id, string targetStatusStr)
+    {
+        var target = await _context.AcademicTerms.FindAsync(id)
+            ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
+
+        var targetStatus = ParseTermStatus(targetStatusStr);
+        ValidateTransition(target.Status, targetStatus);
+
+        target.Status = targetStatus;
+
+        // RegistrationOpen veya sonrasındaki state'e geçişte otomatik IsActive = true
+        if (targetStatus >= TermStatus.Published)
+        {
+            var allActive = await _context.AcademicTerms
+                .Where(t => t.IsActive && t.Id != id)
+                .ToListAsync();
+            foreach (var t in allActive)
+                t.IsActive = false;
+            target.IsActive = true;
+        }
+
+        // Closed/Archived olunca IsActive = false
+        if (targetStatus >= TermStatus.Closed)
+            target.IsActive = false;
+
+        await _context.SaveChangesAsync();
+    }
+
+    private static void ValidateTransition(TermStatus current, TermStatus target)
+    {
+        var allowed = GetAllowedTransitions(current);
+        if (!allowed.Contains(target))
+            throw new InvalidOperationException(
+                $"'{GetStatusLabel(current)}' aşamasından '{GetStatusLabel(target)}' aşamasına geçiş yapılamaz. " +
+                $"İzin verilen geçişler: {string.Join(", ", allowed.Select(GetStatusLabel))}");
+    }
+
+    private static TermStatus[] GetAllowedTransitions(TermStatus current) => current switch
+    {
+        TermStatus.Draft             => [TermStatus.Planning],
+        TermStatus.Planning          => [TermStatus.Scheduling, TermStatus.Draft],
+        TermStatus.Scheduling        => [TermStatus.Published, TermStatus.Planning],
+        TermStatus.Published         => [TermStatus.RegistrationOpen, TermStatus.Scheduling],
+        TermStatus.RegistrationOpen  => [TermStatus.AddDrop],
+        TermStatus.AddDrop           => [TermStatus.WithdrawalPeriod],
+        TermStatus.WithdrawalPeriod  => [TermStatus.GradeEntry],
+        TermStatus.GradeEntry        => [TermStatus.Closed],
+        TermStatus.Closed            => [TermStatus.Archived],
+        TermStatus.Archived          => [],
+        _                            => []
+    };
+
+    private static TermStatus ParseTermStatus(string s) => s switch
+    {
+        "Draft"            => TermStatus.Draft,
+        "Planning"         => TermStatus.Planning,
+        "Scheduling"       => TermStatus.Scheduling,
+        "Published"        => TermStatus.Published,
+        "RegistrationOpen" => TermStatus.RegistrationOpen,
+        "AddDrop"          => TermStatus.AddDrop,
+        "WithdrawalPeriod" => TermStatus.WithdrawalPeriod,
+        "GradeEntry"       => TermStatus.GradeEntry,
+        "Closed"           => TermStatus.Closed,
+        "Archived"         => TermStatus.Archived,
+        _ => throw new ArgumentException($"Geçersiz dönem durumu: {s}")
+    };
+
+    private static string GetStatusLabel(TermStatus s) => s switch
+    {
+        TermStatus.Draft            => "Taslak",
+        TermStatus.Planning         => "Planlama",
+        TermStatus.Scheduling       => "Programlama",
+        TermStatus.Published        => "Yayınlandı",
+        TermStatus.RegistrationOpen => "Kayıt Açık",
+        TermStatus.AddDrop          => "Ders Ekle/Bırak",
+        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
+        TermStatus.GradeEntry       => "Not Girişi",
+        TermStatus.Closed           => "Kapalı",
+        TermStatus.Archived         => "Arşivlendi",
+        _                           => s.ToString()
+    };
+
     // ── Calendar Events ──────────────────────────────────────────────────────
 
     public async Task<List<TermCalendarEventDto>> GetCalendarEventsAsync(int termId)
@@ -199,6 +281,9 @@ public class AdminTermService : IAdminTermService
                 _ => t.TermType.ToString()
             },
             t.IsActive,
+            t.Status.ToString(),
+            GetStatusLabel(t.Status),
+            GetAllowedTransitions(t.Status).Select(s => s.ToString()).ToArray(),
             t.RegistrationStart,
             t.RegistrationEnd,
             t.AddDropStart,

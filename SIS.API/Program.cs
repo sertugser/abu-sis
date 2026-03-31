@@ -17,6 +17,7 @@ using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.TermClosing.Services;
 using SIS.Application.FacultyPlanning.Services;
+using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -81,6 +82,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();

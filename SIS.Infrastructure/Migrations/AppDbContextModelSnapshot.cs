@@ -209,6 +209,10 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("AddDropStart")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("EnglishName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -225,14 +229,21 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("Semester")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ShortName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("TermEnd")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("TermStart")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("WithdrawalDeadlineWeek")
+                    b.Property<int>("TermType")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime>("WithdrawalDeadline")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
@@ -897,6 +908,82 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("StudentPrograms");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId");
+
+                    b.ToTable("TermCalendarEvents");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TermClosingProgress", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Step")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId");
+
+                    b.HasIndex("DepartmentId", "TermId", "Step")
+                        .IsUnique();
+
+                    b.ToTable("TermClosingProgresses");
+                });
+
             modelBuilder.Entity("SIS.Infrastructure.Persistence.ApplicationUser", b =>
                 {
                     b.Property<int>("Id")
@@ -1341,9 +1428,44 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany("CalendarEvents")
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TermClosingProgress", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Term");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
                 {
                     b.Navigation("Curricula");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AcademicTerm", b =>
+                {
+                    b.Navigation("CalendarEvents");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>

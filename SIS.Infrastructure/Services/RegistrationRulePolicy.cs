@@ -1,5 +1,6 @@
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Domain.ValueObjects;
 
 namespace SIS.Infrastructure.Services;
 
@@ -42,5 +43,37 @@ internal static class RegistrationRulePolicy
             && course.DepartmentId != programDepartmentId;
 
         return isFailedCourse || isDdDcImprovement || isLowerOrSameSemester || isNonDepartmental;
+    }
+
+    internal static ConflictOverlapType CheckScheduleOverlap(List<ScheduleSlot> schedule1, List<ScheduleSlot> schedule2)
+    {
+        bool hasPartialOverlap = false;
+        bool hasFullOverlap = false;
+
+        foreach (var slot1 in schedule1)
+        {
+            foreach (var slot2 in schedule2)
+            {
+                if (slot1.Day != slot2.Day) continue;
+
+                if (slot1.StartTime < slot2.EndTime && slot2.StartTime < slot1.EndTime)
+                {
+                    if ((slot1.StartTime == slot2.StartTime && slot1.EndTime == slot2.EndTime) ||
+                        (slot1.StartTime <= slot2.StartTime && slot1.EndTime >= slot2.EndTime) ||
+                        (slot2.StartTime <= slot1.StartTime && slot2.EndTime >= slot1.EndTime))
+                    {
+                        hasFullOverlap = true;
+                    }
+                    else
+                    {
+                        hasPartialOverlap = true;
+                    }
+                }
+            }
+        }
+
+        if (hasFullOverlap) return ConflictOverlapType.Full;
+        if (hasPartialOverlap) return ConflictOverlapType.Partial;
+        return ConflictOverlapType.None;
     }
 }

@@ -9,6 +9,7 @@ public interface IAdminTermService
     Task<AdminTermDto> CreateTermAsync(CreateTermDto dto);
     Task<AdminTermDto> UpdateTermAsync(int id, UpdateTermDto dto);
     Task ActivateTermAsync(int id);
+    Task TransitionStatusAsync(int id, string targetStatus);
 
     Task<List<TermCalendarEventDto>> GetCalendarEventsAsync(int termId);
     Task<TermCalendarEventDto> CreateCalendarEventAsync(int termId, CreateCalendarEventDto dto);

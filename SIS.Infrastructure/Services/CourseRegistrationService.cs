@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Enums;
+using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -34,6 +36,22 @@ public class CourseRegistrationService : ICourseRegistrationService
                 Errors = new List<ValidationError>
                 {
                     new() { Rule = "SectionExists", Message = "Ders sectionu bulunamadi." }
+                }
+            };
+            return response;
+        }
+
+        // Guard: kayıt dönemi kontrolü
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId);
+        if (term != null && term.Status != TermStatus.RegistrationOpen && term.Status != TermStatus.AddDrop)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "RegistrationClosed", Message = $"Ders kayıt dönemi açık değil. Dönem durumu: {GetTermStatusLabel(term.Status)}" }
                 }
             };
             return response;
@@ -164,6 +182,13 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
             _context.CourseRegistrations.Add(registration);
         }
+
+        // FR-56C: Mark as repeated if student already passed this course (grade improvement)
+        registration.IsRepeated = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection)
+            .AnyAsync(cr => cr.StudentId == studentId
+                && cr.CourseSection.CourseId == section.CourseId
+                && RegistrationRulePolicy.IsPassedGrade(cr.Grade));
 
         // Increment section.EnrolledCount (soft hold - FR-44)
         section.EnrolledCount++;
@@ -829,6 +854,23 @@ public class CourseRegistrationService : ICourseRegistrationService
                     };
                 }).ToList();
 
+                // Compute HasScheduleConflict between each pair of pending registrations
+                var scheduleSlots = regItems
+                    .Select(r => new { Item = r, Slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(r.Schedule) ?? new List<ScheduleSlot>() })
+                    .ToList();
+
+                for (int i = 0; i < scheduleSlots.Count; i++)
+                {
+                    for (int j = i + 1; j < scheduleSlots.Count; j++)
+                    {
+                        if (RegistrationRulePolicy.CheckScheduleOverlap(scheduleSlots[i].Slots, scheduleSlots[j].Slots) != ConflictOverlapType.None)
+                        {
+                            scheduleSlots[i].Item.HasScheduleConflict = true;
+                            scheduleSlots[j].Item.HasScheduleConflict = true;
+                        }
+                    }
+                }
+
                 return new PendingApprovalDto
                 {
                     StudentId = student.Id,
@@ -946,4 +988,19 @@ public class CourseRegistrationService : ICourseRegistrationService
             AffectedRegistrations = registrations.Count
         };
     }
+
+    private static string GetTermStatusLabel(TermStatus s) => s switch
+    {
+        TermStatus.Draft            => "Taslak",
+        TermStatus.Planning         => "Planlama",
+        TermStatus.Scheduling       => "Programlama",
+        TermStatus.Published        => "Yayınlandı",
+        TermStatus.RegistrationOpen => "Kayıt Açık",
+        TermStatus.AddDrop          => "Ders Ekle/Bırak",
+        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
+        TermStatus.GradeEntry       => "Not Girişi",
+        TermStatus.Closed           => "Kapalı",
+        TermStatus.Archived         => "Arşivlendi",
+        _                           => s.ToString()
+    };
 }

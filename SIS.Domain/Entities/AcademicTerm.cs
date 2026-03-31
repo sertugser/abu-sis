@@ -19,6 +19,7 @@ public class AcademicTerm
     public DateTime TermStart { get; set; }
     public DateTime TermEnd { get; set; }
     public bool IsActive { get; set; }
+    public TermStatus Status { get; set; } = TermStatus.Draft;
 
     public ICollection<TermCalendarEvent> CalendarEvents { get; set; } = new List<TermCalendarEvent>();
 }
