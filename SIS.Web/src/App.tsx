@@ -33,6 +33,7 @@ import SystemConfigPage from './pages/SystemConfigPage';
 import AuditLogPage from './pages/AuditLogPage';
 import PromotionRulePage from './pages/PromotionRulePage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
+import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
@@ -83,6 +84,7 @@ export default function App() {
                     <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
                     <Route path="denetim-kayitlari" element={<AuditLogPage />} />
                     <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
+                    <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>

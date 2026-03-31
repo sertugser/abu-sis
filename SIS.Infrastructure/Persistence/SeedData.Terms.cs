@@ -25,7 +25,7 @@ public static partial class SeedData
                 ("2024-2025 Güz",   "24-25 Güz",   "Fall 2024-2025",   2024, SemesterType.Fall,   TermType.Regular, "2024-09-01", "2024-09-15", "2024-09-16", "2024-09-30", "2024-09-16", "2025-01-10", "2024-11-04", false, TermStatus.Archived),
                 ("2024-2025 Bahar", "24-25 Bahar", "Spring 2024-2025", 2024, SemesterType.Spring, TermType.Regular, "2025-02-01", "2025-02-15", "2025-02-16", "2025-02-28", "2025-02-16", "2025-06-15", "2025-04-07", false, TermStatus.Archived),
                 ("2025-2026 Güz",   "25-26 Güz",   "Fall 2025-2026",   2025, SemesterType.Fall,   TermType.Regular, "2026-03-01", "2026-04-15", "2026-04-16", "2026-04-30", "2026-03-01", "2026-07-15", "2026-04-19", false, TermStatus.Draft),
-                ("2025-2026 Bahar", "25-26 Bahar", "Spring 2025-2026", 2025, SemesterType.Spring, TermType.Regular, "2026-02-16", "2026-02-20", "2026-03-02", "2026-03-06", "2026-02-23", "2026-06-05", "2026-04-03", true, TermStatus.RegistrationOpen),
+                ("2025-2026 Bahar", "25-26 Bahar", "Spring 2025-2026", 2025, SemesterType.Spring, TermType.Regular, "2026-02-16", "2026-02-20", "2026-03-02", "2026-03-06", "2026-02-23", "2026-06-05", "2026-04-03", true, TermStatus.Draft),
             };
 
             foreach (var t in terms)

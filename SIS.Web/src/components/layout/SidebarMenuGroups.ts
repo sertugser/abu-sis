@@ -367,6 +367,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
       { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
+      { to: ROUTES.CLASSROOM_ADMIN, label: 'Derslik Yönetimi' },
     ],
   },
   {

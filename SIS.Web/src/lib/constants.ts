@@ -30,6 +30,7 @@ export const ROUTES = {
   AUDIT_LOG: '/denetim-kayitlari',
   PROMOTION_RULES: '/sinif-atlatma-kurallari',
   SCHEDULE_APPROVAL: '/program-onayi',
+  CLASSROOM_ADMIN: '/derslik-yonetimi',
 } as const;
 
 export const QUERY_KEYS = {
@@ -123,6 +124,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/denetim-kayitlari',
   '/sinif-atlatma-kurallari',
   '/program-onayi',
+  '/derslik-yonetimi',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {
