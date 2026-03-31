@@ -580,13 +580,11 @@ public class GradeController : ControllerBase
 
         if (section == null) return null;
 
-        // Bu hocanın aynı ders+dönemde herhangi bir section'a atanmış olması yeterli
-        var hasAccess = await _context.CourseSections
-            .AnyAsync(cs => cs.CourseId == section.CourseId
-                && cs.TermId == section.TermId
-                && cs.InstructorId == instructor.Id);
+        // Hocanın tam olarak bu section'a atanmış olması gerekir
+        if (section.InstructorId != instructor.Id)
+            return null;
 
-        return hasAccess ? section : null;
+        return section;
     }
 
     // ══════════════════════════════════════════════════════════

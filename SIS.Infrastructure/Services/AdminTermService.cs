@@ -44,6 +44,9 @@ public class AdminTermService : IAdminTermService
             throw new InvalidOperationException(
                 $"{dto.Year} yılı {dto.Semester} dönemi zaten mevcut.");
 
+        ValidateTermDates(dto.RegistrationStart, dto.RegistrationEnd, dto.AddDropStart,
+            dto.AddDropEnd, dto.TermStart, dto.TermEnd, dto.WithdrawalDeadline);
+
         var term = new AcademicTerm
         {
             Name = dto.Name,
@@ -71,6 +74,12 @@ public class AdminTermService : IAdminTermService
     {
         var term = await _context.AcademicTerms.FindAsync(id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
+
+        if (term.Status >= TermStatus.Closed)
+            throw new InvalidOperationException("Kapalı veya arşivlenmiş dönemler düzenlenemez.");
+
+        ValidateTermDates(dto.RegistrationStart, dto.RegistrationEnd, dto.AddDropStart,
+            dto.AddDropEnd, dto.TermStart, dto.TermEnd, dto.WithdrawalDeadline);
 
         term.Name = dto.Name;
         term.ShortName = dto.ShortName;
@@ -184,6 +193,26 @@ public class AdminTermService : IAdminTermService
         TermStatus.Archived         => "Arşivlendi",
         _                           => s.ToString()
     };
+
+    private static void ValidateTermDates(DateTime regStart, DateTime regEnd,
+        DateTime addDropStart, DateTime addDropEnd,
+        DateTime termStart, DateTime termEnd, DateTime withdrawalDeadline)
+    {
+        if (regStart >= regEnd)
+            throw new InvalidOperationException("Kayıt başlangıç tarihi bitiş tarihinden önce olmalıdır.");
+        if (termStart >= termEnd)
+            throw new InvalidOperationException("Dönem başlangıç tarihi bitiş tarihinden önce olmalıdır.");
+        if (addDropStart >= addDropEnd)
+            throw new InvalidOperationException("Ders ekleme/bırakma başlangıç tarihi bitiş tarihinden önce olmalıdır.");
+        if (regEnd > termEnd)
+            throw new InvalidOperationException("Kayıt bitiş tarihi dönem bitiş tarihinden sonra olamaz.");
+        if (addDropEnd > termEnd)
+            throw new InvalidOperationException("Ders ekleme/bırakma bitiş tarihi dönem bitiş tarihinden sonra olamaz.");
+        if (withdrawalDeadline > termEnd)
+            throw new InvalidOperationException("Çekilme tarihi dönem bitiş tarihinden sonra olamaz.");
+        if (withdrawalDeadline < termStart)
+            throw new InvalidOperationException("Çekilme tarihi dönem başlangıç tarihinden önce olamaz.");
+    }
 
     // ── Calendar Events ──────────────────────────────────────────────────────
 

@@ -365,7 +365,9 @@ public class TermClosingService : ITermClosingService
             newTermId = newTerm.Id;
         }
 
-        currentTerm.IsActive = false;
+        // NOT: currentTerm.IsActive = false yapmıyoruz — bu dönem geçişi merkezi
+        // TransitionStatusAsync üzerinden yapılmalı. Bölüm bazlı kapatma mevcut
+        // dönemin aktifliğini değiştirmemeli (diğer bölümler hâlâ kullanıyor olabilir).
         await _context.SaveChangesAsync(ct);
 
         await UpsertProgressAsync(departmentId, currentTerm.Id, TermClosingStep.NewTerm, userId,

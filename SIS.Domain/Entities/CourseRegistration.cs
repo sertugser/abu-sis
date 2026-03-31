@@ -13,6 +13,7 @@ public class CourseRegistration
     public RegistrationStatus Status { get; set; }
     public GradeCode? Grade { get; set; }
     public bool IsRepeated { get; set; }                       // FR-56C: grade improvement repeat
+    public string? AdvisorNote { get; set; }                   // Danışman red/onay notu
     public bool MandatoryAttendance { get; set; }              // FR-106
     public int CourseWithdrawalCount { get; set; }             // how many times this specific course was withdrawn
     public DateTime CreatedAt { get; set; }

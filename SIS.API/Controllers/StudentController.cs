@@ -11,7 +11,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "Student")]
 public class StudentController : ControllerBase
 {
     private readonly AppDbContext _context;

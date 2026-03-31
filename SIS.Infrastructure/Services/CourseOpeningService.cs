@@ -177,8 +177,55 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.CourseId, ct)
             ?? throw new InvalidOperationException($"Ders bulunamadı (ID: {request.CourseId}).");
 
-        if (course.DepartmentId != departmentId)
+        if (course.DepartmentId.HasValue && course.DepartmentId != departmentId)
             throw new InvalidOperationException($"Ders '{course.Code}' bu bölüme ait değil.");
+
+        // Kapasite validasyonu
+        if (request.CapacityPerSection <= 0)
+            throw new InvalidOperationException("Kontenjan 0'dan büyük olmalıdır.");
+
+        // Şube sayısı üst sınırı
+        if (request.SectionCount <= 0 || request.SectionCount > 20)
+            throw new InvalidOperationException("Şube sayısı 1 ile 20 arasında olmalıdır.");
+
+        // Duplikat kontrol: bu dönemde bu ders zaten açılmış mı?
+        var existingCount = await _context.CourseSections
+            .CountAsync(cs => cs.CourseId == request.CourseId && cs.TermId == termId && cs.IsActive, ct);
+        if (existingCount > 0)
+            throw new InvalidOperationException(
+                $"'{course.Code}' dersi bu dönemde zaten {existingCount} şube ile açılmış. Yeni şube eklemek için mevcut şubeyi güncelleyin.");
+
+        // InstructorId validasyonu
+        if (request.InstructorId.HasValue)
+        {
+            var instructor = await _context.Instructors.AsNoTracking()
+                .FirstOrDefaultAsync(i => i.Id == request.InstructorId.Value, ct);
+            if (instructor == null)
+                throw new InvalidOperationException("Atanan öğretim üyesi bulunamadı.");
+            // Ortak ders olmadığı sürece, hocanın bölümünü kontrol et
+            if (course.DepartmentId.HasValue && instructor.DepartmentId != departmentId)
+                throw new InvalidOperationException("Öğretim üyesi bu bölüme ait değil.");
+        }
+
+        // Semester parity kontrolü: güz döneminde bahar dersi açılmasın
+        var suggestedSemesters = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => cc.CourseId == request.CourseId && cc.Curriculum.IsActive)
+            .Select(cc => cc.SuggestedSemester)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (suggestedSemesters.Count > 0)
+        {
+            bool isFallTerm = term.Semester == SemesterType.Fall;
+            // Güz dönemi: tek dönem dersleri (1,3,5,7), Bahar: çift (2,4,6,8)
+            bool hasMatchingParity = suggestedSemesters.Any(s =>
+                isFallTerm ? (s % 2 == 1) : (s % 2 == 0));
+
+            if (!hasMatchingParity && term.Semester != SemesterType.Summer)
+                throw new InvalidOperationException(
+                    $"'{course.Code}' dersi {(isFallTerm ? "güz" : "bahar")} dönemine uygun değil (önerilen dönemler: {string.Join(", ", suggestedSemesters)}).");
+        }
 
         var created = new List<CourseSection>();
         for (var i = 0; i < request.SectionCount; i++)
@@ -280,11 +327,21 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             throw new InvalidOperationException(
                 $"Şube güncellemek için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
+        if (!section.IsActive)
+            throw new InvalidOperationException("Pasif şube güncellenemez.");
+
         if (request.InstructorId.HasValue)
             section.InstructorId = request.InstructorId.Value;
 
         if (request.Capacity.HasValue)
+        {
+            if (request.Capacity.Value <= 0)
+                throw new InvalidOperationException("Kontenjan 0'dan büyük olmalıdır.");
+            if (request.Capacity.Value < section.EnrolledCount)
+                throw new InvalidOperationException(
+                    $"Kontenjan mevcut kayıtlı öğrenci sayısından ({section.EnrolledCount}) az olamaz.");
             section.Capacity = request.Capacity.Value;
+        }
 
         await _context.SaveChangesAsync(ct);
 
@@ -340,10 +397,26 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             throw new InvalidOperationException(
                 $"Şube kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
-        if (section.EnrolledCount > 0)
-            throw new InvalidOperationException("Kayıtlı öğrenci bulunan şube kapatılamaz.");
+        // Draft/PendingAdvisorApproval kayıtlarını temizle
+        var pendingRegistrations = await _context.CourseRegistrations
+            .Where(cr => cr.CourseSectionId == sectionId
+                && (cr.Status == RegistrationStatus.Draft || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+            .ToListAsync(ct);
+
+        foreach (var reg in pendingRegistrations)
+        {
+            reg.Status = RegistrationStatus.Dropped;
+            reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Aktif kayıtlı öğrenci varsa kapatılamaz
+        var activeCount = await _context.CourseRegistrations
+            .CountAsync(cr => cr.CourseSectionId == sectionId && cr.Status == RegistrationStatus.Active, ct);
+        if (activeCount > 0)
+            throw new InvalidOperationException($"Aktif kayıtlı {activeCount} öğrenci bulunan şube kapatılamaz.");
 
         section.IsActive = false;
+        section.EnrolledCount = 0;
         await _context.SaveChangesAsync(ct);
     }
 

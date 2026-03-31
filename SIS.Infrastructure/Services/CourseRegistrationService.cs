@@ -57,6 +57,21 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
+        // Kapasite kontrolü: kontenjan dolu mu?
+        if (section.EnrolledCount >= section.Capacity)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı dolu ({section.EnrolledCount}/{section.Capacity})." }
+                }
+            };
+            return response;
+        }
+
         // Check if already in plan (same section)
         var existingForSection = await _context.CourseRegistrations
             .FirstOrDefaultAsync(cr => cr.StudentId == studentId
@@ -242,9 +257,8 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
-        var targetStatus = student.IsScholarshipStudent
-            ? RegistrationStatus.Active
-            : RegistrationStatus.PendingAdvisorApproval;
+        // Danışman onayı her zaman zorunlu — burslu öğrenci dahil (ADIM 11)
+        var targetStatus = RegistrationStatus.PendingAdvisorApproval;
 
         // Load or create registrations for the submitted sections
         var registrations = await _context.CourseRegistrations
@@ -974,7 +988,8 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         foreach (var reg in registrations)
         {
-            reg.Status = RegistrationStatus.Dropped;
+            reg.Status = RegistrationStatus.Rejected;
+            reg.AdvisorNote = dto.Note;
             reg.UpdatedAt = DateTime.UtcNow;
             reg.CourseSection.EnrolledCount = Math.Max(0, reg.CourseSection.EnrolledCount - 1);
         }

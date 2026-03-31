@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
+using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
@@ -14,13 +16,16 @@ public class SchedulingController : ControllerBase
 {
     private readonly ISchedulingService _schedulingService;
     private readonly IAcademicOperationsService _academicOperationsService;
+    private readonly AppDbContext _context;
 
     public SchedulingController(
         ISchedulingService schedulingService,
-        IAcademicOperationsService academicOperationsService)
+        IAcademicOperationsService academicOperationsService,
+        AppDbContext context)
     {
         _schedulingService = schedulingService;
         _academicOperationsService = academicOperationsService;
+        _context = context;
     }
 
     [HttpGet("conflicts")]
@@ -49,6 +54,11 @@ public class SchedulingController : ControllerBase
         if (request.SectionId <= 0)
             return BadRequest(new { error = "Gecerli bir sectionId gonderilmelidir." });
 
+        if (!TryGetAuthenticatedUser(out var userId, out _))
+            return Unauthorized();
+        var accessCheck = await CheckSectionAccessAsync(request.SectionId, userId, cancellationToken);
+        if (accessCheck != null) return accessCheck;
+
         var result = await _schedulingService.ValidateAsync(request, cancellationToken);
         return Ok(result);
     }
@@ -58,6 +68,11 @@ public class SchedulingController : ControllerBase
     {
         if (request.SectionId <= 0)
             return BadRequest(new { error = "Gecerli bir sectionId gonderilmelidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out _))
+            return Unauthorized();
+        var accessCheck = await CheckSectionAccessAsync(request.SectionId, userId, cancellationToken);
+        if (accessCheck != null) return accessCheck;
 
         var result = await _schedulingService.SuggestAsync(request, cancellationToken);
         return Ok(result);
@@ -71,6 +86,11 @@ public class SchedulingController : ControllerBase
 
         if (request.ScheduleSlots == null || request.ScheduleSlots.Count == 0)
             return BadRequest(new { error = "En az bir schedule slot gonderilmelidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out _))
+            return Unauthorized();
+        var accessCheck = await CheckSectionAccessAsync(request.SectionId, userId, cancellationToken);
+        if (accessCheck != null) return accessCheck;
 
         var result = await _schedulingService.ApplyAsync(request, cancellationToken);
         return Ok(result);
@@ -118,6 +138,50 @@ public class SchedulingController : ControllerBase
 
         var result = await _schedulingService.BatchAutoScheduleAsync(request, cancellationToken);
         return Ok(result);
+    }
+
+    private async Task<IActionResult?> CheckSectionAccessAsync(int sectionId, int userId, CancellationToken ct)
+    {
+        var section = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == sectionId, ct);
+
+        if (section == null)
+            return NotFound(new { error = "Şube bulunamadı." });
+
+        if (!section.Course.DepartmentId.HasValue)
+            return null; // Ortak ders — herkes erişebilir
+
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        if (roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff"))
+            return null;
+
+        var instructor = await _context.Instructors
+            .AsNoTracking()
+            .Include(i => i.Department)
+            .FirstOrDefaultAsync(i => i.UserId == userId, ct);
+
+        if (instructor == null)
+            return Forbid();
+
+        if (roles.Contains("Dean"))
+        {
+            var department = await _context.Departments.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == section.Course.DepartmentId.Value, ct);
+            if (department == null || department.FacultyId != instructor.Department.FacultyId)
+                return Forbid();
+            return null;
+        }
+
+        if (roles.Contains("DepartmentManager"))
+        {
+            if (instructor.DepartmentId != section.Course.DepartmentId.Value)
+                return Forbid();
+            return null;
+        }
+
+        return Forbid();
     }
 
     private bool TryGetAuthenticatedUser(out int userId, out IReadOnlyCollection<string> roles)

@@ -32,7 +32,7 @@ public class SchedulingControllerTests
     {
         var serviceMock = new Mock<ISchedulingService>(MockBehavior.Strict);
         var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
-        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object, null!);
 
         var result = await controller.GetConflicts(0, CancellationToken.None);
 
@@ -53,7 +53,7 @@ public class SchedulingControllerTests
             .ReturnsAsync(response);
 
         var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
-        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object, null!);
 
         var result = await controller.Validate(new ScheduleValidationRequestDto { SectionId = 5 }, CancellationToken.None);
 
@@ -76,7 +76,7 @@ public class SchedulingControllerTests
             .ReturnsAsync(response);
 
         var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
-        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object, null!);
 
         var result = await controller.Suggest(new ScheduleSuggestionRequestDto { SectionId = 7 }, CancellationToken.None);
 

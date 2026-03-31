@@ -105,12 +105,27 @@ public class AuthService : IAuthService
             {
                 ValidateIssuer = true,
                 ValidateAudience = true,
-                ValidateLifetime = false, // Allow expired tokens for refresh
+                ValidateLifetime = false, // Lifetime kontrolü aşağıda manuel yapılır
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = jwtSettings["Issuer"],
                 ValidAudience = jwtSettings["Audience"],
                 IssuerSigningKey = key
-            }, out _);
+            }, out var validatedToken);
+
+            // Güvenlik: Süresi çok eski token'larla sonsuz yenilemeyi engelle
+            // Sadece son 7 gün içinde expire olmuş token'ları kabul et
+            if (validatedToken is JwtSecurityToken jwt)
+            {
+                var maxRefreshWindow = TimeSpan.FromDays(7);
+                if (jwt.ValidTo < DateTime.UtcNow - maxRefreshWindow)
+                {
+                    return new AuthResponseDto
+                    {
+                        Success = false,
+                        Error = "Token süresi çok eski, lütfen tekrar giriş yapın."
+                    };
+                }
+            }
 
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null)

@@ -30,7 +30,7 @@ public class ForecastControllerTests
     public async Task GetCourseDemand_InvalidCourseId_ReturnsBadRequest()
     {
         var serviceMock = new Mock<IEnrollmentForecastService>(MockBehavior.Strict);
-        var controller = new ForecastController(serviceMock.Object);
+        var controller = new ForecastController(serviceMock.Object, null!);
 
         var result = await controller.GetCourseDemand(0);
 
@@ -45,7 +45,7 @@ public class ForecastControllerTests
             .Setup(service => service.GetCourseDemandForecastAsync(42))
             .ReturnsAsync((CourseDemandForecastDto?)null);
 
-        var controller = new ForecastController(serviceMock.Object);
+        var controller = new ForecastController(serviceMock.Object, null!);
 
         var result = await controller.GetCourseDemand(42);
 
@@ -86,7 +86,7 @@ public class ForecastControllerTests
             .Setup(service => service.GetDepartmentSummaryAsync(7))
             .ReturnsAsync(response);
 
-        var controller = new ForecastController(serviceMock.Object);
+        var controller = new ForecastController(serviceMock.Object, null!);
 
         var result = await controller.GetDepartmentSummary(7);
 
