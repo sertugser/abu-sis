@@ -1,0 +1,31 @@
+feat: Faz 0, 4 ve 5 - Güvenlik, SystemConfig ve Audit Entegrasyonları
+
+Sistemde Yapılan Temel Teknik Değişiklikler:
+- appsettings.json: "RefreshWindowMinutes": 1440 eklenerek AuthService'teki Refresh Token yaşam döngüsü güvence altına alındı.
+- SchedulingService.cs: SuggestAsync metodu içerisindeki derslik önerme işlemi, SystemConfigService kullanılarak bellekte LINQ (occupancy penalty formülü) aracılığıyla tekrar yazıldı.
+- AuditSaveChangesInterceptor.cs: Tuple<EntityEntry, AuditLog> mantığına geçilerek "EntityState.Added" (INSERT) anında null olan Id'lerin veritabanından başarıyla okunabilmesi sağlandı.
+
+Tamamlanan Görevler:
+
+0.1 — Güvenlik Açıkları
+- IDOR düzelt: AcademicLevelController ve EligibilityController'da studentId == authenticatedStudentId kontrolü eklendi.
+- GradeController yetki düzelt: Bir hocanın başka hocanın dersine not girmesi engellendi (GetAuthorizedSectionAsync).
+- AuthService refresh token: Süresi dolan token ile sonsuz yenileme engellendi (RefreshWindowMinutes entegrasyonu).
+- StudentController yetkilendirmesi: Tüm fonksiyonlar [Authorize(Roles="Student")] ile kilitlendi.
+
+2.4 — Performans Index'leri
+- Student: AdvisorId index migration dosyası oluşturuldu.
+
+4.4 — Hardcoded Değerleri SystemConfig'e Taşı
+- RegistrationRulePolicy: Koda gömülü ECTS limitleri ve CGPA eşiği SystemConfig'e bağlandı.
+- CourseRegistrationService: Çekilme limitleri (withdraw) SystemConfig'den okunur hale getirildi.
+- SchedulingService: Derslik tipi eşikleri (AmphiThreshold) ve sınıf doluluk oranları (OccupancyTarget) SystemConfig'e bağlandı.
+- YÖK unvan: Eğitmen unvanına göre MaxWeeklyHours eşleştirmesi dinamikleştirildi.
+
+5.3 — Kod Kalitesi (Audit Log)
+- Genel audit log: Db işlemlerini dinleyen AuditSaveChangesInterceptor oluşturularak CreatedAt / UpdatedAt süreleri ve OldValue -> NewValue değişimlerinin otomatik loglanması sağlandı.
+
+Güncellenen Ek Maddeler ve Fixler:
+- Audit Log Insert ID Fix: Yeni bir kayıt (INSERT) eklendiğinde EntityId'nin 0 (sıfır) kaydedilmesi sorunu (identity sonrası yakalamayla) çözüldü.
+- Faz 2 Migration Fix: "20260331015732_Faz2_NewEntitiesAndIndexes" dosyasındaki migration geçmişini bozabilecek ham IF NOT EXISTS Script'leri standart Entity Framework AddColumn formatına çevrildi.
+- Projedeki "match.txt" gibi atıl dosyalar temizlendi.
