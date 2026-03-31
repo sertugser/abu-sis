@@ -11,5 +11,4 @@ public class Instructor
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public ICollection<CourseSection> Sections { get; set; } = new List<CourseSection>();
-    public ICollection<InstructorAvailability> Availabilities { get; set; } = new List<InstructorAvailability>();
 }

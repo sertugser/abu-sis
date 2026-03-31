@@ -16,8 +16,7 @@ public static partial class SeedData
         await SeedTermsAndClassroomsAsync(context);
         await SeedCalendarEventsAsync(context);
         await SeedUsersAsync(context, userManager);
-        await SeedInstructorAvailabilitiesAsync(context);
-        await SeedRegistrationsAsync(context);
+await SeedRegistrationsAsync(context);
         await SeedSectionSchedulesAsync(context);
         await SeedTimeSlotsAsync(context);
         await SeedSystemConfigAsync(context);

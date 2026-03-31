@@ -38,9 +38,6 @@ public class SchedulingServiceTests : IDisposable
         var instructor1 = AddInstructor(1, 101, maxWeeklyHours: 10);
         var instructor2 = AddInstructor(2, 102, maxWeeklyHours: 10);
         var classroom = AddClassroom(1, "C101", 50);
-        AddAvailability(instructor1.Id, DayOfWeek.Monday, 8, 0, 12, 0);
-        AddAvailability(instructor2.Id, DayOfWeek.Monday, 8, 0, 12, 0);
-
         var course1 = AddCourse(1, "CS101", theoryHours: 2);
         var course2 = AddCourse(2, "CS102", theoryHours: 2);
 
@@ -61,8 +58,6 @@ public class SchedulingServiceTests : IDisposable
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var classroom1 = AddClassroom(1, "C101", 50);
         var classroom2 = AddClassroom(2, "C102", 50);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 8, 0, 12, 0);
-
         var course1 = AddCourse(1, "CS201", theoryHours: 2);
         var course2 = AddCourse(2, "CS202", theoryHours: 2);
 
@@ -83,9 +78,6 @@ public class SchedulingServiceTests : IDisposable
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 3);
         var classroom1 = AddClassroom(1, "C101", 50);
         var classroom2 = AddClassroom(2, "C102", 50);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 8, 0, 12, 0);
-        AddAvailability(instructor.Id, DayOfWeek.Tuesday, 8, 0, 12, 0);
-
         var course1 = AddCourse(1, "CS301", theoryHours: 2);
         var course2 = AddCourse(2, "CS302", theoryHours: 2);
 
@@ -105,8 +97,6 @@ public class SchedulingServiceTests : IDisposable
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var classroom = AddClassroom(1, "Lab1", 20);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 8, 0, 12, 0);
-
         var course = AddCourse(1, "CS401", theoryHours: 2);
         AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 30,
             CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
@@ -118,29 +108,10 @@ public class SchedulingServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ValidateExistingAsync_InstructorUnavailableSlot_ReturnsAvailabilityConflict()
-    {
-        var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
-        var classroom = AddClassroom(1, "C101", 50);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 13, 0, 15, 0);
-
-        var course = AddCourse(1, "CS402", theoryHours: 2);
-        AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
-
-        var result = await _service.ValidateExistingAsync(ActiveTermId);
-
-        result.IsValid.Should().BeFalse();
-        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "InstructorAvailabilityConflict");
-    }
-
-    [Fact]
     public async Task ValidateAsync_ValidScheduleProposal_ReturnsSuccess()
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var classroom = AddClassroom(1, "C101", 50);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 8, 0, 12, 0, isPreferred: true);
-
         var course = AddCourse(1, "CS403", theoryHours: 2);
         AddSection(1, course.Id, null, null, ActiveTermId, 30, null);
 
@@ -172,8 +143,13 @@ public class SchedulingServiceTests : IDisposable
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var bestFitClassroom = AddClassroom(1, "C201", 30);
         AddClassroom(2, "C202", 60);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 9, 0, 12, 0, isPreferred: true);
-        AddAvailability(instructor.Id, DayOfWeek.Tuesday, 9, 0, 12, 0);
+
+        // Add TimeSlots for the term (SuggestAsync uses TimeSlot grid)
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(9, 50), 1);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(10, 50), 2);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(11, 0), new TimeOnly(11, 50), 3);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Tuesday, new TimeOnly(9, 0), new TimeOnly(9, 50), 1);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Tuesday, new TimeOnly(10, 0), new TimeOnly(10, 50), 2);
 
         var course = AddCourse(1, "CS404", theoryHours: 2);
         AddSection(1, course.Id, instructor.Id, null, ActiveTermId, 28, null);
@@ -185,7 +161,7 @@ public class SchedulingServiceTests : IDisposable
         result.SuggestedSlots.Should().ContainSingle();
         result.SuggestedSlots[0].Day.Should().Be(DayOfWeek.Monday);
         result.SuggestedSlots[0].StartTime.Should().Be(new TimeOnly(9, 0));
-        result.SuggestedSlots[0].EndTime.Should().Be(new TimeOnly(11, 0));
+        result.SuggestedSlots[0].EndTime.Should().Be(new TimeOnly(10, 50));
     }
 
     [Fact]
@@ -195,11 +171,13 @@ public class SchedulingServiceTests : IDisposable
         var blockedClassroom = AddClassroom(1, "C301", 40);
         var otherClassroom = AddClassroom(2, "C302", 40);
 
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 9, 0, 11, 0, isPreferred: true);
+        // Only one time window available — same instructor already occupies it
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(9, 50), 1);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(10, 50), 2);
 
         var existingCourse = AddCourse(1, "CS405", theoryHours: 2);
         AddSection(1, existingCourse.Id, instructor.Id, otherClassroom.Id, ActiveTermId, 25,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
+            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 10, 50)));
 
         var targetCourse = AddCourse(2, "CS406", theoryHours: 2);
         AddSection(2, targetCourse.Id, instructor.Id, blockedClassroom.Id, ActiveTermId, 25, null);
@@ -215,8 +193,6 @@ public class SchedulingServiceTests : IDisposable
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var classroom = AddClassroom(1, "C101", 50);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 8, 0, 12, 0);
-
         var activeCourse = AddCourse(1, "CS407", theoryHours: 2);
         AddSection(1, activeCourse.Id, instructor.Id, classroom.Id, ActiveTermId, 20,
             CreateScheduleJson((DayOfWeek.Monday, 8, 0, 10, 0)));
@@ -241,8 +217,6 @@ public class SchedulingServiceTests : IDisposable
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var classroom = AddClassroom(1, "C101", 50);
-        AddAvailability(instructor.Id, DayOfWeek.Monday, 8, 0, 12, 0);
-
         var course = AddCourse(1, "CS410", theoryHours: 2);
         AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 20, "{invalid-json");
 
@@ -405,26 +379,17 @@ public class SchedulingServiceTests : IDisposable
         return section;
     }
 
-    private void AddAvailability(
-        int instructorId,
-        DayOfWeek day,
-        int startHour,
-        int startMinute,
-        int endHour,
-        int endMinute,
-        bool isAvailable = true,
-        bool isPreferred = false)
+    private void AddTimeSlot(int termId, DayOfWeek day, TimeOnly startTime, TimeOnly endTime, int slotOrder)
     {
-        _context.InstructorAvailabilities.Add(new InstructorAvailability
+        _context.TimeSlots.Add(new TimeSlot
         {
-            InstructorId = instructorId,
+            TermId = termId,
             DayOfWeek = day,
-            StartTime = new TimeOnly(startHour, startMinute),
-            EndTime = new TimeOnly(endHour, endMinute),
-            IsAvailable = isAvailable,
-            IsPreferred = isPreferred
+            StartTime = startTime,
+            EndTime = endTime,
+            SlotOrder = slotOrder,
+            DisplayName = $"{day} {slotOrder}. Ders ({startTime:HH\\:mm}-{endTime:HH\\:mm})"
         });
-
         _context.SaveChanges();
     }
 

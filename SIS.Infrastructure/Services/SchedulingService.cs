@@ -16,8 +16,6 @@ public class SchedulingService : ISchedulingService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    private static readonly TimeSpan SuggestionStep = TimeSpan.FromMinutes(30);
-
     private readonly AppDbContext _context;
 
     public SchedulingService(AppDbContext context)
@@ -167,34 +165,32 @@ public class SchedulingService : ISchedulingService
         }
 
         var instructorName = await GetInstructorNameAsync(instructor, cancellationToken);
-        var availabilities = await _context.InstructorAvailabilities
+
+        // Load TimeSlots for this term
+        var timeSlots = await _context.TimeSlots
             .AsNoTracking()
-            .Where(ia => ia.InstructorId == instructor.Id)
-            .OrderByDescending(ia => ia.IsPreferred)
-            .ThenBy(ia => ia.DayOfWeek)
-            .ThenBy(ia => ia.StartTime)
+            .Where(ts => ts.TermId == section.TermId)
+            .OrderBy(ts => ts.DayOfWeek)
+            .ThenBy(ts => ts.SlotOrder)
             .ToListAsync(cancellationToken);
 
         response.InstructorId = instructor.Id;
         response.InstructorName = instructorName;
-        response.InstructorAvailabilities = availabilities
-            .Select(MapAvailability)
-            .ToList();
 
-        if (availabilities.Count == 0)
+        if (timeSlots.Count == 0)
         {
-            response.Notes.Add("Öğretim üyesi müsaitlik kaydı olmadığı için uygunluk dışında öneride bulunulamadı.");
+            response.Notes.Add("Bu dönem için zaman slotu tanımı bulunmadığından öneri üretilemedi.");
             return response;
         }
 
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var currentParse = ParseScheduleJson(section.ScheduleJson);
-        var durationMinutes = ResolveDesiredSlotDurations(section, currentParse.Slots);
-        var slotCombinations = BuildSuggestedSlotCombinations(durationMinutes, currentParse.Slots, availabilities);
+        var requiredHours = ResolveTotalRequiredHours(section);
+        var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentParse.Slots, timeSlots);
 
         if (slotCombinations.Count == 0)
         {
-            response.Notes.Add("Öğretim üyesi müsaitlik aralığında uygun slot kombinasyonu üretilemedi.");
+            response.Notes.Add("Zaman grid'inde uygun slot kombinasyonu üretilemedi.");
             return response;
         }
 
@@ -225,7 +221,6 @@ public class SchedulingService : ISchedulingService
                     instructor,
                     instructorName,
                     classroom,
-                    availabilities,
                     slotCombination.Slots,
                     new List<string>());
 
@@ -242,9 +237,7 @@ public class SchedulingService : ISchedulingService
                 response.SuggestedSlots = candidate.ScheduleSlots.Select(MapScheduleSlot).ToList();
                 response.EstimatedWeeklyHoursImpact = candidateWeeklyHours - currentWeeklyHours;
                 response.Notes.AddRange(candidate.Notes);
-                response.Notes.Add(slotCombination.PreferenceScore == 0
-                    ? "Slotlar tercihli müsaitlik pencereleriyle uyumludur."
-                    : "Slotlar uygun müsaitlik pencereleri içinden seçildi.");
+                response.Notes.Add("Slotlar zaman grid'inden uygun kombinasyon olarak seçildi.");
                 response.Notes.Add($"Derslik secimi kapasite uyumu esas alinarak yapildi ({classroom.Capacity}/{requiredCapacity}).");
                 return response;
             }
@@ -253,6 +246,272 @@ public class SchedulingService : ISchedulingService
         response.Notes.Add("Çakışma olmayan derslik + slot kombinasyonu bulunamadı.");
         return response;
     }
+
+    public async Task<ScheduleValidationResultDto> ApplyAsync(ApplyScheduleRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var validationRequest = new ScheduleValidationRequestDto
+        {
+            SectionId = request.SectionId,
+            ClassroomId = request.ClassroomId,
+            ScheduleSlots = request.ScheduleSlots,
+        };
+
+        var validation = await ValidateAsync(validationRequest, cancellationToken);
+
+        if (!validation.IsValid)
+        {
+            validation.Notes.Add("Çakışma tespit edildiğinden program uygulanmadı.");
+            return validation;
+        }
+
+        var section = await _context.CourseSections
+            .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, cancellationToken);
+
+        if (section == null)
+        {
+            return new ScheduleValidationResultDto
+            {
+                IsValid = false,
+                Notes = { "Section bulunamadı." }
+            };
+        }
+
+        var slots = request.ScheduleSlots.Select(s => new ScheduleSlot
+        {
+            Day = s.Day,
+            StartTime = s.StartTime,
+            EndTime = s.EndTime,
+        }).ToList();
+
+        // Keep existing ScheduleJson behavior
+        section.ScheduleJson = JsonSerializer.Serialize(slots, ScheduleJsonOptions);
+        section.ClassroomId = request.ClassroomId;
+
+        // Also write SectionSchedule records for the new TimeSlot-based system
+        await WriteSectionScheduleRecordsAsync(section.Id, section.TermId, request.ClassroomId, slots, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        validation.Notes.Add("Program başarıyla uygulanarak kaydedildi.");
+        return validation;
+    }
+
+    public async Task<BatchAutoScheduleResultDto> BatchAutoScheduleAsync(BatchAutoScheduleRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var result = new BatchAutoScheduleResultDto();
+
+        var resolvedTerm = await ResolveTermAsync(request.TermId, cancellationToken);
+        if (resolvedTerm == null)
+        {
+            result.Notes.Add(request.TermId.HasValue
+                ? "Belirtilen akademik dönem bulunamadı."
+                : "Aktif akademik dönem bulunamadı.");
+            return result;
+        }
+
+        result.Notes.Add($"Donem: {resolvedTerm.Name}");
+
+        var sectionsQuery = _context.CourseSections
+            .Include(cs => cs.Course)
+            .Include(cs => cs.Classroom)
+            .Where(cs => cs.TermId == resolvedTerm.Id && cs.IsActive && cs.InstructorId != null);
+
+        if (request.DepartmentId.HasValue)
+        {
+            sectionsQuery = sectionsQuery.Where(cs => cs.Course.DepartmentId == request.DepartmentId.Value);
+        }
+
+        var sections = await sectionsQuery.ToListAsync(cancellationToken);
+
+        var unscheduled = sections
+            .Where(cs => string.IsNullOrWhiteSpace(cs.ScheduleJson) || cs.ScheduleJson == "[]")
+            .OrderByDescending(cs => cs.EnrolledCount)
+            .ToList();
+
+        result.TotalSections = unscheduled.Count;
+
+        if (unscheduled.Count == 0)
+        {
+            result.Notes.Add("Programsız section bulunamadı, tüm section'lar zaten programlı.");
+            return result;
+        }
+
+        result.Notes.Add($"{unscheduled.Count} programsiz section bulundu.");
+
+        foreach (var section in unscheduled)
+        {
+            var item = new BatchAutoScheduleItemDto
+            {
+                SectionId = section.Id,
+                CourseCode = section.Course.Code,
+                CourseName = section.Course.Name,
+            };
+
+            var suggestRequest = new ScheduleSuggestionRequestDto
+            {
+                SectionId = section.Id,
+                InstructorId = section.InstructorId,
+            };
+
+            var suggestion = await SuggestAsync(suggestRequest, cancellationToken);
+
+            if (!suggestion.IsFeasible || suggestion.SuggestedSlots.Count == 0)
+            {
+                item.Success = false;
+                item.FailureReason = suggestion.Notes.Count > 0
+                    ? string.Join(" ", suggestion.Notes)
+                    : "Uygun slot kombinasyonu bulunamadı.";
+                result.FailedCount++;
+                result.Results.Add(item);
+                continue;
+            }
+
+            var applyRequest = new ApplyScheduleRequestDto
+            {
+                SectionId = section.Id,
+                ClassroomId = suggestion.SuggestedClassroomId,
+                ScheduleSlots = suggestion.SuggestedSlots,
+            };
+
+            var applyResult = await ApplyAsync(applyRequest, cancellationToken);
+
+            if (applyResult.IsValid)
+            {
+                item.Success = true;
+                item.ClassroomName = suggestion.SuggestedClassroomName;
+                item.Slots = suggestion.SuggestedSlots;
+                result.ScheduledCount++;
+            }
+            else
+            {
+                item.Success = false;
+                item.FailureReason = applyResult.Conflicts.Count > 0
+                    ? applyResult.Conflicts[0].Message
+                    : "Uygulama sırasında çakışma tespit edildi.";
+                result.FailedCount++;
+            }
+
+            result.Results.Add(item);
+        }
+
+        return result;
+    }
+
+    public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(int? termId = null, CancellationToken cancellationToken = default)
+    {
+        var result = new ClassroomDashboardDto();
+        var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
+        if (resolvedTerm == null)
+        {
+            return result;
+        }
+
+        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
+        var evaluation = EvaluateExistingConflicts(snapshot);
+        result.ConflictsCount = evaluation.Conflicts?.Count ?? 0;
+
+        var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(cancellationToken);
+        result.TotalClassrooms = classrooms.Count;
+
+        // Her derslik için o donemdeki dersleri haritala
+        var classroomSchedules = snapshot.Sections
+            .Where(s => s.ClassroomId.HasValue)
+            .GroupBy(s => s.ClassroomId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.SelectMany(s => s.ScheduleSlots.Select(slot => new ClassroomScheduleSlotDto
+                {
+                    Day = (int)slot.Day,
+                    StartHour = slot.StartTime.Hour,
+                    EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
+                    CourseCode = s.CourseCode,
+                    CourseName = s.CourseName,
+                    InstructorName = s.InstructorName
+                })).ToList()
+            );
+
+        result.Classrooms = classrooms.Select(c => new ClassroomInfoDto
+        {
+            Id = c.Id,
+            Name = c.Name,
+            Capacity = c.Capacity,
+            Type = c.Type.ToString(),
+            Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
+        }).OrderBy(c => c.Name).ToList();
+
+        var heatmapMap = new Dictionary<(int day, int hour), int>();
+        for (int day = 0; day < 5; day++)
+        {
+            for (int hour = 8; hour <= 17; hour++)
+            {
+                heatmapMap[(day, hour)] = 0;
+            }
+        }
+
+        var occupationMap = new Dictionary<(int day, int hour), List<ClassroomOccupationDto>>();
+        foreach (var section in snapshot.Sections)
+        {
+            if (section.ClassroomId.HasValue)
+            {
+                foreach (var slot in section.ScheduleSlots)
+                {
+                    int dayIndex = (int)slot.Day - 1;
+                    if (dayIndex >= 0 && dayIndex <= 4)
+                    {
+                        int startHour = slot.StartTime.Hour;
+                        int endHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1;
+
+                        for (int h = startHour; h <= endHour && h <= 17; h++)
+                        {
+                            if (h >= 8)
+                            {
+                                var key = (dayIndex, h);
+                                if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
+                                heatmapMap[key]++;
+
+                                if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
+                                occupationMap[key].Add(new ClassroomOccupationDto
+                                {
+                                    ClassroomName = section.ClassroomName,
+                                    CourseCode = section.CourseCode,
+                                    CourseName = section.CourseName,
+                                    EnrolledCount = section.EnrolledCount,
+                                    Capacity = section.ClassroomCapacity
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        int totalSlots = result.TotalClassrooms * 5 * 10;
+        int usedSlots = heatmapMap.Values.Sum();
+        result.EmptySlots = Math.Max(0, totalSlots - usedSlots);
+        result.OccupancyRate = totalSlots > 0 ? Math.Round((double)usedSlots / totalSlots * 100) : 0;
+
+        foreach (var kvp in heatmapMap)
+        {
+            var day = kvp.Key.day;
+            var hour = kvp.Key.hour;
+            var used = kvp.Value;
+            var total = result.TotalClassrooms;
+
+            result.Heatmap.Add(new ClassroomHeatmapCellDto
+            {
+                Day = day,
+                Hour = hour,
+                UsedClassrooms = used,
+                Occupancy = total > 0 ? Math.Min(1, (double)used / total) : 0,
+                Details = $"{GetDayName(day)} {hour:D2}:00 — {used}/{total} derslik dolu",
+                Occupations = occupationMap.TryGetValue((day, hour), out var occList) ? occList : new()
+            });
+        }
+
+        return result;
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────
 
     private async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
     {
@@ -294,10 +553,9 @@ public class SchedulingService : ISchedulingService
             .ToList();
 
         var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
-        var availabilityMap = await LoadAvailabilityMapAsync(instructorIds, cancellationToken);
 
         var snapshots = sections
-            .Select(section => BuildExistingSectionSnapshot(section, instructorNameMap, availabilityMap))
+            .Select(section => BuildExistingSectionSnapshot(section, instructorNameMap))
             .ToList();
 
         return new TermSnapshot
@@ -309,10 +567,9 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private SectionSnapshot BuildExistingSectionSnapshot(
+    private static SectionSnapshot BuildExistingSectionSnapshot(
         CourseSection section,
-        IReadOnlyDictionary<int, string> instructorNameMap,
-        IReadOnlyDictionary<int, List<InstructorAvailability>> availabilityMap)
+        IReadOnlyDictionary<int, string> instructorNameMap)
     {
         var parseResult = ParseScheduleJson(section.ScheduleJson);
         var instructorId = section.InstructorId;
@@ -337,9 +594,6 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
             ScheduleSlots = parseResult.Slots,
             ParseError = parseResult.ErrorMessage,
-            AvailabilityRules = instructorId.HasValue && availabilityMap.TryGetValue(instructorId.Value, out var rules)
-                ? rules
-                : new List<InstructorAvailability>(),
             Notes = new List<string>()
         };
     }
@@ -357,7 +611,6 @@ public class SchedulingService : ISchedulingService
 
         Instructor? instructor = null;
         string instructorName = string.Empty;
-        List<InstructorAvailability> availabilities = new();
 
         if (instructorId.HasValue)
         {
@@ -372,15 +625,6 @@ public class SchedulingService : ISchedulingService
             else
             {
                 instructorName = await GetInstructorNameAsync(instructor, cancellationToken);
-                availabilities = await _context.InstructorAvailabilities
-                    .AsNoTracking()
-                    .Where(ia => ia.InstructorId == instructor.Id)
-                    .ToListAsync(cancellationToken);
-
-                if (availabilities.Count == 0)
-                {
-                    notes.Add("Bu öğretim üyesi için müsaitlik tanımı bulunmuyor; çakışma kontrolü bilgilendirme notu ile sürdürülüyor.");
-                }
             }
         }
         else
@@ -439,7 +683,6 @@ public class SchedulingService : ISchedulingService
             instructor,
             instructorName,
             classroom,
-            availabilities,
             scheduleSlots,
             notes,
             parseError);
@@ -450,7 +693,6 @@ public class SchedulingService : ISchedulingService
         Instructor? instructor,
         string instructorName,
         Classroom? classroom,
-        List<InstructorAvailability> availabilities,
         IReadOnlyList<ScheduleSlot> scheduleSlots,
         List<string> notes,
         string? parseError = null)
@@ -474,7 +716,6 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
             ScheduleSlots = scheduleSlots.ToList(),
             ParseError = parseError,
-            AvailabilityRules = availabilities,
             Notes = notes
         };
     }
@@ -504,30 +745,6 @@ public class SchedulingService : ISchedulingService
                     $"Derslik kapasitesi section kontenjanini karsilamiyor ({section.ClassroomCapacity}/{section.Capacity}).",
                     null,
                     null));
-            }
-
-            if (section.InstructorId.HasValue)
-            {
-                if (section.AvailabilityRules.Count == 0)
-                {
-                    notes.Add($"Instructor availability tanimi yok: {section.InstructorName} (Section {section.SectionId}).");
-                }
-                else
-                {
-                    foreach (var slot in section.ScheduleSlots)
-                    {
-                        var availability = EvaluateAvailability(section.AvailabilityRules, slot);
-                        if (availability.HasData && !availability.IsWithinAvailability)
-                        {
-                            conflicts.Add(BuildConflict(
-                                section,
-                                ConflictTypes.InstructorAvailabilityConflict,
-                                availability.Message,
-                                slot,
-                                null));
-                        }
-                    }
-                }
             }
         }
 
@@ -644,23 +861,6 @@ public class SchedulingService : ISchedulingService
                 null));
         }
 
-        if (candidate.InstructorId.HasValue && candidate.AvailabilityRules.Count > 0)
-        {
-            foreach (var slot in candidate.ScheduleSlots)
-            {
-                var availability = EvaluateAvailability(candidate.AvailabilityRules, slot);
-                if (availability.HasData && !availability.IsWithinAvailability)
-                {
-                    conflicts.Add(BuildConflict(
-                        candidate,
-                        ConflictTypes.InstructorAvailabilityConflict,
-                        availability.Message,
-                        slot,
-                        null));
-                }
-            }
-        }
-
         foreach (var existing in snapshot.Sections)
         {
             foreach (var overlap in GetOverlapSlots(candidate.ScheduleSlots, existing.ScheduleSlots))
@@ -713,50 +913,242 @@ public class SchedulingService : ISchedulingService
             .ToList();
     }
 
-    private static List<RankedSlotCombination> BuildSuggestedSlotCombinations(
-        IReadOnlyList<int> durationMinutes,
+    // ── TimeSlot-based suggestion helpers ────────────────────────────────
+
+    /// <summary>
+    /// Determines total required hours for a course section (TheoryHours + LabHours).
+    /// </summary>
+    private static int ResolveTotalRequiredHours(CourseSection section)
+    {
+        var total = section.Course.TheoryHours + section.Course.LabHours;
+        return total > 0 ? total : 1;
+    }
+
+    /// <summary>
+    /// Resolves how the required hours should be split across day blocks.
+    /// Returns a list of consecutive-slot counts per day block:
+    ///   1 hour -> [1]
+    ///   2 hours -> [2]
+    ///   3 hours -> [3]
+    ///   4 hours -> [2, 2]
+    ///   5 hours -> [3, 2]
+    ///   6+ hours -> [3, 3] (then more blocks if needed)
+    /// </summary>
+    private static IReadOnlyList<int> ResolveDayBlocks(int totalHours)
+    {
+        if (totalHours <= 3)
+        {
+            return new[] { totalHours };
+        }
+
+        var blocks = new List<int>();
+        var remaining = totalHours;
+
+        while (remaining > 0)
+        {
+            if (remaining >= 6)
+            {
+                blocks.Add(3);
+                remaining -= 3;
+            }
+            else if (remaining >= 4)
+            {
+                // 4 -> [2,2], 5 -> [3,2]
+                var first = remaining == 4 ? 2 : 3;
+                blocks.Add(first);
+                remaining -= first;
+            }
+            else
+            {
+                // remaining is 1, 2, or 3
+                blocks.Add(remaining);
+                remaining = 0;
+            }
+        }
+
+        return blocks;
+    }
+
+    /// <summary>
+    /// Groups TimeSlots by day and finds all possible consecutive-slot windows of a given size.
+    /// A consecutive window means slots whose SlotOrder values are sequential (e.g., 1,2,3).
+    /// </summary>
+    private static List<List<TimeSlot>> FindConsecutiveWindows(IReadOnlyList<TimeSlot> daySlots, int requiredConsecutive)
+    {
+        var windows = new List<List<TimeSlot>>();
+        if (daySlots.Count < requiredConsecutive)
+        {
+            return windows;
+        }
+
+        var sorted = daySlots.OrderBy(ts => ts.SlotOrder).ToList();
+
+        for (int i = 0; i <= sorted.Count - requiredConsecutive; i++)
+        {
+            var window = new List<TimeSlot>();
+            bool valid = true;
+
+            for (int j = 0; j < requiredConsecutive; j++)
+            {
+                if (j > 0 && sorted[i + j].SlotOrder != sorted[i + j - 1].SlotOrder + 1)
+                {
+                    valid = false;
+                    break;
+                }
+                window.Add(sorted[i + j]);
+            }
+
+            if (valid)
+            {
+                windows.Add(window);
+            }
+        }
+
+        return windows;
+    }
+
+    /// <summary>
+    /// Converts a list of consecutive TimeSlots into a single ScheduleSlot covering them.
+    /// </summary>
+    private static ScheduleSlot TimeSlotWindowToScheduleSlot(IReadOnlyList<TimeSlot> window)
+    {
+        return new ScheduleSlot
+        {
+            Day = window[0].DayOfWeek,
+            StartTime = window[0].StartTime,
+            EndTime = window[^1].EndTime
+        };
+    }
+
+    /// <summary>
+    /// Builds slot combinations from the TimeSlot grid for the given required hours.
+    /// If currentSlots exist and are valid, they are included as the first (preferred) combination.
+    /// </summary>
+    private static List<RankedSlotCombination> BuildTimeSlotCombinations(
+        int totalRequiredHours,
         IReadOnlyList<ScheduleSlot> currentSlots,
-        IReadOnlyList<InstructorAvailability> availabilities)
+        IReadOnlyList<TimeSlot> timeSlots)
     {
         var combinations = new List<RankedSlotCombination>();
         var signatures = new HashSet<string>(StringComparer.Ordinal);
 
+        // Include the current schedule as first option if valid
         if (currentSlots.Count > 0)
         {
             var currentValidation = ValidateScheduleSlots(currentSlots.ToList());
             if (currentValidation.ErrorMessage == null)
             {
-                var currentPreference = currentValidation.Slots
-                    .Select(slot => EvaluateAvailability(availabilities, slot))
-                    .All(check => check.HasData && check.IsWithinAvailability)
-                    ? currentValidation.Slots.Count(slot => !EvaluateAvailability(availabilities, slot).IsPreferred)
-                    : int.MaxValue;
-
-                AddCombination(combinations, signatures, currentValidation.Slots, currentPreference);
+                AddCombination(combinations, signatures, currentValidation.Slots, 0);
             }
         }
 
-        var perDurationCandidates = durationMinutes
-            .Select(duration => BuildRankedSlotsForDuration(duration, availabilities))
+        var dayBlocks = ResolveDayBlocks(totalRequiredHours);
+
+        // Group time slots by day
+        var slotsByDay = timeSlots
+            .GroupBy(ts => ts.DayOfWeek)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<TimeSlot>)g.OrderBy(ts => ts.SlotOrder).ToList());
+
+        // For each day block size, find all possible consecutive windows across all days
+        var perBlockCandidates = dayBlocks
+            .Select(blockSize =>
+            {
+                var candidates = new List<RankedSlot>();
+                foreach (var kvp in slotsByDay)
+                {
+                    var windows = FindConsecutiveWindows(kvp.Value, blockSize);
+                    foreach (var window in windows)
+                    {
+                        candidates.Add(new RankedSlot
+                        {
+                            Slot = TimeSlotWindowToScheduleSlot(window),
+                            PreferencePenalty = 0
+                        });
+                    }
+                }
+                return candidates
+                    .OrderBy(c => c.Slot.Day)
+                    .ThenBy(c => c.Slot.StartTime)
+                    .ToList();
+            })
             .ToList();
 
-        if (perDurationCandidates.Any(candidateList => candidateList.Count == 0))
+        if (perBlockCandidates.Any(candidateList => candidateList.Count == 0))
         {
             return combinations;
         }
 
+        // Build combinations recursively, ensuring no overlap and different days for multi-block
         var current = new List<RankedSlot>();
-        BuildCombinationsRecursive(perDurationCandidates, 0, current, combinations, signatures);
+        BuildCombinationsRecursive(perBlockCandidates, 0, current, combinations, signatures);
 
         return combinations
-            .Where(combination => combination.PreferenceScore < int.MaxValue)
             .OrderBy(combination => combination.PreferenceScore)
             .ThenBy(combination => BuildSlotSignature(combination.Slots))
             .ToList();
     }
 
+    // ── SectionSchedule write helper ─────────────────────────────────────
+
+    /// <summary>
+    /// Writes SectionSchedule records alongside ScheduleJson.
+    /// Deletes existing records for this section first, then creates new ones
+    /// by matching each ScheduleSlot to TimeSlots in the term.
+    /// </summary>
+    private async Task WriteSectionScheduleRecordsAsync(
+        int sectionId,
+        int termId,
+        int? classroomId,
+        IReadOnlyList<ScheduleSlot> slots,
+        CancellationToken cancellationToken)
+    {
+        // Remove old SectionSchedule records for this section
+        var existing = await _context.SectionSchedules
+            .Where(ss => ss.CourseSectionId == sectionId)
+            .ToListAsync(cancellationToken);
+
+        if (existing.Count > 0)
+        {
+            _context.SectionSchedules.RemoveRange(existing);
+        }
+
+        if (!classroomId.HasValue || slots.Count == 0)
+        {
+            return;
+        }
+
+        // Load term time slots for matching
+        var termTimeSlots = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var slot in slots)
+        {
+            // Find all TimeSlots that overlap with this ScheduleSlot on the same day
+            var matchingTimeSlots = termTimeSlots
+                .Where(ts => ts.DayOfWeek == slot.Day
+                    && ts.StartTime < slot.EndTime
+                    && slot.StartTime < ts.EndTime)
+                .OrderBy(ts => ts.SlotOrder)
+                .ToList();
+
+            foreach (var ts in matchingTimeSlots)
+            {
+                _context.SectionSchedules.Add(new SectionSchedule
+                {
+                    CourseSectionId = sectionId,
+                    TimeSlotId = ts.Id,
+                    ClassroomId = classroomId.Value
+                });
+            }
+        }
+    }
+
+    // ── Shared slot helpers ──────────────────────────────────────────────
+
     private static void BuildCombinationsRecursive(
-        IReadOnlyList<List<RankedSlot>> perDurationCandidates,
+        IReadOnlyList<List<RankedSlot>> perBlockCandidates,
         int index,
         List<RankedSlot> current,
         List<RankedSlotCombination> results,
@@ -767,13 +1159,13 @@ public class SchedulingService : ISchedulingService
             return;
         }
 
-        if (index == perDurationCandidates.Count)
+        if (index == perBlockCandidates.Count)
         {
             AddCombination(results, signatures, current.Select(slot => slot.Slot).ToList(), current.Sum(slot => slot.PreferencePenalty));
             return;
         }
 
-        foreach (var candidate in perDurationCandidates[index])
+        foreach (var candidate in perBlockCandidates[index])
         {
             if (current.Any(existing => SlotsOverlap(existing.Slot, candidate.Slot)))
             {
@@ -781,7 +1173,7 @@ public class SchedulingService : ISchedulingService
             }
 
             current.Add(candidate);
-            BuildCombinationsRecursive(perDurationCandidates, index + 1, current, results, signatures);
+            BuildCombinationsRecursive(perBlockCandidates, index + 1, current, results, signatures);
             current.RemoveAt(current.Count - 1);
         }
     }
@@ -814,86 +1206,6 @@ public class SchedulingService : ISchedulingService
             Slots = normalizedSlots,
             PreferenceScore = preferenceScore
         });
-    }
-
-    private static List<RankedSlot> BuildRankedSlotsForDuration(int durationMinutes, IReadOnlyList<InstructorAvailability> availabilities)
-    {
-        var rankedSlots = new List<RankedSlot>();
-
-        foreach (var availability in availabilities
-                     .Where(availability => availability.IsAvailable)
-                     .OrderByDescending(availability => availability.IsPreferred)
-                     .ThenBy(availability => availability.DayOfWeek)
-                     .ThenBy(availability => availability.StartTime))
-        {
-            var latestStart = availability.EndTime.Add(-TimeSpan.FromMinutes(durationMinutes));
-            if (latestStart < availability.StartTime)
-            {
-                continue;
-            }
-
-            for (var start = availability.StartTime; start <= latestStart; start = start.Add(SuggestionStep))
-            {
-                var candidateSlot = new ScheduleSlot
-                {
-                    Day = availability.DayOfWeek,
-                    StartTime = start,
-                    EndTime = start.Add(TimeSpan.FromMinutes(durationMinutes))
-                };
-
-                var availabilityCheck = EvaluateAvailability(availabilities, candidateSlot);
-                if (!availabilityCheck.HasData || !availabilityCheck.IsWithinAvailability)
-                {
-                    continue;
-                }
-
-                rankedSlots.Add(new RankedSlot
-                {
-                    Slot = candidateSlot,
-                    PreferencePenalty = availabilityCheck.IsPreferred ? 0 : 1
-                });
-            }
-        }
-
-        return rankedSlots
-            .GroupBy(candidate => BuildSlotSignature(new[] { candidate.Slot }))
-            .Select(group => group.OrderBy(candidate => candidate.PreferencePenalty).First())
-            .OrderBy(candidate => candidate.PreferencePenalty)
-            .ThenBy(candidate => candidate.Slot.Day)
-            .ThenBy(candidate => candidate.Slot.StartTime)
-            .ToList();
-    }
-
-    private static IReadOnlyList<int> ResolveDesiredSlotDurations(CourseSection section, IReadOnlyList<ScheduleSlot> currentSlots)
-    {
-        if (currentSlots.Count > 0)
-        {
-            return currentSlots
-                .OrderBy(slot => slot.Day)
-                .ThenBy(slot => slot.StartTime)
-                .Select(slot => (int)(slot.EndTime - slot.StartTime).TotalMinutes)
-                .Where(duration => duration > 0)
-                .ToList();
-        }
-
-        var durations = new List<int>();
-
-        if (section.Course.TheoryHours > 0)
-        {
-            durations.Add(section.Course.TheoryHours * 60);
-        }
-
-        if (section.Course.LabHours > 0)
-        {
-            durations.Add(section.Course.LabHours * 60);
-        }
-
-        if (durations.Count == 0)
-        {
-            durations.Add(60);
-        }
-
-        return durations;
     }
 
     private static ScheduleParseResult ParseScheduleJson(string? scheduleJson)
@@ -980,69 +1292,6 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private static AvailabilityCheckResult EvaluateAvailability(IReadOnlyList<InstructorAvailability> availabilities, ScheduleSlot slot)
-    {
-        if (availabilities.Count == 0)
-        {
-            return new AvailabilityCheckResult
-            {
-                HasData = false,
-                IsWithinAvailability = true,
-                IsPreferred = false,
-                Message = "Öğretim üyesi müsaitlik tanımı bulunmuyor."
-            };
-        }
-
-        var sameDay = availabilities
-            .Where(availability => availability.DayOfWeek == slot.Day)
-            .ToList();
-
-        if (sameDay.Count == 0)
-        {
-            return new AvailabilityCheckResult
-            {
-                HasData = true,
-                IsWithinAvailability = false,
-                IsPreferred = false,
-                Message = "Öğretim üyesi bu gün için uygun değil."
-            };
-        }
-
-        if (sameDay.Any(availability => !availability.IsAvailable && SlotOverlapsAvailability(slot, availability)))
-        {
-            return new AvailabilityCheckResult
-            {
-                HasData = true,
-                IsWithinAvailability = false,
-                IsPreferred = false,
-                Message = "Öğretim üyesi bu saat aralığında uygun değil."
-            };
-        }
-
-        var coveringWindows = sameDay
-            .Where(availability => availability.IsAvailable && SlotContainedByAvailability(slot, availability))
-            .ToList();
-
-        if (coveringWindows.Count == 0)
-        {
-            return new AvailabilityCheckResult
-            {
-                HasData = true,
-                IsWithinAvailability = false,
-                IsPreferred = false,
-                Message = "Ders slotu öğretim üyesinin müsaitlik penceresi dışında kalıyor."
-            };
-        }
-
-        return new AvailabilityCheckResult
-        {
-            HasData = true,
-            IsWithinAvailability = true,
-            IsPreferred = coveringWindows.Any(window => window.IsPreferred),
-            Message = string.Empty
-        };
-    }
-
     private static List<ScheduleSlot> GetOverlapSlots(IReadOnlyList<ScheduleSlot> firstSchedule, IReadOnlyList<ScheduleSlot> secondSchedule)
     {
         var overlaps = new List<ScheduleSlot>();
@@ -1100,16 +1349,6 @@ public class SchedulingService : ISchedulingService
         && first.StartTime < second.EndTime
         && second.StartTime < first.EndTime;
 
-    private static bool SlotOverlapsAvailability(ScheduleSlot slot, InstructorAvailability availability) =>
-        slot.Day == availability.DayOfWeek
-        && slot.StartTime < availability.EndTime
-        && availability.StartTime < slot.EndTime;
-
-    private static bool SlotContainedByAvailability(ScheduleSlot slot, InstructorAvailability availability) =>
-        slot.Day == availability.DayOfWeek
-        && slot.StartTime >= availability.StartTime
-        && slot.EndTime <= availability.EndTime;
-
     private static decimal ResolveWeeklyHours(IReadOnlyList<ScheduleSlot> slots, Course course)
     {
         if (slots.Count > 0)
@@ -1140,18 +1379,6 @@ public class SchedulingService : ISchedulingService
             Day = slot.Day,
             StartTime = slot.StartTime,
             EndTime = slot.EndTime
-        };
-
-    private static InstructorAvailabilityDto MapAvailability(InstructorAvailability availability) =>
-        new()
-        {
-            Id = availability.Id,
-            InstructorId = availability.InstructorId,
-            DayOfWeek = availability.DayOfWeek,
-            StartTime = availability.StartTime,
-            EndTime = availability.EndTime,
-            IsAvailable = availability.IsAvailable,
-            IsPreferred = availability.IsPreferred
         };
 
     private static SchedulingConflictDto BuildConflict(
@@ -1221,29 +1448,6 @@ public class SchedulingService : ISchedulingService
             .ToDictionaryAsync(item => item.Id, item => item.FullName, cancellationToken);
     }
 
-    private async Task<Dictionary<int, List<InstructorAvailability>>> LoadAvailabilityMapAsync(List<int> instructorIds, CancellationToken cancellationToken)
-    {
-        if (instructorIds.Count == 0)
-        {
-            return new Dictionary<int, List<InstructorAvailability>>();
-        }
-
-        var availabilities = await _context.InstructorAvailabilities
-            .AsNoTracking()
-            .Where(availability => instructorIds.Contains(availability.InstructorId))
-            .ToListAsync(cancellationToken);
-
-        return availabilities
-            .GroupBy(availability => availability.InstructorId)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .OrderByDescending(availability => availability.IsPreferred)
-                    .ThenBy(availability => availability.DayOfWeek)
-                    .ThenBy(availability => availability.StartTime)
-                    .ToList());
-    }
-
     private async Task<string> GetInstructorNameAsync(Instructor instructor, CancellationToken cancellationToken)
     {
         var user = await _context.Users
@@ -1255,12 +1459,26 @@ public class SchedulingService : ISchedulingService
             : $"{instructor.Title} {user.FirstName} {user.LastName}".Trim();
     }
 
+    private static string GetDayName(int day)
+    {
+        return day switch
+        {
+            0 => "Pazartesi",
+            1 => "Salı",
+            2 => "Çarşamba",
+            3 => "Perşembe",
+            4 => "Cuma",
+            _ => "Bilinmeyen"
+        };
+    }
+
+    // ── Constants & inner types ──────────────────────────────────────────
+
     private static class ConflictTypes
     {
         public const string ClassroomConflict = "ClassroomConflict";
         public const string InstructorConflict = "InstructorConflict";
         public const string CapacityConflict = "CapacityConflict";
-        public const string InstructorAvailabilityConflict = "InstructorAvailabilityConflict";
         public const string WeeklyLoadConflict = "WeeklyLoadConflict";
         public const string InvalidScheduleJson = "InvalidScheduleJson";
     }
@@ -1292,7 +1510,6 @@ public class SchedulingService : ISchedulingService
         public int InstructorMaxWeeklyHours { get; init; }
         public List<ScheduleSlot> ScheduleSlots { get; init; } = new();
         public string? ParseError { get; init; }
-        public List<InstructorAvailability> AvailabilityRules { get; init; } = new();
         public List<string> Notes { get; init; } = new();
     }
 
@@ -1300,14 +1517,6 @@ public class SchedulingService : ISchedulingService
     {
         public List<ScheduleSlot> Slots { get; init; } = new();
         public string? ErrorMessage { get; init; }
-    }
-
-    private sealed class AvailabilityCheckResult
-    {
-        public bool HasData { get; init; }
-        public bool IsWithinAvailability { get; init; }
-        public bool IsPreferred { get; init; }
-        public string Message { get; init; } = string.Empty;
     }
 
     private sealed class RankedSlot
@@ -1328,278 +1537,5 @@ public class SchedulingService : ISchedulingService
         public DayOfWeek? DayOfWeek { get; init; }
         public TimeOnly StartTime { get; init; }
         public TimeOnly EndTime { get; init; }
-    }
-
-    public async Task<ScheduleValidationResultDto> ApplyAsync(ApplyScheduleRequestDto request, CancellationToken cancellationToken = default)
-    {
-        var validationRequest = new ScheduleValidationRequestDto
-        {
-            SectionId = request.SectionId,
-            ClassroomId = request.ClassroomId,
-            ScheduleSlots = request.ScheduleSlots,
-        };
-
-        var validation = await ValidateAsync(validationRequest, cancellationToken);
-
-        if (!validation.IsValid)
-        {
-            validation.Notes.Add("Çakışma tespit edildiğinden program uygulanmadı.");
-            return validation;
-        }
-
-        var section = await _context.CourseSections
-            .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, cancellationToken);
-
-        if (section == null)
-        {
-            return new ScheduleValidationResultDto
-            {
-                IsValid = false,
-                Notes = { "Section bulunamadı." }
-            };
-        }
-
-        var slots = request.ScheduleSlots.Select(s => new ScheduleSlot
-        {
-            Day = s.Day,
-            StartTime = s.StartTime,
-            EndTime = s.EndTime,
-        }).ToList();
-
-        section.ScheduleJson = JsonSerializer.Serialize(slots, ScheduleJsonOptions);
-
-        section.ClassroomId = request.ClassroomId;
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        validation.Notes.Add("Program başarıyla uygulanarak kaydedildi.");
-        return validation;
-    }
-
-    public async Task<BatchAutoScheduleResultDto> BatchAutoScheduleAsync(BatchAutoScheduleRequestDto request, CancellationToken cancellationToken = default)
-    {
-        var result = new BatchAutoScheduleResultDto();
-
-        var resolvedTerm = await ResolveTermAsync(request.TermId, cancellationToken);
-        if (resolvedTerm == null)
-        {
-            result.Notes.Add(request.TermId.HasValue
-                ? "Belirtilen akademik dönem bulunamadı."
-                : "Aktif akademik dönem bulunamadı.");
-            return result;
-        }
-
-        result.Notes.Add($"Donem: {resolvedTerm.Name}");
-
-        var sectionsQuery = _context.CourseSections
-            .Include(cs => cs.Course)
-            .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == resolvedTerm.Id && cs.IsActive && cs.InstructorId != null);
-
-        if (request.DepartmentId.HasValue)
-        {
-            sectionsQuery = sectionsQuery.Where(cs => cs.Course.DepartmentId == request.DepartmentId.Value);
-        }
-
-        var sections = await sectionsQuery.ToListAsync(cancellationToken);
-
-        var unscheduled = sections
-            .Where(cs => string.IsNullOrWhiteSpace(cs.ScheduleJson) || cs.ScheduleJson == "[]")
-            .OrderByDescending(cs => cs.EnrolledCount)
-            .ToList();
-
-        result.TotalSections = unscheduled.Count;
-
-        if (unscheduled.Count == 0)
-        {
-            result.Notes.Add("Programsız section bulunamadı, tüm section'lar zaten programlı.");
-            return result;
-        }
-
-        result.Notes.Add($"{unscheduled.Count} programsiz section bulundu.");
-
-        foreach (var section in unscheduled)
-        {
-            var item = new BatchAutoScheduleItemDto
-            {
-                SectionId = section.Id,
-                CourseCode = section.Course.Code,
-                CourseName = section.Course.Name,
-            };
-
-            var suggestRequest = new ScheduleSuggestionRequestDto
-            {
-                SectionId = section.Id,
-                InstructorId = section.InstructorId,
-            };
-
-            var suggestion = await SuggestAsync(suggestRequest, cancellationToken);
-
-            if (!suggestion.IsFeasible || suggestion.SuggestedSlots.Count == 0)
-            {
-                item.Success = false;
-                item.FailureReason = suggestion.Notes.Count > 0
-                    ? string.Join(" ", suggestion.Notes)
-                    : "Uygun slot kombinasyonu bulunamadı.";
-                result.FailedCount++;
-                result.Results.Add(item);
-                continue;
-            }
-
-            var applyRequest = new ApplyScheduleRequestDto
-            {
-                SectionId = section.Id,
-                ClassroomId = suggestion.SuggestedClassroomId,
-                ScheduleSlots = suggestion.SuggestedSlots,
-            };
-
-            var applyResult = await ApplyAsync(applyRequest, cancellationToken);
-
-            if (applyResult.IsValid)
-            {
-                item.Success = true;
-                item.ClassroomName = suggestion.SuggestedClassroomName;
-                item.Slots = suggestion.SuggestedSlots;
-                result.ScheduledCount++;
-            }
-            else
-            {
-                item.Success = false;
-                item.FailureReason = applyResult.Conflicts.Count > 0
-                    ? applyResult.Conflicts[0].Message
-                    : "Uygulama sırasında çakışma tespit edildi.";
-                result.FailedCount++;
-            }
-
-            result.Results.Add(item);
-        }
-
-        return result;
-    }
-    public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(int? termId = null, CancellationToken cancellationToken = default)
-    {
-        var result = new ClassroomDashboardDto();
-        var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
-        if (resolvedTerm == null)
-        {
-            return result;
-        }
-
-        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
-        var evaluation = EvaluateExistingConflicts(snapshot);
-        result.ConflictsCount = evaluation.Conflicts?.Count ?? 0;
-
-        var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(cancellationToken);
-        result.TotalClassrooms = classrooms.Count;
-
-        // Her derslik için o donemdeki dersleri haritala
-        var classroomSchedules = snapshot.Sections
-            .Where(s => s.ClassroomId.HasValue)
-            .GroupBy(s => s.ClassroomId!.Value)
-            .ToDictionary(
-                g => g.Key,
-                g => g.SelectMany(s => s.ScheduleSlots.Select(slot => new ClassroomScheduleSlotDto
-                {
-                    Day = (int)slot.Day,
-                    StartHour = slot.StartTime.Hour,
-                    EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
-                    CourseCode = s.CourseCode,
-                    CourseName = s.CourseName,
-                    InstructorName = s.InstructorName
-                })).ToList()
-            );
-
-        result.Classrooms = classrooms.Select(c => new ClassroomInfoDto
-        {
-            Id = c.Id,
-            Name = c.Name,
-            Capacity = c.Capacity,
-            Type = c.Type.ToString(),
-            Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
-        }).OrderBy(c => c.Name).ToList();
-
-        var heatmapMap = new Dictionary<(int day, int hour), int>();
-        for (int day = 0; day < 5; day++)
-        {
-            for (int hour = 8; hour <= 17; hour++)
-            {
-                heatmapMap[(day, hour)] = 0;
-            }
-        }
-
-        var occupationMap = new Dictionary<(int day, int hour), List<ClassroomOccupationDto>>();
-        foreach (var section in snapshot.Sections)
-        {
-            if (section.ClassroomId.HasValue)
-            {
-                foreach (var slot in section.ScheduleSlots)
-                {
-                    int dayIndex = (int)slot.Day - 1;
-                    if (dayIndex >= 0 && dayIndex <= 4)
-                    {
-                        int startHour = slot.StartTime.Hour;
-                        int endHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1;
-                        
-                        for (int h = startHour; h <= endHour && h <= 17; h++)
-                        {
-                            if (h >= 8) 
-                            {
-                                var key = (dayIndex, h);
-                                if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
-                                heatmapMap[key]++;
-                                
-                                if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
-                                occupationMap[key].Add(new ClassroomOccupationDto
-                                {
-                                    ClassroomName = section.ClassroomName,
-                                    CourseCode = section.CourseCode,
-                                    CourseName = section.CourseName,
-                                    EnrolledCount = section.EnrolledCount,
-                                    Capacity = section.ClassroomCapacity
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        int totalSlots = result.TotalClassrooms * 5 * 10; 
-        int usedSlots = heatmapMap.Values.Sum();
-        result.EmptySlots = Math.Max(0, totalSlots - usedSlots);
-        result.OccupancyRate = totalSlots > 0 ? Math.Round((double)usedSlots / totalSlots * 100) : 0;
-
-        foreach (var kvp in heatmapMap)
-        {
-            var day = kvp.Key.day;
-            var hour = kvp.Key.hour;
-            var used = kvp.Value;
-            var total = result.TotalClassrooms;
-            
-            result.Heatmap.Add(new ClassroomHeatmapCellDto
-            {
-                Day = day,
-                Hour = hour,
-                UsedClassrooms = used,
-                Occupancy = total > 0 ? Math.Min(1, (double)used / total) : 0,
-                Details = $"{GetDayName(day)} {hour:D2}:00 — {used}/{total} derslik dolu",
-                Occupations = occupationMap.TryGetValue((day, hour), out var occList) ? occList : new()
-            });
-        }
-
-        return result;
-    }
-
-    private string GetDayName(int day)
-    {
-        return day switch
-        {
-            0 => "Pazartesi",
-            1 => "Salı",
-            2 => "Çarşamba",
-            3 => "Perşembe",
-            4 => "Cuma",
-            _ => "Bilinmeyen"
-        };
     }
 }
