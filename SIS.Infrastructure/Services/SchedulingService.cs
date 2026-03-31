@@ -513,7 +513,7 @@ public class SchedulingService : ISchedulingService
                 score += 500;
 
             // 3. Large course (amphitheater required)
-            if (section.Capacity >= 100)
+            if (section.Capacity >= hardConfig.AmphiThreshold)
                 score += 400;
 
             // 4. Lab course (only lab classrooms, limited)
@@ -1519,6 +1519,7 @@ public class SchedulingService : ISchedulingService
     {
         var conflicts = new List<SchedulingConflictDto>();
         var notes = new List<string>();
+        var hardConfig = await LoadHardConstraintConfigAsync(ct);
 
         foreach (var section in snapshot.Sections)
         {
@@ -1546,9 +1547,8 @@ public class SchedulingService : ISchedulingService
             }
 
             // H4+: Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
-            // AmphiThreshold SystemConfig'den okunuyor (varsayılan 100)
             if (section.ClassroomId.HasValue
-                && section.Capacity >= 100
+                && section.Capacity >= hardConfig.AmphiThreshold
                 && section.ClassroomType != ClassroomType.Amphitheater)
             {
                 conflicts.Add(BuildConflict(
@@ -1789,7 +1789,6 @@ public class SchedulingService : ISchedulingService
         }
 
         // ── H13: Lunch Break Protection ─────────────────────────────────
-        var hardConfig = await LoadHardConstraintConfigAsync(ct);
 
         if (hardConfig.LunchBreakIsHard)
         {
@@ -2125,9 +2124,8 @@ public class SchedulingService : ISchedulingService
         }
 
         // H4+: Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
-        // AmphiThreshold SystemConfig'den okunuyor (varsayılan 100)
         if (candidate.ClassroomId.HasValue
-            && candidate.Capacity >= 100
+            && candidate.Capacity >= hardConfig.AmphiThreshold
             && candidate.ClassroomType != ClassroomType.Amphitheater)
         {
             conflicts.Add(BuildConflict(
@@ -3228,8 +3226,9 @@ public class SchedulingService : ISchedulingService
             ? let : new TimeOnly(12, 20);
         var maxConsecutive = GetInt(config, "Schedule.MaxConsecutiveHours", 4);
         var breakDuration = GetInt(config, "Schedule.BreakDurationMinutes", 5);
+        var amphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100);
 
-        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration);
+        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration, amphiThreshold);
     }
 
     private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
@@ -3276,7 +3275,7 @@ public class SchedulingService : ISchedulingService
 
     private record HardConstraintConfig(
         bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
-        int MaxConsecutiveHours, int BreakDurationMinutes);
+        int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold);
 
 
     private static class ConflictTypes
