@@ -23,7 +23,6 @@ export interface InstructorSection {
   availableSeats: number;
   classroomName: string;
   schedule: string;
-  scheduleJson: string;
   isActive: boolean;
   isFinalized: boolean;
   activeStudents: number;

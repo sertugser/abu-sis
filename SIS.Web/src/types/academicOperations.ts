@@ -114,7 +114,6 @@ export interface DepartmentSectionClassList {
   instructorName: string;
   classroomName: string;
   scheduleSummary: string;
-  scheduleJson: string;
   capacity: number;
   enrolledCount: number;
   activeStudentCount: number;

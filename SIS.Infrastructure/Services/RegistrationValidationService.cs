@@ -316,7 +316,7 @@ public class RegistrationValidationService : IRegistrationValidationService
 
         var schedulesBySectionId = sectionSchedules
             .GroupBy(ss => ss.CourseSectionId)
-            .ToDictionary(g => g.Key, g => ScheduleHelper.ToScheduleSlots(g));
+            .ToDictionary(g => g.Key, g => ScheduleHelper.ToTimeBlocks(g));
 
         for (int i = 0; i < sections.Count; i++)
         {

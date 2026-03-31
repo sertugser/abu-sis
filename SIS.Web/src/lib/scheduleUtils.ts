@@ -6,78 +6,52 @@ const SLOT_HEIGHT_PER_MINUTE = 2; // px per minute
 
 export { GRID_START_HOUR, GRID_END_HOUR, SLOT_HEIGHT_PER_MINUTE };
 
-export function parseScheduleJson(json: string | null | undefined): ScheduleSlot[] {
-  if (!json || json === '[]') {
+/**
+ * Turkish day name → DayOfWeek number mapping.
+ * Handles both full names (Pazartesi) and short names (Pzt).
+ */
+const TURKISH_DAY_MAP: Record<string, number> = {
+  pazar: 0,
+  paz: 0,
+  pazartesi: 1,
+  pzt: 1,
+  sali: 2,
+  sal: 2,
+  carsamba: 3,
+  car: 3,
+  persembe: 4,
+  per: 4,
+  cuma: 5,
+  cum: 5,
+  cumartesi: 6,
+  cmt: 6,
+};
+
+/**
+ * Parse a backend scheduleSummary string into structured ScheduleSlot[].
+ * Expected format: "Pazartesi 09:00-09:50, Carsamba 13:00-16:00"
+ */
+export function parseScheduleSummary(summary: string | null | undefined): ScheduleSlot[] {
+  if (!summary || !summary.trim()) {
     return [];
   }
 
-  try {
-    const parsed = JSON.parse(json);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
+  const parts = summary.split(',').map(p => p.trim()).filter(Boolean);
+  const slots: ScheduleSlot[] = [];
 
-    return parsed
-      .map((item: unknown) => {
-        if (!item || typeof item !== 'object') {
-          return null;
-        }
+  for (const part of parts) {
+    // Match: "DayName HH:mm-HH:mm"
+    const match = part.match(/^(\S+)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    if (!match) continue;
 
-        const normalizedItem = normalizeObjectKeys(item as Record<string, unknown>);
-        const day = normalizeDayValue(normalizedItem.day ?? normalizedItem.dayOfWeek);
-        const startTime = normalizeTime(normalizedItem.startTime);
-        const endTime = normalizeTime(normalizedItem.endTime);
+    const dayStr = match[1].toLowerCase();
+    const day = TURKISH_DAY_MAP[dayStr];
+    if (day === undefined) continue;
 
-        if (day === null || !startTime || !endTime) {
-          return null;
-        }
-
-        return { day, startTime, endTime } as ScheduleSlot;
-      })
-      .filter((slot): slot is ScheduleSlot => slot !== null);
-  } catch {
-    return [];
-  }
-}
-
-function normalizeObjectKeys(item: Record<string, unknown>) {
-  return Object.entries(item).reduce<Record<string, unknown>>((normalized, [key, value]) => {
-    normalized[key.charAt(0).toLowerCase() + key.slice(1)] = value;
-    return normalized;
-  }, {});
-}
-
-function normalizeDayValue(value: unknown): number | null {
-  if (typeof value === 'number' && value >= 0 && value <= 6) {
-    return value;
+    slots.push({ day, startTime: match[2], endTime: match[3] });
   }
 
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  const dayMap: Record<string, number> = {
-    sunday: 0,
-    monday: 1,
-    tuesday: 2,
-    wednesday: 3,
-    thursday: 4,
-    friday: 5,
-    saturday: 6,
-  };
-
-  return dayMap[normalized] ?? null;
-}
-
-function normalizeTime(value: unknown): string | null {
-  if (typeof value !== 'string' || !value) {
-    return null;
-  }
-
-  // Accept "HH:mm", "HH:mm:ss", etc.
-  const match = value.match(/^(\d{2}:\d{2})/);
-  return match ? match[1] : null;
+  return slots;
 }
 
 /**

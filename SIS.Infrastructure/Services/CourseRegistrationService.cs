@@ -973,7 +973,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 var scheduleSlots = regItems
                     .Select(r => new {
                         Item = r,
-                        Slots = ScheduleHelper.ToScheduleSlots(
+                        Slots = ScheduleHelper.ToTimeBlocks(
                             pendingScheduleMap.GetValueOrDefault(r.CourseSectionId)
                             ?? new List<Domain.Entities.SectionSchedule>())
                     })

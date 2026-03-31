@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { getSchedulingErrorMessage } from '../api/instructorScheduling.api';
 import WeeklyTimetableGrid, { type TimetableEntry } from '../components/scheduling/WeeklyTimetableGrid';
 import { useInstructorSections } from '../hooks/useInstructorSections';
-import { parseScheduleJson } from '../lib/scheduleUtils';
+import { parseScheduleSummary } from '../lib/scheduleUtils';
 
 export default function InstructorSchedulingPage() {
   const navigate = useNavigate();
@@ -98,13 +98,13 @@ function buildTimetableEntries(
     courseCode: string;
     courseName: string;
     classroomName: string;
-    scheduleJson?: string;
+    schedule?: string;
   }>,
 ): TimetableEntry[] {
   const entries: TimetableEntry[] = [];
 
   for (const section of sections) {
-    const slots = parseScheduleJson(section.scheduleJson);
+    const slots = parseScheduleSummary(section.schedule);
     if (slots.length === 0) {
       continue;
     }

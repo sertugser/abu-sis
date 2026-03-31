@@ -593,10 +593,6 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
-                    b.Property<string>("ScheduleJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<int>("SectionNumber")
                         .HasColumnType("integer");
 
@@ -1039,9 +1035,6 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Note")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ScheduleJson")
                         .HasColumnType("text");
 
                     b.Property<int>("SectionId")
@@ -1856,7 +1849,7 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
-                        .WithMany()
+                        .WithMany("SectionSchedules")
                         .HasForeignKey("CourseSectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1997,6 +1990,8 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.CourseSection", b =>
                 {
                     b.Navigation("Registrations");
+
+                    b.Navigation("SectionSchedules");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Curriculum", b =>

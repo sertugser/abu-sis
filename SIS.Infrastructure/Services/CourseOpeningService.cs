@@ -371,7 +371,6 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                 EnrolledCount = 0,
                 IsActive = true,
                 IsFinalized = false,
-                ScheduleJson = "[]",
             };
             _context.CourseSections.Add(section);
             created.Add(section);

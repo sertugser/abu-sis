@@ -8,7 +8,6 @@ public class SchedulingAuditLog
     public string Action { get; set; } = string.Empty; // "Assign", "Unassign", "AutoSchedule"
     public string UserId { get; set; } = string.Empty;
     public int? ClassroomId { get; set; }
-    public string? ScheduleJson { get; set; }
     public int? InstructorId { get; set; }
     public string? Note { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

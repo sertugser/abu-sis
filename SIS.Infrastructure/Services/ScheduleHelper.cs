@@ -1,23 +1,33 @@
 using SIS.Domain.Entities;
-using SIS.Domain.ValueObjects;
 
 namespace SIS.Infrastructure.Services;
 
 /// <summary>
-/// Converts SectionSchedule records (from database) to ScheduleSlot list
-/// for backward compatibility with existing conflict-check logic.
-/// Used during the migration from ScheduleJson to SectionSchedule reads.
+/// Lightweight time-block class used internally for schedule overlap checks
+/// and slot combination logic. Replaces the former ScheduleSlot value object.
+/// </summary>
+internal sealed class TimeBlock
+{
+    public DayOfWeek Day { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public int? ClassroomId { get; set; }
+}
+
+/// <summary>
+/// Converts SectionSchedule records (from database) to TimeBlock list
+/// and formats schedule summaries for display.
 /// </summary>
 public static class ScheduleHelper
 {
     /// <summary>
-    /// Converts SectionSchedule records to ScheduleSlot list.
+    /// Converts SectionSchedule records to internal TimeBlock list.
     /// The SectionSchedule records must have their TimeSlot navigation property loaded.
     /// </summary>
-    public static List<ScheduleSlot> ToScheduleSlots(IEnumerable<SectionSchedule> schedules)
+    internal static List<TimeBlock> ToTimeBlocks(IEnumerable<SectionSchedule> schedules)
     {
         return schedules
-            .Select(ss => new ScheduleSlot
+            .Select(ss => new TimeBlock
             {
                 Day = ss.TimeSlot.DayOfWeek,
                 StartTime = ss.TimeSlot.StartTime,

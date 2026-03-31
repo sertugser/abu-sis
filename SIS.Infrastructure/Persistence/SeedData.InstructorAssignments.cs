@@ -74,8 +74,7 @@ public static partial class SeedData
                     EnrolledCount = 0,
                     ClassroomId = classroom?.Id,
                     IsActive = true,
-                    IsFinalized = false,
-                    ScheduleJson = "[]"
+                    IsFinalized = false
                 });
             }
 

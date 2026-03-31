@@ -181,7 +181,6 @@ public class AdvisorApprovalServiceTests : IDisposable
             Capacity = capacity,
             EnrolledCount = enrolledCount,
             IsActive = true,
-            ScheduleJson = "[]",
             InstructorId = AdvisorInstructorId
         };
         _context.CourseSections.Add(section);

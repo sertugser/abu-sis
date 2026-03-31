@@ -1,6 +1,5 @@
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 
 namespace SIS.Infrastructure.Services;
 
@@ -45,7 +44,7 @@ internal static class RegistrationRulePolicy
         return isFailedCourse || isDdDcImprovement || isLowerOrSameSemester || isNonDepartmental;
     }
 
-    internal static ConflictOverlapType CheckScheduleOverlap(List<ScheduleSlot> schedule1, List<ScheduleSlot> schedule2)
+    internal static ConflictOverlapType CheckScheduleOverlap(List<TimeBlock> schedule1, List<TimeBlock> schedule2)
     {
         bool hasPartialOverlap = false;
         bool hasFullOverlap = false;

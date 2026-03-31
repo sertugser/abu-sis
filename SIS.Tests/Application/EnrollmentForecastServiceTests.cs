@@ -445,7 +445,6 @@ public class EnrollmentForecastServiceTests
             EnrolledCount = enrolledCount,
             ClassroomId = classroomId,
             IsActive = isActive,
-            ScheduleJson = "[]"
         };
 
         context.CourseSections.Add(section);

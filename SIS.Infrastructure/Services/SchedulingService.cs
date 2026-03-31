@@ -1,22 +1,14 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
 
 public class SchedulingService : ISchedulingService
 {
-    private static readonly JsonSerializerOptions ScheduleJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private readonly AppDbContext _context;
 
     public SchedulingService(AppDbContext context)
@@ -190,9 +182,9 @@ public class SchedulingService : ISchedulingService
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
-        var currentParse = ParseScheduleJson(section.ScheduleJson);
+        var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
         var requiredHours = ResolveTotalRequiredHours(section);
-        var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentParse.Slots, timeSlots);
+        var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentBlocks, timeSlots);
 
         if (slotCombinations.Count == 0)
         {
@@ -247,7 +239,7 @@ public class SchedulingService : ISchedulingService
             return response;
         }
 
-        var currentWeeklyHours = ResolveWeeklyHours(currentParse.Slots, section.Course);
+        var currentWeeklyHours = ResolveWeeklyHours(currentBlocks, section.Course);
 
         foreach (var slotCombination in slotCombinations)
         {
@@ -267,11 +259,11 @@ public class SchedulingService : ISchedulingService
                     continue;
                 }
 
-                var candidateWeeklyHours = ResolveWeeklyHours(candidate.ScheduleSlots, section.Course);
+                var candidateWeeklyHours = ResolveWeeklyHours(candidate.TimeBlocks, section.Course);
                 response.IsFeasible = true;
                 response.SuggestedClassroomId = classroom.Id;
                 response.SuggestedClassroomName = classroom.Name;
-                response.SuggestedSlots = candidate.ScheduleSlots.Select(MapScheduleSlot).ToList();
+                response.SuggestedSlots = candidate.TimeBlocks.Select(MapTimeBlock).ToList();
                 response.EstimatedWeeklyHoursImpact = candidateWeeklyHours - currentWeeklyHours;
                 response.Notes.AddRange(candidate.Notes);
                 response.Notes.AddRange(softNotes);
@@ -314,18 +306,16 @@ public class SchedulingService : ISchedulingService
             };
         }
 
-        var slots = request.ScheduleSlots.Select(s => new ScheduleSlot
+        var slots = request.ScheduleSlots.Select(s => new TimeBlock
         {
             Day = s.Day,
             StartTime = s.StartTime,
             EndTime = s.EndTime,
         }).ToList();
 
-        // Keep existing ScheduleJson behavior
-        section.ScheduleJson = JsonSerializer.Serialize(slots, ScheduleJsonOptions);
         section.ClassroomId = request.ClassroomId;
 
-        // Also write SectionSchedule records for the new TimeSlot-based system
+        // Write SectionSchedule records (the authoritative schedule store)
         await WriteSectionScheduleRecordsAsync(section.Id, section.TermId, request.ClassroomId, slots, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -392,7 +382,6 @@ public class SchedulingService : ISchedulingService
         {
             foreach (var sec in allSections.Where(s => !s.IsScheduleLocked))
             {
-                sec.ScheduleJson = "[]";
                 sec.ClassroomId = null;
 
                 // Clear SectionSchedule records
@@ -406,11 +395,21 @@ public class SchedulingService : ISchedulingService
             result.Notes.Add("ForceRegenerate: Kilit disi tum section'larin programi temizlendi.");
         }
 
+        // Determine which sections already have SectionSchedule records
+        var allSectionIds = allSections.Select(s => s.Id).ToList();
+        var scheduledSectionIds = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => allSectionIds.Contains(ss.CourseSectionId))
+            .Select(ss => ss.CourseSectionId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var scheduledSet = scheduledSectionIds.ToHashSet();
+
         // Separate locked and target sections
         var lockedSections = allSections.Where(s => s.IsScheduleLocked).ToList();
         var targetSections = allSections
             .Where(s => !s.IsScheduleLocked
-                && (string.IsNullOrWhiteSpace(s.ScheduleJson) || s.ScheduleJson == "[]"))
+                && (!s.ClassroomId.HasValue || !scheduledSet.Contains(s.Id)))
             .ToList();
 
         result.TotalSections = targetSections.Count;
@@ -571,8 +570,8 @@ public class SchedulingService : ISchedulingService
             }
 
             var requiredHours = ResolveTotalRequiredHours(section);
-            var currentParse = ParseScheduleJson(section.ScheduleJson);
-            var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentParse.Slots, timeSlots);
+            var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
+            var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentBlocks, timeSlots);
 
             // Find the best (slot, classroom) pair
             var bestPair = FindBestPair(
@@ -589,7 +588,7 @@ public class SchedulingService : ISchedulingService
 
                 item.Success = true;
                 item.ClassroomName = bestPair.Classroom.Name;
-                item.Slots = bestPair.Slots.Select(MapScheduleSlot).ToList();
+                item.Slots = bestPair.Slots.Select(MapTimeBlock).ToList();
                 result.ScheduledCount++;
             }
             else
@@ -750,14 +749,14 @@ public class SchedulingService : ISchedulingService
         }
 
         // S2: Instructor daily load imbalance
-        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
         {
             var existingSlots = snapshot.Sections
                 .Where(s => s.InstructorId == candidate.InstructorId)
-                .SelectMany(s => s.ScheduleSlots)
+                .SelectMany(s => s.TimeBlocks)
                 .ToList();
 
-            var allSlots = existingSlots.Concat(candidate.ScheduleSlots);
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
 
             foreach (var dayGroup in allSlots.GroupBy(s => s.Day))
             {
@@ -768,13 +767,13 @@ public class SchedulingService : ISchedulingService
         }
 
         // S3: Prime-time congestion
-        if (softConfig.S3Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S3Enabled && candidate.TimeBlocks.Count > 0)
         {
             var existingSlotKeys = snapshot.Sections
-                .SelectMany(s => s.ScheduleSlots.Select(slot => (slot.Day, slot.StartTime)))
+                .SelectMany(s => s.TimeBlocks.Select(slot => (slot.Day, slot.StartTime)))
                 .ToList();
 
-            foreach (var cSlot in candidate.ScheduleSlots)
+            foreach (var cSlot in candidate.TimeBlocks)
             {
                 var key = (cSlot.Day, cSlot.StartTime);
                 var count = existingSlotKeys.Count(k => k == key) + 1;
@@ -784,7 +783,7 @@ public class SchedulingService : ISchedulingService
         }
 
         // S4: Co-enrollment overlap penalty (uses preloaded pairs from snapshot)
-        if (softConfig.S4Enabled && candidate.ScheduleSlots.Count > 0 && snapshot.CoEnrollmentPairs.Count > 0)
+        if (softConfig.S4Enabled && candidate.TimeBlocks.Count > 0 && snapshot.CoEnrollmentPairs.Count > 0)
         {
             var relevantPairs = snapshot.CoEnrollmentPairs
                 .Where(p => p.CourseId1 == candidate.CourseId || p.CourseId2 == candidate.CourseId);
@@ -793,20 +792,20 @@ public class SchedulingService : ISchedulingService
             {
                 var pairedCourseId = pair.CourseId1 == candidate.CourseId ? pair.CourseId2 : pair.CourseId1;
                 var pairedSections = snapshot.Sections
-                    .Where(s => s.CourseId == pairedCourseId && s.ScheduleSlots.Count > 0);
+                    .Where(s => s.CourseId == pairedCourseId && s.TimeBlocks.Count > 0);
 
                 foreach (var pairedSec in pairedSections)
                 {
-                    if (GetOverlapSlots(candidate.ScheduleSlots, pairedSec.ScheduleSlots).Count > 0)
+                    if (GetOverlapSlots(candidate.TimeBlocks, pairedSec.TimeBlocks).Count > 0)
                         penalty += pair.StudentCount * 0.5;
                 }
             }
         }
 
         // S5: Lunch break preference penalty
-        if (softConfig.S5Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S5Enabled && candidate.TimeBlocks.Count > 0)
         {
-            foreach (var slot in candidate.ScheduleSlots)
+            foreach (var slot in candidate.TimeBlocks)
             {
                 // Use default lunch times for penalty calculation
                 var lunchStart = new TimeOnly(11, 40);
@@ -817,7 +816,7 @@ public class SchedulingService : ISchedulingService
         }
 
         // S7: Student gap penalty
-        if (softConfig.S7Enabled && candidate.ScheduleSlots.Count > 0
+        if (softConfig.S7Enabled && candidate.TimeBlocks.Count > 0
             && candidate.DepartmentId.HasValue && candidate.SuggestedSemester.HasValue)
         {
             var candidateYear = (candidate.SuggestedSemester.Value - 1) / 2;
@@ -825,9 +824,9 @@ public class SchedulingService : ISchedulingService
                 .Where(s => s.DepartmentId == candidate.DepartmentId
                     && s.SuggestedSemester.HasValue
                     && (s.SuggestedSemester.Value - 1) / 2 == candidateYear
-                    && s.ScheduleSlots.Count > 0)
-                .SelectMany(s => s.ScheduleSlots)
-                .Concat(candidate.ScheduleSlots)
+                    && s.TimeBlocks.Count > 0)
+                .SelectMany(s => s.TimeBlocks)
+                .Concat(candidate.TimeBlocks)
                 .GroupBy(s => s.Day);
 
             foreach (var dayGroup in sameDeptYearSlots)
@@ -843,14 +842,14 @@ public class SchedulingService : ISchedulingService
         }
 
         // S8: Instructor day spread penalty
-        if (softConfig.S8Enabled && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S8Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
         {
             var existingSlots = snapshot.Sections
                 .Where(s => s.InstructorId == candidate.InstructorId)
-                .SelectMany(s => s.ScheduleSlots)
+                .SelectMany(s => s.TimeBlocks)
                 .ToList();
 
-            var allSlots = existingSlots.Concat(candidate.ScheduleSlots).ToList();
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks).ToList();
             var usedDays = allSlots.Select(s => s.Day).Distinct().Count();
             var totalHours = allSlots.Sum(s => (s.EndTime - s.StartTime).TotalHours);
             var minPossibleDays = Math.Max(1, (int)Math.Ceiling(totalHours / (double)softConfig.S2MaxDailyHours));
@@ -860,9 +859,9 @@ public class SchedulingService : ISchedulingService
         }
 
         // S9: Early morning / late evening penalty
-        if (softConfig.S9Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S9Enabled && candidate.TimeBlocks.Count > 0)
         {
-            foreach (var slot in candidate.ScheduleSlots)
+            foreach (var slot in candidate.TimeBlocks)
             {
                 if (slot.StartTime <= softConfig.S9MorningStart)
                     penalty += 6;
@@ -872,10 +871,10 @@ public class SchedulingService : ISchedulingService
         }
 
         // S12: Weekday balance penalty
-        if (softConfig.S12Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S12Enabled && candidate.TimeBlocks.Count > 0)
         {
-            var existingSlots = snapshot.Sections.SelectMany(s => s.ScheduleSlots).ToList();
-            var allSlots = existingSlots.Concat(candidate.ScheduleSlots);
+            var existingSlots = snapshot.Sections.SelectMany(s => s.TimeBlocks).ToList();
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
 
             var slotsPerDay = allSlots
                 .GroupBy(s => s.Day)
@@ -902,18 +901,10 @@ public class SchedulingService : ISchedulingService
         BatchAssignment assignment,
         CancellationToken cancellationToken)
     {
-        var slots = assignment.Slots.Select(s => new ScheduleSlot
-        {
-            Day = s.Day,
-            StartTime = s.StartTime,
-            EndTime = s.EndTime,
-        }).ToList();
-
-        section.ScheduleJson = JsonSerializer.Serialize(slots, ScheduleJsonOptions);
         section.ClassroomId = assignment.Classroom.Id;
 
         await WriteSectionScheduleRecordsAsync(
-            section.Id, section.TermId, assignment.Classroom.Id, slots, cancellationToken);
+            section.Id, section.TermId, assignment.Classroom.Id, assignment.Slots, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
     }
 
@@ -921,7 +912,6 @@ public class SchedulingService : ISchedulingService
         CourseSection section,
         CancellationToken cancellationToken)
     {
-        section.ScheduleJson = "[]";
         section.ClassroomId = null;
 
         var existing = await _context.SectionSchedules
@@ -964,7 +954,7 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
             SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
-            ScheduleSlots = assignment.Slots,
+            TimeBlocks = assignment.Slots,
             Notes = new List<string>()
         });
     }
@@ -1083,7 +1073,7 @@ public class SchedulingService : ISchedulingService
 
                 var victimRequiredHours = ResolveTotalRequiredHours(victimSection);
                 var victimSlotCombinations = BuildTimeSlotCombinations(
-                    victimRequiredHours, new List<ScheduleSlot>(), timeSlots);
+                    victimRequiredHours, new List<TimeBlock>(), timeSlots);
 
                 var victimNewPair = FindBestPair(
                     victimSection, victimClassrooms, victimSlotCombinations,
@@ -1103,7 +1093,7 @@ public class SchedulingService : ISchedulingService
                         Attempts = attempts,
                         SoftPenaltyDelta = penaltyDelta,
                         AssignedClassroomName = bestPair.Classroom.Name,
-                        AssignedSlots = bestPair.Slots.Select(MapScheduleSlot).ToList()
+                        AssignedSlots = bestPair.Slots.Select(MapTimeBlock).ToList()
                     };
                 }
                 else
@@ -1138,7 +1128,7 @@ public class SchedulingService : ISchedulingService
 
     private sealed class BatchAssignment
     {
-        public List<ScheduleSlot> Slots { get; init; } = new();
+        public List<TimeBlock> Slots { get; init; } = new();
         public Classroom Classroom { get; init; } = null!;
         public double SoftPenalty { get; init; }
         public List<string> SoftNotes { get; init; } = new();
@@ -1176,7 +1166,7 @@ public class SchedulingService : ISchedulingService
             .GroupBy(s => s.ClassroomId!.Value)
             .ToDictionary(
                 g => g.Key,
-                g => g.SelectMany(s => s.ScheduleSlots.Select(slot => new ClassroomScheduleSlotDto
+                g => g.SelectMany(s => s.TimeBlocks.Select(slot => new ClassroomScheduleSlotDto
                 {
                     Day = (int)slot.Day,
                     StartHour = slot.StartTime.Hour,
@@ -1210,7 +1200,7 @@ public class SchedulingService : ISchedulingService
         {
             if (section.ClassroomId.HasValue)
             {
-                foreach (var slot in section.ScheduleSlots)
+                foreach (var slot in section.TimeBlocks)
                 {
                     int dayIndex = (int)slot.Day - 1;
                     if (dayIndex >= 0 && dayIndex <= 4)
@@ -1277,6 +1267,7 @@ public class SchedulingService : ISchedulingService
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
+            .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
             .Where(cs => cs.TermId == termId && cs.IsActive)
             .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value);
 
@@ -1366,7 +1357,7 @@ public class SchedulingService : ISchedulingService
         IReadOnlyDictionary<int, string> instructorNameMap,
         IReadOnlyDictionary<int, int> semesterMap)
     {
-        var parseResult = ParseScheduleJson(section.ScheduleJson);
+        var timeBlocks = ScheduleHelper.ToTimeBlocks(section.SectionSchedules);
         var instructorId = section.InstructorId;
 
         return new SectionSnapshot
@@ -1390,8 +1381,7 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
             SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
-            ScheduleSlots = parseResult.Slots,
-            ParseError = parseResult.ErrorMessage,
+            TimeBlocks = timeBlocks,
             Notes = new List<string>()
         };
     }
@@ -1447,13 +1437,13 @@ public class SchedulingService : ISchedulingService
             notes.Add("Section için derslik atanmamış.");
         }
 
-        var scheduleSlots = new List<ScheduleSlot>();
+        var scheduleSlots = new List<TimeBlock>();
         string? parseError = null;
 
         if (scheduleSlotOverrides != null)
         {
-            var overrideValidation = ValidateScheduleSlots(scheduleSlotOverrides
-                .Select(dto => new ScheduleSlot
+            var overrideValidation = ValidateTimeBlocks(scheduleSlotOverrides
+                .Select(dto => new TimeBlock
                 {
                     Day = dto.Day,
                     StartTime = dto.StartTime,
@@ -1466,12 +1456,10 @@ public class SchedulingService : ISchedulingService
         }
         else
         {
-            var parseResult = ParseScheduleJson(section.ScheduleJson);
-            scheduleSlots = parseResult.Slots;
-            parseError = parseResult.ErrorMessage;
+            scheduleSlots = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
         }
 
-        if (scheduleSlots.Count == 0 && parseError == null)
+        if (scheduleSlots.Count == 0)
         {
             notes.Add("Section için program slot tanımı bulunmuyor.");
         }
@@ -1490,7 +1478,6 @@ public class SchedulingService : ISchedulingService
             classroom,
             scheduleSlots,
             notes,
-            parseError,
             suggestedSemester);
     }
 
@@ -1499,9 +1486,8 @@ public class SchedulingService : ISchedulingService
         Instructor? instructor,
         string instructorName,
         Classroom? classroom,
-        IReadOnlyList<ScheduleSlot> scheduleSlots,
+        IReadOnlyList<TimeBlock> scheduleSlots,
         List<string> notes,
-        string? parseError = null,
         int? suggestedSemester = null)
     {
         return new SectionSnapshot
@@ -1524,8 +1510,7 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
             SuggestedSemester = suggestedSemester,
-            ScheduleSlots = scheduleSlots.ToList(),
-            ParseError = parseError,
+            TimeBlocks = scheduleSlots.ToList(),
             Notes = notes
         };
     }
@@ -1537,16 +1522,6 @@ public class SchedulingService : ISchedulingService
 
         foreach (var section in snapshot.Sections)
         {
-            if (!string.IsNullOrWhiteSpace(section.ParseError))
-            {
-                conflicts.Add(BuildConflict(
-                    section,
-                    ConflictTypes.InvalidScheduleJson,
-                    section.ParseError,
-                    null,
-                    null));
-            }
-
             if (section.ClassroomId.HasValue && section.ClassroomCapacity < section.Capacity)
             {
                 conflicts.Add(BuildConflict(
@@ -1614,7 +1589,7 @@ public class SchedulingService : ISchedulingService
                 var first = snapshot.Sections[i];
                 var second = snapshot.Sections[j];
 
-                foreach (var overlap in GetOverlapSlots(first.ScheduleSlots, second.ScheduleSlots))
+                foreach (var overlap in GetOverlapSlots(first.TimeBlocks, second.TimeBlocks))
                 {
                     if (first.ClassroomId.HasValue && first.ClassroomId == second.ClassroomId)
                     {
@@ -1730,7 +1705,7 @@ public class SchedulingService : ISchedulingService
                 continue;
             }
 
-            var totalWeeklyHours = group.Sum(section => ResolveWeeklyHours(section.ScheduleSlots, section));
+            var totalWeeklyHours = group.Sum(section => ResolveWeeklyHours(section.TimeBlocks, section));
             if (totalWeeklyHours <= firstSection.InstructorMaxWeeklyHours)
             {
                 continue;
@@ -1751,10 +1726,10 @@ public class SchedulingService : ISchedulingService
         foreach (var coreq in snapshot.Corequisites)
         {
             var courseASections = snapshot.Sections
-                .Where(s => s.CourseId == coreq.CourseId && s.ScheduleSlots.Count > 0)
+                .Where(s => s.CourseId == coreq.CourseId && s.TimeBlocks.Count > 0)
                 .ToList();
             var courseBSections = snapshot.Sections
-                .Where(s => s.CourseId == coreq.RequiredCourseId && s.ScheduleSlots.Count > 0)
+                .Where(s => s.CourseId == coreq.RequiredCourseId && s.TimeBlocks.Count > 0)
                 .ToList();
 
             if (courseASections.Count == 0 || courseBSections.Count == 0)
@@ -1762,7 +1737,7 @@ public class SchedulingService : ISchedulingService
 
             var hasNonConflicting = courseASections.Any(a =>
                 courseBSections.Any(b =>
-                    GetOverlapSlots(a.ScheduleSlots, b.ScheduleSlots).Count == 0));
+                    GetOverlapSlots(a.TimeBlocks, b.TimeBlocks).Count == 0));
 
             if (!hasNonConflicting)
             {
@@ -1792,14 +1767,14 @@ public class SchedulingService : ISchedulingService
         // ── H12: Credit-Hour Block Compatibility ────────────────────────
         foreach (var section in snapshot.Sections)
         {
-            if (section.ScheduleSlots.Count == 0)
+            if (section.TimeBlocks.Count == 0)
                 continue;
 
             var expectedHours = section.TheoryHours + section.LabHours;
             if (expectedHours <= 0)
                 continue;
 
-            var actualMinutes = section.ScheduleSlots.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
+            var actualMinutes = section.TimeBlocks.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
             var actualHours = (int)Math.Round(actualMinutes / 60.0);
 
             if (actualHours != expectedHours)
@@ -1820,7 +1795,7 @@ public class SchedulingService : ISchedulingService
         {
             foreach (var section in snapshot.Sections)
             {
-                foreach (var slot in section.ScheduleSlots)
+                foreach (var slot in section.TimeBlocks)
                 {
                     if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
                     {
@@ -1837,13 +1812,13 @@ public class SchedulingService : ISchedulingService
 
         // ── H15: Max Consecutive Hours ──────────────────────────────────
         foreach (var instructorGroup in snapshot.Sections
-                     .Where(s => s.InstructorId.HasValue && s.ScheduleSlots.Count > 0)
+                     .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
                      .GroupBy(s => s.InstructorId!.Value))
         {
             var instructorName = instructorGroup.First().InstructorName;
 
             var allSlots = instructorGroup
-                .SelectMany(s => s.ScheduleSlots.Select(slot => new { s.SectionId, Slot = slot }))
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { s.SectionId, Slot = slot }))
                 .GroupBy(x => x.Slot.Day);
 
             foreach (var dayGroup in allSlots)
@@ -1930,13 +1905,13 @@ public class SchedulingService : ISchedulingService
         if (softConfig.S2Enabled)
         {
             foreach (var instructorGroup in snapshot.Sections
-                         .Where(s => s.InstructorId.HasValue && s.ScheduleSlots.Count > 0)
+                         .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
                          .GroupBy(s => s.InstructorId!.Value))
             {
                 var instructorName = instructorGroup.First().InstructorName;
 
                 var slotsByDay = instructorGroup
-                    .SelectMany(s => s.ScheduleSlots)
+                    .SelectMany(s => s.TimeBlocks)
                     .GroupBy(slot => slot.Day);
 
                 foreach (var dayGroup in slotsByDay)
@@ -1955,7 +1930,7 @@ public class SchedulingService : ISchedulingService
         if (softConfig.S3Enabled)
         {
             var slotGroups = snapshot.Sections
-                .SelectMany(s => s.ScheduleSlots.Select(slot => new { slot.Day, slot.StartTime }))
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { slot.Day, slot.StartTime }))
                 .GroupBy(x => (x.Day, x.StartTime));
 
             foreach (var group in slotGroups)
@@ -1974,7 +1949,7 @@ public class SchedulingService : ISchedulingService
         {
             var coPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, ct);
             var scheduledSections = snapshot.Sections
-                .Where(s => s.ScheduleSlots.Count > 0)
+                .Where(s => s.TimeBlocks.Count > 0)
                 .ToList();
 
             foreach (var pair in coPairs)
@@ -1986,7 +1961,7 @@ public class SchedulingService : ISchedulingService
                 {
                     foreach (var secB in sectionsB)
                     {
-                        var overlaps = GetOverlapSlots(secA.ScheduleSlots, secB.ScheduleSlots);
+                        var overlaps = GetOverlapSlots(secA.TimeBlocks, secB.TimeBlocks);
                         if (overlaps.Count > 0)
                         {
                             notes.Add($"S4 Uyarı: '{secA.CourseCode}' ve '{secB.CourseCode}' dersleri sık birlikte alınıyor ({pair.StudentCount} öğrenci) ancak zaman çakışması var.");
@@ -2001,7 +1976,7 @@ public class SchedulingService : ISchedulingService
         {
             foreach (var section in snapshot.Sections)
             {
-                foreach (var slot in section.ScheduleSlots)
+                foreach (var slot in section.TimeBlocks)
                 {
                     if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
                     {
@@ -2015,7 +1990,7 @@ public class SchedulingService : ISchedulingService
         if (softConfig.S7Enabled)
         {
             var mandatorySections = snapshot.Sections
-                .Where(s => s.DepartmentId.HasValue && s.SuggestedSemester.HasValue && s.ScheduleSlots.Count > 0)
+                .Where(s => s.DepartmentId.HasValue && s.SuggestedSemester.HasValue && s.TimeBlocks.Count > 0)
                 .ToList();
 
             var deptYearGroups = mandatorySections
@@ -2024,7 +1999,7 @@ public class SchedulingService : ISchedulingService
             foreach (var group in deptYearGroups)
             {
                 var slotsByDay = group
-                    .SelectMany(s => s.ScheduleSlots.Select(slot => new { s.CourseCode, Slot = slot }))
+                    .SelectMany(s => s.TimeBlocks.Select(slot => new { s.CourseCode, Slot = slot }))
                     .GroupBy(x => x.Slot.Day);
 
                 foreach (var dayGroup in slotsByDay)
@@ -2049,11 +2024,11 @@ public class SchedulingService : ISchedulingService
         if (softConfig.S8Enabled)
         {
             foreach (var instructorGroup in snapshot.Sections
-                         .Where(s => s.InstructorId.HasValue && s.ScheduleSlots.Count > 0)
+                         .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
                          .GroupBy(s => s.InstructorId!.Value))
             {
                 var instructorName = instructorGroup.First().InstructorName;
-                var allSlots = instructorGroup.SelectMany(s => s.ScheduleSlots).ToList();
+                var allSlots = instructorGroup.SelectMany(s => s.TimeBlocks).ToList();
                 var usedDays = allSlots.Select(s => s.Day).Distinct().Count();
                 var totalHours = allSlots.Sum(s => (s.EndTime - s.StartTime).TotalHours);
                 var maxHoursPerDay = (double)softConfig.S2MaxDailyHours;
@@ -2071,7 +2046,7 @@ public class SchedulingService : ISchedulingService
         {
             foreach (var section in snapshot.Sections)
             {
-                foreach (var slot in section.ScheduleSlots)
+                foreach (var slot in section.TimeBlocks)
                 {
                     if (slot.StartTime <= softConfig.S9MorningStart)
                     {
@@ -2089,7 +2064,7 @@ public class SchedulingService : ISchedulingService
         if (softConfig.S12Enabled)
         {
             var slotsPerDay = snapshot.Sections
-                .SelectMany(s => s.ScheduleSlots)
+                .SelectMany(s => s.TimeBlocks)
                 .GroupBy(s => s.Day)
                 .Select(g => g.Count())
                 .ToList();
@@ -2125,18 +2100,6 @@ public class SchedulingService : ISchedulingService
         SectionSnapshot candidate, TermSnapshot snapshot, SoftConstraintConfig softConfig, HardConstraintConfig? hardConfig = null)
     {
         var conflicts = new List<SchedulingConflictDto>();
-
-        if (!string.IsNullOrWhiteSpace(candidate.ParseError))
-        {
-            conflicts.Add(BuildConflict(
-                candidate,
-                ConflictTypes.InvalidScheduleJson,
-                candidate.ParseError,
-                null,
-                null));
-
-            return (conflicts, new List<string>());
-        }
 
         if (candidate.ClassroomId.HasValue && candidate.ClassroomCapacity < candidate.Capacity)
         {
@@ -2199,7 +2162,7 @@ public class SchedulingService : ISchedulingService
 
         foreach (var existing in snapshot.Sections)
         {
-            foreach (var overlap in GetOverlapSlots(candidate.ScheduleSlots, existing.ScheduleSlots))
+            foreach (var overlap in GetOverlapSlots(candidate.TimeBlocks, existing.TimeBlocks))
             {
                 if (candidate.ClassroomId.HasValue && candidate.ClassroomId == existing.ClassroomId)
                 {
@@ -2272,8 +2235,8 @@ public class SchedulingService : ISchedulingService
         {
             var totalWeeklyHours = snapshot.Sections
                 .Where(section => section.InstructorId == candidate.InstructorId)
-                .Sum(section => ResolveWeeklyHours(section.ScheduleSlots, section))
-                + ResolveWeeklyHours(candidate.ScheduleSlots, candidate);
+                .Sum(section => ResolveWeeklyHours(section.TimeBlocks, section))
+                + ResolveWeeklyHours(candidate.TimeBlocks, candidate);
 
             if (totalWeeklyHours > candidate.InstructorMaxWeeklyHours)
             {
@@ -2300,7 +2263,7 @@ public class SchedulingService : ISchedulingService
                 continue;
 
             var pairedSections = snapshot.Sections
-                .Where(s => s.CourseId == pairedCourseId.Value && s.ScheduleSlots.Count > 0)
+                .Where(s => s.CourseId == pairedCourseId.Value && s.TimeBlocks.Count > 0)
                 .ToList();
 
             if (pairedSections.Count == 0)
@@ -2308,19 +2271,19 @@ public class SchedulingService : ISchedulingService
 
             // Get all sections of candidate's course (existing + the candidate itself)
             var candidateCourseSections = snapshot.Sections
-                .Where(s => s.CourseId == candidate.CourseId && s.ScheduleSlots.Count > 0)
+                .Where(s => s.CourseId == candidate.CourseId && s.TimeBlocks.Count > 0)
                 .ToList();
 
             // Add the candidate to the list (replacing any excluded section)
             var allCandidateCourseSections = candidateCourseSections
                 .Where(s => s.SectionId != candidate.SectionId)
                 .Append(candidate)
-                .Where(s => s.ScheduleSlots.Count > 0)
+                .Where(s => s.TimeBlocks.Count > 0)
                 .ToList();
 
             var hasNonConflicting = allCandidateCourseSections.Any(a =>
                 pairedSections.Any(b =>
-                    GetOverlapSlots(a.ScheduleSlots, b.ScheduleSlots).Count == 0));
+                    GetOverlapSlots(a.TimeBlocks, b.TimeBlocks).Count == 0));
 
             if (!hasNonConflicting)
             {
@@ -2335,12 +2298,12 @@ public class SchedulingService : ISchedulingService
         }
 
         // ── H12: Credit-Hour Block Compatibility (candidate) ────────────
-        if (candidate.ScheduleSlots.Count > 0)
+        if (candidate.TimeBlocks.Count > 0)
         {
             var expectedHours = candidate.TheoryHours + candidate.LabHours;
             if (expectedHours > 0)
             {
-                var actualMinutes = candidate.ScheduleSlots.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
+                var actualMinutes = candidate.TimeBlocks.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
                 var actualHours = (int)Math.Round(actualMinutes / 60.0);
 
                 if (actualHours != expectedHours)
@@ -2358,7 +2321,7 @@ public class SchedulingService : ISchedulingService
         // ── H13: Lunch Break Protection (candidate) ─────────────────────
         if (hardConfig != null && hardConfig.LunchBreakIsHard)
         {
-            foreach (var slot in candidate.ScheduleSlots)
+            foreach (var slot in candidate.TimeBlocks)
             {
                 if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
                 {
@@ -2373,14 +2336,14 @@ public class SchedulingService : ISchedulingService
         }
 
         // ── H15: Max Consecutive Hours (candidate) ──────────────────────
-        if (hardConfig != null && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        if (hardConfig != null && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
         {
             var existingSlots = snapshot.Sections
                 .Where(s => s.InstructorId == candidate.InstructorId)
-                .SelectMany(s => s.ScheduleSlots.Select(slot => new { Slot = slot }))
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { Slot = slot }))
                 .ToList();
 
-            var candidateSlots = candidate.ScheduleSlots
+            var candidateSlots = candidate.TimeBlocks
                 .Select(slot => new { Slot = slot })
                 .ToList();
 
@@ -2441,14 +2404,14 @@ public class SchedulingService : ISchedulingService
         }
 
         // S2: Hoca günlük yoğunluk dengesi (candidate + existing)
-        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
         {
             var existingSlots = snapshot.Sections
                 .Where(s => s.InstructorId == candidate.InstructorId)
-                .SelectMany(s => s.ScheduleSlots)
+                .SelectMany(s => s.TimeBlocks)
                 .ToList();
 
-            var allSlots = existingSlots.Concat(candidate.ScheduleSlots);
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
 
             foreach (var dayGroup in allSlots.GroupBy(slot => slot.Day))
             {
@@ -2462,13 +2425,13 @@ public class SchedulingService : ISchedulingService
         }
 
         // S3: Slot dağılım dengesi (candidate + existing)
-        if (softConfig.S3Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S3Enabled && candidate.TimeBlocks.Count > 0)
         {
             var existingSlotKeys = snapshot.Sections
-                .SelectMany(s => s.ScheduleSlots.Select(slot => (slot.Day, slot.StartTime)))
+                .SelectMany(s => s.TimeBlocks.Select(slot => (slot.Day, slot.StartTime)))
                 .ToList();
 
-            var candidateSlotKeys = candidate.ScheduleSlots
+            var candidateSlotKeys = candidate.TimeBlocks
                 .Select(slot => (slot.Day, slot.StartTime))
                 .ToList();
 
@@ -2487,7 +2450,7 @@ public class SchedulingService : ISchedulingService
         }
 
         // S4: Cross-Department Co-Enrollment Conflict (candidate) — uses snapshot.CoEnrollmentPairs if preloaded
-        if (softConfig.S4Enabled && candidate.ScheduleSlots.Count > 0 && snapshot.CoEnrollmentPairs.Count > 0)
+        if (softConfig.S4Enabled && candidate.TimeBlocks.Count > 0 && snapshot.CoEnrollmentPairs.Count > 0)
         {
             var relevantPairs = snapshot.CoEnrollmentPairs
                 .Where(p => p.CourseId1 == candidate.CourseId || p.CourseId2 == candidate.CourseId)
@@ -2497,12 +2460,12 @@ public class SchedulingService : ISchedulingService
             {
                 var pairedCourseId = pair.CourseId1 == candidate.CourseId ? pair.CourseId2 : pair.CourseId1;
                 var pairedSections = snapshot.Sections
-                    .Where(s => s.CourseId == pairedCourseId && s.ScheduleSlots.Count > 0)
+                    .Where(s => s.CourseId == pairedCourseId && s.TimeBlocks.Count > 0)
                     .ToList();
 
                 foreach (var pairedSec in pairedSections)
                 {
-                    var overlaps = GetOverlapSlots(candidate.ScheduleSlots, pairedSec.ScheduleSlots);
+                    var overlaps = GetOverlapSlots(candidate.TimeBlocks, pairedSec.TimeBlocks);
                     if (overlaps.Count > 0)
                     {
                         softNotes.Add($"S4 Uyarı: '{candidate.CourseCode}' ve '{pairedSec.CourseCode}' dersleri sık birlikte alınıyor ({pair.StudentCount} öğrenci) ancak zaman çakışması var.");
@@ -2512,13 +2475,13 @@ public class SchedulingService : ISchedulingService
         }
 
         // S5: Lunch Break Preference (candidate — soft mode, only when H13 is NOT hard)
-        if (softConfig.S5Enabled && candidate.ScheduleSlots.Count > 0
+        if (softConfig.S5Enabled && candidate.TimeBlocks.Count > 0
             && (hardConfig == null || !hardConfig.LunchBreakIsHard))
         {
             var lunchStart = hardConfig?.LunchBreakStart ?? new TimeOnly(11, 40);
             var lunchEnd = hardConfig?.LunchBreakEnd ?? new TimeOnly(12, 20);
 
-            foreach (var slot in candidate.ScheduleSlots)
+            foreach (var slot in candidate.TimeBlocks)
             {
                 if (slot.StartTime < lunchEnd && slot.EndTime > lunchStart)
                 {
@@ -2528,7 +2491,7 @@ public class SchedulingService : ISchedulingService
         }
 
         // S7: Student Gap Minimization (candidate)
-        if (softConfig.S7Enabled && candidate.ScheduleSlots.Count > 0
+        if (softConfig.S7Enabled && candidate.TimeBlocks.Count > 0
             && candidate.DepartmentId.HasValue && candidate.SuggestedSemester.HasValue)
         {
             var candidateYear = (candidate.SuggestedSemester.Value - 1) / 2;
@@ -2536,12 +2499,12 @@ public class SchedulingService : ISchedulingService
                 .Where(s => s.DepartmentId == candidate.DepartmentId
                     && s.SuggestedSemester.HasValue
                     && (s.SuggestedSemester.Value - 1) / 2 == candidateYear
-                    && s.ScheduleSlots.Count > 0)
+                    && s.TimeBlocks.Count > 0)
                 .ToList();
 
             var combinedSlots = sameDeptYearSections
-                .SelectMany(s => s.ScheduleSlots.Select(slot => new { s.CourseCode, Slot = slot }))
-                .Concat(candidate.ScheduleSlots.Select(slot => new { candidate.CourseCode, Slot = slot }))
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { s.CourseCode, Slot = slot }))
+                .Concat(candidate.TimeBlocks.Select(slot => new { candidate.CourseCode, Slot = slot }))
                 .GroupBy(x => x.Slot.Day);
 
             foreach (var dayGroup in combinedSlots)
@@ -2562,14 +2525,14 @@ public class SchedulingService : ISchedulingService
         }
 
         // S8: Instructor Day Minimization (candidate)
-        if (softConfig.S8Enabled && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S8Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
         {
             var existingSlots = snapshot.Sections
                 .Where(s => s.InstructorId == candidate.InstructorId)
-                .SelectMany(s => s.ScheduleSlots)
+                .SelectMany(s => s.TimeBlocks)
                 .ToList();
 
-            var allSlots = existingSlots.Concat(candidate.ScheduleSlots).ToList();
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks).ToList();
             var usedDays = allSlots.Select(s => s.Day).Distinct().Count();
             var totalHours = allSlots.Sum(s => (s.EndTime - s.StartTime).TotalHours);
             var maxHoursPerDay = (double)softConfig.S2MaxDailyHours;
@@ -2582,9 +2545,9 @@ public class SchedulingService : ISchedulingService
         }
 
         // S9: Early Morning / Late Evening Penalty (candidate)
-        if (softConfig.S9Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S9Enabled && candidate.TimeBlocks.Count > 0)
         {
-            foreach (var slot in candidate.ScheduleSlots)
+            foreach (var slot in candidate.TimeBlocks)
             {
                 if (slot.StartTime <= softConfig.S9MorningStart)
                 {
@@ -2598,10 +2561,10 @@ public class SchedulingService : ISchedulingService
         }
 
         // S12: Weekday Balance (candidate)
-        if (softConfig.S12Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S12Enabled && candidate.TimeBlocks.Count > 0)
         {
-            var existingSlots = snapshot.Sections.SelectMany(s => s.ScheduleSlots).ToList();
-            var allSlots = existingSlots.Concat(candidate.ScheduleSlots);
+            var existingSlots = snapshot.Sections.SelectMany(s => s.TimeBlocks).ToList();
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
 
             var slotsPerDay = allSlots
                 .GroupBy(s => s.Day)
@@ -2727,11 +2690,11 @@ public class SchedulingService : ISchedulingService
     }
 
     /// <summary>
-    /// Converts a list of consecutive TimeSlots into a single ScheduleSlot covering them.
+    /// Converts a list of consecutive TimeSlots into a single TimeBlock covering them.
     /// </summary>
-    private static ScheduleSlot TimeSlotWindowToScheduleSlot(IReadOnlyList<TimeSlot> window)
+    private static TimeBlock TimeSlotWindowToTimeBlock(IReadOnlyList<TimeSlot> window)
     {
-        return new ScheduleSlot
+        return new TimeBlock
         {
             Day = window[0].DayOfWeek,
             StartTime = window[0].StartTime,
@@ -2745,7 +2708,7 @@ public class SchedulingService : ISchedulingService
     /// </summary>
     private static List<RankedSlotCombination> BuildTimeSlotCombinations(
         int totalRequiredHours,
-        IReadOnlyList<ScheduleSlot> currentSlots,
+        IReadOnlyList<TimeBlock> currentSlots,
         IReadOnlyList<TimeSlot> timeSlots)
     {
         var combinations = new List<RankedSlotCombination>();
@@ -2754,7 +2717,7 @@ public class SchedulingService : ISchedulingService
         // Include the current schedule as first option if valid
         if (currentSlots.Count > 0)
         {
-            var currentValidation = ValidateScheduleSlots(currentSlots.ToList());
+            var currentValidation = ValidateTimeBlocks(currentSlots.ToList());
             if (currentValidation.ErrorMessage == null)
             {
                 AddCombination(combinations, signatures, currentValidation.Slots, 0);
@@ -2780,7 +2743,7 @@ public class SchedulingService : ISchedulingService
                     {
                         candidates.Add(new RankedSlot
                         {
-                            Slot = TimeSlotWindowToScheduleSlot(window),
+                            Slot = TimeSlotWindowToTimeBlock(window),
                             PreferencePenalty = 0
                         });
                     }
@@ -2810,15 +2773,29 @@ public class SchedulingService : ISchedulingService
     // ── SectionSchedule write helper ─────────────────────────────────────
 
     /// <summary>
-    /// Writes SectionSchedule records alongside ScheduleJson.
+    /// Loads existing SectionSchedule records for a section and converts them to TimeBlocks.
+    /// </summary>
+    private async Task<List<TimeBlock>> LoadSectionTimeBlocksAsync(int sectionId, CancellationToken cancellationToken)
+    {
+        var schedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == sectionId)
+            .ToListAsync(cancellationToken);
+
+        return ScheduleHelper.ToTimeBlocks(schedules);
+    }
+
+    /// <summary>
+    /// Writes SectionSchedule records.
     /// Deletes existing records for this section first, then creates new ones
-    /// by matching each ScheduleSlot to TimeSlots in the term.
+    /// by matching each TimeBlock to TimeSlots in the term.
     /// </summary>
     private async Task WriteSectionScheduleRecordsAsync(
         int sectionId,
         int termId,
         int? classroomId,
-        IReadOnlyList<ScheduleSlot> slots,
+        IReadOnlyList<TimeBlock> slots,
         CancellationToken cancellationToken)
     {
         // Remove old SectionSchedule records for this section
@@ -2844,7 +2821,7 @@ public class SchedulingService : ISchedulingService
 
         foreach (var slot in slots)
         {
-            // Find all TimeSlots that overlap with this ScheduleSlot on the same day
+            // Find all TimeSlots that overlap with this TimeBlock on the same day
             var matchingTimeSlots = termTimeSlots
                 .Where(ts => ts.DayOfWeek == slot.Day
                     && ts.StartTime < slot.EndTime
@@ -2900,13 +2877,13 @@ public class SchedulingService : ISchedulingService
     private static void AddCombination(
         List<RankedSlotCombination> combinations,
         HashSet<string> signatures,
-        List<ScheduleSlot> slots,
+        List<TimeBlock> slots,
         int preferenceScore)
     {
         var normalizedSlots = slots
             .OrderBy(slot => slot.Day)
             .ThenBy(slot => slot.StartTime)
-            .Select(slot => new ScheduleSlot
+            .Select(slot => new TimeBlock
             {
                 Day = slot.Day,
                 StartTime = slot.StartTime,
@@ -2927,53 +2904,7 @@ public class SchedulingService : ISchedulingService
         });
     }
 
-    private static ScheduleParseResult ParseScheduleJson(string? scheduleJson)
-    {
-        if (string.IsNullOrWhiteSpace(scheduleJson) || scheduleJson.Trim() == "[]")
-        {
-            return new ScheduleParseResult();
-        }
-
-        try
-        {
-            var rawSlots = JsonSerializer.Deserialize<List<ScheduleSlotJsonModel>>(scheduleJson, ScheduleJsonOptions);
-            if (rawSlots == null || rawSlots.Count == 0)
-            {
-                return new ScheduleParseResult();
-            }
-
-            var slots = new List<ScheduleSlot>();
-            foreach (var rawSlot in rawSlots)
-            {
-                var day = rawSlot.Day ?? rawSlot.DayOfWeek;
-                if (!day.HasValue)
-                {
-                    return new ScheduleParseResult
-                    {
-                        ErrorMessage = "Program JSON içindeki bir slotta gün bilgisi eksik."
-                    };
-                }
-
-                slots.Add(new ScheduleSlot
-                {
-                    Day = day.Value,
-                    StartTime = rawSlot.StartTime,
-                    EndTime = rawSlot.EndTime
-                });
-            }
-
-            return ValidateScheduleSlots(slots);
-        }
-        catch (JsonException)
-        {
-            return new ScheduleParseResult
-            {
-                ErrorMessage = "Program JSON güvenli şekilde ayrıştırılamadı."
-            };
-        }
-    }
-
-    private static ScheduleParseResult ValidateScheduleSlots(List<ScheduleSlot> slots)
+    private static ScheduleParseResult ValidateTimeBlocks(List<TimeBlock> slots)
     {
         var normalizedSlots = slots
             .OrderBy(slot => slot.Day)
@@ -3011,9 +2942,9 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private static List<ScheduleSlot> GetOverlapSlots(IReadOnlyList<ScheduleSlot> firstSchedule, IReadOnlyList<ScheduleSlot> secondSchedule)
+    private static List<TimeBlock> GetOverlapSlots(IReadOnlyList<TimeBlock> firstSchedule, IReadOnlyList<TimeBlock> secondSchedule)
     {
-        var overlaps = new List<ScheduleSlot>();
+        var overlaps = new List<TimeBlock>();
 
         foreach (var first in firstSchedule)
         {
@@ -3036,7 +2967,7 @@ public class SchedulingService : ISchedulingService
             .ToList();
     }
 
-    private static bool TryGetOverlap(ScheduleSlot first, ScheduleSlot second, out ScheduleSlot overlap)
+    private static bool TryGetOverlap(TimeBlock first, TimeBlock second, out TimeBlock overlap)
     {
         overlap = default!;
 
@@ -3053,7 +2984,7 @@ public class SchedulingService : ISchedulingService
             return false;
         }
 
-        overlap = new ScheduleSlot
+        overlap = new TimeBlock
         {
             Day = first.Day,
             StartTime = start,
@@ -3063,12 +2994,12 @@ public class SchedulingService : ISchedulingService
         return true;
     }
 
-    private static bool SlotsOverlap(ScheduleSlot first, ScheduleSlot second) =>
+    private static bool SlotsOverlap(TimeBlock first, TimeBlock second) =>
         first.Day == second.Day
         && first.StartTime < second.EndTime
         && second.StartTime < first.EndTime;
 
-    private static decimal ResolveWeeklyHours(IReadOnlyList<ScheduleSlot> slots, Course course)
+    private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, Course course)
     {
         if (slots.Count > 0)
         {
@@ -3080,7 +3011,7 @@ public class SchedulingService : ISchedulingService
         return catalogHours > 0 ? catalogHours : 0m;
     }
 
-    private static decimal ResolveWeeklyHours(IReadOnlyList<ScheduleSlot> slots, SectionSnapshot section)
+    private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, SectionSnapshot section)
     {
         if (slots.Count > 0)
         {
@@ -3092,7 +3023,7 @@ public class SchedulingService : ISchedulingService
         return catalogHours > 0 ? catalogHours : 0m;
     }
 
-    private static ScheduleSlotDto MapScheduleSlot(ScheduleSlot slot) =>
+    private static ScheduleSlotDto MapTimeBlock(TimeBlock slot) =>
         new()
         {
             Day = slot.Day,
@@ -3104,7 +3035,7 @@ public class SchedulingService : ISchedulingService
         SectionSnapshot section,
         string conflictType,
         string message,
-        ScheduleSlot? slot,
+        TimeBlock? slot,
         int? relatedSectionId)
     {
         return new SchedulingConflictDto
@@ -3125,7 +3056,7 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private static string BuildSlotSignature(IEnumerable<ScheduleSlot> slots) =>
+    private static string BuildSlotSignature(IEnumerable<TimeBlock> slots) =>
         string.Join("|", slots
             .OrderBy(slot => slot.Day)
             .ThenBy(slot => slot.StartTime)
@@ -3405,34 +3336,26 @@ public class SchedulingService : ISchedulingService
         public int InstructorMaxWeeklyHours { get; init; }
         public int? DepartmentId { get; init; }                    // for H5, H8
         public int? SuggestedSemester { get; init; }               // for H5 (curriculum year)
-        public List<ScheduleSlot> ScheduleSlots { get; init; } = new();
-        public string? ParseError { get; init; }
+        public List<TimeBlock> TimeBlocks { get; init; } = new();
         public List<string> Notes { get; init; } = new();
     }
 
     private sealed class ScheduleParseResult
     {
-        public List<ScheduleSlot> Slots { get; init; } = new();
+        public List<TimeBlock> Slots { get; init; } = new();
         public string? ErrorMessage { get; init; }
     }
 
     private sealed class RankedSlot
     {
-        public ScheduleSlot Slot { get; init; } = null!;
+        public TimeBlock Slot { get; init; } = null!;
         public int PreferencePenalty { get; init; }
     }
 
     private sealed class RankedSlotCombination
     {
-        public List<ScheduleSlot> Slots { get; init; } = new();
+        public List<TimeBlock> Slots { get; init; } = new();
         public int PreferenceScore { get; init; }
     }
 
-    private sealed class ScheduleSlotJsonModel
-    {
-        public DayOfWeek? Day { get; init; }
-        public DayOfWeek? DayOfWeek { get; init; }
-        public TimeOnly StartTime { get; init; }
-        public TimeOnly EndTime { get; init; }
-    }
 }

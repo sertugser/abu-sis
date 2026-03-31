@@ -97,7 +97,6 @@ public class InstructorController : ControllerBase
             AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),
             ClassroomName = s.Classroom?.Name ?? "",
             Schedule = myScheduleMap.GetValueOrDefault(s.Id, string.Empty),
-            ScheduleJson = s.ScheduleJson,
             IsActive = s.IsActive,
             IsFinalized = s.IsFinalized,
             ActiveStudents = s.Registrations.Count(r => r.Status == Domain.Enums.RegistrationStatus.Active)

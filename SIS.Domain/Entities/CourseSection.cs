@@ -20,8 +20,6 @@ public class CourseSection
     public uint RowVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
-    // Schedule stored as JSON: list of {DayOfWeek, StartTime, EndTime}
-    public string ScheduleJson { get; set; } = "[]";
     public ICollection<CourseRegistration> Registrations { get; set; } = new List<CourseRegistration>();
     public ICollection<SectionSchedule> SectionSchedules { get; set; } = new List<SectionSchedule>();
 }

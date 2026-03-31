@@ -1,12 +1,10 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -16,12 +14,6 @@ namespace SIS.API.Controllers;
 [Authorize(Roles = "AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
 public class SchedulingController : ControllerBase
 {
-    private static readonly JsonSerializerOptions ScheduleJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private readonly ISchedulingService _schedulingService;
     private readonly IAcademicOperationsService _academicOperationsService;
     private readonly AppDbContext _context;
@@ -208,18 +200,10 @@ public class SchedulingController : ControllerBase
             .ToListAsync(cancellationToken);
 
         // Preserve originals for rollback
-        var origScheduleJson1 = section1.ScheduleJson;
-        var origScheduleJson2 = section2.ScheduleJson;
         var origClassroomId1 = section1.ClassroomId;
         var origClassroomId2 = section2.ClassroomId;
 
         // Perform swap
-        if (request.SwapSlots)
-        {
-            section1.ScheduleJson = origScheduleJson2;
-            section2.ScheduleJson = origScheduleJson1;
-        }
-
         if (request.SwapClassrooms)
         {
             section1.ClassroomId = origClassroomId2;
@@ -264,8 +248,6 @@ public class SchedulingController : ControllerBase
         if (!validation1.IsValid || !validation2.IsValid)
         {
             // Rollback
-            section1.ScheduleJson = origScheduleJson1;
-            section2.ScheduleJson = origScheduleJson2;
             section1.ClassroomId = origClassroomId1;
             section2.ClassroomId = origClassroomId2;
 
@@ -281,8 +263,7 @@ public class SchedulingController : ControllerBase
         }
 
         // Update SectionSchedule records for both sections
-        await UpdateSectionScheduleRecordsAsync(section1, cancellationToken);
-        await UpdateSectionScheduleRecordsAsync(section2, cancellationToken);
+        await SwapSectionScheduleRecordsAsync(section1, section2, request.SwapSlots, request.SwapClassrooms, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -717,46 +698,51 @@ public class SchedulingController : ControllerBase
         );
     }
 
-    private async Task UpdateSectionScheduleRecordsAsync(Domain.Entities.CourseSection section, CancellationToken ct)
+    private async Task SwapSectionScheduleRecordsAsync(
+        Domain.Entities.CourseSection section1,
+        Domain.Entities.CourseSection section2,
+        bool swapSlots,
+        bool swapClassrooms,
+        CancellationToken ct)
     {
-        // Remove old SectionSchedule records
-        var existing = await _context.SectionSchedules
-            .Where(ss => ss.CourseSectionId == section.Id)
+        var records1 = await _context.SectionSchedules
+            .Where(ss => ss.CourseSectionId == section1.Id)
+            .ToListAsync(ct);
+        var records2 = await _context.SectionSchedules
+            .Where(ss => ss.CourseSectionId == section2.Id)
             .ToListAsync(ct);
 
-        if (existing.Count > 0)
-            _context.SectionSchedules.RemoveRange(existing);
+        // Capture original data before removal
+        var data1 = records1.Select(r => new { r.TimeSlotId, r.ClassroomId }).ToList();
+        var data2 = records2.Select(r => new { r.TimeSlotId, r.ClassroomId }).ToList();
 
-        if (!section.ClassroomId.HasValue)
-            return;
+        _context.SectionSchedules.RemoveRange(records1);
+        _context.SectionSchedules.RemoveRange(records2);
 
-        var slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(section.ScheduleJson, ScheduleJsonOptions);
-        if (slots == null || slots.Count == 0)
-            return;
+        // Rebuild with swapped values
+        var slots1 = swapSlots ? data2 : data1;
+        var classrooms1 = swapClassrooms ? data2 : data1;
+        var slots2 = swapSlots ? data1 : data2;
+        var classrooms2 = swapClassrooms ? data1 : data2;
 
-        var termTimeSlots = await _context.TimeSlots
-            .AsNoTracking()
-            .Where(ts => ts.TermId == section.TermId)
-            .ToListAsync(ct);
-
-        foreach (var slot in slots)
+        for (int i = 0; i < slots1.Count; i++)
         {
-            var matchingTimeSlots = termTimeSlots
-                .Where(ts => ts.DayOfWeek == slot.Day
-                    && ts.StartTime < slot.EndTime
-                    && slot.StartTime < ts.EndTime)
-                .OrderBy(ts => ts.SlotOrder)
-                .ToList();
-
-            foreach (var ts in matchingTimeSlots)
+            _context.SectionSchedules.Add(new Domain.Entities.SectionSchedule
             {
-                _context.SectionSchedules.Add(new Domain.Entities.SectionSchedule
-                {
-                    CourseSectionId = section.Id,
-                    TimeSlotId = ts.Id,
-                    ClassroomId = section.ClassroomId.Value
-                });
-            }
+                CourseSectionId = section1.Id,
+                TimeSlotId = slots1[i].TimeSlotId,
+                ClassroomId = swapClassrooms && i < classrooms1.Count ? classrooms1[i].ClassroomId : slots1[i].ClassroomId
+            });
+        }
+
+        for (int i = 0; i < slots2.Count; i++)
+        {
+            _context.SectionSchedules.Add(new Domain.Entities.SectionSchedule
+            {
+                CourseSectionId = section2.Id,
+                TimeSlotId = slots2[i].TimeSlotId,
+                ClassroomId = swapClassrooms && i < classrooms2.Count ? classrooms2[i].ClassroomId : slots2[i].ClassroomId
+            });
         }
     }
 
@@ -769,7 +755,6 @@ public class SchedulingController : ControllerBase
             courseName = section.Course.Name,
             classroomId = section.ClassroomId,
             classroomName = section.Classroom?.Name,
-            scheduleJson = section.ScheduleJson,
             isScheduleLocked = section.IsScheduleLocked,
             sectionNumber = section.SectionNumber
         };

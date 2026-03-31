@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
@@ -12,12 +11,6 @@ namespace SIS.Infrastructure.Services;
 
 public class FacultyPlanningService : IFacultyPlanningService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private readonly AppDbContext _context;
     private readonly ISchedulingService _schedulingService;
 
@@ -273,7 +266,6 @@ public class FacultyPlanningService : IFacultyPlanningService
                     InstructorName = s.InstructorId.HasValue
                         ? instructorNameMap.GetValueOrDefault(s.InstructorId.Value)
                         : null,
-                    ScheduleJson = s.ScheduleJson,
                     ScheduleSummary = ScheduleHelper.FormatScheduleSummary(sectionScheds),
                     Status = sectionStatus,
                     TheoryHours = s.Course.TheoryHours,
@@ -335,9 +327,6 @@ public class FacultyPlanningService : IFacultyPlanningService
                 result.Warnings.Add($"Derslik tipi uyumsuz: beklenen {expectedType}, atanan {classroom.Type}.");
 
             section.ClassroomId = request.ClassroomId.Value;
-            section.ScheduleJson = JsonSerializer.Serialize(
-                request.ScheduleSlots.Select(s => new { s.Day, s.StartTime, s.EndTime, s.ClassroomId }),
-                JsonOptions);
         }
 
         if (request.InstructorId.HasValue)
@@ -367,7 +356,6 @@ public class FacultyPlanningService : IFacultyPlanningService
             Action = "Assign",
             UserId = userId,
             ClassroomId = request.ClassroomId,
-            ScheduleJson = section.ScheduleJson,
             InstructorId = request.InstructorId
         });
         await _context.SaveChangesAsync(ct);
@@ -395,7 +383,6 @@ public class FacultyPlanningService : IFacultyPlanningService
             throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerinin atamasini kaldirabilirsiniz.");
 
         section.ClassroomId = null;
-        section.ScheduleJson = "[]";
         section.InstructorId = null;
 
         _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
