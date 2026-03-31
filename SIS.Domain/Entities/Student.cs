@@ -19,6 +19,8 @@ public class Student
     public bool HasFinancialBlock { get; set; }                  // FR-49: debt block
     public int? AdvisorId { get; set; }                          // FK to Instructor
     public Instructor? Advisor { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public ICollection<StudentProgram> StudentPrograms { get; set; } = new List<StudentProgram>();
     public ICollection<CourseRegistration> Registrations { get; set; } = new List<CourseRegistration>();
 }

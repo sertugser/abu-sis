@@ -9,6 +9,8 @@ public class CourseRegistration
     public Student Student { get; set; } = null!;
     public int CourseSectionId { get; set; }
     public CourseSection CourseSection { get; set; } = null!;
+    public int? RegistrationPlanId { get; set; }
+    public RegistrationPlan? RegistrationPlan { get; set; }
     // Term is derived via CourseSection.TermId - no direct FK needed
     public RegistrationStatus Status { get; set; }
     public GradeCode? Grade { get; set; }

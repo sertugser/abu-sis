@@ -33,6 +33,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<SchedulingAuditLog> SchedulingAuditLogs => Set<SchedulingAuditLog>();
     public DbSet<TermClosingProgress> TermClosingProgresses => Set<TermClosingProgress>();
     public DbSet<TermCalendarEvent> TermCalendarEvents => Set<TermCalendarEvent>();
+    public DbSet<TimeSlot> TimeSlots => Set<TimeSlot>();
+    public DbSet<SectionSchedule> SectionSchedules => Set<SectionSchedule>();
+    public DbSet<ClassroomTermAssignment> ClassroomTermAssignments => Set<ClassroomTermAssignment>();
+    public DbSet<CourseAccessPolicy> CourseAccessPolicies => Set<CourseAccessPolicy>();
+    public DbSet<RegistrationPlan> RegistrationPlans => Set<RegistrationPlan>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
+    public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -205,6 +213,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // ── CourseSection ────────────────────────────────────────
         builder.Entity<CourseSection>(e =>
         {
+            e.HasIndex(cs => new { cs.CourseId, cs.TermId, cs.SectionNumber }).IsUnique();
+            e.HasIndex(cs => new { cs.CourseId, cs.TermId });
+
             e.HasOne(cs => cs.Course)
              .WithMany()
              .HasForeignKey(cs => cs.CourseId)
@@ -324,7 +335,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             entity.HasOne(e => e.Section)
                 .WithMany()
                 .HasForeignKey(e => e.SectionId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => new { e.SectionId, e.CreatedAt });
         });
@@ -358,6 +369,157 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
              .WithMany()
              .HasForeignKey(p => p.TermId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── TimeSlot ─────────────────────────────────────────────
+        builder.Entity<TimeSlot>(e =>
+        {
+            e.HasIndex(ts => new { ts.Pattern, ts.StartTime, ts.EndTime }).IsUnique();
+        });
+
+        // ── SectionSchedule ──────────────────────────────────────
+        builder.Entity<SectionSchedule>(e =>
+        {
+            e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId }).IsUnique();
+
+            e.HasOne(ss => ss.CourseSection)
+             .WithMany()
+             .HasForeignKey(ss => ss.CourseSectionId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(ss => ss.TimeSlot)
+             .WithMany()
+             .HasForeignKey(ss => ss.TimeSlotId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(ss => ss.Classroom)
+             .WithMany()
+             .HasForeignKey(ss => ss.ClassroomId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── ClassroomTermAssignment ──────────────────────────────
+        builder.Entity<ClassroomTermAssignment>(e =>
+        {
+            e.HasIndex(cta => new { cta.TermId, cta.ClassroomId }).IsUnique();
+
+            e.HasOne(cta => cta.Term)
+             .WithMany()
+             .HasForeignKey(cta => cta.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(cta => cta.Classroom)
+             .WithMany()
+             .HasForeignKey(cta => cta.ClassroomId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(cta => cta.Faculty)
+             .WithMany()
+             .HasForeignKey(cta => cta.FacultyId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── CourseAccessPolicy ───────────────────────────────────
+        builder.Entity<CourseAccessPolicy>(e =>
+        {
+            e.HasOne(cap => cap.Course)
+             .WithMany()
+             .HasForeignKey(cap => cap.CourseId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(cap => cap.Term)
+             .WithMany()
+             .HasForeignKey(cap => cap.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(cap => cap.Faculty)
+             .WithMany()
+             .HasForeignKey(cap => cap.FacultyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(cap => cap.Department)
+             .WithMany()
+             .HasForeignKey(cap => cap.DepartmentId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── RegistrationPlan ─────────────────────────────────────
+        builder.Entity<RegistrationPlan>(e =>
+        {
+            e.HasIndex(rp => new { rp.StudentId, rp.TermId }).IsUnique();
+
+            e.HasOne(rp => rp.Student)
+             .WithMany()
+             .HasForeignKey(rp => rp.StudentId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(rp => rp.Term)
+             .WithMany()
+             .HasForeignKey(rp => rp.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── CourseRegistration → RegistrationPlan FK ─────────────
+        builder.Entity<CourseRegistration>(e2 =>
+        {
+            e2.HasOne(cr => cr.RegistrationPlan)
+              .WithMany(rp => rp.Registrations)
+              .HasForeignKey(cr => cr.RegistrationPlanId)
+              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── AuditLog ─────────────────────────────────────────────
+        builder.Entity<AuditLog>(e =>
+        {
+            e.HasIndex(al => al.Timestamp);
+            e.HasIndex(al => new { al.EntityType, al.EntityId });
+            e.HasIndex(al => al.UserId);
+        });
+
+        // ── SystemConfig ─────────────────────────────────────────
+        builder.Entity<SystemConfig>(e =>
+        {
+            e.HasIndex(sc => sc.Key).IsUnique();
+        });
+
+        // ── PromotionRule ────────────────────────────────────────
+        builder.Entity<PromotionRule>(e =>
+        {
+            e.HasIndex(pr => new { pr.ProgramId, pr.FromYear, pr.ToYear }).IsUnique();
+            e.Property(pr => pr.MinCgpa).HasPrecision(4, 2);
+
+            e.HasOne(pr => pr.Program)
+             .WithMany()
+             .HasForeignKey(pr => pr.ProgramId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── Classroom ────────────────────────────────────────────
+        builder.Entity<Classroom>(e =>
+        {
+            e.HasIndex(c => c.Name).IsUnique();
+        });
+
+        // ── Performance Indexes ──────────────────────────────────
+        builder.Entity<CourseRegistration>(e3 =>
+        {
+            e3.HasIndex(cr => cr.StudentId);
+            e3.HasIndex(cr => cr.CourseSectionId);
+        });
+
+        builder.Entity<Student>(e2 =>
+        {
+            e2.HasIndex(s => s.AdvisorId);
+        });
+
+        builder.Entity<GradeComponent>(e2 =>
+        {
+            e2.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId, gc.Name }).IsUnique();
+        });
+
+        builder.Entity<Curriculum>(e2 =>
+        {
+            e2.HasIndex(c => new { c.ProgramId, c.Version }).IsUnique();
         });
     }
 }

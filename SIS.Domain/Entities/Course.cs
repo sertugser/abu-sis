@@ -11,6 +11,8 @@ public class Course
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
     public bool IsNonGpa { get; set; }                      // true = S/U graded
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public ICollection<CoursePrerequisite> Prerequisites { get; set; } = new List<CoursePrerequisite>();
     public ICollection<CourseEquivalency> Equivalencies { get; set; } = new List<CourseEquivalency>();
 }
