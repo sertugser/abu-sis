@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 using SIS.Domain.Entities;
 
 namespace SIS.API.Controllers;
@@ -14,9 +15,24 @@ public record BulkClassroomTermAssignmentDto(int TermId, List<BulkAssignmentItem
 [ApiController]
 [Route("api/admin/classroom-assignments")]
 [Authorize(Roles = "SystemAdministrator")]
-public class ClassroomTermAssignmentController(AppDbContext context) : ControllerBase
+public class ClassroomTermAssignmentController(AppDbContext context, ClassroomSuggestionService suggestionService) : ControllerBase
 {
     private readonly AppDbContext _context = context;
+    private readonly ClassroomSuggestionService _suggestionService = suggestionService;
+
+    [HttpPost("suggest")]
+    public async Task<IActionResult> SuggestAssignments([FromQuery] int termId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _suggestionService.SuggestAssignmentsAsync(termId, ct);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetByTerm([FromQuery] int termId, CancellationToken ct)
