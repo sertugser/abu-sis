@@ -75,6 +75,29 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
+        // Get or create RegistrationPlan for this student+term
+        var plan = await _context.RegistrationPlans
+            .FirstOrDefaultAsync(rp => rp.StudentId == studentId && rp.TermId == section.TermId);
+
+        if (plan == null)
+        {
+            plan = new Domain.Entities.RegistrationPlan
+            {
+                StudentId = studentId,
+                TermId = section.TermId,
+                Status = RegistrationPlanStatus.Draft,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.RegistrationPlans.Add(plan);
+            await _context.SaveChangesAsync(); // need ID before FK assignment
+        }
+        else if (plan.Status == RegistrationPlanStatus.Rejected)
+        {
+            // Rejected plan can be edited and resubmitted
+            plan.Status = RegistrationPlanStatus.Draft;
+            plan.UpdatedAt = DateTime.UtcNow;
+        }
+
         // Check if already in plan (same section)
         var existingForSection = await _context.CourseRegistrations
             .FirstOrDefaultAsync(cr => cr.StudentId == studentId
@@ -185,6 +208,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         {
             // Reactivate existing record instead of creating new (unique constraint)
             droppedRecord.Status = RegistrationStatus.Draft;
+            droppedRecord.RegistrationPlanId = plan.Id;
             droppedRecord.UpdatedAt = DateTime.UtcNow;
             registration = droppedRecord;
         }
@@ -195,6 +219,7 @@ public class CourseRegistrationService : ICourseRegistrationService
             {
                 StudentId = studentId,
                 CourseSectionId = courseSectionId,
+                RegistrationPlanId = plan.Id,
                 Status = RegistrationStatus.Draft,
                 CreatedAt = DateTime.UtcNow
             };
@@ -313,6 +338,20 @@ public class CourseRegistrationService : ICourseRegistrationService
         {
             reg.Status = targetStatus;
             reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Update RegistrationPlan status to Submitted
+        var termId = registrations.FirstOrDefault()?.CourseSection.TermId;
+        if (termId.HasValue)
+        {
+            var plan = await _context.RegistrationPlans
+                .FirstOrDefaultAsync(rp => rp.StudentId == studentId && rp.TermId == termId.Value);
+            if (plan != null)
+            {
+                plan.Status = RegistrationPlanStatus.Submitted;
+                plan.SubmittedAt = DateTime.UtcNow;
+                plan.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         await _context.SaveChangesAsync();
@@ -993,6 +1032,15 @@ public class CourseRegistrationService : ICourseRegistrationService
             reg.UpdatedAt = DateTime.UtcNow;
         }
 
+        // Update RegistrationPlan status to Approved
+        var plan = await _context.RegistrationPlans
+            .FirstOrDefaultAsync(rp => rp.StudentId == dto.StudentId && rp.TermId == activeTerm.Id);
+        if (plan != null)
+        {
+            plan.Status = RegistrationPlanStatus.Approved;
+            plan.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _context.SaveChangesAsync();
 
         return new ApprovalResponseDto
@@ -1042,6 +1090,16 @@ public class CourseRegistrationService : ICourseRegistrationService
             reg.AdvisorNote = dto.Note;
             reg.UpdatedAt = DateTime.UtcNow;
             reg.CourseSection.EnrolledCount = Math.Max(0, reg.CourseSection.EnrolledCount - 1);
+        }
+
+        // Update RegistrationPlan status to Rejected with advisor note
+        var plan = await _context.RegistrationPlans
+            .FirstOrDefaultAsync(rp => rp.StudentId == dto.StudentId && rp.TermId == activeTerm.Id);
+        if (plan != null)
+        {
+            plan.Status = RegistrationPlanStatus.Rejected;
+            plan.AdvisorNote = dto.Note;
+            plan.UpdatedAt = DateTime.UtcNow;
         }
 
         await _context.SaveChangesAsync();
