@@ -969,15 +969,75 @@ public class CourseRegistrationService : ICourseRegistrationService
                     StudentNumber = student.StudentNumber,
                     StudentName = studentName ?? string.Empty,
                     Cgpa = student.Cgpa,
+                    Sgpa = student.Sgpa,
                     CompletedSemesters = student.CompletedSemesters,
                     IsScholarshipStudent = student.IsScholarshipStudent,
                     Registrations = regItems,
                     TotalEcts = regItems.Sum(r => r.Ects),
+                    EctsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa),
                     SubmittedAt = g.Max(r => r.UpdatedAt ?? r.CreatedAt)
                 };
             })
             .OrderBy(dto => dto.StudentName)
             .ToList();
+
+        // Alttan dersler, müfredat özeti ve plan durumu ekle
+        foreach (var dto in result)
+        {
+            var student = studentDict[dto.StudentId];
+
+            // Plan durumu
+            var plan = await _context.RegistrationPlans
+                .FirstOrDefaultAsync(rp => rp.StudentId == dto.StudentId && rp.TermId == activeTerm.Id);
+            dto.PlanStatus = plan?.Status.ToString() ?? "N/A";
+
+            // Alttan dersler (FF/NA/U)
+            var failedRegs = await _context.CourseRegistrations
+                .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Course)
+                .Where(cr => cr.StudentId == dto.StudentId
+                    && cr.Grade != null
+                    && (cr.Grade == GradeCode.FF || cr.Grade == GradeCode.NA || cr.Grade == GradeCode.U)
+                    && cr.Status != RegistrationStatus.Dropped)
+                .ToListAsync();
+
+            var selectedCourseIds = dto.Registrations.Select(r =>
+                registrations.First(reg => reg.Id == r.RegistrationId).CourseSection.CourseId).ToHashSet();
+
+            dto.FailedCourses = failedRegs
+                .GroupBy(r => r.CourseSection.CourseId)
+                .Select(g => g.OrderByDescending(r => r.Id).First())
+                .Select(r => new FailedCourseDto
+                {
+                    CourseCode = r.CourseSection.Course.Code,
+                    CourseName = r.CourseSection.Course.Name,
+                    Grade = r.Grade!.Value.ToString(),
+                    IsSelectedInPlan = selectedCourseIds.Contains(r.CourseSection.CourseId)
+                }).ToList();
+
+            // Müfredat özeti
+            var mainProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+            if (mainProgram != null)
+            {
+                var curriculumCourses = await _context.CurriculumCourses
+                    .Include(cc => cc.Course)
+                    .Where(cc => cc.CurriculumId == mainProgram.CurriculumId)
+                    .ToListAsync();
+
+                var passedCourseIds = await _context.CourseRegistrations
+                    .Include(cr => cr.CourseSection)
+                    .Where(cr => cr.StudentId == dto.StudentId && RegistrationRulePolicy.IsPassedGrade(cr.Grade))
+                    .Select(cr => cr.CourseSection.CourseId)
+                    .Distinct()
+                    .ToListAsync();
+
+                var passedSet = passedCourseIds.ToHashSet();
+
+                dto.CurriculumTotalCourses = curriculumCourses.Count;
+                dto.CurriculumCompletedCourses = curriculumCourses.Count(cc => passedSet.Contains(cc.CourseId));
+                dto.CurriculumTotalEcts = curriculumCourses.Sum(cc => cc.Course.Ects);
+                dto.CurriculumCompletedEcts = curriculumCourses.Where(cc => passedSet.Contains(cc.CourseId)).Sum(cc => cc.Course.Ects);
+            }
+        }
 
         return result;
     }
