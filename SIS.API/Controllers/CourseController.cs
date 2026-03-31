@@ -206,11 +206,42 @@ public class CourseController : ControllerBase
         // Also include passed courses so student can see them for potential retake
         relevantCourseIds.UnionWith(passedCourseIds);
 
+        // CourseAccessPolicy filtresi: öğrencinin bölüm/fakültesine açık dersler
+        var studentDepartmentId = await _context.AcademicPrograms.AsNoTracking()
+            .Where(p => p.Id == activeProgram.ProgramId)
+            .Select(p => p.DepartmentId)
+            .FirstOrDefaultAsync();
+
+        var studentFacultyId = await _context.Departments.AsNoTracking()
+            .Where(d => d.Id == studentDepartmentId)
+            .Select(d => d.FacultyId)
+            .FirstOrDefaultAsync();
+
+        var accessibleCourseIds = await _context.CourseAccessPolicies
+            .AsNoTracking()
+            .Where(cap => cap.TermId == activeTerm.Id
+                && (cap.DepartmentId == null || cap.DepartmentId == studentDepartmentId)
+                && (cap.FacultyId == null || cap.FacultyId == studentFacultyId))
+            .Select(cap => cap.CourseId)
+            .Distinct()
+            .ToListAsync();
+
+        // DepartmentId null olan dersler (ortak dersler) her bölümden görünür
+        var sharedCourseIds = await _context.Courses.AsNoTracking()
+            .Where(c => c.DepartmentId == null)
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        // Müfredattaki dersler + erişim politikası olan dersler + ortak dersler
+        var visibleCourseIds = new HashSet<int>(relevantCourseIds);
+        visibleCourseIds.UnionWith(accessibleCourseIds);
+        visibleCourseIds.UnionWith(sharedCourseIds);
+
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == activeTerm.Id && relevantCourseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == activeTerm.Id && visibleCourseIds.Contains(cs.CourseId))
             .ToListAsync();
 
         // Instructor names
