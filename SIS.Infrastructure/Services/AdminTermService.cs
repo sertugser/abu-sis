@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -10,9 +11,11 @@ namespace SIS.Infrastructure.Services;
 public class AdminTermService : IAdminTermService
 {
     private readonly AppDbContext _context;
+    private readonly ITimeSlotService _timeSlotService;
 
-    public AdminTermService(AppDbContext context)
+    public AdminTermService(AppDbContext context, ITimeSlotService timeSlotService)
     {
+        _timeSlotService = timeSlotService;
         _context = context;
     }
 
@@ -162,6 +165,12 @@ public class AdminTermService : IAdminTermService
                 if (reg.CourseSection.EnrolledCount > 0)
                     reg.CourseSection.EnrolledCount--;
             }
+        }
+
+        // Draft → Planning: TimeSlot grid'i oluştur
+        if (targetStatus == TermStatus.Planning)
+        {
+            await _timeSlotService.GenerateTimeSlotsForTermAsync(id);
         }
 
         await _context.SaveChangesAsync();
