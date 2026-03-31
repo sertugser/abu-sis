@@ -209,9 +209,6 @@ export default function AcademicCalendarPage() {
               <h2 className="text-xl font-bold text-[#003366]">
                 {MONTH_NAMES[vm.m]} {vm.y}
               </h2>
-              {calendarData && (
-                <p className="text-xs text-gray-500 mt-0.5">{calendarData.termName}</p>
-              )}
             </div>
             <div className="flex gap-1">
               <button onClick={prev} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-gray-600">
