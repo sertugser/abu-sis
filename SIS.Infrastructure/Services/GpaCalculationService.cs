@@ -209,6 +209,57 @@ public class GpaCalculationService : IGpaCalculationService
         return (totalAkts, totalPoints);
     }
 
+    /// <summary>
+    /// Batch CGPA hesaplama: Tüm öğrencilerin kayıtlarını TEK sorguda yükler,
+    /// her öğrenci için in-memory CGPA hesaplar. N+1 sorununu ortadan kaldırır.
+    /// </summary>
+    public async Task<Dictionary<int, decimal>> BatchCalculateCgpaAsync(List<int> studentIds)
+    {
+        if (studentIds.Count == 0)
+            return new Dictionary<int, decimal>();
+
+        var allRegistrations = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Course)
+            .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Term)
+            .Where(cr => studentIds.Contains(cr.StudentId)
+                && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
+                && cr.Grade != null)
+            .ToListAsync();
+
+        var result = new Dictionary<int, decimal>();
+
+        foreach (var studentId in studentIds)
+        {
+            var studentRegs = allRegistrations.Where(r => r.StudentId == studentId).ToList();
+
+            // Same logic as GetCgpaComponentsAsync but in-memory
+            var latestPerCourse = studentRegs
+                .GroupBy(cr => cr.CourseSection.CourseId)
+                .Select(g => g.OrderByDescending(cr => cr.CourseSection.Term.Year)
+                    .ThenByDescending(cr => cr.CourseSection.Term.Semester)
+                    .ThenByDescending(cr => cr.Id).First())
+                .ToList();
+
+            int totalAkts = 0;
+            decimal totalPoints = 0;
+            foreach (var reg in latestPerCourse)
+            {
+                var point = GradePointMap.GetPoint(reg.Grade!.Value);
+                if (point == null) continue;
+                var akts = reg.CourseSection.Course.Ects;
+                if (akts == 0) continue;
+                totalAkts += akts;
+                totalPoints += akts * point.Value;
+            }
+
+            result[studentId] = totalAkts > 0
+                ? Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero)
+                : 0;
+        }
+
+        return result;
+    }
+
     private static decimal CalculateAverage(IEnumerable<Domain.Entities.CourseRegistration> registrations)
     {
         var totalAkts = 0;
