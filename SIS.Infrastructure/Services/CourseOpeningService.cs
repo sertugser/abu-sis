@@ -207,26 +207,6 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                 throw new InvalidOperationException("Öğretim üyesi bu bölüme ait değil.");
         }
 
-        // Semester parity kontrolü: güz döneminde bahar dersi açılmasın
-        var suggestedSemesters = await _context.CurriculumCourses
-            .AsNoTracking()
-            .Where(cc => cc.CourseId == request.CourseId && cc.Curriculum.IsActive)
-            .Select(cc => cc.SuggestedSemester)
-            .Distinct()
-            .ToListAsync(ct);
-
-        if (suggestedSemesters.Count > 0)
-        {
-            bool isFallTerm = term.Semester == SemesterType.Fall;
-            // Güz dönemi: tek dönem dersleri (1,3,5,7), Bahar: çift (2,4,6,8)
-            bool hasMatchingParity = suggestedSemesters.Any(s =>
-                isFallTerm ? (s % 2 == 1) : (s % 2 == 0));
-
-            if (!hasMatchingParity && term.Semester != SemesterType.Summer)
-                throw new InvalidOperationException(
-                    $"'{course.Code}' dersi {(isFallTerm ? "güz" : "bahar")} dönemine uygun değil (önerilen dönemler: {string.Join(", ", suggestedSemesters)}).");
-        }
-
         var created = new List<CourseSection>();
         for (var i = 0; i < request.SectionCount; i++)
         {
