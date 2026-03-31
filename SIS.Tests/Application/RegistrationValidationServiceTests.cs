@@ -1,6 +1,8 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -30,7 +32,7 @@ public class RegistrationValidationServiceTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new AppDbContext(options);
-        _service = new RegistrationValidationService(_context);
+        _service = new RegistrationValidationService(_context, GetSystemConfig());
 
         SeedBaseData();
     }
@@ -108,6 +110,16 @@ public class RegistrationValidationServiceTests : IDisposable
         });
 
         _context.SaveChanges();
+    }
+
+    private static ISystemConfigService GetSystemConfig()
+    {
+        var mock = new Mock<ISystemConfigService>();
+        mock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync((string _, int def) => def);
+        mock.Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>())).ReturnsAsync((string _, decimal def) => def);
+        mock.Setup(x => x.GetValueAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((string _, string def) => def);
+        mock.Setup(x => x.GetBoolAsync(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync((string _, bool def) => def);
+        return mock.Object;
     }
 
     // ──────────────────────────── Helpers ────────────────────────────

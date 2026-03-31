@@ -5,6 +5,8 @@ using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Application.Common.Services;
+using Moq;
 
 namespace SIS.Tests.Application;
 
@@ -31,8 +33,8 @@ public class AdvisorApprovalServiceTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new AppDbContext(options);
-        var validationService = new RegistrationValidationService(_context);
-        _service = new CourseRegistrationService(_context, validationService);
+        var validationService = new RegistrationValidationService(_context, GetSystemConfig());
+        _service = new CourseRegistrationService(_context, validationService, GetSystemConfig());
 
         SeedBaseData();
     }
@@ -149,6 +151,16 @@ public class AdvisorApprovalServiceTests : IDisposable
         });
 
         _context.SaveChanges();
+    }
+
+    private static ISystemConfigService GetSystemConfig()
+    {
+        var mock = new Mock<ISystemConfigService>();
+        mock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync((string _, int def) => def);
+        mock.Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>())).ReturnsAsync((string _, decimal def) => def);
+        mock.Setup(x => x.GetValueAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((string _, string def) => def);
+        mock.Setup(x => x.GetBoolAsync(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync((string _, bool def) => def);
+        return mock.Object;
     }
 
     // ──────────────────────────── Helpers ────────────────────────────
