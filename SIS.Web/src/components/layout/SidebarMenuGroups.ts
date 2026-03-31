@@ -68,6 +68,8 @@ export const instructorMenuGroups: MenuGroup[] = [
     label: 'Ders İşlemleri',
     icon: BookOpen,
     children: [
+      { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
+      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
     ],
   },
@@ -82,7 +84,6 @@ export const advisorMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
-      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
     ],
   },
   {
@@ -98,6 +99,8 @@ export const advisorMenuGroups: MenuGroup[] = [
     label: 'Ders İşlemleri',
     icon: BookOpen,
     children: [
+      { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
+      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
     ],
   },
@@ -112,6 +115,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
+      { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
     ],
   },
   {
@@ -120,6 +124,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     icon: GraduationCap,
     children: [
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
+      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
@@ -170,6 +175,7 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     icon: BookOpen,
     children: [
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
+      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
     ],
@@ -185,6 +191,7 @@ export const deanMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
+      { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
     ],
   },
   {
@@ -193,6 +200,8 @@ export const deanMenuGroups: MenuGroup[] = [
     icon: Building2,
     children: [
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
+      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
+      { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
       { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
@@ -228,6 +237,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
+      { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
     ],
   },
   {
@@ -236,6 +246,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     icon: Calendar,
     children: [
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
+      { to: '/akademik-takvim', label: 'Akademik Takvim' },
     ],
   },
   {
