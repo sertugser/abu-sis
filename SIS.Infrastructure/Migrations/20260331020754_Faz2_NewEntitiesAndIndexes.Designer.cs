@@ -12,7 +12,7 @@ using SIS.Infrastructure.Persistence;
 namespace SIS.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260331015732_Faz2_NewEntitiesAndIndexes")]
+    [Migration("20260331020754_Faz2_NewEntitiesAndIndexes")]
     partial class Faz2_NewEntitiesAndIndexes
     {
         /// <inheritdoc />
