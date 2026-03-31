@@ -106,59 +106,58 @@ export default function ClassroomManagementAdminPage() {
   // Stats
   const all = classrooms ?? [];
   const totalCapacity = all.reduce((sum, c) => sum + c.capacity, 0);
+  const avgCapacity = all.length > 0 ? Math.round(totalCapacity / all.length) : 0;
+  const largest = all.length > 0 ? all.reduce((max, c) => c.capacity > max.capacity ? c : max, all[0]) : null;
   const typeGroups = all.reduce((acc, c) => {
     acc[c.type] = (acc[c.type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-end">
-        <Button onClick={openCreate} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Yeni Derslik
-        </Button>
-      </div>
-
-      {/* Summary cards */}
+    <div className="space-y-5">
+      {/* Summary cards + action */}
       {!isLoading && !isError && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-blue-50 p-2.5 rounded-lg">
-              <Building2 className="h-5 w-5 text-blue-600" />
+            <div className="bg-blue-50 p-2 rounded-lg">
+              <Building2 className="h-4 w-4 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{all.length}</p>
-              <p className="text-xs text-muted-foreground">Toplam Derslik</p>
+              <p className="text-xl font-bold">{all.length}</p>
+              <p className="text-[11px] text-muted-foreground">Toplam Derslik</p>
             </div>
           </div>
           <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-emerald-50 p-2.5 rounded-lg">
-              <Users className="h-5 w-5 text-emerald-600" />
+            <div className="bg-emerald-50 p-2 rounded-lg">
+              <Users className="h-4 w-4 text-emerald-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{totalCapacity}</p>
-              <p className="text-xs text-muted-foreground">Toplam Kapasite</p>
+              <p className="text-xl font-bold">{totalCapacity}</p>
+              <p className="text-[11px] text-muted-foreground">Toplam Kapasite</p>
             </div>
           </div>
           <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-violet-50 p-2.5 rounded-lg">
-              <Layers className="h-5 w-5 text-violet-600" />
+            <div className="bg-amber-50 p-2 rounded-lg">
+              <Layers className="h-4 w-4 text-amber-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{Object.keys(typeGroups).length}</p>
-              <p className="text-xs text-muted-foreground">Derslik Tipi</p>
+              <p className="text-xl font-bold">{avgCapacity}</p>
+              <p className="text-[11px] text-muted-foreground">Ort. Kapasite</p>
             </div>
           </div>
-          <div className="bg-white border rounded-xl p-4">
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(typeGroups).map(([type, count]) => (
-                <span key={type} className={`text-xs px-2 py-0.5 rounded-full border ${TYPE_COLORS[type] || 'bg-gray-100'}`}>
-                  {TYPE_LABELS[type] || type}: {count}
-                </span>
-              ))}
+          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
+            <div className="bg-rose-50 p-2 rounded-lg">
+              <Building2 className="h-4 w-4 text-rose-600" />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Tip Dağılımı</p>
+            <div>
+              <p className="text-xl font-bold">{largest?.capacity ?? 0}</p>
+              <p className="text-[11px] text-muted-foreground truncate" title={largest?.name}>{largest?.name ?? '—'}</p>
+            </div>
+          </div>
+          <div className="bg-white border rounded-xl p-4 flex items-center justify-center">
+            <Button onClick={openCreate} className="gap-1.5 w-full">
+              <Plus className="h-4 w-4" /> Yeni Derslik
+            </Button>
           </div>
         </div>
       )}
