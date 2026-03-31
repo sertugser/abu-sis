@@ -305,6 +305,7 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: '/donem-kapatma', label: 'Dönem Kapatma İşlemleri' },
       { to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: '/merkezi-derslik-yonetimi', label: 'Merkezi Derslik Yönetimi' },
+      { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
       { to: '/ders-kayit-istatistikleri', label: 'Ders Kayıt İstatistikleri' },
       { to: '/basari-istatistigi', label: 'Başarı İstatistiği' },
     ],
@@ -364,6 +365,8 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
       { to: ROUTES.CLASSROOM_MANAGEMENT, label: 'Merkezi Derslik Yönetimi' },
       { to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sınıf Listeleri' },
+      { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
+      { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
     ],
   },
   {
@@ -373,6 +376,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.ACADEMIC_STRUCTURE, label: 'Fakülte / Bölüm / Program' },
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
+      { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
     ],
   },
   {

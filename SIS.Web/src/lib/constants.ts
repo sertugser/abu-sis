@@ -26,6 +26,10 @@ export const ROUTES = {
   TERM_MANAGEMENT: '/donem-yonetimi',
   ACADEMIC_STRUCTURE: '/akademik-yapi',
   COURSE_CATALOG_ADMIN: '/ders-katalogu',
+  SYSTEM_CONFIG: '/sistem-ayarlari',
+  AUDIT_LOG: '/denetim-kayitlari',
+  PROMOTION_RULES: '/sinif-atlatma-kurallari',
+  SCHEDULE_APPROVAL: '/program-onayi',
 } as const;
 
 export const QUERY_KEYS = {
@@ -62,6 +66,12 @@ export const QUERY_KEYS = {
   adminInstructors: (search?: string, departmentId?: number) =>
     ['admin', 'instructors', search, departmentId] as const,
   adminTerms: ['admin', 'terms'] as const,
+  systemConfigs: ['admin', 'systemConfigs'] as const,
+  auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,
+  promotionRules: (programId?: number) => ['admin', 'promotionRules', programId] as const,
+  scheduleApprovalStatus: (facultyId: number, termId?: number) => ['scheduleApproval', facultyId, termId] as const,
+  adminFaculties: ['admin', 'faculties'] as const,
+  adminPrograms: (departmentId?: number) => ['admin', 'programs', departmentId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -71,6 +81,7 @@ export const STATUS_LABELS: Record<string, string> = {
   Completed: 'Tamamlandı',
   Dropped: 'Bırakıldı',
   Withdrawn: 'Çekildi',
+  Rejected: 'Reddedildi',
 };
 
 export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'> = {
@@ -80,6 +91,7 @@ export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructi
   Completed: 'default',
   Dropped: 'destructive',
   Withdrawn: 'outline',
+  Rejected: 'destructive',
 };
 
 /** Routes that have actual page implementations in App.tsx */
@@ -107,6 +119,10 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/donem-yonetimi',
   '/akademik-yapi',
   '/ders-katalogu',
+  '/sistem-ayarlari',
+  '/denetim-kayitlari',
+  '/sinif-atlatma-kurallari',
+  '/program-onayi',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

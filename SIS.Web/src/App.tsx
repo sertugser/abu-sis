@@ -29,9 +29,13 @@ import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import AcademicStructurePage from './pages/AcademicStructurePage';
 import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
+import SystemConfigPage from './pages/SystemConfigPage';
+import AuditLogPage from './pages/AuditLogPage';
+import PromotionRulePage from './pages/PromotionRulePage';
+import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
-import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES } from './lib/roles';
+import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
   return (
@@ -76,6 +80,13 @@ export default function App() {
                     <Route path="donem-yonetimi" element={<TermManagementPage />} />
                     <Route path="akademik-yapi" element={<AcademicStructurePage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
+                    <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
+                    <Route path="denetim-kayitlari" element={<AuditLogPage />} />
+                    <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
+                  </Route>
+
+                  <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>
+                    <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
 
                   <Route path="*" element={<NotFoundPage />} />

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
+import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
 import {
   useApplySchedule, useAssignSection, useAutoSchedulePreview,
   useFacultyPlanningConflicts, useFacultyPlanningOverview,
@@ -36,17 +37,15 @@ export default function FacultyPlanningPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
+  const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
 
-  // Resolve facultyId from user's department context
-  // For now, derive from first accessible department; backend resolves faculty from department
   const departments = contextQuery.data?.accessibleDepartments ?? [];
 
-  // Faculty ID will come from a faculty-level API or be derived
-  // Placeholder: use 1 until faculty selector is built from /api/faculty-planning/overview
-  const [facultyId] = useState<number>(1); // TODO: resolve from context
+  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
+  const facultyId = selectedFacultyId ?? faculties?.[0]?.id ?? null;
   const termId = activeTerm?.id ?? null;
 
-  if (contextQuery.isLoading) return <Skeleton className="h-96 rounded-xl" />;
+  if (contextQuery.isLoading || facultiesLoading) return <Skeleton className="h-96 rounded-xl" />;
 
   if (contextQuery.isError) {
     return (
@@ -58,19 +57,43 @@ export default function FacultyPlanningPage() {
     );
   }
 
+  if (!facultyId) {
+    return (
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Fakülte bulunamadı</AlertTitle>
+        <AlertDescription>Sistemde tanımlı fakülte bulunmamaktadır.</AlertDescription>
+      </Alert>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        {TABS.map(tab => (
-          <Button
-            key={tab.key}
-            variant={activeTab === tab.key ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setActiveTab(tab.key)}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Fakülte:</label>
+          <select
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            value={facultyId}
+            onChange={e => setSelectedFacultyId(Number(e.target.value))}
           >
-            {tab.label}
-          </Button>
-        ))}
+            {(faculties ?? []).map(f => (
+              <option key={f.id} value={f.id}>{f.code} — {f.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-wrap gap-2 ml-auto">
+          {TABS.map(tab => (
+            <Button
+              key={tab.key}
+              variant={activeTab === tab.key ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {activeTab === 'overview' && <OverviewTab facultyId={facultyId} termId={termId} />}

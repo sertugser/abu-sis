@@ -369,6 +369,16 @@ function AddCourseDialog({
   const [instructorId, setInstructorId] = useState<string>('');
   const [search, setSearch] = useState('');
 
+  const handleSelectCourse = (c: CurriculumCourseForOpeningDto) => {
+    setSelectedCourse(c);
+    if (c.recommendedSectionCount != null && c.recommendedSectionCount > 0) {
+      setSectionCount(c.recommendedSectionCount);
+    }
+    if (c.recommendedCapacity != null && c.recommendedCapacity > 0) {
+      setCapacity(c.recommendedCapacity);
+    }
+  };
+
   const filteredCourses = (curriculumQuery.data ?? []).filter(
     c => c.courseCode.toLowerCase().includes(search.toLowerCase()) || c.courseName.toLowerCase().includes(search.toLowerCase()),
   );
@@ -430,6 +440,7 @@ function AddCourseDialog({
                     <TableHead>Ders Adı</TableHead>
                     <TableHead>AKTS</TableHead>
                     <TableHead>Snf</TableHead>
+                    <TableHead>Talep</TableHead>
                     <TableHead>Durum</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -438,21 +449,45 @@ function AddCourseDialog({
                     <TableRow
                       key={c.courseId}
                       className={`cursor-pointer ${selectedCourse?.courseId === c.courseId ? 'bg-primary/10' : ''}`}
-                      onClick={() => setSelectedCourse(c)}
+                      onClick={() => handleSelectCourse(c)}
                     >
                       <TableCell>
                         <input
                           type="radio"
                           checked={selectedCourse?.courseId === c.courseId}
-                          onChange={() => setSelectedCourse(c)}
+                          onChange={() => handleSelectCourse(c)}
                         />
                       </TableCell>
                       <TableCell>
                         <span className="font-mono text-xs">{c.courseCode}</span>
                       </TableCell>
-                      <TableCell className="text-sm">{c.courseName}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">{c.courseName}</div>
+                        {c.crossDepartmentDemand && c.crossDepartmentDemand.length > 0 && (
+                          <div className="flex gap-1 mt-0.5 flex-wrap">
+                            {c.crossDepartmentDemand.map((cd, idx) => (
+                              <Badge key={idx} variant="outline" className="text-[10px] px-1 py-0">
+                                {cd.departmentName}({cd.estimatedStudentCount})
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell>{c.ects}</TableCell>
                       <TableCell>{Math.ceil(c.suggestedSemester / 2)}</TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          {c.predictedDemand != null && (
+                            <div className="text-xs text-muted-foreground">Talep: {c.predictedDemand}</div>
+                          )}
+                          {c.retakeCount != null && c.retakeCount > 0 && (
+                            <div className="text-xs text-red-600 font-medium">Alttan: {c.retakeCount}</div>
+                          )}
+                          {c.recommendedSectionCount != null && (
+                            <div className="text-xs text-blue-600">Onerilen: {c.recommendedSectionCount} sube</div>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {c.alreadyOpened ? (
                           <Badge variant="secondary">{c.existingSectionCount} şube açık</Badge>

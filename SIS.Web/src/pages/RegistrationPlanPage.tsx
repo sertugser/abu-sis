@@ -13,7 +13,7 @@ import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import type { ValidationError } from '../types/registration';
 import { Link } from 'react-router-dom';
-import { Trash2, Send, CheckCircle2, ClipboardList, BookOpen, Loader2 } from 'lucide-react';
+import { AlertCircle, Trash2, Send, CheckCircle2, ClipboardList, BookOpen, Loader2 } from 'lucide-react';
 
 export default function RegistrationPlanPage() {
   const { data: registrations, isLoading } = useMyRegistrations();
@@ -23,7 +23,9 @@ export default function RegistrationPlanPage() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  const planItems = registrations?.filter(r => r.status === 'Draft') || [];
+  const planItems = registrations?.filter(r => r.status === 'Draft' || r.status === 'Rejected') || [];
+  const rejectedItems = registrations?.filter(r => r.status === 'Rejected') || [];
+  const advisorNote = rejectedItems.length > 0 ? rejectedItems[0]?.advisorNote : undefined;
   const totalEcts = planItems.reduce((sum, r) => sum + r.ects, 0);
   const ectsLimit = student?.ectsLimit ?? 30;
   const ectsPercent = Math.min((totalEcts / ectsLimit) * 100, 100);
@@ -73,6 +75,19 @@ export default function RegistrationPlanPage() {
         </Alert>
       )}
 
+      {rejectedItems.length > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Kayıt planınız danışmanınız tarafından reddedildi.</strong>
+            {advisorNote && (
+              <p className="mt-1 text-sm">Danışman notu: {advisorNote}</p>
+            )}
+            <p className="mt-1 text-sm">Planınızı düzenleyip tekrar gönderebilirsiniz.</p>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {validationErrors.length > 0 && <ValidationErrors errors={validationErrors} />}
 
       {planItems.length > 0 ? (
@@ -92,15 +107,17 @@ export default function RegistrationPlanPage() {
                     <Badge variant="default" className="shrink-0">{item.ects} ECTS</Badge>
                     <RegistrationStatusBadge status={item.status} />
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleRemove(item.registrationId)}
-                    disabled={dropCourse.isPending}
-                    className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {(item.status === 'Draft' || item.status === 'Rejected') && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemove(item.registrationId)}
+                      disabled={dropCourse.isPending}
+                      className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
