@@ -64,11 +64,12 @@ public class SchedulingService : ISchedulingService
         var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
 
         result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
         result.Notes.AddRange(candidate.Notes);
 
-        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig);
+        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
         result.Conflicts = conflicts;
         result.Notes.AddRange(softNotes);
         result.IsValid = conflicts.Count == 0;
@@ -188,6 +189,7 @@ public class SchedulingService : ISchedulingService
 
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
         var currentParse = ParseScheduleJson(section.ScheduleJson);
         var requiredHours = ResolveTotalRequiredHours(section);
         var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentParse.Slots, timeSlots);
@@ -259,7 +261,7 @@ public class SchedulingService : ISchedulingService
                     slotCombination.Slots,
                     new List<string>());
 
-                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig);
+                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig, hardConfig);
                 if (conflicts.Count > 0)
                 {
                     continue;
@@ -611,6 +613,12 @@ public class SchedulingService : ISchedulingService
             .AsNoTracking()
             .ToDictionaryAsync(d => d.Id, d => d.FacultyId, cancellationToken);
 
+        // Load corequisite relationships for H11
+        var corequisites = await _context.CoursePrerequisites
+            .AsNoTracking()
+            .Where(cp => cp.IsCorequisite)
+            .ToListAsync(cancellationToken);
+
         var snapshots = sections
             .Select(section => BuildExistingSectionSnapshot(section, instructorNameMap, semesterMap))
             .ToList();
@@ -622,7 +630,8 @@ public class SchedulingService : ISchedulingService
             ScopeName = scopeName,
             Sections = snapshots,
             ClassroomAssignments = classroomAssignments,
-            DeptFacultyMap = deptFacultyMap
+            DeptFacultyMap = deptFacultyMap,
+            Corequisites = corequisites
         };
     }
 
@@ -1012,6 +1021,162 @@ public class SchedulingService : ISchedulingService
             }
         }
 
+        // ── H11: Corequisite Compatibility ──────────────────────────────
+        foreach (var coreq in snapshot.Corequisites)
+        {
+            var courseASections = snapshot.Sections
+                .Where(s => s.CourseId == coreq.CourseId && s.ScheduleSlots.Count > 0)
+                .ToList();
+            var courseBSections = snapshot.Sections
+                .Where(s => s.CourseId == coreq.RequiredCourseId && s.ScheduleSlots.Count > 0)
+                .ToList();
+
+            if (courseASections.Count == 0 || courseBSections.Count == 0)
+                continue;
+
+            var hasNonConflicting = courseASections.Any(a =>
+                courseBSections.Any(b =>
+                    GetOverlapSlots(a.ScheduleSlots, b.ScheduleSlots).Count == 0));
+
+            if (!hasNonConflicting)
+            {
+                var firstA = courseASections[0];
+                var firstB = courseBSections[0];
+                foreach (var sec in courseASections)
+                {
+                    conflicts.Add(BuildConflict(
+                        sec,
+                        ConflictTypes.CorequisiteConflict,
+                        $"Corequisite dersler ({firstA.CourseCode} ve {firstB.CourseCode}) arasında çakışmasız bir şube kombinasyonu bulunmuyor.",
+                        null,
+                        null));
+                }
+                foreach (var sec in courseBSections)
+                {
+                    conflicts.Add(BuildConflict(
+                        sec,
+                        ConflictTypes.CorequisiteConflict,
+                        $"Corequisite dersler ({firstA.CourseCode} ve {firstB.CourseCode}) arasında çakışmasız bir şube kombinasyonu bulunmuyor.",
+                        null,
+                        null));
+                }
+            }
+        }
+
+        // ── H12: Credit-Hour Block Compatibility ────────────────────────
+        foreach (var section in snapshot.Sections)
+        {
+            if (section.ScheduleSlots.Count == 0)
+                continue;
+
+            var expectedHours = section.TheoryHours + section.LabHours;
+            if (expectedHours <= 0)
+                continue;
+
+            var actualMinutes = section.ScheduleSlots.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
+            var actualHours = (int)Math.Round(actualMinutes / 60.0);
+
+            if (actualHours != expectedHours)
+            {
+                conflicts.Add(BuildConflict(
+                    section,
+                    ConflictTypes.CreditHourMismatch,
+                    $"Dersin saat gereksinimine uygun slot bloğu atanmamış ({section.CourseCode}: beklenen {expectedHours} saat, atanan {actualHours} saat).",
+                    null,
+                    null));
+            }
+        }
+
+        // ── H13: Lunch Break Protection ─────────────────────────────────
+        var hardConfig = await LoadHardConstraintConfigAsync(ct);
+
+        if (hardConfig.LunchBreakIsHard)
+        {
+            foreach (var section in snapshot.Sections)
+            {
+                foreach (var slot in section.ScheduleSlots)
+                {
+                    if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
+                    {
+                        conflicts.Add(BuildConflict(
+                            section,
+                            ConflictTypes.LunchBreakConflict,
+                            "Öğle arası saatlerinde ders atanamaz.",
+                            slot,
+                            null));
+                    }
+                }
+            }
+        }
+
+        // ── H15: Max Consecutive Hours ──────────────────────────────────
+        foreach (var instructorGroup in snapshot.Sections
+                     .Where(s => s.InstructorId.HasValue && s.ScheduleSlots.Count > 0)
+                     .GroupBy(s => s.InstructorId!.Value))
+        {
+            var instructorName = instructorGroup.First().InstructorName;
+
+            var allSlots = instructorGroup
+                .SelectMany(s => s.ScheduleSlots.Select(slot => new { s.SectionId, Slot = slot }))
+                .GroupBy(x => x.Slot.Day);
+
+            foreach (var dayGroup in allSlots)
+            {
+                var sortedSlots = dayGroup.OrderBy(x => x.Slot.StartTime).ToList();
+                if (sortedSlots.Count <= 1)
+                    continue;
+
+                var blockStartIdx = 0;
+                var blockMinutes = (sortedSlots[0].Slot.EndTime - sortedSlots[0].Slot.StartTime).TotalMinutes;
+
+                for (int idx = 1; idx < sortedSlots.Count; idx++)
+                {
+                    var gap = (sortedSlots[idx].Slot.StartTime - sortedSlots[idx - 1].Slot.EndTime).TotalMinutes;
+                    if (gap <= hardConfig.BreakDurationMinutes)
+                    {
+                        blockMinutes += (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                    else
+                    {
+                        var blockHours = blockMinutes / 60.0;
+                        if (blockHours > hardConfig.MaxConsecutiveHours)
+                        {
+                            var dayName = GetDayOfWeekName(dayGroup.Key);
+                            for (int k = blockStartIdx; k < idx; k++)
+                            {
+                                var sec = snapshot.Sections.First(s => s.SectionId == sortedSlots[k].SectionId);
+                                conflicts.Add(BuildConflict(
+                                    sec,
+                                    ConflictTypes.MaxConsecutiveHoursConflict,
+                                    $"Öğretim üyesi '{instructorName}' {dayName} günü {hardConfig.MaxConsecutiveHours} saatten fazla aralıksız ders veriyor ({blockHours:0.#} saat).",
+                                    null,
+                                    null));
+                            }
+                        }
+                        blockStartIdx = idx;
+                        blockMinutes = (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                }
+
+                // Check the last block
+                var lastBlockHours = blockMinutes / 60.0;
+                if (lastBlockHours > hardConfig.MaxConsecutiveHours)
+                {
+                    var dayName = GetDayOfWeekName(dayGroup.Key);
+                    for (int k = blockStartIdx; k < sortedSlots.Count; k++)
+                    {
+                        var sec = snapshot.Sections.First(s => s.SectionId == sortedSlots[k].SectionId);
+                        conflicts.Add(BuildConflict(
+                            sec,
+                            ConflictTypes.MaxConsecutiveHoursConflict,
+                            $"Öğretim üyesi '{instructorName}' {dayName} günü {hardConfig.MaxConsecutiveHours} saatten fazla aralıksız ders veriyor ({lastBlockHours:0.#} saat).",
+                            null,
+                            null));
+                    }
+                }
+            }
+        }
+
         // ── Soft Constraints ────────────────────────────────────────────
         var softConfig = await LoadSoftConstraintConfigAsync(ct);
 
@@ -1092,7 +1257,7 @@ public class SchedulingService : ISchedulingService
     }
 
     private (List<SchedulingConflictDto> Conflicts, List<string> SoftNotes) EvaluateCandidateConflicts(
-        SectionSnapshot candidate, TermSnapshot snapshot, SoftConstraintConfig softConfig)
+        SectionSnapshot candidate, TermSnapshot snapshot, SoftConstraintConfig softConfig, HardConstraintConfig? hardConfig = null)
     {
         var conflicts = new List<SchedulingConflictDto>();
 
@@ -1253,6 +1418,143 @@ public class SchedulingService : ISchedulingService
                     $"Instructor haftalik ders yuku limiti asiliyor ({totalWeeklyHours:0.##}/{candidate.InstructorMaxWeeklyHours} saat).",
                     null,
                     null));
+            }
+        }
+
+        // ── H11: Corequisite Compatibility (candidate) ──────────────────
+        foreach (var coreq in snapshot.Corequisites)
+        {
+            // Check if the candidate's course is part of a corequisite pair
+            int? pairedCourseId = null;
+            if (coreq.CourseId == candidate.CourseId)
+                pairedCourseId = coreq.RequiredCourseId;
+            else if (coreq.RequiredCourseId == candidate.CourseId)
+                pairedCourseId = coreq.CourseId;
+
+            if (!pairedCourseId.HasValue)
+                continue;
+
+            var pairedSections = snapshot.Sections
+                .Where(s => s.CourseId == pairedCourseId.Value && s.ScheduleSlots.Count > 0)
+                .ToList();
+
+            if (pairedSections.Count == 0)
+                continue;
+
+            // Get all sections of candidate's course (existing + the candidate itself)
+            var candidateCourseSections = snapshot.Sections
+                .Where(s => s.CourseId == candidate.CourseId && s.ScheduleSlots.Count > 0)
+                .ToList();
+
+            // Add the candidate to the list (replacing any excluded section)
+            var allCandidateCourseSections = candidateCourseSections
+                .Where(s => s.SectionId != candidate.SectionId)
+                .Append(candidate)
+                .Where(s => s.ScheduleSlots.Count > 0)
+                .ToList();
+
+            var hasNonConflicting = allCandidateCourseSections.Any(a =>
+                pairedSections.Any(b =>
+                    GetOverlapSlots(a.ScheduleSlots, b.ScheduleSlots).Count == 0));
+
+            if (!hasNonConflicting)
+            {
+                var pairedCode = pairedSections[0].CourseCode;
+                conflicts.Add(BuildConflict(
+                    candidate,
+                    ConflictTypes.CorequisiteConflict,
+                    $"Corequisite dersler ({candidate.CourseCode} ve {pairedCode}) arasında çakışmasız bir şube kombinasyonu bulunmuyor.",
+                    null,
+                    null));
+            }
+        }
+
+        // ── H12: Credit-Hour Block Compatibility (candidate) ────────────
+        if (candidate.ScheduleSlots.Count > 0)
+        {
+            var expectedHours = candidate.TheoryHours + candidate.LabHours;
+            if (expectedHours > 0)
+            {
+                var actualMinutes = candidate.ScheduleSlots.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
+                var actualHours = (int)Math.Round(actualMinutes / 60.0);
+
+                if (actualHours != expectedHours)
+                {
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.CreditHourMismatch,
+                        $"Dersin saat gereksinimine uygun slot bloğu atanmamış ({candidate.CourseCode}: beklenen {expectedHours} saat, atanan {actualHours} saat).",
+                        null,
+                        null));
+                }
+            }
+        }
+
+        // ── H13: Lunch Break Protection (candidate) ─────────────────────
+        if (hardConfig != null && hardConfig.LunchBreakIsHard)
+        {
+            foreach (var slot in candidate.ScheduleSlots)
+            {
+                if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
+                {
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.LunchBreakConflict,
+                        "Öğle arası saatlerinde ders atanamaz.",
+                        slot,
+                        null));
+                }
+            }
+        }
+
+        // ── H15: Max Consecutive Hours (candidate) ──────────────────────
+        if (hardConfig != null && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        {
+            var existingSlots = snapshot.Sections
+                .Where(s => s.InstructorId == candidate.InstructorId)
+                .SelectMany(s => s.ScheduleSlots.Select(slot => new { Slot = slot }))
+                .ToList();
+
+            var candidateSlots = candidate.ScheduleSlots
+                .Select(slot => new { Slot = slot })
+                .ToList();
+
+            var allSlots = existingSlots.Concat(candidateSlots);
+
+            foreach (var dayGroup in allSlots.GroupBy(x => x.Slot.Day))
+            {
+                var sortedSlots = dayGroup.OrderBy(x => x.Slot.StartTime).ToList();
+                if (sortedSlots.Count <= 1)
+                    continue;
+
+                var blockStartIdx = 0;
+                var blockMinutes = (sortedSlots[0].Slot.EndTime - sortedSlots[0].Slot.StartTime).TotalMinutes;
+
+                for (int idx = 1; idx < sortedSlots.Count; idx++)
+                {
+                    var gap = (sortedSlots[idx].Slot.StartTime - sortedSlots[idx - 1].Slot.EndTime).TotalMinutes;
+                    if (gap <= hardConfig.BreakDurationMinutes)
+                    {
+                        blockMinutes += (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                    else
+                    {
+                        blockStartIdx = idx;
+                        blockMinutes = (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                }
+
+                var blockHours = blockMinutes / 60.0;
+                if (blockHours > hardConfig.MaxConsecutiveHours)
+                {
+                    var dayName = GetDayOfWeekName(dayGroup.Key);
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.MaxConsecutiveHoursConflict,
+                        $"Öğretim üyesi '{candidate.InstructorName}' {dayName} günü {hardConfig.MaxConsecutiveHours} saatten fazla aralıksız ders veriyor ({blockHours:0.#} saat).",
+                        null,
+                        null));
+                }
             }
         }
 
@@ -1910,6 +2212,21 @@ public class SchedulingService : ISchedulingService
             S3MaxSectionsPerSlot: GetInt(config, "SoftConstraint.S3.MaxSectionsPerSlot", 5));
     }
 
+    private async Task<HardConstraintConfig> LoadHardConstraintConfigAsync(CancellationToken ct)
+    {
+        var config = await LoadSystemConfigAsync(ct);
+
+        var lunchIsHard = GetBool(config, "Schedule.LunchBreak.IsHard", false);
+        var lunchStart = config.TryGetValue("Schedule.LunchBreakStart", out var ls) && TimeOnly.TryParse(ls, out var lst)
+            ? lst : new TimeOnly(11, 40);
+        var lunchEnd = config.TryGetValue("Schedule.LunchBreakEnd", out var le) && TimeOnly.TryParse(le, out var let)
+            ? let : new TimeOnly(12, 20);
+        var maxConsecutive = GetInt(config, "Schedule.MaxConsecutiveHours", 4);
+        var breakDuration = GetInt(config, "Schedule.BreakDurationMinutes", 5);
+
+        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration);
+    }
+
     private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
     {
         return config.TryGetValue(key, out var value)
@@ -1946,6 +2263,10 @@ public class SchedulingService : ISchedulingService
         bool S2Enabled, int S2MaxDailyHours,
         bool S3Enabled, int S3MaxSectionsPerSlot);
 
+    private record HardConstraintConfig(
+        bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
+        int MaxConsecutiveHours, int BreakDurationMinutes);
+
 
     private static class ConflictTypes
     {
@@ -1959,6 +2280,10 @@ public class SchedulingService : ISchedulingService
         public const string SameCourseComponentConflict = "SameCourseComponentConflict"; // H6
         public const string SameCourseSectionConflict = "SameCourseSectionConflict";     // H8
         public const string FacultyClassroomConflict = "FacultyClassroomConflict";       // H10
+        public const string CorequisiteConflict = "CorequisiteConflict";                 // H11
+        public const string CreditHourMismatch = "CreditHourMismatch";                   // H12
+        public const string LunchBreakConflict = "LunchBreakConflict";                   // H13
+        public const string MaxConsecutiveHoursConflict = "MaxConsecutiveHoursConflict"; // H15
     }
 
     private sealed class TermSnapshot
@@ -1969,6 +2294,7 @@ public class SchedulingService : ISchedulingService
         public List<SectionSnapshot> Sections { get; init; } = new();
         public List<ClassroomTermAssignment> ClassroomAssignments { get; init; } = new(); // for H10
         public Dictionary<int, int> DeptFacultyMap { get; init; } = new();                // for H10
+        public List<CoursePrerequisite> Corequisites { get; init; } = new();              // for H11
     }
 
     private sealed class SectionSnapshot
