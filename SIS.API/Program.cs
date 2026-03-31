@@ -29,6 +29,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditInterceptor>();
 
 builder.Services.AddCors(options =>
 {
@@ -41,8 +43,11 @@ builder.Services.AddCors(options =>
 });
 
 // Add EF Core + PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.AddInterceptors(serviceProvider.GetRequiredService<AuditInterceptor>());
+});
 
 // Add Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
