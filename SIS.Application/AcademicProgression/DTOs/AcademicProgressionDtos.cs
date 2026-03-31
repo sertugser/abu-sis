@@ -26,6 +26,7 @@ public class StudentProgressionDto
     public bool WasPromoted { get; set; }
     public string Status { get; set; } = string.Empty; // "Normal", "Warning-LowCGPA", "Warning-BehindSchedule"
     public List<string> Warnings { get; set; } = new();
+    public List<string> PromotionRuleDetails { get; set; } = new();
 }
 
 /// <summary>Tek öğrenci dönem sonu GPA yeniden hesaplama sonucu</summary>
