@@ -74,7 +74,8 @@ public class RegistrationValidationServiceTests : IDisposable
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true
+            IsActive = true,
+            Status = TermStatus.RegistrationOpen
         });
 
         // Student (active, good CGPA, no financial block)
@@ -271,10 +272,9 @@ public class RegistrationValidationServiceTests : IDisposable
     [Fact]
     public async Task Validate_OutsideRegistrationPeriod_ReturnsPeriodError()
     {
-        // Move registration window to the past
+        // Set term status to Published (not RegistrationOpen/AddDrop)
         var term = _context.AcademicTerms.Find(TermId)!;
-        term.RegistrationStart = DateTime.UtcNow.AddDays(-20);
-        term.RegistrationEnd = DateTime.UtcNow.AddDays(-10);
+        term.Status = TermStatus.Published;
         _context.SaveChanges();
 
         var course = AddCourse(300, "CS300", "Operating Systems", 5);

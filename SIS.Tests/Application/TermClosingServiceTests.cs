@@ -51,6 +51,7 @@ public class TermClosingServiceTests : IDisposable
             Year = 2025,
             Semester = SemesterType.Fall,
             IsActive = true,
+            Status = TermStatus.GradeEntry,
             RegistrationStart = new DateTime(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc),
             RegistrationEnd = new DateTime(2025, 9, 15, 0, 0, 0, DateTimeKind.Utc),
             AddDropStart = new DateTime(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -298,7 +299,7 @@ public class TermClosingServiceTests : IDisposable
         result.NewTermId.Should().NotBeNull();
 
         var oldTerm = await _context.AcademicTerms.FindAsync(TermId);
-        oldTerm!.IsActive.Should().BeFalse();
+        oldTerm!.IsActive.Should().BeTrue(); // current term is no longer deactivated per-department
 
         var newTerm = await _context.AcademicTerms.FindAsync(result.NewTermId);
         newTerm!.IsActive.Should().BeTrue();
