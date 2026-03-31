@@ -24,6 +24,9 @@ export interface AdminTermDto {
   withdrawalDeadline: string;
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
+  status: string;
+  statusLabel: string;
+  allowedTransitions: string[];
 }
 
 export interface CreateTermDto {
@@ -131,6 +134,21 @@ export function useActivateTerm() {
   return useMutation({
     mutationFn: async (id: number) => {
       await apiClient.post(`${API}/${id}/activate`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+    },
+  });
+}
+
+// ── Term Status Transition ───────────────────────────────────────────────────
+
+export function useTransitionTermStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ termId, targetStatus }: { termId: number; targetStatus: string }) => {
+      await apiClient.post(`${API}/${termId}/transition`, { targetStatus });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });

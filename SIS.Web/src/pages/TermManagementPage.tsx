@@ -25,6 +25,7 @@ import {
   useCreateTerm,
   useUpdateTerm,
   useActivateTerm,
+  useTransitionTermStatus,
   useTermCalendarEvents,
   useCreateCalendarEvent,
   useUpdateCalendarEvent,
@@ -105,6 +106,45 @@ const EVENT_TYPE_DEFAULTS: Record<string, string> = {
   HorizontalTransfer: 'Yatay Geçiş Başvuruları',
   DoubleMajor: 'Çift Anadal / Yan Dal Başvuruları',
   Other: '',
+};
+
+const TRANSITION_LABELS: Record<string, string> = {
+  Planning: 'Planlamaya Gec',
+  Scheduling: 'Programlamaya Gec',
+  Published: 'Yayinla',
+  RegistrationOpen: 'Kayitlari Ac',
+  AddDrop: 'Ders Ekle/Birak',
+  WithdrawalPeriod: 'Cekilme Donemi',
+  GradeEntry: 'Not Girisi',
+  Closed: 'Donemi Kapat',
+  Archived: 'Arsivle',
+  Draft: 'Taslaga Don',
+};
+
+const TERM_STATUS_LABELS: Record<string, string> = {
+  Draft: 'Taslak',
+  Planning: 'Planlama',
+  Scheduling: 'Programlama',
+  Published: 'Yayinlandi',
+  RegistrationOpen: 'Kayit Acik',
+  AddDrop: 'Ekle/Birak',
+  WithdrawalPeriod: 'Cekilme Donemi',
+  GradeEntry: 'Not Girisi',
+  Closed: 'Kapali',
+  Archived: 'Arsiv',
+};
+
+const TERM_STATUS_COLORS: Record<string, string> = {
+  Draft: 'bg-gray-100 text-gray-700 border-gray-300',
+  Planning: 'bg-blue-100 text-blue-700 border-blue-300',
+  Scheduling: 'bg-indigo-100 text-indigo-700 border-indigo-300',
+  Published: 'bg-green-100 text-green-700 border-green-300',
+  RegistrationOpen: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  AddDrop: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+  WithdrawalPeriod: 'bg-orange-100 text-orange-700 border-orange-300',
+  GradeEntry: 'bg-purple-100 text-purple-700 border-purple-300',
+  Closed: 'bg-red-100 text-red-700 border-red-300',
+  Archived: 'bg-slate-100 text-slate-700 border-slate-300',
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -492,10 +532,32 @@ export default function TermManagementPage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [expandedTermId, setExpandedTermId] = useState<number | null>(null);
 
+  const [transitionError, setTransitionError] = useState('');
+  const [transitioningTermId, setTransitioningTermId] = useState<number | null>(null);
+
   const { data: terms = [], isLoading } = useAdminTerms();
   const createTerm = useCreateTerm();
   const updateTerm = useUpdateTerm();
   const activateTerm = useActivateTerm();
+  const transitionTerm = useTransitionTermStatus();
+
+  async function handleTransition(termId: number, targetStatus: string) {
+    setTransitionError('');
+    setTransitioningTermId(termId);
+    try {
+      await transitionTerm.mutateAsync({ termId, targetStatus });
+      showSuccess(`Donem durumu "${TERM_STATUS_LABELS[targetStatus] ?? targetStatus}" olarak guncellendi.`);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
+      const msg = axiosErr?.response?.data?.error
+        ?? axiosErr?.response?.data?.message
+        ?? axiosErr?.response?.data?.title
+        ?? (err instanceof Error ? err.message : 'Gecis basarisiz.');
+      setTransitionError(msg);
+    } finally {
+      setTransitioningTermId(null);
+    }
+  }
 
   const sortedTerms = [...terms].sort((a, b) => b.year - a.year || b.semester.localeCompare(a.semester));
 
@@ -603,25 +665,35 @@ export default function TermManagementPage() {
           </div>
         </div>
 
+        {transitionError && (
+          <div className="mx-4 mt-3 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive flex items-start gap-2">
+            <span className="shrink-0 font-semibold">Hata:</span>
+            <span>{transitionError}</span>
+            <button onClick={() => setTransitionError('')} className="ml-auto shrink-0 text-destructive hover:text-destructive/80 font-bold">&times;</button>
+          </div>
+        )}
+
         <table className="w-full text-sm">
           <thead className="bg-muted/20 border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Durum</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ders Kaydı</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ekle / Bırak</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem Tarihi</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Çekilme Son</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Geçiş</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Yükleniyor...</td>
+                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Yükleniyor...</td>
               </tr>
             ) : sortedTerms.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
+                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
               </tr>
             ) : sortedTerms.flatMap(term => {
               const isExpanded = expandedTermId === term.id;
@@ -645,6 +717,13 @@ export default function TermManagementPage() {
                     </div>
                   </td>
 
+                  {/* Durum */}
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${TERM_STATUS_COLORS[term.status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`}>
+                      {term.statusLabel || TERM_STATUS_LABELS[term.status] || term.status}
+                    </span>
+                  </td>
+
                   {/* Kayıt */}
                   <td className="px-4 py-3">
                     <DateCell start={term.registrationStart} end={term.registrationEnd} active={term.isRegistrationOpen} />
@@ -665,6 +744,28 @@ export default function TermManagementPage() {
                     <p className="text-sm font-medium text-foreground">
                       {fmt(term.withdrawalDeadline)}
                     </p>
+                  </td>
+
+                  {/* Geçiş */}
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(term.allowedTransitions ?? []).length === 0 ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        term.allowedTransitions.map(target => (
+                          <Button
+                            key={target}
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 px-2"
+                            disabled={transitioningTermId === term.id}
+                            onClick={() => handleTransition(term.id, target)}
+                          >
+                            {transitioningTermId === term.id ? '...' : (TRANSITION_LABELS[target] ?? target)}
+                          </Button>
+                        ))
+                      )}
+                    </div>
                   </td>
 
                   {/* İşlemler */}
@@ -699,7 +800,7 @@ export default function TermManagementPage() {
                 </tr>,
                 isExpanded && (
                   <tr key={`${term.id}-calendar`} className="border-l-4 border-l-transparent">
-                    <td colSpan={6} className="p-0 bg-muted/5">
+                    <td colSpan={8} className="p-0 bg-muted/5">
                       <TermCalendarSection termId={term.id} />
                     </td>
                   </tr>
