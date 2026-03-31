@@ -270,9 +270,9 @@ public class SchedulingServiceTests : IDisposable
     private static ISystemConfigService GetSystemConfig()
     {
         var mock = new Mock<ISystemConfigService>();
-        mock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync((string _, int def) => def);
-        mock.Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>())).ReturnsAsync((string _, decimal def) => def);
-        mock.Setup(x => x.GetStringAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((string _, string def) => def);
+        mock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>())).Returns((string _, int def) => Task.FromResult(def));
+        mock.Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>())).Returns((string _, decimal def) => Task.FromResult(def));
+        mock.Setup(x => x.GetStringAsync(It.IsAny<string>(), It.IsAny<string>())).Returns((string _, string def) => Task.FromResult(def));
         return mock.Object;
     }
 
