@@ -51,9 +51,11 @@ export default function App() {
                 <Route element={<AppLayout />}>
                   <Route index element={<RoleDashboard />} />
 
+                  {/* Herkesin erişebildiği sayfalar */}
+                  <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
+
                   <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
                     <Route path="kullanim-kilavuzu" element={<UsageGuidePage />} />
-                    <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
                     <Route path="plan" element={<RegistrationPlanPage />} />
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
