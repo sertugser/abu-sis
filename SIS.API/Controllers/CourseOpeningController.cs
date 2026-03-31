@@ -135,18 +135,27 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     {
         var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
 
-        // SystemAdministrator and AdministrativeStaff can access all departments
         if (roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff"))
             return true;
 
-        // DepartmentManager can only access their own department
-        if (roles.Contains("DepartmentManager"))
+        var instructor = await _context.Instructors
+            .AsNoTracking()
+            .Include(i => i.Department)
+            .FirstOrDefaultAsync(i => i.UserId == userId, ct);
+
+        if (instructor == null) return false;
+
+        // Dean: kendi fakültesindeki tüm bölümlere erişebilir
+        if (roles.Contains("Dean"))
         {
-            var instructor = await _context.Instructors
-                .AsNoTracking()
-                .FirstOrDefaultAsync(i => i.UserId == userId, ct);
-            return instructor != null && instructor.DepartmentId == departmentId;
+            var department = await _context.Departments.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == departmentId, ct);
+            return department != null && department.FacultyId == instructor.Department.FacultyId;
         }
+
+        // DepartmentManager: sadece kendi bölümü
+        if (roles.Contains("DepartmentManager"))
+            return instructor.DepartmentId == departmentId;
 
         return false;
     }

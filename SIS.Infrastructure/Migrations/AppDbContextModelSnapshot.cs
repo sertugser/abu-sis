@@ -166,6 +166,9 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("DegreeLevel")
                         .HasColumnType("integer");
 
@@ -184,6 +187,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int>("TotalRequiredEcts")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -209,6 +215,13 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("AddDropStart")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EnglishName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -225,14 +238,27 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("Semester")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ShortName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("TermEnd")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("TermStart")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("WithdrawalDeadlineWeek")
+                    b.Property<int>("TermType")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("WithdrawalDeadline")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
@@ -245,6 +271,51 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("AcademicTerms");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.AuditLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("EntityId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("text");
+
+                    b.Property<string>("NewValue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OldValue")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("EntityType", "EntityId");
+
+                    b.ToTable("AuditLogs");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Classroom", b =>
                 {
                     b.Property<int>("Id")
@@ -253,7 +324,17 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BuildingName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("Capacity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Floor")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
@@ -263,9 +344,44 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("Name")
+                        .IsUnique();
+
                     b.ToTable("Classrooms");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ClassroomTermAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClassroomId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClassroomId");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("TermId", "ClassroomId")
+                        .IsUnique();
+
+                    b.ToTable("ClassroomTermAssignments");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -279,6 +395,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("integer");
@@ -299,6 +418,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("TheoryHours")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Code")
@@ -307,6 +429,39 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("DepartmentId");
 
                     b.ToTable("Courses");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.CourseAccessPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("TermId");
+
+                    b.ToTable("CourseAccessPolicies");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseEquivalency", b =>
@@ -347,6 +502,9 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AdvisorNote")
+                        .HasColumnType("text");
+
                     b.Property<int>("CourseSectionId")
                         .HasColumnType("integer");
 
@@ -365,6 +523,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("MandatoryAttendance")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("RegistrationPlanId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -377,6 +538,10 @@ namespace SIS.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CourseSectionId");
+
+                    b.HasIndex("RegistrationPlanId");
+
+                    b.HasIndex("StudentId");
 
                     b.HasIndex("StudentId", "CourseSectionId")
                         .IsUnique();
@@ -401,6 +566,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("CourseId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("EnrolledCount")
                         .HasColumnType("integer");
 
@@ -423,18 +591,27 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("SectionNumber")
+                        .HasColumnType("integer");
+
                     b.Property<int>("TermId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ClassroomId");
 
-                    b.HasIndex("CourseId");
-
                     b.HasIndex("InstructorId");
 
                     b.HasIndex("TermId");
+
+                    b.HasIndex("CourseId", "TermId");
+
+                    b.HasIndex("CourseId", "TermId", "SectionNumber")
+                        .IsUnique();
 
                     b.ToTable("CourseSections");
                 });
@@ -500,11 +677,17 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<int>("ProgramId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Version")
                         .IsRequired()
@@ -512,7 +695,8 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProgramId");
+                    b.HasIndex("ProgramId", "Version")
+                        .IsUnique();
 
                     b.ToTable("Curricula");
                 });
@@ -550,12 +734,18 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("FacultyId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -579,9 +769,15 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -620,7 +816,8 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("AcademicTermId");
 
-                    b.HasIndex("CourseId");
+                    b.HasIndex("CourseId", "AcademicTermId", "Name")
+                        .IsUnique();
 
                     b.ToTable("GradeComponents");
                 });
@@ -678,6 +875,9 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("DepartmentId")
                         .HasColumnType("integer");
 
@@ -687,6 +887,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
@@ -735,6 +938,80 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("InstructorAvailabilities");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("FromYear")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("MinCgpa")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)");
+
+                    b.Property<int?>("MinCourseCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinEcts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ToYear")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramId", "FromYear", "ToYear")
+                        .IsUnique();
+
+                    b.ToTable("PromotionRules");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.RegistrationPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdvisorNote")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId");
+
+                    b.HasIndex("StudentId", "TermId")
+                        .IsUnique();
+
+                    b.ToTable("RegistrationPlans");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.SchedulingAuditLog", b =>
                 {
                     b.Property<int>("Id")
@@ -776,6 +1053,35 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("SchedulingAuditLogs");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.SectionSchedule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClassroomId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TimeSlotId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClassroomId");
+
+                    b.HasIndex("TimeSlotId");
+
+                    b.HasIndex("CourseSectionId", "TimeSlotId")
+                        .IsUnique();
+
+                    b.ToTable("SectionSchedules");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>
                 {
                     b.Property<int>("Id")
@@ -793,6 +1099,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int>("CompletedSemesters")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("FrozenSemesterCount")
                         .HasColumnType("integer");
@@ -817,6 +1126,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("StudentNumber")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
@@ -895,6 +1207,149 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("ProgramId");
 
                     b.ToTable("StudentPrograms");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.SystemConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("SystemConfigs");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId");
+
+                    b.ToTable("TermCalendarEvents");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TermClosingProgress", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Step")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId");
+
+                    b.HasIndex("DepartmentId", "TermId", "Step")
+                        .IsUnique();
+
+                    b.ToTable("TermClosingProgresses");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TimeSlot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int>("Pattern")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SlotType")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Pattern", "StartTime", "EndTime")
+                        .IsUnique();
+
+                    b.ToTable("TimeSlots");
                 });
 
             modelBuilder.Entity("SIS.Infrastructure.Persistence.ApplicationUser", b =>
@@ -1034,6 +1489,33 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Department");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ClassroomTermAssignment", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
+                        .WithMany()
+                        .HasForeignKey("ClassroomId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Classroom");
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Term");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Department", "Department")
@@ -1042,6 +1524,39 @@ namespace SIS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.CourseAccessPolicy", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Term");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseEquivalency", b =>
@@ -1090,6 +1605,11 @@ namespace SIS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SIS.Domain.Entities.RegistrationPlan", "RegistrationPlan")
+                        .WithMany("Registrations")
+                        .HasForeignKey("RegistrationPlanId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SIS.Domain.Entities.Student", "Student")
                         .WithMany("Registrations")
                         .HasForeignKey("StudentId")
@@ -1097,6 +1617,8 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("CourseSection");
+
+                    b.Navigation("RegistrationPlan");
 
                     b.Navigation("Student");
                 });
@@ -1268,15 +1790,72 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Instructor");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Program");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.RegistrationPlan", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Student", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Student");
+
+                    b.Navigation("Term");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.SchedulingAuditLog", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.CourseSection", "Section")
                         .WithMany()
                         .HasForeignKey("SectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Section");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.SectionSchedule", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
+                        .WithMany()
+                        .HasForeignKey("ClassroomId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
+                        .WithMany()
+                        .HasForeignKey("CourseSectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.TimeSlot", "TimeSlot")
+                        .WithMany()
+                        .HasForeignKey("TimeSlotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Classroom");
+
+                    b.Navigation("CourseSection");
+
+                    b.Navigation("TimeSlot");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>
@@ -1341,9 +1920,44 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany("CalendarEvents")
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TermClosingProgress", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Term");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
                 {
                     b.Navigation("Curricula");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AcademicTerm", b =>
+                {
+                    b.Navigation("CalendarEvents");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -1383,6 +1997,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Availabilities");
 
                     b.Navigation("Sections");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.RegistrationPlan", b =>
+                {
+                    b.Navigation("Registrations");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>

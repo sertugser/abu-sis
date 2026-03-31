@@ -95,17 +95,13 @@ public class RegistrationValidationService : IRegistrationValidationService
                 Message = "Aktif akademik donem bulunamadi."
             });
         }
-        else
+        else if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
         {
-            var now = DateTime.UtcNow;
-            if (now < activeTerm.RegistrationStart || now > activeTerm.RegistrationEnd)
+            errors.Add(new ValidationError
             {
-                errors.Add(new ValidationError
-                {
-                    Rule = "RegistrationPeriod",
-                    Message = $"Kayit donemi disindasiniz. Kayit donemi: {activeTerm.RegistrationStart:dd.MM.yyyy} - {activeTerm.RegistrationEnd:dd.MM.yyyy}"
-                });
-            }
+                Rule = "RegistrationPeriod",
+                Message = $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.Status}"
+            });
         }
 
         // If blocking errors so far, return early
@@ -311,7 +307,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             {
                 var existingSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(existing.CourseSection.ScheduleJson) ?? new();
 
-                var overlapType = CheckScheduleOverlap(newSchedule, existingSchedule);
+                var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, existingSchedule);
 
                 if (overlapType != ConflictOverlapType.None)
                 {
@@ -350,7 +346,7 @@ public class RegistrationValidationService : IRegistrationValidationService
                 var otherSection = sections[j];
                 var otherSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(otherSection.ScheduleJson) ?? new();
 
-                var overlapType = CheckScheduleOverlap(newSchedule, otherSchedule);
+                var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, otherSchedule);
                 if (overlapType != ConflictOverlapType.None)
                 {
                     bool isRepeat = currentlyFailedCourseIds.Contains(newSection.Course.Id) || currentlyFailedCourseIds.Contains(otherSection.Course.Id);
@@ -384,37 +380,4 @@ public class RegistrationValidationService : IRegistrationValidationService
         return result;
     }
 
-    private static ConflictOverlapType CheckScheduleOverlap(List<ScheduleSlot> schedule1, List<ScheduleSlot> schedule2)
-    {
-        bool hasPartialOverlap = false;
-        bool hasFullOverlap = false;
-
-        foreach (var slot1 in schedule1)
-        {
-            foreach (var slot2 in schedule2)
-            {
-                if (slot1.Day != slot2.Day) continue;
-
-                // Check time overlap
-                if (slot1.StartTime < slot2.EndTime && slot2.StartTime < slot1.EndTime)
-                {
-                    // Check if full overlap (one slot completely contains the other)
-                    if ((slot1.StartTime == slot2.StartTime && slot1.EndTime == slot2.EndTime) ||
-                        (slot1.StartTime <= slot2.StartTime && slot1.EndTime >= slot2.EndTime) ||
-                        (slot2.StartTime <= slot1.StartTime && slot2.EndTime >= slot1.EndTime))
-                    {
-                        hasFullOverlap = true;
-                    }
-                    else
-                    {
-                        hasPartialOverlap = true;
-                    }
-                }
-            }
-        }
-
-        if (hasFullOverlap) return ConflictOverlapType.Full;
-        if (hasPartialOverlap) return ConflictOverlapType.Partial;
-        return ConflictOverlapType.None;
-    }
 }

@@ -168,11 +168,44 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
 
     public async Task<List<OpenedCourseSectionDto>> OpenCourseAsync(int departmentId, int termId, OpenCourseRequest request, CancellationToken ct)
     {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new InvalidOperationException("Dönem bulunamadı.");
+        if (term.Status != TermStatus.Planning)
+            throw new InvalidOperationException(
+                $"Ders açmak için dönem 'Planlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
         var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.CourseId, ct)
             ?? throw new InvalidOperationException($"Ders bulunamadı (ID: {request.CourseId}).");
 
-        if (course.DepartmentId != departmentId)
+        if (course.DepartmentId.HasValue && course.DepartmentId != departmentId)
             throw new InvalidOperationException($"Ders '{course.Code}' bu bölüme ait değil.");
+
+        // Kapasite validasyonu
+        if (request.CapacityPerSection <= 0)
+            throw new InvalidOperationException("Kontenjan 0'dan büyük olmalıdır.");
+
+        // Şube sayısı üst sınırı
+        if (request.SectionCount <= 0 || request.SectionCount > 20)
+            throw new InvalidOperationException("Şube sayısı 1 ile 20 arasında olmalıdır.");
+
+        // Duplikat kontrol: bu dönemde bu ders zaten açılmış mı?
+        var existingCount = await _context.CourseSections
+            .CountAsync(cs => cs.CourseId == request.CourseId && cs.TermId == termId && cs.IsActive, ct);
+        if (existingCount > 0)
+            throw new InvalidOperationException(
+                $"'{course.Code}' dersi bu dönemde zaten {existingCount} şube ile açılmış. Yeni şube eklemek için mevcut şubeyi güncelleyin.");
+
+        // InstructorId validasyonu
+        if (request.InstructorId.HasValue)
+        {
+            var instructor = await _context.Instructors.AsNoTracking()
+                .FirstOrDefaultAsync(i => i.Id == request.InstructorId.Value, ct);
+            if (instructor == null)
+                throw new InvalidOperationException("Atanan öğretim üyesi bulunamadı.");
+            // Ortak ders olmadığı sürece, hocanın bölümünü kontrol et
+            if (course.DepartmentId.HasValue && instructor.DepartmentId != departmentId)
+                throw new InvalidOperationException("Öğretim üyesi bu bölüme ait değil.");
+        }
 
         var created = new List<CourseSection>();
         for (var i = 0; i < request.SectionCount; i++)
@@ -269,11 +302,26 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, ct)
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Şube güncellemek için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
+        if (!section.IsActive)
+            throw new InvalidOperationException("Pasif şube güncellenemez.");
+
         if (request.InstructorId.HasValue)
             section.InstructorId = request.InstructorId.Value;
 
         if (request.Capacity.HasValue)
+        {
+            if (request.Capacity.Value <= 0)
+                throw new InvalidOperationException("Kontenjan 0'dan büyük olmalıdır.");
+            if (request.Capacity.Value < section.EnrolledCount)
+                throw new InvalidOperationException(
+                    $"Kontenjan mevcut kayıtlı öğrenci sayısından ({section.EnrolledCount}) az olamaz.");
             section.Capacity = request.Capacity.Value;
+        }
 
         await _context.SaveChangesAsync(ct);
 
@@ -324,12 +372,48 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         var section = await _context.CourseSections.FirstOrDefaultAsync(cs => cs.Id == sectionId, ct)
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
-        if (section.EnrolledCount > 0)
-            throw new InvalidOperationException("Kayıtlı öğrenci bulunan şube kapatılamaz.");
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Şube kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
+        // Draft/PendingAdvisorApproval kayıtlarını temizle
+        var pendingRegistrations = await _context.CourseRegistrations
+            .Where(cr => cr.CourseSectionId == sectionId
+                && (cr.Status == RegistrationStatus.Draft || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+            .ToListAsync(ct);
+
+        foreach (var reg in pendingRegistrations)
+        {
+            reg.Status = RegistrationStatus.Dropped;
+            reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Aktif kayıtlı öğrenci varsa kapatılamaz
+        var activeCount = await _context.CourseRegistrations
+            .CountAsync(cr => cr.CourseSectionId == sectionId && cr.Status == RegistrationStatus.Active, ct);
+        if (activeCount > 0)
+            throw new InvalidOperationException($"Aktif kayıtlı {activeCount} öğrenci bulunan şube kapatılamaz.");
 
         section.IsActive = false;
+        section.EnrolledCount = 0;
         await _context.SaveChangesAsync(ct);
     }
+
+    private static string GetTermStatusLabel(TermStatus s) => s switch
+    {
+        TermStatus.Draft            => "Taslak",
+        TermStatus.Planning         => "Planlama",
+        TermStatus.Scheduling       => "Programlama",
+        TermStatus.Published        => "Yayınlandı",
+        TermStatus.RegistrationOpen => "Kayıt Açık",
+        TermStatus.AddDrop          => "Ders Ekle/Bırak",
+        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
+        TermStatus.GradeEntry       => "Not Girişi",
+        TermStatus.Closed           => "Kapalı",
+        TermStatus.Archived         => "Arşivlendi",
+        _                           => s.ToString()
+    };
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(IEnumerable<int> instructorIds, CancellationToken ct)
     {

@@ -266,6 +266,11 @@ public class FacultyPlanningService : IFacultyPlanningService
             .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, ct)
             ?? throw new KeyNotFoundException("Sube bulunamadi.");
 
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+        if (term != null && term.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Hoca/derslik/zaman ataması için dönem 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
         if (section.IsFinalized)
             throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
 
@@ -340,6 +345,11 @@ public class FacultyPlanningService : IFacultyPlanningService
             .Include(cs => cs.Course)
             .FirstOrDefaultAsync(cs => cs.Id == sectionId, ct)
             ?? throw new KeyNotFoundException("Sube bulunamadi.");
+
+        var unassignTerm = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+        if (unassignTerm != null && unassignTerm.Status != TermStatus.Planning && unassignTerm.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Atama kaldırma sadece 'Planlama' veya 'Programlama' aşamasında yapılabilir. Mevcut durum: {GetTermStatusLabel(unassignTerm.Status)}");
 
         if (section.IsFinalized)
             throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
@@ -696,4 +706,19 @@ public class FacultyPlanningService : IFacultyPlanningService
     };
 
     private record ScheduleSlotSimple(DayOfWeek Day, TimeOnly StartTime, TimeOnly EndTime);
+
+    private static string GetTermStatusLabel(TermStatus s) => s switch
+    {
+        TermStatus.Draft            => "Taslak",
+        TermStatus.Planning         => "Planlama",
+        TermStatus.Scheduling       => "Programlama",
+        TermStatus.Published        => "Yayınlandı",
+        TermStatus.RegistrationOpen => "Kayıt Açık",
+        TermStatus.AddDrop          => "Ders Ekle/Bırak",
+        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
+        TermStatus.GradeEntry       => "Not Girişi",
+        TermStatus.Closed           => "Kapalı",
+        TermStatus.Archived         => "Arşivlendi",
+        _                           => s.ToString()
+    };
 }

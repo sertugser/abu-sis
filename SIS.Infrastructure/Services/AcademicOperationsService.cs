@@ -487,6 +487,10 @@ public class AcademicOperationsService : IAcademicOperationsService
     public async Task<CourseSectionApprovalDto> ApproveCourseSectionsAsync(
         int departmentId, int termId, ApproveCourseSectionsRequest request, string userId, CancellationToken cancellationToken = default)
     {
+        var approveTerm = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, cancellationToken);
+        if (approveTerm != null && approveTerm.Status != TermStatus.Planning)
+            throw new InvalidOperationException("Ders onaylama sadece 'Planlama' aşamasında yapılabilir.");
+
         if (request.SectionCount <= 0)
             throw new ArgumentException("Şube sayısı en az 1 olmalıdır.");
 
@@ -509,6 +513,10 @@ public class AcademicOperationsService : IAcademicOperationsService
     public async Task<CourseSectionApprovalDto> RejectCourseSectionsAsync(
         int departmentId, int termId, RejectCourseSectionsRequest request, string userId, CancellationToken cancellationToken = default)
     {
+        var rejectTerm = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, cancellationToken);
+        if (rejectTerm != null && rejectTerm.Status != TermStatus.Planning)
+            throw new InvalidOperationException("Ders reddetme sadece 'Planlama' aşamasında yapılabilir.");
+
         var approval = await GetOrCreateApprovalAsync(departmentId, termId, request.CourseId, cancellationToken);
 
         approval.Status = SectionApprovalStatus.Rejected;

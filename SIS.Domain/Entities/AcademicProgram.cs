@@ -13,5 +13,7 @@ public class AcademicProgram
     public EducationType EducationType { get; set; }
     public int MaxStudyDurationSemesters { get; set; }      // e.g., 14 for 7-year max
     public int TotalRequiredEcts { get; set; }              // 240 for bachelor, 120 for associate
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public ICollection<Curriculum> Curricula { get; set; } = new List<Curriculum>();
 }

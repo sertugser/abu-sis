@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Enums;
+using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -34,6 +36,37 @@ public class CourseRegistrationService : ICourseRegistrationService
                 Errors = new List<ValidationError>
                 {
                     new() { Rule = "SectionExists", Message = "Ders sectionu bulunamadi." }
+                }
+            };
+            return response;
+        }
+
+        // Guard: kayıt dönemi kontrolü
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId);
+        if (term != null && term.Status != TermStatus.RegistrationOpen && term.Status != TermStatus.AddDrop)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "RegistrationClosed", Message = $"Ders kayıt dönemi açık değil. Dönem durumu: {GetTermStatusLabel(term.Status)}" }
+                }
+            };
+            return response;
+        }
+
+        // Kapasite kontrolü: kontenjan dolu mu?
+        if (section.EnrolledCount >= section.Capacity)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı dolu ({section.EnrolledCount}/{section.Capacity})." }
                 }
             };
             return response;
@@ -165,6 +198,13 @@ public class CourseRegistrationService : ICourseRegistrationService
             _context.CourseRegistrations.Add(registration);
         }
 
+        // FR-56C: Mark as repeated if student already passed this course (grade improvement)
+        registration.IsRepeated = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection)
+            .AnyAsync(cr => cr.StudentId == studentId
+                && cr.CourseSection.CourseId == section.CourseId
+                && RegistrationRulePolicy.IsPassedGrade(cr.Grade));
+
         // Increment section.EnrolledCount (soft hold - FR-44)
         section.EnrolledCount++;
 
@@ -217,9 +257,8 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
-        var targetStatus = student.IsScholarshipStudent
-            ? RegistrationStatus.Active
-            : RegistrationStatus.PendingAdvisorApproval;
+        // Danışman onayı her zaman zorunlu — burslu öğrenci dahil (ADIM 11)
+        var targetStatus = RegistrationStatus.PendingAdvisorApproval;
 
         // Load or create registrations for the submitted sections
         var registrations = await _context.CourseRegistrations
@@ -478,6 +517,22 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
+        // Guard: dönem AddDrop aşamasında olmalı
+        var dropTerm = registration.CourseSection.Term;
+        if (dropTerm.Status != TermStatus.AddDrop && dropTerm.Status != TermStatus.RegistrationOpen)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(dropTerm.Status)}" }
+                }
+            };
+            return response;
+        }
+
         // Check status is droppable
         if (registration.Status != RegistrationStatus.Active
             && registration.Status != RegistrationStatus.PendingAdvisorApproval
@@ -569,6 +624,22 @@ public class CourseRegistrationService : ICourseRegistrationService
                 Errors = new List<ValidationError>
                 {
                     new() { Rule = "RegistrationExists", Message = "Kayit bulunamadi." }
+                }
+            };
+            return response;
+        }
+
+        // Guard: dönem WithdrawalPeriod aşamasında olmalı
+        var withdrawTerm = registration.CourseSection.Term;
+        if (withdrawTerm.Status != TermStatus.WithdrawalPeriod)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "TermStatus", Message = $"Ders çekilme sadece çekilme döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(withdrawTerm.Status)}" }
                 }
             };
             return response;
@@ -829,6 +900,23 @@ public class CourseRegistrationService : ICourseRegistrationService
                     };
                 }).ToList();
 
+                // Compute HasScheduleConflict between each pair of pending registrations
+                var scheduleSlots = regItems
+                    .Select(r => new { Item = r, Slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(r.Schedule) ?? new List<ScheduleSlot>() })
+                    .ToList();
+
+                for (int i = 0; i < scheduleSlots.Count; i++)
+                {
+                    for (int j = i + 1; j < scheduleSlots.Count; j++)
+                    {
+                        if (RegistrationRulePolicy.CheckScheduleOverlap(scheduleSlots[i].Slots, scheduleSlots[j].Slots) != ConflictOverlapType.None)
+                        {
+                            scheduleSlots[i].Item.HasScheduleConflict = true;
+                            scheduleSlots[j].Item.HasScheduleConflict = true;
+                        }
+                    }
+                }
+
                 return new PendingApprovalDto
                 {
                     StudentId = student.Id,
@@ -869,6 +957,17 @@ public class CourseRegistrationService : ICourseRegistrationService
             {
                 Success = false,
                 Message = "Aktif donem bulunamadi.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        // Guard: dönem RegistrationOpen veya AddDrop olmalı
+        if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(activeTerm.Status)}",
                 AffectedRegistrations = 0
             };
         }
@@ -932,7 +1031,8 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         foreach (var reg in registrations)
         {
-            reg.Status = RegistrationStatus.Dropped;
+            reg.Status = RegistrationStatus.Rejected;
+            reg.AdvisorNote = dto.Note;
             reg.UpdatedAt = DateTime.UtcNow;
             reg.CourseSection.EnrolledCount = Math.Max(0, reg.CourseSection.EnrolledCount - 1);
         }
@@ -946,4 +1046,19 @@ public class CourseRegistrationService : ICourseRegistrationService
             AffectedRegistrations = registrations.Count
         };
     }
+
+    private static string GetTermStatusLabel(TermStatus s) => s switch
+    {
+        TermStatus.Draft            => "Taslak",
+        TermStatus.Planning         => "Planlama",
+        TermStatus.Scheduling       => "Programlama",
+        TermStatus.Published        => "Yayınlandı",
+        TermStatus.RegistrationOpen => "Kayıt Açık",
+        TermStatus.AddDrop          => "Ders Ekle/Bırak",
+        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
+        TermStatus.GradeEntry       => "Not Girişi",
+        TermStatus.Closed           => "Kapalı",
+        TermStatus.Archived         => "Arşivlendi",
+        _                           => s.ToString()
+    };
 }

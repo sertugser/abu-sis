@@ -128,6 +128,8 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
     public async Task AddPrerequisiteAsync(int courseId, AddPrerequisiteDto dto)
     {
+        if (courseId == dto.RequiredCourseId)
+            throw new InvalidOperationException("Bir ders kendisinin önkoşulu olamaz.");
         if (!await db.Courses.AnyAsync(c => c.Id == courseId))
             throw new KeyNotFoundException("Ders bulunamadı.");
         if (!await db.Courses.AnyAsync(c => c.Id == dto.RequiredCourseId))
@@ -135,8 +137,34 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         if (await db.CoursePrerequisites.AnyAsync(p => p.CourseId == courseId && p.RequiredCourseId == dto.RequiredCourseId))
             throw new InvalidOperationException("Bu önkoşul zaten tanımlı.");
 
+        // Döngü kontrolü: A→B→C→A engeli
+        if (await WouldCreatePrerequisiteCycleAsync(courseId, dto.RequiredCourseId))
+            throw new InvalidOperationException("Bu önkoşul ilişkisi döngü oluşturacak.");
+
         db.CoursePrerequisites.Add(new CoursePrerequisite { CourseId = courseId, RequiredCourseId = dto.RequiredCourseId });
         await db.SaveChangesAsync();
+    }
+
+    private async Task<bool> WouldCreatePrerequisiteCycleAsync(int courseId, int newRequiredCourseId)
+    {
+        // BFS: newRequiredCourseId'den geriye doğru ilerle, courseId'ye ulaşılıyor mu?
+        var allPrereqs = await db.CoursePrerequisites.ToListAsync();
+        var visited = new HashSet<int>();
+        var queue = new Queue<int>();
+        queue.Enqueue(newRequiredCourseId);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (current == courseId) return true; // Döngü tespit edildi
+
+            if (!visited.Add(current)) continue;
+
+            foreach (var prereq in allPrereqs.Where(p => p.CourseId == current))
+                queue.Enqueue(prereq.RequiredCourseId);
+        }
+
+        return false;
     }
 
     public async Task RemovePrerequisiteAsync(int courseId, int requiredCourseId)
@@ -150,14 +178,20 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
     public async Task AddEquivalencyAsync(int courseId, AddEquivalencyDto dto)
     {
+        if (courseId == dto.EquivalentCourseId)
+            throw new InvalidOperationException("Bir ders kendisinin eşdeğeri olamaz.");
         if (!await db.Courses.AnyAsync(c => c.Id == courseId))
             throw new KeyNotFoundException("Ders bulunamadı.");
         if (!await db.Courses.AnyAsync(c => c.Id == dto.EquivalentCourseId))
             throw new KeyNotFoundException("Eşdeğer ders bulunamadı.");
-        if (await db.CourseEquivalencies.AnyAsync(e => e.CourseId == courseId && e.EquivalentCourseId == dto.EquivalentCourseId))
+        if (await db.CourseEquivalencies.AnyAsync(e =>
+            (e.CourseId == courseId && e.EquivalentCourseId == dto.EquivalentCourseId) ||
+            (e.CourseId == dto.EquivalentCourseId && e.EquivalentCourseId == courseId)))
             throw new InvalidOperationException("Bu eşdeğerlik zaten tanımlı.");
 
+        // Simetrik kayıt: A↔B her iki yönde de oluştur
         db.CourseEquivalencies.Add(new CourseEquivalency { CourseId = courseId, EquivalentCourseId = dto.EquivalentCourseId });
+        db.CourseEquivalencies.Add(new CourseEquivalency { CourseId = dto.EquivalentCourseId, EquivalentCourseId = courseId });
         await db.SaveChangesAsync();
     }
 

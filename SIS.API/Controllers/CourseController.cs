@@ -141,6 +141,10 @@ public class CourseController : ControllerBase
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
 
+        // Guard: katalog ancak Published veya sonraki aşamalarda görülebilir
+        if (activeTerm.Status < TermStatus.Published)
+            return BadRequest(new { error = $"Ders kataloğu henüz yayınlanmadı. Dönem durumu: {activeTerm.Status}" });
+
         // 3. Curriculum data — which courses are in the student's program
         var curriculumCourses = await _context.CurriculumCourses
             .Where(cc => cc.CurriculumId == activeProgram.CurriculumId)
@@ -377,8 +381,8 @@ public class CourseController : ControllerBase
             RegistrationEnd = term.RegistrationEnd,
             AddDropStart = term.AddDropStart,
             AddDropEnd = term.AddDropEnd,
-            IsRegistrationOpen = now >= term.RegistrationStart && now <= term.RegistrationEnd,
-            IsAddDropOpen = now >= term.AddDropStart && now <= term.AddDropEnd
+            IsRegistrationOpen = term.Status == TermStatus.RegistrationOpen,
+            IsAddDropOpen = term.Status == TermStatus.AddDrop
         };
 
         return Ok(dto);

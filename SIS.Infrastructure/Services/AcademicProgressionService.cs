@@ -108,8 +108,11 @@ public class AcademicProgressionService : IAcademicProgressionService
                 : 1;
             var newLevel = Math.Clamp(ectsBasedLevel, 1, normalDurationYears);
 
-            // Yeni CompletedSemesters = (newLevel - 1) * 2
-            var newSemesters = (newLevel - 1) * 2;
+            // CompletedSemesters: en az mevcut değeri koru, seviye yükseldiyse güncelle
+            // Tek sayı kaybını önle: sadece gerçekten seviye değiştiyse güncelle
+            var newSemesters = newLevel > oldLevel
+                ? oldSemesters + 1  // Bir dönem daha tamamlandı
+                : oldSemesters;     // Seviye değişmediyse mevcut değeri koru
 
             var user = users.GetValueOrDefault(student.UserId);
             var fullName = user != null ? $"{user.FirstName} {user.LastName}" : student.StudentNumber;
@@ -159,6 +162,23 @@ public class AcademicProgressionService : IAcademicProgressionService
             {
                 student.CompletedSemesters = newSemesters;
                 student.Cgpa = Math.Round(cgpa, 4);
+
+                // SGPA güncelle: son dönemin ANO'sunu hesapla
+                var latestTermId = await _context.CourseRegistrations
+                    .Include(cr => cr.CourseSection)
+                    .Where(cr => cr.StudentId == student.Id
+                        && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
+                        && cr.Grade != null)
+                    .Select(cr => cr.CourseSection.TermId)
+                    .Distinct()
+                    .OrderByDescending(tid => tid)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (latestTermId > 0)
+                {
+                    var sgpa = await _gpaCalculationService.CalculateSgpaAsync(student.Id, latestTermId);
+                    student.Sgpa = Math.Round(sgpa, 4);
+                }
             }
         }
 

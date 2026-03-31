@@ -1,16 +1,42 @@
+using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.API.Controllers;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
+using SIS.Infrastructure.Persistence;
 
 namespace SIS.Tests.API;
 
 public class SchedulingControllerTests
 {
+    private static ControllerContext CreateAuthenticatedContext(int userId = 1, string role = "SystemAdministrator")
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new(ClaimTypes.Role, role)
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var principal = new ClaimsPrincipal(identity);
+        return new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = principal }
+        };
+    }
+
+    private static AppDbContext CreateInMemoryContext()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        return new AppDbContext(options);
+    }
     [Fact]
     public void SchedulingController_HasExpectedRouteAndAuthorization()
     {
@@ -32,7 +58,7 @@ public class SchedulingControllerTests
     {
         var serviceMock = new Mock<ISchedulingService>(MockBehavior.Strict);
         var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
-        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object, null!);
 
         var result = await controller.GetConflicts(0, CancellationToken.None);
 
@@ -52,8 +78,22 @@ public class SchedulingControllerTests
             .Setup(service => service.ValidateAsync(It.IsAny<ScheduleValidationRequestDto>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
+        using var context = CreateInMemoryContext();
+        // Add a section with Id=5 and a course with null DepartmentId (ortak ders, no access check needed)
+        context.Courses.Add(new SIS.Domain.Entities.Course
+        {
+            Id = 50, Code = "TEST50", Name = "Test Course", Ects = 5,
+            DepartmentId = null, TheoryHours = 3, LabHours = 0
+        });
+        context.CourseSections.Add(new SIS.Domain.Entities.CourseSection
+        {
+            Id = 5, CourseId = 50, TermId = 1, Capacity = 40, EnrolledCount = 0, IsActive = true
+        });
+        await context.SaveChangesAsync();
+
         var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
-        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object, context);
+        controller.ControllerContext = CreateAuthenticatedContext();
 
         var result = await controller.Validate(new ScheduleValidationRequestDto { SectionId = 5 }, CancellationToken.None);
 
@@ -75,8 +115,22 @@ public class SchedulingControllerTests
             .Setup(service => service.SuggestAsync(It.IsAny<ScheduleSuggestionRequestDto>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
+        using var context = CreateInMemoryContext();
+        // Add a section with Id=7 and a course with null DepartmentId (ortak ders, no access check needed)
+        context.Courses.Add(new SIS.Domain.Entities.Course
+        {
+            Id = 70, Code = "TEST70", Name = "Test Course", Ects = 5,
+            DepartmentId = null, TheoryHours = 3, LabHours = 0
+        });
+        context.CourseSections.Add(new SIS.Domain.Entities.CourseSection
+        {
+            Id = 7, CourseId = 70, TermId = 1, Capacity = 40, EnrolledCount = 0, IsActive = true
+        });
+        await context.SaveChangesAsync();
+
         var academicOperationsServiceMock = new Mock<IAcademicOperationsService>(MockBehavior.Strict);
-        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object);
+        var controller = new SchedulingController(serviceMock.Object, academicOperationsServiceMock.Object, context);
+        controller.ControllerContext = CreateAuthenticatedContext();
 
         var result = await controller.Suggest(new ScheduleSuggestionRequestDto { SectionId = 7 }, CancellationToken.None);
 

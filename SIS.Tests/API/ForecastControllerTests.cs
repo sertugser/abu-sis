@@ -1,15 +1,33 @@
+using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.API.Controllers;
 using SIS.Application.EnrollmentForecast.DTOs;
 using SIS.Application.EnrollmentForecast.Services;
+using SIS.Infrastructure.Persistence;
 
 namespace SIS.Tests.API;
 
 public class ForecastControllerTests
 {
+    private static ControllerContext CreateAuthenticatedContext(int userId = 1, string role = "SystemAdministrator")
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new(ClaimTypes.Role, role)
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var principal = new ClaimsPrincipal(identity);
+        return new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = principal }
+        };
+    }
     [Fact]
     public void ForecastController_HasExpectedRouteAndAuthorization()
     {
@@ -30,7 +48,7 @@ public class ForecastControllerTests
     public async Task GetCourseDemand_InvalidCourseId_ReturnsBadRequest()
     {
         var serviceMock = new Mock<IEnrollmentForecastService>(MockBehavior.Strict);
-        var controller = new ForecastController(serviceMock.Object);
+        var controller = new ForecastController(serviceMock.Object, null!);
 
         var result = await controller.GetCourseDemand(0);
 
@@ -45,7 +63,20 @@ public class ForecastControllerTests
             .Setup(service => service.GetCourseDemandForecastAsync(42))
             .ReturnsAsync((CourseDemandForecastDto?)null);
 
-        var controller = new ForecastController(serviceMock.Object);
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        using var context = new AppDbContext(options);
+        // Add a course with Id=42 so the controller can find it (DepartmentId null = ortak ders, no access check needed)
+        context.Courses.Add(new SIS.Domain.Entities.Course
+        {
+            Id = 42, Code = "TEST42", Name = "Test Course", Ects = 5,
+            DepartmentId = null, TheoryHours = 3, LabHours = 0
+        });
+        await context.SaveChangesAsync();
+
+        var controller = new ForecastController(serviceMock.Object, context);
+        controller.ControllerContext = CreateAuthenticatedContext();
 
         var result = await controller.GetCourseDemand(42);
 
@@ -86,7 +117,8 @@ public class ForecastControllerTests
             .Setup(service => service.GetDepartmentSummaryAsync(7))
             .ReturnsAsync(response);
 
-        var controller = new ForecastController(serviceMock.Object);
+        var controller = new ForecastController(serviceMock.Object, null!);
+        controller.ControllerContext = CreateAuthenticatedContext();
 
         var result = await controller.GetDepartmentSummary(7);
 
