@@ -107,6 +107,16 @@ namespace SIS.Infrastructure.Migrations
                 nullable: false,
                 defaultValue: 0);
 
+            // Mevcut section'lara sıralı SectionNumber ata (unique index için)
+            migrationBuilder.Sql("""
+                WITH numbered AS (
+                    SELECT "Id", ROW_NUMBER() OVER (PARTITION BY "CourseId", "TermId" ORDER BY "Id") AS rn
+                    FROM "CourseSections"
+                )
+                UPDATE "CourseSections" SET "SectionNumber" = numbered.rn
+                FROM numbered WHERE "CourseSections"."Id" = numbered."Id";
+                """);
+
             migrationBuilder.AddColumn<DateTime>(
                 name: "UpdatedAt",
                 table: "CourseSections",

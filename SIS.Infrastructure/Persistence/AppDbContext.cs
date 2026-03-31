@@ -25,8 +25,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<Classroom> Classrooms => Set<Classroom>();
-    public DbSet<InstructorAvailability> InstructorAvailabilities => Set<InstructorAvailability>();
-    public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
+public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
     public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
     public DbSet<CourseSectionApproval> CourseSectionApprovals => Set<CourseSectionApproval>();
@@ -80,17 +79,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
              .WithMany()
              .HasForeignKey(i => i.DepartmentId)
              .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // ── InstructorAvailability ───────────────────────────────
-        builder.Entity<InstructorAvailability>(e =>
-        {
-            e.HasIndex(ia => new { ia.InstructorId, ia.DayOfWeek, ia.StartTime, ia.EndTime }).IsUnique();
-
-            e.HasOne(ia => ia.Instructor)
-             .WithMany(i => i.Availabilities)
-             .HasForeignKey(ia => ia.InstructorId)
-             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Faculty ─────────────────────────────────────────────
@@ -374,7 +362,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // ── TimeSlot ─────────────────────────────────────────────
         builder.Entity<TimeSlot>(e =>
         {
-            e.HasIndex(ts => new { ts.Pattern, ts.StartTime, ts.EndTime }).IsUnique();
+            e.HasIndex(ts => new { ts.TermId, ts.DayOfWeek, ts.StartTime }).IsUnique();
+
+            e.HasOne(ts => ts.Term)
+             .WithMany()
+             .HasForeignKey(ts => ts.TermId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── SectionSchedule ──────────────────────────────────────

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.Common.Services;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
@@ -12,11 +13,13 @@ public class CourseRegistrationService : ICourseRegistrationService
 {
     private readonly AppDbContext _context;
     private readonly IRegistrationValidationService _validationService;
+    private readonly ISystemConfigProvider _config;
 
-    public CourseRegistrationService(AppDbContext context, IRegistrationValidationService validationService)
+    public CourseRegistrationService(AppDbContext context, IRegistrationValidationService validationService, ISystemConfigProvider? config = null)
     {
         _context = context;
         _validationService = validationService;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
@@ -70,6 +73,29 @@ public class CourseRegistrationService : ICourseRegistrationService
                 }
             };
             return response;
+        }
+
+        // Get or create RegistrationPlan for this student+term
+        var plan = await _context.RegistrationPlans
+            .FirstOrDefaultAsync(rp => rp.StudentId == studentId && rp.TermId == section.TermId);
+
+        if (plan == null)
+        {
+            plan = new Domain.Entities.RegistrationPlan
+            {
+                StudentId = studentId,
+                TermId = section.TermId,
+                Status = RegistrationPlanStatus.Draft,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.RegistrationPlans.Add(plan);
+            await _context.SaveChangesAsync(); // need ID before FK assignment
+        }
+        else if (plan.Status == RegistrationPlanStatus.Rejected)
+        {
+            // Rejected plan can be edited and resubmitted
+            plan.Status = RegistrationPlanStatus.Draft;
+            plan.UpdatedAt = DateTime.UtcNow;
         }
 
         // Check if already in plan (same section)
@@ -182,6 +208,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         {
             // Reactivate existing record instead of creating new (unique constraint)
             droppedRecord.Status = RegistrationStatus.Draft;
+            droppedRecord.RegistrationPlanId = plan.Id;
             droppedRecord.UpdatedAt = DateTime.UtcNow;
             registration = droppedRecord;
         }
@@ -192,6 +219,7 @@ public class CourseRegistrationService : ICourseRegistrationService
             {
                 StudentId = studentId,
                 CourseSectionId = courseSectionId,
+                RegistrationPlanId = plan.Id,
                 Status = RegistrationStatus.Draft,
                 CreatedAt = DateTime.UtcNow
             };
@@ -310,6 +338,20 @@ public class CourseRegistrationService : ICourseRegistrationService
         {
             reg.Status = targetStatus;
             reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Update RegistrationPlan status to Submitted
+        var termId = registrations.FirstOrDefault()?.CourseSection.TermId;
+        if (termId.HasValue)
+        {
+            var plan = await _context.RegistrationPlans
+                .FirstOrDefaultAsync(rp => rp.StudentId == studentId && rp.TermId == termId.Value);
+            if (plan != null)
+            {
+                plan.Status = RegistrationPlanStatus.Submitted;
+                plan.SubmittedAt = DateTime.UtcNow;
+                plan.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         await _context.SaveChangesAsync();
@@ -765,7 +807,11 @@ public class CourseRegistrationService : ICourseRegistrationService
         var mainProg = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
         if (mainProg?.Program != null)
         {
-            int maxWithdrawals = mainProg.Program.DegreeLevel == DegreeLevel.Associate ? 3 : 6;
+            var isAssociate = mainProg.Program.DegreeLevel == DegreeLevel.Associate;
+            var maxWithdrawalsKey = isAssociate
+                ? "Withdrawal.MaxCount.Associate"
+                : "Withdrawal.MaxCount.Undergraduate";
+            int maxWithdrawals = await _config.GetIntAsync(maxWithdrawalsKey, isAssociate ? 3 : 6);
             if (student.WithdrawalCount >= maxWithdrawals)
             {
                 errors.Add(new ValidationError
@@ -923,15 +969,75 @@ public class CourseRegistrationService : ICourseRegistrationService
                     StudentNumber = student.StudentNumber,
                     StudentName = studentName ?? string.Empty,
                     Cgpa = student.Cgpa,
+                    Sgpa = student.Sgpa,
                     CompletedSemesters = student.CompletedSemesters,
                     IsScholarshipStudent = student.IsScholarshipStudent,
                     Registrations = regItems,
                     TotalEcts = regItems.Sum(r => r.Ects),
+                    EctsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa),
                     SubmittedAt = g.Max(r => r.UpdatedAt ?? r.CreatedAt)
                 };
             })
             .OrderBy(dto => dto.StudentName)
             .ToList();
+
+        // Alttan dersler, müfredat özeti ve plan durumu ekle
+        foreach (var dto in result)
+        {
+            var student = studentDict[dto.StudentId];
+
+            // Plan durumu
+            var plan = await _context.RegistrationPlans
+                .FirstOrDefaultAsync(rp => rp.StudentId == dto.StudentId && rp.TermId == activeTerm.Id);
+            dto.PlanStatus = plan?.Status.ToString() ?? "N/A";
+
+            // Alttan dersler (FF/NA/U)
+            var failedRegs = await _context.CourseRegistrations
+                .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Course)
+                .Where(cr => cr.StudentId == dto.StudentId
+                    && cr.Grade != null
+                    && (cr.Grade == GradeCode.FF || cr.Grade == GradeCode.NA || cr.Grade == GradeCode.U)
+                    && cr.Status != RegistrationStatus.Dropped)
+                .ToListAsync();
+
+            var selectedCourseIds = dto.Registrations.Select(r =>
+                registrations.First(reg => reg.Id == r.RegistrationId).CourseSection.CourseId).ToHashSet();
+
+            dto.FailedCourses = failedRegs
+                .GroupBy(r => r.CourseSection.CourseId)
+                .Select(g => g.OrderByDescending(r => r.Id).First())
+                .Select(r => new FailedCourseDto
+                {
+                    CourseCode = r.CourseSection.Course.Code,
+                    CourseName = r.CourseSection.Course.Name,
+                    Grade = r.Grade!.Value.ToString(),
+                    IsSelectedInPlan = selectedCourseIds.Contains(r.CourseSection.CourseId)
+                }).ToList();
+
+            // Müfredat özeti
+            var mainProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+            if (mainProgram != null)
+            {
+                var curriculumCourses = await _context.CurriculumCourses
+                    .Include(cc => cc.Course)
+                    .Where(cc => cc.CurriculumId == mainProgram.CurriculumId)
+                    .ToListAsync();
+
+                var passedCourseIds = await _context.CourseRegistrations
+                    .Include(cr => cr.CourseSection)
+                    .Where(cr => cr.StudentId == dto.StudentId && RegistrationRulePolicy.IsPassedGrade(cr.Grade))
+                    .Select(cr => cr.CourseSection.CourseId)
+                    .Distinct()
+                    .ToListAsync();
+
+                var passedSet = passedCourseIds.ToHashSet();
+
+                dto.CurriculumTotalCourses = curriculumCourses.Count;
+                dto.CurriculumCompletedCourses = curriculumCourses.Count(cc => passedSet.Contains(cc.CourseId));
+                dto.CurriculumTotalEcts = curriculumCourses.Sum(cc => cc.Course.Ects);
+                dto.CurriculumCompletedEcts = curriculumCourses.Where(cc => passedSet.Contains(cc.CourseId)).Sum(cc => cc.Course.Ects);
+            }
+        }
 
         return result;
     }
@@ -986,6 +1092,15 @@ public class CourseRegistrationService : ICourseRegistrationService
             reg.UpdatedAt = DateTime.UtcNow;
         }
 
+        // Update RegistrationPlan status to Approved
+        var plan = await _context.RegistrationPlans
+            .FirstOrDefaultAsync(rp => rp.StudentId == dto.StudentId && rp.TermId == activeTerm.Id);
+        if (plan != null)
+        {
+            plan.Status = RegistrationPlanStatus.Approved;
+            plan.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _context.SaveChangesAsync();
 
         return new ApprovalResponseDto
@@ -1035,6 +1150,16 @@ public class CourseRegistrationService : ICourseRegistrationService
             reg.AdvisorNote = dto.Note;
             reg.UpdatedAt = DateTime.UtcNow;
             reg.CourseSection.EnrolledCount = Math.Max(0, reg.CourseSection.EnrolledCount - 1);
+        }
+
+        // Update RegistrationPlan status to Rejected with advisor note
+        var plan = await _context.RegistrationPlans
+            .FirstOrDefaultAsync(rp => rp.StudentId == dto.StudentId && rp.TermId == activeTerm.Id);
+        if (plan != null)
+        {
+            plan.Status = RegistrationPlanStatus.Rejected;
+            plan.AdvisorNote = dto.Note;
+            plan.UpdatedAt = DateTime.UtcNow;
         }
 
         await _context.SaveChangesAsync();

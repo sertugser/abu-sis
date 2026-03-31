@@ -5,6 +5,7 @@ using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -17,12 +18,14 @@ public class EnrollmentForecastService : IEnrollmentForecastService
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly IMemoryCache _cache;
+    private readonly ISystemConfigProvider _config;
 
-    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache)
+    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, ISystemConfigProvider? config = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _cache = cache;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     public async Task<CourseDemandForecastDto?> GetCourseDemandForecastAsync(int courseId)
@@ -301,7 +304,10 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         IDictionary<int, decimal> cgpaCache)
     {
         var cgpa = await GetEffectiveCgpaAsync(student, cgpaCache);
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa);
+        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
+        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
+        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
+        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
         var completedSemesters = Math.Max(0, student.CompletedSemesters);
         var currentSemester = completedSemesters + 1;
 
@@ -367,6 +373,8 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         var behindScheduleCandidates = new List<CourseCandidate>();
         var upperCandidates = new List<CourseCandidate>();
 
+        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m);
+
         if (curriculumCoursesByCurriculumId.TryGetValue(activeProgram.CurriculumId, out var curriculumCourses))
         {
             foreach (var curriculumCourse in curriculumCourses)
@@ -386,7 +394,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
                 if (!ArePrerequisitesMet(course.Id, passedCourseIds, prerequisitesByCourseId, equivalentCourseIdsByCourseId))
                     continue;
 
-                if (RegistrationRulePolicy.HasLowCgpaRestriction(cgpa, completedSemesters)
+                if (RegistrationRulePolicy.HasLowCgpaRestriction(cgpa, completedSemesters, retentionThreshold)
                     && !RegistrationRulePolicy.IsAllowedUnderLowCgpaRestriction(
                         course,
                         curriculumCourse.SuggestedSemester,

@@ -1,0 +1,141 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SIS.Infrastructure.Persistence;
+using SIS.Domain.Entities;
+
+namespace SIS.API.Controllers;
+
+public record ClassroomTermAssignmentDto(int Id, int TermId, int ClassroomId, string ClassroomName, int FacultyId, string FacultyName);
+public record CreateClassroomTermAssignmentDto(int TermId, int ClassroomId, int FacultyId);
+public record BulkAssignmentItemDto(int ClassroomId, int FacultyId);
+public record BulkClassroomTermAssignmentDto(int TermId, List<BulkAssignmentItemDto> Assignments);
+
+[ApiController]
+[Route("api/admin/classroom-assignments")]
+[Authorize(Roles = "SystemAdministrator")]
+public class ClassroomTermAssignmentController(AppDbContext context) : ControllerBase
+{
+    private readonly AppDbContext _context = context;
+
+    [HttpGet]
+    public async Task<IActionResult> GetByTerm([FromQuery] int termId, CancellationToken ct)
+    {
+        var assignments = await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Include(a => a.Classroom)
+            .Include(a => a.Faculty)
+            .Where(a => a.TermId == termId)
+            .OrderBy(a => a.Faculty.Name).ThenBy(a => a.Classroom.Name)
+            .Select(a => new ClassroomTermAssignmentDto(
+                a.Id, a.TermId, a.ClassroomId, a.Classroom.Name,
+                a.FacultyId, a.Faculty.Name))
+            .ToListAsync(ct);
+
+        return Ok(assignments);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateClassroomTermAssignmentDto dto, CancellationToken ct)
+    {
+        // Aynı dönemde aynı derslik başka fakülteye atanmış mı kontrol et
+        var exists = await _context.ClassroomTermAssignments
+            .AnyAsync(a => a.TermId == dto.TermId && a.ClassroomId == dto.ClassroomId, ct);
+
+        if (exists)
+            return BadRequest(new { error = "Bu derslik zaten bu dönemde bir fakülteye atanmış." });
+
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == dto.TermId, ct);
+        if (term == null)
+            return NotFound(new { error = "Dönem bulunamadı." });
+
+        var classroom = await _context.Classrooms.AsNoTracking().FirstOrDefaultAsync(c => c.Id == dto.ClassroomId, ct);
+        if (classroom == null)
+            return NotFound(new { error = "Derslik bulunamadı." });
+
+        var faculty = await _context.Faculties.AsNoTracking().FirstOrDefaultAsync(f => f.Id == dto.FacultyId, ct);
+        if (faculty == null)
+            return NotFound(new { error = "Fakülte bulunamadı." });
+
+        var assignment = new ClassroomTermAssignment
+        {
+            TermId = dto.TermId,
+            ClassroomId = dto.ClassroomId,
+            FacultyId = dto.FacultyId
+        };
+
+        _context.ClassroomTermAssignments.Add(assignment);
+        await _context.SaveChangesAsync(ct);
+
+        return CreatedAtAction(null, null,
+            new ClassroomTermAssignmentDto(assignment.Id, assignment.TermId, assignment.ClassroomId,
+                classroom.Name, assignment.FacultyId, faculty.Name));
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        var assignment = await _context.ClassroomTermAssignments.FirstOrDefaultAsync(a => a.Id == id, ct);
+
+        if (assignment == null)
+            return NotFound(new { error = "Atama bulunamadı." });
+
+        _context.ClassroomTermAssignments.Remove(assignment);
+        await _context.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+
+    [HttpPost("bulk")]
+    public async Task<IActionResult> BulkAssign([FromBody] BulkClassroomTermAssignmentDto dto, CancellationToken ct)
+    {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == dto.TermId, ct);
+        if (term == null)
+            return NotFound(new { error = "Dönem bulunamadı." });
+
+        var errors = new List<string>();
+        var created = new List<ClassroomTermAssignmentDto>();
+
+        foreach (var item in dto.Assignments)
+        {
+            var exists = await _context.ClassroomTermAssignments
+                .AnyAsync(a => a.TermId == dto.TermId && a.ClassroomId == item.ClassroomId, ct);
+
+            if (exists)
+            {
+                errors.Add($"Derslik {item.ClassroomId} zaten bu dönemde atanmış.");
+                continue;
+            }
+
+            var classroom = await _context.Classrooms.AsNoTracking().FirstOrDefaultAsync(c => c.Id == item.ClassroomId, ct);
+            if (classroom == null)
+            {
+                errors.Add($"Derslik {item.ClassroomId} bulunamadı.");
+                continue;
+            }
+
+            var faculty = await _context.Faculties.AsNoTracking().FirstOrDefaultAsync(f => f.Id == item.FacultyId, ct);
+            if (faculty == null)
+            {
+                errors.Add($"Fakülte {item.FacultyId} bulunamadı.");
+                continue;
+            }
+
+            var assignment = new ClassroomTermAssignment
+            {
+                TermId = dto.TermId,
+                ClassroomId = item.ClassroomId,
+                FacultyId = item.FacultyId
+            };
+
+            _context.ClassroomTermAssignments.Add(assignment);
+            await _context.SaveChangesAsync(ct);
+
+            created.Add(new ClassroomTermAssignmentDto(
+                assignment.Id, assignment.TermId, assignment.ClassroomId,
+                classroom.Name, assignment.FacultyId, faculty.Name));
+        }
+
+        return Ok(new { created, errors });
+    }
+}

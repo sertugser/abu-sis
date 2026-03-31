@@ -5,6 +5,7 @@ using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -12,10 +13,12 @@ namespace SIS.Infrastructure.Services;
 public class RegistrationValidationService : IRegistrationValidationService
 {
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _config;
 
-    public RegistrationValidationService(AppDbContext context)
+    public RegistrationValidationService(AppDbContext context, ISystemConfigProvider? config = null)
     {
         _context = context;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
@@ -237,7 +240,10 @@ public class RegistrationValidationService : IRegistrationValidationService
         var existingEcts = existingRegistrations.Sum(r => r.CourseSection.Course.Ects);
         var totalEcts = requestedEcts + existingEcts;
 
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa);
+        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
+        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
+        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
+        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
 
         if (totalEcts > ectsLimit)
         {
@@ -249,7 +255,8 @@ public class RegistrationValidationService : IRegistrationValidationService
         }
 
         // === CHECK 7: CGPA Restriction (FR-56B) ===
-        if (RegistrationRulePolicy.HasLowCgpaRestriction(student.Cgpa, student.CompletedSemesters))
+        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m);
+        if (RegistrationRulePolicy.HasLowCgpaRestriction(student.Cgpa, student.CompletedSemesters, retentionThreshold))
         {
             var studentProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
 

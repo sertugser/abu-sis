@@ -12,8 +12,8 @@ using SIS.Infrastructure.Persistence;
 namespace SIS.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260331015732_Faz2_NewEntitiesAndIndexes")]
-    partial class Faz2_NewEntitiesAndIndexes
+    [Migration("20260331092440_DropInstructorAvailability")]
+    partial class DropInstructorAvailability
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -907,40 +907,6 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("Instructors");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Entities.InstructorAvailability", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DayOfWeek")
-                        .HasColumnType("integer");
-
-                    b.Property<TimeOnly>("EndTime")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<int>("InstructorId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsAvailable")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPreferred")
-                        .HasColumnType("boolean");
-
-                    b.Property<TimeOnly>("StartTime")
-                        .HasColumnType("time without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InstructorId", "DayOfWeek", "StartTime", "EndTime")
-                        .IsUnique();
-
-                    b.ToTable("InstructorAvailabilities");
-                });
-
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
                 {
                     b.Property<int>("Id")
@@ -1331,6 +1297,9 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1338,18 +1307,18 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time without time zone");
 
-                    b.Property<int>("Pattern")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SlotType")
+                    b.Property<int>("SlotOrder")
                         .HasColumnType("integer");
 
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time without time zone");
 
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Pattern", "StartTime", "EndTime")
+                    b.HasIndex("TermId", "DayOfWeek", "StartTime")
                         .IsUnique();
 
                     b.ToTable("TimeSlots");
@@ -1782,17 +1751,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Department");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Entities.InstructorAvailability", b =>
-                {
-                    b.HasOne("SIS.Domain.Entities.Instructor", "Instructor")
-                        .WithMany("Availabilities")
-                        .HasForeignKey("InstructorId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Instructor");
-                });
-
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
@@ -1953,6 +1911,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Term");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.TimeSlot", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Term");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
                 {
                     b.Navigation("Curricula");
@@ -1997,8 +1966,6 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.Instructor", b =>
                 {
-                    b.Navigation("Availabilities");
-
                     b.Navigation("Sections");
                 });
 

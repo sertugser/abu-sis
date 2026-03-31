@@ -4,6 +4,7 @@ using SIS.Application.StudentEligibility.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -12,11 +13,13 @@ public class StudentEligibilityService : IStudentEligibilityService
 {
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
+    private readonly ISystemConfigProvider _config;
 
-    public StudentEligibilityService(AppDbContext context, IGpaCalculationService gpaCalculationService)
+    public StudentEligibilityService(AppDbContext context, IGpaCalculationService gpaCalculationService, ISystemConfigProvider? config = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     public async Task<CourseEligibilityReportDto?> GetCourseEligibilityReportAsync(
@@ -205,7 +208,7 @@ public class StudentEligibilityService : IStudentEligibilityService
         }
 
         // 5. CGPA restriction
-        if (RegistrationRulePolicy.HasLowCgpaRestriction(snapshot.Cgpa, snapshot.CompletedSemesters))
+        if (RegistrationRulePolicy.HasLowCgpaRestriction(snapshot.Cgpa, snapshot.CompletedSemesters, context.RetentionThreshold))
         {
             var suggestedSemester = GetSuggestedSemester(course.Id, snapshot.CurriculumId, context);
             var isFailed = snapshot.FailedCourseIds.Contains(course.Id);
@@ -353,6 +356,11 @@ public class StudentEligibilityService : IStudentEligibilityService
         var snapshots = new List<EligibilityStudentSnapshot>();
         var cgpaCache = new Dictionary<int, decimal>();
 
+        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30, cancellationToken);
+        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42, cancellationToken);
+        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48, cancellationToken);
+        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m, cancellationToken);
+
         foreach (var student in students)
         {
             var mainProgram = student.StudentPrograms
@@ -364,7 +372,7 @@ public class StudentEligibilityService : IStudentEligibilityService
                 .GetValueOrDefault(student.Id, new List<CourseRegistration>());
 
             var cgpa = await GetCgpaAsync(student, cgpaCache);
-            var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa);
+            var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
             var completedSemesters = Math.Max(0, student.CompletedSemesters);
             var currentSemester = completedSemesters + 1;
 
@@ -418,7 +426,8 @@ public class StudentEligibilityService : IStudentEligibilityService
             PrerequisitesByCourseId = prerequisitesByCourseId,
             EquivalentCourseIdsByCourseId = equivalentCourseIdsByCourseId,
             CurriculumCoursesByCurriculumId = curriculumCoursesByCurriculumId,
-            UsersByStudentId = usersByStudentId
+            UsersByStudentId = usersByStudentId,
+            RetentionThreshold = retentionThreshold
         };
     }
 
@@ -461,6 +470,7 @@ public class StudentEligibilityService : IStudentEligibilityService
         public required Dictionary<int, HashSet<int>> EquivalentCourseIdsByCourseId { get; init; }
         public required Dictionary<int, List<CurriculumCourse>> CurriculumCoursesByCurriculumId { get; init; }
         public required Dictionary<int, ApplicationUser> UsersByStudentId { get; init; }
+        public decimal RetentionThreshold { get; init; }
     }
 
     private sealed class EligibilityStudentSnapshot

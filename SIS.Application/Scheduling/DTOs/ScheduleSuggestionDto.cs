@@ -11,5 +11,4 @@ public class ScheduleSuggestionDto
     public List<ScheduleSlotDto> SuggestedSlots { get; set; } = new();
     public decimal EstimatedWeeklyHoursImpact { get; set; }
     public List<string> Notes { get; set; } = new();
-    public List<InstructorAvailabilityDto> InstructorAvailabilities { get; set; } = new();
 }

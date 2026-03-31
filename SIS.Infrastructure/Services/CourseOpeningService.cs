@@ -226,6 +226,23 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         }
         await _context.SaveChangesAsync(ct);
 
+        // CourseAccessPolicy: varsayılan olarak kendi bölümüne açık
+        var existingPolicy = await _context.CourseAccessPolicies
+            .AnyAsync(cap => cap.CourseId == request.CourseId && cap.TermId == termId, ct);
+
+        if (!existingPolicy)
+        {
+            var policy = new CourseAccessPolicy
+            {
+                CourseId = request.CourseId,
+                TermId = termId,
+                DepartmentId = course.DepartmentId.HasValue ? departmentId : null,
+                // DepartmentId null olan ortak dersler tüm bölümlere açık (FacultyId ve DepartmentId null)
+            };
+            _context.CourseAccessPolicies.Add(policy);
+            await _context.SaveChangesAsync(ct);
+        }
+
         // Resolve instructor name if set
         string? instructorName = null;
         if (request.InstructorId.HasValue)

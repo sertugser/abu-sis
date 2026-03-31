@@ -88,6 +88,7 @@ builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
@@ -104,6 +105,7 @@ builder.Services.AddScoped<IAdminTermService, AdminTermService>();
 builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
+builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 
 var app = builder.Build();
 
