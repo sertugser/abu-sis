@@ -32,23 +32,67 @@ function findActiveGroup(pathname: string, menuGroups: MenuGroup[]): string | nu
 }
 
 function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
-  if (roles.includes('SystemAdministrator')) return systemAdminMenuGroups;
-  if (roles.includes('Dean')) return deanMenuGroups;
-  if (roles.includes('DepartmentManager')) return departmentManagerMenuGroups;
-  if (roles.includes('AdministrativeStaff')) return administrativeStaffMenuGroups;
-  if (roles.includes('AcademicAdvisor')) return advisorMenuGroups;
-  if (roles.includes('Instructor')) return instructorMenuGroups;
-  return studentMenuGroups;
+  // Kullanıcının TÜM rollerine ait menüleri topla ve birleştir
+  const roleMenuMap: [string, MenuGroup[]][] = [
+    ['SystemAdministrator', systemAdminMenuGroups],
+    ['Dean', deanMenuGroups],
+    ['DepartmentManager', departmentManagerMenuGroups],
+    ['AdministrativeStaff', administrativeStaffMenuGroups],
+    ['AcademicAdvisor', advisorMenuGroups],
+    ['Instructor', instructorMenuGroups],
+    ['Student', studentMenuGroups],
+  ];
+
+  const allGroups: MenuGroup[] = [];
+  const seenGroupIds = new Set<string>();
+  const seenRoutes = new Set<string>();
+
+  for (const [role, menus] of roleMenuMap) {
+    if (!roles.includes(role)) continue;
+
+    for (const group of menus) {
+      if (seenGroupIds.has(group.id)) {
+        // Aynı id'li grup zaten var — children'ları birleştir
+        const existing = allGroups.find(g => g.id === group.id);
+        if (existing) {
+          for (const child of group.children) {
+            if (!seenRoutes.has(child.to)) {
+              existing.children.push(child);
+              seenRoutes.add(child.to);
+            }
+          }
+        }
+      } else {
+        // Yeni grup — duplikat route'ları filtrele
+        const filteredChildren = group.children.filter(child => {
+          if (seenRoutes.has(child.to)) return false;
+          seenRoutes.add(child.to);
+          return true;
+        });
+
+        if (filteredChildren.length > 0) {
+          allGroups.push({ ...group, children: [...filteredChildren] });
+          seenGroupIds.add(group.id);
+        }
+      }
+    }
+  }
+
+  return allGroups.length > 0 ? allGroups : studentMenuGroups;
 }
 
 function getRoleLabel(roles: string[]): string {
-  if (roles.includes('SystemAdministrator')) return 'Yönetici Paneli';
-  if (roles.includes('Dean')) return 'Dekan Paneli';
-  if (roles.includes('DepartmentManager')) return 'Bölüm Başkanı Paneli';
-  if (roles.includes('AdministrativeStaff')) return 'İdari Personel Paneli';
-  if (roles.includes('AcademicAdvisor')) return 'Danışman Paneli';
-  if (roles.includes('Instructor')) return 'Öğretim Üyesi Paneli';
-  return 'Öğrenci Bilgi Sistemi';
+  const labels: string[] = [];
+  if (roles.includes('SystemAdministrator')) labels.push('Yönetici');
+  if (roles.includes('Dean')) labels.push('Dekan');
+  if (roles.includes('DepartmentManager')) labels.push('Bölüm Başkanı');
+  if (roles.includes('AdministrativeStaff')) labels.push('İdari Personel');
+  if (roles.includes('AcademicAdvisor')) labels.push('Danışman');
+  if (roles.includes('Instructor')) labels.push('Öğretim Üyesi');
+  if (roles.includes('Student')) labels.push('Öğrenci');
+
+  if (labels.length === 0) return 'Öğrenci Bilgi Sistemi';
+  return labels.join(' / ') + ' Paneli';
 }
 
 const EXPANDED_W = 260;
