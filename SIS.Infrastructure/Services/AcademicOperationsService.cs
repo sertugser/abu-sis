@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SIS.Application.AcademicOperations.DTOs;
@@ -7,18 +6,12 @@ using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
 
 public class AcademicOperationsService : IAcademicOperationsService
 {
-    private static readonly JsonSerializerOptions ScheduleJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     private readonly AppDbContext _context;
     private readonly IEnrollmentForecastService _forecastService;
     private readonly ISchedulingService _schedulingService;
@@ -158,6 +151,17 @@ public class AcademicOperationsService : IAcademicOperationsService
             .Where(user => instructorUserIds.Contains(user.Id) || studentUserIds.Contains(user.Id))
             .ToDictionaryAsync(user => user.Id, cancellationToken);
 
+        // Load SectionSchedule records for schedule display
+        var classSectionIds = sections.Select(s => s.Id).ToList();
+        var sectionScheduleRecords = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => classSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync(cancellationToken);
+        var scheduleMap = sectionScheduleRecords
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var sectionDtos = sections
             .Select(section =>
             {
@@ -196,6 +200,8 @@ public class AcademicOperationsService : IAcademicOperationsService
                         : $"{section.Instructor.Title} {instructorUser.FirstName} {instructorUser.LastName}".Trim();
                 }
 
+                var sectionScheds = scheduleMap.GetValueOrDefault(section.Id) ?? new List<SectionSchedule>();
+
                 return new DepartmentSectionClassListDto
                 {
                     SectionId = section.Id,
@@ -204,7 +210,7 @@ public class AcademicOperationsService : IAcademicOperationsService
                     CourseName = section.Course.Name,
                     InstructorName = instructorName,
                     ClassroomName = section.Classroom?.Name ?? string.Empty,
-                    ScheduleSummary = FormatSchedule(section.ScheduleJson),
+                    ScheduleSummary = ScheduleHelper.FormatSchedule(sectionScheds),
                     ScheduleJson = section.ScheduleJson,
                     Capacity = section.Capacity,
                     EnrolledCount = section.EnrolledCount,
@@ -417,47 +423,12 @@ public class AcademicOperationsService : IAcademicOperationsService
         return "Akademik Operasyonlar";
     }
 
-    private string FormatSchedule(string scheduleJson)
-    {
-        if (string.IsNullOrWhiteSpace(scheduleJson) || scheduleJson == "[]")
-            return string.Empty;
-
-        try
-        {
-            var slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(scheduleJson, ScheduleJsonOptions);
-            if (slots == null || slots.Count == 0)
-                return string.Empty;
-
-            return string.Join(", ", slots
-                .OrderBy(slot => slot.Day)
-                .ThenBy(slot => slot.StartTime)
-                .Select(slot => $"{DayOfWeekToTurkish(slot.Day)} {slot.StartTime:HH:mm}-{slot.EndTime:HH:mm}"));
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Schedule JSON parse edilemedi: {ScheduleJson}", scheduleJson);
-            return string.Empty;
-        }
-    }
-
     private static string BuildSemesterLabel(int semesterNumber)
     {
         var classYear = (semesterNumber - 1) / 2 + 1;
         var termLabel = semesterNumber % 2 == 1 ? "Güz" : "Bahar";
         return $"{classYear}. Sınıf {termLabel}";
     }
-
-    private static string DayOfWeekToTurkish(DayOfWeek day) => day switch
-    {
-        DayOfWeek.Monday => "Pazartesi",
-        DayOfWeek.Tuesday => "Salı",
-        DayOfWeek.Wednesday => "Çarşamba",
-        DayOfWeek.Thursday => "Perşembe",
-        DayOfWeek.Friday => "Cuma",
-        DayOfWeek.Saturday => "Cumartesi",
-        DayOfWeek.Sunday => "Pazar",
-        _ => day.ToString()
-    };
 
     // ── Section Approval ──────────────────────────────────────
 

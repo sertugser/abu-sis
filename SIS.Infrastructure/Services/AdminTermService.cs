@@ -222,8 +222,13 @@ public class AdminTermService : IAdminTermService
                 if (activeSections.Count == 0)
                     errors.Add("Yayınlamak için en az bir aktif ders şubesi olmalıdır.");
 
-                var unscheduled = activeSections.Where(s =>
-                    string.IsNullOrEmpty(s.ScheduleJson) || s.ScheduleJson == "[]").ToList();
+                var scheduledSectionIdsForPublish = await _context.SectionSchedules
+                    .AsNoTracking()
+                    .Where(ss => activeSections.Select(s => s.Id).Contains(ss.CourseSectionId))
+                    .Select(ss => ss.CourseSectionId)
+                    .Distinct()
+                    .ToListAsync();
+                var unscheduled = activeSections.Where(s => !scheduledSectionIdsForPublish.Contains(s.Id)).ToList();
                 if (unscheduled.Count > 0)
                     errors.Add($"{unscheduled.Count} şubede zaman ataması yapılmamış.");
 

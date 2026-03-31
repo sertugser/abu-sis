@@ -78,6 +78,9 @@ public class RegistrationValidationServiceTests : IDisposable
             Status = TermStatus.RegistrationOpen
         });
 
+        // Classroom (needed for SectionSchedule records)
+        _context.Classrooms.Add(new Classroom { Id = 1, Name = "A-101", Capacity = 100, Type = Domain.Enums.ClassroomType.Lecture, BuildingName = "A", Floor = 1 });
+
         // Student (active, good CGPA, no financial block)
         _context.Students.Add(new Student
         {
@@ -146,6 +149,48 @@ public class RegistrationValidationServiceTests : IDisposable
         };
         _context.CourseSections.Add(section);
         _context.SaveChanges();
+
+        // Also create SectionSchedule + TimeSlot records so the service can read from them
+        if (scheduleJson != null && scheduleJson != "[]")
+        {
+            var slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(scheduleJson);
+            if (slots != null)
+            {
+                foreach (var slot in slots)
+                {
+                    // Find or create a TimeSlot for this day/time/term
+                    var timeSlot = _context.TimeSlots.FirstOrDefault(ts =>
+                        ts.TermId == termId
+                        && ts.DayOfWeek == slot.Day
+                        && ts.StartTime == slot.StartTime
+                        && ts.EndTime == slot.EndTime);
+
+                    if (timeSlot == null)
+                    {
+                        timeSlot = new TimeSlot
+                        {
+                            TermId = termId,
+                            DayOfWeek = slot.Day,
+                            StartTime = slot.StartTime,
+                            EndTime = slot.EndTime,
+                            SlotOrder = 1,
+                            DisplayName = $"{slot.Day} {slot.StartTime:HH:mm}-{slot.EndTime:HH:mm}"
+                        };
+                        _context.TimeSlots.Add(timeSlot);
+                        _context.SaveChanges();
+                    }
+
+                    _context.SectionSchedules.Add(new SectionSchedule
+                    {
+                        CourseSectionId = section.Id,
+                        TimeSlotId = timeSlot.Id,
+                        ClassroomId = slot.ClassroomId ?? 1
+                    });
+                }
+                _context.SaveChanges();
+            }
+        }
+
         return section;
     }
 

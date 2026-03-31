@@ -197,6 +197,16 @@ public class SchedulingController : ControllerBase
         if (section1.TermId != section2.TermId)
             return BadRequest(new { error = "Farkli donemlerdeki section'lar takas edilemez." });
 
+        // Load SectionSchedule records for both sections
+        var swapSchedules1 = await _context.SectionSchedules
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == section1.Id)
+            .ToListAsync(cancellationToken);
+        var swapSchedules2 = await _context.SectionSchedules
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == section2.Id)
+            .ToListAsync(cancellationToken);
+
         // Preserve originals for rollback
         var origScheduleJson1 = section1.ScheduleJson;
         var origScheduleJson2 = section2.ScheduleJson;
@@ -216,9 +226,23 @@ public class SchedulingController : ControllerBase
             section2.ClassroomId = origClassroomId1;
         }
 
-        // Validate both sections after swap
-        var slots1 = ParseScheduleSlots(section1.ScheduleJson);
-        var slots2 = ParseScheduleSlots(section2.ScheduleJson);
+        // Build validation slots from SectionSchedule (swapped if needed)
+        var slotsSource1 = request.SwapSlots ? swapSchedules2 : swapSchedules1;
+        var slotsSource2 = request.SwapSlots ? swapSchedules1 : swapSchedules2;
+        var slots1 = slotsSource1.Select(ss => new ScheduleSlotDto
+        {
+            Day = ss.TimeSlot.DayOfWeek,
+            StartTime = ss.TimeSlot.StartTime,
+            EndTime = ss.TimeSlot.EndTime,
+            ClassroomId = ss.ClassroomId
+        }).ToList();
+        var slots2 = slotsSource2.Select(ss => new ScheduleSlotDto
+        {
+            Day = ss.TimeSlot.DayOfWeek,
+            StartTime = ss.TimeSlot.StartTime,
+            EndTime = ss.TimeSlot.EndTime,
+            ClassroomId = ss.ClassroomId
+        }).ToList();
 
         var validation1 = await _schedulingService.ValidateAsync(new ScheduleValidationRequestDto
         {
@@ -361,17 +385,28 @@ public class SchedulingController : ControllerBase
             .Where(cs => cs.TermId == term.Id && cs.InstructorId == instructorId && cs.IsActive)
             .ToListAsync(cancellationToken);
 
+        // Load SectionSchedule records for timetable
+        var instrSectionIds = sections.Select(s => s.Id).ToList();
+        var instrSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => instrSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync(cancellationToken);
+        var instrScheduleMap = instrSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var entries = new List<TimetableEntryDto>();
         foreach (var section in sections)
         {
-            var slots = ParseScheduleSlots(section.ScheduleJson);
-            foreach (var slot in slots)
+            var scheds = instrScheduleMap.GetValueOrDefault(section.Id) ?? new();
+            foreach (var ss in scheds)
             {
                 entries.Add(new TimetableEntryDto
                 {
-                    Day = slot.Day,
-                    StartTime = slot.StartTime,
-                    EndTime = slot.EndTime,
+                    Day = ss.TimeSlot.DayOfWeek,
+                    StartTime = ss.TimeSlot.StartTime,
+                    EndTime = ss.TimeSlot.EndTime,
                     CourseCode = section.Course.Code,
                     CourseName = section.Course.Name,
                     SectionId = section.Id,
@@ -413,17 +448,28 @@ public class SchedulingController : ControllerBase
         var instructorIds = sections.Where(s => s.InstructorId.HasValue).Select(s => s.InstructorId!.Value).Distinct().ToList();
         var instructorNames = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
 
+        // Load SectionSchedule records for classroom timetable
+        var classroomSectionIds = sections.Select(s => s.Id).ToList();
+        var classroomSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => classroomSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync(cancellationToken);
+        var classroomScheduleMap = classroomSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var entries = new List<TimetableEntryDto>();
         foreach (var section in sections)
         {
-            var slots = ParseScheduleSlots(section.ScheduleJson);
-            foreach (var slot in slots)
+            var scheds = classroomScheduleMap.GetValueOrDefault(section.Id) ?? new();
+            foreach (var ss in scheds)
             {
                 entries.Add(new TimetableEntryDto
                 {
-                    Day = slot.Day,
-                    StartTime = slot.StartTime,
-                    EndTime = slot.EndTime,
+                    Day = ss.TimeSlot.DayOfWeek,
+                    StartTime = ss.TimeSlot.StartTime,
+                    EndTime = ss.TimeSlot.EndTime,
                     CourseCode = section.Course.Code,
                     CourseName = section.Course.Name,
                     SectionId = section.Id,
@@ -484,23 +530,34 @@ public class SchedulingController : ControllerBase
                 g => (int)Math.Ceiling(g.Min(cc => cc.SuggestedSemester) / 2.0)
             );
 
+        // Load SectionSchedule records for department timetable
+        var deptSectionIds = sections.Select(s => s.Id).ToList();
+        var deptSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => deptSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync(cancellationToken);
+        var deptScheduleMap = deptSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var yearGroups = new Dictionary<int, List<TimetableEntryDto>>();
 
         foreach (var section in sections)
         {
             var year = courseYearMap.TryGetValue(section.CourseId, out var y) ? y : 0;
-            var slots = ParseScheduleSlots(section.ScheduleJson);
+            var scheds = deptScheduleMap.GetValueOrDefault(section.Id) ?? new();
 
             if (!yearGroups.ContainsKey(year))
                 yearGroups[year] = new List<TimetableEntryDto>();
 
-            foreach (var slot in slots)
+            foreach (var ss in scheds)
             {
                 yearGroups[year].Add(new TimetableEntryDto
                 {
-                    Day = slot.Day,
-                    StartTime = slot.StartTime,
-                    EndTime = slot.EndTime,
+                    Day = ss.TimeSlot.DayOfWeek,
+                    StartTime = ss.TimeSlot.StartTime,
+                    EndTime = ss.TimeSlot.EndTime,
                     CourseCode = section.Course.Code,
                     CourseName = section.Course.Name,
                     SectionId = section.Id,
@@ -658,28 +715,6 @@ public class SchedulingController : ControllerBase
                 ? $"{i.Title} {user.FirstName} {user.LastName}".Trim()
                 : i.Title
         );
-    }
-
-    private static List<ScheduleSlotDto> ParseScheduleSlots(string scheduleJson)
-    {
-        if (string.IsNullOrWhiteSpace(scheduleJson) || scheduleJson == "[]")
-            return new List<ScheduleSlotDto>();
-
-        try
-        {
-            var slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(scheduleJson, ScheduleJsonOptions);
-            return slots?.Select(s => new ScheduleSlotDto
-            {
-                Day = s.Day,
-                StartTime = s.StartTime,
-                EndTime = s.EndTime,
-                ClassroomId = s.ClassroomId
-            }).ToList() ?? new List<ScheduleSlotDto>();
-        }
-        catch
-        {
-            return new List<ScheduleSlotDto>();
-        }
     }
 
     private async Task UpdateSectionScheduleRecordsAsync(Domain.Entities.CourseSection section, CancellationToken ct)

@@ -377,7 +377,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId }).IsUnique();
 
             e.HasOne(ss => ss.CourseSection)
-             .WithMany()
+             .WithMany(cs => cs.SectionSchedules)
              .HasForeignKey(ss => ss.CourseSectionId)
              .OnDelete(DeleteBehavior.Cascade);
 

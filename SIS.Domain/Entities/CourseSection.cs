@@ -23,4 +23,5 @@ public class CourseSection
     // Schedule stored as JSON: list of {DayOfWeek, StartTime, EndTime}
     public string ScheduleJson { get; set; } = "[]";
     public ICollection<CourseRegistration> Registrations { get; set; } = new List<CourseRegistration>();
+    public ICollection<SectionSchedule> SectionSchedules { get; set; } = new List<SectionSchedule>();
 }

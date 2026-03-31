@@ -1,12 +1,11 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Common.DTOs;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 
 namespace SIS.API.Controllers;
 
@@ -75,6 +74,17 @@ public class CourseController : ControllerBase
             .Where(u => instructorIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}");
 
+        // Load SectionSchedule records for schedule display
+        var sectionIds = sections.Select(s => s.Id).ToList();
+        var sectionSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => sectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+        var scheduleMap = sectionSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
+
         // Group sections by course
         var courseGroups = sections
             .GroupBy(s => s.CourseId)
@@ -103,7 +113,7 @@ public class CourseController : ControllerBase
                         EnrolledCount = s.EnrolledCount,
                         AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),
                         ClassroomName = s.Classroom?.Name ?? string.Empty,
-                        Schedule = FormatSchedule(s.ScheduleJson),
+                        Schedule = scheduleMap.GetValueOrDefault(s.Id, string.Empty),
                         IsActive = s.IsActive
                     }).ToList()
                 };
@@ -253,6 +263,17 @@ public class CourseController : ControllerBase
             .Where(u => instructorUserIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}");
 
+        // Load SectionSchedule records for schedule display
+        var catalogSectionIds = sections.Select(s => s.Id).ToList();
+        var catalogSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => catalogSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+        var catalogScheduleMap = catalogSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
+
         // 7. Build result — group by course
         var result = sections
             .GroupBy(s => s.CourseId)
@@ -326,7 +347,7 @@ public class CourseController : ControllerBase
                         EnrolledCount = s.EnrolledCount,
                         AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),
                         ClassroomName = s.Classroom?.Name ?? string.Empty,
-                        Schedule = FormatSchedule(s.ScheduleJson),
+                        Schedule = catalogScheduleMap.GetValueOrDefault(s.Id, string.Empty),
                         IsActive = s.IsActive
                     }).ToList()
                 };
@@ -363,6 +384,12 @@ public class CourseController : ControllerBase
                 instructorName = $"{section.Instructor.Title} {user.FirstName} {user.LastName}".Trim();
         }
 
+        var detailSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == section.Id)
+            .ToListAsync();
+
         var dto = new SectionDto
         {
             SectionId = section.Id,
@@ -371,7 +398,7 @@ public class CourseController : ControllerBase
             EnrolledCount = section.EnrolledCount,
             AvailableSeats = Math.Max(0, section.Capacity - section.EnrolledCount),
             ClassroomName = section.Classroom?.Name ?? string.Empty,
-            Schedule = FormatSchedule(section.ScheduleJson),
+            Schedule = ScheduleHelper.FormatSchedule(detailSchedules),
             IsActive = section.IsActive
         };
 
@@ -419,45 +446,4 @@ public class CourseController : ControllerBase
         return Ok(dto);
     }
 
-    /// <summary>
-    /// Converts ScheduleJson (list of ScheduleSlot) to a human-readable Turkish string.
-    /// Example: "Pazartesi 09:00-11:00, Carsamba 13:00-15:00"
-    /// </summary>
-    private static string FormatSchedule(string scheduleJson)
-    {
-        if (string.IsNullOrWhiteSpace(scheduleJson) || scheduleJson == "[]")
-            return string.Empty;
-
-        try
-        {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(scheduleJson, options);
-
-            if (slots == null || slots.Count == 0)
-                return string.Empty;
-
-            var formatted = slots
-                .OrderBy(s => s.Day)
-                .ThenBy(s => s.StartTime)
-                .Select(s => $"{DayOfWeekToTurkish(s.Day)} {s.StartTime:HH:mm}-{s.EndTime:HH:mm}");
-
-            return string.Join(", ", formatted);
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    private static string DayOfWeekToTurkish(DayOfWeek day) => day switch
-    {
-        DayOfWeek.Monday => "Pazartesi",
-        DayOfWeek.Tuesday => "Sali",
-        DayOfWeek.Wednesday => "Carsamba",
-        DayOfWeek.Thursday => "Persembe",
-        DayOfWeek.Friday => "Cuma",
-        DayOfWeek.Saturday => "Cumartesi",
-        DayOfWeek.Sunday => "Pazar",
-        _ => day.ToString()
-    };
 }
