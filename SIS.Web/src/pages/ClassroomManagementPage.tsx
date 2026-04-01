@@ -339,7 +339,7 @@ export default function ClassroomManagementPage() {
                                       'h-10 rounded-md border flex items-center justify-center text-[10px] font-semibold transition-colors',
                                       style.bg, style.border,
                                     )}>
-                                      {cell.usedCount > 0 ? cell.usedCount : ''}
+                                      {(cell.usedCount ?? 0) > 0 ? cell.usedCount : ''}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" className="text-xs max-w-xs">
@@ -349,7 +349,7 @@ export default function ClassroomManagementPage() {
                                       <p key={i} className="text-muted-foreground">{o.classroomName}: {o.courseCode} ({o.enrolledCount}/{o.capacity})</p>
                                     ))}
                                     {(cell.occupations?.length ?? 0) > 5 && (
-                                      <p className="text-muted-foreground">+{cell.occupations.length - 5} daha...</p>
+                                      <p className="text-muted-foreground">+{(cell.occupations?.length ?? 0) - 5} daha...</p>
                                     )}
                                   </TooltipContent>
                                 </Tooltip>
