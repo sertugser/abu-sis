@@ -950,9 +950,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("FromYear")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("MaxFailedCourses")
+                        .HasColumnType("integer");
+
                     b.Property<decimal?>("MinCgpa")
                         .HasPrecision(4, 2)
                         .HasColumnType("numeric(4,2)");
+
+                    b.Property<int?>("MinCompulsoryCoursePassed")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("MinCourseCount")
                         .HasColumnType("integer");

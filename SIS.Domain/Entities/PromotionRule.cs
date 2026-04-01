@@ -14,4 +14,6 @@ public class PromotionRule
     public decimal? MinCgpa { get; set; }
     public int? MinEcts { get; set; }
     public int? MinCourseCount { get; set; }
+    public int? MaxFailedCourses { get; set; }          // Max FF ders sayısı (aşarsa sınıf atlayamaz)
+    public int? MinCompulsoryCoursePassed { get; set; }  // O sınıfın zorunlu derslerinden min kaçı geçilmiş olmalı
 }

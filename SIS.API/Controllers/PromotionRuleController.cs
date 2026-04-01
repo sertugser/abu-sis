@@ -6,9 +6,21 @@ using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
-public record PromotionRuleDto(int Id, int ProgramId, string ProgramName, int FromYear, int ToYear, decimal? MinCgpa, int? MinEcts, int? MinCourseCount);
-public record CreatePromotionRuleDto(int ProgramId, int FromYear, int ToYear, decimal? MinCgpa, int? MinEcts, int? MinCourseCount);
-public record UpdatePromotionRuleDto(int FromYear, int ToYear, decimal? MinCgpa, int? MinEcts, int? MinCourseCount);
+public record PromotionRuleDto(
+    int Id, int ProgramId, string ProgramName,
+    int FromYear, int ToYear,
+    decimal? MinCgpa, int? MinEcts, int? MinCourseCount,
+    int? MaxFailedCourses, int? MinCompulsoryCoursePassed);
+
+public record CreatePromotionRuleDto(
+    int ProgramId, int FromYear, int ToYear,
+    decimal? MinCgpa, int? MinEcts, int? MinCourseCount,
+    int? MaxFailedCourses, int? MinCompulsoryCoursePassed);
+
+public record UpdatePromotionRuleDto(
+    int FromYear, int ToYear,
+    decimal? MinCgpa, int? MinEcts, int? MinCourseCount,
+    int? MaxFailedCourses, int? MinCompulsoryCoursePassed);
 
 [ApiController]
 [Route("api/admin/promotion-rules")]
@@ -32,7 +44,9 @@ public class PromotionRuleController(AppDbContext context) : ControllerBase
             .OrderBy(r => r.ProgramId).ThenBy(r => r.FromYear)
             .Select(r => new PromotionRuleDto(
                 r.Id, r.ProgramId, r.Program.Name,
-                r.FromYear, r.ToYear, r.MinCgpa, r.MinEcts, r.MinCourseCount))
+                r.FromYear, r.ToYear,
+                r.MinCgpa, r.MinEcts, r.MinCourseCount,
+                r.MaxFailedCourses, r.MinCompulsoryCoursePassed))
             .ToListAsync(ct);
 
         return Ok(rules);
@@ -46,12 +60,12 @@ public class PromotionRuleController(AppDbContext context) : ControllerBase
             return NotFound(new { error = "Program bulunamadı." });
 
         if (dto.FromYear >= dto.ToYear)
-            return BadRequest(new { error = "FromYear, ToYear'dan küçük olmalıdır." });
+            return BadRequest(new { error = "Hedef sınıf, kaynak sınıftan büyük olmalıdır." });
 
-        if (dto.MinCgpa == null && dto.MinEcts == null && dto.MinCourseCount == null)
-            return BadRequest(new { error = "En az bir kural kriteri belirtilmelidir (MinCgpa, MinEcts veya MinCourseCount)." });
+        if (dto.MinCgpa == null && dto.MinEcts == null && dto.MinCourseCount == null
+            && dto.MaxFailedCourses == null && dto.MinCompulsoryCoursePassed == null)
+            return BadRequest(new { error = "En az bir kural kriteri belirtilmelidir." });
 
-        // Aynı program ve sınıf geçişi için kural var mı?
         var exists = await _context.PromotionRules.AnyAsync(r =>
             r.ProgramId == dto.ProgramId && r.FromYear == dto.FromYear && r.ToYear == dto.ToYear, ct);
 
@@ -65,7 +79,9 @@ public class PromotionRuleController(AppDbContext context) : ControllerBase
             ToYear = dto.ToYear,
             MinCgpa = dto.MinCgpa,
             MinEcts = dto.MinEcts,
-            MinCourseCount = dto.MinCourseCount
+            MinCourseCount = dto.MinCourseCount,
+            MaxFailedCourses = dto.MaxFailedCourses,
+            MinCompulsoryCoursePassed = dto.MinCompulsoryCoursePassed
         };
 
         _context.PromotionRules.Add(rule);
@@ -73,7 +89,9 @@ public class PromotionRuleController(AppDbContext context) : ControllerBase
 
         return CreatedAtAction(null, null,
             new PromotionRuleDto(rule.Id, rule.ProgramId, program.Name,
-                rule.FromYear, rule.ToYear, rule.MinCgpa, rule.MinEcts, rule.MinCourseCount));
+                rule.FromYear, rule.ToYear,
+                rule.MinCgpa, rule.MinEcts, rule.MinCourseCount,
+                rule.MaxFailedCourses, rule.MinCompulsoryCoursePassed));
     }
 
     [HttpPut("{id}")]
@@ -87,12 +105,12 @@ public class PromotionRuleController(AppDbContext context) : ControllerBase
             return NotFound(new { error = "Sınıf atlatma kuralı bulunamadı." });
 
         if (dto.FromYear >= dto.ToYear)
-            return BadRequest(new { error = "FromYear, ToYear'dan küçük olmalıdır." });
+            return BadRequest(new { error = "Hedef sınıf, kaynak sınıftan büyük olmalıdır." });
 
-        if (dto.MinCgpa == null && dto.MinEcts == null && dto.MinCourseCount == null)
-            return BadRequest(new { error = "En az bir kural kriteri belirtilmelidir (MinCgpa, MinEcts veya MinCourseCount)." });
+        if (dto.MinCgpa == null && dto.MinEcts == null && dto.MinCourseCount == null
+            && dto.MaxFailedCourses == null && dto.MinCompulsoryCoursePassed == null)
+            return BadRequest(new { error = "En az bir kural kriteri belirtilmelidir." });
 
-        // Aynı program ve sınıf geçişi için başka kural var mı? (kendi hariç)
         var duplicate = await _context.PromotionRules.AnyAsync(r =>
             r.ProgramId == rule.ProgramId && r.FromYear == dto.FromYear && r.ToYear == dto.ToYear && r.Id != id, ct);
 
@@ -104,11 +122,15 @@ public class PromotionRuleController(AppDbContext context) : ControllerBase
         rule.MinCgpa = dto.MinCgpa;
         rule.MinEcts = dto.MinEcts;
         rule.MinCourseCount = dto.MinCourseCount;
+        rule.MaxFailedCourses = dto.MaxFailedCourses;
+        rule.MinCompulsoryCoursePassed = dto.MinCompulsoryCoursePassed;
 
         await _context.SaveChangesAsync(ct);
 
         return Ok(new PromotionRuleDto(rule.Id, rule.ProgramId, rule.Program.Name,
-            rule.FromYear, rule.ToYear, rule.MinCgpa, rule.MinEcts, rule.MinCourseCount));
+            rule.FromYear, rule.ToYear,
+            rule.MinCgpa, rule.MinEcts, rule.MinCourseCount,
+            rule.MaxFailedCourses, rule.MinCompulsoryCoursePassed));
     }
 
     [HttpDelete("{id}")]

@@ -161,6 +161,41 @@ public class AcademicProgressionService : IAcademicProgressionService
                             reasons.Add($"Ders sayisi {passedCourseCount} < {rule.MinCourseCount.Value} gerekli");
                         }
                     }
+                    if (rule.MaxFailedCourses.HasValue)
+                    {
+                        var failedCourseCount = studentRegs
+                            .Where(r => r.Grade == GradeCode.FF || r.Grade == GradeCode.NA || r.Grade == GradeCode.U)
+                            .Select(r => r.CourseSection.CourseId)
+                            .Distinct()
+                            .Count();
+                        if (failedCourseCount > rule.MaxFailedCourses.Value)
+                        {
+                            canPromote = false;
+                            reasons.Add($"Basarisiz ders {failedCourseCount} > max {rule.MaxFailedCourses.Value}");
+                        }
+                    }
+                    if (rule.MinCompulsoryCoursePassed.HasValue)
+                    {
+                        // Öğrencinin müfredatındaki zorunlu derslerden geçtiği sayı
+                        var passedCompulsoryCourseIds = studentRegs
+                            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
+                            .Select(r => r.CourseSection.CourseId)
+                            .Distinct()
+                            .ToHashSet();
+
+                        var compulsoryPassedCount = await _context.CurriculumCourses
+                            .AsNoTracking()
+                            .Where(cc => cc.CurriculumId == mainProgram.CurriculumId
+                                && cc.IsCompulsory
+                                && passedCompulsoryCourseIds.Contains(cc.CourseId))
+                            .CountAsync(cancellationToken);
+
+                        if (compulsoryPassedCount < rule.MinCompulsoryCoursePassed.Value)
+                        {
+                            canPromote = false;
+                            reasons.Add($"Zorunlu ders {compulsoryPassedCount} < {rule.MinCompulsoryCoursePassed.Value} gerekli");
+                        }
+                    }
 
                     if (canPromote)
                     {

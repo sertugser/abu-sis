@@ -6,26 +6,32 @@ export interface PromotionRuleDto {
   programName?: string;
   fromYear: number;
   toYear: number;
-  minCgpa: number;
-  minEcts: number;
-  minCourseCount: number;
+  minCgpa: number | null;
+  minEcts: number | null;
+  minCourseCount: number | null;
+  maxFailedCourses: number | null;
+  minCompulsoryCoursePassed: number | null;
 }
 
 export interface CreatePromotionRuleDto {
   programId: number;
   fromYear: number;
   toYear: number;
-  minCgpa: number;
-  minEcts: number;
-  minCourseCount: number;
+  minCgpa?: number | null;
+  minEcts?: number | null;
+  minCourseCount?: number | null;
+  maxFailedCourses?: number | null;
+  minCompulsoryCoursePassed?: number | null;
 }
 
 export interface UpdatePromotionRuleDto {
   fromYear: number;
   toYear: number;
-  minCgpa: number;
-  minEcts: number;
-  minCourseCount: number;
+  minCgpa?: number | null;
+  minEcts?: number | null;
+  minCourseCount?: number | null;
+  maxFailedCourses?: number | null;
+  minCompulsoryCoursePassed?: number | null;
 }
 
 export async function getPromotionRules(programId?: number): Promise<PromotionRuleDto[]> {
