@@ -6,7 +6,7 @@ Ankara Bilim University - Production Student Information System
 
 ## Tech Stack
 - **Backend:** ASP.NET Core 10 Web API (.NET 10 SDK, targeting net10.0)
-- **Frontend:** React (not yet started)
+- **Frontend:** React + TypeScript + Vite + shadcn/ui + TanStack Query
 - **Database:** PostgreSQL (localhost:5432)
 - **ORM:** Entity Framework Core 10
 - **Auth:** JWT Bearer Tokens + RBAC
@@ -34,9 +34,12 @@ Dependency direction: API → Application → Domain ← Infrastructure
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports
 - ApplicationUser (IdentityUser) lives in SIS.Infrastructure/Persistence/
-- ScheduleSlot (value object) lives in SIS.Domain/ValueObjects/
+- Schedule data stored in SectionSchedule table (ScheduleJson removed, ScheduleSlot deleted)
+- TimeBlock internal type in ScheduleHelper replaces ScheduleSlot for internal use
 - Composite PKs (CoursePrerequisite, CourseEquivalency, CurriculumCourse) configured in OnModelCreating
 - Solution file format: .slnx (modern XML format from .NET 10 SDK)
+- SystemConfig table for configurable business rules (no hardcoded values)
+- ISystemConfigProvider with 5-minute memory cache for config reads
 
 ## Database
 - Host: localhost, Port: 5432, Database: StudentInfoSystem
@@ -332,250 +335,63 @@ Tüm kritik işlemler ayrıntılı ve sorgulanabilir loglanır:
 
 ---
 
-## E. MEVCUT ENTITY DURUMU VE EKSİKLER
+## E. MEVCUT ENTITY DURUMU (Güncel — Faz 0-8 + Scheduling Spec tamamlanmış)
 
-- Classroom: Name, Capacity, Type — **EKSİK:** BuildingName, Floor
-- Course: DepartmentId nullable (ortak dersler için) — **EKSİK:** CourseAccessPolicy
-- CourseSection: ScheduleJson string — **DEĞİŞECEK:** SectionSchedule(CourseSectionId, TimeSlotId, ClassroomId) entity'ye geçilecek
-- Instructor: MaxWeeklyHours var, Availabilities var — Availabilities kullanılmayacak (YÖK bazlı yük yeterli)
-- RegistrationStatus: Draft/Active/PendingAdvisorApproval/Dropped/Withdrawn — **EKSİK:** Rejected
-- Curriculum: tek versiyonlu — **EKSİK:** versiyonlama desteği
-- TimeSlot: **YENİ** entity — Pattern bazlı sabit zaman grid'i
-- ClassroomTermAssignment: **YENİ** entity — dönemlik derslik-fakülte ataması
-- RegistrationPlan: **YENİ** entity — öğrencinin dönemlik kayıt planı üst entity'si
-- AuditLog: **YENİ** — kritik işlemlerin sorgulanabilir logu
-- SystemConfig: **YENİ** — konfigüre edilebilir iş kuralları (ECTS limitleri, CGPA eşikleri, çekilme limitleri, unvan→MaxWeeklyHours, derslik eşikleri)
-- PromotionRule: **YENİ** — program bazlı sınıf atlatma kuralları (min CGPA, min AKTS, min ders sayısı)
-- InstructorAvailability: **KALDIRILACAK** — entity, endpoint'ler ve SchedulingService bağımlılığı temizlenecek
-- CourseRegistration: **EKSİK:** RowVersion (concurrency), AdvisorNote alanı
-- CourseSection: **EKSİK:** SectionNumber alanı (şube numarası)
-- Tüm ana entity'ler: **EKSİK:** CreatedAt/UpdatedAt audit alanları
-- ClassroomEquipment, PreRegistrationSurvey: **SİLİNECEK** — boş placeholder dosyalar
-- AppDbContext: **EKSİK:** Performans index'leri (CourseRegistration, CourseSection, Student.AdvisorId)
+**Ana Entity'ler (tümünde CreatedAt/UpdatedAt var):**
+- Classroom: Name, BuildingName, Floor, Capacity, Type (Lecture/Lab/Computer/Seminar/Amphitheater)
+- Course: DepartmentId nullable (ortak dersler), TheoryHours, LabHours, Ects, IsNonGpa
+- CourseSection: SectionNumber, IsActive, IsFinalized, IsScheduleLocked, RowVersion, SectionSchedules navigasyonu
+- CourseRegistration: RegistrationPlanId FK, AdvisorNote, IsRepeated, RowVersion
+- CoursePrerequisite: IsCorequisite (lecture+lab aynı dönem)
+- Student: Cgpa, Sgpa, CompletedSemesters, IsScholarshipStudent, HasFinancialBlock, AdvisorId
+- Instructor: MaxWeeklyHours (unvana göre), DepartmentId
+- Curriculum: Version, IsActive (paralel müfredat desteği)
+- AcademicTerm: Status (TermStatus enum), IsActive
+
+**Scheduling Entity'leri:**
+- TimeSlot: TermId, DayOfWeek, StartTime, EndTime, SlotOrder (SystemConfig'den generate edilir)
+- SectionSchedule: CourseSectionId, TimeSlotId, ClassroomId (tek yetkili schedule kaynağı — ScheduleJson kaldırıldı)
+- ClassroomTermAssignment: TermId, ClassroomId, FacultyId (dönemlik derslik-fakülte ataması)
+- FacultyScheduleApproval: FacultyId, TermId, ApprovedByUserId (dekan onayı)
+
+**Kayıt ve Plan Entity'leri:**
+- RegistrationPlan: StudentId, TermId, Status (Draft/Submitted/Approved/Rejected), AdvisorNote
+- CourseAccessPolicy: CourseId, TermId, FacultyId?, DepartmentId? (ders erişim politikası)
+
+**Sistem Entity'leri:**
+- SystemConfig: Key, Value, Category, DataType (tüm iş kuralları config'den okunur)
+- PromotionRule: ProgramId, FromYear, ToYear, MinCgpa, MinEcts, MinCourseCount
+- AuditLog: UserId, Action, EntityType, EntityId, OldValue, NewValue (EF Core interceptor ile otomatik)
+
+**Kaldırılanlar:**
+- InstructorAvailability — tamamen silindi (entity, endpoint, DB tablosu)
+- ScheduleSlot value object — tamamen silindi (SectionSchedule ile değiştirildi)
+- CourseSection.ScheduleJson — tamamen kaldırıldı
+- ClassroomEquipment, PreRegistrationSurvey — silindi (boş placeholder)
+
+**Enum'lar:**
+- TermStatus: Draft→Planning→Scheduling→Published→RegistrationOpen→AddDrop→WithdrawalPeriod→GradeEntry→Closed→Archived
+- RegistrationStatus: Draft, PendingAdvisorApproval, Active, Rejected, Dropped, Withdrawn, Completed
+- RegistrationPlanStatus: Draft, Submitted, Approved, Rejected
+- ClassroomType: Lecture, Lab, Computer, Seminar, Amphitheater
 
 ---
 
 ## F. TAM UYGULAMA YOL HARİTASI (Audit Sonucu — 2026-03-31)
 
-### FAZ 0 — KRİTİK GÜVENLİK VE BUG FIX'LER
-Yeni entity gerekmez. Mevcut koddaki veri bütünlüğü ve güvenlik sorunlarını düzeltir.
+**TAMAMLANMA DURUMU:**
+- ✅ FAZ 0 — Güvenlik ve bug fix'ler (tamamlandı)
+- ✅ FAZ 1 — Term geçiş guard'ları ve status tutarlılık (tamamlandı)
+- ✅ FAZ 2 — Yeni entity'ler ve migration (tamamlandı)
+- ✅ FAZ 3 — Scheduling mimarisi yeniden yapı (tamamlandı — ScheduleJson kaldırıldı, TimeSlot grid, SectionSchedule)
+- ✅ FAZ 4 — Kayıt akışı iyileştirme (tamamlandı — RegistrationPlan, CourseAccessPolicy, SystemConfig entegrasyonu)
+- ✅ FAZ 5 — Performans ve kod kalitesi (tamamlandı — batch GPA, N+1 fix, seed data düzeltme)
+- ✅ FAZ 6 — Müfredat ve kural motoru (tamamlandı — PromotionRule entegrasyonu)
+- ✅ FAZ 7 — Çapraz kesişen altyapı (tamamlandı — AuditLog interceptor)
+- ✅ FAZ 8 — Frontend (tamamlandı — sidebar yeniden yapılandırma, kırık sayfalar düzeltme, yeni sayfalar)
+- ⬚ FAZ 9 — İleri seviye özellikler (yapılmadı)
 
-**0.1 — Güvenlik Açıkları**
-- [ ] IDOR düzelt: AcademicLevelController ve EligibilityController'da Student rolü başka öğrencinin verisini görebiliyor → studentId == authenticatedStudentId kontrolü ekle
-- [ ] GradeController yetki düzelt: Bir hoca başka hocanın section'ındaki notları değiştirebiliyor → section bazlı instructor kontrolü ekle (GetAuthorizedSectionAsync)
-- [ ] AuthService refresh token güvenlik açığı: ValidateLifetime=false → süresi dolmuş token ile sonsuz yenileme mümkün → düzelt
-- [ ] StudentController'a [Authorize(Roles="Student")] ekle (şu an tüm authenticated kullanıcılara açık)
-
-**0.2 — Dean Rolü Düzeltmeleri**
-- [ ] CourseOpeningController.HasDepartmentAccessAsync: Dean için fakülte bazlı erişim dalı ekle
-- [ ] FacultyPlanningController: facultyId'nin Dean'in kendi fakültesine ait olduğunu kontrol et
-- [ ] TermClosingController, AcademicProgressionController, ForecastController: Dean'in sadece kendi fakültesindeki bölümlere erişimini kontrol et
-
-**0.3 — DepartmentManager Erişim Kontrolü**
-- [ ] FacultyPlanningController: DepartmentManager'ın facultyId kontrolü ekle
-- [ ] TermClosingController: departmentId doğrulama ekle
-- [ ] AcademicProgressionController: departmentId doğrulama ekle
-- [ ] ForecastController: departmentId doğrulama ekle
-- [ ] SchedulingController (validate, suggest, apply): erişim kontrolü ekle
-- [ ] StudentManagementController, InstructorManagementController: bölüm filtreleme ekle
-
-**0.4 — İş Kuralı Bug'ları**
-- [ ] Burslu öğrenci danışman atlama kaldır (CourseRegistrationService.SubmitRegistrationAsync) — danışman onayı her zaman zorunlu
-- [ ] Ortak ders açma bug'ı düzelt (CourseOpeningService.OpenCourseAsync satır 180) — DepartmentId null kontrolü
-- [ ] GpaCalculationService: IsNonGpa dersleri GPA'ya dahil etme → Course.IsNonGpa kontrolü ekle
-- [ ] AcademicProgressionService: CompletedSemesters tek sayı kaybı düzelt, SGPA güncellenmemesi düzelt
-- [ ] AdminCourseCatalogService: Önkoşul döngüsü kontrolü ekle (A→B→C→A engeli), denklik simetri kontrolü
-- [ ] AdminTermService: Tarih validasyonu ekle (RegStart < RegEnd, TermStart < TermEnd, vb.)
-- [ ] TermClosingService.OpenNewTermAsync: Çoklu bölüm sorunu düzelt (bir bölüm yeni dönem açınca diğerlerinin aktif dönemi kapanıyor)
-
-**0.5 — Kayıt Akışı Bug'ları**
-- [ ] RegistrationStatus.Rejected enum değeri ekle
-- [ ] RejectStudentRegistrationsAsync: Dropped yerine Rejected kullan, AdvisorNote kaydet
-- [ ] AddToPlanAsync: Kapasite kontrolü ekle (EnrolledCount >= Capacity → engel)
-- [ ] InstructorAvailability kaldır (entity, endpoint'ler, SchedulingService bağımlılığı)
-
-**0.6 — Ders Açma Validasyonları**
-- [ ] Duplikat section kontrolü (aynı ders, aynı dönem, aynı bölüm)
-- [ ] InstructorId geçerlilik kontrolü (var mı, doğru departmanda mı)
-- [ ] Capacity > 0 ve SectionCount üst sınır kontrolü
-- [ ] Semester parity backend'de enforce et (güz döneminde bahar dersi açılmasın)
-- [ ] UpdateSection: capacity < enrolledCount kontrolü, IsActive false ise güncelleme engeli
-- [ ] CloseSectionAsync: Draft/PendingAdvisorApproval kayıtları temizle
-- [ ] BulkOpenCourseAsync: transactional yap veya duplikat courseId kontrolü ekle
-- [ ] FluentValidation: CourseOpening DTO'larına validator ekle
-
-### FAZ 1 — TERM GEÇİŞ GUARD'LARI VE TERM STATUS TUTARLILIK
-Dönem lifecycle'ın veri bütünlüğünü koruyan guard'lar.
-
-**1.1 — Geçiş Guard'ları (AdminTermService.TransitionStatusAsync)**
-- [ ] Draft → Planning: Takvim tarihleri girilmiş mi? Derslik atamaları yapılmış mı?
-- [ ] Planning → Scheduling: En az bir CourseSection açılmış mı? Her section'da Instructor atanmış mı?
-- [ ] Scheduling → Published: Tüm aktif section'larda slot+derslik+hoca atanmış mı? Hard constraint ihlali var mı?
-- [ ] GradeEntry → Closed: Tüm aktif section'lar finalize edilmiş mi? Not girilmemiş ders var mı?
-- [ ] RegistrationOpen → AddDrop: Submitted/Draft kayıtları otomatik iptal et, kapasite serbest bırak
-- [ ] ActivateTermAsync düzelt: Draft statusundeki dönem aktif edilemesin
-
-**1.2 — Servis Seviyesi Term Status Guard'ları**
-- [ ] SubmitRegistrationAsync: term.Status RegistrationOpen/AddDrop kontrolü
-- [ ] DropCourseAsync: term.Status AddDrop kontrolü (tarih yerine veya tarihle birlikte)
-- [ ] WithdrawCourseAsync: term.Status WithdrawalPeriod kontrolü
-- [ ] ApproveStudentRegistrationsAsync: term.Status RegistrationOpen/AddDrop kontrolü
-- [ ] RejectStudentRegistrationsAsync: term.Status RegistrationOpen/AddDrop kontrolü
-- [ ] UnassignSectionAsync: term.Status sadece Planning/Scheduling'de izin ver
-- [ ] GradeController (SubmitGrades, Finalize, Unfinalize): term.Status GradeEntry kontrolü
-- [ ] GradeController (UpsertComponent, DeleteComponent): term.Status Planning/Scheduling/GradeEntry kontrolü
-- [ ] AcademicOperationsService (Approve/Reject): term.Status Planning kontrolü
-- [ ] TermClosingService (LockGrades, CalculateGpa, Promote): adım sırası zorunluluğu ekle + term.Status GradeEntry/Closed kontrolü
-- [ ] AcademicProgressionService: term.Status Closed kontrolü
-- [ ] CalendarEvent CRUD: Archived dönemde düzenleme engeli
-- [ ] UpdateTermAsync: Closed/Archived dönemler düzenlenemesin
-
-**1.3 — IsActive / TermStatus Tutarlılık**
-- [ ] RegistrationValidationService: tarih bazlı kontrol yerine (veya yanına) TermStatus kontrolü ekle
-- [ ] CourseController.GetActiveTerm: IsRegistrationOpen/IsAddDropOpen değerlerini TermStatus'tan türet
-- [ ] Birden fazla aktif dönem riski: FirstOrDefaultAsync(t => t.IsActive) kullanan tüm yerleri tespit et, tutarlılık sağla
-
-### FAZ 2 — YENİ ENTITY'LER VE MİGRATION (Altyapı Temeli)
-
-**2.1 — Entity Güncellemeleri**
-- [ ] Classroom: BuildingName (string), Floor (int) ekle
-- [ ] CourseSection: SectionNumber (int) ekle, (CourseId, TermId, SectionNumber) unique constraint
-- [ ] CourseRegistration: RowVersion ekle (concurrency), RegistrationPlanId FK ekle
-- [ ] Tüm ana entity'lere CreatedAt/UpdatedAt audit alanları ekle (Faculty, Department, Program, Curriculum, Course, CourseSection, Student, Instructor, Classroom, AcademicTerm)
-- [ ] SchedulingAuditLog → CourseSection cascade delete'i Restrict'e çevir
-- [ ] Boş dosyaları sil: ClassroomEquipment.cs, PreRegistrationSurvey.cs
-
-**2.2 — Yeni Entity'ler**
-- [ ] TimeSlot: Id, Pattern (MWF/TR/MW/SingleDay), StartTime, EndTime, SlotType (Normal/Lab), DisplayName + CRUD + seed data
-- [ ] SectionSchedule: Id, CourseSectionId (FK), TimeSlotId (FK), ClassroomId (FK)
-- [ ] ClassroomTermAssignment: Id, TermId (FK), ClassroomId (FK), FacultyId (FK)
-- [ ] CourseAccessPolicy: Id, CourseId (FK), TermId (FK), FacultyId? (FK), DepartmentId? (FK)
-- [ ] RegistrationPlan: Id, StudentId (FK), TermId (FK), Status (Draft/Submitted/Approved/Rejected), SubmittedAt, AdvisorNote, CreatedAt, UpdatedAt
-- [ ] AuditLog: Id, UserId, Action, EntityType, EntityId, OldValue (JSON), NewValue (JSON), Timestamp, IpAddress
-- [ ] SystemConfig: Id, Key, Value, Description, Category, DataType + seed data (ECTS limitleri, CGPA eşikleri, çekilme limitleri, unvan→MaxWeeklyHours, derslik eşikleri)
-- [ ] PromotionRule: Id, ProgramId (FK), FromYear, ToYear, MinCgpa, MinEcts, MinCourseCount
-
-**2.3 — InstructorAvailability Kaldırma**
-- [ ] Entity, DbSet, OnModelCreating konfigürasyonu kaldır
-- [ ] InstructorController availability endpoint'leri kaldır
-- [ ] SchedulingService.SuggestAsync'ten availability bağımlılığını kaldır
-- [ ] Migration: InstructorAvailability tablosu drop
-
-**2.4 — Performans Index'leri**
-- [ ] CourseRegistration: (StudentId), (CourseSectionId), (StudentId, CourseSectionId) index
-- [ ] CourseSection: (CourseId, TermId) composite index
-- [ ] Student: (AdvisorId) index
-- [ ] Curriculum: (ProgramId, Version) unique constraint
-- [ ] Classroom: (Name) unique index
-- [ ] GradeComponent: (CourseId, AcademicTermId, Name) unique constraint
-- [ ] Migration oluştur ve uygula
-
-### FAZ 3 — SCHEDULİNG MİMARİSİ YENİDEN YAPI
-
-**3.1 — ScheduleJson → SectionSchedule Geçişi**
-- [ ] Mevcut ScheduleJson verilerini parse → SectionSchedule + TimeSlot eşleştirme migration script'i
-- [ ] CourseSection.ScheduleJson alanını kaldır
-- [ ] ScheduleSlot value object'i kaldır (SIS.Domain/ValueObjects/ScheduleSlot.cs)
-- [ ] Code Conventions'dan ScheduleSlot referansını kaldır
-
-**3.2 — SchedulingService Yeniden Yazım (TimeSlot bazlı)**
-- [ ] ValidateAsync: H1-H12 tüm constraint'leri SectionSchedule+TimeSlot üzerinden kontrol et
-- [ ] SuggestAsync: TimeSlot pattern'larını kullan, çakışma bazlı eleme (availability'siz)
-- [ ] ApplyAsync: SectionSchedule kayıtları oluştur
-- [ ] BatchAutoScheduleAsync: Yeni yapıya uyumlu + sıralama heuristiği (büyük amfi → zorunlu → seçmeli → seminer)
-
-**3.3 — H4-H12 Constraint İmplementasyonu**
-- [ ] H4: Derslik tipi uyumu (Classroom.Type kontrolü)
-- [ ] H5: Müfredat çakışma (CurriculumCourse'dan aynı bölüm/yıl zorunlu dersler → farklı slot)
-- [ ] H6: Ders bileşen çakışma (aynı Course'un lecture vs lab section'ları)
-- [ ] H7: Cross-listed ders (CourseEquivalency üzerinden tek zaman/mekân)
-- [ ] H8: Aynı ders farklı şube → farklı slot
-- [ ] H10: Fakülte derslik kısıtı (ClassroomTermAssignment kontrolü)
-- [ ] H11: Corequisite (lecture + bağlı lab çakışmasız kombinasyon)
-- [ ] H12: Kredi → pattern uyumu (TheoryHours+LabHours → uygun TimeSlot pattern)
-
-**3.4 — Soft Constraint'ler ve İyileştirmeler**
-- [ ] S1: Derslik doluluk oranı (SystemConfig'den eşik)
-- [ ] S2: Hoca günlük yoğunluk dengesi
-- [ ] S3: Slot dağılım dengesi
-- [ ] S4: Cross-department sık birlikte alınan ders çiftleri çakışma uyarısı
-- [ ] Incremental scheduling: önceki dönem SectionSchedule verilerini başlangıç noktası olarak kopyala
-
-### FAZ 4 — KAYIT AKIŞI İYİLEŞTİRME
-
-**4.1 — RegistrationPlan Entegrasyonu**
-- [ ] AddToPlanAsync: İlk ders eklendiğinde RegistrationPlan(Status:Draft) oluştur
-- [ ] SubmitRegistrationAsync: RegistrationPlan.Status=Submitted, SubmittedAt=now
-- [ ] ApproveStudentRegistrationsAsync: RegistrationPlan.Status=Approved
-- [ ] RejectStudentRegistrationsAsync: RegistrationPlan.Status=Rejected, AdvisorNote kaydedilir
-- [ ] Red sonrası düzeltme döngüsü: Öğrenci Rejected planı düzenleyip tekrar gönderin
-
-**4.2 — CourseAccessPolicy Entegrasyonu**
-- [ ] Ders açma sırasında otomatik kendi bölümü eklenir, ek bölüm/fakülte seçilebilir
-- [ ] CourseController → student-catalog: Öğrencinin bölümüne/fakültesine açık dersler filtresi
-- [ ] RegistrationValidationService: Müfredatta olmayan + CourseAccessPolicy'de olmayan derse kayıt engeli
-- [ ] EnrollmentForecastService: Cross-department talep aggregation (CourseAccessPolicy bazlı)
-- [ ] DepartmentId null dersler için özel handling (ortak dersler her bölümde görünsün)
-
-**4.3 — Danışman Dashboard Genişletme**
-- [ ] GetPendingApprovalsAsync: Alttan dersler listesi, müfredat uyumu, önkoşul zinciri durumu, transkript özeti ekle
-
-**4.4 — Hardcoded Değerleri SystemConfig'e Taşı**
-- [ ] RegistrationRulePolicy: ECTS limitleri, CGPA eşiği → SystemConfig'den oku
-- [ ] CourseRegistrationService: Çekilme limitleri → SystemConfig'den oku
-- [ ] SchedulingService: Derslik tipi eşikleri, doluluk oranı → SystemConfig'den oku
-- [ ] YÖK unvan → MaxWeeklyHours eşleştirmesi → SystemConfig'den oku, Instructor oluşturulurken otomatik set
-
-### FAZ 5 — PERFORMANS VE KOD KALİTESİ
-
-**5.1 — N+1 ve Memory Sorunları**
-- [ ] AdminUserService: DB seviyesinde sayfalama, GetRolesAsync batch hale getir
-- [ ] AdminInstructorService: DB seviyesinde sayfalama ekle
-- [ ] StudentEligibilityService: Tüm veriyi belleğe yükleme yerine filtrelenmiş sorgu
-- [ ] EnrollmentForecastService: GPA batch hesaplama (N+1 çöz), cache key'i departmentId+termId bazlı yap
-- [ ] GpaCalculationService: Batch GPA hesaplama metodu ekle
-
-**5.2 — Transaction Eksiklikleri**
-- [ ] BulkOpenCoursesAsync: Transactional yap
-- [ ] TermClosingService.LockGradesAsync: Çift SaveChanges sorunu düzelt
-- [ ] AcademicOperationsService.BulkApproveAsync: Transactional yap
-- [ ] AcademicProgressionService.PromoteDepartmentStudentsAsync: Explicit transaction
-
-**5.3 — Kod Kalitesi**
-- [ ] CourseController.GetStudentCatalog: 190 satır iş mantığını servis katmanına taşı
-- [ ] Hata mesajı format tutarlılığı: Tüm controller'larda { error = "..." } standardize et
-- [ ] FacultyPlanningController: GetUserId exception handling düzelt (500 yerine 401)
-- [ ] AnnouncementController: Exception yutmayı düzelt, loglama ekle
-- [ ] RegistrationController: AppDbContext doğrudan kullanımını servis katmanına taşı
-- [ ] Seed data düzelt: Geçmiş dönemlere doğru TermStatus ata, BSM-L çift tanım düzelt, MaxWeeklyHours unvana göre farklılaştır
-- [ ] DateTime.UtcNow tutarlılığı: Tüm servislerde UTC kullanımını standardize et
-
-### FAZ 6 — MÜFREDAT VE KURAL MOTORU
-
-- [ ] Curriculum versiyonlama servisi: Paralel aktif müfredat yönetimi
-- [ ] Müfredat geçiş kuralları: CurriculumTransitionMapping entity'si (eski ders → yeni ders)
-- [ ] Sınıf atlatma kuralları: PromotionRule entity'sinden kural oku, AcademicProgressionService güncelle
-- [ ] Danışman dashboard genişletme: Transkript, müfredat durumu, staj bilgileri tek ekranda
-
-### FAZ 7 — ÇAPRAZ KESİŞEN ALTYAPI
-
-- [ ] Genel audit log: Middleware/interceptor ile otomatik loglama, admin filtrelenebilir endpoint
-- [ ] Bildirim sistemi: Notification entity, in-app bildirim, tetikleyiciler (dönem geçişi, danışman onay/red, kontenjan değişikliği)
-- [ ] Derslik akıllı atama önerisi: Fakülte yoğunluğu analizi → SystemAdmin'e öneri
-
-### FAZ 8 — FRONTEND (React)
-
-- [ ] Admin term lifecycle UI
-- [ ] Derslik atama ekranı (akıllı öneri ile)
-- [ ] Ders açma ekranı (CourseAccessPolicy + enrollment forecast)
-- [ ] Programlama ekranı (otomatik atama sonucu + manuel düzeltme + constraint uyarılar)
-- [ ] Öğrenci ders seçim ekranı (katalog → plan → gönder)
-- [ ] Danışman ekranı (tam dashboard + plan onay/red)
-- [ ] Müfredat kural tanımlama UI
-- [ ] SystemConfig yönetim paneli
-- [ ] Audit log görüntüleme ekranı
-
-### FAZ 9 — İLERİ SEVİYE ÖZELLİKLER
+### FAZ 9 — İLERİ SEVİYE ÖZELLİKLER (yapılmadı)
 
 - [ ] Akademik takvim öneri motoru (önceki yıldan kaydırma)
 - [ ] Bütünleme katılım anketi
@@ -586,16 +402,8 @@ Dönem lifecycle'ın veri bütünlüğünü koruyan guard'lar.
 ### BAĞIMLILIK GRAFİĞİ
 
 ```
-FAZ 0 ──── bağımsız, HEMEN başla
-FAZ 1 ──── bağımsız, FAZ 0 ile paralel
-FAZ 2 ──── bağımsız, FAZ 0-1 ile paralel
-FAZ 3 ──── FAZ 2'ye bağımlı (TimeSlot, SectionSchedule gerekli)
-FAZ 4 ──── FAZ 2'ye bağımlı (RegistrationPlan, CourseAccessPolicy, SystemConfig gerekli)
-FAZ 5 ──── bağımsız, FAZ 0-1 ile paralel başlanabilir
-FAZ 6 ──── bağımsız
-FAZ 7 ──── FAZ 2'ye kısmen bağımlı (AuditLog entity)
-FAZ 8 ──── FAZ 0-7 tamamlanmış olmalı (backend hazır)
-FAZ 9 ──── FAZ 8 sonrası
+FAZ 0-8 ── TAMAMLANDI ✅
+FAZ 9 ──── Yapılmadı (akademik takvim öneri, bütünleme anketi, zamana bağlı yetki)
 ```
 
 ---
