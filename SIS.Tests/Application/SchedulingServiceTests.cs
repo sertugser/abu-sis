@@ -139,6 +139,28 @@ public class SchedulingServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateExistingAsync_WhenAcademicSlotCountMatchesRequiredSlots_DoesNotReturnCreditHourMismatch()
+    {
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var classroom = AddClassroom(1, "C101", 50);
+
+        var course = AddCourse(1, "CS322", theoryHours: 3, labHours: 4);
+
+        AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 9, 0, 9, 50),
+            (DayOfWeek.Monday, 9, 55, 10, 45),
+            (DayOfWeek.Monday, 10, 50, 11, 40),
+            (DayOfWeek.Monday, 12, 20, 13, 10),
+            (DayOfWeek.Monday, 13, 15, 14, 05),
+            (DayOfWeek.Monday, 14, 10, 15, 00),
+            (DayOfWeek.Monday, 15, 05, 15, 55));
+
+        var result = await _service.ValidateExistingAsync(ActiveTermId);
+
+        result.Conflicts.Should().NotContain(conflict => conflict.ConflictType == "CreditHourMismatch");
+    }
+
+    [Fact]
     public async Task ValidateExistingAsync_ClassroomCapacityTooSmall_ReturnsCapacityConflict()
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
@@ -258,6 +280,43 @@ public class SchedulingServiceTests : IDisposable
 
         result.IsValid.Should().BeFalse();
         result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "NoDayOffConflict");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_WhenRequestedRangeMapsToRequiredAcademicSlots_DoesNotReturnCreditHourMismatch()
+    {
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(9, 50), 1);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(9, 55), new TimeOnly(10, 45), 2);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(10, 50), new TimeOnly(11, 40), 3);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(12, 20), new TimeOnly(13, 10), 4);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(13, 15), new TimeOnly(14, 05), 5);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(14, 10), new TimeOnly(15, 00), 6);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(15, 05), new TimeOnly(15, 55), 7);
+
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var classroom = AddClassroom(1, "C101", 50);
+        var course = AddCourse(1, "CS432", theoryHours: 3, labHours: 4);
+        AddSection(1, course.Id, null, null, ActiveTermId, 30);
+
+        var request = new ScheduleValidationRequestDto
+        {
+            SectionId = 1,
+            InstructorId = instructor.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = DayOfWeek.Monday,
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(15, 55)
+                }
+            ]
+        };
+
+        var result = await _service.ValidateAsync(request);
+
+        result.Conflicts.Should().NotContain(conflict => conflict.ConflictType == "CreditHourMismatch");
     }
 
     [Fact]

@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   applySchedule, assignSection, autoSchedulePreview, getAvailableClassrooms,
-  getFacultyPlanningConflicts, getFacultyPlanningOverview, getFacultyPlanningSections, unassignSection,
+  getFacultyPlanningConflicts, getFacultyPlanningOverview, getFacultyPlanningSections,
+  getFacultyPlanningTimeSlots, unassignSection,
 } from '../api/facultyPlanning.api';
 import type {
   ApplyScheduleRequest, AssignSectionRequest, AutoScheduleRequest,
@@ -83,5 +84,14 @@ export function useFacultyPlanningConflicts(facultyId: number | null, termId: nu
     queryFn: () => getFacultyPlanningConflicts(facultyId!, termId!),
     enabled: facultyId != null && termId != null,
     staleTime: 30 * 1000,
+  });
+}
+
+export function useFacultyPlanningTimeSlots(termId: number | null) {
+  return useQuery({
+    queryKey: ['facultyPlanning', 'timeSlots', termId],
+    queryFn: () => getFacultyPlanningTimeSlots(termId!),
+    enabled: termId != null,
+    staleTime: 60 * 1000,
   });
 }

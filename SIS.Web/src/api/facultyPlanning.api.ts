@@ -2,7 +2,7 @@ import apiClient from './axios';
 import type {
   ApplyScheduleRequest, ApplyScheduleResult, AssignmentResult, AssignSectionRequest,
   AutoSchedulePreview, AutoScheduleRequest, AvailableClassroom,
-  FacultyPlanningOverview, FacultyPlanningSectionPage,
+  FacultyPlanningOverview, FacultyPlanningSectionPage, FacultyPlanningTimeSlot,
 } from '../types/facultyPlanning';
 import type { SchedulingConflict } from '../types/scheduling';
 
@@ -46,6 +46,13 @@ export async function getAvailableClassrooms(
 ): Promise<AvailableClassroom[]> {
   const { data } = await apiClient.get<AvailableClassroom[]>('/faculty-planning/available-classrooms', {
     params: { termId, day, startTime, endTime, minCapacity, type },
+  });
+  return data;
+}
+
+export async function getFacultyPlanningTimeSlots(termId: number): Promise<FacultyPlanningTimeSlot[]> {
+  const { data } = await apiClient.get<FacultyPlanningTimeSlot[]>('/faculty-planning/time-slots', {
+    params: { termId },
   });
   return data;
 }

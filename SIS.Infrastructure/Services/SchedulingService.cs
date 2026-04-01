@@ -252,6 +252,7 @@ public class SchedulingService : ISchedulingService
                     instructorName,
                     classroom,
                     slotCombination.Slots,
+                    requiredHours,
                     new List<string>(),
                     suggestedSemester: candidateCourseMetadata.MinSuggestedSemesters.TryGetValue(section.CourseId, out var suggestedSemester)
                         ? suggestedSemester
@@ -699,6 +700,7 @@ public class SchedulingService : ISchedulingService
                     section.InstructorId.HasValue && instructorNameMap.TryGetValue(section.InstructorId.Value, out var name) ? name : string.Empty,
                     classroom,
                     slotCombo.Slots,
+                    ResolveTotalRequiredHours(section),
                     new List<string>(),
                     suggestedSemester: snapshot.CourseSuggestedSemestersByDepartment.TryGetValue(section.CourseId, out var semestersByDept)
                         ? semestersByDept.Values.Min()
@@ -1007,6 +1009,7 @@ public class SchedulingService : ISchedulingService
                     section.InstructorId.HasValue && instructorNameMap.TryGetValue(section.InstructorId.Value, out var name) ? name : string.Empty,
                     classroom,
                     slotCombo.Slots,
+                    ResolveTotalRequiredHours(section),
                     new List<string>(),
                     suggestedSemester: snapshot.CourseSuggestedSemestersByDepartment.TryGetValue(section.CourseId, out var semestersByDept)
                         ? semestersByDept.Values.Min()
@@ -1393,6 +1396,7 @@ public class SchedulingService : ISchedulingService
             SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
             SuggestedSemestersByDepartment = GetSuggestedSemestersByDepartment(section.CourseId, suggestedSemestersByDepartment),
             AccessibleDepartmentIds = GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, accessibleDepartments),
+            AssignedTimeSlotCount = ResolveAssignedTimeSlotCount(timeBlocks),
             TimeBlocks = timeBlocks,
             Notes = new List<string>()
         };
@@ -1450,6 +1454,7 @@ public class SchedulingService : ISchedulingService
         }
 
         var scheduleSlots = new List<TimeBlock>();
+        var assignedTimeSlotCount = 0;
         string? parseError = null;
 
         if (scheduleSlotOverrides != null)
@@ -1465,10 +1470,12 @@ public class SchedulingService : ISchedulingService
 
             scheduleSlots = overrideValidation.Slots;
             parseError = overrideValidation.ErrorMessage;
+            assignedTimeSlotCount = await CountMatchedTimeSlotsAsync(section.TermId, scheduleSlots, cancellationToken);
         }
         else
         {
             scheduleSlots = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
+            assignedTimeSlotCount = ResolveAssignedTimeSlotCount(scheduleSlots);
         }
 
         if (scheduleSlots.Count == 0)
@@ -1487,6 +1494,7 @@ public class SchedulingService : ISchedulingService
             instructorName,
             classroom,
             scheduleSlots,
+            assignedTimeSlotCount,
             notes,
             suggestedSemester,
             GetSuggestedSemestersByDepartment(section.CourseId, courseMetadata.SuggestedSemestersByDepartment),
@@ -1499,6 +1507,7 @@ public class SchedulingService : ISchedulingService
         string instructorName,
         Classroom? classroom,
         IReadOnlyList<TimeBlock> scheduleSlots,
+        int assignedTimeSlotCount,
         List<string> notes,
         int? suggestedSemester = null,
         Dictionary<int, int>? suggestedSemestersByDepartment = null,
@@ -1526,6 +1535,7 @@ public class SchedulingService : ISchedulingService
             SuggestedSemester = suggestedSemester,
             SuggestedSemestersByDepartment = suggestedSemestersByDepartment ?? new Dictionary<int, int>(),
             AccessibleDepartmentIds = accessibleDepartmentIds ?? new HashSet<int>(),
+            AssignedTimeSlotCount = assignedTimeSlotCount,
             TimeBlocks = scheduleSlots.ToList(),
             Notes = notes
         };
@@ -1842,15 +1852,12 @@ public class SchedulingService : ISchedulingService
             if (expectedHours <= 0)
                 continue;
 
-            var actualMinutes = section.TimeBlocks.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
-            var actualHours = (int)Math.Round(actualMinutes / 60.0);
-
-            if (actualHours != expectedHours)
+            if (section.AssignedTimeSlotCount != expectedHours)
             {
                 conflicts.Add(BuildConflict(
                     section,
                     ConflictTypes.CreditHourMismatch,
-                    $"Dersin saat gereksinimine uygun slot bloğu atanmamış ({section.CourseCode}: beklenen {expectedHours} saat, atanan {actualHours} saat).",
+                    $"Dersin haftalik slot gereksinimine uygun atama yapilmamis ({section.CourseCode}: beklenen {expectedHours} slot, atanan {section.AssignedTimeSlotCount} slot).",
                     null,
                     null));
             }
@@ -2423,15 +2430,12 @@ public class SchedulingService : ISchedulingService
             var expectedHours = candidate.TheoryHours + candidate.LabHours;
             if (expectedHours > 0)
             {
-                var actualMinutes = candidate.TimeBlocks.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
-                var actualHours = (int)Math.Round(actualMinutes / 60.0);
-
-                if (actualHours != expectedHours)
+                if (candidate.AssignedTimeSlotCount != expectedHours)
                 {
                     conflicts.Add(BuildConflict(
                         candidate,
                         ConflictTypes.CreditHourMismatch,
-                        $"Dersin saat gereksinimine uygun slot bloğu atanmamış ({candidate.CourseCode}: beklenen {expectedHours} saat, atanan {actualHours} saat).",
+                        $"Dersin haftalik slot gereksinimine uygun atama yapilmamis ({candidate.CourseCode}: beklenen {expectedHours} slot, atanan {candidate.AssignedTimeSlotCount} slot).",
                         null,
                         null));
                 }
@@ -2906,6 +2910,36 @@ public class SchedulingService : ISchedulingService
         return ScheduleHelper.ToTimeBlocks(schedules);
     }
 
+    private async Task<int> CountMatchedTimeSlotsAsync(
+        int termId,
+        IReadOnlyList<TimeBlock> slots,
+        CancellationToken cancellationToken)
+    {
+        if (slots.Count == 0)
+        {
+            return 0;
+        }
+
+        var termTimeSlots = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .ToListAsync(cancellationToken);
+
+        if (termTimeSlots.Count == 0)
+        {
+            return ResolveAssignedTimeSlotCount(slots);
+        }
+
+        return termTimeSlots
+            .Where(ts => slots.Any(slot =>
+                ts.DayOfWeek == slot.Day
+                && ts.StartTime < slot.EndTime
+                && slot.StartTime < ts.EndTime))
+            .Select(ts => ts.Id)
+            .Distinct()
+            .Count();
+    }
+
     /// <summary>
     /// Writes SectionSchedule records.
     /// Deletes existing records for this section first, then creates new ones
@@ -3118,6 +3152,9 @@ public class SchedulingService : ISchedulingService
         first.Day == second.Day
         && first.StartTime < second.EndTime
         && second.StartTime < first.EndTime;
+
+    private static int ResolveAssignedTimeSlotCount(IReadOnlyList<TimeBlock> slots) =>
+        slots.Sum(slot => Math.Max(1, (int)Math.Round((slot.EndTime - slot.StartTime).TotalMinutes / 60.0, MidpointRounding.AwayFromZero)));
 
     private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, Course course)
     {
@@ -3638,6 +3675,7 @@ public class SchedulingService : ISchedulingService
         public int? SuggestedSemester { get; init; }               // for H5 (curriculum year)
         public Dictionary<int, int> SuggestedSemestersByDepartment { get; init; } = new();
         public HashSet<int> AccessibleDepartmentIds { get; init; } = new();
+        public int AssignedTimeSlotCount { get; init; }
         public List<TimeBlock> TimeBlocks { get; init; } = new();
         public List<string> Notes { get; init; } = new();
     }

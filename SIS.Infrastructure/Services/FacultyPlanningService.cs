@@ -80,7 +80,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .ToListAsync(ct);
         var scheduledSet = scheduledSectionIds.ToHashSet();
 
-        var scheduled = sections.Count(s => s.ClassroomId.HasValue && scheduledSet.Contains(s.Id));
+        var scheduled = sections.Count(s => s.ClassroomId.HasValue && s.InstructorId.HasValue && scheduledSet.Contains(s.Id));
         var unscheduled = sections.Count - scheduled;
 
         var conflicts = await _schedulingService.GetConflictsAsync(termId, ct);
@@ -104,7 +104,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                 DepartmentName = dept.Name,
                 DepartmentCode = dept.Code,
                 TotalSections = deptSections.Count,
-                ScheduledSections = deptSections.Count(s => s.ClassroomId.HasValue && scheduledSet.Contains(s.Id)),
+                ScheduledSections = deptSections.Count(s => s.ClassroomId.HasValue && s.InstructorId.HasValue && scheduledSet.Contains(s.Id)),
                 PendingApprovals = pendingApprovals
             });
         }
@@ -240,8 +240,8 @@ public class FacultyPlanningService : IFacultyPlanningService
 
                 string sectionStatus;
                 if (hasConflict) sectionStatus = "Conflicted";
-                else if (hasClassroom && hasSchedule) sectionStatus = "Scheduled";
-                else if (hasClassroom || hasInstructor) sectionStatus = "Partial";
+                else if (hasClassroom && hasSchedule && hasInstructor) sectionStatus = "Scheduled";
+                else if (hasClassroom || hasSchedule || hasInstructor) sectionStatus = "Partial";
                 else sectionStatus = "Unscheduled";
 
                 if (status != null && !string.Equals(sectionStatus, status, StringComparison.OrdinalIgnoreCase))
@@ -343,12 +343,29 @@ public class FacultyPlanningService : IFacultyPlanningService
 
         if (request.ClassroomId.HasValue && request.ScheduleSlots is { Count: > 0 })
         {
-            await WriteSectionScheduleRecordsAsync(
-                section.Id,
+            var matchedTimeSlots = await ResolveRequestedTimeSlotsAsync(
                 section.TermId,
-                request.ClassroomId.Value,
                 request.ScheduleSlots,
                 ct);
+
+            var expectedSlotCount = ResolveExpectedSlotCount(section.Course.TheoryHours, section.Course.LabHours);
+            if (matchedTimeSlots.Count != expectedSlotCount)
+            {
+                throw new InvalidOperationException(
+                    $"Secilen zaman araligi {section.Course.Code} icin {expectedSlotCount} akademik slot kapsamalidir; secim {matchedTimeSlots.Count} slot kapsiyor.");
+            }
+
+            await WriteSectionScheduleRecordsAsync(
+                section.Id,
+                request.ClassroomId.Value,
+                matchedTimeSlots,
+                ct);
+        }
+
+        if (request.ClassroomId.HasValue && request.ScheduleSlots is { Count: > 0 } && !section.InstructorId.HasValue)
+        {
+            result.Warnings.Add(
+                "Ogretim uyesi atanmadigi icin hoca bazli uyarilar hesaplanamaz. InstructorConflict, DailyLoadConflict ve NoDayOffConflict icin once hoca secilmelidir.");
         }
 
         try
@@ -516,6 +533,12 @@ public class FacultyPlanningService : IFacultyPlanningService
             .Include(ss => ss.CourseSection)
             .Where(ss => ss.CourseSection.TermId == request.TermId && ss.CourseSection.IsActive)
             .ToListAsync(ct);
+        var termTimeSlots = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == request.TermId)
+            .OrderBy(ts => ts.DayOfWeek)
+            .ThenBy(ts => ts.SlotOrder)
+            .ToListAsync(ct);
         var scheduledSlotsByClassroom = allScheduledRecords
             .GroupBy(ss => ss.ClassroomId)
             .ToDictionary(g => g.Key, g => g.Select(ss => new ScheduleSlotSimple(
@@ -523,6 +546,7 @@ public class FacultyPlanningService : IFacultyPlanningService
 
         var sectionInstructorIds = sections.Where(s => s.InstructorId.HasValue).Select(s => s.InstructorId!.Value).Distinct();
         var instructorNameMap = await LoadInstructorNameMapAsync(sectionInstructorIds, ct);
+        var candidateWindowsBySlotCount = new Dictionary<int, List<AutoScheduleWindow>>();
 
         // Build instructor schedule map for instructor conflict + daily load + day-off checks
         var scheduledSlotsByInstructor = allScheduledRecords
@@ -560,65 +584,67 @@ public class FacultyPlanningService : IFacultyPlanningService
                 continue;
             }
 
-            var totalHours = section.Course.TheoryHours + section.Course.LabHours;
-            if (totalHours <= 0) totalHours = 3;
+            var requiredSlotCount = ResolveExpectedSlotCount(section.Course.TheoryHours, section.Course.LabHours);
+            if (!candidateWindowsBySlotCount.TryGetValue(requiredSlotCount, out var candidateWindows))
+            {
+                candidateWindows = BuildAutoScheduleWindows(termTimeSlots, requiredSlotCount);
+                candidateWindowsBySlotCount[requiredSlotCount] = candidateWindows;
+            }
 
             // ── SCORING: Collect all valid candidates, score them, pick best ──
             var candidates = new List<AutoScheduleCandidate>();
 
-            foreach (var classroom in candidateClassrooms)
+            foreach (var candidateWindow in candidateWindows)
             {
-                for (var dayInt = 1; dayInt <= 5; dayInt++)
+                foreach (var classroom in candidateClassrooms)
                 {
-                    var day = (DayOfWeek)dayInt;
-                    for (var hour = 8; hour <= 17 - totalHours; hour++)
+                    var day = candidateWindow.Day;
+                    var start = candidateWindow.Start;
+                    var end = candidateWindow.End;
+
+                    // ── HARD CONSTRAINTS (eliminates candidate) ──
+
+                    // H1: Classroom conflict (existing + preview)
+                    if (scheduledSlotsByClassroom.TryGetValue(classroom.Id, out var classroomSlots)
+                        && classroomSlots.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start))
+                        continue;
+                    if (previewAssignments.Any(p =>
+                        p.classroomId == classroom.Id && p.day == day && p.start < end && p.end > start))
+                        continue;
+
+                    // H2: Instructor conflict + daily 9hr hard limit
+                    if (section.InstructorId.HasValue)
                     {
-                        var start = new TimeOnly(hour, 0);
-                        var end = new TimeOnly(hour + totalHours, 0);
+                        var instrId = section.InstructorId.Value;
 
-                        // ── HARD CONSTRAINTS (eliminates candidate) ──
-
-                        // H1: Classroom conflict (existing + preview)
-                        if (scheduledSlotsByClassroom.TryGetValue(classroom.Id, out var classroomSlots)
-                            && classroomSlots.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start))
+                        if (scheduledSlotsByInstructor.TryGetValue(instrId, out var instrSlots)
+                            && instrSlots.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start))
                             continue;
-                        if (previewAssignments.Any(p =>
-                            p.classroomId == classroom.Id && p.day == day && p.start < end && p.end > start))
+                        if (previewInstructorAssignments.Any(p =>
+                            p.instructorId == instrId && p.day == day && p.start < end && p.end > start))
                             continue;
 
-                        // H2: Instructor conflict + daily 9hr hard limit
-                        if (section.InstructorId.HasValue)
-                        {
-                            var instrId = section.InstructorId.Value;
+                        var existingDailyHours = (scheduledSlotsByInstructor.TryGetValue(instrId, out var instrAllSlots)
+                            ? instrAllSlots.Where(s => s.Day == day).Sum(s => (s.EndTime - s.StartTime).TotalHours)
+                            : 0)
+                            + previewInstructorAssignments.Where(p => p.instructorId == instrId && p.day == day)
+                                .Sum(p => (p.end - p.start).TotalHours);
 
-                            if (scheduledSlotsByInstructor.TryGetValue(instrId, out var instrSlots)
-                                && instrSlots.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start))
-                                continue;
-                            if (previewInstructorAssignments.Any(p =>
-                                p.instructorId == instrId && p.day == day && p.start < end && p.end > start))
-                                continue;
-
-                            var existingDailyHours = (scheduledSlotsByInstructor.TryGetValue(instrId, out var instrAllSlots)
-                                ? instrAllSlots.Where(s => s.Day == day).Sum(s => (s.EndTime - s.StartTime).TotalHours)
-                                : 0)
-                                + previewInstructorAssignments.Where(p => p.instructorId == instrId && p.day == day)
-                                    .Sum(p => (p.end - p.start).TotalHours);
-
-                            if (existingDailyHours + totalHours > 9) continue;
-                        }
-
-                        var score = CalculateAutoScheduleScore(
-                            section,
-                            classroom,
-                            requiredType,
-                            day,
-                            hour,
-                            totalHours,
-                            scheduledSlotsByInstructor,
-                            previewInstructorAssignments);
-
-                        candidates.Add(new AutoScheduleCandidate(classroom, day, start, end, score));
+                        if (existingDailyHours + requiredSlotCount > 9) continue;
                     }
+
+                    var score = CalculateAutoScheduleScore(
+                        section,
+                        classroom,
+                        requiredType,
+                        day,
+                        start,
+                        end,
+                        requiredSlotCount,
+                        scheduledSlotsByInstructor,
+                        previewInstructorAssignments);
+
+                    candidates.Add(new AutoScheduleCandidate(classroom, day, start, end, score));
                 }
             }
 
@@ -787,50 +813,69 @@ public class FacultyPlanningService : IFacultyPlanningService
         }
     }
 
-    private async Task WriteSectionScheduleRecordsAsync(
-        int sectionId,
+    private async Task<List<TimeSlot>> ResolveRequestedTimeSlotsAsync(
         int termId,
-        int classroomId,
         IReadOnlyList<ScheduleSlotDto> scheduleSlots,
         CancellationToken ct)
     {
-        await ClearSectionScheduleRecordsAsync(sectionId, ct);
-
-        if (scheduleSlots.Count == 0)
-        {
-            return;
-        }
-
         var termTimeSlots = await _context.TimeSlots
             .AsNoTracking()
             .Where(ts => ts.TermId == termId)
+            .OrderBy(ts => ts.DayOfWeek)
+            .ThenBy(ts => ts.SlotOrder)
             .ToListAsync(ct);
+
+        var matchedTimeSlots = new List<TimeSlot>();
 
         foreach (var slot in scheduleSlots)
         {
-            var matchingTimeSlots = termTimeSlots
+            var overlappingTimeSlots = termTimeSlots
                 .Where(ts => ts.DayOfWeek == slot.Day
                     && ts.StartTime < slot.EndTime
                     && slot.StartTime < ts.EndTime)
                 .OrderBy(ts => ts.SlotOrder)
                 .ToList();
 
-            if (matchingTimeSlots.Count == 0)
+            if (overlappingTimeSlots.Count == 0)
             {
                 throw new InvalidOperationException(
                     $"{DayLabel(slot.Day)} {slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm} araligi donem zaman slotlari ile eslesmiyor.");
             }
 
-            foreach (var timeSlot in matchingTimeSlots)
-            {
-                _context.SectionSchedules.Add(new SectionSchedule
-                {
-                    CourseSectionId = sectionId,
-                    TimeSlotId = timeSlot.Id,
-                    ClassroomId = classroomId
-                });
-            }
+            matchedTimeSlots.AddRange(overlappingTimeSlots);
         }
+
+        return matchedTimeSlots
+            .GroupBy(ts => ts.Id)
+            .Select(group => group.First())
+            .OrderBy(ts => ts.DayOfWeek)
+            .ThenBy(ts => ts.SlotOrder)
+            .ToList();
+    }
+
+    private async Task WriteSectionScheduleRecordsAsync(
+        int sectionId,
+        int classroomId,
+        IReadOnlyList<TimeSlot> timeSlots,
+        CancellationToken ct)
+    {
+        await ClearSectionScheduleRecordsAsync(sectionId, ct);
+
+        foreach (var timeSlot in timeSlots)
+        {
+            _context.SectionSchedules.Add(new SectionSchedule
+            {
+                CourseSectionId = sectionId,
+                TimeSlotId = timeSlot.Id,
+                ClassroomId = classroomId
+            });
+        }
+    }
+
+    private static int ResolveExpectedSlotCount(int theoryHours, int labHours)
+    {
+        var total = theoryHours + labHours;
+        return total > 0 ? total : 1;
     }
 
     private static string DayLabel(DayOfWeek day) => day switch
@@ -848,8 +893,9 @@ public class FacultyPlanningService : IFacultyPlanningService
         Classroom classroom,
         ClassroomType requiredType,
         DayOfWeek day,
-        int hour,
-        int totalHours,
+        TimeOnly startTime,
+        TimeOnly endTime,
+        int requiredSlotCount,
         IReadOnlyDictionary<int, List<ScheduleSlotSimple>> scheduledSlotsByInstructor,
         IReadOnlyList<(int instructorId, DayOfWeek day, TimeOnly start, TimeOnly end)> previewInstructorAssignments)
     {
@@ -890,13 +936,13 @@ public class FacultyPlanningService : IFacultyPlanningService
                 + previewInstructorAssignments.Where(p => p.instructorId == instrId && p.day == day)
                     .Sum(p => (p.end - p.start).TotalHours);
 
-            var projectedDaily = dailyHours + totalHours;
+            var projectedDaily = dailyHours + requiredSlotCount;
             if (projectedDaily > 6) score -= (projectedDaily - 6) * 10;
         }
 
-        if (hour >= 9 && hour + totalHours <= 15) score += 10;
-        if (hour < 9) score -= 8;
-        if (hour + totalHours > 16) score -= 5;
+        if (startTime >= new TimeOnly(9, 0) && endTime <= new TimeOnly(15, 0)) score += 10;
+        if (startTime < new TimeOnly(9, 0)) score -= 8;
+        if (endTime > new TimeOnly(16, 0)) score -= 5;
 
         return score;
     }
@@ -908,7 +954,54 @@ public class FacultyPlanningService : IFacultyPlanningService
     }
 
     private record ScheduleSlotSimple(DayOfWeek Day, TimeOnly StartTime, TimeOnly EndTime);
+    private sealed record AutoScheduleWindow(DayOfWeek Day, TimeOnly Start, TimeOnly End);
     private sealed record AutoScheduleCandidate(Classroom Classroom, DayOfWeek Day, TimeOnly Start, TimeOnly End, double Score);
+
+    private static List<AutoScheduleWindow> BuildAutoScheduleWindows(IReadOnlyList<TimeSlot> termTimeSlots, int requiredSlotCount)
+    {
+        if (requiredSlotCount <= 0 || termTimeSlots.Count == 0)
+        {
+            return [];
+        }
+
+        var windows = new List<AutoScheduleWindow>();
+
+        foreach (var dayGroup in termTimeSlots
+            .GroupBy(ts => ts.DayOfWeek)
+            .OrderBy(group => group.Key))
+        {
+            var daySlots = dayGroup
+                .OrderBy(ts => ts.SlotOrder)
+                .ToList();
+
+            for (var startIndex = 0; startIndex <= daySlots.Count - requiredSlotCount; startIndex++)
+            {
+                var window = daySlots.Skip(startIndex).Take(requiredSlotCount).ToList();
+                var isConsecutive = true;
+
+                for (var offset = 1; offset < window.Count; offset++)
+                {
+                    if (window[offset].SlotOrder != window[offset - 1].SlotOrder + 1)
+                    {
+                        isConsecutive = false;
+                        break;
+                    }
+                }
+
+                if (!isConsecutive)
+                {
+                    continue;
+                }
+
+                windows.Add(new AutoScheduleWindow(
+                    dayGroup.Key,
+                    window[0].StartTime,
+                    window[^1].EndTime));
+            }
+        }
+
+        return windows;
+    }
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
