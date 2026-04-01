@@ -2,15 +2,12 @@ import { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertCircle, AlertTriangle, ArrowLeft, Building2, ChevronDown,
-  Layers, TrendingUp, Users,
+  Layers, TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActiveTerm } from '@/hooks/useActiveTerm';
@@ -54,6 +51,10 @@ function getOccupancyStyle(occ: number) {
   return OCCUPANCY_COLORS[OCCUPANCY_COLORS.length - 1];
 }
 
+interface HeatmapOccupation { classroomName: string; courseCode: string; courseName: string; enrolledCount: number; capacity: number }
+interface HeatmapDayCell { occupied?: boolean; courseCode?: string; courseName?: string; instructorName?: string; occupancy?: number; usedCount?: number; total?: number; occupations?: HeatmapOccupation[] }
+interface HeatmapRow { hour: number; days: HeatmapDayCell[] }
+
 // ── Main Page ──────────────────────────────────────────────────────
 
 export default function ClassroomManagementPage() {
@@ -65,14 +66,12 @@ export default function ClassroomManagementPage() {
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
   const [conflictsOpen, setConflictsOpen] = useState(false);
 
-  const classrooms = dashboard?.classrooms ?? [];
+  const classrooms = useMemo(() => dashboard?.classrooms ?? [], [dashboard]);
   const filteredClassrooms = typeFilter
     ? classrooms.filter(c => c.type === typeFilter)
     : classrooms;
 
   const assignedCount = classrooms.filter(c => c.schedules.length > 0).length;
-  const totalSlots = classrooms.length * 5 * 10;
-  const usedSlots = classrooms.reduce((sum, c) => sum + c.schedules.length, 0);
 
   // Type distribution
   const typeGroups = useMemo(() => {
@@ -291,12 +290,12 @@ export default function ClassroomManagementPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {heatmapData.map((row: any) => (
+                    {heatmapData.map((row: HeatmapRow) => (
                       <tr key={row.hour}>
                         <td className="text-xs text-muted-foreground font-mono py-0.5 pr-2">
                           {String(row.hour).padStart(2, '0')}:00
                         </td>
-                        {row.days.map((cell: any, dayIdx: number) => {
+                        {row.days.map((cell: HeatmapDayCell, dayIdx: number) => {
                           if (selectedClassroom) {
                             // Single classroom view
                             return (
@@ -346,7 +345,7 @@ export default function ClassroomManagementPage() {
                                   <TooltipContent side="top" className="text-xs max-w-xs">
                                     <p className="font-semibold">{DAY_LABELS[dayIdx]} {String(row.hour).padStart(2, '0')}:00</p>
                                     <p>{cell.usedCount}/{cell.total} derslik dolu (%{Math.round((cell.occupancy ?? 0) * 100)})</p>
-                                    {cell.occupations?.slice(0, 5).map((o: any, i: number) => (
+                                    {cell.occupations?.slice(0, 5).map((o: HeatmapOccupation, i: number) => (
                                       <p key={i} className="text-muted-foreground">{o.classroomName}: {o.courseCode} ({o.enrolledCount}/{o.capacity})</p>
                                     ))}
                                     {(cell.occupations?.length ?? 0) > 5 && (

@@ -93,12 +93,12 @@ export default function ClassroomManagementAdminPage() {
     if (editingClassroom) {
       updateMutation.mutate(
         { id: editingClassroom.id, dto: form },
-        { onSuccess: () => setDialogOpen(false), onError: (e: any) => setError(e?.response?.data?.error || 'Güncelleme başarısız.') },
+        { onSuccess: () => setDialogOpen(false), onError: (e: unknown) => setError((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Güncelleme başarısız.') },
       );
     } else {
       createMutation.mutate(form, {
         onSuccess: () => setDialogOpen(false),
-        onError: (e: any) => setError(e?.response?.data?.error || 'Oluşturma başarısız.'),
+        onError: (e: unknown) => setError((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Oluşturma başarısız.'),
       });
     }
   };

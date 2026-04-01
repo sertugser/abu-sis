@@ -2125,6 +2125,7 @@ public class SchedulingService : ISchedulingService
 
         // H4+: Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
         if (candidate.ClassroomId.HasValue
+            && hardConfig != null
             && candidate.Capacity >= hardConfig.AmphiThreshold
             && candidate.ClassroomType != ClassroomType.Amphitheater)
         {
