@@ -47,21 +47,20 @@ import {
 type OperationsMode = 'planning' | 'class-lists';
 
 const MODE_LINKS: { mode: OperationsMode; to: string; label: string; icon: typeof Users }[] = [
-  { mode: 'planning', to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama', icon: BarChart3 },
-  { mode: 'class-lists', to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sinif Listeleri', icon: Users },
+  { mode: 'planning', to: ROUTES.COURSE_APPROVAL, label: 'Planlama', icon: BarChart3 },
+  { mode: 'class-lists', to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri', icon: Users },
 ];
 
 const CONFLICT_CFG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'outline' }> = {
   ClassroomConflict: { label: 'Derslik', variant: 'destructive' },
-  InstructorConflict: { label: 'Ogretim Uyesi', variant: 'destructive' },
+  InstructorConflict: { label: 'Öğretim Üyesi', variant: 'destructive' },
   CapacityConflict: { label: 'Kapasite', variant: 'warning' },
-  InstructorAvailabilityConflict: { label: 'Musaitlik', variant: 'warning' },
-  WeeklyLoadConflict: { label: 'Yuk Asimi', variant: 'warning' },
-  InvalidScheduleJson: { label: 'Veri Hatasi', variant: 'outline' },
+  WeeklyLoadConflict: { label: 'Yük Aşımı', variant: 'warning' },
+  InvalidScheduleJson: { label: 'Veri Hatası', variant: 'outline' },
 };
 
 const DAY_LABELS: Record<number, string> = {
-  0: 'Pazar', 1: 'Pazartesi', 2: 'Sali', 3: 'Carsamba', 4: 'Persembe', 5: 'Cuma', 6: 'Cumartesi',
+  0: 'Pazar', 1: 'Pazartesi', 2: 'Salı', 3: 'Çarşamba', 4: 'Perşembe', 5: 'Cuma', 6: 'Cumartesi',
 };
 
 const ITEMS_PER_PAGE = 20;
@@ -120,9 +119,9 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Sayfa yuklenemedi</AlertTitle>
+        <AlertTitle>Sayfa yüklenemedi</AlertTitle>
         <AlertDescription>
-          {getAcademicOperationsErrorMessage(contextQuery.error, 'Yetkili kapsam bilgileri alinamadi.')}
+          {getAcademicOperationsErrorMessage(contextQuery.error, 'Yetkili kapsam bilgileri alınamadı.')}
         </AlertDescription>
       </Alert>
     );
@@ -172,7 +171,7 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
       {!selectedDepartment ? (
         <Card>
           <CardContent className="py-16 text-center text-gray-500">
-            Bu rol icin goruntulenebilir bolum bulunamadi.
+            Bu rol için görüntülenebilir bölüm bulunamadı.
           </CardContent>
         </Card>
       ) : (
@@ -183,7 +182,7 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
               termId={activeTerm?.id ?? null}
               departmentName={selectedDepartment.departmentName}
               isLoading={planningQuery.isLoading}
-              errorMessage={planningQuery.isError ? getAcademicOperationsErrorMessage(planningQuery.error, 'Planlama verisi yuklenemedi.') : null}
+              errorMessage={planningQuery.isError ? getAcademicOperationsErrorMessage(planningQuery.error, 'Planlama verisi yüklenemedi.') : null}
               summary={planningQuery.data ?? null}
               searchTerm={searchTerm}
               onSearchTermChange={setSearchTerm}
@@ -192,7 +191,7 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
           {mode === 'class-lists' && (
             <ClassListsMode
               isLoading={classListsQuery.isLoading}
-              errorMessage={classListsQuery.isError ? getAcademicOperationsErrorMessage(classListsQuery.error, 'Sinif listeleri yuklenemedi.') : null}
+              errorMessage={classListsQuery.isError ? getAcademicOperationsErrorMessage(classListsQuery.error, 'Sınıf listeleri yüklenemedi.') : null}
               classLists={classListsQuery.data ?? null}
               searchTerm={searchTerm}
               onSearchTermChange={setSearchTerm}
@@ -251,7 +250,7 @@ function PlanningMode({
     return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Hata</AlertTitle><AlertDescription>{errorMessage}</AlertDescription></Alert>;
   }
   if (!summary) {
-    return <Card><CardContent className="py-16 text-center text-gray-500">{departmentName} icin veri bulunamadi.</CardContent></Card>;
+    return <Card><CardContent className="py-16 text-center text-gray-500">{departmentName} için veri bulunamadı.</CardContent></Card>;
   }
 
   const allCourses = summary.forecastSummary?.courseSummaries ?? [];
@@ -305,7 +304,7 @@ function PlanningMode({
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-600" />
               <span className="text-sm font-medium text-red-700">
-                {conflicts.length} cakisma tespit edildi
+                {conflicts.length} çakışma tespit edildi
               </span>
               <div className="flex gap-1 ml-2">
                 {Array.from(groupConflicts(conflicts).entries()).map(([type, count]) => (
@@ -343,7 +342,7 @@ function PlanningMode({
           <div className="flex items-center gap-2">
             <Progress value={progressPct} className="w-32 h-2" indicatorClassName={progressPct === 100 ? 'bg-emerald-600' : 'bg-blue-600'} />
             <span className="text-xs text-gray-500 whitespace-nowrap">
-              <span className="font-medium text-gray-900">{approvedCount}</span> onayli
+              <span className="font-medium text-gray-900">{approvedCount}</span> onaylı
               {rejectedCount > 0 && <>, <span className="font-medium text-gray-900">{rejectedCount}</span> red</>}
               , <span className="font-medium text-gray-900">{pendingCount}</span> bekliyor
             </span>
@@ -362,7 +361,7 @@ function PlanningMode({
           {pendingFiltered.length > 0 && (
             <Button size="sm" onClick={handleBulkApprove} disabled={bulkApproveMut.isPending} className="h-8 gap-1 text-xs">
               <Check className="h-3 w-3" />
-              Tumunu Onayla ({pendingFiltered.length})
+              Tümünü Onayla ({pendingFiltered.length})
             </Button>
           )}
         </div>
@@ -370,7 +369,7 @@ function PlanningMode({
 
       {/* 3. Course table */}
       {sorted.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">Eslesen ders bulunamadi.</p>
+        <p className="text-sm text-gray-500 py-8 text-center">Eşleşen ders bulunamadı.</p>
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
@@ -380,9 +379,9 @@ function PlanningMode({
                   <TableHead className="w-8" />
                   <TableHead>Ders</TableHead>
                   <TableHead className="text-right w-24">Talep</TableHead>
-                  <TableHead className="text-center w-16">Sube</TableHead>
+                  <TableHead className="text-center w-16">Şube</TableHead>
                   <TableHead className="text-center w-24">Durum</TableHead>
-                  <TableHead className="text-center w-20">Islem</TableHead>
+                  <TableHead className="text-center w-20">İşlem</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -452,7 +451,7 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
         </TableCell>
         <TableCell className="text-center">
           <Badge variant={status === 'Approved' ? 'success' : status === 'Rejected' ? 'destructive' : 'secondary'}>
-            {status === 'Approved' ? 'Onayli' : status === 'Rejected' ? 'Red' : 'Bekliyor'}
+            {status === 'Approved' ? 'Onaylı' : status === 'Rejected' ? 'Red' : 'Bekliyor'}
           </Badge>
         </TableCell>
         <TableCell className="text-center" onClick={e => e.stopPropagation()}>
@@ -479,7 +478,7 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
               onClick={() => onApprove(course.courseId, sectionCount, note || undefined)}
               disabled={isApproving}
             >
-              Degistir
+              Değiştir
             </button>
           )}
         </TableCell>
@@ -493,7 +492,7 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
               {/* Approval control row */}
               <div className="flex flex-wrap items-end gap-3 pb-3 border-b border-gray-200">
                 <div>
-                  <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Sube</p>
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Şube</p>
                   <div className="flex items-center gap-0.5">
                     <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setSectionCount(c => Math.max(1, c - 1))}>
                       <Minus className="h-3 w-3" />
@@ -506,10 +505,10 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
                 </div>
                 <div className="flex-1 min-w-[12rem]">
                   <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Not</p>
-                  <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Karar gerekcesi..." className="h-7 text-xs" />
+                  <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Karar gerekçesi..." className="h-7 text-xs" />
                 </div>
                 <Button size="sm" className="h-7 text-xs gap-1" onClick={() => onApprove(course.courseId, sectionCount, note || undefined)} disabled={isApproving}>
-                  <Check className="h-3 w-3" />{sectionCount} Sube Onayla
+                  <Check className="h-3 w-3" />{sectionCount} Şube Onayla
                 </Button>
                 <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" onClick={() => onReject(course.courseId, note || undefined)} disabled={isRejecting}>
                   <X className="h-3 w-3" />Reddet
@@ -540,12 +539,12 @@ function DetailDemandBreakdown({ course }: { course: CourseDemandForecast }) {
     { label: 'NA Tekrar', value: bd.retakeNA, color: 'bg-orange-500' },
     ...(bd.retakeU > 0 ? [{ label: 'U Tekrar', value: bd.retakeU, color: 'bg-amber-500' }] : []),
     ...(bd.behindSchedule > 0 ? [{ label: 'Geride', value: bd.behindSchedule, color: 'bg-blue-500' }] : []),
-    ...(bd.upperCourse > 0 ? [{ label: 'Ustten', value: bd.upperCourse, color: 'bg-violet-500' }] : []),
+    ...(bd.upperCourse > 0 ? [{ label: 'Üstten', value: bd.upperCourse, color: 'bg-violet-500' }] : []),
   ].filter(i => i.value > 0);
 
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Talep Kirilimi</p>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Talep Kırılımı</p>
       <div className="space-y-1.5">
         {items.map(item => (
           <div key={item.label} className="flex items-center gap-2">
@@ -559,7 +558,7 @@ function DetailDemandBreakdown({ course }: { course: CourseDemandForecast }) {
       </div>
       {bd.ectsLimited > 0 && (
         <p className="text-[10px] text-amber-600 mt-2 flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" />{bd.ectsLimited} ogrenci AKTS limitinde
+          <AlertTriangle className="h-3 w-3" />{bd.ectsLimited} öğrenci AKTS limitinde
         </p>
       )}
     </div>
@@ -573,19 +572,19 @@ function DetailConfidenceAndDistribution({ course }: { course: CourseDemandForec
     <div className="space-y-3">
       {conf && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Guven Araligi</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Güven Aralığı</p>
           <div className="rounded-md border p-2.5 text-xs space-y-1">
-            <Row label="Aralik" value={`${conf.lowerBound} – ${conf.upperBound}`} />
+            <Row label="Aralık" value={`${conf.lowerBound} – ${conf.upperBound}`} />
             <Row label="Marj" value={`±${conf.margin}`} />
-            <Row label="Yontem" value={conf.method} mono />
+            <Row label="Yöntem" value={conf.method} mono />
           </div>
         </div>
       )}
       {sd && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Sube Dagilimi</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Şube Dağılımı</p>
           <div className="rounded-md border p-2.5 text-xs space-y-1">
-            <Row label="Kapasite/sube" value={String(sd.effectiveCapacityPerSection)} />
+            <Row label="Kapasite/şube" value={String(sd.effectiveCapacityPerSection)} />
             <Row
               label="Doluluk"
               value={`%${(sd.utilizationRate * 100).toFixed(0)}`}
@@ -599,7 +598,7 @@ function DetailConfidenceAndDistribution({ course }: { course: CourseDemandForec
                       <TooltipTrigger asChild>
                         <span className="flex-1 text-center py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-semibold">{n}</span>
                       </TooltipTrigger>
-                      <TooltipContent>Sube {i + 1}: {n} ogrenci</TooltipContent>
+                      <TooltipContent>Şube {i + 1}: {n} öğrenci</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 ))}
@@ -623,7 +622,7 @@ function DetailHistory({ course }: { course: CourseDemandForecast }) {
   const pred = course.totalPredictedDemand || 1;
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Gecmis Donemler</p>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Geçmiş Dönemler</p>
       <div className="space-y-2">
         {hist.map(h => {
           const avg = h.sectionCount > 0 ? Math.round(h.actualEnrollment / h.sectionCount) : 0;
@@ -631,7 +630,7 @@ function DetailHistory({ course }: { course: CourseDemandForecast }) {
             <div key={h.termId} className="rounded-md border p-2.5">
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="font-medium">{h.termName}</span>
-                <span className="text-gray-500">{h.sectionCount} sube · ort {avg}/sube</span>
+                <span className="text-gray-500">{h.sectionCount} şube · ort {avg}/şube</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
@@ -669,7 +668,7 @@ function ClassListsMode({
 
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-10 rounded-lg" /><Skeleton className="h-96 rounded-xl" /></div>;
   if (errorMessage) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Hata</AlertTitle><AlertDescription>{errorMessage}</AlertDescription></Alert>;
-  if (!classLists) return <Card><CardContent className="py-16 text-center text-gray-500">Veri bulunamadi.</CardContent></Card>;
+  if (!classLists) return <Card><CardContent className="py-16 text-center text-gray-500">Veri bulunamadı.</CardContent></Card>;
 
   const sections = classLists.sections;
   const totalPages = Math.max(1, Math.ceil(sections.length / ITEMS_PER_PAGE));
@@ -691,8 +690,8 @@ function ClassListsMode({
       {/* Compact info bar + search */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm text-gray-500">
-          <span className="font-semibold text-gray-900">{sections.length}</span> sube ·{' '}
-          <span className="font-semibold text-gray-900">{classLists.totalStudents}</span> ogrenci ·{' '}
+          <span className="font-semibold text-gray-900">{sections.length}</span> şube ·{' '}
+          <span className="font-semibold text-gray-900">{classLists.totalStudents}</span> öğrenci ·{' '}
           %{avgOccupancy} doluluk
         </p>
         <div className="relative">
@@ -700,7 +699,7 @@ function ClassListsMode({
           <Input
             value={searchTerm}
             onChange={e => { onSearchTermChange(e.target.value); setPage(0); }}
-            placeholder="Ders, ogretim uyesi veya derslik..."
+            placeholder="Ders, öğretim üyesi veya derslik..."
             className="pl-8 h-8 w-64 text-sm"
           />
         </div>
@@ -712,24 +711,24 @@ function ClassListsMode({
           {noInstructor.length > 0 && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-amber-700">
               <AlertTriangle className="h-3 w-3" />
-              {noInstructor.length} sube ogretim uyesi atanmamis
+              {noInstructor.length} şube öğretim üyesi atanmamış
             </span>
           )}
           {noClassroom.length > 0 && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-amber-700">
               <AlertTriangle className="h-3 w-3" />
-              {noClassroom.length} sube derslik atanmamis
+              {noClassroom.length} şube derslik atanmamış
             </span>
           )}
           {overfull.length > 0 && (
             <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-200 px-2 py-1 text-red-700">
               <AlertCircle className="h-3 w-3" />
-              {overfull.length} sube kapasite asiminda
+              {overfull.length} şube kapasite aşımında
             </span>
           )}
           {empty.length > 0 && (
             <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 border border-gray-300 px-2 py-1 text-gray-500">
-              {empty.length} sube bos
+              {empty.length} şube boş
             </span>
           )}
         </div>
@@ -737,7 +736,7 @@ function ClassListsMode({
 
       {/* Table */}
       {sections.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">Eslesen sube bulunamadi.</p>
+        <p className="text-sm text-gray-500 py-8 text-center">Eşleşen şube bulunamadı.</p>
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
@@ -746,7 +745,7 @@ function ClassListsMode({
                 <TableRow className="bg-gray-50 text-xs">
                   <TableHead className="w-8" />
                   <TableHead>Ders</TableHead>
-                  <TableHead>Ogretim Uyesi</TableHead>
+                  <TableHead>Öğretim Üyesi</TableHead>
                   <TableHead>Derslik</TableHead>
                   <TableHead className="hidden lg:table-cell">Program</TableHead>
                   <TableHead className="text-center w-28">Doluluk</TableHead>
@@ -797,13 +796,13 @@ function SectionRow({ section, isExpanded, onToggle }: {
           </div>
         </TableCell>
         <TableCell className={cn('text-sm', !section.instructorName && 'text-amber-600 italic text-xs')}>
-          {section.instructorName || 'Atanmamis'}
+          {section.instructorName || 'Atanmamış'}
         </TableCell>
         <TableCell className={cn('text-sm', !section.classroomName && 'text-amber-600 italic text-xs')}>
-          {section.classroomName || 'Atanmamis'}
+          {section.classroomName || 'Atanmamış'}
         </TableCell>
         <TableCell className="hidden lg:table-cell text-xs text-gray-500">
-          {section.scheduleSummary || <span className="italic">Tanimlanmamis</span>}
+          {section.scheduleSummary || <span className="italic">Tanımlanmamış</span>}
         </TableCell>
         <TableCell>
           <div className="flex items-center gap-2 justify-center">
@@ -822,7 +821,7 @@ function SectionRow({ section, isExpanded, onToggle }: {
           <TableCell colSpan={6} className="p-0">
             <div className="px-6 py-3">
               {section.students.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-3">Bu subede ogrenci yok.</p>
+                <p className="text-sm text-gray-500 text-center py-3">Bu şubede öğrenci yok.</p>
               ) : (
                 <div className="rounded-md border overflow-hidden">
                   <Table>
@@ -881,7 +880,7 @@ function Row({ label, value, mono, className }: { label: string; value: string; 
 function Pagination({ current, total, count, onPage }: { current: number; total: number; count: number; onPage: (p: number) => void }) {
   return (
     <div className="flex items-center justify-between px-4 py-2.5 border-t text-xs text-gray-500">
-      <span>{count} kayit · sayfa {current + 1}/{total}</span>
+      <span>{count} kayıt · sayfa {current + 1}/{total}</span>
       <div className="flex gap-1">
         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={current === 0} onClick={() => onPage(current - 1)}>
           <ChevronLeft className="h-3.5 w-3.5" />

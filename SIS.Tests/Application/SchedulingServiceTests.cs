@@ -1,10 +1,8 @@
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -42,9 +40,9 @@ public class SchedulingServiceTests : IDisposable
         var course2 = AddCourse(2, "CS102", theoryHours: 2);
 
         AddSection(1, course1.Id, instructor1.Id, classroom.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
+(DayOfWeek.Monday, 9, 0, 11, 0));
         AddSection(2, course2.Id, instructor2.Id, classroom.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Monday, 10, 0, 12, 0)));
+(DayOfWeek.Monday, 10, 0, 12, 0));
 
         var result = await _service.ValidateExistingAsync(ActiveTermId);
 
@@ -62,9 +60,9 @@ public class SchedulingServiceTests : IDisposable
         var course2 = AddCourse(2, "CS202", theoryHours: 2);
 
         AddSection(1, course1.Id, instructor.Id, classroom1.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
+(DayOfWeek.Monday, 9, 0, 11, 0));
         AddSection(2, course2.Id, instructor.Id, classroom2.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Monday, 10, 0, 12, 0)));
+(DayOfWeek.Monday, 10, 0, 12, 0));
 
         var result = await _service.ValidateExistingAsync(ActiveTermId);
 
@@ -82,9 +80,9 @@ public class SchedulingServiceTests : IDisposable
         var course2 = AddCourse(2, "CS302", theoryHours: 2);
 
         AddSection(1, course1.Id, instructor.Id, classroom1.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
+(DayOfWeek.Monday, 9, 0, 11, 0));
         AddSection(2, course2.Id, instructor.Id, classroom2.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Tuesday, 9, 0, 11, 0)));
+(DayOfWeek.Tuesday, 9, 0, 11, 0));
 
         var result = await _service.ValidateExistingAsync(ActiveTermId);
 
@@ -99,7 +97,7 @@ public class SchedulingServiceTests : IDisposable
         var classroom = AddClassroom(1, "Lab1", 20);
         var course = AddCourse(1, "CS401", theoryHours: 2);
         AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 30,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
+(DayOfWeek.Monday, 9, 0, 11, 0));
 
         var result = await _service.ValidateExistingAsync(ActiveTermId);
 
@@ -113,7 +111,7 @@ public class SchedulingServiceTests : IDisposable
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var classroom = AddClassroom(1, "C101", 50);
         var course = AddCourse(1, "CS403", theoryHours: 2);
-        AddSection(1, course.Id, null, null, ActiveTermId, 30, null);
+        AddSection(1, course.Id, null, null, ActiveTermId, 30);
 
         var request = new ScheduleValidationRequestDto
         {
@@ -152,7 +150,7 @@ public class SchedulingServiceTests : IDisposable
         AddTimeSlot(ActiveTermId, DayOfWeek.Tuesday, new TimeOnly(10, 0), new TimeOnly(10, 50), 2);
 
         var course = AddCourse(1, "CS404", theoryHours: 2);
-        AddSection(1, course.Id, instructor.Id, null, ActiveTermId, 28, null);
+        AddSection(1, course.Id, instructor.Id, null, ActiveTermId, 28);
 
         var result = await _service.SuggestAsync(new ScheduleSuggestionRequestDto { SectionId = 1 });
 
@@ -177,10 +175,10 @@ public class SchedulingServiceTests : IDisposable
 
         var existingCourse = AddCourse(1, "CS405", theoryHours: 2);
         AddSection(1, existingCourse.Id, instructor.Id, otherClassroom.Id, ActiveTermId, 25,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 10, 50)));
+(DayOfWeek.Monday, 9, 0, 10, 50));
 
         var targetCourse = AddCourse(2, "CS406", theoryHours: 2);
-        AddSection(2, targetCourse.Id, instructor.Id, blockedClassroom.Id, ActiveTermId, 25, null);
+        AddSection(2, targetCourse.Id, instructor.Id, blockedClassroom.Id, ActiveTermId, 25);
 
         var result = await _service.SuggestAsync(new ScheduleSuggestionRequestDto { SectionId = 2 });
 
@@ -195,14 +193,14 @@ public class SchedulingServiceTests : IDisposable
         var classroom = AddClassroom(1, "C101", 50);
         var activeCourse = AddCourse(1, "CS407", theoryHours: 2);
         AddSection(1, activeCourse.Id, instructor.Id, classroom.Id, ActiveTermId, 20,
-            CreateScheduleJson((DayOfWeek.Monday, 8, 0, 10, 0)));
+(DayOfWeek.Monday, 8, 0, 10, 0));
 
         var inactiveCourse1 = AddCourse(2, "CS408", theoryHours: 2);
         var inactiveCourse2 = AddCourse(3, "CS409", theoryHours: 2);
         AddSection(2, inactiveCourse1.Id, instructor.Id, classroom.Id, SecondaryTermId, 20,
-            CreateScheduleJson((DayOfWeek.Monday, 9, 0, 11, 0)));
+(DayOfWeek.Monday, 9, 0, 11, 0));
         AddSection(3, inactiveCourse2.Id, instructor.Id, classroom.Id, SecondaryTermId, 20,
-            CreateScheduleJson((DayOfWeek.Monday, 10, 0, 12, 0)));
+(DayOfWeek.Monday, 10, 0, 12, 0));
 
         var activeResult = await _service.ValidateExistingAsync(ActiveTermId);
         var requestedTermResult = await _service.ValidateExistingAsync(SecondaryTermId);
@@ -213,26 +211,12 @@ public class SchedulingServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ValidateExistingAsync_InvalidScheduleJson_ReturnsParseConflict()
-    {
-        var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
-        var classroom = AddClassroom(1, "C101", 50);
-        var course = AddCourse(1, "CS410", theoryHours: 2);
-        AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 20, "{invalid-json");
-
-        var result = await _service.ValidateExistingAsync(ActiveTermId);
-
-        result.IsValid.Should().BeFalse();
-        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "InvalidScheduleJson");
-    }
-
-    [Fact]
-    public async Task ValidateExistingAsync_NullScheduleJson_IsHandledSafely()
+    public async Task ValidateExistingAsync_NoSectionScheduleRecords_IsHandledSafely()
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
         var classroom = AddClassroom(1, "C101", 50);
         var course = AddCourse(1, "CS411", theoryHours: 2);
-        AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 20, null);
+        AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 20);
 
         var result = await _service.ValidateExistingAsync(ActiveTermId);
 
@@ -358,7 +342,7 @@ public class SchedulingServiceTests : IDisposable
         int? classroomId,
         int termId,
         int capacity,
-        string? scheduleJson)
+        params (DayOfWeek day, int startHour, int startMinute, int endHour, int endMinute)[] scheduleSlots)
     {
         var section = new CourseSection
         {
@@ -370,12 +354,51 @@ public class SchedulingServiceTests : IDisposable
             Capacity = capacity,
             EnrolledCount = 0,
             IsActive = true,
-            IsFinalized = false,
-            ScheduleJson = scheduleJson ?? string.Empty
+            IsFinalized = false
         };
 
         _context.CourseSections.Add(section);
         _context.SaveChanges();
+
+        // Create SectionSchedule records with matching TimeSlots
+        foreach (var slot in scheduleSlots)
+        {
+            var startTime = new TimeOnly(slot.startHour, slot.startMinute);
+            var endTime = new TimeOnly(slot.endHour, slot.endMinute);
+
+            // Find or create a TimeSlot that covers this range
+            var timeSlot = _context.TimeSlots
+                .FirstOrDefault(ts => ts.TermId == termId
+                    && ts.DayOfWeek == slot.day
+                    && ts.StartTime == startTime
+                    && ts.EndTime == endTime);
+
+            if (timeSlot == null)
+            {
+                timeSlot = new TimeSlot
+                {
+                    TermId = termId,
+                    DayOfWeek = slot.day,
+                    StartTime = startTime,
+                    EndTime = endTime,
+                    SlotOrder = _context.TimeSlots.Count(ts => ts.TermId == termId && ts.DayOfWeek == slot.day) + 1,
+                    DisplayName = $"{slot.day} ({startTime:HH\\:mm}-{endTime:HH\\:mm})"
+                };
+                _context.TimeSlots.Add(timeSlot);
+                _context.SaveChanges();
+            }
+
+            _context.SectionSchedules.Add(new SectionSchedule
+            {
+                CourseSectionId = section.Id,
+                TimeSlotId = timeSlot.Id,
+                ClassroomId = classroomId ?? 0
+            });
+        }
+
+        if (scheduleSlots.Length > 0)
+            _context.SaveChanges();
+
         return section;
     }
 
@@ -391,16 +414,6 @@ public class SchedulingServiceTests : IDisposable
             DisplayName = $"{day} {slotOrder}. Ders ({startTime:HH\\:mm}-{endTime:HH\\:mm})"
         });
         _context.SaveChanges();
-    }
-
-    private static string CreateScheduleJson(params (DayOfWeek day, int startHour, int startMinute, int endHour, int endMinute)[] slots)
-    {
-        return JsonSerializer.Serialize(slots.Select(slot => new ScheduleSlot
-        {
-            Day = slot.day,
-            StartTime = new TimeOnly(slot.startHour, slot.startMinute),
-            EndTime = new TimeOnly(slot.endHour, slot.endMinute)
-        }));
     }
 
     public void Dispose()

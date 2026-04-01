@@ -1,10 +1,8 @@
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -78,6 +76,9 @@ public class RegistrationValidationServiceTests : IDisposable
             Status = TermStatus.RegistrationOpen
         });
 
+        // Classroom (needed for SectionSchedule records)
+        _context.Classrooms.Add(new Classroom { Id = 1, Name = "A-101", Capacity = 100, Type = Domain.Enums.ClassroomType.Lecture, BuildingName = "A", Floor = 1 });
+
         // Student (active, good CGPA, no financial block)
         _context.Students.Add(new Student
         {
@@ -141,12 +142,63 @@ public class RegistrationValidationServiceTests : IDisposable
             TermId = termId,
             Capacity = capacity,
             EnrolledCount = enrolledCount,
-            IsActive = isActive,
-            ScheduleJson = scheduleJson ?? "[]"
+            IsActive = isActive
         };
         _context.CourseSections.Add(section);
         _context.SaveChanges();
+
+        // Parse the legacy scheduleJson format to create SectionSchedule records
+        if (scheduleJson != null && scheduleJson != "[]")
+        {
+            var slotData = System.Text.Json.JsonSerializer.Deserialize<List<ScheduleSlotData>>(scheduleJson);
+            if (slotData != null)
+            {
+                foreach (var slot in slotData)
+                {
+                    var day = slot.Day ?? slot.DayOfWeek ?? DayOfWeek.Monday;
+                    var timeSlot = _context.TimeSlots.FirstOrDefault(ts =>
+                        ts.TermId == termId
+                        && ts.DayOfWeek == day
+                        && ts.StartTime == slot.StartTime
+                        && ts.EndTime == slot.EndTime);
+
+                    if (timeSlot == null)
+                    {
+                        timeSlot = new TimeSlot
+                        {
+                            TermId = termId,
+                            DayOfWeek = day,
+                            StartTime = slot.StartTime,
+                            EndTime = slot.EndTime,
+                            SlotOrder = 1,
+                            DisplayName = $"{day} {slot.StartTime:HH:mm}-{slot.EndTime:HH:mm}"
+                        };
+                        _context.TimeSlots.Add(timeSlot);
+                        _context.SaveChanges();
+                    }
+
+                    _context.SectionSchedules.Add(new SectionSchedule
+                    {
+                        CourseSectionId = section.Id,
+                        TimeSlotId = timeSlot.Id,
+                        ClassroomId = slot.ClassroomId ?? 1
+                    });
+                }
+                _context.SaveChanges();
+            }
+        }
+
         return section;
+    }
+
+    // Helper class for deserializing schedule data in tests
+    private sealed class ScheduleSlotData
+    {
+        public DayOfWeek? Day { get; set; }
+        public DayOfWeek? DayOfWeek { get; set; }
+        public TimeOnly StartTime { get; set; }
+        public TimeOnly EndTime { get; set; }
+        public int? ClassroomId { get; set; }
     }
 
     private Domain.Entities.CourseRegistration AddRegistration(int id, int studentId, int sectionId,
@@ -196,9 +248,9 @@ public class RegistrationValidationServiceTests : IDisposable
 
     private static string MakeScheduleJson(DayOfWeek day, TimeOnly start, TimeOnly end)
     {
-        return JsonSerializer.Serialize(new List<ScheduleSlot>
+        return System.Text.Json.JsonSerializer.Serialize(new[]
         {
-            new() { Day = day, StartTime = start, EndTime = end }
+            new { Day = day, StartTime = start, EndTime = end }
         });
     }
 

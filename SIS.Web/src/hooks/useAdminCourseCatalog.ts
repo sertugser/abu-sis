@@ -28,6 +28,21 @@ export interface CurriculumAssignmentDto {
   isCompulsory: boolean;
 }
 
+export interface CourseStatsDto {
+  lastTermName: string | null;
+  lastTermSectionCount: number;
+  lastTermTotalEnrolled: number;
+  lastTermAvgCapacity: number;
+  totalTimesOpened: number;
+}
+
+export interface PrerequisiteChainNodeDto {
+  courseId: number;
+  code: string;
+  name: string;
+  prerequisites: PrerequisiteChainNodeDto[];
+}
+
 export interface CourseDetailDto {
   id: number;
   code: string;
@@ -41,6 +56,8 @@ export interface CourseDetailDto {
   prerequisites: PrerequisiteDto[];
   equivalencies: EquivalencyDto[];
   curriculumAssignments: CurriculumAssignmentDto[];
+  stats: CourseStatsDto | null;
+  prerequisiteChain: PrerequisiteChainNodeDto[] | null;
 }
 
 export interface CourseFilterParams {

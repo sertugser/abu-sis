@@ -1,21 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { QUERY_KEYS } from '@/lib/constants';
 import {
   applyInstructorSectionSchedule,
-  createInstructorAvailability,
-  deleteInstructorAvailability,
-  getInstructorAvailabilities,
+  getInstructorTimetable,
   suggestInstructorSectionSchedule,
-  updateInstructorAvailability,
   validateInstructorSectionSchedule,
 } from '../api/instructorScheduling.api';
-import type { ApplyScheduleRequest, UpsertInstructorAvailabilityRequest } from '../types/scheduling';
+import type { ApplyScheduleRequest } from '../types/scheduling';
 
-export function useInstructorAvailabilities() {
+export function useInstructorTimetable(instructorId: number | undefined, termId?: number) {
   return useQuery({
-    queryKey: QUERY_KEYS.instructorAvailabilities,
-    queryFn: getInstructorAvailabilities,
-    staleTime: 60 * 1000,
+    queryKey: ['instructorTimetable', instructorId, termId],
+    queryFn: () => getInstructorTimetable(instructorId!, termId),
+    enabled: !!instructorId,
+    staleTime: 2 * 60 * 1000,
   });
 }
 
@@ -44,45 +41,7 @@ export function useApplyInstructorSchedule() {
     }) => applyInstructorSectionSchedule(sectionId, request),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['instructorSections'] });
-    },
-  });
-}
-
-export function useCreateInstructorAvailability() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (payload: UpsertInstructorAvailabilityRequest) => createInstructorAvailability(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.instructorAvailabilities });
-    },
-  });
-}
-
-export function useUpdateInstructorAvailability() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      availabilityId,
-      payload,
-    }: {
-      availabilityId: number;
-      payload: UpsertInstructorAvailabilityRequest;
-    }) => updateInstructorAvailability(availabilityId, payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.instructorAvailabilities });
-    },
-  });
-}
-
-export function useDeleteInstructorAvailability() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (availabilityId: number) => deleteInstructorAvailability(availabilityId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.instructorAvailabilities });
+      await queryClient.invalidateQueries({ queryKey: ['instructorTimetable'] });
     },
   });
 }

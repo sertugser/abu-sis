@@ -29,6 +29,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditInterceptor>();
 
 builder.Services.AddCors(options =>
 {
@@ -41,8 +43,11 @@ builder.Services.AddCors(options =>
 });
 
 // Add EF Core + PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.AddInterceptors(serviceProvider.GetRequiredService<AuditInterceptor>());
+});
 
 // Add Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
@@ -83,12 +88,14 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
+builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
 
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
+builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();

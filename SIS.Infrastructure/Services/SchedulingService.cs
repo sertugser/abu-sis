@@ -1,22 +1,14 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
 
 public class SchedulingService : ISchedulingService
 {
-    private static readonly JsonSerializerOptions ScheduleJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private readonly AppDbContext _context;
 
     public SchedulingService(AppDbContext context)
@@ -64,11 +56,12 @@ public class SchedulingService : ISchedulingService
         var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
 
         result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
         result.Notes.AddRange(candidate.Notes);
 
-        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig);
+        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
         result.Conflicts = conflicts;
         result.Notes.AddRange(softNotes);
         result.IsValid = conflicts.Count == 0;
@@ -188,9 +181,10 @@ public class SchedulingService : ISchedulingService
 
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
-        var currentParse = ParseScheduleJson(section.ScheduleJson);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+        var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
         var requiredHours = ResolveTotalRequiredHours(section);
-        var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentParse.Slots, timeSlots);
+        var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentBlocks, timeSlots);
 
         if (slotCombinations.Count == 0)
         {
@@ -199,9 +193,40 @@ public class SchedulingService : ISchedulingService
         }
 
         var requiredCapacity = Math.Max(section.Capacity, 0);
-        var classrooms = await _context.Classrooms
+
+        // Fakülteye atanmış dersliklerden seç (H10 ön-filtre)
+        var courseDeptId = section.Course.DepartmentId;
+        int? facultyId = null;
+        if (courseDeptId.HasValue)
+        {
+            facultyId = await _context.Departments.AsNoTracking()
+                .Where(d => d.Id == courseDeptId.Value)
+                .Select(d => d.FacultyId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var assignedClassroomIds = await _context.ClassroomTermAssignments
             .AsNoTracking()
-            .Where(c => c.Capacity > 0 && c.Capacity >= requiredCapacity)
+            .Where(cta => cta.TermId == section.TermId
+                && (!facultyId.HasValue || cta.FacultyId == facultyId.Value))
+            .Select(cta => cta.ClassroomId)
+            .ToListAsync(cancellationToken);
+
+        IQueryable<Classroom> classroomQuery;
+        if (assignedClassroomIds.Count > 0)
+        {
+            // Fakülteye atanmış dersliklerden seç
+            classroomQuery = _context.Classrooms.AsNoTracking()
+                .Where(c => assignedClassroomIds.Contains(c.Id) && c.Capacity >= requiredCapacity);
+        }
+        else
+        {
+            // Henüz atama yoksa tüm dersliklerden seç (fallback)
+            classroomQuery = _context.Classrooms.AsNoTracking()
+                .Where(c => c.Capacity > 0 && c.Capacity >= requiredCapacity);
+        }
+
+        var classrooms = await classroomQuery
             .OrderBy(c => c.Capacity - requiredCapacity)
             .ThenBy(c => c.Id == section.ClassroomId ? 0 : 1)
             .ThenBy(c => c.Name)
@@ -214,7 +239,7 @@ public class SchedulingService : ISchedulingService
             return response;
         }
 
-        var currentWeeklyHours = ResolveWeeklyHours(currentParse.Slots, section.Course);
+        var currentWeeklyHours = ResolveWeeklyHours(currentBlocks, section.Course);
 
         foreach (var slotCombination in slotCombinations)
         {
@@ -228,17 +253,17 @@ public class SchedulingService : ISchedulingService
                     slotCombination.Slots,
                     new List<string>());
 
-                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig);
+                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig, hardConfig);
                 if (conflicts.Count > 0)
                 {
                     continue;
                 }
 
-                var candidateWeeklyHours = ResolveWeeklyHours(candidate.ScheduleSlots, section.Course);
+                var candidateWeeklyHours = ResolveWeeklyHours(candidate.TimeBlocks, section.Course);
                 response.IsFeasible = true;
                 response.SuggestedClassroomId = classroom.Id;
                 response.SuggestedClassroomName = classroom.Name;
-                response.SuggestedSlots = candidate.ScheduleSlots.Select(MapScheduleSlot).ToList();
+                response.SuggestedSlots = candidate.TimeBlocks.Select(MapTimeBlock).ToList();
                 response.EstimatedWeeklyHoursImpact = candidateWeeklyHours - currentWeeklyHours;
                 response.Notes.AddRange(candidate.Notes);
                 response.Notes.AddRange(softNotes);
@@ -281,18 +306,16 @@ public class SchedulingService : ISchedulingService
             };
         }
 
-        var slots = request.ScheduleSlots.Select(s => new ScheduleSlot
+        var slots = request.ScheduleSlots.Select(s => new TimeBlock
         {
             Day = s.Day,
             StartTime = s.StartTime,
             EndTime = s.EndTime,
         }).ToList();
 
-        // Keep existing ScheduleJson behavior
-        section.ScheduleJson = JsonSerializer.Serialize(slots, ScheduleJsonOptions);
         section.ClassroomId = request.ClassroomId;
 
-        // Also write SectionSchedule records for the new TimeSlot-based system
+        // Write SectionSchedule records (the authoritative schedule store)
         await WriteSectionScheduleRecordsAsync(section.Id, section.TermId, request.ClassroomId, slots, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -316,34 +339,211 @@ public class SchedulingService : ISchedulingService
 
         result.Notes.Add($"Donem: {resolvedTerm.Name}");
 
+        // ── Step 0: Load all sections for the scope ──────────────────────
         var sectionsQuery = _context.CourseSections
             .Include(cs => cs.Course)
+            .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
             .Where(cs => cs.TermId == resolvedTerm.Id && cs.IsActive && cs.InstructorId != null);
 
-        if (request.DepartmentId.HasValue)
+        // Scope: faculty-based, department-based, or term-wide
+        int? scopeFacultyId = request.FacultyId;
+
+        if (request.FacultyId.HasValue)
+        {
+            // Faculty-based: schedule all departments in this faculty together
+            var facultyDeptIds = await _context.Departments.AsNoTracking()
+                .Where(d => d.FacultyId == request.FacultyId.Value)
+                .Select(d => d.Id)
+                .ToListAsync(cancellationToken);
+
+            sectionsQuery = sectionsQuery.Where(cs =>
+                cs.Course.DepartmentId.HasValue && facultyDeptIds.Contains(cs.Course.DepartmentId.Value));
+
+            result.Notes.Add($"Kapsam: Fakulte ID {request.FacultyId.Value} ({facultyDeptIds.Count} bolum)");
+        }
+        else if (request.DepartmentId.HasValue)
         {
             sectionsQuery = sectionsQuery.Where(cs => cs.Course.DepartmentId == request.DepartmentId.Value);
+
+            // Resolve faculty for this department
+            scopeFacultyId = await _context.Departments.AsNoTracking()
+                .Where(d => d.Id == request.DepartmentId.Value)
+                .Select(d => (int?)d.FacultyId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            result.Notes.Add($"Kapsam: Bolum ID {request.DepartmentId.Value}");
         }
 
-        var sections = await sectionsQuery.ToListAsync(cancellationToken);
+        var allSections = await sectionsQuery.ToListAsync(cancellationToken);
 
-        var unscheduled = sections
-            .Where(cs => string.IsNullOrWhiteSpace(cs.ScheduleJson) || cs.ScheduleJson == "[]")
-            .OrderByDescending(cs => cs.EnrolledCount)
+        // ── ForceRegenerate: clear non-locked schedules ──────────────────
+        if (request.ForceRegenerate)
+        {
+            foreach (var sec in allSections.Where(s => !s.IsScheduleLocked))
+            {
+                sec.ClassroomId = null;
+
+                // Clear SectionSchedule records
+                var existingRecords = await _context.SectionSchedules
+                    .Where(ss => ss.CourseSectionId == sec.Id)
+                    .ToListAsync(cancellationToken);
+                if (existingRecords.Count > 0)
+                    _context.SectionSchedules.RemoveRange(existingRecords);
+            }
+            await _context.SaveChangesAsync(cancellationToken);
+            result.Notes.Add("ForceRegenerate: Kilit disi tum section'larin programi temizlendi.");
+        }
+
+        // Determine which sections already have SectionSchedule records
+        var allSectionIds = allSections.Select(s => s.Id).ToList();
+        var scheduledSectionIds = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => allSectionIds.Contains(ss.CourseSectionId))
+            .Select(ss => ss.CourseSectionId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var scheduledSet = scheduledSectionIds.ToHashSet();
+
+        // Separate locked and target sections
+        var lockedSections = allSections.Where(s => s.IsScheduleLocked).ToList();
+        var targetSections = allSections
+            .Where(s => !s.IsScheduleLocked
+                && (!s.ClassroomId.HasValue || !scheduledSet.Contains(s.Id)))
             .ToList();
 
-        result.TotalSections = unscheduled.Count;
+        result.TotalSections = targetSections.Count;
 
-        if (unscheduled.Count == 0)
+        if (targetSections.Count == 0)
         {
-            result.Notes.Add("Programsız section bulunamadı, tüm section'lar zaten programlı.");
+            result.Notes.Add("Programsiz section bulunamadi, tum section'lar zaten programli veya kilitli.");
+            result.SkippedCount = lockedSections.Count;
             return result;
         }
 
-        result.Notes.Add($"{unscheduled.Count} programsiz section bulundu.");
+        result.Notes.Add($"{targetSections.Count} programsiz section bulundu, {lockedSections.Count} section kilitli.");
 
-        foreach (var section in unscheduled)
+        // ── Load shared data ─────────────────────────────────────────────
+        var timeSlots = await _context.TimeSlots.AsNoTracking()
+            .Where(ts => ts.TermId == resolvedTerm.Id)
+            .OrderBy(ts => ts.DayOfWeek).ThenBy(ts => ts.SlotOrder)
+            .ToListAsync(cancellationToken);
+
+        if (timeSlots.Count == 0)
+        {
+            result.Notes.Add("Bu donem icin zaman slotu tanimi bulunamadigindan otomatik programlama yapilamadi.");
+            result.FailedCount = targetSections.Count;
+            foreach (var sec in targetSections)
+            {
+                result.Results.Add(new BatchAutoScheduleItemDto
+                {
+                    SectionId = sec.Id,
+                    CourseCode = sec.Course.Code,
+                    CourseName = sec.Course.Name,
+                    Success = false,
+                    FailureReason = "Donem icin zaman slotu tanimi bulunamadi."
+                });
+            }
+            return result;
+        }
+
+        var classroomAssignments = await _context.ClassroomTermAssignments.AsNoTracking()
+            .Where(cta => cta.TermId == resolvedTerm.Id)
+            .ToListAsync(cancellationToken);
+
+        var deptFacultyMap = await _context.Departments.AsNoTracking()
+            .ToDictionaryAsync(d => d.Id, d => d.FacultyId, cancellationToken);
+
+        var allClassrooms = await _context.Classrooms.AsNoTracking()
+            .Where(c => c.Capacity > 0)
+            .ToListAsync(cancellationToken);
+
+        // Load compulsory course info from active curricula
+        var compulsoryCourseIds = await _context.CurriculumCourses.AsNoTracking()
+            .Where(cc => cc.Curriculum.IsActive && cc.IsCompulsory)
+            .Select(cc => cc.CourseId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var compulsorySet = new HashSet<int>(compulsoryCourseIds);
+
+        // Load suggested semesters for H5
+        var semesterLookup = await _context.CurriculumCourses.AsNoTracking()
+            .Where(cc => cc.Curriculum.IsActive)
+            .Select(cc => new { cc.CourseId, cc.SuggestedSemester })
+            .ToListAsync(cancellationToken);
+        var semesterMap = semesterLookup
+            .GroupBy(x => x.CourseId)
+            .ToDictionary(g => g.Key, g => g.Min(x => x.SuggestedSemester));
+
+        var corequisites = await _context.CoursePrerequisites.AsNoTracking()
+            .Where(cp => cp.IsCorequisite)
+            .ToListAsync(cancellationToken);
+
+        var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+        var systemConfig = await LoadSystemConfigAsync(cancellationToken);
+        var maxBacktrackingDepth = GetInt(systemConfig, "Scheduling.MaxBacktrackingDepth", 3);
+
+        // Load instructor names
+        var instructorIds = allSections
+            .Where(s => s.InstructorId.HasValue)
+            .Select(s => s.InstructorId!.Value)
+            .Distinct().ToList();
+        var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
+
+        // ── Step 1: Priority scoring ─────────────────────────────────────
+        var scoredSections = new List<(CourseSection Section, double Score)>();
+
+        foreach (var section in targetSections)
+        {
+            double score = 0;
+
+            // 1. Classroom constraint tightness (MRV)
+            var sectionFacultyId = section.Course.DepartmentId.HasValue
+                ? deptFacultyMap.GetValueOrDefault(section.Course.DepartmentId.Value)
+                : 0;
+
+            var availableClassrooms = GetAvailableClassrooms(
+                allClassrooms, classroomAssignments, sectionFacultyId, section.Capacity, section.Course);
+            var domainSize = availableClassrooms.Count * timeSlots.Count;
+            score += (1.0 / Math.Max(domainSize, 1)) * 1000;
+
+            // 2. Compulsory course
+            if (compulsorySet.Contains(section.CourseId))
+                score += 500;
+
+            // 3. Large course (amphitheater required)
+            if (section.Capacity >= hardConfig.AmphiThreshold)
+                score += 400;
+
+            // 4. Lab course (only lab classrooms, limited)
+            if (section.Course.LabHours > 0 && section.Course.TheoryHours == 0)
+                score += 300;
+
+            // 5. Multi-component course (lecture+lab together)
+            var hasSiblingComponents = allSections.Any(s =>
+                s.CourseId == section.CourseId
+                && s.Id != section.Id
+                && IsLabSection(s.Course) != IsLabSection(section.Course));
+            if (hasSiblingComponents)
+                score += 200;
+
+            scoredSections.Add((section, score));
+        }
+
+        // Sort by priority score descending (highest priority first)
+        scoredSections.Sort((a, b) => b.Score.CompareTo(a.Score));
+
+        // ── Build initial term snapshot (includes locked + already scheduled) ──
+        var termSnapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
+        double totalSoftPenalty = 0;
+        int backtrackingAttempts = 0;
+
+        // Track assignments for backtracking: sectionId -> (slots, classroomId, score)
+        var assignedMap = new Dictionary<int, BatchAssignment>();
+
+        // ── Step 2 & 3: Schedule each section ────────────────────────────
+        foreach (var (section, priorityScore) in scoredSections)
         {
             var item = new BatchAutoScheduleItemDto
             {
@@ -352,54 +552,596 @@ public class SchedulingService : ISchedulingService
                 CourseName = section.Course.Name,
             };
 
-            var suggestRequest = new ScheduleSuggestionRequestDto
-            {
-                SectionId = section.Id,
-                InstructorId = section.InstructorId,
-            };
+            var sectionFacultyId = section.Course.DepartmentId.HasValue
+                ? deptFacultyMap.GetValueOrDefault(section.Course.DepartmentId.Value)
+                : 0;
 
-            var suggestion = await SuggestAsync(suggestRequest, cancellationToken);
+            var availableClassrooms = GetAvailableClassrooms(
+                allClassrooms, classroomAssignments, sectionFacultyId, section.Capacity, section.Course);
 
-            if (!suggestion.IsFeasible || suggestion.SuggestedSlots.Count == 0)
+            if (availableClassrooms.Count == 0)
             {
-                item.Success = false;
-                item.FailureReason = suggestion.Notes.Count > 0
-                    ? string.Join(" ", suggestion.Notes)
-                    : "Uygun slot kombinasyonu bulunamadı.";
-                result.FailedCount++;
-                result.Results.Add(item);
-                continue;
+                // Try without classroom assignment filter as fallback
+                availableClassrooms = allClassrooms
+                    .Where(c => c.Capacity >= section.Capacity && IsClassroomTypeCompatible(c, section.Course))
+                    .OrderBy(c => c.Capacity - section.Capacity)
+                    .ThenBy(c => c.Name)
+                    .ToList();
             }
 
-            var applyRequest = new ApplyScheduleRequestDto
-            {
-                SectionId = section.Id,
-                ClassroomId = suggestion.SuggestedClassroomId,
-                ScheduleSlots = suggestion.SuggestedSlots,
-            };
+            var requiredHours = ResolveTotalRequiredHours(section);
+            var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
+            var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentBlocks, timeSlots);
 
-            var applyResult = await ApplyAsync(applyRequest, cancellationToken);
+            // Find the best (slot, classroom) pair
+            var bestPair = FindBestPair(
+                section, availableClassrooms, slotCombinations,
+                termSnapshot, softConfig, hardConfig, instructorNameMap, semesterMap);
 
-            if (applyResult.IsValid)
+            if (bestPair != null)
             {
+                // Apply assignment
+                await ApplyBatchAssignment(section, bestPair, cancellationToken);
+                UpdateSnapshotWithAssignment(termSnapshot, section, bestPair, instructorNameMap, semesterMap);
+                assignedMap[section.Id] = bestPair;
+                totalSoftPenalty += bestPair.SoftPenalty;
+
                 item.Success = true;
-                item.ClassroomName = suggestion.SuggestedClassroomName;
-                item.Slots = suggestion.SuggestedSlots;
+                item.ClassroomName = bestPair.Classroom.Name;
+                item.Slots = bestPair.Slots.Select(MapTimeBlock).ToList();
                 result.ScheduledCount++;
             }
             else
             {
-                item.Success = false;
-                item.FailureReason = applyResult.Conflicts.Count > 0
-                    ? applyResult.Conflicts[0].Message
-                    : "Uygulama sırasında çakışma tespit edildi.";
-                result.FailedCount++;
+                // ── Step 3: Backtracking ─────────────────────────────────
+                var backtrackResult = await TryBacktrackAsync(
+                    section, priorityScore, scoredSections, assignedMap,
+                    termSnapshot, availableClassrooms, slotCombinations,
+                    allClassrooms, classroomAssignments, deptFacultyMap, timeSlots,
+                    softConfig, hardConfig, instructorNameMap, semesterMap,
+                    maxBacktrackingDepth, cancellationToken);
+
+                backtrackingAttempts += backtrackResult.Attempts;
+
+                if (backtrackResult.Success)
+                {
+                    totalSoftPenalty += backtrackResult.SoftPenaltyDelta;
+
+                    item.Success = true;
+                    item.ClassroomName = backtrackResult.AssignedClassroomName;
+                    item.Slots = backtrackResult.AssignedSlots;
+                    result.ScheduledCount++;
+                }
+                else
+                {
+                    item.Success = false;
+                    item.FailureReason = backtrackResult.FailureReason
+                        ?? "Cakisma olmayan derslik + slot kombinasyonu bulunamadi.";
+                    result.FailedCount++;
+                }
             }
 
             result.Results.Add(item);
         }
 
+        result.SkippedCount = lockedSections.Count;
+        result.SoftPenaltyScore = Math.Round(totalSoftPenalty, 2);
+        result.BacktrackingAttempts = backtrackingAttempts;
+        result.Notes.Add($"Toplam soft penalty skoru: {result.SoftPenaltyScore}");
+        if (backtrackingAttempts > 0)
+            result.Notes.Add($"Backtracking deneme sayisi: {backtrackingAttempts}");
+
         return result;
+    }
+
+    // ── BatchAutoSchedule helper methods ────────────────────────────────
+
+    private static bool IsLabSection(Course course) =>
+        course.LabHours > 0 && course.TheoryHours == 0;
+
+    private static bool IsClassroomTypeCompatible(Classroom classroom, Course course)
+    {
+        var isLab = course.LabHours > 0 && course.TheoryHours == 0;
+        if (isLab)
+            return classroom.Type == ClassroomType.Lab || classroom.Type == ClassroomType.Computer;
+
+        // Large courses need amphitheater — but capacity check is separate
+        return classroom.Type != ClassroomType.Lab;
+    }
+
+    private static List<Classroom> GetAvailableClassrooms(
+        List<Classroom> allClassrooms,
+        List<ClassroomTermAssignment> assignments,
+        int facultyId,
+        int requiredCapacity,
+        Course course)
+    {
+        IEnumerable<Classroom> pool;
+
+        if (assignments.Count > 0 && facultyId > 0)
+        {
+            var assignedIds = new HashSet<int>(
+                assignments.Where(a => a.FacultyId == facultyId).Select(a => a.ClassroomId));
+            pool = allClassrooms.Where(c => assignedIds.Contains(c.Id));
+        }
+        else
+        {
+            // No assignments configured — use all classrooms
+            pool = allClassrooms;
+        }
+
+        return pool
+            .Where(c => c.Capacity >= requiredCapacity && IsClassroomTypeCompatible(c, course))
+            .OrderBy(c => c.Capacity - requiredCapacity)
+            .ThenBy(c => c.Name)
+            .ToList();
+    }
+
+    private BatchAssignment? FindBestPair(
+        CourseSection section,
+        List<Classroom> classrooms,
+        List<RankedSlotCombination> slotCombinations,
+        TermSnapshot snapshot,
+        SoftConstraintConfig softConfig,
+        HardConstraintConfig hardConfig,
+        IReadOnlyDictionary<int, string> instructorNameMap,
+        IReadOnlyDictionary<int, int> semesterMap)
+    {
+        if (classrooms.Count == 0 || slotCombinations.Count == 0)
+            return null;
+
+        BatchAssignment? best = null;
+        double bestPenalty = double.MaxValue;
+
+        foreach (var slotCombo in slotCombinations)
+        {
+            foreach (var classroom in classrooms)
+            {
+                var candidate = BuildCandidateSnapshot(
+                    section,
+                    section.Instructor,
+                    section.InstructorId.HasValue && instructorNameMap.TryGetValue(section.InstructorId.Value, out var name) ? name : string.Empty,
+                    classroom,
+                    slotCombo.Slots,
+                    new List<string>(),
+                    suggestedSemester: semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null);
+
+                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
+                if (conflicts.Count > 0)
+                    continue;
+
+                // Calculate soft penalty score
+                double penalty = slotCombo.PreferenceScore;
+                penalty += CalculateSoftPenalty(candidate, snapshot, softConfig);
+
+                if (penalty < bestPenalty)
+                {
+                    bestPenalty = penalty;
+                    best = new BatchAssignment
+                    {
+                        Slots = slotCombo.Slots,
+                        Classroom = classroom,
+                        SoftPenalty = penalty,
+                        SoftNotes = softNotes
+                    };
+                }
+            }
+        }
+
+        return best;
+    }
+
+    private static double CalculateSoftPenalty(
+        SectionSnapshot candidate,
+        TermSnapshot snapshot,
+        SoftConstraintConfig softConfig)
+    {
+        double penalty = 0;
+
+        // S1: Occupancy deviation from ideal range
+        if (softConfig.S1Enabled && candidate.ClassroomId.HasValue && candidate.ClassroomCapacity > 0)
+        {
+            var occupancy = candidate.Capacity * 100.0 / candidate.ClassroomCapacity;
+            if (occupancy < softConfig.S1MinOccupancy)
+                penalty += (softConfig.S1MinOccupancy - occupancy) * 0.5;
+            else if (occupancy > softConfig.S1MaxOccupancy)
+                penalty += (occupancy - softConfig.S1MaxOccupancy) * 0.5;
+        }
+
+        // S2: Instructor daily load imbalance
+        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
+        {
+            var existingSlots = snapshot.Sections
+                .Where(s => s.InstructorId == candidate.InstructorId)
+                .SelectMany(s => s.TimeBlocks)
+                .ToList();
+
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
+
+            foreach (var dayGroup in allSlots.GroupBy(s => s.Day))
+            {
+                var dailyHours = dayGroup.Sum(s => (s.EndTime - s.StartTime).TotalHours);
+                if (dailyHours > softConfig.S2MaxDailyHours)
+                    penalty += (dailyHours - softConfig.S2MaxDailyHours) * 10;
+            }
+        }
+
+        // S3: Prime-time congestion
+        if (softConfig.S3Enabled && candidate.TimeBlocks.Count > 0)
+        {
+            var existingSlotKeys = snapshot.Sections
+                .SelectMany(s => s.TimeBlocks.Select(slot => (slot.Day, slot.StartTime)))
+                .ToList();
+
+            foreach (var cSlot in candidate.TimeBlocks)
+            {
+                var key = (cSlot.Day, cSlot.StartTime);
+                var count = existingSlotKeys.Count(k => k == key) + 1;
+                if (count > softConfig.S3MaxSectionsPerSlot)
+                    penalty += (count - softConfig.S3MaxSectionsPerSlot) * 5;
+            }
+        }
+
+        // S4: Co-enrollment overlap penalty (uses preloaded pairs from snapshot)
+        if (softConfig.S4Enabled && candidate.TimeBlocks.Count > 0 && snapshot.CoEnrollmentPairs.Count > 0)
+        {
+            var relevantPairs = snapshot.CoEnrollmentPairs
+                .Where(p => p.CourseId1 == candidate.CourseId || p.CourseId2 == candidate.CourseId);
+
+            foreach (var pair in relevantPairs)
+            {
+                var pairedCourseId = pair.CourseId1 == candidate.CourseId ? pair.CourseId2 : pair.CourseId1;
+                var pairedSections = snapshot.Sections
+                    .Where(s => s.CourseId == pairedCourseId && s.TimeBlocks.Count > 0);
+
+                foreach (var pairedSec in pairedSections)
+                {
+                    if (GetOverlapSlots(candidate.TimeBlocks, pairedSec.TimeBlocks).Count > 0)
+                        penalty += pair.StudentCount * 0.5;
+                }
+            }
+        }
+
+        // S5: Lunch break preference penalty
+        if (softConfig.S5Enabled && candidate.TimeBlocks.Count > 0)
+        {
+            foreach (var slot in candidate.TimeBlocks)
+            {
+                // Use default lunch times for penalty calculation
+                var lunchStart = new TimeOnly(11, 40);
+                var lunchEnd = new TimeOnly(12, 20);
+                if (slot.StartTime < lunchEnd && slot.EndTime > lunchStart)
+                    penalty += 8;
+            }
+        }
+
+        // S7: Student gap penalty
+        if (softConfig.S7Enabled && candidate.TimeBlocks.Count > 0
+            && candidate.DepartmentId.HasValue && candidate.SuggestedSemester.HasValue)
+        {
+            var candidateYear = (candidate.SuggestedSemester.Value - 1) / 2;
+            var sameDeptYearSlots = snapshot.Sections
+                .Where(s => s.DepartmentId == candidate.DepartmentId
+                    && s.SuggestedSemester.HasValue
+                    && (s.SuggestedSemester.Value - 1) / 2 == candidateYear
+                    && s.TimeBlocks.Count > 0)
+                .SelectMany(s => s.TimeBlocks)
+                .Concat(candidate.TimeBlocks)
+                .GroupBy(s => s.Day);
+
+            foreach (var dayGroup in sameDeptYearSlots)
+            {
+                var sorted = dayGroup.OrderBy(s => s.StartTime).ToList();
+                for (int idx = 1; idx < sorted.Count; idx++)
+                {
+                    var gapHours = (sorted[idx].StartTime - sorted[idx - 1].EndTime).TotalHours;
+                    if (gapHours >= softConfig.S7MaxGapSlots)
+                        penalty += (gapHours - softConfig.S7MaxGapSlots + 1) * 3;
+                }
+            }
+        }
+
+        // S8: Instructor day spread penalty
+        if (softConfig.S8Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
+        {
+            var existingSlots = snapshot.Sections
+                .Where(s => s.InstructorId == candidate.InstructorId)
+                .SelectMany(s => s.TimeBlocks)
+                .ToList();
+
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks).ToList();
+            var usedDays = allSlots.Select(s => s.Day).Distinct().Count();
+            var totalHours = allSlots.Sum(s => (s.EndTime - s.StartTime).TotalHours);
+            var minPossibleDays = Math.Max(1, (int)Math.Ceiling(totalHours / (double)softConfig.S2MaxDailyHours));
+
+            if (usedDays > minPossibleDays)
+                penalty += (usedDays - minPossibleDays) * 4;
+        }
+
+        // S9: Early morning / late evening penalty
+        if (softConfig.S9Enabled && candidate.TimeBlocks.Count > 0)
+        {
+            foreach (var slot in candidate.TimeBlocks)
+            {
+                if (slot.StartTime <= softConfig.S9MorningStart)
+                    penalty += 6;
+                else if (slot.StartTime >= softConfig.S9EveningStart)
+                    penalty += 6;
+            }
+        }
+
+        // S12: Weekday balance penalty
+        if (softConfig.S12Enabled && candidate.TimeBlocks.Count > 0)
+        {
+            var existingSlots = snapshot.Sections.SelectMany(s => s.TimeBlocks).ToList();
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
+
+            var slotsPerDay = allSlots
+                .GroupBy(s => s.Day)
+                .Select(g => g.Count())
+                .ToList();
+
+            if (slotsPerDay.Count > 1)
+            {
+                var avg = slotsPerDay.Average();
+                var maxCount = slotsPerDay.Max();
+                var minCount = slotsPerDay.Min();
+                var diff = maxCount - minCount;
+
+                if (avg > 0 && diff > avg * softConfig.S12MaxImbalancePercent / 100.0)
+                    penalty += diff * 2;
+            }
+        }
+
+        return penalty;
+    }
+
+    private async Task ApplyBatchAssignment(
+        CourseSection section,
+        BatchAssignment assignment,
+        CancellationToken cancellationToken)
+    {
+        section.ClassroomId = assignment.Classroom.Id;
+
+        await WriteSectionScheduleRecordsAsync(
+            section.Id, section.TermId, assignment.Classroom.Id, assignment.Slots, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task UnapplyBatchAssignment(
+        CourseSection section,
+        CancellationToken cancellationToken)
+    {
+        section.ClassroomId = null;
+
+        var existing = await _context.SectionSchedules
+            .Where(ss => ss.CourseSectionId == section.Id)
+            .ToListAsync(cancellationToken);
+        if (existing.Count > 0)
+            _context.SectionSchedules.RemoveRange(existing);
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void UpdateSnapshotWithAssignment(
+        TermSnapshot snapshot,
+        CourseSection section,
+        BatchAssignment assignment,
+        IReadOnlyDictionary<int, string> instructorNameMap,
+        IReadOnlyDictionary<int, int> semesterMap)
+    {
+        // Remove any existing snapshot entry for this section
+        snapshot.Sections.RemoveAll(s => s.SectionId == section.Id);
+
+        // Add updated entry
+        snapshot.Sections.Add(new SectionSnapshot
+        {
+            SectionId = section.Id,
+            CourseId = section.CourseId,
+            CourseCode = section.Course.Code,
+            CourseName = section.Course.Name,
+            TermId = section.TermId,
+            TheoryHours = section.Course.TheoryHours,
+            LabHours = section.Course.LabHours,
+            Capacity = section.Capacity,
+            EnrolledCount = section.EnrolledCount,
+            ClassroomId = assignment.Classroom.Id,
+            ClassroomName = assignment.Classroom.Name,
+            ClassroomCapacity = assignment.Classroom.Capacity,
+            ClassroomType = assignment.Classroom.Type,
+            InstructorId = section.InstructorId,
+            InstructorName = section.InstructorId.HasValue && instructorNameMap.TryGetValue(section.InstructorId.Value, out var n) ? n : string.Empty,
+            InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
+            DepartmentId = section.Course.DepartmentId,
+            SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
+            TimeBlocks = assignment.Slots,
+            Notes = new List<string>()
+        });
+    }
+
+    private static void RemoveFromSnapshot(TermSnapshot snapshot, int sectionId)
+    {
+        snapshot.Sections.RemoveAll(s => s.SectionId == sectionId);
+    }
+
+    private async Task<BacktrackResult> TryBacktrackAsync(
+        CourseSection section,
+        double sectionPriorityScore,
+        List<(CourseSection Section, double Score)> scoredSections,
+        Dictionary<int, BatchAssignment> assignedMap,
+        TermSnapshot snapshot,
+        List<Classroom> sectionClassrooms,
+        List<RankedSlotCombination> sectionSlotCombinations,
+        List<Classroom> allClassrooms,
+        List<ClassroomTermAssignment> classroomAssignments,
+        Dictionary<int, int> deptFacultyMap,
+        List<TimeSlot> timeSlots,
+        SoftConstraintConfig softConfig,
+        HardConstraintConfig hardConfig,
+        IReadOnlyDictionary<int, string> instructorNameMap,
+        IReadOnlyDictionary<int, int> semesterMap,
+        int maxDepth,
+        CancellationToken cancellationToken)
+    {
+        if (maxDepth <= 0)
+        {
+            return new BacktrackResult
+            {
+                Success = false,
+                FailureReason = "Cakisma olmayan derslik + slot kombinasyonu bulunamadi (backtracking limiti)."
+            };
+        }
+
+        // Find sections that conflict with any possible placement of the current section
+        var conflictingSectionIds = new HashSet<int>();
+
+        foreach (var slotCombo in sectionSlotCombinations)
+        {
+            foreach (var classroom in sectionClassrooms)
+            {
+                var candidate = BuildCandidateSnapshot(
+                    section,
+                    section.Instructor,
+                    section.InstructorId.HasValue && instructorNameMap.TryGetValue(section.InstructorId.Value, out var name) ? name : string.Empty,
+                    classroom,
+                    slotCombo.Slots,
+                    new List<string>(),
+                    suggestedSemester: semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null);
+
+                var (conflicts, _) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
+                foreach (var conflict in conflicts)
+                {
+                    if (conflict.RelatedSectionId.HasValue && assignedMap.ContainsKey(conflict.RelatedSectionId.Value))
+                        conflictingSectionIds.Add(conflict.RelatedSectionId.Value);
+                }
+            }
+        }
+
+        if (conflictingSectionIds.Count == 0)
+        {
+            return new BacktrackResult
+            {
+                Success = false,
+                FailureReason = "Cakisma olmayan derslik + slot kombinasyonu bulunamadi.",
+                Attempts = 1
+            };
+        }
+
+        // Among conflicting sections, find the one with the lowest priority score
+        var conflictCandidates = scoredSections
+            .Where(s => conflictingSectionIds.Contains(s.Section.Id) && !s.Section.IsScheduleLocked)
+            .OrderBy(s => s.Score)
+            .ToList();
+
+        int attempts = 0;
+
+        foreach (var (victimSection, victimScore) in conflictCandidates)
+        {
+            if (attempts >= maxDepth)
+                break;
+
+            attempts++;
+
+            // Save victim's assignment for potential restore
+            var victimAssignment = assignedMap[victimSection.Id];
+
+            // Unassign the victim
+            RemoveFromSnapshot(snapshot, victimSection.Id);
+            await UnapplyBatchAssignment(victimSection, cancellationToken);
+            assignedMap.Remove(victimSection.Id);
+
+            // Try to place the current section
+            var bestPair = FindBestPair(
+                section, sectionClassrooms, sectionSlotCombinations,
+                snapshot, softConfig, hardConfig, instructorNameMap, semesterMap);
+
+            if (bestPair != null)
+            {
+                // Place current section
+                await ApplyBatchAssignment(section, bestPair, cancellationToken);
+                UpdateSnapshotWithAssignment(snapshot, section, bestPair, instructorNameMap, semesterMap);
+                assignedMap[section.Id] = bestPair;
+
+                // Try to re-place the victim in a different slot
+                var victimFacultyId = victimSection.Course.DepartmentId.HasValue
+                    ? deptFacultyMap.GetValueOrDefault(victimSection.Course.DepartmentId.Value)
+                    : 0;
+
+                var victimClassrooms = GetAvailableClassrooms(
+                    allClassrooms, classroomAssignments, victimFacultyId,
+                    victimSection.Capacity, victimSection.Course);
+
+                var victimRequiredHours = ResolveTotalRequiredHours(victimSection);
+                var victimSlotCombinations = BuildTimeSlotCombinations(
+                    victimRequiredHours, new List<TimeBlock>(), timeSlots);
+
+                var victimNewPair = FindBestPair(
+                    victimSection, victimClassrooms, victimSlotCombinations,
+                    snapshot, softConfig, hardConfig, instructorNameMap, semesterMap);
+
+                if (victimNewPair != null)
+                {
+                    await ApplyBatchAssignment(victimSection, victimNewPair, cancellationToken);
+                    UpdateSnapshotWithAssignment(snapshot, victimSection, victimNewPair, instructorNameMap, semesterMap);
+                    assignedMap[victimSection.Id] = victimNewPair;
+
+                    var penaltyDelta = bestPair.SoftPenalty + victimNewPair.SoftPenalty - victimAssignment.SoftPenalty;
+
+                    return new BacktrackResult
+                    {
+                        Success = true,
+                        Attempts = attempts,
+                        SoftPenaltyDelta = penaltyDelta,
+                        AssignedClassroomName = bestPair.Classroom.Name,
+                        AssignedSlots = bestPair.Slots.Select(MapTimeBlock).ToList()
+                    };
+                }
+                else
+                {
+                    // Victim could not be re-placed — revert everything
+                    RemoveFromSnapshot(snapshot, section.Id);
+                    await UnapplyBatchAssignment(section, cancellationToken);
+                    assignedMap.Remove(section.Id);
+
+                    // Restore victim
+                    await ApplyBatchAssignment(victimSection, victimAssignment, cancellationToken);
+                    UpdateSnapshotWithAssignment(snapshot, victimSection, victimAssignment, instructorNameMap, semesterMap);
+                    assignedMap[victimSection.Id] = victimAssignment;
+                }
+            }
+            else
+            {
+                // Couldn't place current section even after removing victim — restore victim
+                await ApplyBatchAssignment(victimSection, victimAssignment, cancellationToken);
+                UpdateSnapshotWithAssignment(snapshot, victimSection, victimAssignment, instructorNameMap, semesterMap);
+                assignedMap[victimSection.Id] = victimAssignment;
+            }
+        }
+
+        return new BacktrackResult
+        {
+            Success = false,
+            Attempts = attempts,
+            FailureReason = "Backtracking sonrasinda da uygun derslik + slot kombinasyonu bulunamadi."
+        };
+    }
+
+    private sealed class BatchAssignment
+    {
+        public List<TimeBlock> Slots { get; init; } = new();
+        public Classroom Classroom { get; init; } = null!;
+        public double SoftPenalty { get; init; }
+        public List<string> SoftNotes { get; init; } = new();
+    }
+
+    private sealed class BacktrackResult
+    {
+        public bool Success { get; init; }
+        public int Attempts { get; init; }
+        public double SoftPenaltyDelta { get; init; }
+        public string? FailureReason { get; init; }
+        public string? AssignedClassroomName { get; init; }
+        public List<ScheduleSlotDto>? AssignedSlots { get; init; }
     }
 
     public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(int? termId = null, CancellationToken cancellationToken = default)
@@ -424,7 +1166,7 @@ public class SchedulingService : ISchedulingService
             .GroupBy(s => s.ClassroomId!.Value)
             .ToDictionary(
                 g => g.Key,
-                g => g.SelectMany(s => s.ScheduleSlots.Select(slot => new ClassroomScheduleSlotDto
+                g => g.SelectMany(s => s.TimeBlocks.Select(slot => new ClassroomScheduleSlotDto
                 {
                     Day = (int)slot.Day,
                     StartHour = slot.StartTime.Hour,
@@ -458,7 +1200,7 @@ public class SchedulingService : ISchedulingService
         {
             if (section.ClassroomId.HasValue)
             {
-                foreach (var slot in section.ScheduleSlots)
+                foreach (var slot in section.TimeBlocks)
                 {
                     int dayIndex = (int)slot.Day - 1;
                     if (dayIndex >= 0 && dayIndex <= 4)
@@ -525,6 +1267,7 @@ public class SchedulingService : ISchedulingService
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
+            .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
             .Where(cs => cs.TermId == termId && cs.IsActive)
             .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value);
 
@@ -580,6 +1323,18 @@ public class SchedulingService : ISchedulingService
             .AsNoTracking()
             .ToDictionaryAsync(d => d.Id, d => d.FacultyId, cancellationToken);
 
+        // Load corequisite relationships for H11
+        var corequisites = await _context.CoursePrerequisites
+            .AsNoTracking()
+            .Where(cp => cp.IsCorequisite)
+            .ToListAsync(cancellationToken);
+
+        // Load co-enrollment pairs for S4 (using default threshold, will be filtered by config later)
+        var softCfg = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var coEnrollmentPairs = softCfg.S4Enabled
+            ? await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, cancellationToken)
+            : new List<CoEnrollmentPair>();
+
         var snapshots = sections
             .Select(section => BuildExistingSectionSnapshot(section, instructorNameMap, semesterMap))
             .ToList();
@@ -591,7 +1346,9 @@ public class SchedulingService : ISchedulingService
             ScopeName = scopeName,
             Sections = snapshots,
             ClassroomAssignments = classroomAssignments,
-            DeptFacultyMap = deptFacultyMap
+            DeptFacultyMap = deptFacultyMap,
+            Corequisites = corequisites,
+            CoEnrollmentPairs = coEnrollmentPairs
         };
     }
 
@@ -600,7 +1357,7 @@ public class SchedulingService : ISchedulingService
         IReadOnlyDictionary<int, string> instructorNameMap,
         IReadOnlyDictionary<int, int> semesterMap)
     {
-        var parseResult = ParseScheduleJson(section.ScheduleJson);
+        var timeBlocks = ScheduleHelper.ToTimeBlocks(section.SectionSchedules);
         var instructorId = section.InstructorId;
 
         return new SectionSnapshot
@@ -624,8 +1381,7 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
             SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
-            ScheduleSlots = parseResult.Slots,
-            ParseError = parseResult.ErrorMessage,
+            TimeBlocks = timeBlocks,
             Notes = new List<string>()
         };
     }
@@ -681,13 +1437,13 @@ public class SchedulingService : ISchedulingService
             notes.Add("Section için derslik atanmamış.");
         }
 
-        var scheduleSlots = new List<ScheduleSlot>();
+        var scheduleSlots = new List<TimeBlock>();
         string? parseError = null;
 
         if (scheduleSlotOverrides != null)
         {
-            var overrideValidation = ValidateScheduleSlots(scheduleSlotOverrides
-                .Select(dto => new ScheduleSlot
+            var overrideValidation = ValidateTimeBlocks(scheduleSlotOverrides
+                .Select(dto => new TimeBlock
                 {
                     Day = dto.Day,
                     StartTime = dto.StartTime,
@@ -700,12 +1456,10 @@ public class SchedulingService : ISchedulingService
         }
         else
         {
-            var parseResult = ParseScheduleJson(section.ScheduleJson);
-            scheduleSlots = parseResult.Slots;
-            parseError = parseResult.ErrorMessage;
+            scheduleSlots = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
         }
 
-        if (scheduleSlots.Count == 0 && parseError == null)
+        if (scheduleSlots.Count == 0)
         {
             notes.Add("Section için program slot tanımı bulunmuyor.");
         }
@@ -724,7 +1478,6 @@ public class SchedulingService : ISchedulingService
             classroom,
             scheduleSlots,
             notes,
-            parseError,
             suggestedSemester);
     }
 
@@ -733,9 +1486,8 @@ public class SchedulingService : ISchedulingService
         Instructor? instructor,
         string instructorName,
         Classroom? classroom,
-        IReadOnlyList<ScheduleSlot> scheduleSlots,
+        IReadOnlyList<TimeBlock> scheduleSlots,
         List<string> notes,
-        string? parseError = null,
         int? suggestedSemester = null)
     {
         return new SectionSnapshot
@@ -758,8 +1510,7 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
             SuggestedSemester = suggestedSemester,
-            ScheduleSlots = scheduleSlots.ToList(),
-            ParseError = parseError,
+            TimeBlocks = scheduleSlots.ToList(),
             Notes = notes
         };
     }
@@ -768,19 +1519,10 @@ public class SchedulingService : ISchedulingService
     {
         var conflicts = new List<SchedulingConflictDto>();
         var notes = new List<string>();
+        var hardConfig = await LoadHardConstraintConfigAsync(ct);
 
         foreach (var section in snapshot.Sections)
         {
-            if (!string.IsNullOrWhiteSpace(section.ParseError))
-            {
-                conflicts.Add(BuildConflict(
-                    section,
-                    ConflictTypes.InvalidScheduleJson,
-                    section.ParseError,
-                    null,
-                    null));
-            }
-
             if (section.ClassroomId.HasValue && section.ClassroomCapacity < section.Capacity)
             {
                 conflicts.Add(BuildConflict(
@@ -800,6 +1542,19 @@ public class SchedulingService : ISchedulingService
                     section,
                     ConflictTypes.ClassroomTypeConflict,
                     $"Lab section'u ({section.CourseCode}) Lab veya Computer tipinde bir dersliğe atanmalıdır, mevcut tip: {section.ClassroomType}.",
+                    null,
+                    null));
+            }
+
+            // H4+: Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
+            if (section.ClassroomId.HasValue
+                && section.Capacity >= hardConfig.AmphiThreshold
+                && section.ClassroomType != ClassroomType.Amphitheater)
+            {
+                conflicts.Add(BuildConflict(
+                    section,
+                    ConflictTypes.ClassroomTypeConflict,
+                    $"Kontenjanı {section.Capacity} olan ders için Amfi derslik gereklidir.",
                     null,
                     null));
             }
@@ -834,7 +1589,7 @@ public class SchedulingService : ISchedulingService
                 var first = snapshot.Sections[i];
                 var second = snapshot.Sections[j];
 
-                foreach (var overlap in GetOverlapSlots(first.ScheduleSlots, second.ScheduleSlots))
+                foreach (var overlap in GetOverlapSlots(first.TimeBlocks, second.TimeBlocks))
                 {
                     if (first.ClassroomId.HasValue && first.ClassroomId == second.ClassroomId)
                     {
@@ -950,7 +1705,7 @@ public class SchedulingService : ISchedulingService
                 continue;
             }
 
-            var totalWeeklyHours = group.Sum(section => ResolveWeeklyHours(section.ScheduleSlots, section));
+            var totalWeeklyHours = group.Sum(section => ResolveWeeklyHours(section.TimeBlocks, section));
             if (totalWeeklyHours <= firstSection.InstructorMaxWeeklyHours)
             {
                 continue;
@@ -964,6 +1719,161 @@ public class SchedulingService : ISchedulingService
                     $"Instructor haftalik ders yuku limiti asiliyor ({totalWeeklyHours:0.##}/{firstSection.InstructorMaxWeeklyHours} saat).",
                     null,
                     null));
+            }
+        }
+
+        // ── H11: Corequisite Compatibility ──────────────────────────────
+        foreach (var coreq in snapshot.Corequisites)
+        {
+            var courseASections = snapshot.Sections
+                .Where(s => s.CourseId == coreq.CourseId && s.TimeBlocks.Count > 0)
+                .ToList();
+            var courseBSections = snapshot.Sections
+                .Where(s => s.CourseId == coreq.RequiredCourseId && s.TimeBlocks.Count > 0)
+                .ToList();
+
+            if (courseASections.Count == 0 || courseBSections.Count == 0)
+                continue;
+
+            var hasNonConflicting = courseASections.Any(a =>
+                courseBSections.Any(b =>
+                    GetOverlapSlots(a.TimeBlocks, b.TimeBlocks).Count == 0));
+
+            if (!hasNonConflicting)
+            {
+                var firstA = courseASections[0];
+                var firstB = courseBSections[0];
+                foreach (var sec in courseASections)
+                {
+                    conflicts.Add(BuildConflict(
+                        sec,
+                        ConflictTypes.CorequisiteConflict,
+                        $"Corequisite dersler ({firstA.CourseCode} ve {firstB.CourseCode}) arasında çakışmasız bir şube kombinasyonu bulunmuyor.",
+                        null,
+                        null));
+                }
+                foreach (var sec in courseBSections)
+                {
+                    conflicts.Add(BuildConflict(
+                        sec,
+                        ConflictTypes.CorequisiteConflict,
+                        $"Corequisite dersler ({firstA.CourseCode} ve {firstB.CourseCode}) arasında çakışmasız bir şube kombinasyonu bulunmuyor.",
+                        null,
+                        null));
+                }
+            }
+        }
+
+        // ── H12: Credit-Hour Block Compatibility ────────────────────────
+        foreach (var section in snapshot.Sections)
+        {
+            if (section.TimeBlocks.Count == 0)
+                continue;
+
+            var expectedHours = section.TheoryHours + section.LabHours;
+            if (expectedHours <= 0)
+                continue;
+
+            var actualMinutes = section.TimeBlocks.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
+            var actualHours = (int)Math.Round(actualMinutes / 60.0);
+
+            if (actualHours != expectedHours)
+            {
+                conflicts.Add(BuildConflict(
+                    section,
+                    ConflictTypes.CreditHourMismatch,
+                    $"Dersin saat gereksinimine uygun slot bloğu atanmamış ({section.CourseCode}: beklenen {expectedHours} saat, atanan {actualHours} saat).",
+                    null,
+                    null));
+            }
+        }
+
+        // ── H13: Lunch Break Protection ─────────────────────────────────
+
+        if (hardConfig.LunchBreakIsHard)
+        {
+            foreach (var section in snapshot.Sections)
+            {
+                foreach (var slot in section.TimeBlocks)
+                {
+                    if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
+                    {
+                        conflicts.Add(BuildConflict(
+                            section,
+                            ConflictTypes.LunchBreakConflict,
+                            "Öğle arası saatlerinde ders atanamaz.",
+                            slot,
+                            null));
+                    }
+                }
+            }
+        }
+
+        // ── H15: Max Consecutive Hours ──────────────────────────────────
+        foreach (var instructorGroup in snapshot.Sections
+                     .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
+                     .GroupBy(s => s.InstructorId!.Value))
+        {
+            var instructorName = instructorGroup.First().InstructorName;
+
+            var allSlots = instructorGroup
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { s.SectionId, Slot = slot }))
+                .GroupBy(x => x.Slot.Day);
+
+            foreach (var dayGroup in allSlots)
+            {
+                var sortedSlots = dayGroup.OrderBy(x => x.Slot.StartTime).ToList();
+                if (sortedSlots.Count <= 1)
+                    continue;
+
+                var blockStartIdx = 0;
+                var blockMinutes = (sortedSlots[0].Slot.EndTime - sortedSlots[0].Slot.StartTime).TotalMinutes;
+
+                for (int idx = 1; idx < sortedSlots.Count; idx++)
+                {
+                    var gap = (sortedSlots[idx].Slot.StartTime - sortedSlots[idx - 1].Slot.EndTime).TotalMinutes;
+                    if (gap <= hardConfig.BreakDurationMinutes)
+                    {
+                        blockMinutes += (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                    else
+                    {
+                        var blockHours = blockMinutes / 60.0;
+                        if (blockHours > hardConfig.MaxConsecutiveHours)
+                        {
+                            var dayName = GetDayOfWeekName(dayGroup.Key);
+                            for (int k = blockStartIdx; k < idx; k++)
+                            {
+                                var sec = snapshot.Sections.First(s => s.SectionId == sortedSlots[k].SectionId);
+                                conflicts.Add(BuildConflict(
+                                    sec,
+                                    ConflictTypes.MaxConsecutiveHoursConflict,
+                                    $"Öğretim üyesi '{instructorName}' {dayName} günü {hardConfig.MaxConsecutiveHours} saatten fazla aralıksız ders veriyor ({blockHours:0.#} saat).",
+                                    null,
+                                    null));
+                            }
+                        }
+                        blockStartIdx = idx;
+                        blockMinutes = (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                }
+
+                // Check the last block
+                var lastBlockHours = blockMinutes / 60.0;
+                if (lastBlockHours > hardConfig.MaxConsecutiveHours)
+                {
+                    var dayName = GetDayOfWeekName(dayGroup.Key);
+                    for (int k = blockStartIdx; k < sortedSlots.Count; k++)
+                    {
+                        var sec = snapshot.Sections.First(s => s.SectionId == sortedSlots[k].SectionId);
+                        conflicts.Add(BuildConflict(
+                            sec,
+                            ConflictTypes.MaxConsecutiveHoursConflict,
+                            $"Öğretim üyesi '{instructorName}' {dayName} günü {hardConfig.MaxConsecutiveHours} saatten fazla aralıksız ders veriyor ({lastBlockHours:0.#} saat).",
+                            null,
+                            null));
+                    }
+                }
             }
         }
 
@@ -994,13 +1904,13 @@ public class SchedulingService : ISchedulingService
         if (softConfig.S2Enabled)
         {
             foreach (var instructorGroup in snapshot.Sections
-                         .Where(s => s.InstructorId.HasValue && s.ScheduleSlots.Count > 0)
+                         .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
                          .GroupBy(s => s.InstructorId!.Value))
             {
                 var instructorName = instructorGroup.First().InstructorName;
 
                 var slotsByDay = instructorGroup
-                    .SelectMany(s => s.ScheduleSlots)
+                    .SelectMany(s => s.TimeBlocks)
                     .GroupBy(slot => slot.Day);
 
                 foreach (var dayGroup in slotsByDay)
@@ -1019,7 +1929,7 @@ public class SchedulingService : ISchedulingService
         if (softConfig.S3Enabled)
         {
             var slotGroups = snapshot.Sections
-                .SelectMany(s => s.ScheduleSlots.Select(slot => new { slot.Day, slot.StartTime }))
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { slot.Day, slot.StartTime }))
                 .GroupBy(x => (x.Day, x.StartTime));
 
             foreach (var group in slotGroups)
@@ -1029,6 +1939,145 @@ public class SchedulingService : ISchedulingService
                 {
                     var dayName = GetDayOfWeekName(group.Key.Day);
                     notes.Add($"S3 Uyarı: {dayName} {group.Key.StartTime:HH\\:mm} slotunda {count} section yığılması var (max {softConfig.S3MaxSectionsPerSlot})");
+                }
+            }
+        }
+
+        // S4: Cross-Department Co-Enrollment Conflict
+        if (softConfig.S4Enabled)
+        {
+            var coPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, ct);
+            var scheduledSections = snapshot.Sections
+                .Where(s => s.TimeBlocks.Count > 0)
+                .ToList();
+
+            foreach (var pair in coPairs)
+            {
+                var sectionsA = scheduledSections.Where(s => s.CourseId == pair.CourseId1).ToList();
+                var sectionsB = scheduledSections.Where(s => s.CourseId == pair.CourseId2).ToList();
+
+                foreach (var secA in sectionsA)
+                {
+                    foreach (var secB in sectionsB)
+                    {
+                        var overlaps = GetOverlapSlots(secA.TimeBlocks, secB.TimeBlocks);
+                        if (overlaps.Count > 0)
+                        {
+                            notes.Add($"S4 Uyarı: '{secA.CourseCode}' ve '{secB.CourseCode}' dersleri sık birlikte alınıyor ({pair.StudentCount} öğrenci) ancak zaman çakışması var.");
+                        }
+                    }
+                }
+            }
+        }
+
+        // S5: Lunch Break Preference (soft mode — only when H13 lunch break is NOT hard)
+        if (softConfig.S5Enabled && !hardConfig.LunchBreakIsHard)
+        {
+            foreach (var section in snapshot.Sections)
+            {
+                foreach (var slot in section.TimeBlocks)
+                {
+                    if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
+                    {
+                        notes.Add($"S5 Uyarı: {section.CourseCode} öğle arası saatlerinde programlanmış ({slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm}).");
+                    }
+                }
+            }
+        }
+
+        // S7: Student Gap Minimization — same dept/year mandatory courses should not have large gaps on same day
+        if (softConfig.S7Enabled)
+        {
+            var mandatorySections = snapshot.Sections
+                .Where(s => s.DepartmentId.HasValue && s.SuggestedSemester.HasValue && s.TimeBlocks.Count > 0)
+                .ToList();
+
+            var deptYearGroups = mandatorySections
+                .GroupBy(s => (DeptId: s.DepartmentId!.Value, Year: (s.SuggestedSemester!.Value - 1) / 2));
+
+            foreach (var group in deptYearGroups)
+            {
+                var slotsByDay = group
+                    .SelectMany(s => s.TimeBlocks.Select(slot => new { s.CourseCode, Slot = slot }))
+                    .GroupBy(x => x.Slot.Day);
+
+                foreach (var dayGroup in slotsByDay)
+                {
+                    var sorted = dayGroup.OrderBy(x => x.Slot.StartTime).ToList();
+                    if (sorted.Count < 2) continue;
+
+                    for (int idx = 1; idx < sorted.Count; idx++)
+                    {
+                        var gapHours = (sorted[idx].Slot.StartTime - sorted[idx - 1].Slot.EndTime).TotalHours;
+                        if (gapHours >= softConfig.S7MaxGapSlots)
+                        {
+                            var dayName = GetDayOfWeekName(dayGroup.Key);
+                            notes.Add($"S7 Uyarı: Bölüm {group.Key.DeptId}, {group.Key.Year + 1}. sınıf — {dayName} günü '{sorted[idx - 1].CourseCode}' ile '{sorted[idx].CourseCode}' arasında {gapHours:0.#} saatlik boşluk var.");
+                        }
+                    }
+                }
+            }
+        }
+
+        // S8: Instructor Day Minimization — prefer fewer teaching days
+        if (softConfig.S8Enabled)
+        {
+            foreach (var instructorGroup in snapshot.Sections
+                         .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
+                         .GroupBy(s => s.InstructorId!.Value))
+            {
+                var instructorName = instructorGroup.First().InstructorName;
+                var allSlots = instructorGroup.SelectMany(s => s.TimeBlocks).ToList();
+                var usedDays = allSlots.Select(s => s.Day).Distinct().Count();
+                var totalHours = allSlots.Sum(s => (s.EndTime - s.StartTime).TotalHours);
+                var maxHoursPerDay = (double)softConfig.S2MaxDailyHours;
+                var minPossibleDays = Math.Max(1, (int)Math.Ceiling(totalHours / maxHoursPerDay));
+
+                if (usedDays > minPossibleDays + 1)
+                {
+                    notes.Add($"S8 Uyarı: {instructorName} hocanın dersleri {usedDays} güne dağılmış (minimum {minPossibleDays} gün yeterli olabilir).");
+                }
+            }
+        }
+
+        // S9: Early Morning / Late Evening Penalty
+        if (softConfig.S9Enabled)
+        {
+            foreach (var section in snapshot.Sections)
+            {
+                foreach (var slot in section.TimeBlocks)
+                {
+                    if (slot.StartTime <= softConfig.S9MorningStart)
+                    {
+                        notes.Add($"S9 Uyarı: {section.CourseCode} erken sabah slotuna ({slot.StartTime:HH\\:mm}) programlanmış.");
+                    }
+                    else if (slot.StartTime >= softConfig.S9EveningStart)
+                    {
+                        notes.Add($"S9 Uyarı: {section.CourseCode} geç akşam slotuna ({slot.StartTime:HH\\:mm}) programlanmış.");
+                    }
+                }
+            }
+        }
+
+        // S12: Weekday Balance — sections should be distributed evenly across weekdays
+        if (softConfig.S12Enabled)
+        {
+            var slotsPerDay = snapshot.Sections
+                .SelectMany(s => s.TimeBlocks)
+                .GroupBy(s => s.Day)
+                .Select(g => g.Count())
+                .ToList();
+
+            if (slotsPerDay.Count > 1)
+            {
+                var avg = slotsPerDay.Average();
+                var maxCount = slotsPerDay.Max();
+                var minCount = slotsPerDay.Min();
+                var diff = maxCount - minCount;
+
+                if (avg > 0 && diff > avg * softConfig.S12MaxImbalancePercent / 100.0)
+                {
+                    notes.Add($"S12 Uyarı: Hafta içi slot dağılımı dengesiz (min: {minCount}, max: {maxCount}, fark: {diff}).");
                 }
             }
         }
@@ -1047,21 +2096,9 @@ public class SchedulingService : ISchedulingService
     }
 
     private (List<SchedulingConflictDto> Conflicts, List<string> SoftNotes) EvaluateCandidateConflicts(
-        SectionSnapshot candidate, TermSnapshot snapshot, SoftConstraintConfig softConfig)
+        SectionSnapshot candidate, TermSnapshot snapshot, SoftConstraintConfig softConfig, HardConstraintConfig? hardConfig = null)
     {
         var conflicts = new List<SchedulingConflictDto>();
-
-        if (!string.IsNullOrWhiteSpace(candidate.ParseError))
-        {
-            conflicts.Add(BuildConflict(
-                candidate,
-                ConflictTypes.InvalidScheduleJson,
-                candidate.ParseError,
-                null,
-                null));
-
-            return (conflicts, new List<string>());
-        }
 
         if (candidate.ClassroomId.HasValue && candidate.ClassroomCapacity < candidate.Capacity)
         {
@@ -1082,6 +2119,20 @@ public class SchedulingService : ISchedulingService
                 candidate,
                 ConflictTypes.ClassroomTypeConflict,
                 $"Lab section'u ({candidate.CourseCode}) Lab veya Computer tipinde bir dersliğe atanmalıdır, mevcut tip: {candidate.ClassroomType}.",
+                null,
+                null));
+        }
+
+        // H4+: Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
+        if (candidate.ClassroomId.HasValue
+            && hardConfig != null
+            && candidate.Capacity >= hardConfig.AmphiThreshold
+            && candidate.ClassroomType != ClassroomType.Amphitheater)
+        {
+            conflicts.Add(BuildConflict(
+                candidate,
+                ConflictTypes.ClassroomTypeConflict,
+                $"Kontenjanı {candidate.Capacity} olan ders için Amfi derslik gereklidir.",
                 null,
                 null));
         }
@@ -1110,7 +2161,7 @@ public class SchedulingService : ISchedulingService
 
         foreach (var existing in snapshot.Sections)
         {
-            foreach (var overlap in GetOverlapSlots(candidate.ScheduleSlots, existing.ScheduleSlots))
+            foreach (var overlap in GetOverlapSlots(candidate.TimeBlocks, existing.TimeBlocks))
             {
                 if (candidate.ClassroomId.HasValue && candidate.ClassroomId == existing.ClassroomId)
                 {
@@ -1183,8 +2234,8 @@ public class SchedulingService : ISchedulingService
         {
             var totalWeeklyHours = snapshot.Sections
                 .Where(section => section.InstructorId == candidate.InstructorId)
-                .Sum(section => ResolveWeeklyHours(section.ScheduleSlots, section))
-                + ResolveWeeklyHours(candidate.ScheduleSlots, candidate);
+                .Sum(section => ResolveWeeklyHours(section.TimeBlocks, section))
+                + ResolveWeeklyHours(candidate.TimeBlocks, candidate);
 
             if (totalWeeklyHours > candidate.InstructorMaxWeeklyHours)
             {
@@ -1194,6 +2245,143 @@ public class SchedulingService : ISchedulingService
                     $"Instructor haftalik ders yuku limiti asiliyor ({totalWeeklyHours:0.##}/{candidate.InstructorMaxWeeklyHours} saat).",
                     null,
                     null));
+            }
+        }
+
+        // ── H11: Corequisite Compatibility (candidate) ──────────────────
+        foreach (var coreq in snapshot.Corequisites)
+        {
+            // Check if the candidate's course is part of a corequisite pair
+            int? pairedCourseId = null;
+            if (coreq.CourseId == candidate.CourseId)
+                pairedCourseId = coreq.RequiredCourseId;
+            else if (coreq.RequiredCourseId == candidate.CourseId)
+                pairedCourseId = coreq.CourseId;
+
+            if (!pairedCourseId.HasValue)
+                continue;
+
+            var pairedSections = snapshot.Sections
+                .Where(s => s.CourseId == pairedCourseId.Value && s.TimeBlocks.Count > 0)
+                .ToList();
+
+            if (pairedSections.Count == 0)
+                continue;
+
+            // Get all sections of candidate's course (existing + the candidate itself)
+            var candidateCourseSections = snapshot.Sections
+                .Where(s => s.CourseId == candidate.CourseId && s.TimeBlocks.Count > 0)
+                .ToList();
+
+            // Add the candidate to the list (replacing any excluded section)
+            var allCandidateCourseSections = candidateCourseSections
+                .Where(s => s.SectionId != candidate.SectionId)
+                .Append(candidate)
+                .Where(s => s.TimeBlocks.Count > 0)
+                .ToList();
+
+            var hasNonConflicting = allCandidateCourseSections.Any(a =>
+                pairedSections.Any(b =>
+                    GetOverlapSlots(a.TimeBlocks, b.TimeBlocks).Count == 0));
+
+            if (!hasNonConflicting)
+            {
+                var pairedCode = pairedSections[0].CourseCode;
+                conflicts.Add(BuildConflict(
+                    candidate,
+                    ConflictTypes.CorequisiteConflict,
+                    $"Corequisite dersler ({candidate.CourseCode} ve {pairedCode}) arasında çakışmasız bir şube kombinasyonu bulunmuyor.",
+                    null,
+                    null));
+            }
+        }
+
+        // ── H12: Credit-Hour Block Compatibility (candidate) ────────────
+        if (candidate.TimeBlocks.Count > 0)
+        {
+            var expectedHours = candidate.TheoryHours + candidate.LabHours;
+            if (expectedHours > 0)
+            {
+                var actualMinutes = candidate.TimeBlocks.Sum(slot => (slot.EndTime - slot.StartTime).TotalMinutes);
+                var actualHours = (int)Math.Round(actualMinutes / 60.0);
+
+                if (actualHours != expectedHours)
+                {
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.CreditHourMismatch,
+                        $"Dersin saat gereksinimine uygun slot bloğu atanmamış ({candidate.CourseCode}: beklenen {expectedHours} saat, atanan {actualHours} saat).",
+                        null,
+                        null));
+                }
+            }
+        }
+
+        // ── H13: Lunch Break Protection (candidate) ─────────────────────
+        if (hardConfig != null && hardConfig.LunchBreakIsHard)
+        {
+            foreach (var slot in candidate.TimeBlocks)
+            {
+                if (slot.StartTime < hardConfig.LunchBreakEnd && slot.EndTime > hardConfig.LunchBreakStart)
+                {
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.LunchBreakConflict,
+                        "Öğle arası saatlerinde ders atanamaz.",
+                        slot,
+                        null));
+                }
+            }
+        }
+
+        // ── H15: Max Consecutive Hours (candidate) ──────────────────────
+        if (hardConfig != null && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
+        {
+            var existingSlots = snapshot.Sections
+                .Where(s => s.InstructorId == candidate.InstructorId)
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { Slot = slot }))
+                .ToList();
+
+            var candidateSlots = candidate.TimeBlocks
+                .Select(slot => new { Slot = slot })
+                .ToList();
+
+            var allSlots = existingSlots.Concat(candidateSlots);
+
+            foreach (var dayGroup in allSlots.GroupBy(x => x.Slot.Day))
+            {
+                var sortedSlots = dayGroup.OrderBy(x => x.Slot.StartTime).ToList();
+                if (sortedSlots.Count <= 1)
+                    continue;
+
+                var blockStartIdx = 0;
+                var blockMinutes = (sortedSlots[0].Slot.EndTime - sortedSlots[0].Slot.StartTime).TotalMinutes;
+
+                for (int idx = 1; idx < sortedSlots.Count; idx++)
+                {
+                    var gap = (sortedSlots[idx].Slot.StartTime - sortedSlots[idx - 1].Slot.EndTime).TotalMinutes;
+                    if (gap <= hardConfig.BreakDurationMinutes)
+                    {
+                        blockMinutes += (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                    else
+                    {
+                        blockStartIdx = idx;
+                        blockMinutes = (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
+                    }
+                }
+
+                var blockHours = blockMinutes / 60.0;
+                if (blockHours > hardConfig.MaxConsecutiveHours)
+                {
+                    var dayName = GetDayOfWeekName(dayGroup.Key);
+                    conflicts.Add(BuildConflict(
+                        candidate,
+                        ConflictTypes.MaxConsecutiveHoursConflict,
+                        $"Öğretim üyesi '{candidate.InstructorName}' {dayName} günü {hardConfig.MaxConsecutiveHours} saatten fazla aralıksız ders veriyor ({blockHours:0.#} saat).",
+                        null,
+                        null));
+                }
             }
         }
 
@@ -1215,14 +2403,14 @@ public class SchedulingService : ISchedulingService
         }
 
         // S2: Hoca günlük yoğunluk dengesi (candidate + existing)
-        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S2Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
         {
             var existingSlots = snapshot.Sections
                 .Where(s => s.InstructorId == candidate.InstructorId)
-                .SelectMany(s => s.ScheduleSlots)
+                .SelectMany(s => s.TimeBlocks)
                 .ToList();
 
-            var allSlots = existingSlots.Concat(candidate.ScheduleSlots);
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
 
             foreach (var dayGroup in allSlots.GroupBy(slot => slot.Day))
             {
@@ -1236,13 +2424,13 @@ public class SchedulingService : ISchedulingService
         }
 
         // S3: Slot dağılım dengesi (candidate + existing)
-        if (softConfig.S3Enabled && candidate.ScheduleSlots.Count > 0)
+        if (softConfig.S3Enabled && candidate.TimeBlocks.Count > 0)
         {
             var existingSlotKeys = snapshot.Sections
-                .SelectMany(s => s.ScheduleSlots.Select(slot => (slot.Day, slot.StartTime)))
+                .SelectMany(s => s.TimeBlocks.Select(slot => (slot.Day, slot.StartTime)))
                 .ToList();
 
-            var candidateSlotKeys = candidate.ScheduleSlots
+            var candidateSlotKeys = candidate.TimeBlocks
                 .Select(slot => (slot.Day, slot.StartTime))
                 .ToList();
 
@@ -1256,6 +2444,142 @@ public class SchedulingService : ISchedulingService
                 {
                     var dayName = GetDayOfWeekName(group.Key.Day);
                     softNotes.Add($"S3 Uyarı: {dayName} {group.Key.StartTime:HH\\:mm} slotunda {count} section yığılması var (max {softConfig.S3MaxSectionsPerSlot})");
+                }
+            }
+        }
+
+        // S4: Cross-Department Co-Enrollment Conflict (candidate) — uses snapshot.CoEnrollmentPairs if preloaded
+        if (softConfig.S4Enabled && candidate.TimeBlocks.Count > 0 && snapshot.CoEnrollmentPairs.Count > 0)
+        {
+            var relevantPairs = snapshot.CoEnrollmentPairs
+                .Where(p => p.CourseId1 == candidate.CourseId || p.CourseId2 == candidate.CourseId)
+                .ToList();
+
+            foreach (var pair in relevantPairs)
+            {
+                var pairedCourseId = pair.CourseId1 == candidate.CourseId ? pair.CourseId2 : pair.CourseId1;
+                var pairedSections = snapshot.Sections
+                    .Where(s => s.CourseId == pairedCourseId && s.TimeBlocks.Count > 0)
+                    .ToList();
+
+                foreach (var pairedSec in pairedSections)
+                {
+                    var overlaps = GetOverlapSlots(candidate.TimeBlocks, pairedSec.TimeBlocks);
+                    if (overlaps.Count > 0)
+                    {
+                        softNotes.Add($"S4 Uyarı: '{candidate.CourseCode}' ve '{pairedSec.CourseCode}' dersleri sık birlikte alınıyor ({pair.StudentCount} öğrenci) ancak zaman çakışması var.");
+                    }
+                }
+            }
+        }
+
+        // S5: Lunch Break Preference (candidate — soft mode, only when H13 is NOT hard)
+        if (softConfig.S5Enabled && candidate.TimeBlocks.Count > 0
+            && (hardConfig == null || !hardConfig.LunchBreakIsHard))
+        {
+            var lunchStart = hardConfig?.LunchBreakStart ?? new TimeOnly(11, 40);
+            var lunchEnd = hardConfig?.LunchBreakEnd ?? new TimeOnly(12, 20);
+
+            foreach (var slot in candidate.TimeBlocks)
+            {
+                if (slot.StartTime < lunchEnd && slot.EndTime > lunchStart)
+                {
+                    softNotes.Add($"S5 Uyarı: {candidate.CourseCode} öğle arası saatlerinde programlanmış ({slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm}).");
+                }
+            }
+        }
+
+        // S7: Student Gap Minimization (candidate)
+        if (softConfig.S7Enabled && candidate.TimeBlocks.Count > 0
+            && candidate.DepartmentId.HasValue && candidate.SuggestedSemester.HasValue)
+        {
+            var candidateYear = (candidate.SuggestedSemester.Value - 1) / 2;
+            var sameDeptYearSections = snapshot.Sections
+                .Where(s => s.DepartmentId == candidate.DepartmentId
+                    && s.SuggestedSemester.HasValue
+                    && (s.SuggestedSemester.Value - 1) / 2 == candidateYear
+                    && s.TimeBlocks.Count > 0)
+                .ToList();
+
+            var combinedSlots = sameDeptYearSections
+                .SelectMany(s => s.TimeBlocks.Select(slot => new { s.CourseCode, Slot = slot }))
+                .Concat(candidate.TimeBlocks.Select(slot => new { candidate.CourseCode, Slot = slot }))
+                .GroupBy(x => x.Slot.Day);
+
+            foreach (var dayGroup in combinedSlots)
+            {
+                var sorted = dayGroup.OrderBy(x => x.Slot.StartTime).ToList();
+                if (sorted.Count < 2) continue;
+
+                for (int idx = 1; idx < sorted.Count; idx++)
+                {
+                    var gapHours = (sorted[idx].Slot.StartTime - sorted[idx - 1].Slot.EndTime).TotalHours;
+                    if (gapHours >= softConfig.S7MaxGapSlots)
+                    {
+                        var dayName = GetDayOfWeekName(dayGroup.Key);
+                        softNotes.Add($"S7 Uyarı: {dayName} günü '{sorted[idx - 1].CourseCode}' ile '{sorted[idx].CourseCode}' arasında {gapHours:0.#} saatlik boşluk var.");
+                    }
+                }
+            }
+        }
+
+        // S8: Instructor Day Minimization (candidate)
+        if (softConfig.S8Enabled && candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
+        {
+            var existingSlots = snapshot.Sections
+                .Where(s => s.InstructorId == candidate.InstructorId)
+                .SelectMany(s => s.TimeBlocks)
+                .ToList();
+
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks).ToList();
+            var usedDays = allSlots.Select(s => s.Day).Distinct().Count();
+            var totalHours = allSlots.Sum(s => (s.EndTime - s.StartTime).TotalHours);
+            var maxHoursPerDay = (double)softConfig.S2MaxDailyHours;
+            var minPossibleDays = Math.Max(1, (int)Math.Ceiling(totalHours / maxHoursPerDay));
+
+            if (usedDays > minPossibleDays + 1)
+            {
+                softNotes.Add($"S8 Uyarı: {candidate.InstructorName} hocanın dersleri {usedDays} güne dağılmış (minimum {minPossibleDays} gün yeterli olabilir).");
+            }
+        }
+
+        // S9: Early Morning / Late Evening Penalty (candidate)
+        if (softConfig.S9Enabled && candidate.TimeBlocks.Count > 0)
+        {
+            foreach (var slot in candidate.TimeBlocks)
+            {
+                if (slot.StartTime <= softConfig.S9MorningStart)
+                {
+                    softNotes.Add($"S9 Uyarı: {candidate.CourseCode} erken sabah slotuna ({slot.StartTime:HH\\:mm}) programlanmış.");
+                }
+                else if (slot.StartTime >= softConfig.S9EveningStart)
+                {
+                    softNotes.Add($"S9 Uyarı: {candidate.CourseCode} geç akşam slotuna ({slot.StartTime:HH\\:mm}) programlanmış.");
+                }
+            }
+        }
+
+        // S12: Weekday Balance (candidate)
+        if (softConfig.S12Enabled && candidate.TimeBlocks.Count > 0)
+        {
+            var existingSlots = snapshot.Sections.SelectMany(s => s.TimeBlocks).ToList();
+            var allSlots = existingSlots.Concat(candidate.TimeBlocks);
+
+            var slotsPerDay = allSlots
+                .GroupBy(s => s.Day)
+                .Select(g => g.Count())
+                .ToList();
+
+            if (slotsPerDay.Count > 1)
+            {
+                var avg = slotsPerDay.Average();
+                var maxCount = slotsPerDay.Max();
+                var minCount = slotsPerDay.Min();
+                var diff = maxCount - minCount;
+
+                if (avg > 0 && diff > avg * softConfig.S12MaxImbalancePercent / 100.0)
+                {
+                    softNotes.Add($"S12 Uyarı: Hafta içi slot dağılımı dengesiz (min: {minCount}, max: {maxCount}, fark: {diff}).");
                 }
             }
         }
@@ -1365,11 +2689,11 @@ public class SchedulingService : ISchedulingService
     }
 
     /// <summary>
-    /// Converts a list of consecutive TimeSlots into a single ScheduleSlot covering them.
+    /// Converts a list of consecutive TimeSlots into a single TimeBlock covering them.
     /// </summary>
-    private static ScheduleSlot TimeSlotWindowToScheduleSlot(IReadOnlyList<TimeSlot> window)
+    private static TimeBlock TimeSlotWindowToTimeBlock(IReadOnlyList<TimeSlot> window)
     {
-        return new ScheduleSlot
+        return new TimeBlock
         {
             Day = window[0].DayOfWeek,
             StartTime = window[0].StartTime,
@@ -1383,7 +2707,7 @@ public class SchedulingService : ISchedulingService
     /// </summary>
     private static List<RankedSlotCombination> BuildTimeSlotCombinations(
         int totalRequiredHours,
-        IReadOnlyList<ScheduleSlot> currentSlots,
+        IReadOnlyList<TimeBlock> currentSlots,
         IReadOnlyList<TimeSlot> timeSlots)
     {
         var combinations = new List<RankedSlotCombination>();
@@ -1392,7 +2716,7 @@ public class SchedulingService : ISchedulingService
         // Include the current schedule as first option if valid
         if (currentSlots.Count > 0)
         {
-            var currentValidation = ValidateScheduleSlots(currentSlots.ToList());
+            var currentValidation = ValidateTimeBlocks(currentSlots.ToList());
             if (currentValidation.ErrorMessage == null)
             {
                 AddCombination(combinations, signatures, currentValidation.Slots, 0);
@@ -1418,7 +2742,7 @@ public class SchedulingService : ISchedulingService
                     {
                         candidates.Add(new RankedSlot
                         {
-                            Slot = TimeSlotWindowToScheduleSlot(window),
+                            Slot = TimeSlotWindowToTimeBlock(window),
                             PreferencePenalty = 0
                         });
                     }
@@ -1448,15 +2772,29 @@ public class SchedulingService : ISchedulingService
     // ── SectionSchedule write helper ─────────────────────────────────────
 
     /// <summary>
-    /// Writes SectionSchedule records alongside ScheduleJson.
+    /// Loads existing SectionSchedule records for a section and converts them to TimeBlocks.
+    /// </summary>
+    private async Task<List<TimeBlock>> LoadSectionTimeBlocksAsync(int sectionId, CancellationToken cancellationToken)
+    {
+        var schedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == sectionId)
+            .ToListAsync(cancellationToken);
+
+        return ScheduleHelper.ToTimeBlocks(schedules);
+    }
+
+    /// <summary>
+    /// Writes SectionSchedule records.
     /// Deletes existing records for this section first, then creates new ones
-    /// by matching each ScheduleSlot to TimeSlots in the term.
+    /// by matching each TimeBlock to TimeSlots in the term.
     /// </summary>
     private async Task WriteSectionScheduleRecordsAsync(
         int sectionId,
         int termId,
         int? classroomId,
-        IReadOnlyList<ScheduleSlot> slots,
+        IReadOnlyList<TimeBlock> slots,
         CancellationToken cancellationToken)
     {
         // Remove old SectionSchedule records for this section
@@ -1482,7 +2820,7 @@ public class SchedulingService : ISchedulingService
 
         foreach (var slot in slots)
         {
-            // Find all TimeSlots that overlap with this ScheduleSlot on the same day
+            // Find all TimeSlots that overlap with this TimeBlock on the same day
             var matchingTimeSlots = termTimeSlots
                 .Where(ts => ts.DayOfWeek == slot.Day
                     && ts.StartTime < slot.EndTime
@@ -1538,13 +2876,13 @@ public class SchedulingService : ISchedulingService
     private static void AddCombination(
         List<RankedSlotCombination> combinations,
         HashSet<string> signatures,
-        List<ScheduleSlot> slots,
+        List<TimeBlock> slots,
         int preferenceScore)
     {
         var normalizedSlots = slots
             .OrderBy(slot => slot.Day)
             .ThenBy(slot => slot.StartTime)
-            .Select(slot => new ScheduleSlot
+            .Select(slot => new TimeBlock
             {
                 Day = slot.Day,
                 StartTime = slot.StartTime,
@@ -1565,53 +2903,7 @@ public class SchedulingService : ISchedulingService
         });
     }
 
-    private static ScheduleParseResult ParseScheduleJson(string? scheduleJson)
-    {
-        if (string.IsNullOrWhiteSpace(scheduleJson) || scheduleJson.Trim() == "[]")
-        {
-            return new ScheduleParseResult();
-        }
-
-        try
-        {
-            var rawSlots = JsonSerializer.Deserialize<List<ScheduleSlotJsonModel>>(scheduleJson, ScheduleJsonOptions);
-            if (rawSlots == null || rawSlots.Count == 0)
-            {
-                return new ScheduleParseResult();
-            }
-
-            var slots = new List<ScheduleSlot>();
-            foreach (var rawSlot in rawSlots)
-            {
-                var day = rawSlot.Day ?? rawSlot.DayOfWeek;
-                if (!day.HasValue)
-                {
-                    return new ScheduleParseResult
-                    {
-                        ErrorMessage = "Program JSON içindeki bir slotta gün bilgisi eksik."
-                    };
-                }
-
-                slots.Add(new ScheduleSlot
-                {
-                    Day = day.Value,
-                    StartTime = rawSlot.StartTime,
-                    EndTime = rawSlot.EndTime
-                });
-            }
-
-            return ValidateScheduleSlots(slots);
-        }
-        catch (JsonException)
-        {
-            return new ScheduleParseResult
-            {
-                ErrorMessage = "Program JSON güvenli şekilde ayrıştırılamadı."
-            };
-        }
-    }
-
-    private static ScheduleParseResult ValidateScheduleSlots(List<ScheduleSlot> slots)
+    private static ScheduleParseResult ValidateTimeBlocks(List<TimeBlock> slots)
     {
         var normalizedSlots = slots
             .OrderBy(slot => slot.Day)
@@ -1649,9 +2941,9 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private static List<ScheduleSlot> GetOverlapSlots(IReadOnlyList<ScheduleSlot> firstSchedule, IReadOnlyList<ScheduleSlot> secondSchedule)
+    private static List<TimeBlock> GetOverlapSlots(IReadOnlyList<TimeBlock> firstSchedule, IReadOnlyList<TimeBlock> secondSchedule)
     {
-        var overlaps = new List<ScheduleSlot>();
+        var overlaps = new List<TimeBlock>();
 
         foreach (var first in firstSchedule)
         {
@@ -1674,7 +2966,7 @@ public class SchedulingService : ISchedulingService
             .ToList();
     }
 
-    private static bool TryGetOverlap(ScheduleSlot first, ScheduleSlot second, out ScheduleSlot overlap)
+    private static bool TryGetOverlap(TimeBlock first, TimeBlock second, out TimeBlock overlap)
     {
         overlap = default!;
 
@@ -1691,7 +2983,7 @@ public class SchedulingService : ISchedulingService
             return false;
         }
 
-        overlap = new ScheduleSlot
+        overlap = new TimeBlock
         {
             Day = first.Day,
             StartTime = start,
@@ -1701,12 +2993,12 @@ public class SchedulingService : ISchedulingService
         return true;
     }
 
-    private static bool SlotsOverlap(ScheduleSlot first, ScheduleSlot second) =>
+    private static bool SlotsOverlap(TimeBlock first, TimeBlock second) =>
         first.Day == second.Day
         && first.StartTime < second.EndTime
         && second.StartTime < first.EndTime;
 
-    private static decimal ResolveWeeklyHours(IReadOnlyList<ScheduleSlot> slots, Course course)
+    private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, Course course)
     {
         if (slots.Count > 0)
         {
@@ -1718,7 +3010,7 @@ public class SchedulingService : ISchedulingService
         return catalogHours > 0 ? catalogHours : 0m;
     }
 
-    private static decimal ResolveWeeklyHours(IReadOnlyList<ScheduleSlot> slots, SectionSnapshot section)
+    private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, SectionSnapshot section)
     {
         if (slots.Count > 0)
         {
@@ -1730,7 +3022,7 @@ public class SchedulingService : ISchedulingService
         return catalogHours > 0 ? catalogHours : 0m;
     }
 
-    private static ScheduleSlotDto MapScheduleSlot(ScheduleSlot slot) =>
+    private static ScheduleSlotDto MapTimeBlock(TimeBlock slot) =>
         new()
         {
             Day = slot.Day,
@@ -1742,7 +3034,7 @@ public class SchedulingService : ISchedulingService
         SectionSnapshot section,
         string conflictType,
         string message,
-        ScheduleSlot? slot,
+        TimeBlock? slot,
         int? relatedSectionId)
     {
         return new SchedulingConflictDto
@@ -1763,7 +3055,7 @@ public class SchedulingService : ISchedulingService
         };
     }
 
-    private static string BuildSlotSignature(IEnumerable<ScheduleSlot> slots) =>
+    private static string BuildSlotSignature(IEnumerable<TimeBlock> slots) =>
         string.Join("|", slots
             .OrderBy(slot => slot.Day)
             .ThenBy(slot => slot.StartTime)
@@ -1841,6 +3133,11 @@ public class SchedulingService : ISchedulingService
     {
         var config = await LoadSystemConfigAsync(ct);
 
+        var s9MorningStart = config.TryGetValue("SoftConstraint.S9.MorningStart", out var ms) && TimeOnly.TryParse(ms, out var mst)
+            ? mst : new TimeOnly(8, 0);
+        var s9EveningStart = config.TryGetValue("SoftConstraint.S9.EveningStart", out var es) && TimeOnly.TryParse(es, out var est)
+            ? est : new TimeOnly(17, 0);
+
         return new SoftConstraintConfig(
             S1Enabled: GetBool(config, "SoftConstraint.S1.Enabled", true),
             S1MinOccupancy: GetInt(config, "Classroom.OccupancyTarget.Min", 60),
@@ -1848,7 +3145,91 @@ public class SchedulingService : ISchedulingService
             S2Enabled: GetBool(config, "SoftConstraint.S2.Enabled", true),
             S2MaxDailyHours: GetInt(config, "SoftConstraint.S2.MaxDailyHours", 6),
             S3Enabled: GetBool(config, "SoftConstraint.S3.Enabled", true),
-            S3MaxSectionsPerSlot: GetInt(config, "SoftConstraint.S3.MaxSectionsPerSlot", 5));
+            S3MaxSectionsPerSlot: GetInt(config, "SoftConstraint.S3.MaxSectionsPerSlot", 5),
+            S4Enabled: GetBool(config, "SoftConstraint.S4.Enabled", true),
+            S4MinCoPairThreshold: GetInt(config, "SoftConstraint.S4.MinCoPairThreshold", 20),
+            S5Enabled: GetBool(config, "SoftConstraint.S5.Enabled", true),
+            S7Enabled: GetBool(config, "SoftConstraint.S7.Enabled", true),
+            S7MaxGapSlots: GetInt(config, "SoftConstraint.S7.MaxGapSlots", 3),
+            S8Enabled: GetBool(config, "SoftConstraint.S8.Enabled", true),
+            S9Enabled: GetBool(config, "SoftConstraint.S9.Enabled", true),
+            S9MorningStart: s9MorningStart,
+            S9EveningStart: s9EveningStart,
+            S12Enabled: GetBool(config, "SoftConstraint.S12.Enabled", true),
+            S12MaxImbalancePercent: GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20));
+    }
+
+    /// <summary>
+    /// Loads co-enrollment pairs from the last 3 terms (before the given term).
+    /// Finds course pairs frequently taken by the same student in the same term.
+    /// </summary>
+    private async Task<List<CoEnrollmentPair>> LoadCoEnrollmentPairsAsync(int currentTermId, int minThreshold, CancellationToken ct)
+    {
+        // Get last 3 term IDs before the current term
+        var recentTermIds = await _context.AcademicTerms.AsNoTracking()
+            .Where(t => t.Id < currentTermId)
+            .OrderByDescending(t => t.Id)
+            .Take(3)
+            .Select(t => t.Id)
+            .ToListAsync(ct);
+
+        if (recentTermIds.Count == 0)
+            return new List<CoEnrollmentPair>();
+
+        // Get all active registrations from recent terms: (studentId, courseId, termId)
+        var registrations = await _context.CourseRegistrations.AsNoTracking()
+            .Where(cr => cr.Status == RegistrationStatus.Active
+                && cr.CourseSection != null
+                && recentTermIds.Contains(cr.CourseSection.TermId))
+            .Select(cr => new
+            {
+                cr.StudentId,
+                cr.CourseSection.CourseId,
+                cr.CourseSection.TermId
+            })
+            .ToListAsync(ct);
+
+        // Group by (studentId, termId) to find courses taken together
+        var coPairCounts = new Dictionary<(int, int), int>();
+
+        foreach (var termGroup in registrations.GroupBy(r => (r.StudentId, r.TermId)))
+        {
+            var courseIds = termGroup.Select(r => r.CourseId).Distinct().OrderBy(x => x).ToList();
+            for (int i = 0; i < courseIds.Count; i++)
+            {
+                for (int j = i + 1; j < courseIds.Count; j++)
+                {
+                    var key = (courseIds[i], courseIds[j]);
+                    coPairCounts[key] = coPairCounts.GetValueOrDefault(key) + 1;
+                }
+            }
+        }
+
+        return coPairCounts
+            .Where(kvp => kvp.Value >= minThreshold)
+            .Select(kvp => new CoEnrollmentPair
+            {
+                CourseId1 = kvp.Key.Item1,
+                CourseId2 = kvp.Key.Item2,
+                StudentCount = kvp.Value
+            })
+            .ToList();
+    }
+
+    private async Task<HardConstraintConfig> LoadHardConstraintConfigAsync(CancellationToken ct)
+    {
+        var config = await LoadSystemConfigAsync(ct);
+
+        var lunchIsHard = GetBool(config, "Schedule.LunchBreak.IsHard", false);
+        var lunchStart = config.TryGetValue("Schedule.LunchBreakStart", out var ls) && TimeOnly.TryParse(ls, out var lst)
+            ? lst : new TimeOnly(11, 40);
+        var lunchEnd = config.TryGetValue("Schedule.LunchBreakEnd", out var le) && TimeOnly.TryParse(le, out var let)
+            ? let : new TimeOnly(12, 20);
+        var maxConsecutive = GetInt(config, "Schedule.MaxConsecutiveHours", 4);
+        var breakDuration = GetInt(config, "Schedule.BreakDurationMinutes", 5);
+        var amphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100);
+
+        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration, amphiThreshold);
     }
 
     private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
@@ -1885,7 +3266,17 @@ public class SchedulingService : ISchedulingService
     private record SoftConstraintConfig(
         bool S1Enabled, int S1MinOccupancy, int S1MaxOccupancy,
         bool S2Enabled, int S2MaxDailyHours,
-        bool S3Enabled, int S3MaxSectionsPerSlot);
+        bool S3Enabled, int S3MaxSectionsPerSlot,
+        bool S4Enabled, int S4MinCoPairThreshold,
+        bool S5Enabled,
+        bool S7Enabled, int S7MaxGapSlots,
+        bool S8Enabled,
+        bool S9Enabled, TimeOnly S9MorningStart, TimeOnly S9EveningStart,
+        bool S12Enabled, int S12MaxImbalancePercent);
+
+    private record HardConstraintConfig(
+        bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
+        int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold);
 
 
     private static class ConflictTypes
@@ -1900,6 +3291,10 @@ public class SchedulingService : ISchedulingService
         public const string SameCourseComponentConflict = "SameCourseComponentConflict"; // H6
         public const string SameCourseSectionConflict = "SameCourseSectionConflict";     // H8
         public const string FacultyClassroomConflict = "FacultyClassroomConflict";       // H10
+        public const string CorequisiteConflict = "CorequisiteConflict";                 // H11
+        public const string CreditHourMismatch = "CreditHourMismatch";                   // H12
+        public const string LunchBreakConflict = "LunchBreakConflict";                   // H13
+        public const string MaxConsecutiveHoursConflict = "MaxConsecutiveHoursConflict"; // H15
     }
 
     private sealed class TermSnapshot
@@ -1910,6 +3305,15 @@ public class SchedulingService : ISchedulingService
         public List<SectionSnapshot> Sections { get; init; } = new();
         public List<ClassroomTermAssignment> ClassroomAssignments { get; init; } = new(); // for H10
         public Dictionary<int, int> DeptFacultyMap { get; init; } = new();                // for H10
+        public List<CoursePrerequisite> Corequisites { get; init; } = new();              // for H11
+        public List<CoEnrollmentPair> CoEnrollmentPairs { get; set; } = new();            // for S4
+    }
+
+    private sealed class CoEnrollmentPair
+    {
+        public int CourseId1 { get; init; }
+        public int CourseId2 { get; init; }
+        public int StudentCount { get; init; }
     }
 
     private sealed class SectionSnapshot
@@ -1932,34 +3336,26 @@ public class SchedulingService : ISchedulingService
         public int InstructorMaxWeeklyHours { get; init; }
         public int? DepartmentId { get; init; }                    // for H5, H8
         public int? SuggestedSemester { get; init; }               // for H5 (curriculum year)
-        public List<ScheduleSlot> ScheduleSlots { get; init; } = new();
-        public string? ParseError { get; init; }
+        public List<TimeBlock> TimeBlocks { get; init; } = new();
         public List<string> Notes { get; init; } = new();
     }
 
     private sealed class ScheduleParseResult
     {
-        public List<ScheduleSlot> Slots { get; init; } = new();
+        public List<TimeBlock> Slots { get; init; } = new();
         public string? ErrorMessage { get; init; }
     }
 
     private sealed class RankedSlot
     {
-        public ScheduleSlot Slot { get; init; } = null!;
+        public TimeBlock Slot { get; init; } = null!;
         public int PreferencePenalty { get; init; }
     }
 
     private sealed class RankedSlotCombination
     {
-        public List<ScheduleSlot> Slots { get; init; } = new();
+        public List<TimeBlock> Slots { get; init; } = new();
         public int PreferenceScore { get; init; }
     }
 
-    private sealed class ScheduleSlotJsonModel
-    {
-        public DayOfWeek? Day { get; init; }
-        public DayOfWeek? DayOfWeek { get; init; }
-        public TimeOnly StartTime { get; init; }
-        public TimeOnly EndTime { get; init; }
-    }
 }

@@ -57,10 +57,12 @@ export default function CourseCatalogPage() {
   const effectiveClassYear = classYearFilter ?? classYear;
 
   const registeredSectionIds = registrations
-    ?.filter(r => ['Draft', 'Active', 'PendingAdvisorApproval'].includes(r.status))
+    ?.filter(r => ['Draft', 'Active', 'PendingAdvisorApproval', 'Rejected'].includes(r.status))
     .map(r => r.courseSectionId) || [];
 
-  const planItems = registrations?.filter(r => r.status === 'Draft') || [];
+  const planItems = registrations?.filter(r => r.status === 'Draft' || r.status === 'Rejected') || [];
+  const rejectedItems = registrations?.filter(r => r.status === 'Rejected') || [];
+  const advisorNote = rejectedItems.length > 0 ? rejectedItems[0]?.advisorNote : undefined;
   const confirmedItems = registrations?.filter(r => ['Active', 'PendingAdvisorApproval'].includes(r.status)) || [];
   const allSelectedItems = [...confirmedItems, ...planItems];
   const totalEcts = allSelectedItems.reduce((sum, r) => sum + r.ects, 0);
@@ -242,6 +244,16 @@ export default function CourseCatalogPage() {
           <AlertDescription>Plana eklenirken hata oluştu. Lütfen tekrar deneyin.</AlertDescription>
         </Alert>
       )}
+      {rejectedItems.length > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Kayıt planınız danışmanınız tarafından reddedildi.</strong>
+            {advisorNote && <span className="ml-1">Notu: {advisorNote}</span>}
+            <span className="ml-1">Planınızı düzenleyip tekrar gönderebilirsiniz.</span>
+          </AlertDescription>
+        </Alert>
+      )}
       {alttanCourses.length > 0 && viewFilter !== 'alttan' && (
         <Alert variant="destructive">
           <RotateCcw className="h-4 w-4" />
@@ -321,7 +333,7 @@ export default function CourseCatalogPage() {
                         <RegistrationStatusBadge status={item.status} />
                       </TableCell>
                       <TableCell className="text-right pr-6">
-                        {item.status === 'Draft' && (
+                        {(item.status === 'Draft' || item.status === 'Rejected') && (
                           <Button
                             variant="ghost"
                             size="icon"

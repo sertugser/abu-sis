@@ -14,7 +14,6 @@ public class FacultyPlanningSectionDto
     public string? ClassroomType { get; set; }
     public int? InstructorId { get; set; }
     public string? InstructorName { get; set; }
-    public string ScheduleJson { get; set; } = "[]";
     public string ScheduleSummary { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public int TheoryHours { get; set; }

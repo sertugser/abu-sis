@@ -24,6 +24,9 @@ export interface AdminTermDto {
   withdrawalDeadline: string;
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
+  status: string;
+  statusLabel: string;
+  allowedTransitions: string[];
 }
 
 export interface CreateTermDto {
@@ -139,6 +142,21 @@ export function useActivateTerm() {
   });
 }
 
+// ── Term Status Transition ───────────────────────────────────────────────────
+
+export function useTransitionTermStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ termId, targetStatus }: { termId: number; targetStatus: string }) => {
+      await apiClient.post(`${API}/${termId}/transition`, { targetStatus });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+    },
+  });
+}
+
 // ── Calendar Events ──────────────────────────────────────────────────────────
 
 export function useTermCalendarEvents(termId: number | null) {
@@ -161,6 +179,7 @@ export function useCreateCalendarEvent() {
     },
     onSuccess: (_, { termId }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
+      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
     },
   });
 }
@@ -174,6 +193,7 @@ export function useUpdateCalendarEvent() {
     },
     onSuccess: (_, { termId }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
+      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
     },
   });
 }
@@ -186,6 +206,7 @@ export function useDeleteCalendarEvent() {
     },
     onSuccess: (_, { termId }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
+      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
     },
   });
 }

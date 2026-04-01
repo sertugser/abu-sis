@@ -273,10 +273,10 @@ function CapacityStatusCard({
 
         {forecast && (
           <Link
-            to={ROUTES.MANAGEMENT_PLANNING}
+            to={ROUTES.COURSE_APPROVAL}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
           >
-            Planlama Merkezi <ArrowRight className="h-3.5 w-3.5" />
+            Ders Onay İşlemleri <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         )}
       </CardContent>
@@ -374,7 +374,7 @@ function ScheduleHealthCard({
               ))}
               {conflictCount > 2 && (
                 <Link
-                  to={ROUTES.FACULTY_PLANNING}
+                  to={ROUTES.SCHEDULE_CREATION}
                   className="text-xs text-primary hover:underline"
                 >
                   ve {conflictCount - 2} daha...
@@ -385,10 +385,10 @@ function ScheduleHealthCard({
         )}
 
         <Link
-          to={ROUTES.FACULTY_PLANNING}
+          to={ROUTES.SCHEDULE_CREATION}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
-          Fakülte Planlama <ArrowRight className="h-3.5 w-3.5" />
+          Ders Programı Oluşturma <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </CardContent>
     </Card>
@@ -479,17 +479,17 @@ function GradeEntryCard({
 const QUICK_LINKS_STORAGE_KEY = 'sis-dashboard-quick-links';
 
 const DEFAULT_QUICK_LINKS = [
-  ROUTES.MANAGEMENT_PLANNING,
-  ROUTES.MANAGEMENT_CLASS_LISTS,
-  ROUTES.FACULTY_PLANNING,
+  ROUTES.COURSE_APPROVAL,
+  ROUTES.CLASS_LISTS,
+  ROUTES.SCHEDULE_CREATION,
   ROUTES.TERM_CLOSING,
 ];
 
 /** Icon overrides for well-known routes */
 const ROUTE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  [ROUTES.MANAGEMENT_PLANNING]: Network,
-  [ROUTES.MANAGEMENT_CLASS_LISTS]: ClipboardList,
-[ROUTES.FACULTY_PLANNING]: CalendarRange,
+  [ROUTES.COURSE_APPROVAL]: Network,
+  [ROUTES.CLASS_LISTS]: ClipboardList,
+  [ROUTES.SCHEDULE_CREATION]: CalendarRange,
   [ROUTES.TERM_CLOSING]: GraduationCap,
   [ROUTES.INSTRUCTOR_SECTIONS]: Layers,
 };

@@ -19,30 +19,55 @@ public class AdminUserService : IAdminUserService
 
     public async Task<PagedResult<AdminUserListItemDto>> GetUsersAsync(AdminUserFilterDto filter)
     {
-        var allUsers = await _userManager.Users.ToListAsync();
+        // Batch load all role mappings in TWO queries instead of N+1 per-user GetRolesAsync calls
+        var allUserRoles = await _context.UserRoles.ToListAsync();
+        var roleNamesById = await _context.Roles.ToDictionaryAsync(r => r.Id, r => r.Name ?? "");
 
-        // Determine active/locked status via LockoutEnd
-        var result = new List<AdminUserListItemDto>();
-        foreach (var user in allUsers)
+        var rolesByUserId = allUserRoles
+            .GroupBy(ur => ur.UserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(ur => roleNamesById.GetValueOrDefault(ur.RoleId, ""))
+                      .Where(n => !string.IsNullOrEmpty(n))
+                      .ToList());
+
+        // Build base query with DB-level search filtering
+        var query = _userManager.Users.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var roles = (await _userManager.GetRolesAsync(user)).ToList();
+            var s = filter.Search.ToLower();
+            query = query.Where(u =>
+                u.FirstName.ToLower().Contains(s) ||
+                u.LastName.ToLower().Contains(s) ||
+                (u.Email != null && u.Email.ToLower().Contains(s)));
+        }
+
+        // IsActive filter: locked out users have LockoutEnd > now
+        if (filter.IsActive.HasValue)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (filter.IsActive.Value)
+                query = query.Where(u => !u.LockoutEnabled || u.LockoutEnd == null || u.LockoutEnd <= now);
+            else
+                query = query.Where(u => u.LockoutEnabled && u.LockoutEnd != null && u.LockoutEnd > now);
+        }
+
+        // Materialize filtered users
+        var filteredUsers = await query.ToListAsync();
+
+        // Apply role filter in memory (roles are already batch-loaded)
+        var result = new List<AdminUserListItemDto>();
+        var now2 = DateTimeOffset.UtcNow;
+
+        foreach (var user in filteredUsers)
+        {
+            var roles = rolesByUserId.GetValueOrDefault(user.Id, new List<string>());
 
             if (!string.IsNullOrWhiteSpace(filter.Role) && !roles.Contains(filter.Role))
                 continue;
 
-            var isActive = !await _userManager.IsLockedOutAsync(user);
-
-            if (filter.IsActive.HasValue && filter.IsActive.Value != isActive)
-                continue;
-
-            if (!string.IsNullOrWhiteSpace(filter.Search))
-            {
-                var s = filter.Search.ToLower();
-                if (!user.FirstName.ToLower().Contains(s) &&
-                    !user.LastName.ToLower().Contains(s) &&
-                    !(user.Email ?? "").ToLower().Contains(s))
-                    continue;
-            }
+            var isActive = !user.LockoutEnabled || user.LockoutEnd == null || user.LockoutEnd <= now2;
 
             result.Add(new AdminUserListItemDto(
                 user.Id,

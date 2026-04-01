@@ -3,6 +3,7 @@ import {
   getOpenedCourses,
   getCurriculumCoursesForOpening,
   getDepartmentInstructors,
+  getInstructorWorkload,
   openCourse,
   bulkOpenCourses,
   updateOpenedSection,
@@ -35,6 +36,15 @@ export function useDepartmentInstructors(departmentId: number | null) {
     queryFn: () => getDepartmentInstructors(departmentId!),
     enabled: departmentId !== null,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useInstructorWorkload(instructorId: number | null, termId: number | null) {
+  return useQuery({
+    queryKey: ['courseOpening', 'workload', instructorId, termId],
+    queryFn: () => getInstructorWorkload(instructorId!, termId!),
+    enabled: instructorId !== null && instructorId > 0 && termId !== null,
+    staleTime: 30 * 1000,
   });
 }
 

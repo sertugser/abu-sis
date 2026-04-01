@@ -220,7 +220,7 @@ public class StudentEligibilityService : IStudentEligibilityService
                 reasons.Add(new IneligibilityReasonDto
                 {
                     Reason = IneligibilityReason.LowCgpaRestriction,
-                    Message = "CGPA < 1.70 kisitlamasi: ust donem derslerine kayit yapilamaz."
+                    Message = $"CGPA < {context.RetentionThreshold:F2} kisitlamasi: ust donem derslerine kayit yapilamaz."
                 });
             }
         }

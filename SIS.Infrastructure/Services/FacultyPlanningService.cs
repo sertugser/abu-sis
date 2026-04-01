@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
@@ -12,12 +11,6 @@ namespace SIS.Infrastructure.Services;
 
 public class FacultyPlanningService : IFacultyPlanningService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private readonly AppDbContext _context;
     private readonly ISchedulingService _schedulingService;
 
@@ -77,7 +70,17 @@ public class FacultyPlanningService : IFacultyPlanningService
             .Where(cs => cs.TermId == termId && cs.IsActive && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
             .ToListAsync(ct);
 
-        var scheduled = sections.Count(s => s.ClassroomId.HasValue && s.ScheduleJson != "[]");
+        // Determine which sections have SectionSchedule records
+        var overviewSectionIds = sections.Select(s => s.Id).ToList();
+        var scheduledSectionIds = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => overviewSectionIds.Contains(ss.CourseSectionId))
+            .Select(ss => ss.CourseSectionId)
+            .Distinct()
+            .ToListAsync(ct);
+        var scheduledSet = scheduledSectionIds.ToHashSet();
+
+        var scheduled = sections.Count(s => s.ClassroomId.HasValue && scheduledSet.Contains(s.Id));
         var unscheduled = sections.Count - scheduled;
 
         var conflicts = await _schedulingService.GetConflictsAsync(termId, ct);
@@ -101,7 +104,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                 DepartmentName = dept.Name,
                 DepartmentCode = dept.Code,
                 TotalSections = deptSections.Count,
-                ScheduledSections = deptSections.Count(s => s.ClassroomId.HasValue && s.ScheduleJson != "[]"),
+                ScheduledSections = deptSections.Count(s => s.ClassroomId.HasValue && scheduledSet.Contains(s.Id)),
                 PendingApprovals = pendingApprovals
             });
         }
@@ -137,6 +140,17 @@ public class FacultyPlanningService : IFacultyPlanningService
             .Where(c => classroomIds.Contains(c.Id))
             .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
 
+        // Load SectionSchedule for recent log sections
+        var recentLogSectionIds = recentLogs.Select(l => l.SectionId).Distinct().ToList();
+        var recentLogSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => recentLogSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync(ct);
+        var recentLogScheduleMap = recentLogSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.FormatScheduleSummary(g));
+
         return new FacultyPlanningOverviewDto
         {
             FacultyId = faculty.Id,
@@ -158,7 +172,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                 ClassroomName = l.ClassroomId.HasValue
                     ? classroomNameMap.GetValueOrDefault(l.ClassroomId.Value)
                     : null,
-                ScheduleSummary = l.ScheduleJson,
+                ScheduleSummary = recentLogScheduleMap.GetValueOrDefault(l.SectionId, "Zamanlanmamis"),
                 AssignedByUserName = int.TryParse(l.UserId, out var uid) ? userNameMap.GetValueOrDefault(uid, "Bilinmeyen") : "Bilinmeyen",
                 Action = l.Action,
                 AssignedAt = l.CreatedAt
@@ -201,6 +215,18 @@ public class FacultyPlanningService : IFacultyPlanningService
         var instructorIds = allSections.Where(s => s.InstructorId.HasValue).Select(s => s.InstructorId!.Value).Distinct();
         var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, ct);
 
+        // Load SectionSchedule records for schedule display
+        var sectionPageIds = allSections.Select(s => s.Id).ToList();
+        var sectionPageSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => sectionPageIds.Contains(ss.CourseSectionId))
+            .ToListAsync(ct);
+        var sectionPageScheduleMap = sectionPageSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var sectionPageHasSchedule = sectionPageScheduleMap.Keys.ToHashSet();
+
         foreach (var group in grouped)
         {
             var index = 0;
@@ -208,7 +234,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             {
                 index++;
                 var hasClassroom = s.ClassroomId.HasValue;
-                var hasSchedule = s.ScheduleJson != "[]";
+                var hasSchedule = sectionPageHasSchedule.Contains(s.Id);
                 var hasInstructor = s.InstructorId.HasValue;
                 var hasConflict = conflictSectionIds.Contains(s.Id);
 
@@ -220,6 +246,9 @@ public class FacultyPlanningService : IFacultyPlanningService
 
                 if (status != null && !string.Equals(sectionStatus, status, StringComparison.OrdinalIgnoreCase))
                     continue;
+
+                var sectionScheds = sectionPageScheduleMap.GetValueOrDefault(s.Id)
+                    ?? new List<SectionSchedule>();
 
                 items.Add(new FacultyPlanningSectionDto
                 {
@@ -237,8 +266,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                     InstructorName = s.InstructorId.HasValue
                         ? instructorNameMap.GetValueOrDefault(s.InstructorId.Value)
                         : null,
-                    ScheduleJson = s.ScheduleJson,
-                    ScheduleSummary = BuildScheduleSummary(s.ScheduleJson),
+                    ScheduleSummary = ScheduleHelper.FormatScheduleSummary(sectionScheds),
                     Status = sectionStatus,
                     TheoryHours = s.Course.TheoryHours,
                     LabHours = s.Course.LabHours,
@@ -299,9 +327,6 @@ public class FacultyPlanningService : IFacultyPlanningService
                 result.Warnings.Add($"Derslik tipi uyumsuz: beklenen {expectedType}, atanan {classroom.Type}.");
 
             section.ClassroomId = request.ClassroomId.Value;
-            section.ScheduleJson = JsonSerializer.Serialize(
-                request.ScheduleSlots.Select(s => new { s.Day, s.StartTime, s.EndTime, s.ClassroomId }),
-                JsonOptions);
         }
 
         if (request.InstructorId.HasValue)
@@ -331,7 +356,6 @@ public class FacultyPlanningService : IFacultyPlanningService
             Action = "Assign",
             UserId = userId,
             ClassroomId = request.ClassroomId,
-            ScheduleJson = section.ScheduleJson,
             InstructorId = request.InstructorId
         });
         await _context.SaveChangesAsync(ct);
@@ -359,7 +383,6 @@ public class FacultyPlanningService : IFacultyPlanningService
             throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerinin atamasini kaldirabilirsiniz.");
 
         section.ClassroomId = null;
-        section.ScheduleJson = "[]";
         section.InstructorId = null;
 
         _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
@@ -423,13 +446,24 @@ public class FacultyPlanningService : IFacultyPlanningService
             .Select(d => d.Id)
             .ToListAsync(ct);
 
-        var query = _context.CourseSections
+        // Find sections that have SectionSchedule records (i.e., are already scheduled)
+        var termScheduledSectionIds = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => ss.CourseSection.TermId == request.TermId)
+            .Select(ss => ss.CourseSectionId)
+            .Distinct()
+            .ToListAsync(ct);
+        var termScheduledSet = termScheduledSectionIds.ToHashSet();
+
+        // Load candidate sections (unscheduled = no SectionSchedule records OR no classroom)
+        var candidateQuery = _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course).ThenInclude(c => c.Department)
             .Include(cs => cs.Instructor)
             .Where(cs => cs.TermId == request.TermId && cs.IsActive && !cs.IsFinalized)
-            .Where(cs => cs.ScheduleJson == "[]" || cs.ClassroomId == null)
             .Where(cs => departmentIds.Contains(cs.Course.DepartmentId ?? 0));
+
+        var query = candidateQuery;
 
         if (request.DepartmentId.HasValue)
             query = query.Where(cs => cs.Course.DepartmentId == request.DepartmentId.Value);
@@ -437,7 +471,11 @@ public class FacultyPlanningService : IFacultyPlanningService
         if (request.SectionIds is { Count: > 0 })
             query = query.Where(cs => request.SectionIds.Contains(cs.Id));
 
-        var sections = await query.ToListAsync(ct);
+        var allCandidateSections = await query.ToListAsync(ct);
+        // Filter to only unscheduled sections (no SectionSchedule records or no classroom)
+        var sections = allCandidateSections
+            .Where(s => !s.ClassroomId.HasValue || !termScheduledSet.Contains(s.Id))
+            .ToList();
 
         var courseIds = sections.Select(s => s.CourseId).Distinct().ToList();
         var compulsoryCourseIds = await _context.CurriculumCourses
@@ -455,11 +493,17 @@ public class FacultyPlanningService : IFacultyPlanningService
             .ToList();
 
         var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(ct);
-        var allScheduled = await _context.CourseSections
+        // Load all scheduled sections' SectionSchedule records for conflict checking
+        var allScheduledRecords = await _context.SectionSchedules
             .AsNoTracking()
-            .Where(cs => cs.TermId == request.TermId && cs.IsActive && cs.ClassroomId.HasValue && cs.ScheduleJson != "[]")
-            .Select(cs => new { cs.Id, cs.ClassroomId, cs.InstructorId, cs.ScheduleJson })
+            .Include(ss => ss.TimeSlot)
+            .Include(ss => ss.CourseSection)
+            .Where(ss => ss.CourseSection.TermId == request.TermId && ss.CourseSection.IsActive)
             .ToListAsync(ct);
+        var scheduledSlotsByClassroom = allScheduledRecords
+            .GroupBy(ss => ss.ClassroomId)
+            .ToDictionary(g => g.Key, g => g.Select(ss => new ScheduleSlotSimple(
+                ss.TimeSlot.DayOfWeek, ss.TimeSlot.StartTime, ss.TimeSlot.EndTime)).ToList());
 
         var sectionInstructorIds = sections.Where(s => s.InstructorId.HasValue).Select(s => s.InstructorId!.Value).Distinct();
         var instructorNameMap = await LoadInstructorNameMapAsync(sectionInstructorIds, ct);
@@ -507,16 +551,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                         var start = new TimeOnly(hour, 0);
                         var end = new TimeOnly(hour + totalHours, 0);
 
-                        var conflict = allScheduled.Any(s =>
-                        {
-                            if (s.ClassroomId != classroom.Id) return false;
-                            try
-                            {
-                                var slots = JsonSerializer.Deserialize<List<ScheduleSlotSimple>>(s.ScheduleJson!, JsonOptions);
-                                return slots?.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start) == true;
-                            }
-                            catch { return false; }
-                        });
+                        var conflict = scheduledSlotsByClassroom.TryGetValue(classroom.Id, out var classroomSlots)
+                            && classroomSlots.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start);
 
                         var previewConflict = previewAssignments.Any(p =>
                             p.classroomId == classroom.Id && p.day == day && p.start < end && p.end > start);
@@ -656,43 +692,20 @@ public class FacultyPlanningService : IFacultyPlanningService
     private async Task<HashSet<int>> GetOccupiedClassroomIdsAsync(
         int termId, DayOfWeek day, TimeOnly startTime, TimeOnly endTime, CancellationToken ct)
     {
-        var sections = await _context.CourseSections
+        var occupiedClassroomIds = await _context.SectionSchedules
             .AsNoTracking()
-            .Where(cs => cs.TermId == termId && cs.IsActive && cs.ClassroomId.HasValue && cs.ScheduleJson != "[]")
-            .Select(cs => new { cs.ClassroomId, cs.ScheduleJson })
+            .Include(ss => ss.TimeSlot)
+            .Include(ss => ss.CourseSection)
+            .Where(ss => ss.CourseSection.TermId == termId
+                && ss.CourseSection.IsActive
+                && ss.TimeSlot.DayOfWeek == day
+                && ss.TimeSlot.StartTime < endTime
+                && ss.TimeSlot.EndTime > startTime)
+            .Select(ss => ss.ClassroomId)
+            .Distinct()
             .ToListAsync(ct);
 
-        var occupied = new HashSet<int>();
-        foreach (var s in sections)
-        {
-            try
-            {
-                var slots = JsonSerializer.Deserialize<List<ScheduleSlotSimple>>(s.ScheduleJson!, JsonOptions);
-                if (slots?.Any(slot => slot.Day == day && slot.StartTime < endTime && slot.EndTime > startTime) == true)
-                    occupied.Add(s.ClassroomId!.Value);
-            }
-            catch { /* skip invalid JSON */ }
-        }
-        return occupied;
-    }
-
-    private static string BuildScheduleSummary(string scheduleJson)
-    {
-        if (string.IsNullOrEmpty(scheduleJson) || scheduleJson == "[]") return "Zamanlanmamis";
-        try
-        {
-            var slots = JsonSerializer.Deserialize<List<ScheduleSlotSimple>>(scheduleJson, JsonOptions);
-            if (slots == null || slots.Count == 0) return "Zamanlanmamis";
-
-            var dayLabels = new Dictionary<int, string>
-            {
-                [0] = "Paz", [1] = "Pzt", [2] = "Sal", [3] = "Car", [4] = "Per", [5] = "Cum", [6] = "Cmt"
-            };
-
-            return string.Join(", ", slots.Select(s =>
-                $"{dayLabels.GetValueOrDefault((int)s.Day, "?")} {s.StartTime:HH:mm}-{s.EndTime:HH:mm}"));
-        }
-        catch { return "Gecersiz"; }
+        return occupiedClassroomIds.ToHashSet();
     }
 
     private static string DayLabel(DayOfWeek day) => day switch

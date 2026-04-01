@@ -1,13 +1,12 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 
 namespace SIS.API.Controllers;
 
@@ -74,6 +73,17 @@ public class InstructorController : ControllerBase
             .Where(cs => cs.InstructorId == instructor.Id && cs.TermId == activeTerm.Id)
             .ToListAsync();
 
+        // Load SectionSchedule records for schedule display
+        var mySectionIds = sections.Select(s => s.Id).ToList();
+        var mySectionSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => mySectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+        var myScheduleMap = mySectionSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
+
         var result = sections.Select(s => new
         {
             SectionId = s.Id,
@@ -86,8 +96,7 @@ public class InstructorController : ControllerBase
             EnrolledCount = s.EnrolledCount,
             AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),
             ClassroomName = s.Classroom?.Name ?? "",
-            Schedule = FormatSchedule(s.ScheduleJson),
-            ScheduleJson = s.ScheduleJson,
+            Schedule = myScheduleMap.GetValueOrDefault(s.Id, string.Empty),
             IsActive = s.IsActive,
             IsFinalized = s.IsFinalized,
             ActiveStudents = s.Registrations.Count(r => r.Status == Domain.Enums.RegistrationStatus.Active)
@@ -244,36 +253,4 @@ public class InstructorController : ControllerBase
             .AsNoTracking()
             .AnyAsync(section => section.Id == sectionId && section.InstructorId == instructorId, cancellationToken);
 
-    private static string FormatSchedule(string scheduleJson)
-    {
-        if (string.IsNullOrWhiteSpace(scheduleJson) || scheduleJson == "[]")
-            return string.Empty;
-
-        try
-        {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(scheduleJson, options);
-            if (slots == null || slots.Count == 0) return string.Empty;
-
-            var formatted = slots
-                .OrderBy(s => s.Day)
-                .ThenBy(s => s.StartTime)
-                .Select(s => $"{DayOfWeekToTurkish(s.Day)} {s.StartTime:HH:mm}-{s.EndTime:HH:mm}");
-
-            return string.Join(", ", formatted);
-        }
-        catch { return string.Empty; }
-    }
-
-    private static string DayOfWeekToTurkish(DayOfWeek day) => day switch
-    {
-        DayOfWeek.Monday => "Pazartesi",
-        DayOfWeek.Tuesday => "Sali",
-        DayOfWeek.Wednesday => "Carsamba",
-        DayOfWeek.Thursday => "Persembe",
-        DayOfWeek.Friday => "Cuma",
-        DayOfWeek.Saturday => "Cumartesi",
-        DayOfWeek.Sunday => "Pazar",
-        _ => day.ToString()
-    };
 }

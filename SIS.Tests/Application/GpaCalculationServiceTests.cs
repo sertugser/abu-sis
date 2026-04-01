@@ -391,7 +391,7 @@ public class GpaCalculationServiceTests : IDisposable
         var section = new CourseSection
         {
             Id = id, CourseId = courseId, TermId = termId,
-            Capacity = 40, EnrolledCount = 1, IsActive = false, ScheduleJson = "[]"
+            Capacity = 40, EnrolledCount = 1, IsActive = false
         };
         _context.CourseSections.Add(section);
         return section;

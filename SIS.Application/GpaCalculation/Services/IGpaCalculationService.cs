@@ -8,4 +8,5 @@ public interface IGpaCalculationService
     Task<decimal> CalculateCgpaAsync(int studentId);
     Task<List<TermGpaHistoryItemDto>> GetTermGpaHistoryAsync(int studentId);
     Task<GpaResultDto> RecalculateAndUpdateAsync(int studentId);
+    Task<Dictionary<int, decimal>> BatchCalculateCgpaAsync(List<int> studentIds);
 }

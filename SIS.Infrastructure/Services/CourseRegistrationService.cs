@@ -1,10 +1,8 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Common.Services;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -433,6 +431,17 @@ public class CourseRegistrationService : ICourseRegistrationService
             .Select(g => g.CourseId)
             .ToHashSet();
 
+        // Load SectionSchedule records for schedule display
+        var regSectionIds = registrations.Select(r => r.CourseSectionId).Distinct().ToList();
+        var sectionSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => regSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+        var schedulesBySectionId = sectionSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
+
         return registrations.Select(r =>
         {
             var courseId = r.CourseSection.CourseId;
@@ -465,7 +474,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                     && userNames.TryGetValue(r.CourseSection.Instructor.UserId, out var name)
                         ? $"{r.CourseSection.Instructor.Title} {name}".Trim()
                         : string.Empty,
-                Schedule = r.CourseSection.ScheduleJson,
+                Schedule = schedulesBySectionId.GetValueOrDefault(r.CourseSectionId, string.Empty),
                 Status = r.Status.ToString(),
                 IsCompulsory = isCompulsory,
                 SuggestedSemester = semester,
@@ -917,6 +926,17 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         var studentDict = students.ToDictionary(s => s.Id);
 
+        // Load SectionSchedule records for schedule display and conflict checks
+        var pendingSectionIds = registrations.Select(r => r.CourseSectionId).Distinct().ToList();
+        var pendingSectionSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => pendingSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+        var pendingScheduleMap = pendingSectionSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         // Group by student, build PendingApprovalDto
         var result = registrations
             .GroupBy(r => r.StudentId)
@@ -932,6 +952,9 @@ public class CourseRegistrationService : ICourseRegistrationService
                     if (instructor != null && users.TryGetValue(instructor.UserId, out var iName))
                         instructorName = $"{instructor.Title} {iName}".Trim();
 
+                    var sectionScheds = pendingScheduleMap.GetValueOrDefault(r.CourseSectionId)
+                        ?? new List<Domain.Entities.SectionSchedule>();
+
                     return new PendingRegistrationItemDto
                     {
                         RegistrationId = r.Id,
@@ -939,7 +962,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                         CourseCode = r.CourseSection.Course.Code,
                         CourseName = r.CourseSection.Course.Name,
                         Ects = r.CourseSection.Course.Ects,
-                        Schedule = r.CourseSection.ScheduleJson,
+                        Schedule = ScheduleHelper.FormatSchedule(sectionScheds),
                         InstructorName = instructorName,
                         IsRepeated = r.IsRepeated,
                         Status = r.Status.ToString()
@@ -948,7 +971,12 @@ public class CourseRegistrationService : ICourseRegistrationService
 
                 // Compute HasScheduleConflict between each pair of pending registrations
                 var scheduleSlots = regItems
-                    .Select(r => new { Item = r, Slots = JsonSerializer.Deserialize<List<ScheduleSlot>>(r.Schedule) ?? new List<ScheduleSlot>() })
+                    .Select(r => new {
+                        Item = r,
+                        Slots = ScheduleHelper.ToTimeBlocks(
+                            pendingScheduleMap.GetValueOrDefault(r.CourseSectionId)
+                            ?? new List<Domain.Entities.SectionSchedule>())
+                    })
                     .ToList();
 
                 for (int i = 0; i < scheduleSlots.Count; i++)

@@ -10,15 +10,14 @@ export const ROUTES = {
   MUFREDAT_DURUM: '/mufredat-durum',
   // Instructor routes
   INSTRUCTOR_SECTIONS: '/derslerim',
-  INSTRUCTOR_SCHEDULING: '/musaitlik-yonetimi',
+  INSTRUCTOR_SCHEDULING: '/ders-programim',
   GRADE_ENTRY: '/not-girisi',
-  MANAGEMENT_PLANNING: '/planlama-merkezi',
-  MANAGEMENT_CLASS_LISTS: '/sinif-listeleri',
-// New pages from technical analysis
-  CLASSROOM_MANAGEMENT: '/merkezi-derslik-yonetimi',
+  COURSE_APPROVAL: '/ders-onay-islemleri',
+  CLASS_LISTS: '/sinif-listeleri',
+  CLASSROOM_DASHBOARD: '/derslik-doluluk-tablosu',
   TERM_CLOSING: '/donem-kapatma',
-  PRE_REGISTRATION_SURVEY: '/on-kayit-anketi',
-  FACULTY_PLANNING: '/fakulte-planlama',
+  SCHEDULE_CREATION: '/ders-programi-olusturma',
+  CLASSROOM_ASSIGNMENT: '/derslik-fakulte-atamasi',
   COURSE_OPENING: '/ders-acma-islemleri',
   // Admin routes
   USER_MANAGEMENT: '/kullanici-yonetimi',
@@ -27,6 +26,11 @@ export const ROUTES = {
   TERM_MANAGEMENT: '/donem-yonetimi',
   ACADEMIC_STRUCTURE: '/akademik-yapi',
   COURSE_CATALOG_ADMIN: '/ders-katalogu',
+  SYSTEM_CONFIG: '/sistem-ayarlari',
+  AUDIT_LOG: '/denetim-kayitlari',
+  PROMOTION_RULES: '/sinif-atlatma-kurallari',
+  SCHEDULE_APPROVAL: '/program-onayi',
+  CLASSROOM_ADMIN: '/derslik-yonetimi',
 } as const;
 
 export const QUERY_KEYS = {
@@ -37,7 +41,7 @@ export const QUERY_KEYS = {
   studentInfo: ['studentInfo'] as const,
   termGpaHistory: ['termGpaHistory'] as const,
   curriculumStatus: ['curriculumStatus'] as const,
-  instructorAvailabilities: ['instructorAvailabilities'] as const,
+  instructorTimetable: ['instructorTimetable'] as const,
   academicOperationsContext: ['academicOperationsContext'] as const,
   academicPlanningSummary: (departmentId?: number, termId?: number) => ['academicPlanningSummary', departmentId, termId] as const,
   departmentClassLists: (departmentId?: number, termId?: number) => ['departmentClassLists', departmentId, termId] as const,
@@ -63,6 +67,12 @@ export const QUERY_KEYS = {
   adminInstructors: (search?: string, departmentId?: number) =>
     ['admin', 'instructors', search, departmentId] as const,
   adminTerms: ['admin', 'terms'] as const,
+  systemConfigs: ['admin', 'systemConfigs'] as const,
+  auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,
+  promotionRules: (programId?: number) => ['admin', 'promotionRules', programId] as const,
+  scheduleApprovalStatus: (facultyId: number, termId?: number) => ['scheduleApproval', facultyId, termId] as const,
+  adminFaculties: ['admin', 'faculties'] as const,
+  adminPrograms: (departmentId?: number) => ['admin', 'programs', departmentId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -72,6 +82,7 @@ export const STATUS_LABELS: Record<string, string> = {
   Completed: 'Tamamlandı',
   Dropped: 'Bırakıldı',
   Withdrawn: 'Çekildi',
+  Rejected: 'Reddedildi',
 };
 
 export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'> = {
@@ -81,6 +92,7 @@ export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructi
   Completed: 'default',
   Dropped: 'destructive',
   Withdrawn: 'outline',
+  Rejected: 'destructive',
 };
 
 /** Routes that have actual page implementations in App.tsx */
@@ -93,14 +105,14 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/alinan-dersler',
   '/donem-ortalamalari',
   '/mufredat-durum',
-  '/on-kayit-anketi',
   '/derslerim',
   '/not-girisi',
-  '/musaitlik-yonetimi',
-  '/planlama-merkezi',
+  '/ders-programim',
+  '/ders-onay-islemleri',
   '/sinif-listeleri',
-  '/fakulte-planlama',
-  '/merkezi-derslik-yonetimi',
+  '/ders-programi-olusturma',
+  '/derslik-doluluk-tablosu',
+  '/derslik-fakulte-atamasi',
   '/donem-kapatma',
   '/ders-acma-islemleri',
   '/kullanici-yonetimi',
@@ -109,6 +121,11 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/donem-yonetimi',
   '/akademik-yapi',
   '/ders-katalogu',
+  '/sistem-ayarlari',
+  '/denetim-kayitlari',
+  '/sinif-atlatma-kurallari',
+  '/program-onayi',
+  '/derslik-yonetimi',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

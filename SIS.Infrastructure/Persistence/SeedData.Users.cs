@@ -73,7 +73,7 @@ public static partial class SeedData
                     UserId = user.Id,
                     DepartmentId = depts[deptCode],
                     Title = title,
-                    MaxWeeklyHours = 20
+                    MaxWeeklyHours = ResolveMaxWeeklyHours(title)
                 });
             }
         }
@@ -291,4 +291,14 @@ public static partial class SeedData
 
         return user;
     }
+
+    private static int ResolveMaxWeeklyHours(string title) => title switch
+    {
+        var t when t.StartsWith("Prof.") => 10,
+        var t when t.StartsWith("Doç.") => 12,
+        var t when t.StartsWith("Dr. Öğr.") || t.StartsWith("Dr.") => 12,
+        var t when t.StartsWith("Öğr. Gör.") => 16,
+        var t when t.Contains("Prof.") => 10, // "Emeritus Prof. Dr." etc.
+        _ => 20 // Arş. Gör. and others
+    };
 }

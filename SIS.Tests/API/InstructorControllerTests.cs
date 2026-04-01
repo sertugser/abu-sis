@@ -149,7 +149,6 @@ public class InstructorControllerTests
             InstructorId = instructorId,
             Capacity = 30,
             IsActive = true,
-            ScheduleJson = "[]"
         });
 
         context.SaveChanges();

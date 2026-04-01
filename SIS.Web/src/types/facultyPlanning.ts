@@ -56,7 +56,6 @@ export interface FacultyPlanningSection {
   classroomType: string | null;
   instructorId: number | null;
   instructorName: string | null;
-  scheduleJson: string;
   scheduleSummary: string;
   status: SectionStatus;
   theoryHours: number;

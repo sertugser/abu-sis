@@ -3,7 +3,7 @@ namespace SIS.Domain.Entities;
 /// <summary>
 /// Bir şubenin hangi TimeSlot'ta hangi derslikte yapıldığını belirler.
 /// CourseSection ↔ TimeSlot ↔ Classroom ilişkisi.
-/// Faz 3'te ScheduleJson yerine geçecek.
+/// Authoritative schedule storage (replaced ScheduleJson).
 /// </summary>
 public class SectionSchedule
 {

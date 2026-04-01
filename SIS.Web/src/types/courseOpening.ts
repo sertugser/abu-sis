@@ -28,6 +28,12 @@ export interface OpenedCourseListDto {
   sections: OpenedCourseSectionDto[];
 }
 
+export interface CrossDepartmentDemandDto {
+  departmentName: string;
+  programName: string;
+  estimatedStudentCount: number;
+}
+
 export interface CurriculumCourseForOpeningDto {
   courseId: number;
   courseCode: string;
@@ -39,6 +45,12 @@ export interface CurriculumCourseForOpeningDto {
   isCompulsory: boolean;
   alreadyOpened: boolean;
   existingSectionCount: number;
+  predictedDemand?: number;
+  retakeCount?: number;
+  recommendedSectionCount?: number;
+  recommendedCapacity?: number;
+  crossDepartmentDemand?: CrossDepartmentDemandDto[];
+  previousTermEnrollment?: number;
 }
 
 export interface InstructorOptionDto {
@@ -69,4 +81,26 @@ export interface UpdateOpenedSectionRequest {
   sectionId: number;
   instructorId?: number;
   capacity?: number;
+}
+
+// ── Instructor Workload ──
+
+export interface AssignedSectionDto {
+  sectionId: number;
+  courseCode: string;
+  courseName: string;
+  sectionNumber: number;
+  weeklyHours: number;
+  capacity: number;
+  enrolledCount: number;
+}
+
+export interface InstructorWorkloadDto {
+  instructorId: number;
+  fullName: string;
+  title: string;
+  maxWeeklyHours: number;
+  assignedWeeklyHours: number;
+  remainingCapacity: number;
+  assignedSections: AssignedSectionDto[];
 }

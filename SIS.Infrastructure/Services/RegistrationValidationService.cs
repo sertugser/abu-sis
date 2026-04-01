@@ -1,10 +1,8 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -304,15 +302,31 @@ public class RegistrationValidationService : IRegistrationValidationService
         }
 
         // === CHECK 8: Schedule Conflict (FR-41) ===
+        // Load SectionSchedule records for all relevant sections (new + existing)
+        var allSectionIds = sections.Select(s => s.Id)
+            .Union(existingRegistrations.Select(r => r.CourseSectionId))
+            .Distinct()
+            .ToList();
+
+        var sectionSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => allSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+
+        var schedulesBySectionId = sectionSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.ToTimeBlocks(g));
+
         for (int i = 0; i < sections.Count; i++)
         {
             var newSection = sections[i];
-            var newSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(newSection.ScheduleJson) ?? new();
+            var newSchedule = schedulesBySectionId.GetValueOrDefault(newSection.Id) ?? new();
 
             // Check against existing registrations
             foreach (var existing in existingRegistrations)
             {
-                var existingSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(existing.CourseSection.ScheduleJson) ?? new();
+                var existingSchedule = schedulesBySectionId.GetValueOrDefault(existing.CourseSectionId) ?? new();
 
                 var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, existingSchedule);
 
@@ -351,7 +365,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             for (int j = i + 1; j < sections.Count; j++)
             {
                 var otherSection = sections[j];
-                var otherSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(otherSection.ScheduleJson) ?? new();
+                var otherSchedule = schedulesBySectionId.GetValueOrDefault(otherSection.Id) ?? new();
 
                 var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, otherSchedule);
                 if (overlapType != ConflictOverlapType.None)

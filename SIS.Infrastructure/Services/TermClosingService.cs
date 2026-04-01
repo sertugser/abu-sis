@@ -182,6 +182,10 @@ public class TermClosingService : ITermClosingService
             gradeLockCount++;
         }
 
+        // Grade assignments (IsFinalized, reg.Grade) must be persisted BEFORE GPA recalculation,
+        // otherwise RecalculateAndUpdateAsync reads stale data from DB.
+        await _context.SaveChangesAsync(ct);
+
         var affectedStudentIds = await _context.CourseRegistrations
             .Where(cr => sections.Select(s => s.Id).Contains(cr.CourseSectionId)
                 && cr.Status != RegistrationStatus.Dropped
@@ -194,8 +198,6 @@ public class TermClosingService : ITermClosingService
         {
             await _gpaService.RecalculateAndUpdateAsync(studentId);
         }
-
-        await _context.SaveChangesAsync(ct);
 
         var notes = $"{gradeLockCount} section kilitlendi (toplam {sections.Count} section).";
         await UpsertProgressAsync(departmentId, term.Id, TermClosingStep.GradeLock, userId, notes, ct);

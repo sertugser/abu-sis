@@ -66,4 +66,5 @@ export interface StudentRegistrationDto {
   suggestedSemester: number;
   isRepeated: boolean;
   takeType: string;
+  advisorNote?: string;
 }

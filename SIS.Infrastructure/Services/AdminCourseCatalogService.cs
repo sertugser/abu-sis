@@ -15,7 +15,15 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             .AsQueryable();
 
         if (filter.DepartmentId.HasValue)
-            query = query.Where(c => c.DepartmentId == filter.DepartmentId.Value);
+        {
+            var deptId = filter.DepartmentId.Value;
+            // Müfredat bazlı filtreleme: sahip bölüm VEYA o bölümün müfredatında olan dersler
+            var curriculumCourseIds = db.CurriculumCourses
+                .Where(cc => cc.Curriculum.Program.DepartmentId == deptId)
+                .Select(cc => cc.CourseId);
+
+            query = query.Where(c => c.DepartmentId == deptId || curriculumCourseIds.Contains(c.Id));
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
@@ -58,6 +66,12 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
                 cc.IsCompulsory))
             .ToListAsync();
 
+        // Önceki dönem istatistikleri
+        var stats = await BuildCourseStatsAsync(id);
+
+        // Önkoşul zinciri (3 seviye derinlik)
+        var chain = await BuildPrerequisiteChainAsync(id, maxDepth: 3);
+
         return new CourseDetailDto(
             course.Id, course.Code, course.Name,
             course.Ects, course.TheoryHours, course.LabHours,
@@ -67,8 +81,67 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
                 p.RequiredCourse.Id, p.RequiredCourse.Code, p.RequiredCourse.Name)).ToList(),
             course.Equivalencies.Select(e => new EquivalencyDto(
                 e.EquivalentCourse.Id, e.EquivalentCourse.Code, e.EquivalentCourse.Name)).ToList(),
-            curriculumAssignments
+            curriculumAssignments,
+            stats,
+            chain
         );
+    }
+
+    private async Task<CourseStatsDto?> BuildCourseStatsAsync(int courseId)
+    {
+        // Toplam kaç dönem açılmış
+        var totalTimesOpened = await db.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.IsActive)
+            .Select(cs => cs.TermId)
+            .Distinct()
+            .CountAsync();
+
+        if (totalTimesOpened == 0) return null;
+
+        // En son dönem
+        var lastTermId = await db.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.IsActive)
+            .OrderByDescending(cs => cs.TermId)
+            .Select(cs => cs.TermId)
+            .FirstOrDefaultAsync();
+
+        if (lastTermId == 0) return null;
+
+        var lastTerm = await db.AcademicTerms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == lastTermId);
+
+        var lastTermSections = await db.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.TermId == lastTermId && cs.IsActive)
+            .ToListAsync();
+
+        return new CourseStatsDto(
+            LastTermName: lastTerm?.Name,
+            LastTermSectionCount: lastTermSections.Count,
+            LastTermTotalEnrolled: lastTermSections.Sum(s => s.EnrolledCount),
+            LastTermAvgCapacity: lastTermSections.Count > 0
+                ? (int)lastTermSections.Average(s => s.Capacity) : 0,
+            TotalTimesOpened: totalTimesOpened
+        );
+    }
+
+    private async Task<List<PrerequisiteChainNodeDto>> BuildPrerequisiteChainAsync(int courseId, int maxDepth)
+    {
+        if (maxDepth <= 0) return [];
+
+        var prereqs = await db.CoursePrerequisites
+            .Include(p => p.RequiredCourse)
+            .Where(p => p.CourseId == courseId)
+            .ToListAsync();
+
+        var result = new List<PrerequisiteChainNodeDto>();
+        foreach (var p in prereqs)
+        {
+            var children = await BuildPrerequisiteChainAsync(p.RequiredCourseId, maxDepth - 1);
+            result.Add(new PrerequisiteChainNodeDto(
+                p.RequiredCourse.Id, p.RequiredCourse.Code, p.RequiredCourse.Name, children));
+        }
+        return result;
     }
 
     public async Task<CourseDetailDto> CreateCourseAsync(CreateCourseDto dto)

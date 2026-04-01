@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, Edit2, Trash2, X, ChevronRight, BookOpen } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, X, ChevronRight, BookOpen, BarChart3, GitBranch } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,7 @@ import {
   useRemoveEquivalency,
   type CourseListItemDto,
   type CreateCourseDto,
+  type PrerequisiteChainNodeDto,
 } from '../hooks/useAdminCourseCatalog';
 import { useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
 
@@ -65,7 +66,7 @@ function CourseFormFields({ form, onChange, departments }: CourseFormProps) {
         </div>
       </div>
       <div>
-        <label className="text-sm font-medium text-foreground block mb-1">Bölüm (İsteğe Bağlı)</label>
+        <label className="text-sm font-medium text-foreground block mb-1">Sahip Bölüm</label>
         <select
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           value={form.departmentId ?? ''}
@@ -223,7 +224,7 @@ function CourseDetailPanel({ courseId, allCourses, onClose, onEdit, onDelete }: 
           ) : (
             <div className="space-y-1.5">
               {detail.curriculumAssignments.map(a => (
-                <div key={a.curriculumId} className="flex items-center justify-between bg-muted/40 rounded-md px-3 py-2 text-xs">
+                <div key={`${a.curriculumId}-${a.suggestedSemester}`} className="flex items-center justify-between bg-muted/40 rounded-md px-3 py-2 text-xs">
                   <div>
                     <span className="font-medium text-foreground">{a.programName}</span>
                     <span className="text-muted-foreground ml-1">v{a.curriculumVersion}</span>
@@ -240,16 +241,84 @@ function CourseDetailPanel({ courseId, allCourses, onClose, onEdit, onDelete }: 
             </div>
           )}
         </div>
+
+        {/* Previous Term Stats */}
+        {detail.stats && (
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Dönem İstatistikleri
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-blue-50 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-blue-700">{detail.stats.totalTimesOpened}</p>
+                <p className="text-[11px] text-blue-600/70">Açıldığı Dönem</p>
+              </div>
+              <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-emerald-700">{detail.stats.lastTermSectionCount}</p>
+                <p className="text-[11px] text-emerald-600/70">Son Dönem Şube</p>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-amber-700">{detail.stats.lastTermTotalEnrolled}</p>
+                <p className="text-[11px] text-amber-600/70">Son Dönem Kayıtlı</p>
+              </div>
+              <div className="bg-violet-50 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-violet-700">{detail.stats.lastTermAvgCapacity}</p>
+                <p className="text-[11px] text-violet-600/70">Ort. Kontenjan</p>
+              </div>
+            </div>
+            {detail.stats.lastTermName && (
+              <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
+                Son dönem: {detail.stats.lastTermName}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Prerequisite Chain */}
+        {detail.prerequisiteChain && detail.prerequisiteChain.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+              <GitBranch className="h-3.5 w-3.5" />
+              Önkoşul Zinciri
+            </h3>
+            <div className="bg-muted/30 rounded-lg p-3">
+              <PrerequisiteChainTree nodes={detail.prerequisiteChain} />
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PrerequisiteChainTree({ nodes, depth = 0 }: { nodes: PrerequisiteChainNodeDto[]; depth?: number }) {
+  return (
+    <div className={depth > 0 ? 'ml-4 border-l-2 border-gray-200 pl-3' : ''}>
+      {nodes.map(node => (
+        <div key={node.courseId} className="py-1">
+          <div className="flex items-center gap-1.5">
+            {depth > 0 && <span className="text-gray-300 text-xs">→</span>}
+            <span className="font-mono text-xs font-semibold text-foreground">{node.code}</span>
+            <span className="text-xs text-muted-foreground truncate">{node.name}</span>
+          </div>
+          {node.prerequisites.length > 0 && (
+            <PrerequisiteChainTree nodes={node.prerequisites} depth={depth + 1} />
+          )}
+        </div>
+      ))}
     </div>
   );
 }
 
 // ─── Main Page ───────────────────────────────────────────────────
 
+type CourseTypeFilter = 'all' | 'theory' | 'lab' | 'mixed';
+
 export default function CourseCatalogAdminPage() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState<number | undefined>(undefined);
+  const [typeFilter, setTypeFilter] = useState<CourseTypeFilter>('all');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -258,8 +327,16 @@ export default function CourseCatalogAdminPage() {
   const [form, setForm] = useState<CreateCourseDto>(emptyCourseForm());
   const [formError, setFormError] = useState('');
 
-  const { data: courses = [], isLoading } = useAdminCourses({ search: search || undefined, departmentId: deptFilter });
+  const { data: allCourses = [], isLoading } = useAdminCourses({ search: search || undefined, departmentId: deptFilter });
   const { data: departments = [] } = useAdminDepartmentsByStructure(undefined);
+
+  // Frontend-side filters
+  const courses = allCourses.filter(c => {
+    if (typeFilter === 'theory' && c.labHours > 0) return false;
+    if (typeFilter === 'lab' && (c.labHours === 0 || c.theoryHours > 0)) return false;
+    if (typeFilter === 'mixed' && (c.labHours === 0 || c.theoryHours === 0)) return false;
+    return true;
+  });
   const createCourse = useCreateCourse();
   const updateCourse = useUpdateCourse();
   const deleteCourseM = useDeleteCourse();
@@ -306,22 +383,44 @@ export default function CourseCatalogAdminPage() {
       {/* Left: Course List */}
       <div className={`flex flex-col border-r border-border transition-all bg-background ${selectedCourseId ? 'w-1/2' : 'w-full'}`}>
         {/* Filters + Action */}
-        <div className="flex flex-wrap gap-3 items-center border-b border-border px-5 py-4">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Kod veya isimle ara..." value={search} onChange={e => setSearch(e.target.value)} />
+        <div className="flex flex-col border-b border-border px-5 py-4 gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-9" placeholder="Kod veya isimle ara..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <select
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+              value={deptFilter ?? ''}
+              onChange={e => setDeptFilter(e.target.value ? Number(e.target.value) : undefined)}
+            >
+              <option value="">Tüm Bölümler</option>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-sm text-muted-foreground">{isLoading ? '' : `${courses.length} ders`}</span>
+              <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" /> Ders Ekle</Button>
+            </div>
           </div>
-          <select
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-            value={deptFilter ?? ''}
-            onChange={e => setDeptFilter(e.target.value ? Number(e.target.value) : undefined)}
-          >
-            <option value="">Tüm Bölümler</option>
-            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-sm text-muted-foreground">{isLoading ? '' : `${courses.length} ders`}</span>
-            <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" /> Ders Ekle</Button>
+          <div className="flex items-center gap-1.5">
+            {([
+              ['all', 'Tümü'],
+              ['theory', 'Sadece Teori'],
+              ['lab', 'Sadece Lab'],
+              ['mixed', 'Teori + Lab'],
+            ] as [CourseTypeFilter, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTypeFilter(key)}
+                className={`px-3 py-1 text-xs rounded-full border transition ${
+                  typeFilter === key
+                    ? 'bg-[#003366] text-white border-[#003366]'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 

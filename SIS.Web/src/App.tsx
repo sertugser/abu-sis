@@ -20,8 +20,9 @@ import GradeEntryPage from './pages/GradeEntryPage';
 import AcademicOperationsPage from './pages/AcademicOperationsPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
+import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
 import TermClosingWizard from './pages/TermClosingWizard';
-import PreRegistrationSurveyPage from './pages/PreRegistrationSurveyPage';
+
 import CourseOpeningPage from './pages/CourseOpeningPage';
 import UserManagementPage from './pages/UserManagementPage';
 import StudentDirectoryPage from './pages/StudentDirectoryPage';
@@ -29,9 +30,14 @@ import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import AcademicStructurePage from './pages/AcademicStructurePage';
 import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
+import SystemConfigPage from './pages/SystemConfigPage';
+import AuditLogPage from './pages/AuditLogPage';
+import PromotionRulePage from './pages/PromotionRulePage';
+import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
+import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
-import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES } from './lib/roles';
+import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
   return (
@@ -45,29 +51,32 @@ export default function App() {
                 <Route element={<AppLayout />}>
                   <Route index element={<RoleDashboard />} />
 
+                  {/* Herkesin erişebildiği sayfalar */}
+                  <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
+
                   <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
                     <Route path="kullanim-kilavuzu" element={<UsageGuidePage />} />
-                    <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
                     <Route path="plan" element={<RegistrationPlanPage />} />
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
                     <Route path="donem-ortalamalari" element={<TermGpaPage />} />
                     <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
-                    <Route path="on-kayit-anketi" element={<PreRegistrationSurveyPage />} />
+
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager']} />}>
                     <Route path="derslerim" element={<InstructorSectionsPage />} />
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
-                    <Route path="musaitlik-yonetimi" element={<InstructorSchedulingPage />} />
+                    <Route path="ders-programim" element={<InstructorSchedulingPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>
-                    <Route path="planlama-merkezi" element={<AcademicOperationsPage mode="planning" />} />
+                    <Route path="ders-onay-islemleri" element={<AcademicOperationsPage mode="planning" />} />
                     <Route path="sinif-listeleri" element={<AcademicOperationsPage mode="class-lists" />} />
-                    <Route path="fakulte-planlama" element={<FacultyPlanningPage />} />
-                    <Route path="merkezi-derslik-yonetimi" element={<ClassroomManagementPage />} />
+                    <Route path="ders-programi-olusturma" element={<FacultyPlanningPage />} />
+                    <Route path="derslik-doluluk-tablosu" element={<ClassroomManagementPage />} />
+                    <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
                     <Route path="donem-kapatma" element={<TermClosingWizard />} />
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
                     <Route path="kullanici-yonetimi" element={<UserManagementPage />} />
@@ -76,6 +85,14 @@ export default function App() {
                     <Route path="donem-yonetimi" element={<TermManagementPage />} />
                     <Route path="akademik-yapi" element={<AcademicStructurePage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
+                    <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
+                    <Route path="denetim-kayitlari" element={<AuditLogPage />} />
+                    <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
+                    <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
+                  </Route>
+
+                  <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>
+                    <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
 
                   <Route path="*" element={<NotFoundPage />} />

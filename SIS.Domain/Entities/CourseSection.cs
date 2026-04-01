@@ -16,10 +16,10 @@ public class CourseSection
     public int SectionNumber { get; set; }
     public bool IsActive { get; set; }
     public bool IsFinalized { get; set; }
+    public bool IsScheduleLocked { get; set; } // true = otomatik scheduling değiştiremez
     public uint RowVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
-    // Schedule stored as JSON: list of {DayOfWeek, StartTime, EndTime}
-    public string ScheduleJson { get; set; } = "[]";
     public ICollection<CourseRegistration> Registrations { get; set; } = new List<CourseRegistration>();
+    public ICollection<SectionSchedule> SectionSchedules { get; set; } = new List<SectionSchedule>();
 }
