@@ -46,14 +46,23 @@ export interface ClassroomAssignmentItemDto {
   facultyId: number;
   facultyName: string;
   reason: string;
+  priority: string;
 }
 
 export interface FacultyLoadDto {
   facultyId: number;
   facultyName: string;
   studentCount: number;
+  curriculumCourseCount: number;
+  compulsoryCourseCount: number;
+  labCourseCount: number;
+  amphiNeedCount: number;
   estimatedSectionCount: number;
-  labSectionCount: number;
+  totalWeeklyHours: number;
+  parallelClassroomNeed: number;
+  parallelLabNeed: number;
+  historicalSectionCount: number;
+  historicalClassroomUsage: number;
   loadPercentage: number;
 }
 

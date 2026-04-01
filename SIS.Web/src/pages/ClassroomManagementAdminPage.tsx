@@ -107,7 +107,6 @@ export default function ClassroomManagementAdminPage() {
   const all = classrooms ?? [];
   const totalCapacity = all.reduce((sum, c) => sum + c.capacity, 0);
   const avgCapacity = all.length > 0 ? Math.round(totalCapacity / all.length) : 0;
-  const largest = all.length > 0 ? all.reduce((max, c) => c.capacity > max.capacity ? c : max, all[0]) : null;
   const typeGroups = all.reduce((acc, c) => {
     acc[c.type] = (acc[c.type] || 0) + 1;
     return acc;
@@ -115,9 +114,9 @@ export default function ClassroomManagementAdminPage() {
 
   return (
     <div className="space-y-5">
-      {/* Summary cards + action */}
+      {/* Summary cards */}
       {!isLoading && !isError && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
             <div className="bg-blue-50 p-2 rounded-lg">
               <Building2 className="h-4 w-4 text-blue-600" />
@@ -146,42 +145,42 @@ export default function ClassroomManagementAdminPage() {
             </div>
           </div>
           <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-rose-50 p-2 rounded-lg">
-              <Building2 className="h-4 w-4 text-rose-600" />
+            <div className="bg-violet-50 p-2 rounded-lg">
+              <Layers className="h-4 w-4 text-violet-600" />
             </div>
             <div>
-              <p className="text-xl font-bold">{largest?.capacity ?? 0}</p>
-              <p className="text-[11px] text-muted-foreground truncate" title={largest?.name}>{largest?.name ?? '—'}</p>
+              <p className="text-xl font-bold">{all.length > 0 ? Math.min(...all.map(c => c.capacity)) : 0}<span className="text-sm font-normal text-muted-foreground"> – {all.length > 0 ? Math.max(...all.map(c => c.capacity)) : 0}</span></p>
+              <p className="text-[11px] text-muted-foreground">Kapasite Aralığı</p>
             </div>
-          </div>
-          <div className="bg-white border rounded-xl p-4 flex items-center justify-center">
-            <Button onClick={openCreate} className="gap-1.5 w-full">
-              <Plus className="h-4 w-4" /> Yeni Derslik
-            </Button>
           </div>
         </div>
       )}
 
-      {/* Filter */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setFilterType(undefined)}
-          className={`px-3 py-1.5 text-xs rounded-full border transition ${!filterType ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-        >
-          Tümü ({all.length})
-        </button>
-        {CLASSROOM_TYPES.map(t => {
-          const count = typeGroups[t] || 0;
-          return (
-            <button
-              key={t}
-              onClick={() => setFilterType(filterType === t ? undefined : t)}
-              className={`px-3 py-1.5 text-xs rounded-full border transition ${filterType === t ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-            >
-              {TYPE_LABELS[t]} {count > 0 && `(${count})`}
-            </button>
-          );
-        })}
+      {/* Filter + Action */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFilterType(undefined)}
+            className={`px-3 py-1.5 text-xs rounded-full border transition ${!filterType ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+          >
+            Tümü ({all.length})
+          </button>
+          {CLASSROOM_TYPES.map(t => {
+            const count = typeGroups[t] || 0;
+            return (
+              <button
+                key={t}
+                onClick={() => setFilterType(filterType === t ? undefined : t)}
+                className={`px-3 py-1.5 text-xs rounded-full border transition ${filterType === t ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              >
+                {TYPE_LABELS[t]} {count > 0 && `(${count})`}
+              </button>
+            );
+          })}
+        </div>
+        <Button onClick={openCreate} className="gap-1.5">
+          <Plus className="h-4 w-4" /> Yeni Derslik
+        </Button>
       </div>
 
       {/* Table */}
