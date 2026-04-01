@@ -3,6 +3,7 @@ import type {
   OpenedCourseListDto,
   CurriculumCourseForOpeningDto,
   InstructorOptionDto,
+  InstructorWorkloadDto,
   OpenCourseRequest,
   OpenedCourseSectionDto,
   BulkOpenCoursesRequest,
@@ -52,4 +53,12 @@ export async function updateOpenedSection(request: UpdateOpenedSectionRequest): 
 
 export async function closeSection(sectionId: number): Promise<void> {
   await apiClient.delete(`/course-opening/section/${sectionId}`);
+}
+
+export async function getInstructorWorkload(instructorId: number, termId: number): Promise<InstructorWorkloadDto> {
+  const { data } = await apiClient.get<InstructorWorkloadDto>(
+    `/course-opening/instructors/${instructorId}/workload`,
+    { params: { termId } },
+  );
+  return data;
 }
