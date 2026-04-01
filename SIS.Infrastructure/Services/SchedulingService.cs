@@ -3311,7 +3311,7 @@ public class SchedulingService : ISchedulingService
 
         var curriculumRows = await _context.CurriculumCourses
             .AsNoTracking()
-            .Where(cc => ids.Contains(cc.CourseId) && cc.Curriculum.IsActive)
+            .Where(cc => ids.Contains(cc.CourseId) && cc.Curriculum.IsActive && cc.IsCompulsory)
             .Select(cc => new
             {
                 cc.CourseId,
