@@ -259,6 +259,7 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                         crossDeptEstimate += estimate;
                         crossDeptDemandList.Add(new CrossDepartmentDemandDto
                         {
+                            DepartmentId = d.DeptId,
                             DepartmentName = d.DeptName,
                             ProgramName = d.ProgName,
                             EstimatedStudentCount = estimate,
@@ -340,12 +341,20 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         if (request.SectionCount <= 0 || request.SectionCount > 20)
             throw new InvalidOperationException("Şube sayısı 1 ile 20 arasında olmalıdır.");
 
-        // Duplikat kontrol: bu dönemde bu ders zaten açılmış mı?
-        var existingCount = await _context.CourseSections
-            .CountAsync(cs => cs.CourseId == request.CourseId && cs.TermId == termId && cs.IsActive, ct);
-        if (existingCount > 0)
+        // Mevcut section'ları kontrol et (aktif/pasif fark etmez, SectionNumber çakışmasını önlemek için)
+        var existingSections = await _context.CourseSections
+            .Where(cs => cs.CourseId == request.CourseId && cs.TermId == termId)
+            .ToListAsync(ct);
+
+        var activeCount = existingSections.Count(s => s.IsActive);
+        if (activeCount > 0)
             throw new InvalidOperationException(
-                $"'{course.Code}' dersi bu dönemde zaten {existingCount} şube ile açılmış. Yeni şube eklemek için mevcut şubeyi güncelleyin.");
+                $"'{course.Code}' dersi bu dönemde zaten {activeCount} şube ile açılmış. Yeni şube eklemek için mevcut şubeyi güncelleyin.");
+
+        // Mevcut en yüksek SectionNumber (approve'dan gelen pasif section'lar olabilir)
+        var maxSectionNumber = existingSections.Count > 0
+            ? existingSections.Max(s => s.SectionNumber)
+            : 0;
 
         // InstructorId validasyonu
         if (request.InstructorId.HasValue)
@@ -366,6 +375,7 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             {
                 CourseId = request.CourseId,
                 TermId = termId,
+                SectionNumber = maxSectionNumber + i + 1,
                 Capacity = request.CapacityPerSection,
                 InstructorId = request.InstructorId,
                 EnrolledCount = 0,
@@ -377,22 +387,51 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         }
         await _context.SaveChangesAsync(ct);
 
-        // CourseAccessPolicy: varsayılan olarak kendi bölümüne açık
-        var existingPolicy = await _context.CourseAccessPolicies
-            .AnyAsync(cap => cap.CourseId == request.CourseId && cap.TermId == termId, ct);
+        // CourseAccessPolicy: erişim politikası oluştur
+        // Mevcut politikaları temizle (tekrar açma durumunda)
+        var existingPolicies = await _context.CourseAccessPolicies
+            .Where(cap => cap.CourseId == request.CourseId && cap.TermId == termId)
+            .ToListAsync(ct);
+        _context.CourseAccessPolicies.RemoveRange(existingPolicies);
 
-        if (!existingPolicy)
+        if (request.AccessibleDepartmentIds is { Count: > 0 })
         {
-            var policy = new CourseAccessPolicy
+            // Kullanıcı elle seçtiyse: seçilen bölümler için politika oluştur
+            foreach (var deptId in request.AccessibleDepartmentIds.Distinct())
             {
-                CourseId = request.CourseId,
-                TermId = termId,
-                DepartmentId = course.DepartmentId.HasValue ? departmentId : null,
-                // DepartmentId null olan ortak dersler tüm bölümlere açık (FacultyId ve DepartmentId null)
-            };
-            _context.CourseAccessPolicies.Add(policy);
-            await _context.SaveChangesAsync(ct);
+                _context.CourseAccessPolicies.Add(new CourseAccessPolicy
+                {
+                    CourseId = request.CourseId,
+                    TermId = termId,
+                    DepartmentId = deptId,
+                });
+            }
         }
+        else
+        {
+            // Otomatik: müfredattaki tüm bölümleri bul ve hepsine aç
+            var curriculumDeptIds = await _context.CurriculumCourses
+                .AsNoTracking()
+                .Where(cc => cc.CourseId == request.CourseId && cc.Curriculum.IsActive)
+                .Select(cc => cc.Curriculum.Program.DepartmentId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            // Açan bölümü de ekle (müfredatta olmasa bile)
+            if (!curriculumDeptIds.Contains(departmentId))
+                curriculumDeptIds.Add(departmentId);
+
+            foreach (var deptId in curriculumDeptIds)
+            {
+                _context.CourseAccessPolicies.Add(new CourseAccessPolicy
+                {
+                    CourseId = request.CourseId,
+                    TermId = termId,
+                    DepartmentId = deptId,
+                });
+            }
+        }
+        await _context.SaveChangesAsync(ct);
 
         // Resolve instructor name if set
         string? instructorName = null;
@@ -409,21 +448,12 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             .Select(cc => (int?)cc.SuggestedSemester)
             .MinAsync(ct) ?? 0;
 
-        // Get existing section count to compute section numbers
-        var existingSections = await _context.CourseSections
-            .AsNoTracking()
-            .Where(cs => cs.TermId == termId && cs.CourseId == request.CourseId)
-            .OrderBy(cs => cs.Id)
-            .Select(cs => cs.Id)
-            .ToListAsync(ct);
-
         return created.Select(s =>
         {
-            var sectionNumber = existingSections.IndexOf(s.Id) + 1;
             return new OpenedCourseSectionDto
             {
                 SectionId = s.Id,
-                SectionNumber = sectionNumber > 0 ? sectionNumber : 1,
+                SectionNumber = s.SectionNumber,
                 CourseId = s.CourseId,
                 CourseCode = course.Code,
                 CourseName = course.Name,

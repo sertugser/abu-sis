@@ -51,10 +51,17 @@ public class ClassroomSuggestionService
             .Where(c => !existingAssignments.Contains(c.Id))
             .ToList();
 
-        // Ortalama derslik kapasitesi (section sayısı tahmini için)
-        var avgCapacity = classrooms.Count > 0
-            ? (int)classrooms.Average(c => c.Capacity)
-            : 50;
+        // Tip-bazlı ortalama kapasite (section sayısı tahmini için)
+        var lectureAvgCapacity = classrooms
+            .Where(c => c.Type == ClassroomType.Lecture || c.Type == ClassroomType.Seminar || c.Type == ClassroomType.Amphitheater)
+            .Select(c => c.Capacity)
+            .DefaultIfEmpty(50)
+            .Average();
+        var labAvgCapacity = classrooms
+            .Where(c => c.Type == ClassroomType.Lab || c.Type == ClassroomType.Computer)
+            .Select(c => c.Capacity)
+            .DefaultIfEmpty(30)
+            .Average();
 
         // Önceki dönem (tarihsel analiz için)
         var previousTermId = await _context.AcademicTerms
@@ -82,12 +89,25 @@ public class ClassroomSuggestionService
             }
 
             // ── 2a. Aktif öğrenci sayısı ──────────────────────────────────
+            // Fakülte toplam (istatistik için)
             var studentCount = await _context.Students
                 .Where(s => s.Status == StudentStatus.Active
                     && s.StudentPrograms.Any(sp => sp.IsActive
                         && sp.Type == StudentProgramType.Main
                         && departmentIds.Contains(sp.Program.DepartmentId)))
                 .CountAsync(ct);
+
+            // Bölüm bazlı öğrenci sayısı (ders talep tahmini için)
+            var studentCountByDept = new Dictionary<int, int>();
+            foreach (var deptId in departmentIds)
+            {
+                studentCountByDept[deptId] = await _context.Students
+                    .Where(s => s.Status == StudentStatus.Active
+                        && s.StudentPrograms.Any(sp => sp.IsActive
+                            && sp.Type == StudentProgramType.Main
+                            && sp.Program.DepartmentId == deptId))
+                    .CountAsync(ct);
+            }
 
             // ── 2b. Müfredat dersleri (dönem paritesine göre) ─────────────
             var curriculumCoursesQuery = _context.CurriculumCourses
@@ -114,68 +134,88 @@ public class ClassroomSuggestionService
                 })
                 .ToList();
 
+            // Haftada kullanılabilir ders saati sayısı (tipik: 5 gün × 6 slot = 30)
+            const int availableWeeklySlotsPerClassroom = 30;
+
             // ── 2c. Haftalık ders saati ihtiyacı ─────────────────────────
             int totalWeeklyTheoryHours = 0;
             int totalWeeklyLabHours = 0;
             int labCourseCount = 0;
-            int amphiNeedCount = 0;
+            int amphiCourseCount = 0;        // Kaç ders büyük derslik gerektiriyor
+            int amphiWeeklyHours = 0;        // Bu derslerin toplam haftalık saati
             int estimatedTotalSections = 0;
+
+            // yearCount'u döngü dışında bir kez hesapla
+            var yearCount = Math.Max(1, curriculumCourses
+                .Select(cc => (cc.SuggestedSemester + 1) / 2)
+                .DefaultIfEmpty(1)
+                .Max());
 
             foreach (var uc in uniqueCourses)
             {
                 var course = uc.Course;
 
                 // Bu ders için tahmini öğrenci sayısı:
-                // Zorunlu → tüm sınıf, Seçmeli → %30-40 oranında
+                // Dersin bölümündeki öğrenci sayısını kullan (tüm fakülte değil)
+                var courseStudentBase = course.DepartmentId.HasValue
+                    && studentCountByDept.TryGetValue(course.DepartmentId.Value, out var deptCount)
+                    ? deptCount
+                    : studentCount; // cross-departmental dersler için fakülte toplamını kullan
+
                 int estimatedDemand;
                 if (uc.IsCompulsory)
                 {
-                    // Zorunlu ders: ilgili sınıf seviyesindeki öğrenci sayısı
-                    // Basitleştirme: toplam öğrenci / toplam yıl sayısı (4 yıl varsayılan)
-                    var yearCount = Math.Max(1, curriculumCourses
-                        .Select(cc => (cc.SuggestedSemester + 1) / 2)
-                        .DefaultIfEmpty(1)
-                        .Max());
-                    estimatedDemand = Math.Max(1, studentCount / yearCount);
+                    estimatedDemand = Math.Max(1, courseStudentBase / yearCount);
                 }
                 else
                 {
-                    // Seçmeli ders: tahmini talep = zorunlunun %35'i
-                    var yearCount = Math.Max(1, curriculumCourses
-                        .Select(cc => (cc.SuggestedSemester + 1) / 2)
-                        .DefaultIfEmpty(1)
-                        .Max());
-                    estimatedDemand = Math.Max(1, (int)(studentCount / yearCount * 0.35));
+                    estimatedDemand = Math.Max(1, (int)(courseStudentBase / yearCount * 0.35));
                 }
 
-                // Kaç section gerekecek?
-                int sectionsNeeded = Math.Max(1, (int)Math.Ceiling((double)estimatedDemand / avgCapacity));
-                estimatedTotalSections += sectionsNeeded;
+                // Teori section sayısı → derslik/amfi kapasitesine göre
+                int theorySectionsNeeded = course.TheoryHours > 0
+                    ? Math.Max(1, (int)Math.Ceiling(estimatedDemand / lectureAvgCapacity))
+                    : 0;
+
+                // Lab section sayısı → lab derslik kapasitesine göre (lablar daha küçük)
+                int labSectionsNeeded = course.LabHours > 0
+                    ? Math.Max(1, (int)Math.Ceiling(estimatedDemand / labAvgCapacity))
+                    : 0;
+
+                estimatedTotalSections += Math.Max(theorySectionsNeeded, labSectionsNeeded);
 
                 // Teori saatleri
                 if (course.TheoryHours > 0)
-                    totalWeeklyTheoryHours += course.TheoryHours * sectionsNeeded;
+                    totalWeeklyTheoryHours += course.TheoryHours * theorySectionsNeeded;
 
                 // Lab saatleri
                 if (course.LabHours > 0)
                 {
-                    totalWeeklyLabHours += course.LabHours * sectionsNeeded;
+                    totalWeeklyLabHours += course.LabHours * labSectionsNeeded;
                     labCourseCount++;
                 }
 
-                // Amfi ihtiyacı: tahmini talep >= eşik ve tek section olarak verilecekse
+                // Amfi ihtiyacı: tahmini talep >= eşik → bu ders büyük derslikte verilmeli
                 if (estimatedDemand >= amphiThreshold)
-                    amphiNeedCount++;
+                {
+                    amphiCourseCount++;
+                    // Bu ders tek section olarak amfide verilecek, haftalık saatleri
+                    amphiWeeklyHours += course.TheoryHours;
+                }
             }
+
+            // Paralel amfi ihtiyacı: amfi gerektiren derslerin haftalık saatlerini
+            // zaman dilimlerine bölerek aynı anda kaç amfi gerektiğini hesapla
+            int parallelAmphiNeed = amphiWeeklyHours > 0
+                ? (int)Math.Ceiling((double)amphiWeeklyHours / availableWeeklySlotsPerClassroom)
+                : 0;
+            // En az 1 amfi (amfi dersi varsa) ama ders sayısından fazla olamaz
+            if (amphiCourseCount > 0)
+                parallelAmphiNeed = Math.Max(1, Math.Min(parallelAmphiNeed, amphiCourseCount));
 
             // ── 2d. Paralel derslik ihtiyacı ─────────────────────────────
             // Haftada kaç saat derslik kullanılacak (teori + lab ayrı tip)
             int totalWeeklySlotDemand = totalWeeklyTheoryHours + totalWeeklyLabHours;
-
-            // Haftada kullanılabilir ders saati sayısı (tipik: 5 gün × 6 slot = 30)
-            // Bu değer aslında TimeSlot grid'inden hesaplanabilir ama
-            // derslik ataması aşamasında grid henüz oluşmamış olabilir
-            const int availableWeeklySlotsPerClassroom = 30;
 
             // Aynı anda kaç derslik gerekli (paralel ihtiyaç)
             int parallelClassroomNeed = totalWeeklySlotDemand > 0
@@ -189,8 +229,8 @@ public class ClassroomSuggestionService
 
             // ── 2e. Tarihsel analiz (önceki dönem) ───────────────────────
             int historicalSectionCount = 0;
-            int historicalLabSectionCount = 0;
             int historicalClassroomUsage = 0;
+            int historicalLabClassroomUsage = 0;
             if (previousTermId > 0)
             {
                 var prevSections = await _context.CourseSections
@@ -201,16 +241,37 @@ public class ClassroomSuggestionService
                     .ToListAsync(ct);
 
                 historicalSectionCount = prevSections.Count;
-                historicalLabSectionCount = prevSections.Count(s =>
-                    s.Course.LabHours > 0 && s.Course.TheoryHours == 0);
+
+                var prevSectionIds = prevSections.Select(ps => ps.Id).ToList();
 
                 // Kaç farklı derslik kullanılmış?
                 historicalClassroomUsage = await _context.Set<SectionSchedule>()
                     .AsNoTracking()
-                    .Where(ss => prevSections.Select(ps => ps.Id).Contains(ss.CourseSectionId))
+                    .Where(ss => prevSectionIds.Contains(ss.CourseSectionId))
                     .Select(ss => ss.ClassroomId)
                     .Distinct()
                     .CountAsync(ct);
+
+                // Kaç farklı lab dersliği kullanılmış?
+                var labSectionIds = prevSections
+                    .Where(s => s.Course.LabHours > 0)
+                    .Select(s => s.Id)
+                    .ToList();
+
+                if (labSectionIds.Count > 0)
+                {
+                    historicalLabClassroomUsage = await _context.Set<SectionSchedule>()
+                        .AsNoTracking()
+                        .Where(ss => labSectionIds.Contains(ss.CourseSectionId))
+                        .Join(_context.Classrooms,
+                            ss => ss.ClassroomId,
+                            c => c.Id,
+                            (ss, c) => c)
+                        .Where(c => c.Type == ClassroomType.Lab || c.Type == ClassroomType.Computer)
+                        .Select(c => c.Id)
+                        .Distinct()
+                        .CountAsync(ct);
+                }
             }
 
             // ── 2f. Final ihtiyaç hesabı ─────────────────────────────────
@@ -219,20 +280,24 @@ public class ClassroomSuggestionService
             if (historicalClassroomUsage > 0)
             {
                 // Tarihsel veri: %60 ağırlık, müfredat tahmini: %40 ağırlık
-                finalClassroomNeed = (int)Math.Ceiling(
+                var blendedClassroom = (int)Math.Ceiling(
                     historicalClassroomUsage * 0.6 + parallelClassroomNeed * 0.4);
+                // Tarihsel veri, tahminin 2 katını geçemez (anomali koruması)
+                finalClassroomNeed = Math.Min(blendedClassroom, parallelClassroomNeed * 2);
             }
             else
             {
                 finalClassroomNeed = parallelClassroomNeed;
             }
 
-            // Lab derslik ihtiyacı: tarihsel + tahmin
+            // Lab derslik ihtiyacı: tarihsel (kaç farklı lab dersliği kullanılmış) + tahmin
             int finalLabNeed;
-            if (historicalLabSectionCount > 0)
+            if (historicalLabClassroomUsage > 0)
             {
-                finalLabNeed = (int)Math.Ceiling(
-                    historicalLabSectionCount * 0.6 + parallelLabNeed * 0.4);
+                var blendedLab = (int)Math.Ceiling(
+                    historicalLabClassroomUsage * 0.6 + parallelLabNeed * 0.4);
+                // Tarihsel veri, tahminin 2 katını geçemez (anomali koruması)
+                finalLabNeed = Math.Min(blendedLab, parallelLabNeed * 2);
             }
             else
             {
@@ -247,7 +312,8 @@ public class ClassroomSuggestionService
                 CurriculumCourseCount = uniqueCourses.Count,
                 CompulsoryCourseCount = uniqueCourses.Count(c => c.IsCompulsory),
                 LabCourseCount = labCourseCount,
-                AmphiNeedCount = amphiNeedCount,
+                AmphiCourseCount = amphiCourseCount,
+                ParallelAmphiNeed = parallelAmphiNeed,
                 TotalWeeklyTheoryHours = totalWeeklyTheoryHours,
                 TotalWeeklyLabHours = totalWeeklyLabHours,
                 EstimatedSectionCount = estimatedTotalSections,
@@ -284,15 +350,15 @@ public class ClassroomSuggestionService
             .ToList();
 
         var amphiFaculties = rankedFaculties
-            .Where(f => f.AmphiNeedCount > 0)
-            .OrderByDescending(f => f.AmphiNeedCount)
+            .Where(f => f.ParallelAmphiNeed > 0)
+            .OrderByDescending(f => f.ParallelAmphiNeed)
             .ThenByDescending(f => f.StudentCount)
             .ToList();
 
-        // Her fakülteye amfi ihtiyacı kadar dağıt
+        // Her fakülteye paralel amfi ihtiyacı kadar dağıt
         foreach (var faculty in amphiFaculties)
         {
-            var needed = faculty.AmphiNeedCount;
+            var needed = faculty.ParallelAmphiNeed;
             var assigned = 0;
             foreach (var amfi in amphitheaters.ToList())
             {
@@ -306,7 +372,7 @@ public class ClassroomSuggestionService
                     ClassroomType = amfi.Type.ToString(),
                     FacultyId = faculty.FacultyId,
                     FacultyName = faculty.FacultyName,
-                    Reason = $"Amfi ihtiyacı: {faculty.AmphiNeedCount} ders {amphiThreshold}+ öğrenci bekleniyor ({faculty.StudentCount} aktif öğrenci)",
+                    Reason = $"{faculty.AmphiCourseCount} ders {amphiThreshold}+ öğrenciye sahip, haftalık programa göre {faculty.ParallelAmphiNeed} amfi aynı anda gerekli",
                     Priority = "high"
                 });
                 remaining.Remove(amfi);
@@ -347,6 +413,9 @@ public class ClassroomSuggestionService
             .ThenByDescending(f => f.LabCourseCount)
             .ToList();
 
+        // Lab atama sayısını fakülte bazında takip et
+        var labAssignedCount = rankedFaculties.ToDictionary(f => f.FacultyId, _ => 0);
+
         foreach (var faculty in labFaculties)
         {
             var needed = faculty.ParallelLabNeed;
@@ -369,15 +438,22 @@ public class ClassroomSuggestionService
                 remaining.Remove(lab);
                 labClassrooms.Remove(lab);
                 assigned++;
+                labAssignedCount[faculty.FacultyId]++;
             }
         }
 
-        // Kalan lab derslikler → lab dersi olan ama daha az ihtiyacı olan fakültelere
+        // Kalan lab derslikler → en çok lab eksiği olan fakülteye (deficit-based dağıtım)
         foreach (var lab in labClassrooms.ToList())
         {
-            var target = rankedFaculties.FirstOrDefault(f => f.LabCourseCount > 0)
+            var target = rankedFaculties
+                .Where(f => f.LabCourseCount > 0)
+                .OrderByDescending(f => f.ParallelLabNeed - labAssignedCount.GetValueOrDefault(f.FacultyId))
+                .ThenByDescending(f => f.LabCourseCount)
+                .FirstOrDefault()
                 ?? rankedFaculties.FirstOrDefault();
             if (target == null) break;
+
+            labAssignedCount[target.FacultyId] = labAssignedCount.GetValueOrDefault(target.FacultyId) + 1;
 
             suggestions.Add(new ClassroomAssignmentItemDto
             {
@@ -387,7 +463,7 @@ public class ClassroomSuggestionService
                 ClassroomType = lab.Type.ToString(),
                 FacultyId = target.FacultyId,
                 FacultyName = target.FacultyName,
-                Reason = $"Kalan lab derslik → lab dersi bulunan fakülte ({target.LabCourseCount} lab dersi)",
+                Reason = $"Kalan lab derslik → en çok lab eksiği olan fakülte ({target.LabCourseCount} lab dersi, {labAssignedCount[target.FacultyId]} atanmış)",
                 Priority = "medium"
             });
             remaining.Remove(lab);
@@ -498,7 +574,8 @@ public class ClassroomSuggestionService
                 CurriculumCourseCount = f.CurriculumCourseCount,
                 CompulsoryCourseCount = f.CompulsoryCourseCount,
                 LabCourseCount = f.LabCourseCount,
-                AmphiNeedCount = f.AmphiNeedCount,
+                AmphiCourseCount = f.AmphiCourseCount,
+                ParallelAmphiNeed = f.ParallelAmphiNeed,
                 EstimatedSectionCount = f.EstimatedSectionCount,
                 TotalWeeklyHours = f.TotalWeeklyTheoryHours + f.TotalWeeklyLabHours,
                 ParallelClassroomNeed = f.ParallelClassroomNeed,
@@ -520,7 +597,8 @@ public class ClassroomSuggestionService
         public int CurriculumCourseCount { get; set; }
         public int CompulsoryCourseCount { get; set; }
         public int LabCourseCount { get; set; }
-        public int AmphiNeedCount { get; set; }
+        public int AmphiCourseCount { get; set; }
+        public int ParallelAmphiNeed { get; set; }
         public int TotalWeeklyTheoryHours { get; set; }
         public int TotalWeeklyLabHours { get; set; }
         public int EstimatedSectionCount { get; set; }
@@ -530,12 +608,13 @@ public class ClassroomSuggestionService
         public int HistoricalClassroomUsage { get; set; }
 
         /// <summary>
-        /// Talep puanı: öğrenci + section + haftalık saat ağırlıklı
+        /// Talep puanı: sadece bağımsız (birbirinden türetilmemiş) metrikler.
+        /// EstimatedSectionCount ve WeeklyHours zaten StudentCount'tan türüyor → dahil edilmez.
         /// </summary>
         public double DemandScore =>
             StudentCount * 1.0
-            + EstimatedSectionCount * 5.0
-            + (TotalWeeklyTheoryHours + TotalWeeklyLabHours) * 2.0;
+            + CurriculumCourseCount * 3.0
+            + LabCourseCount * 2.0;
 
         public static FacultyDemandAnalysis Empty(int facultyId, string facultyName) => new()
         {
@@ -577,7 +656,8 @@ public class FacultyLoadDto
     public int CurriculumCourseCount { get; set; }
     public int CompulsoryCourseCount { get; set; }
     public int LabCourseCount { get; set; }
-    public int AmphiNeedCount { get; set; }
+    public int AmphiCourseCount { get; set; }
+    public int ParallelAmphiNeed { get; set; }
     public int EstimatedSectionCount { get; set; }
     public int TotalWeeklyHours { get; set; }
     public int ParallelClassroomNeed { get; set; }

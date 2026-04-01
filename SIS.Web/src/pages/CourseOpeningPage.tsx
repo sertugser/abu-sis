@@ -489,6 +489,7 @@ function AddCourseDialog({
   const [capacity, setCapacity] = useState(40);
   const [instructorId, setInstructorId] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [selectedDeptIds, setSelectedDeptIds] = useState<number[]>([]);
 
   const workloadQuery = useInstructorWorkload(instructorId ? Number(instructorId) : null, termId);
 
@@ -496,6 +497,10 @@ function AddCourseDialog({
     setSelectedCourse(c);
     if (c.recommendedSectionCount != null && c.recommendedSectionCount > 0) setSectionCount(c.recommendedSectionCount);
     if (c.recommendedCapacity != null && c.recommendedCapacity > 0) setCapacity(c.recommendedCapacity);
+    // Müfredattaki tüm bölümleri + açan bölümü otomatik seç
+    const deptIds = (c.crossDepartmentDemand ?? []).map(d => d.departmentId);
+    if (!deptIds.includes(departmentId)) deptIds.push(departmentId);
+    setSelectedDeptIds(deptIds);
   };
 
   const filteredCourses = (curriculumQuery.data ?? []).filter(
@@ -505,7 +510,7 @@ function AddCourseDialog({
   const handleSubmit = () => {
     if (!selectedCourse) return;
     openMutation.mutate(
-      { courseId: selectedCourse.courseId, sectionCount, capacityPerSection: capacity, instructorId: instructorId ? Number(instructorId) : undefined },
+      { courseId: selectedCourse.courseId, sectionCount, capacityPerSection: capacity, instructorId: instructorId ? Number(instructorId) : undefined, accessibleDepartmentIds: selectedDeptIds },
       { onSuccess: () => { setSelectedCourse(null); onClose(); } },
     );
   };
@@ -690,32 +695,62 @@ function AddCourseDialog({
 
             {/* ── Açma Formu ── */}
             {selectedCourse && (
-              <div className="grid grid-cols-3 gap-3 mt-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Şube Sayısı</label>
-                  <Input type="number" min={1} max={20} value={sectionCount} onChange={e => setSectionCount(Number(e.target.value))} />
+              <>
+                <div className="grid grid-cols-3 gap-3 mt-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Şube Sayısı</label>
+                    <Input type="number" min={1} max={20} value={sectionCount} onChange={e => setSectionCount(Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Kontenjan</label>
+                    <Input type="number" min={1} max={500} value={capacity} onChange={e => setCapacity(Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Öğretim Elemanı</label>
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={instructorId}
+                      onChange={e => setInstructorId(e.target.value)}
+                    >
+                      <option value="">Seçiniz (opsiyonel)</option>
+                      {(instructorsQuery.data ?? []).map(inst => (
+                        <option key={inst.instructorId} value={inst.instructorId}>{inst.fullName}</option>
+                      ))}
+                    </select>
+                    {workloadQuery.data && (
+                      <div className="mt-1"><WorkloadBar workload={workloadQuery.data} /></div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Kontenjan</label>
-                  <Input type="number" min={1} max={500} value={capacity} onChange={e => setCapacity(Number(e.target.value))} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Öğretim Elemanı</label>
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={instructorId}
-                    onChange={e => setInstructorId(e.target.value)}
-                  >
-                    <option value="">Seçiniz (opsiyonel)</option>
-                    {(instructorsQuery.data ?? []).map(inst => (
-                      <option key={inst.instructorId} value={inst.instructorId}>{inst.fullName}</option>
-                    ))}
-                  </select>
-                  {workloadQuery.data && (
-                    <div className="mt-1"><WorkloadBar workload={workloadQuery.data} /></div>
-                  )}
-                </div>
-              </div>
+
+                {/* ── Erişilebilir Bölümler ── */}
+                {(selectedCourse.crossDepartmentDemand ?? []).length > 0 && (
+                  <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <label className="text-sm font-medium text-blue-900 block mb-2">Dersi Alabilecek Bölümler</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {(selectedCourse.crossDepartmentDemand ?? []).map(d => (
+                        <label key={d.departmentId} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-blue-100 rounded px-1.5 py-1">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            checked={selectedDeptIds.includes(d.departmentId)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setSelectedDeptIds(prev => [...prev, d.departmentId]);
+                              } else {
+                                setSelectedDeptIds(prev => prev.filter(id => id !== d.departmentId));
+                              }
+                            }}
+                          />
+                          <span>{d.departmentName}</span>
+                          <span className="text-xs text-gray-500">({d.estimatedStudentCount} öğrenci)</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-blue-700 mt-1.5">Müfredatına göre otomatik seçildi. İstediğiniz bölümleri kaldırabilir veya ekleyebilirsiniz.</p>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

@@ -570,10 +570,10 @@ public class AcademicOperationsService : IAcademicOperationsService
         var totalDemand = approval.PredictedDemand;
 
         // Derslik kapasitesine göre bölme: tüm dersliklerin ortalama kapasitesini hesapla
-        var avgClassroomCapacity = await _context.Classrooms
-            .Select(c => c.Capacity)
-            .DefaultIfEmpty(40)
-            .AverageAsync(cancellationToken);
+        var classroomCount = await _context.Classrooms.CountAsync(cancellationToken);
+        var avgClassroomCapacity = classroomCount > 0
+            ? await _context.Classrooms.AverageAsync(c => c.Capacity, cancellationToken)
+            : 40.0;
 
         var capacityPerSection = (int)Math.Ceiling(avgClassroomCapacity);
 
@@ -583,17 +583,23 @@ public class AcademicOperationsService : IAcademicOperationsService
             capacityPerSection = (int)Math.Ceiling((double)totalDemand / sectionCount);
         }
 
+        // Mevcut en yüksek SectionNumber'ı bul (tekrar onaylama durumunda çakışma olmasın)
+        var maxSectionNumber = await _context.CourseSections
+            .Where(cs => cs.CourseId == approval.CourseId && cs.TermId == approval.TermId)
+            .Select(cs => (int?)cs.SectionNumber)
+            .MaxAsync(cancellationToken) ?? 0;
+
         for (var i = 0; i < sectionCount; i++)
         {
             _context.CourseSections.Add(new CourseSection
             {
                 CourseId = approval.CourseId,
                 TermId = approval.TermId,
+                SectionNumber = maxSectionNumber + i + 1,
                 Capacity = capacityPerSection,
                 EnrolledCount = 0,
                 IsActive = true,
                 IsFinalized = false,
-                // SectionSchedule records will be created during scheduling phase
             });
         }
     }

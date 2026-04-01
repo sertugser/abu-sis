@@ -27,6 +27,10 @@
   --color-accent: oklch(0.65 0.14 188);
   --color-accent-foreground: oklch(0.18 0.04 260);
 
+  /* ── Popover ── */
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.18 0.04 260);
+
   /* ── Borders & Inputs ── */
   --color-border: oklch(0.92 0.005 250);
   --color-input: oklch(0.92 0.005 250);
