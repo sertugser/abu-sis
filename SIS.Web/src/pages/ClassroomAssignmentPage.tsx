@@ -413,9 +413,9 @@ export default function ClassroomAssignmentPage() {
                             {fl.labCourseCount} lab dersi ({fl.parallelLabNeed} lab derslik)
                           </span>
                         )}
-                        {fl.amphiNeedCount > 0 && (
+                        {fl.amphiCourseCount > 0 && (
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
-                            {fl.amphiNeedCount} amfi ihtiyacı
+                            {fl.amphiCourseCount} ders 100+ öğrenci ({fl.parallelAmphiNeed} amfi gerekli)
                           </span>
                         )}
                         {fl.historicalClassroomUsage > 0 && (

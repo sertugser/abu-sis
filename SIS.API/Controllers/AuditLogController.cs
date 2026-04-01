@@ -8,6 +8,7 @@ namespace SIS.API.Controllers;
 public record AuditLogSummaryDto(
     int Id,
     int? UserId,
+    string? UserName,
     string Action,
     string EntityType,
     string? EntityId,
@@ -17,6 +18,7 @@ public record AuditLogSummaryDto(
 public record AuditLogDetailDto(
     int Id,
     int? UserId,
+    string? UserName,
     string Action,
     string EntityType,
     string? EntityId,
@@ -79,19 +81,31 @@ public class AuditLogController(AppDbContext context) : ControllerBase
 
         var totalCount = await query.CountAsync(ct);
 
-        var items = await query
+        var rawItems = await query
             .OrderByDescending(al => al.Timestamp)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(al => new AuditLogSummaryDto(
-                al.Id,
-                al.UserId,
-                al.Action,
-                al.EntityType,
-                al.EntityId,
-                al.Timestamp,
-                al.IpAddress))
             .ToListAsync(ct);
+
+        // Kullanıcı adlarını toplu çek
+        var userIds = rawItems.Where(al => al.UserId.HasValue).Select(al => al.UserId!.Value).Distinct().ToList();
+        var userNames = userIds.Count > 0
+            ? await _context.Users
+                .AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct)
+            : new Dictionary<int, string>();
+
+        var items = rawItems.Select(al => new AuditLogSummaryDto(
+            al.Id,
+            al.UserId,
+            al.UserId.HasValue && userNames.TryGetValue(al.UserId.Value, out var name) ? name : null,
+            al.Action,
+            al.EntityType,
+            al.EntityId,
+            al.Timestamp,
+            al.IpAddress
+        )).ToList();
 
         return Ok(new AuditLogPagedResponse(items, totalCount, page, pageSize));
     }
@@ -102,22 +116,26 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
-        var log = await _context.AuditLogs.AsNoTracking()
-            .Where(al => al.Id == id)
-            .Select(al => new AuditLogDetailDto(
-                al.Id,
-                al.UserId,
-                al.Action,
-                al.EntityType,
-                al.EntityId,
-                al.OldValue,
-                al.NewValue,
-                al.Timestamp,
-                al.IpAddress))
+        var al = await _context.AuditLogs.AsNoTracking()
+            .Where(a => a.Id == id)
             .FirstOrDefaultAsync(ct);
 
-        if (log is null)
+        if (al is null)
             return NotFound(new { error = "Audit log kaydı bulunamadı." });
+
+        string? userName = null;
+        if (al.UserId.HasValue)
+        {
+            var user = await _context.Users.AsNoTracking()
+                .Where(u => u.Id == al.UserId.Value)
+                .Select(u => u.FirstName + " " + u.LastName)
+                .FirstOrDefaultAsync(ct);
+            userName = user;
+        }
+
+        var log = new AuditLogDetailDto(
+            al.Id, al.UserId, userName, al.Action, al.EntityType,
+            al.EntityId, al.OldValue, al.NewValue, al.Timestamp, al.IpAddress);
 
         return Ok(log);
     }

@@ -56,7 +56,8 @@ export interface FacultyLoadDto {
   curriculumCourseCount: number;
   compulsoryCourseCount: number;
   labCourseCount: number;
-  amphiNeedCount: number;
+  amphiCourseCount: number;
+  parallelAmphiNeed: number;
   estimatedSectionCount: number;
   totalWeeklyHours: number;
   parallelClassroomNeed: number;

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.API.Filters;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -23,6 +24,8 @@ public class StudentManagementController : ControllerBase
     }
 
     [HttpGet]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student")]
     public async Task<IActionResult> GetStudents([FromQuery] AdminStudentFilterDto filter)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -40,6 +43,8 @@ public class StudentManagementController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
     public async Task<IActionResult> GetStudent(int id)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();

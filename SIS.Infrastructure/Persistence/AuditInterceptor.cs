@@ -30,6 +30,9 @@ public class AuditInterceptor : SaveChangesInterceptor
         nameof(ClassroomTermAssignment),
         nameof(Course),
         nameof(Curriculum),
+        nameof(StudentGrade),       // Not degisiklikleri
+        nameof(GradeComponent),     // Not bilesenleri
+        nameof(GradingCriteria),    // Degerlendirme kriterleri
     };
 
     // Properties that must never appear in audit logs (security)
