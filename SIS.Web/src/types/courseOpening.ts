@@ -29,6 +29,7 @@ export interface OpenedCourseListDto {
 }
 
 export interface CrossDepartmentDemandDto {
+  departmentId: number;
   departmentName: string;
   programName: string;
   estimatedStudentCount: number;
@@ -65,6 +66,7 @@ export interface OpenCourseRequest {
   sectionCount: number;
   capacityPerSection: number;
   instructorId?: number;
+  accessibleDepartmentIds?: number[];
 }
 
 export interface BulkOpenCoursesRequest {

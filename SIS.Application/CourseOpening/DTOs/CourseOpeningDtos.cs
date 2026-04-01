@@ -60,6 +60,7 @@ public class CurriculumCourseForOpeningDto
 
 public class CrossDepartmentDemandDto
 {
+    public int DepartmentId { get; set; }
     public string DepartmentName { get; set; } = "";
     public string ProgramName { get; set; } = "";
     public int EstimatedStudentCount { get; set; }
@@ -79,6 +80,10 @@ public class OpenCourseRequest
     public int SectionCount { get; set; } = 1;
     public int CapacityPerSection { get; set; } = 40;
     public int? InstructorId { get; set; }
+    /// <summary>
+    /// Dersin hangi bölümlere açık olacağı. Null/boş ise müfredattaki tüm bölümlere otomatik açılır.
+    /// </summary>
+    public List<int>? AccessibleDepartmentIds { get; set; }
 }
 
 public class BulkOpenCoursesRequest
