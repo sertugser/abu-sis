@@ -17,6 +17,7 @@ public class CourseSection
     public bool IsActive { get; set; }
     public bool IsFinalized { get; set; }
     public bool IsScheduleLocked { get; set; } // true = otomatik scheduling değiştiremez
+    public bool IsPinned { get; set; } // true = dışarıdan gelen hoca, saati sabit, optimizasyon değiştiremez
     public uint RowVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

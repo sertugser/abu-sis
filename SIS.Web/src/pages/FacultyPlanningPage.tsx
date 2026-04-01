@@ -20,6 +20,7 @@ import {
   useFacultyPlanningSections, useUnassignSection,
 } from '../hooks/useFacultyPlanning';
 import type {
+  AssignmentResult,
   FacultyPlanningSection,
 } from '../types/facultyPlanning';
 import type { SchedulingConflict } from '../types/scheduling';
@@ -207,6 +208,21 @@ const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'succe
   Partial: { label: 'Kısmi', variant: 'warning' },
 };
 
+interface SectionActionFeedback {
+  kind: 'success' | 'error';
+  title: string;
+  message: string;
+  warnings?: string[];
+  conflicts?: SchedulingConflict[];
+}
+
+function getApiErrorMessage(error: unknown, fallback: string) {
+  return (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.error
+    ?? (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.message
+    ?? (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.title
+    ?? fallback;
+}
+
 function SectionListTab({
   facultyId, termId, departments,
 }: {
@@ -218,15 +234,85 @@ function SectionListTab({
   const [filterStatus, setFilterStatus] = useState<string | undefined>();
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<SectionActionFeedback | null>(null);
 
   const sectionsQuery = useFacultyPlanningSections(facultyId, termId, filterDept, filterStatus, page);
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
 
+  const handleAssign = (
+    sectionId: number,
+    classroomId?: number,
+    slots?: { day: number; startTime: string; endTime: string }[],
+    instructorId?: number,
+  ) => {
+    setActionFeedback(null);
+    assignMutation.mutate(
+      { sectionId, classroomId, scheduleSlots: slots, instructorId },
+      {
+        onSuccess: (result: AssignmentResult) => {
+          const hasConflicts = result.conflicts.length > 0;
+          const hasWarnings = result.warnings.length > 0;
+
+          setActionFeedback({
+            kind: hasConflicts ? 'error' : 'success',
+            title: hasConflicts ? 'Atama kaydedildi, çakışma bulundu' : 'Atama başarılı',
+            message: hasConflicts
+              ? 'Şube atandı ancak çakışma analizi uyarı üretti. Detaylar aşağıda.'
+              : hasWarnings
+                ? 'Şube atandı. Uyarılar aşağıda listelendi.'
+                : 'Şube başarıyla atandı.',
+            warnings: result.warnings,
+            conflicts: result.conflicts,
+          });
+        },
+        onError: (error: unknown) => {
+          setActionFeedback({
+            kind: 'error',
+            title: 'Atama başarısız',
+            message: getApiErrorMessage(error, 'Şube atanamadı.'),
+          });
+        },
+      },
+    );
+  };
+
+  const handleUnassign = (sectionId: number) => {
+    setActionFeedback(null);
+    unassignMutation.mutate(sectionId, {
+      onSuccess: () => {
+        setActionFeedback({
+          kind: 'success',
+          title: 'Atama kaldırıldı',
+          message: 'Şubenin derslik ve zaman ataması kaldırıldı.',
+        });
+      },
+      onError: (error: unknown) => {
+        setActionFeedback({
+          kind: 'error',
+          title: 'Kaldırma başarısız',
+          message: getApiErrorMessage(error, 'Atama kaldırılamadı.'),
+        });
+      },
+    });
+  };
+
   if (!termId) return <Card><CardContent className="py-8 text-center text-muted-foreground">Aktif dönem bulunamadı.</CardContent></Card>;
 
   return (
     <div className="space-y-4">
+      {actionFeedback && (
+        <Alert variant={actionFeedback.kind === 'error' ? 'destructive' : 'default'}>
+          {actionFeedback.kind === 'error' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+          <AlertTitle>{actionFeedback.title}</AlertTitle>
+          <AlertDescription className="space-y-1">
+            <p>{actionFeedback.message}</p>
+            {(actionFeedback.warnings ?? []).map((warning, index) => <p key={`warning-${index}`} className="text-xs">{warning}</p>)}
+            {(actionFeedback.conflicts ?? []).map((conflict, index) => <p key={`conflict-${index}`} className="text-xs">{conflict.conflictType}: {conflict.message}</p>)}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <select
@@ -270,11 +356,10 @@ function SectionListTab({
                     section={s}
                     expanded={expandedId === s.sectionId}
                     onToggle={() => setExpandedId(prev => prev === s.sectionId ? null : s.sectionId)}
-                    onAssign={(classroomId, slots, instructorId) =>
-                      assignMutation.mutate({ sectionId: s.sectionId, classroomId, scheduleSlots: slots, instructorId })
-                    }
-                    onUnassign={() => unassignMutation.mutate(s.sectionId)}
+                    onAssign={(classroomId, slots, instructorId) => handleAssign(s.sectionId, classroomId, slots, instructorId)}
+                    onUnassign={() => handleUnassign(s.sectionId)}
                     isAssigning={assignMutation.isPending}
+                    isUnassigning={unassignMutation.isPending}
                   />
                 ))}
               </TableBody>
@@ -295,17 +380,19 @@ function SectionListTab({
   );
 }
 
-function SectionRow({ section: s, expanded, onToggle, onAssign, onUnassign, isAssigning }: {
+function SectionRow({ section: s, expanded, onToggle, onAssign, onUnassign, isAssigning, isUnassigning }: {
   section: FacultyPlanningSection;
   expanded: boolean;
   onToggle: () => void;
   onAssign: (classroomId?: number, slots?: { day: number; startTime: string; endTime: string }[], instructorId?: number) => void;
   onUnassign: () => void;
   isAssigning: boolean;
+  isUnassigning: boolean;
 }) {
   const [classroomId, setClassroomId] = useState<string>(s.classroomId?.toString() ?? '');
   const [day, setDay] = useState('1');
   const [startHour, setStartHour] = useState('9');
+  const [localError, setLocalError] = useState<string>('');
   const totalHours = s.theoryHours + s.labHours || 3;
 
   const statusCfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.Unscheduled;
@@ -333,37 +420,60 @@ function SectionRow({ section: s, expanded, onToggle, onAssign, onUnassign, isAs
             <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium">Derslik ID</label>
-                <Input className="h-8 w-24" value={classroomId} onChange={e => setClassroomId(e.target.value)} placeholder="Derslik ID" />
+                <Input
+                  className="h-8 w-24"
+                  value={classroomId}
+                  onChange={e => setClassroomId(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  placeholder="Derslik ID"
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium">Gün</label>
-                <select className="h-8 rounded-md border px-2 text-sm" value={day} onChange={e => setDay(e.target.value)}>
+                <select
+                  className="h-8 rounded-md border px-2 text-sm"
+                  value={day}
+                  onChange={e => setDay(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                >
                   <option value="1">Pzt</option><option value="2">Sal</option><option value="3">Çar</option>
                   <option value="4">Per</option><option value="5">Cum</option>
                 </select>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium">Saat</label>
-                <select className="h-8 rounded-md border px-2 text-sm" value={startHour} onChange={e => setStartHour(e.target.value)}>
+                <select
+                  className="h-8 rounded-md border px-2 text-sm"
+                  value={startHour}
+                  onChange={e => setStartHour(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                >
                   {Array.from({ length: 10 }, (_, i) => i + 8).map(h => (
                     <option key={h} value={h}>{`${h}:00-${h + totalHours}:00`}</option>
                   ))}
                 </select>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" disabled={isAssigning} onClick={() => {
+                <Button size="sm" type="button" disabled={isAssigning} onClick={(e) => {
+                  e.stopPropagation();
+                  if (!classroomId.trim()) {
+                    setLocalError('Atama için Derslik ID girilmelidir.');
+                    return;
+                  }
+                  setLocalError('');
                   const slots = [{ day: Number(day), startTime: `${startHour.padStart(2, '0')}:00`, endTime: `${(Number(startHour) + totalHours).toString().padStart(2, '0')}:00` }];
-                  onAssign(classroomId ? Number(classroomId) : undefined, slots, undefined);
+                  onAssign(Number(classroomId), slots, undefined);
                 }}>
                   <Check className="h-4 w-4 mr-1" /> Ata
                 </Button>
                 {s.status !== 'Unscheduled' && (
-                  <Button size="sm" variant="destructive" onClick={onUnassign}>
+                  <Button size="sm" type="button" variant="destructive" disabled={isUnassigning} onClick={(e) => { e.stopPropagation(); onUnassign(); }}>
                     <X className="h-4 w-4 mr-1" /> Kaldır
                   </Button>
                 )}
               </div>
             </div>
+            {localError && <p className="mt-2 text-xs text-destructive">{localError}</p>}
           </TableCell>
         </TableRow>
       )}

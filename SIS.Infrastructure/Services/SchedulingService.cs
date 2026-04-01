@@ -182,6 +182,7 @@ public class SchedulingService : ISchedulingService
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+        var candidateCourseMetadata = await LoadCourseSchedulingMetadataAsync(section.TermId, [section.CourseId], cancellationToken);
         var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
         var requiredHours = ResolveTotalRequiredHours(section);
         var slotCombinations = BuildTimeSlotCombinations(requiredHours, currentBlocks, timeSlots);
@@ -251,7 +252,12 @@ public class SchedulingService : ISchedulingService
                     instructorName,
                     classroom,
                     slotCombination.Slots,
-                    new List<string>());
+                    new List<string>(),
+                    suggestedSemester: candidateCourseMetadata.MinSuggestedSemesters.TryGetValue(section.CourseId, out var suggestedSemester)
+                        ? suggestedSemester
+                        : null,
+                    suggestedSemestersByDepartment: GetSuggestedSemestersByDepartment(section.CourseId, candidateCourseMetadata.SuggestedSemestersByDepartment),
+                    accessibleDepartmentIds: GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, candidateCourseMetadata.AccessibleDepartments));
 
                 var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig, hardConfig);
                 if (conflicts.Count > 0)
@@ -466,15 +472,6 @@ public class SchedulingService : ISchedulingService
             .ToListAsync(cancellationToken);
         var compulsorySet = new HashSet<int>(compulsoryCourseIds);
 
-        // Load suggested semesters for H5
-        var semesterLookup = await _context.CurriculumCourses.AsNoTracking()
-            .Where(cc => cc.Curriculum.IsActive)
-            .Select(cc => new { cc.CourseId, cc.SuggestedSemester })
-            .ToListAsync(cancellationToken);
-        var semesterMap = semesterLookup
-            .GroupBy(x => x.CourseId)
-            .ToDictionary(g => g.Key, g => g.Min(x => x.SuggestedSemester));
-
         var corequisites = await _context.CoursePrerequisites.AsNoTracking()
             .Where(cp => cp.IsCorequisite)
             .ToListAsync(cancellationToken);
@@ -576,13 +573,13 @@ public class SchedulingService : ISchedulingService
             // Find the best (slot, classroom) pair
             var bestPair = FindBestPair(
                 section, availableClassrooms, slotCombinations,
-                termSnapshot, softConfig, hardConfig, instructorNameMap, semesterMap);
+                termSnapshot, softConfig, hardConfig, instructorNameMap);
 
             if (bestPair != null)
             {
                 // Apply assignment
                 await ApplyBatchAssignment(section, bestPair, cancellationToken);
-                UpdateSnapshotWithAssignment(termSnapshot, section, bestPair, instructorNameMap, semesterMap);
+                UpdateSnapshotWithAssignment(termSnapshot, section, bestPair, instructorNameMap);
                 assignedMap[section.Id] = bestPair;
                 totalSoftPenalty += bestPair.SoftPenalty;
 
@@ -598,7 +595,7 @@ public class SchedulingService : ISchedulingService
                     section, priorityScore, scoredSections, assignedMap,
                     termSnapshot, availableClassrooms, slotCombinations,
                     allClassrooms, classroomAssignments, deptFacultyMap, timeSlots,
-                    softConfig, hardConfig, instructorNameMap, semesterMap,
+                    softConfig, hardConfig, instructorNameMap,
                     maxBacktrackingDepth, cancellationToken);
 
                 backtrackingAttempts += backtrackResult.Attempts;
@@ -684,8 +681,7 @@ public class SchedulingService : ISchedulingService
         TermSnapshot snapshot,
         SoftConstraintConfig softConfig,
         HardConstraintConfig hardConfig,
-        IReadOnlyDictionary<int, string> instructorNameMap,
-        IReadOnlyDictionary<int, int> semesterMap)
+        IReadOnlyDictionary<int, string> instructorNameMap)
     {
         if (classrooms.Count == 0 || slotCombinations.Count == 0)
             return null;
@@ -704,7 +700,11 @@ public class SchedulingService : ISchedulingService
                     classroom,
                     slotCombo.Slots,
                     new List<string>(),
-                    suggestedSemester: semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null);
+                    suggestedSemester: snapshot.CourseSuggestedSemestersByDepartment.TryGetValue(section.CourseId, out var semestersByDept)
+                        ? semestersByDept.Values.Min()
+                        : null,
+                    suggestedSemestersByDepartment: GetSuggestedSemestersByDepartment(section.CourseId, snapshot.CourseSuggestedSemestersByDepartment),
+                    accessibleDepartmentIds: GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, snapshot.CourseAccessibleDepartments));
 
                 var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
                 if (conflicts.Count > 0)
@@ -927,8 +927,7 @@ public class SchedulingService : ISchedulingService
         TermSnapshot snapshot,
         CourseSection section,
         BatchAssignment assignment,
-        IReadOnlyDictionary<int, string> instructorNameMap,
-        IReadOnlyDictionary<int, int> semesterMap)
+        IReadOnlyDictionary<int, string> instructorNameMap)
     {
         // Remove any existing snapshot entry for this section
         snapshot.Sections.RemoveAll(s => s.SectionId == section.Id);
@@ -953,7 +952,11 @@ public class SchedulingService : ISchedulingService
             InstructorName = section.InstructorId.HasValue && instructorNameMap.TryGetValue(section.InstructorId.Value, out var n) ? n : string.Empty,
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
-            SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
+            SuggestedSemester = snapshot.CourseSuggestedSemestersByDepartment.TryGetValue(section.CourseId, out var semestersByDept)
+                ? semestersByDept.Values.Min()
+                : null,
+            SuggestedSemestersByDepartment = GetSuggestedSemestersByDepartment(section.CourseId, snapshot.CourseSuggestedSemestersByDepartment),
+            AccessibleDepartmentIds = GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, snapshot.CourseAccessibleDepartments),
             TimeBlocks = assignment.Slots,
             Notes = new List<string>()
         });
@@ -979,7 +982,6 @@ public class SchedulingService : ISchedulingService
         SoftConstraintConfig softConfig,
         HardConstraintConfig hardConfig,
         IReadOnlyDictionary<int, string> instructorNameMap,
-        IReadOnlyDictionary<int, int> semesterMap,
         int maxDepth,
         CancellationToken cancellationToken)
     {
@@ -1006,7 +1008,11 @@ public class SchedulingService : ISchedulingService
                     classroom,
                     slotCombo.Slots,
                     new List<string>(),
-                    suggestedSemester: semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null);
+                    suggestedSemester: snapshot.CourseSuggestedSemestersByDepartment.TryGetValue(section.CourseId, out var semestersByDept)
+                        ? semestersByDept.Values.Min()
+                        : null,
+                    suggestedSemestersByDepartment: GetSuggestedSemestersByDepartment(section.CourseId, snapshot.CourseSuggestedSemestersByDepartment),
+                    accessibleDepartmentIds: GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, snapshot.CourseAccessibleDepartments));
 
                 var (conflicts, _) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
                 foreach (var conflict in conflicts)
@@ -1053,13 +1059,13 @@ public class SchedulingService : ISchedulingService
             // Try to place the current section
             var bestPair = FindBestPair(
                 section, sectionClassrooms, sectionSlotCombinations,
-                snapshot, softConfig, hardConfig, instructorNameMap, semesterMap);
+                snapshot, softConfig, hardConfig, instructorNameMap);
 
             if (bestPair != null)
             {
                 // Place current section
                 await ApplyBatchAssignment(section, bestPair, cancellationToken);
-                UpdateSnapshotWithAssignment(snapshot, section, bestPair, instructorNameMap, semesterMap);
+                UpdateSnapshotWithAssignment(snapshot, section, bestPair, instructorNameMap);
                 assignedMap[section.Id] = bestPair;
 
                 // Try to re-place the victim in a different slot
@@ -1077,12 +1083,12 @@ public class SchedulingService : ISchedulingService
 
                 var victimNewPair = FindBestPair(
                     victimSection, victimClassrooms, victimSlotCombinations,
-                    snapshot, softConfig, hardConfig, instructorNameMap, semesterMap);
+                    snapshot, softConfig, hardConfig, instructorNameMap);
 
                 if (victimNewPair != null)
                 {
                     await ApplyBatchAssignment(victimSection, victimNewPair, cancellationToken);
-                    UpdateSnapshotWithAssignment(snapshot, victimSection, victimNewPair, instructorNameMap, semesterMap);
+                    UpdateSnapshotWithAssignment(snapshot, victimSection, victimNewPair, instructorNameMap);
                     assignedMap[victimSection.Id] = victimNewPair;
 
                     var penaltyDelta = bestPair.SoftPenalty + victimNewPair.SoftPenalty - victimAssignment.SoftPenalty;
@@ -1105,7 +1111,7 @@ public class SchedulingService : ISchedulingService
 
                     // Restore victim
                     await ApplyBatchAssignment(victimSection, victimAssignment, cancellationToken);
-                    UpdateSnapshotWithAssignment(snapshot, victimSection, victimAssignment, instructorNameMap, semesterMap);
+                    UpdateSnapshotWithAssignment(snapshot, victimSection, victimAssignment, instructorNameMap);
                     assignedMap[victimSection.Id] = victimAssignment;
                 }
             }
@@ -1113,7 +1119,7 @@ public class SchedulingService : ISchedulingService
             {
                 // Couldn't place current section even after removing victim — restore victim
                 await ApplyBatchAssignment(victimSection, victimAssignment, cancellationToken);
-                UpdateSnapshotWithAssignment(snapshot, victimSection, victimAssignment, instructorNameMap, semesterMap);
+                UpdateSnapshotWithAssignment(snapshot, victimSection, victimAssignment, instructorNameMap);
                 assignedMap[victimSection.Id] = victimAssignment;
             }
         }
@@ -1302,15 +1308,10 @@ public class SchedulingService : ISchedulingService
 
         var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
 
-        // Load suggested semesters from active curricula for H5
-        var suggestedSemesters = await _context.CurriculumCourses
-            .AsNoTracking()
-            .Where(cc => cc.Curriculum.IsActive)
-            .Select(cc => new { cc.CourseId, cc.SuggestedSemester })
-            .ToListAsync(cancellationToken);
-        var semesterMap = suggestedSemesters
-            .GroupBy(x => x.CourseId)
-            .ToDictionary(g => g.Key, g => g.Min(x => x.SuggestedSemester));
+        var courseMetadata = await LoadCourseSchedulingMetadataAsync(
+            termId,
+            sections.Select(section => section.CourseId),
+            cancellationToken);
 
         // Load classroom-term assignments for H10
         var classroomAssignments = await _context.ClassroomTermAssignments
@@ -1336,7 +1337,12 @@ public class SchedulingService : ISchedulingService
             : new List<CoEnrollmentPair>();
 
         var snapshots = sections
-            .Select(section => BuildExistingSectionSnapshot(section, instructorNameMap, semesterMap))
+            .Select(section => BuildExistingSectionSnapshot(
+                section,
+                instructorNameMap,
+                courseMetadata.MinSuggestedSemesters,
+                courseMetadata.SuggestedSemestersByDepartment,
+                courseMetadata.AccessibleDepartments))
             .ToList();
 
         return new TermSnapshot
@@ -1348,14 +1354,18 @@ public class SchedulingService : ISchedulingService
             ClassroomAssignments = classroomAssignments,
             DeptFacultyMap = deptFacultyMap,
             Corequisites = corequisites,
-            CoEnrollmentPairs = coEnrollmentPairs
+            CoEnrollmentPairs = coEnrollmentPairs,
+            CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
+            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments
         };
     }
 
     private static SectionSnapshot BuildExistingSectionSnapshot(
         CourseSection section,
         IReadOnlyDictionary<int, string> instructorNameMap,
-        IReadOnlyDictionary<int, int> semesterMap)
+        IReadOnlyDictionary<int, int> semesterMap,
+        IReadOnlyDictionary<int, Dictionary<int, int>> suggestedSemestersByDepartment,
+        IReadOnlyDictionary<int, HashSet<int>> accessibleDepartments)
     {
         var timeBlocks = ScheduleHelper.ToTimeBlocks(section.SectionSchedules);
         var instructorId = section.InstructorId;
@@ -1381,6 +1391,8 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
             SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
+            SuggestedSemestersByDepartment = GetSuggestedSemestersByDepartment(section.CourseId, suggestedSemestersByDepartment),
+            AccessibleDepartmentIds = GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, accessibleDepartments),
             TimeBlocks = timeBlocks,
             Notes = new List<string>()
         };
@@ -1464,12 +1476,10 @@ public class SchedulingService : ISchedulingService
             notes.Add("Section için program slot tanımı bulunmuyor.");
         }
 
-        // Load suggested semester for H5
-        var suggestedSemester = await _context.CurriculumCourses
-            .AsNoTracking()
-            .Where(cc => cc.Curriculum.IsActive && cc.CourseId == section.CourseId)
-            .Select(cc => (int?)cc.SuggestedSemester)
-            .MinAsync(cancellationToken);
+        var courseMetadata = await LoadCourseSchedulingMetadataAsync(section.TermId, [section.CourseId], cancellationToken);
+        var suggestedSemester = courseMetadata.MinSuggestedSemesters.TryGetValue(section.CourseId, out var semester)
+            ? semester
+            : (int?)null;
 
         return BuildCandidateSnapshot(
             section,
@@ -1478,7 +1488,9 @@ public class SchedulingService : ISchedulingService
             classroom,
             scheduleSlots,
             notes,
-            suggestedSemester);
+            suggestedSemester,
+            GetSuggestedSemestersByDepartment(section.CourseId, courseMetadata.SuggestedSemestersByDepartment),
+            GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, courseMetadata.AccessibleDepartments));
     }
 
     private static SectionSnapshot BuildCandidateSnapshot(
@@ -1488,7 +1500,9 @@ public class SchedulingService : ISchedulingService
         Classroom? classroom,
         IReadOnlyList<TimeBlock> scheduleSlots,
         List<string> notes,
-        int? suggestedSemester = null)
+        int? suggestedSemester = null,
+        Dictionary<int, int>? suggestedSemestersByDepartment = null,
+        HashSet<int>? accessibleDepartmentIds = null)
     {
         return new SectionSnapshot
         {
@@ -1510,6 +1524,8 @@ public class SchedulingService : ISchedulingService
             InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
             DepartmentId = section.Course.DepartmentId,
             SuggestedSemester = suggestedSemester,
+            SuggestedSemestersByDepartment = suggestedSemestersByDepartment ?? new Dictionary<int, int>(),
+            AccessibleDepartmentIds = accessibleDepartmentIds ?? new HashSet<int>(),
             TimeBlocks = scheduleSlots.ToList(),
             Notes = notes
         };
@@ -1625,24 +1641,21 @@ public class SchedulingService : ISchedulingService
                             first.SectionId));
                     }
 
-                    // H5: Aynı bölümün aynı sınıf seviyesindeki zorunlu dersleri aynı slot'ta olamaz
-                    if (first.DepartmentId.HasValue && second.DepartmentId.HasValue
-                        && first.DepartmentId == second.DepartmentId
-                        && first.SuggestedSemester.HasValue && second.SuggestedSemester.HasValue
-                        && (first.SuggestedSemester.Value - 1) / 2 == (second.SuggestedSemester.Value - 1) / 2
-                        && first.CourseId != second.CourseId)
+                    // H5: Aynı bölüm/yıl öğrencilerinin alabileceği dersler aynı slot'ta olamaz
+                    if (first.CourseId != second.CourseId
+                        && TryGetSharedCurriculumDepartment(first, second, out _))
                     {
                         conflicts.Add(BuildConflict(
                             first,
                             ConflictTypes.CurriculumConflict,
-                            $"Aynı bölüm ve sınıf seviyesindeki '{first.CourseCode}' ile '{second.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
+                            $"Aynı bölüm/yıl öğrencilerinin alabileceği '{first.CourseCode}' ile '{second.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
                             overlap,
                             second.SectionId));
 
                         conflicts.Add(BuildConflict(
                             second,
                             ConflictTypes.CurriculumConflict,
-                            $"Aynı bölüm ve sınıf seviyesindeki '{second.CourseCode}' ile '{first.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
+                            $"Aynı bölüm/yıl öğrencilerinin alabileceği '{second.CourseCode}' ile '{first.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
                             overlap,
                             first.SectionId));
                     }
@@ -1719,6 +1732,61 @@ public class SchedulingService : ISchedulingService
                     $"Instructor haftalik ders yuku limiti asiliyor ({totalWeeklyHours:0.##}/{firstSection.InstructorMaxWeeklyHours} saat).",
                     null,
                     null));
+            }
+        }
+
+        // ── DailyLoad: Bir hocanın günlük ders yükü 9 saati geçmemeli ──
+        foreach (var group in snapshot.Sections
+                     .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
+                     .GroupBy(s => s.InstructorId!.Value))
+        {
+            var instructorSections = group.ToList();
+            var dailyGroups = instructorSections
+                .SelectMany(s => s.TimeBlocks.Select(tb => new { Section = s, tb.Day, tb.StartTime, tb.EndTime }))
+                .GroupBy(x => x.Day);
+
+            foreach (var dayGroup in dailyGroups)
+            {
+                var dailyHours = dayGroup.Sum(x => (x.EndTime - x.StartTime).TotalHours);
+                if (dailyHours > 9)
+                {
+                    var firstSection = dayGroup.First().Section;
+                    foreach (var section in instructorSections.Where(s => s.TimeBlocks.Any(tb => tb.Day == dayGroup.Key)))
+                    {
+                        conflicts.Add(BuildConflict(
+                            section,
+                            ConflictTypes.DailyLoadConflict,
+                            $"Öğretim üyesi '{section.InstructorName}' {dayGroup.Key} günü {dailyHours:0.#} saat ders veriyor (maks 9 saat).",
+                            null,
+                            null));
+                    }
+                }
+            }
+        }
+
+        // ── NoDayOff: Her hocanın haftada en az 1 günü boş olmalı ──
+        foreach (var group in snapshot.Sections
+                     .Where(s => s.InstructorId.HasValue && s.TimeBlocks.Count > 0)
+                     .GroupBy(s => s.InstructorId!.Value))
+        {
+            var instructorSections = group.ToList();
+            var usedDays = instructorSections
+                .SelectMany(s => s.TimeBlocks)
+                .Select(tb => tb.Day)
+                .Distinct()
+                .Count();
+
+            if (usedDays >= 5)
+            {
+                foreach (var section in instructorSections)
+                {
+                    conflicts.Add(BuildConflict(
+                        section,
+                        ConflictTypes.NoDayOffConflict,
+                        $"Öğretim üyesi '{section.InstructorName}' haftanın 5 gününde de ders veriyor, en az 1 gün boş olmalıdır.",
+                        null,
+                        null));
+                }
             }
         }
 
@@ -2183,17 +2251,14 @@ public class SchedulingService : ISchedulingService
                         existing.SectionId));
                 }
 
-                // H5: Aynı bölümün aynı sınıf seviyesindeki zorunlu dersleri aynı slot'ta olamaz
-                if (candidate.DepartmentId.HasValue && existing.DepartmentId.HasValue
-                    && candidate.DepartmentId == existing.DepartmentId
-                    && candidate.SuggestedSemester.HasValue && existing.SuggestedSemester.HasValue
-                    && (candidate.SuggestedSemester.Value - 1) / 2 == (existing.SuggestedSemester.Value - 1) / 2
-                    && candidate.CourseId != existing.CourseId)
+                // H5: Aynı bölüm/yıl öğrencilerinin alabileceği dersler aynı slot'ta olamaz
+                if (candidate.CourseId != existing.CourseId
+                    && TryGetSharedCurriculumDepartment(candidate, existing, out _))
                 {
                     conflicts.Add(BuildConflict(
                         candidate,
                         ConflictTypes.CurriculumConflict,
-                        $"Aynı bölüm ve sınıf seviyesindeki '{candidate.CourseCode}' ile '{existing.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
+                        $"Aynı bölüm/yıl öğrencilerinin alabileceği '{candidate.CourseCode}' ile '{existing.CourseCode}' dersleri aynı zaman aralığında çakışıyor.",
                         overlap,
                         existing.SectionId));
                 }
@@ -2243,6 +2308,62 @@ public class SchedulingService : ISchedulingService
                     candidate,
                     ConflictTypes.WeeklyLoadConflict,
                     $"Instructor haftalik ders yuku limiti asiliyor ({totalWeeklyHours:0.##}/{candidate.InstructorMaxWeeklyHours} saat).",
+                    null,
+                    null));
+            }
+        }
+
+        if (candidate.InstructorId.HasValue && candidate.TimeBlocks.Count > 0)
+        {
+            var instructorSections = snapshot.Sections
+                .Where(section => section.InstructorId == candidate.InstructorId && section.TimeBlocks.Count > 0)
+                .ToList();
+
+            var dailyGroups = instructorSections
+                .SelectMany(section => section.TimeBlocks.Select(slot => new
+                {
+                    slot.Day,
+                    slot.StartTime,
+                    slot.EndTime
+                }))
+                .Concat(candidate.TimeBlocks.Select(slot => new
+                {
+                    slot.Day,
+                    slot.StartTime,
+                    slot.EndTime
+                }))
+                .GroupBy(slot => slot.Day);
+
+            foreach (var dayGroup in dailyGroups)
+            {
+                var dailyHours = dayGroup.Sum(slot => (slot.EndTime - slot.StartTime).TotalHours);
+                if (dailyHours <= 9)
+                {
+                    continue;
+                }
+
+                var dayName = GetDayOfWeekName(dayGroup.Key);
+                conflicts.Add(BuildConflict(
+                    candidate,
+                    ConflictTypes.DailyLoadConflict,
+                    $"Öğretim üyesi '{candidate.InstructorName}' {dayName} günü {dailyHours:0.#} saat ders veriyor (maks 9 saat).",
+                    null,
+                    null));
+            }
+
+            var usedDays = instructorSections
+                .SelectMany(section => section.TimeBlocks)
+                .Select(slot => slot.Day)
+                .Concat(candidate.TimeBlocks.Select(slot => slot.Day))
+                .Distinct()
+                .Count();
+
+            if (usedDays >= 5)
+            {
+                conflicts.Add(BuildConflict(
+                    candidate,
+                    ConflictTypes.NoDayOffConflict,
+                    $"Öğretim üyesi '{candidate.InstructorName}' haftanın 5 gününde de ders veriyor, en az 1 gün boş olmalıdır.",
                     null,
                     null));
             }
@@ -3055,11 +3176,179 @@ public class SchedulingService : ISchedulingService
         };
     }
 
+    private static bool TryGetSharedCurriculumDepartment(
+        SectionSnapshot first,
+        SectionSnapshot second,
+        out int sharedDepartmentId)
+    {
+        foreach (var departmentId in first.AccessibleDepartmentIds)
+        {
+            if (!second.AccessibleDepartmentIds.Contains(departmentId))
+                continue;
+
+            if (!first.SuggestedSemestersByDepartment.TryGetValue(departmentId, out var firstSemester))
+                continue;
+
+            if (!second.SuggestedSemestersByDepartment.TryGetValue(departmentId, out var secondSemester))
+                continue;
+
+            if ((firstSemester - 1) / 2 != (secondSemester - 1) / 2)
+                continue;
+
+            sharedDepartmentId = departmentId;
+            return true;
+        }
+
+        if (first.DepartmentId.HasValue && second.DepartmentId.HasValue
+            && first.DepartmentId == second.DepartmentId
+            && first.SuggestedSemester.HasValue && second.SuggestedSemester.HasValue
+            && (first.SuggestedSemester.Value - 1) / 2 == (second.SuggestedSemester.Value - 1) / 2)
+        {
+            sharedDepartmentId = first.DepartmentId.Value;
+            return true;
+        }
+
+        sharedDepartmentId = 0;
+        return false;
+    }
+
+    private static Dictionary<int, int> GetSuggestedSemestersByDepartment(
+        int courseId,
+        IReadOnlyDictionary<int, Dictionary<int, int>> suggestedSemestersByDepartment)
+    {
+        return suggestedSemestersByDepartment.TryGetValue(courseId, out var values)
+            ? values.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+            : new Dictionary<int, int>();
+    }
+
+    private static HashSet<int> GetAccessibleDepartments(
+        int courseId,
+        int? owningDepartmentId,
+        IReadOnlyDictionary<int, HashSet<int>> accessibleDepartments)
+    {
+        var result = accessibleDepartments.TryGetValue(courseId, out var values)
+            ? values.ToHashSet()
+            : new HashSet<int>();
+
+        if (owningDepartmentId.HasValue)
+            result.Add(owningDepartmentId.Value);
+
+        return result;
+    }
+
     private static string BuildSlotSignature(IEnumerable<TimeBlock> slots) =>
         string.Join("|", slots
             .OrderBy(slot => slot.Day)
             .ThenBy(slot => slot.StartTime)
             .Select(slot => $"{(int)slot.Day}:{slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm}"));
+
+    private async Task<CourseSchedulingMetadata> LoadCourseSchedulingMetadataAsync(
+        int termId,
+        IEnumerable<int> courseIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = courseIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new CourseSchedulingMetadata();
+        }
+
+        var curriculumRows = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => ids.Contains(cc.CourseId) && cc.Curriculum.IsActive)
+            .Select(cc => new
+            {
+                cc.CourseId,
+                DepartmentId = cc.Curriculum.Program.DepartmentId,
+                cc.SuggestedSemester
+            })
+            .ToListAsync(cancellationToken);
+
+        var suggestedSemestersByDepartment = curriculumRows
+            .GroupBy(row => row.CourseId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .GroupBy(row => row.DepartmentId)
+                    .ToDictionary(deptGroup => deptGroup.Key, deptGroup => deptGroup.Min(row => row.SuggestedSemester)));
+
+        var minSuggestedSemesters = suggestedSemestersByDepartment
+            .ToDictionary(item => item.Key, item => item.Value.Values.Min());
+
+        var courseDepartmentIds = await _context.Courses
+            .AsNoTracking()
+            .Where(course => ids.Contains(course.Id))
+            .Select(course => new { course.Id, course.DepartmentId })
+            .ToDictionaryAsync(course => course.Id, course => course.DepartmentId, cancellationToken);
+
+        var policyRows = await _context.CourseAccessPolicies
+            .AsNoTracking()
+            .Where(policy => policy.TermId == termId && ids.Contains(policy.CourseId))
+            .Select(policy => new { policy.CourseId, policy.DepartmentId, policy.FacultyId })
+            .ToListAsync(cancellationToken);
+
+        var facultyIds = policyRows
+            .Where(policy => !policy.DepartmentId.HasValue && policy.FacultyId.HasValue)
+            .Select(policy => policy.FacultyId!.Value)
+            .Distinct()
+            .ToList();
+
+        var facultyDepartmentMap = facultyIds.Count == 0
+            ? new Dictionary<int, List<int>>()
+            : await _context.Departments
+                .AsNoTracking()
+                .Where(department => facultyIds.Contains(department.FacultyId))
+                .GroupBy(department => department.FacultyId)
+                .ToDictionaryAsync(
+                    group => group.Key,
+                    group => group.Select(department => department.Id).ToList(),
+                    cancellationToken);
+
+        var policiesByCourse = policyRows
+            .GroupBy(policy => policy.CourseId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var accessibleDepartments = new Dictionary<int, HashSet<int>>();
+        foreach (var courseId in ids)
+        {
+            var departmentIds = new HashSet<int>();
+
+            if (suggestedSemestersByDepartment.TryGetValue(courseId, out var suggestedByDept))
+            {
+                departmentIds.UnionWith(suggestedByDept.Keys);
+            }
+
+            if (courseDepartmentIds.TryGetValue(courseId, out var owningDepartmentId) && owningDepartmentId.HasValue)
+            {
+                departmentIds.Add(owningDepartmentId.Value);
+            }
+
+            if (policiesByCourse.TryGetValue(courseId, out var policies))
+            {
+                foreach (var policy in policies)
+                {
+                    if (policy.DepartmentId.HasValue)
+                    {
+                        departmentIds.Add(policy.DepartmentId.Value);
+                    }
+                    else if (policy.FacultyId.HasValue
+                        && facultyDepartmentMap.TryGetValue(policy.FacultyId.Value, out var facultyDepartments))
+                    {
+                        departmentIds.UnionWith(facultyDepartments);
+                    }
+                }
+            }
+
+            accessibleDepartments[courseId] = departmentIds;
+        }
+
+        return new CourseSchedulingMetadata
+        {
+            MinSuggestedSemesters = minSuggestedSemesters,
+            SuggestedSemestersByDepartment = suggestedSemestersByDepartment,
+            AccessibleDepartments = accessibleDepartments
+        };
+    }
 
     private async Task<AcademicTerm?> ResolveTermAsync(int? termId, CancellationToken cancellationToken)
     {
@@ -3295,6 +3584,8 @@ public class SchedulingService : ISchedulingService
         public const string CreditHourMismatch = "CreditHourMismatch";                   // H12
         public const string LunchBreakConflict = "LunchBreakConflict";                   // H13
         public const string MaxConsecutiveHoursConflict = "MaxConsecutiveHoursConflict"; // H15
+        public const string DailyLoadConflict = "DailyLoadConflict";                       // S-DL: günlük 9 saat aşımı
+        public const string NoDayOffConflict = "NoDayOffConflict";                         // S-DO: haftalık boş gün yok
     }
 
     private sealed class TermSnapshot
@@ -3307,6 +3598,15 @@ public class SchedulingService : ISchedulingService
         public Dictionary<int, int> DeptFacultyMap { get; init; } = new();                // for H10
         public List<CoursePrerequisite> Corequisites { get; init; } = new();              // for H11
         public List<CoEnrollmentPair> CoEnrollmentPairs { get; set; } = new();            // for S4
+        public Dictionary<int, Dictionary<int, int>> CourseSuggestedSemestersByDepartment { get; init; } = new();
+        public Dictionary<int, HashSet<int>> CourseAccessibleDepartments { get; init; } = new();
+    }
+
+    private sealed class CourseSchedulingMetadata
+    {
+        public Dictionary<int, int> MinSuggestedSemesters { get; init; } = new();
+        public Dictionary<int, Dictionary<int, int>> SuggestedSemestersByDepartment { get; init; } = new();
+        public Dictionary<int, HashSet<int>> AccessibleDepartments { get; init; } = new();
     }
 
     private sealed class CoEnrollmentPair
@@ -3336,6 +3636,8 @@ public class SchedulingService : ISchedulingService
         public int InstructorMaxWeeklyHours { get; init; }
         public int? DepartmentId { get; init; }                    // for H5, H8
         public int? SuggestedSemester { get; init; }               // for H5 (curriculum year)
+        public Dictionary<int, int> SuggestedSemestersByDepartment { get; init; } = new();
+        public HashSet<int> AccessibleDepartmentIds { get; init; } = new();
         public List<TimeBlock> TimeBlocks { get; init; } = new();
         public List<string> Notes { get; init; } = new();
     }
