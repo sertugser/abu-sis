@@ -313,10 +313,18 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
 
     public async Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, CancellationToken ct)
     {
+        // Include instructors from all departments in the same faculty,
+        // so shared-course departments (e.g. BMTR, BSM, YM) can see BM instructors
+        var facultyId = await _context.Departments
+            .AsNoTracking()
+            .Where(d => d.Id == departmentId)
+            .Select(d => d.FacultyId)
+            .FirstOrDefaultAsync(ct);
+
         var instructors = await _context.Instructors
             .AsNoTracking()
-            .Where(i => i.DepartmentId == departmentId)
-            .Select(i => new { i.Id, i.Title, i.UserId })
+            .Where(i => i.Department.FacultyId == facultyId)
+            .Select(i => new { i.Id, i.Title, i.UserId, i.DepartmentId })
             .ToListAsync(ct);
 
         var userIds = instructors.Select(i => i.UserId).Distinct().ToList();
@@ -325,12 +333,24 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => new { u.FirstName, u.LastName }, ct);
 
+        // Load department names for instructors from other departments
+        var deptIds = instructors.Select(i => i.DepartmentId).Distinct().ToList();
+        var deptNameMap = await _context.Departments
+            .AsNoTracking()
+            .Where(d => deptIds.Contains(d.Id))
+            .ToDictionaryAsync(d => d.Id, d => d.Code, ct);
+
         return instructors.Select(i =>
         {
-            var name = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
+            var baseName = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
+            // Append department code for instructors from other departments
+            var name = i.DepartmentId != departmentId && deptNameMap.TryGetValue(i.DepartmentId, out var deptCode)
+                ? $"{baseName} ({deptCode})"
+                : baseName;
             return new InstructorOptionDto { InstructorId = i.Id, FullName = name };
         })
-        .OrderBy(i => i.FullName)
+        .OrderByDescending(i => instructors.First(x => x.Id == i.InstructorId).DepartmentId == departmentId ? 1 : 0)
+        .ThenBy(i => i.FullName)
         .ToList();
     }
 
