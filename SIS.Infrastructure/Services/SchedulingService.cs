@@ -1617,8 +1617,22 @@ public class SchedulingService : ISchedulingService
 
                 foreach (var overlap in GetOverlapSlots(first.TimeBlocks, second.TimeBlocks))
                 {
-                    if (first.ClassroomId.HasValue && first.ClassroomId == second.ClassroomId)
+                    // Classroom conflict: compare per-slot ClassroomId (supports split courses with different classrooms per block)
+                    var firstSlotClassroom = first.TimeBlocks
+                        .Where(tb => tb.Day == overlap.Day && tb.StartTime < overlap.EndTime && tb.EndTime > overlap.StartTime)
+                        .Select(tb => tb.ClassroomId)
+                        .FirstOrDefault() ?? first.ClassroomId;
+                    var secondSlotClassroom = second.TimeBlocks
+                        .Where(tb => tb.Day == overlap.Day && tb.StartTime < overlap.EndTime && tb.EndTime > overlap.StartTime)
+                        .Select(tb => tb.ClassroomId)
+                        .FirstOrDefault() ?? second.ClassroomId;
+
+                    if (firstSlotClassroom.HasValue && firstSlotClassroom == secondSlotClassroom)
                     {
+                        var classroomName = first.TimeBlocks
+                            .FirstOrDefault(tb => tb.ClassroomId == firstSlotClassroom)?.ClassroomId.HasValue == true
+                            ? first.ClassroomName : second.ClassroomName;
+
                         conflicts.Add(BuildConflict(
                             first,
                             ConflictTypes.ClassroomConflict,
@@ -3229,6 +3243,10 @@ public class SchedulingService : ISchedulingService
             if (!second.SuggestedSemestersByDepartment.TryGetValue(departmentId, out var secondSemester))
                 continue;
 
+            // SuggestedSemester <= 0 means undefined — skip to avoid false positives
+            if (firstSemester <= 0 || secondSemester <= 0)
+                continue;
+
             if ((firstSemester - 1) / 2 != (secondSemester - 1) / 2)
                 continue;
 
@@ -3239,6 +3257,7 @@ public class SchedulingService : ISchedulingService
         if (first.DepartmentId.HasValue && second.DepartmentId.HasValue
             && first.DepartmentId == second.DepartmentId
             && first.SuggestedSemester.HasValue && second.SuggestedSemester.HasValue
+            && first.SuggestedSemester.Value > 0 && second.SuggestedSemester.Value > 0
             && (first.SuggestedSemester.Value - 1) / 2 == (second.SuggestedSemester.Value - 1) / 2)
         {
             sharedDepartmentId = first.DepartmentId.Value;

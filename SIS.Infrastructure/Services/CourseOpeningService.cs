@@ -193,20 +193,30 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
 
         var passedSet = passedByStudent.ToLookup(x => x.CourseId, x => x.StudentId);
 
-        // 4. Average classroom capacity for recommended section count
+        // 4. Classroom capacity by type for recommended section count
         var department = await _context.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == departmentId, ct);
-        var avgCapacity = 40; // default
+        var avgLectureCapacity = 40; // default
+        var avgLabCapacity = 30; // default
         if (department != null)
         {
-            var termCapacities = await _context.ClassroomTermAssignments
+            var termClassrooms = await _context.ClassroomTermAssignments
                 .AsNoTracking()
                 .Include(cta => cta.Classroom)
                 .Where(cta => cta.TermId == termId && cta.FacultyId == department.FacultyId)
-                .Select(cta => cta.Classroom.Capacity)
+                .Select(cta => new { cta.Classroom.Capacity, cta.Classroom.Type })
                 .ToListAsync(ct);
 
-            if (termCapacities.Count > 0)
-                avgCapacity = (int)Math.Round(termCapacities.Average());
+            var lectureCapacities = termClassrooms
+                .Where(c => c.Type == ClassroomType.Lecture || c.Type == ClassroomType.Amphitheater)
+                .Select(c => c.Capacity).ToList();
+            var labCapacities = termClassrooms
+                .Where(c => c.Type == ClassroomType.Lab || c.Type == ClassroomType.Computer)
+                .Select(c => c.Capacity).ToList();
+
+            if (lectureCapacities.Count > 0)
+                avgLectureCapacity = (int)Math.Round(lectureCapacities.Average());
+            if (labCapacities.Count > 0)
+                avgLabCapacity = (int)Math.Round(labCapacities.Average());
         }
 
         // 5. Previous term enrollment (same semester type from previous year)
@@ -268,8 +278,13 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                 }
 
                 var predictedDemand = notPassedCount + retakeCount + crossDeptEstimate;
+
+                // Lab-only courses use lab classroom capacity; mixed/theory use lecture capacity
+                var isLabOnly = first.Course.LabHours > 0 && first.Course.TheoryHours == 0;
+                var effectiveCapacity = isLabOnly ? avgLabCapacity : avgLectureCapacity;
+
                 var recommendedSections = predictedDemand > 0
-                    ? (int)Math.Ceiling((double)predictedDemand / avgCapacity)
+                    ? (int)Math.Ceiling((double)predictedDemand / effectiveCapacity)
                     : 1;
 
                 return new CurriculumCourseForOpeningDto
@@ -287,7 +302,7 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                     PredictedDemand = predictedDemand,
                     RetakeCount = retakeCount,
                     RecommendedSectionCount = recommendedSections,
-                    RecommendedCapacity = avgCapacity,
+                    RecommendedCapacity = effectiveCapacity,
                     CrossDepartmentDemand = crossDeptDemandList,
                     PreviousTermEnrollment = prevEnrollment > 0 ? prevEnrollment : null,
                 };
