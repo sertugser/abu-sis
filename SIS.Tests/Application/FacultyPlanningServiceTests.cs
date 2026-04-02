@@ -153,7 +153,8 @@ public class FacultyPlanningServiceTests : IDisposable
             classroomId: classroom.Id,
             (DayOfWeek.Monday, 8, 0, 16, 0));
 
-        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 0), new TimeOnly(18, 0), 2);
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 0), new TimeOnly(16, 50), 9);
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 55), new TimeOnly(17, 45), 10);
         var candidateSection = AddSection(2, candidateCourse.Id, instructor.Id, capacity: 35);
 
         await _service.AssignSectionAsync(new AssignSectionRequest
@@ -166,7 +167,7 @@ public class FacultyPlanningServiceTests : IDisposable
                 {
                     Day = DayOfWeek.Monday,
                     StartTime = new TimeOnly(16, 0),
-                    EndTime = new TimeOnly(18, 0)
+                    EndTime = new TimeOnly(17, 45)
                 }
             ]
         }, "999");

@@ -590,175 +590,27 @@ public class FacultyPlanningService : IFacultyPlanningService
                 continue;
             }
 
-            var theoryHours = section.Course.TheoryHours;
-            var labHours = section.Course.LabHours;
-            var totalHours = theoryHours + labHours;
+            var totalHours = section.Course.TheoryHours + section.Course.LabHours;
             if (totalHours <= 0) totalHours = 3;
 
-            // Determine scheduling blocks:
-            // If course has BOTH theory AND lab → split into two separate blocks
-            // Otherwise → single block with totalHours
-            var needsSplit = theoryHours > 0 && labHours > 0;
+            // Split into two blocks if theory+lab can't fit in one consecutive window
+            // Both blocks use the SAME classroom to avoid per-slot ClassroomId issues
+            var needsSplit = section.Course.TheoryHours > 0 && section.Course.LabHours > 0;
             var blockSizes = needsSplit
-                ? new[] { theoryHours, labHours }
+                ? new[] { section.Course.TheoryHours, section.Course.LabHours }
                 : new[] { totalHours };
 
-            // For split courses, lab block prefers Lab classrooms with appropriate capacity
-            var labClassrooms = needsSplit
-                ? classrooms
-                    .Where(c => c.Capacity >= Math.Min(section.Capacity, 30)) // lab rooms are typically smaller
-                    .OrderByDescending(c => IsCompatibleClassroomType(c.Type, ClassroomType.Lab) ? 1 : 0)
-                    .ThenBy(c => c.Capacity - section.Capacity)
-                    .ToList()
-                : null;
+            // ── Find best classroom + time slot(s) for ALL blocks ──
+            var bestResult = FindBestAssignment(
+                section, candidateClassrooms, timeSlotsByDay, blockSizes, requiredType,
+                scheduledSlotsByClassroom, previewAssignments,
+                scheduledSlotsByInstructor, previewInstructorAssignments,
+                allScheduledRecords, curriculumSemesterMap);
 
-            // ── SCORING: Find best slot(s) for this section ──
-            var assignedSlots = new List<ScheduleSlotDto>();
-            var assignedClassroomId = 0;
-            var assignedClassroomName = "";
-            var totalScore = 0.0;
-            var allBlocksAssigned = true;
-
-            // Temporary preview for multi-block: track what this section uses
-            var sectionTempPreviews = new List<(int classroomId, DayOfWeek day, TimeOnly start, TimeOnly end)>();
-            var sectionTempInstrPreviews = new List<(int instructorId, DayOfWeek day, TimeOnly start, TimeOnly end)>();
-
-            for (var blockIdx = 0; blockIdx < blockSizes.Length; blockIdx++)
+            if (bestResult != null)
             {
-                var blockSize = blockSizes[blockIdx];
-                var isLabBlock = needsSplit && blockIdx == 1;
-                var blockClassrooms = isLabBlock ? labClassrooms! : candidateClassrooms;
-                var blockType = isLabBlock ? ClassroomType.Lab : ClassroomType.Lecture;
-
-                var candidates = new List<AutoScheduleCandidate>();
-
-                foreach (var classroom in blockClassrooms)
-                {
-                    foreach (var (day, daySlots) in timeSlotsByDay)
-                    {
-                        for (var startIdx = 0; startIdx <= daySlots.Count - blockSize; startIdx++)
-                        {
-                            var slotGroup = daySlots.Skip(startIdx).Take(blockSize).ToList();
-
-                            // Verify slots are truly consecutive (reject lunch gap)
-                            var isConsecutive = true;
-                            for (var i = 1; i < slotGroup.Count; i++)
-                            {
-                                var gap = (slotGroup[i].StartTime - slotGroup[i - 1].EndTime).TotalMinutes;
-                                if (gap > 15) { isConsecutive = false; break; }
-                            }
-                            if (!isConsecutive) continue;
-
-                            var start = slotGroup.First().StartTime;
-                            var end = slotGroup.Last().EndTime;
-
-                            // ── HARD CONSTRAINTS ──
-
-                            // H1: Classroom conflict (existing + preview + this section's other block)
-                            if (scheduledSlotsByClassroom.TryGetValue(classroom.Id, out var classroomSlots)
-                                && classroomSlots.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start))
-                                continue;
-                            if (previewAssignments.Any(p =>
-                                p.classroomId == classroom.Id && p.day == day && p.start < end && p.end > start))
-                                continue;
-                            if (sectionTempPreviews.Any(p =>
-                                p.classroomId == classroom.Id && p.day == day && p.start < end && p.end > start))
-                                continue;
-
-                            // H2: Instructor conflict + daily 9hr hard limit
-                            if (section.InstructorId.HasValue)
-                            {
-                                var instrId = section.InstructorId.Value;
-
-                                if (scheduledSlotsByInstructor.TryGetValue(instrId, out var instrSlots)
-                                    && instrSlots.Any(slot => slot.Day == day && slot.StartTime < end && slot.EndTime > start))
-                                    continue;
-                                if (previewInstructorAssignments.Any(p =>
-                                    p.instructorId == instrId && p.day == day && p.start < end && p.end > start))
-                                    continue;
-                                if (sectionTempInstrPreviews.Any(p =>
-                                    p.instructorId == instrId && p.day == day && p.start < end && p.end > start))
-                                    continue;
-
-                                var existingDailyHours = (scheduledSlotsByInstructor.TryGetValue(instrId, out var instrAllSlots)
-                                    ? instrAllSlots.Where(s => s.Day == day).Sum(s => (s.EndTime - s.StartTime).TotalHours)
-                                    : 0)
-                                    + previewInstructorAssignments.Where(p => p.instructorId == instrId && p.day == day)
-                                        .Sum(p => (p.end - p.start).TotalHours)
-                                    + sectionTempInstrPreviews.Where(p => p.instructorId == instrId && p.day == day)
-                                        .Sum(p => (p.end - p.start).TotalHours);
-
-                                if (existingDailyHours + blockSize > 9) continue;
-                            }
-
-                            // H5: Curriculum conflict
-                            if (HasCurriculumConflict(section, day, start, end,
-                                previewAssignments, allScheduledRecords, curriculumSemesterMap))
-                                continue;
-
-                            // H8: Same course section conflict
-                            if (previewAssignments.Any(p =>
-                                p.courseId == section.CourseId && p.sectionId != section.Id
-                                && p.day == day && p.start < end && p.end > start))
-                                continue;
-                            if (allScheduledRecords.Any(r =>
-                                r.CourseSection.CourseId == section.CourseId && r.CourseSectionId != section.Id
-                                && r.TimeSlot.DayOfWeek == day && r.TimeSlot.StartTime < end && r.TimeSlot.EndTime > start))
-                                continue;
-
-                            // Block must not overlap with this section's already-assigned block
-                            if (sectionTempPreviews.Any(p => p.day == day && p.start < end && p.end > start))
-                                continue;
-
-                            var score = CalculateAutoScheduleScore(
-                                section, classroom, blockType, day,
-                                slotGroup.First().SlotOrder, blockSize,
-                                scheduledSlotsByInstructor, previewInstructorAssignments,
-                                previewAssignments);
-
-                            candidates.Add(new AutoScheduleCandidate(classroom, day, start, end, score));
-                        }
-                    }
-                }
-
-                if (candidates.Count > 0)
-                {
-                    var best = candidates
-                        .OrderByDescending(c => c.Score)
-                        .ThenBy(c => c.Day)
-                        .ThenBy(c => c.Start)
-                        .ThenBy(c => c.Classroom.Capacity)
-                        .First();
-
-                    assignedSlots.Add(new ScheduleSlotDto
-                    {
-                        Day = best.Day, StartTime = best.Start, EndTime = best.End,
-                        ClassroomId = best.Classroom.Id, ClassroomName = best.Classroom.Name
-                    });
-                    totalScore += best.Score;
-
-                    // Use first block's classroom for the section, lab block may differ
-                    if (blockIdx == 0)
-                    {
-                        assignedClassroomId = best.Classroom.Id;
-                        assignedClassroomName = best.Classroom.Name;
-                    }
-
-                    sectionTempPreviews.Add((best.Classroom.Id, best.Day, best.Start, best.End));
-                    if (section.InstructorId.HasValue)
-                        sectionTempInstrPreviews.Add((section.InstructorId.Value, best.Day, best.Start, best.End));
-                }
-                else
-                {
-                    allBlocksAssigned = false;
-                    break;
-                }
-            }
-
-            if (allBlocksAssigned && assignedSlots.Count > 0)
-            {
-                var fitScore = NormalizeAutoScheduleScore(totalScore / blockSizes.Length);
-                var scheduleSummary = string.Join(" + ", assignedSlots.Select(s => $"{DayLabel(s.Day)} {s.StartTime:HH:mm}-{s.EndTime:HH:mm}"));
+                var fitScore = NormalizeAutoScheduleScore(bestResult.TotalScore / blockSizes.Length);
+                var scheduleSummary = string.Join(" + ", bestResult.Slots.Select(s => $"{DayLabel(s.Day)} {s.StartTime:HH:mm}-{s.EndTime:HH:mm}"));
 
                 result.Assignments.Add(new AutoSchedulePreviewItemDto
                 {
@@ -766,9 +618,9 @@ public class FacultyPlanningService : IFacultyPlanningService
                     CourseCode = section.Course.Code,
                     CourseName = section.Course.Name,
                     DepartmentCode = section.Course.Department?.Code ?? "",
-                    ClassroomId = assignedClassroomId,
-                    ClassroomName = assignedClassroomName,
-                    ScheduleSlots = assignedSlots,
+                    ClassroomId = bestResult.ClassroomId,
+                    ClassroomName = bestResult.ClassroomName,
+                    ScheduleSlots = bestResult.Slots,
                     ScheduleSummary = scheduleSummary,
                     InstructorId = section.InstructorId,
                     InstructorName = section.InstructorId.HasValue
@@ -776,11 +628,12 @@ public class FacultyPlanningService : IFacultyPlanningService
                     FitScore = fitScore
                 });
 
-                // Commit all blocks to preview
-                foreach (var tp in sectionTempPreviews)
-                    previewAssignments.Add((section.Id, section.CourseId, tp.classroomId, tp.day, tp.start, tp.end));
-                foreach (var tip in sectionTempInstrPreviews)
-                    previewInstructorAssignments.Add(tip);
+                // Commit ALL blocks to preview tracking
+                foreach (var slot in bestResult.Slots)
+                    previewAssignments.Add((section.Id, section.CourseId, bestResult.ClassroomId, slot.Day, slot.StartTime, slot.EndTime));
+                if (section.InstructorId.HasValue)
+                    foreach (var slot in bestResult.Slots)
+                        previewInstructorAssignments.Add((section.InstructorId.Value, slot.Day, slot.StartTime, slot.EndTime));
 
                 result.SuccessCount++;
             }
@@ -922,14 +775,15 @@ public class FacultyPlanningService : IFacultyPlanningService
         await ClearSectionScheduleRecordsAsync(sectionId, ct);
 
         if (scheduleSlots.Count == 0)
-        {
             return;
-        }
 
         var termTimeSlots = await _context.TimeSlots
             .AsNoTracking()
             .Where(ts => ts.TermId == termId)
             .ToListAsync(ct);
+
+        // Resolve which academic time slots are covered by the requested ranges
+        var allMatchedSlots = new List<(TimeSlot timeSlot, int classroomId)>();
 
         foreach (var slot in scheduleSlots)
         {
@@ -946,18 +800,43 @@ public class FacultyPlanningService : IFacultyPlanningService
                     $"{DayLabel(slot.Day)} {slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm} araligi donem zaman slotlari ile eslesmiyor.");
             }
 
-            // Each slot can carry its own ClassroomId (for split theory+lab courses)
             var effectiveClassroomId = slot.ClassroomId ?? classroomId;
+            foreach (var ts in matchingTimeSlots)
+                allMatchedSlots.Add((ts, effectiveClassroomId));
+        }
 
-            foreach (var timeSlot in matchingTimeSlots)
+        // Validate total slot count matches course hours
+        var section = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .FirstAsync(cs => cs.Id == sectionId, ct);
+        var expectedSlotCount = section.Course.TheoryHours + section.Course.LabHours;
+        if (expectedSlotCount > 0 && allMatchedSlots.Count != expectedSlotCount)
+        {
+            throw new InvalidOperationException(
+                $"Slot sayisi uyumsuz: {section.Course.Code} icin {expectedSlotCount} slot gerekli, {allMatchedSlots.Count} slot secildi.");
+        }
+
+        // Write with hard guard against classroom double-booking
+        foreach (var (timeSlot, effectiveCrId) in allMatchedSlots)
+        {
+            var alreadyOccupied = await _context.SectionSchedules
+                .AnyAsync(ss => ss.ClassroomId == effectiveCrId
+                    && ss.TimeSlotId == timeSlot.Id
+                    && ss.CourseSectionId != sectionId, ct);
+
+            if (alreadyOccupied)
             {
-                _context.SectionSchedules.Add(new SectionSchedule
-                {
-                    CourseSectionId = sectionId,
-                    TimeSlotId = timeSlot.Id,
-                    ClassroomId = effectiveClassroomId
-                });
+                throw new InvalidOperationException(
+                    $"Derslik cakismasi: {DayLabel(timeSlot.DayOfWeek)} {timeSlot.StartTime:HH\\:mm}-{timeSlot.EndTime:HH\\:mm} slotunda derslik zaten dolu.");
             }
+
+            _context.SectionSchedules.Add(new SectionSchedule
+            {
+                CourseSectionId = sectionId,
+                TimeSlotId = timeSlot.Id,
+                ClassroomId = effectiveCrId
+            });
         }
     }
 
@@ -1103,6 +982,224 @@ public class FacultyPlanningService : IFacultyPlanningService
 
     private record ScheduleSlotSimple(DayOfWeek Day, TimeOnly StartTime, TimeOnly EndTime);
     private sealed record AutoScheduleCandidate(Classroom Classroom, DayOfWeek Day, TimeOnly Start, TimeOnly End, double Score);
+
+    private sealed class AssignmentResult
+    {
+        public int ClassroomId { get; init; }
+        public string ClassroomName { get; init; } = "";
+        public List<ScheduleSlotDto> Slots { get; init; } = new();
+        public double TotalScore { get; init; }
+    }
+
+    /// <summary>
+    /// Finds the best conflict-free assignment for a section across ALL blocks.
+    /// All blocks use the SAME classroom. For split courses (theory+lab),
+    /// each block gets its own time window but same classroom.
+    /// Returns null if no valid assignment exists.
+    /// </summary>
+    private AssignmentResult? FindBestAssignment(
+        CourseSection section,
+        List<Classroom> candidateClassrooms,
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        int[] blockSizes,
+        ClassroomType requiredType,
+        Dictionary<int, List<ScheduleSlotSimple>> scheduledSlotsByClassroom,
+        List<(int sectionId, int courseId, int classroomId, DayOfWeek day, TimeOnly start, TimeOnly end)> previewAssignments,
+        Dictionary<int, List<ScheduleSlotSimple>> scheduledSlotsByInstructor,
+        List<(int instructorId, DayOfWeek day, TimeOnly start, TimeOnly end)> previewInstructorAssignments,
+        List<SectionSchedule> allScheduledRecords,
+        Dictionary<int, List<(int DepartmentId, int SuggestedSemester)>> curriculumSemesterMap)
+    {
+        AssignmentResult? bestOverall = null;
+
+        foreach (var classroom in candidateClassrooms)
+        {
+            // Build all valid time windows for this classroom
+            var validWindows = new List<(DayOfWeek day, TimeOnly start, TimeOnly end, int slotOrder, double score)>();
+
+            foreach (var (day, daySlots) in timeSlotsByDay)
+            {
+                // Try all possible block sizes for this day
+                foreach (var blockSize in blockSizes.Distinct())
+                {
+                    for (var startIdx = 0; startIdx <= daySlots.Count - blockSize; startIdx++)
+                    {
+                        var slotGroup = daySlots.Skip(startIdx).Take(blockSize).ToList();
+
+                        // Verify consecutive (no lunch gap)
+                        var isConsecutive = true;
+                        for (var i = 1; i < slotGroup.Count; i++)
+                        {
+                            var gap = (slotGroup[i].StartTime - slotGroup[i - 1].EndTime).TotalMinutes;
+                            if (gap > 15) { isConsecutive = false; break; }
+                        }
+                        if (!isConsecutive) continue;
+
+                        var start = slotGroup.First().StartTime;
+                        var end = slotGroup.Last().EndTime;
+
+                        // H1: Classroom conflict
+                        if (scheduledSlotsByClassroom.TryGetValue(classroom.Id, out var cls)
+                            && cls.Any(s => s.Day == day && s.StartTime < end && s.EndTime > start))
+                            continue;
+                        if (previewAssignments.Any(p =>
+                            p.classroomId == classroom.Id && p.day == day && p.start < end && p.end > start))
+                            continue;
+
+                        // H2: Instructor conflict
+                        if (section.InstructorId.HasValue)
+                        {
+                            var instrId = section.InstructorId.Value;
+                            if (scheduledSlotsByInstructor.TryGetValue(instrId, out var isl)
+                                && isl.Any(s => s.Day == day && s.StartTime < end && s.EndTime > start))
+                                continue;
+                            if (previewInstructorAssignments.Any(p =>
+                                p.instructorId == instrId && p.day == day && p.start < end && p.end > start))
+                                continue;
+                        }
+
+                        // H5: Curriculum conflict
+                        if (HasCurriculumConflict(section, day, start, end,
+                            previewAssignments, allScheduledRecords, curriculumSemesterMap))
+                            continue;
+
+                        // H8: Same course section conflict
+                        if (previewAssignments.Any(p =>
+                            p.courseId == section.CourseId && p.sectionId != section.Id
+                            && p.day == day && p.start < end && p.end > start))
+                            continue;
+
+                        var score = CalculateAutoScheduleScore(
+                            section, classroom, requiredType, day,
+                            slotGroup.First().SlotOrder, blockSize,
+                            scheduledSlotsByInstructor, previewInstructorAssignments,
+                            previewAssignments);
+
+                        validWindows.Add((day, start, end, slotGroup.First().SlotOrder, score));
+                    }
+                }
+            }
+
+            // Now find the best combination of non-overlapping windows for all blocks
+            var bestForClassroom = FindBestBlockCombination(validWindows, blockSizes, section.InstructorId,
+                scheduledSlotsByInstructor, previewInstructorAssignments);
+
+            if (bestForClassroom != null)
+            {
+                var totalScore = bestForClassroom.Sum(w => w.score);
+                if (bestOverall == null || totalScore > bestOverall.TotalScore)
+                {
+                    bestOverall = new AssignmentResult
+                    {
+                        ClassroomId = classroom.Id,
+                        ClassroomName = classroom.Name,
+                        Slots = bestForClassroom.Select(w => new ScheduleSlotDto
+                        {
+                            Day = w.day, StartTime = w.start, EndTime = w.end
+                        }).ToList(),
+                        TotalScore = totalScore
+                    };
+                }
+            }
+        }
+
+        return bestOverall;
+    }
+
+    /// <summary>
+    /// Finds the best non-overlapping combination of time windows for the given block sizes.
+    /// For single-block courses, just picks the highest-scoring window.
+    /// For split courses, finds two non-overlapping windows (one per block size).
+    /// Also checks instructor daily load across selected blocks.
+    /// </summary>
+    private static List<(DayOfWeek day, TimeOnly start, TimeOnly end, double score)>? FindBestBlockCombination(
+        List<(DayOfWeek day, TimeOnly start, TimeOnly end, int slotOrder, double score)> validWindows,
+        int[] blockSizes,
+        int? instructorId,
+        Dictionary<int, List<ScheduleSlotSimple>> scheduledSlotsByInstructor,
+        List<(int instructorId, DayOfWeek day, TimeOnly start, TimeOnly end)> previewInstructorAssignments)
+    {
+        if (blockSizes.Length == 1)
+        {
+            // Single block: find windows matching the block size and pick best
+            var slotCount = blockSizes[0];
+            var matching = validWindows
+                .Where(w => CountSlots(w.start, w.end) == slotCount)
+                .OrderByDescending(w => w.score)
+                .ThenBy(w => w.day)
+                .ThenBy(w => w.start)
+                .FirstOrDefault();
+
+            if (matching == default) return null;
+            return new List<(DayOfWeek, TimeOnly, TimeOnly, double)>
+            {
+                (matching.day, matching.start, matching.end, matching.score)
+            };
+        }
+
+        // Multi-block: find best pair of non-overlapping windows
+        var block0Size = blockSizes[0];
+        var block1Size = blockSizes[1];
+
+        var block0Windows = validWindows
+            .Where(w => CountSlots(w.start, w.end) == block0Size)
+            .OrderByDescending(w => w.score)
+            .Take(20) // limit search space
+            .ToList();
+
+        var block1Windows = validWindows
+            .Where(w => CountSlots(w.start, w.end) == block1Size)
+            .OrderByDescending(w => w.score)
+            .Take(20)
+            .ToList();
+
+        (DayOfWeek day, TimeOnly start, TimeOnly end, double score)? bestW0 = null;
+        (DayOfWeek day, TimeOnly start, TimeOnly end, double score)? bestW1 = null;
+        var bestPairScore = double.MinValue;
+
+        foreach (var w0 in block0Windows)
+        {
+            foreach (var w1 in block1Windows)
+            {
+                // Must not overlap in time (same or different days)
+                if (w0.day == w1.day && w0.start < w1.end && w1.start < w0.end)
+                    continue;
+
+                // Instructor daily load check across both blocks
+                if (instructorId.HasValue)
+                {
+                    var instrId = instructorId.Value;
+                    // Check instructor overlap between the two blocks
+                    if (w0.day == w1.day)
+                    {
+                        var existingHours = (scheduledSlotsByInstructor.TryGetValue(instrId, out var isl)
+                            ? isl.Where(s => s.Day == w0.day).Sum(s => (s.EndTime - s.StartTime).TotalHours) : 0)
+                            + previewInstructorAssignments.Where(p => p.instructorId == instrId && p.day == w0.day)
+                                .Sum(p => (p.end - p.start).TotalHours);
+                        if (existingHours + block0Size + block1Size > 9) continue;
+                    }
+                }
+
+                var pairScore = w0.score + w1.score;
+                if (pairScore > bestPairScore)
+                {
+                    bestPairScore = pairScore;
+                    bestW0 = (w0.day, w0.start, w0.end, w0.score);
+                    bestW1 = (w1.day, w1.start, w1.end, w1.score);
+                }
+            }
+        }
+
+        if (bestW0 == null || bestW1 == null) return null;
+        return new List<(DayOfWeek, TimeOnly, TimeOnly, double)> { bestW0.Value, bestW1.Value };
+    }
+
+    private static int CountSlots(TimeOnly start, TimeOnly end)
+    {
+        // Each slot is ~55 minutes (50 min + 5 min break)
+        var totalMinutes = (end - start).TotalMinutes;
+        return (int)Math.Round(totalMinutes / 55.0);
+    }
 
     /// <summary>
     /// Internships (490), graduation projects (491, 492) are not held in classrooms.
