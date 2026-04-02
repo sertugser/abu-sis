@@ -341,16 +341,26 @@ public class FacultyPlanningService : IFacultyPlanningService
             section.InstructorId = request.InstructorId.Value;
         }
 
-        // Write schedule records if classroom + slots provided, or if slots carry their own ClassroomIds
+        // Write schedule records only if this is a NEW schedule assignment (not just an instructor change)
+        // Skip if section already has schedule records and classroom hasn't changed
         var hasSlotLevelClassrooms = request.ScheduleSlots?.Any(s => s.ClassroomId.HasValue) == true;
         if ((request.ClassroomId.HasValue || hasSlotLevelClassrooms) && request.ScheduleSlots is { Count: > 0 })
         {
-            await WriteSectionScheduleRecordsAsync(
-                section.Id,
-                section.TermId,
-                request.ClassroomId ?? 0,
-                request.ScheduleSlots,
-                ct);
+            var existingScheduleCount = await _context.SectionSchedules
+                .CountAsync(ss => ss.CourseSectionId == section.Id, ct);
+
+            var classroomChanged = request.ClassroomId.HasValue && section.ClassroomId != request.ClassroomId.Value;
+            var isNewSchedule = existingScheduleCount == 0;
+
+            if (isNewSchedule || classroomChanged)
+            {
+                await WriteSectionScheduleRecordsAsync(
+                    section.Id,
+                    section.TermId,
+                    request.ClassroomId ?? section.ClassroomId ?? 0,
+                    request.ScheduleSlots,
+                    ct);
+            }
         }
 
         try
