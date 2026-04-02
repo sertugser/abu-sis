@@ -96,6 +96,27 @@ public class FacultyPlanningController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("time-slots")]
+    public async Task<IActionResult> GetTimeSlots([FromQuery] int termId, CancellationToken ct)
+    {
+        var slots = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .OrderBy(ts => ts.DayOfWeek)
+            .ThenBy(ts => ts.SlotOrder)
+            .Select(ts => new FacultyPlanningTimeSlotDto
+            {
+                Day = (int)ts.DayOfWeek,
+                SlotOrder = ts.SlotOrder,
+                StartTime = ts.StartTime,
+                EndTime = ts.EndTime,
+                DisplayName = ts.DisplayName
+            })
+            .ToListAsync(ct);
+
+        return Ok(slots);
+    }
+
     [HttpGet("conflicts")]
     public async Task<IActionResult> GetConflicts([FromQuery] int facultyId, [FromQuery] int termId, CancellationToken ct)
     {

@@ -70,6 +70,14 @@ export interface FacultyPlanningSectionPage {
   pageSize: number;
 }
 
+export interface FacultyPlanningTimeSlot {
+  day: number;
+  slotOrder: number;
+  startTime: string;
+  endTime: string;
+  displayName: string;
+}
+
 export interface AssignSectionRequest {
   sectionId: number;
   classroomId?: number;

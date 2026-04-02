@@ -12,6 +12,7 @@ public class SchedulingServiceTests : IDisposable
 {
     private const int FacultyId = 1;
     private const int DepartmentId = 1;
+    private const int SecondaryDepartmentId = 2;
     private const int ActiveTermId = 1;
     private const int SecondaryTermId = 2;
 
@@ -91,6 +92,75 @@ public class SchedulingServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateExistingAsync_DailyHoursExceeded_ReturnsDailyLoadConflict()
+    {
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var classroom1 = AddClassroom(1, "C101", 50);
+        var classroom2 = AddClassroom(2, "C102", 50);
+        var classroom3 = AddClassroom(3, "C103", 50);
+        var course1 = AddCourse(1, "CS311", theoryHours: 3);
+        var course2 = AddCourse(2, "CS312", theoryHours: 3);
+        var course3 = AddCourse(3, "CS313", theoryHours: 4);
+
+        AddSection(1, course1.Id, instructor.Id, classroom1.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 8, 0, 11, 0));
+        AddSection(2, course2.Id, instructor.Id, classroom2.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 11, 10, 14, 10));
+        AddSection(3, course3.Id, instructor.Id, classroom3.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 15, 0, 19, 0));
+
+        var result = await _service.ValidateExistingAsync(ActiveTermId);
+
+        result.IsValid.Should().BeFalse();
+        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "DailyLoadConflict");
+    }
+
+    [Fact]
+    public async Task ValidateExistingAsync_NoDayOffRemaining_ReturnsNoDayOffConflict()
+    {
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var course = AddCourse(1, "CS321", theoryHours: 2);
+
+        AddSection(1, course.Id, instructor.Id, AddClassroom(1, "C101", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 9, 0, 11, 0));
+        AddSection(2, course.Id, instructor.Id, AddClassroom(2, "C102", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Tuesday, 9, 0, 11, 0));
+        AddSection(3, course.Id, instructor.Id, AddClassroom(3, "C103", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Wednesday, 9, 0, 11, 0));
+        AddSection(4, course.Id, instructor.Id, AddClassroom(4, "C104", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Thursday, 9, 0, 11, 0));
+        AddSection(5, course.Id, instructor.Id, AddClassroom(5, "C105", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Friday, 9, 0, 11, 0));
+
+        var result = await _service.ValidateExistingAsync(ActiveTermId);
+
+        result.IsValid.Should().BeFalse();
+        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "NoDayOffConflict");
+    }
+
+    [Fact]
+    public async Task ValidateExistingAsync_WhenAcademicSlotCountMatchesRequiredSlots_DoesNotReturnCreditHourMismatch()
+    {
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var classroom = AddClassroom(1, "C101", 50);
+
+        var course = AddCourse(1, "CS322", theoryHours: 3, labHours: 4);
+
+        AddSection(1, course.Id, instructor.Id, classroom.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 9, 0, 9, 50),
+            (DayOfWeek.Monday, 9, 55, 10, 45),
+            (DayOfWeek.Monday, 10, 50, 11, 40),
+            (DayOfWeek.Monday, 12, 20, 13, 10),
+            (DayOfWeek.Monday, 13, 15, 14, 05),
+            (DayOfWeek.Monday, 14, 10, 15, 00),
+            (DayOfWeek.Monday, 15, 05, 15, 55));
+
+        var result = await _service.ValidateExistingAsync(ActiveTermId);
+
+        result.Conflicts.Should().NotContain(conflict => conflict.ConflictType == "CreditHourMismatch");
+    }
+
+    [Fact]
     public async Task ValidateExistingAsync_ClassroomCapacityTooSmall_ReturnsCapacityConflict()
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
@@ -103,6 +173,197 @@ public class SchedulingServiceTests : IDisposable
 
         result.IsValid.Should().BeFalse();
         result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "CapacityConflict");
+    }
+
+    [Fact]
+    public async Task ValidateExistingAsync_CrossDepartmentAccessibleCoursesForSameYear_ReturnsCurriculumConflict()
+    {
+        AddDepartment(SecondaryDepartmentId, FacultyId, "Mathematics", "MATH");
+        AddProgram(1, DepartmentId, "CENG-L");
+        AddProgram(2, SecondaryDepartmentId, "MATH-L");
+        AddCurriculum(1, 1);
+        AddCurriculum(2, 2);
+
+        var instructor1 = AddInstructor(1, 101, maxWeeklyHours: 10, departmentId: DepartmentId);
+        var instructor2 = AddInstructor(2, 102, maxWeeklyHours: 10, departmentId: SecondaryDepartmentId);
+        var classroom1 = AddClassroom(1, "C101", 50);
+        var classroom2 = AddClassroom(2, "C102", 50);
+        var course1 = AddCourse(1, "CENG111", theoryHours: 2, departmentId: DepartmentId);
+        var course2 = AddCourse(2, "MATH111", theoryHours: 2, departmentId: SecondaryDepartmentId);
+
+        AddCurriculumCourse(1, course1.Id, suggestedSemester: 1, isCompulsory: true);
+        AddCurriculumCourse(1, course2.Id, suggestedSemester: 1, isCompulsory: true);
+        AddCurriculumCourse(2, course2.Id, suggestedSemester: 1, isCompulsory: true);
+        AddCourseAccessPolicy(course2.Id, ActiveTermId, departmentId: DepartmentId);
+
+        AddSection(1, course1.Id, instructor1.Id, classroom1.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 9, 0, 11, 0));
+        AddSection(2, course2.Id, instructor2.Id, classroom2.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 9, 0, 11, 0));
+
+        var result = await _service.ValidateExistingAsync(ActiveTermId);
+
+        result.IsValid.Should().BeFalse();
+        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "CurriculumConflict");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_DailyHoursExceeded_ReturnsDailyLoadConflict()
+    {
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var course1 = AddCourse(1, "CS421", theoryHours: 3);
+        var course2 = AddCourse(2, "CS422", theoryHours: 3);
+        var candidateCourse = AddCourse(3, "CS423", theoryHours: 4);
+
+        AddSection(1, course1.Id, instructor.Id, AddClassroom(1, "C101", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 8, 0, 11, 0));
+        AddSection(2, course2.Id, instructor.Id, AddClassroom(2, "C102", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 11, 10, 14, 10));
+        AddSection(3, candidateCourse.Id, null, null, ActiveTermId, 30);
+
+        var request = new ScheduleValidationRequestDto
+        {
+            SectionId = 3,
+            InstructorId = instructor.Id,
+            ClassroomId = AddClassroom(3, "C103", 50).Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = DayOfWeek.Monday,
+                    StartTime = new TimeOnly(15, 0),
+                    EndTime = new TimeOnly(19, 0)
+                }
+            ]
+        };
+
+        var result = await _service.ValidateAsync(request);
+
+        result.IsValid.Should().BeFalse();
+        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "DailyLoadConflict");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_NoDayOffRemaining_ReturnsNoDayOffConflict()
+    {
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var course = AddCourse(1, "CS431", theoryHours: 2);
+        var candidateCourse = AddCourse(2, "CS432", theoryHours: 2);
+
+        AddSection(1, course.Id, instructor.Id, AddClassroom(1, "C101", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Tuesday, 9, 0, 11, 0));
+        AddSection(2, course.Id, instructor.Id, AddClassroom(2, "C102", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Wednesday, 9, 0, 11, 0));
+        AddSection(3, course.Id, instructor.Id, AddClassroom(3, "C103", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Thursday, 9, 0, 11, 0));
+        AddSection(4, course.Id, instructor.Id, AddClassroom(4, "C104", 50).Id, ActiveTermId, 30,
+            (DayOfWeek.Friday, 9, 0, 11, 0));
+        AddSection(5, candidateCourse.Id, null, null, ActiveTermId, 30);
+
+        var request = new ScheduleValidationRequestDto
+        {
+            SectionId = 5,
+            InstructorId = instructor.Id,
+            ClassroomId = AddClassroom(5, "C105", 50).Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = DayOfWeek.Monday,
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(11, 0)
+                }
+            ]
+        };
+
+        var result = await _service.ValidateAsync(request);
+
+        result.IsValid.Should().BeFalse();
+        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "NoDayOffConflict");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_WhenRequestedRangeMapsToRequiredAcademicSlots_DoesNotReturnCreditHourMismatch()
+    {
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(9, 50), 1);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(9, 55), new TimeOnly(10, 45), 2);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(10, 50), new TimeOnly(11, 40), 3);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(12, 20), new TimeOnly(13, 10), 4);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(13, 15), new TimeOnly(14, 05), 5);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(14, 10), new TimeOnly(15, 00), 6);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Monday, new TimeOnly(15, 05), new TimeOnly(15, 55), 7);
+
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20);
+        var classroom = AddClassroom(1, "C101", 50);
+        var course = AddCourse(1, "CS432", theoryHours: 3, labHours: 4);
+        AddSection(1, course.Id, null, null, ActiveTermId, 30);
+
+        var request = new ScheduleValidationRequestDto
+        {
+            SectionId = 1,
+            InstructorId = instructor.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = DayOfWeek.Monday,
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(15, 55)
+                }
+            ]
+        };
+
+        var result = await _service.ValidateAsync(request);
+
+        result.Conflicts.Should().NotContain(conflict => conflict.ConflictType == "CreditHourMismatch");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_CrossDepartmentAccessibleCoursesForSameYear_ReturnsCurriculumConflict()
+    {
+        AddDepartment(SecondaryDepartmentId, FacultyId, "Mathematics", "MATH");
+        AddProgram(1, DepartmentId, "CENG-L");
+        AddProgram(2, SecondaryDepartmentId, "MATH-L");
+        AddCurriculum(1, 1);
+        AddCurriculum(2, 2);
+
+        var instructor1 = AddInstructor(1, 101, maxWeeklyHours: 10, departmentId: DepartmentId);
+        var instructor2 = AddInstructor(2, 102, maxWeeklyHours: 10, departmentId: SecondaryDepartmentId);
+        var classroom1 = AddClassroom(1, "C101", 50);
+        var classroom2 = AddClassroom(2, "C102", 50);
+        var course1 = AddCourse(1, "CENG211", theoryHours: 2, departmentId: DepartmentId);
+        var course2 = AddCourse(2, "MATH211", theoryHours: 2, departmentId: SecondaryDepartmentId);
+
+        AddCurriculumCourse(1, course1.Id, suggestedSemester: 3, isCompulsory: true);
+        AddCurriculumCourse(1, course2.Id, suggestedSemester: 3, isCompulsory: true);
+        AddCurriculumCourse(2, course2.Id, suggestedSemester: 3, isCompulsory: true);
+        AddCourseAccessPolicy(course2.Id, ActiveTermId, departmentId: DepartmentId);
+
+        AddSection(1, course1.Id, instructor1.Id, classroom1.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 9, 0, 11, 0));
+        AddSection(2, course2.Id, null, null, ActiveTermId, 30);
+
+        var request = new ScheduleValidationRequestDto
+        {
+            SectionId = 2,
+            InstructorId = instructor2.Id,
+            ClassroomId = classroom2.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = DayOfWeek.Monday,
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(11, 0)
+                }
+            ]
+        };
+
+        var result = await _service.ValidateAsync(request);
+
+        result.IsValid.Should().BeFalse();
+        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "CurriculumConflict");
     }
 
     [Fact]
@@ -275,7 +536,80 @@ public class SchedulingServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private Instructor AddInstructor(int id, int userId, int maxWeeklyHours)
+    private Department AddDepartment(int id, int facultyId, string name, string code)
+    {
+        var department = new Department
+        {
+            Id = id,
+            FacultyId = facultyId,
+            Name = name,
+            Code = code
+        };
+
+        _context.Departments.Add(department);
+        _context.SaveChanges();
+        return department;
+    }
+
+    private AcademicProgram AddProgram(int id, int departmentId, string code)
+    {
+        var program = new AcademicProgram
+        {
+            Id = id,
+            DepartmentId = departmentId,
+            Name = code,
+            Code = code,
+            DegreeLevel = DegreeLevel.Bachelor,
+            EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 14,
+            TotalRequiredEcts = 240
+        };
+
+        _context.AcademicPrograms.Add(program);
+        _context.SaveChanges();
+        return program;
+    }
+
+    private Curriculum AddCurriculum(int id, int programId)
+    {
+        var curriculum = new Curriculum
+        {
+            Id = id,
+            ProgramId = programId,
+            Version = "2025",
+            IsActive = true
+        };
+
+        _context.Curricula.Add(curriculum);
+        _context.SaveChanges();
+        return curriculum;
+    }
+
+    private void AddCurriculumCourse(int curriculumId, int courseId, int suggestedSemester, bool isCompulsory)
+    {
+        _context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = curriculumId,
+            CourseId = courseId,
+            SuggestedSemester = suggestedSemester,
+            IsCompulsory = isCompulsory
+        });
+        _context.SaveChanges();
+    }
+
+    private void AddCourseAccessPolicy(int courseId, int termId, int? departmentId = null, int? facultyId = null)
+    {
+        _context.CourseAccessPolicies.Add(new CourseAccessPolicy
+        {
+            CourseId = courseId,
+            TermId = termId,
+            DepartmentId = departmentId,
+            FacultyId = facultyId
+        });
+        _context.SaveChanges();
+    }
+
+    private Instructor AddInstructor(int id, int userId, int maxWeeklyHours, int departmentId = DepartmentId)
     {
         _context.Users.Add(new ApplicationUser
         {
@@ -291,7 +625,7 @@ public class SchedulingServiceTests : IDisposable
         {
             Id = id,
             UserId = userId,
-            DepartmentId = DepartmentId,
+            DepartmentId = departmentId,
             Title = "Dr.",
             MaxWeeklyHours = maxWeeklyHours
         };
@@ -316,14 +650,14 @@ public class SchedulingServiceTests : IDisposable
         return classroom;
     }
 
-    private Course AddCourse(int id, string code, int theoryHours, int labHours = 0)
+    private Course AddCourse(int id, string code, int theoryHours, int labHours = 0, int? departmentId = DepartmentId)
     {
         var course = new Course
         {
             Id = id,
             Code = code,
             Name = code,
-            DepartmentId = DepartmentId,
+            DepartmentId = departmentId,
             Ects = theoryHours + labHours,
             TheoryHours = theoryHours,
             LabHours = labHours,

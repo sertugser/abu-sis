@@ -28,3 +28,12 @@ public class FacultyPlanningSectionPageDto
     public int Page { get; set; }
     public int PageSize { get; set; }
 }
+
+public class FacultyPlanningTimeSlotDto
+{
+    public int Day { get; set; }
+    public int SlotOrder { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+}

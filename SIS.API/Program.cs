@@ -139,7 +139,6 @@ if (app.Environment.IsDevelopment())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
     await SeedData.SeedAsync(context, userManager, roleManager);
-    await SeedData.AssignInstructorCoursesAsync(context);
 }
 
 app.Run();

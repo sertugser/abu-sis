@@ -2,6 +2,8 @@ export interface ScheduleSlot {
   day: number;
   startTime: string;
   endTime: string;
+  classroomId?: number;
+  classroomName?: string;
 }
 
 

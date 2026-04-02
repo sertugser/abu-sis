@@ -584,6 +584,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPinned")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsScheduleLocked")
                         .HasColumnType("boolean");
 

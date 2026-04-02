@@ -17,10 +17,13 @@ import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
 import {
   useApplySchedule, useAssignSection, useAutoSchedulePreview,
   useFacultyPlanningConflicts, useFacultyPlanningOverview,
-  useFacultyPlanningSections, useUnassignSection,
+  useFacultyPlanningSections, useFacultyPlanningTimeSlots, useUnassignSection,
 } from '../hooks/useFacultyPlanning';
+import { useDepartmentInstructors } from '../hooks/useCourseOpening';
 import type {
+  AssignmentResult,
   FacultyPlanningSection,
+  FacultyPlanningTimeSlot,
 } from '../types/facultyPlanning';
 import type { SchedulingConflict } from '../types/scheduling';
 
@@ -207,6 +210,84 @@ const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'succe
   Partial: { label: 'Kısmi', variant: 'warning' },
 };
 
+interface SectionActionFeedback {
+  kind: 'success' | 'error';
+  title: string;
+  message: string;
+  warnings?: string[];
+  conflicts?: SchedulingConflict[];
+}
+
+function getApiErrorMessage(error: unknown, fallback: string) {
+  return (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.error
+    ?? (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.message
+    ?? (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.title
+    ?? fallback;
+}
+
+interface ManualScheduleOption {
+  key: string;
+  day: number;
+  startTime: string;
+  endTime: string;
+  label: string;
+}
+
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: 'Pzt' },
+  { value: 2, label: 'Sal' },
+  { value: 3, label: 'Çar' },
+  { value: 4, label: 'Per' },
+  { value: 5, label: 'Cum' },
+];
+
+function formatSlotTime(value: string) {
+  return value.slice(0, 5);
+}
+
+function buildManualScheduleOptions(timeSlots: FacultyPlanningTimeSlot[], requiredSlotCount: number): ManualScheduleOption[] {
+  if (requiredSlotCount <= 0) {
+    return [];
+  }
+
+  const slotsByDay = new Map<number, FacultyPlanningTimeSlot[]>();
+  timeSlots.forEach(slot => {
+    const daySlots = slotsByDay.get(slot.day) ?? [];
+    daySlots.push(slot);
+    slotsByDay.set(slot.day, daySlots);
+  });
+
+  const options: ManualScheduleOption[] = [];
+
+  Array.from(slotsByDay.entries())
+    .sort(([leftDay], [rightDay]) => leftDay - rightDay)
+    .forEach(([day, daySlots]) => {
+      const sortedSlots = [...daySlots].sort((left, right) => left.slotOrder - right.slotOrder);
+
+      for (let index = 0; index <= sortedSlots.length - requiredSlotCount; index += 1) {
+        const window = sortedSlots.slice(index, index + requiredSlotCount);
+        const isConsecutive = window.every((slot, slotIndex) =>
+          slotIndex === 0 || slot.slotOrder === window[slotIndex - 1].slotOrder + 1);
+
+        if (!isConsecutive) {
+          continue;
+        }
+
+        const startTime = window[0].startTime;
+        const endTime = window[window.length - 1].endTime;
+        options.push({
+          key: `${day}-${window[0].slotOrder}-${window[window.length - 1].slotOrder}`,
+          day,
+          startTime,
+          endTime,
+          label: `${formatSlotTime(startTime)}-${formatSlotTime(endTime)} (${requiredSlotCount} slot)`,
+        });
+      }
+    });
+
+  return options;
+}
+
 function SectionListTab({
   facultyId, termId, departments,
 }: {
@@ -218,15 +299,94 @@ function SectionListTab({
   const [filterStatus, setFilterStatus] = useState<string | undefined>();
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<SectionActionFeedback | null>(null);
 
   const sectionsQuery = useFacultyPlanningSections(facultyId, termId, filterDept, filterStatus, page);
+  const timeSlotsQuery = useFacultyPlanningTimeSlots(termId);
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
+
+  const handleAssign = (
+    sectionId: number,
+    classroomId?: number,
+    slots?: { day: number; startTime: string; endTime: string }[],
+    instructorId?: number,
+  ) => {
+    setActionFeedback(null);
+    assignMutation.mutate(
+      { sectionId, classroomId, scheduleSlots: slots, instructorId },
+      {
+        onSuccess: (result: AssignmentResult) => {
+          const hasConflicts = result.conflicts.length > 0;
+          const hasWarnings = result.warnings.length > 0;
+
+          setActionFeedback({
+            kind: hasConflicts ? 'error' : 'success',
+            title: hasConflicts ? 'Atama kaydedildi, çakışma bulundu' : 'Atama başarılı',
+            message: hasConflicts
+              ? 'Şube atandı ancak çakışma analizi uyarı üretti. Detaylar aşağıda.'
+              : hasWarnings
+                ? 'Şube atandı. Uyarılar aşağıda listelendi.'
+                : 'Şube başarıyla atandı.',
+            warnings: result.warnings,
+            conflicts: result.conflicts,
+          });
+        },
+        onError: (error: unknown) => {
+          setActionFeedback({
+            kind: 'error',
+            title: 'Atama başarısız',
+            message: getApiErrorMessage(error, 'Şube atanamadı.'),
+          });
+        },
+      },
+    );
+  };
+
+  const handleUnassign = (sectionId: number) => {
+    setActionFeedback(null);
+    unassignMutation.mutate(sectionId, {
+      onSuccess: () => {
+        setActionFeedback({
+          kind: 'success',
+          title: 'Atama kaldırıldı',
+          message: 'Şubenin derslik ve zaman ataması kaldırıldı.',
+        });
+      },
+      onError: (error: unknown) => {
+        setActionFeedback({
+          kind: 'error',
+          title: 'Kaldırma başarısız',
+          message: getApiErrorMessage(error, 'Atama kaldırılamadı.'),
+        });
+      },
+    });
+  };
 
   if (!termId) return <Card><CardContent className="py-8 text-center text-muted-foreground">Aktif dönem bulunamadı.</CardContent></Card>;
 
   return (
     <div className="space-y-4">
+      {actionFeedback && (
+        <Alert variant={actionFeedback.kind === 'error' ? 'destructive' : 'default'}>
+          {actionFeedback.kind === 'error' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+          <AlertTitle>{actionFeedback.title}</AlertTitle>
+          <AlertDescription className="space-y-1">
+            <p>{actionFeedback.message}</p>
+            {(actionFeedback.warnings ?? []).map((warning, index) => <p key={`warning-${index}`} className="text-xs">{warning}</p>)}
+            {(actionFeedback.conflicts ?? []).map((conflict, index) => <p key={`conflict-${index}`} className="text-xs">{conflict.conflictType}: {conflict.message}</p>)}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {timeSlotsQuery.isError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Akademik saat tablosu yüklenemedi</AlertTitle>
+          <AlertDescription>Manuel atama seçenekleri şu an üretilemedi. Sayfayı yenileyip tekrar deneyin.</AlertDescription>
+        </Alert>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <select
@@ -268,13 +428,14 @@ function SectionListTab({
                   <SectionRow
                     key={s.sectionId}
                     section={s}
+                    timeSlots={timeSlotsQuery.data ?? []}
+                    timeSlotsLoaded={timeSlotsQuery.isSuccess}
                     expanded={expandedId === s.sectionId}
                     onToggle={() => setExpandedId(prev => prev === s.sectionId ? null : s.sectionId)}
-                    onAssign={(classroomId, slots, instructorId) =>
-                      assignMutation.mutate({ sectionId: s.sectionId, classroomId, scheduleSlots: slots, instructorId })
-                    }
-                    onUnassign={() => unassignMutation.mutate(s.sectionId)}
+                    onAssign={(classroomId, slots, instructorId) => handleAssign(s.sectionId, classroomId, slots, instructorId)}
+                    onUnassign={() => handleUnassign(s.sectionId)}
                     isAssigning={assignMutation.isPending}
+                    isUnassigning={unassignMutation.isPending}
                   />
                 ))}
               </TableBody>
@@ -295,20 +456,31 @@ function SectionListTab({
   );
 }
 
-function SectionRow({ section: s, expanded, onToggle, onAssign, onUnassign, isAssigning }: {
+function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle, onAssign, onUnassign, isAssigning, isUnassigning }: {
   section: FacultyPlanningSection;
+  timeSlots: FacultyPlanningTimeSlot[];
+  timeSlotsLoaded: boolean;
   expanded: boolean;
   onToggle: () => void;
   onAssign: (classroomId?: number, slots?: { day: number; startTime: string; endTime: string }[], instructorId?: number) => void;
   onUnassign: () => void;
   isAssigning: boolean;
+  isUnassigning: boolean;
 }) {
   const [classroomId, setClassroomId] = useState<string>(s.classroomId?.toString() ?? '');
+  const [instructorId, setInstructorId] = useState<string>(s.instructorId?.toString() ?? '');
   const [day, setDay] = useState('1');
-  const [startHour, setStartHour] = useState('9');
-  const totalHours = s.theoryHours + s.labHours || 3;
+  const [selectedSlotKey, setSelectedSlotKey] = useState('');
+  const [localError, setLocalError] = useState<string>('');
+  const requiredSlotCount = s.theoryHours + s.labHours || 1;
+  const slotOptions = buildManualScheduleOptions(timeSlots, requiredSlotCount);
+  const availableDays = Array.from(new Set(slotOptions.map(option => option.day))).sort((left, right) => left - right);
+  const effectiveDay = availableDays.includes(Number(day)) ? Number(day) : (availableDays[0] ?? Number(day));
+  const dayOptions = slotOptions.filter(option => option.day === effectiveDay);
+  const selectedOption = dayOptions.find(option => option.key === selectedSlotKey) ?? dayOptions[0] ?? null;
 
   const statusCfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.Unscheduled;
+  const instructorsQuery = useDepartmentInstructors(s.departmentId);
 
   return (
     <>
@@ -333,37 +505,103 @@ function SectionRow({ section: s, expanded, onToggle, onAssign, onUnassign, isAs
             <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium">Derslik ID</label>
-                <Input className="h-8 w-24" value={classroomId} onChange={e => setClassroomId(e.target.value)} placeholder="Derslik ID" />
+                <Input
+                  className="h-8 w-24"
+                  value={classroomId}
+                  onChange={e => setClassroomId(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  placeholder="Derslik ID"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Hoca</label>
+                <select
+                  className="h-8 min-w-52 rounded-md border px-2 text-sm"
+                  value={instructorId}
+                  onChange={e => setInstructorId(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  disabled={instructorsQuery.isLoading || instructorsQuery.isError}
+                >
+                  <option value="">Hoca atanmadı</option>
+                  {(instructorsQuery.data ?? []).map(instructor => (
+                    <option key={instructor.instructorId} value={instructor.instructorId}>
+                      {instructor.fullName}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium">Gün</label>
-                <select className="h-8 rounded-md border px-2 text-sm" value={day} onChange={e => setDay(e.target.value)}>
-                  <option value="1">Pzt</option><option value="2">Sal</option><option value="3">Çar</option>
-                  <option value="4">Per</option><option value="5">Cum</option>
+                <select
+                  className="h-8 rounded-md border px-2 text-sm"
+                  value={String(effectiveDay)}
+                  onChange={e => setDay(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  disabled={!timeSlotsLoaded || availableDays.length === 0}
+                >
+                  {WEEKDAY_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value} disabled={!availableDays.includes(option.value)}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium">Saat</label>
-                <select className="h-8 rounded-md border px-2 text-sm" value={startHour} onChange={e => setStartHour(e.target.value)}>
-                  {Array.from({ length: 10 }, (_, i) => i + 8).map(h => (
-                    <option key={h} value={h}>{`${h}:00-${h + totalHours}:00`}</option>
-                  ))}
+                <select
+                  className="h-8 rounded-md border px-2 text-sm"
+                  value={selectedOption?.key ?? ''}
+                  onChange={e => setSelectedSlotKey(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  disabled={!timeSlotsLoaded || dayOptions.length === 0}
+                >
+                  {dayOptions.length === 0 ? (
+                    <option value="">Uygun saat aralığı yok</option>
+                  ) : (
+                    dayOptions.map(option => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))
+                  )}
                 </select>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" disabled={isAssigning} onClick={() => {
-                  const slots = [{ day: Number(day), startTime: `${startHour.padStart(2, '0')}:00`, endTime: `${(Number(startHour) + totalHours).toString().padStart(2, '0')}:00` }];
-                  onAssign(classroomId ? Number(classroomId) : undefined, slots, undefined);
+                <Button size="sm" type="button" disabled={isAssigning} onClick={(e) => {
+                  e.stopPropagation();
+                  if (!classroomId.trim()) {
+                    setLocalError('Atama için Derslik ID girilmelidir.');
+                    return;
+                  }
+                  if (!timeSlotsLoaded) {
+                    setLocalError('Akademik saat seçenekleri henüz yüklenmedi.');
+                    return;
+                  }
+                  if (!selectedOption) {
+                    setLocalError(`${requiredSlotCount} slot kapsayan uygun bir saat aralığı bulunamadı.`);
+                    return;
+                  }
+                  setLocalError('');
+                  const slots = [{ day: selectedOption.day, startTime: selectedOption.startTime, endTime: selectedOption.endTime }];
+                  onAssign(Number(classroomId), slots, instructorId ? Number(instructorId) : undefined);
                 }}>
                   <Check className="h-4 w-4 mr-1" /> Ata
                 </Button>
                 {s.status !== 'Unscheduled' && (
-                  <Button size="sm" variant="destructive" onClick={onUnassign}>
+                  <Button size="sm" type="button" variant="destructive" disabled={isUnassigning} onClick={(e) => { e.stopPropagation(); onUnassign(); }}>
                     <X className="h-4 w-4 mr-1" /> Kaldır
                   </Button>
                 )}
               </div>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">Bu şube için gerekli haftalık yük: {requiredSlotCount} akademik slot.</p>
+            {!instructorId && (
+              <p className="mt-1 text-xs text-amber-700">
+                Hoca atanmadıysa instructor bazlı çakışmalar hesaplanmaz. 5 güne yayılma uyarısı için burada hoca seçmelisin.
+              </p>
+            )}
+            {instructorsQuery.isError && (
+              <p className="mt-1 text-xs text-destructive">Bölüm hoca listesi yüklenemedi.</p>
+            )}
+            {localError && <p className="mt-2 text-xs text-destructive">{localError}</p>}
           </TableCell>
         </TableRow>
       )}
