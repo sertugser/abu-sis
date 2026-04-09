@@ -37,6 +37,7 @@ export const studentMenuGroups: MenuGroup[] = [
     icon: BookOpen,
     children: [
       { to: ROUTES.DERS_KAYIT, label: 'Ders Kayıt' },
+      { to: ROUTES.PLAN, label: 'Kayıt Planım' },
       { to: '/donem-ortalamalari', label: 'Dönem Ortalamaları' },
       { to: '/mufredat-durum', label: 'Müfredat Durum' },
     ],

@@ -1,4 +1,4 @@
-C:\Users\ASUS\Documents\GitHub\student-information-system\start-project.bat@echo off
+@echo off
 echo =========================================
 echo SIS Project - Starting in Integrated Terminal...
 echo =========================================

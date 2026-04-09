@@ -1,7 +1,6 @@
 export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
-  KULLANIM_KILAVUZU: '/kullanim-kilavuzu',
   AKADEMIK_TAKVIM: '/akademik-takvim',
   DERS_KAYIT: '/ders-kayit',
   PLAN: '/plan',
@@ -98,7 +97,6 @@ export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructi
 /** Routes that have actual page implementations in App.tsx */
 export const IMPLEMENTED_ROUTES = new Set([
   '/',
-  '/kullanim-kilavuzu',
   '/akademik-takvim',
   '/ders-kayit',
   '/plan',

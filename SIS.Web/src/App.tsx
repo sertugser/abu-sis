@@ -12,7 +12,6 @@ import RegistrationPlanPage from './pages/RegistrationPlanPage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import CurriculumStatusPage from './pages/CurriculumStatusPage';
 import TermGpaPage from './pages/TermGpaPage';
-import UsageGuidePage from './pages/UsageGuidePage';
 import AcademicCalendarPage from './pages/AcademicCalendarPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
@@ -55,7 +54,6 @@ export default function App() {
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
 
                   <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
-                    <Route path="kullanim-kilavuzu" element={<UsageGuidePage />} />
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
                     <Route path="plan" element={<RegistrationPlanPage />} />
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />

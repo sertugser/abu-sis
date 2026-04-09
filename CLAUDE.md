@@ -1,8 +1,7 @@
 # Student Information System (SIS)
 
 ## Project Overview
-Ankara Bilim University - Production Student Information System
-13 modules, 139 functional requirements (SRS-based)
+Ankara Bilim University - Student Information System
 
 ## Tech Stack
 - **Backend:** ASP.NET Core 10 Web API (.NET 10 SDK, targeting net10.0)
@@ -16,38 +15,41 @@ Ankara Bilim University - Production Student Information System
 ```
 SIS.Domain/           → Entities, Enums, ValueObjects, Exceptions (zero dependencies)
 SIS.Application/      → Services, DTOs, Validators (depends on Domain)
-SIS.Infrastructure/   → EF Core, DbContext, Repositories (depends on Domain + Application)
+SIS.Infrastructure/   → EF Core, DbContext, Services (depends on Domain + Application)
 SIS.API/              → Controllers, Middleware, DI (depends on Application + Infrastructure)
 SIS.Tests/            → Unit tests (depends on Application + Domain)
 ```
 Dependency direction: API → Application → Domain ← Infrastructure
 
 ## Key Business Rules (Course Registration)
-- ECTS caps: CGPA <2.00 → 30 ECTS, 2.00-2.49 → 42 ECTS, ≥2.50 → 48 ECTS
-- CGPA < 1.70 (after 1st semester) → student is retained (sinifta kalir), cannot take upper-level courses
-- FF/NA/U courses must be re-selected before new courses (FR-55)
+All thresholds below are configurable via SystemConfig (admin panel), values shown are defaults:
+- ECTS caps: CGPA-based limits (defaults: <2.00 → 30, 2.00-2.49 → 42, ≥2.50 → 48)
+- Retention threshold (default: 1.70) → student retained after 1st semester, cannot take upper-level courses
+- FF/NA/U courses must be re-selected before new courses
 - Full overlap for first-time courses → categorically blocked, no override
 - Full/Partial overlap for repeated (FF) courses → allowed with advisor + dept manager approval
-- Instructor cannot be assigned to overlapping sections (FR-36)
-- Registration plan: soft hold on capacity, cleared at midnight if unconfirmed (FR-44)
+- Instructor cannot be assigned to overlapping sections
+- Registration plan: soft hold on capacity, cleared at midnight if unconfirmed
+
+## Term Lifecycle
+Draft → Planning → Scheduling → Published → RegistrationOpen → AddDrop → WithdrawalPeriod → GradeEntry → Closed → Archived
+
+- Tüm geçişler admin tarafından manuel yapılabilir (guard koşulları dahilinde)
+- Published → GradeEntry arası geçişler ayrıca takvim tarihlerine göre otomatik tetiklenir
+- Geri dönüş izinleri: Planning→Draft, Scheduling→Planning, Published→Scheduling
 
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports
 - ApplicationUser (IdentityUser) lives in SIS.Infrastructure/Persistence/
-- Schedule data stored in SectionSchedule table (ScheduleJson removed, ScheduleSlot deleted)
-- TimeBlock internal type in ScheduleHelper replaces ScheduleSlot for internal use
+- Schedule data stored in SectionSchedule table
 - Composite PKs (CoursePrerequisite, CourseEquivalency, CurriculumCourse) configured in OnModelCreating
-- Solution file format: .slnx (modern XML format from .NET 10 SDK)
 - SystemConfig table for configurable business rules (no hardcoded values)
 - ISystemConfigProvider with 5-minute memory cache for config reads
 
 ## Database
-- Host: localhost, Port: 5432, Database: StudentInfoSystem
-- Username: postgres, Password: configured in appsettings.json
-- YOKSİS integration: Mock/Simulation (no real API)
-
-## User Roles
-Student, Instructor, AcademicAdvisor, AdministrativeStaff, DepartmentManager, Dean, SystemAdministrator
+- PostgreSQL, Host: localhost, Port: 5432, Database: StudentInfoSystem
+- appsettings.json: placeholder değerler (CHANGE_ME) — GitHub'a gider
+- appsettings.Development.json: gerçek şifreler — .gitignore'da, GitHub'a gitmez
 
 ## Commands
 ```bash
@@ -56,24 +58,3 @@ dotnet test                           # Run tests
 dotnet ef database update -p SIS.Infrastructure -s SIS.API  # Apply migrations
 ```
 
----
-### C1. Audit Log
-Tüm kritik işlemler ayrıntılı ve sorgulanabilir loglanır:
-- Yetki değişiklikleri (rol atama/kaldırma)
-- Ders açma/kapama, kontenjan değişimi
-- Müfredat değişiklikleri
-- Danışman onay/red işlemleri
-- Not giriş/düzeltme
-- Sistem ayarı değişiklikleri
-- Format: kim, ne zaman, ne yaptı, eski değer → yeni değer
-
-### C2. Bildirim Sistemi
-İlgili kişilere otomatik bildirim:
-- Dönem durum geçişlerinde ilgili rollere
-- Danışman onay/red durumunda öğrenciye
-- Kontenjan değişikliğinde kayıtlı öğrencilere
-- Sistem konfigürasyon değişikliklerinde ilgili rollere
-
-### C3. Bütünleme Katılım Anketi
-- GradeEntry sonrasında öğrenci bütünleme sınavına girip girmeyeceğini önceden işaretler
-- Sistem katılım tahmini üretir, gereksiz operasyonel yük azaltılır
