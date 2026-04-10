@@ -23,6 +23,7 @@ import {
 } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import type {
+  ApprovalWorkflowStatus,
   CourseDemandForecast,
   CourseSectionApproval,
   DepartmentSectionClassList,
@@ -64,6 +65,48 @@ const DAY_LABELS: Record<number, string> = {
 };
 
 const ITEMS_PER_PAGE = 20;
+
+const WORKFLOW_ORDER: Record<ApprovalWorkflowStatus, number> = {
+  Pending: 0,
+  PartiallyOpened: 1,
+  Approved: 2,
+  Completed: 3,
+  Rejected: 4,
+};
+
+function getWorkflowStatus(approval: CourseSectionApproval | null): ApprovalWorkflowStatus {
+  return approval?.workflowStatus ?? approval?.status ?? 'Pending';
+}
+
+function getWorkflowLabel(status: ApprovalWorkflowStatus) {
+  switch (status) {
+    case 'Approved':
+      return 'Onaylı';
+    case 'PartiallyOpened':
+      return 'Kısmi Açıldı';
+    case 'Completed':
+      return 'Tamamlandı';
+    case 'Rejected':
+      return 'Red';
+    default:
+      return 'Bekliyor';
+  }
+}
+
+function getWorkflowVariant(status: ApprovalWorkflowStatus): 'success' | 'warning' | 'destructive' | 'secondary' | 'outline' {
+  switch (status) {
+    case 'Completed':
+      return 'success';
+    case 'PartiallyOpened':
+      return 'warning';
+    case 'Rejected':
+      return 'destructive';
+    case 'Approved':
+      return 'outline';
+    default:
+      return 'secondary';
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    Main Page — only department selector + tabs, nothing else
@@ -264,21 +307,34 @@ function PlanningMode({
 
   // Sort: pending first, then by demand desc
   const sorted = [...filtered].sort((a, b) => {
-    const aStatus = approvalMap.get(a.courseId)?.status ?? 'Pending';
-    const bStatus = approvalMap.get(b.courseId)?.status ?? 'Pending';
-    if (aStatus === 'Pending' && bStatus !== 'Pending') return -1;
-    if (aStatus !== 'Pending' && bStatus === 'Pending') return 1;
+    const aStatus = getWorkflowStatus(approvalMap.get(a.courseId) ?? null);
+    const bStatus = getWorkflowStatus(approvalMap.get(b.courseId) ?? null);
+    const orderDiff = WORKFLOW_ORDER[aStatus] - WORKFLOW_ORDER[bStatus];
+    if (orderDiff !== 0) return orderDiff;
     return b.totalPredictedDemand - a.totalPredictedDemand;
   });
 
-  const approvedCount = allCourses.filter(c => approvalMap.get(c.courseId)?.status === 'Approved').length;
-  const rejectedCount = allCourses.filter(c => approvalMap.get(c.courseId)?.status === 'Rejected').length;
-  const pendingCount = allCourses.length - approvedCount - rejectedCount;
-  const progressPct = allCourses.length > 0 ? ((approvedCount + rejectedCount) / allCourses.length) * 100 : 0;
+  const workflowCounts = allCourses.reduce<Record<ApprovalWorkflowStatus, number>>((acc, course) => {
+    const workflowStatus = getWorkflowStatus(approvalMap.get(course.courseId) ?? null);
+    acc[workflowStatus] += 1;
+    return acc;
+  }, {
+    Pending: 0,
+    Approved: 0,
+    PartiallyOpened: 0,
+    Completed: 0,
+    Rejected: 0,
+  });
+
+  const approvedCount = workflowCounts.Approved;
+  const partialCount = workflowCounts.PartiallyOpened;
+  const completedCount = workflowCounts.Completed;
+  const rejectedCount = workflowCounts.Rejected;
+  const pendingCount = workflowCounts.Pending;
+  const progressPct = allCourses.length > 0 ? ((allCourses.length - pendingCount) / allCourses.length) * 100 : 0;
 
   const pendingFiltered = sorted.filter(c => {
-    const a = approvalMap.get(c.courseId);
-    return !a || a.status === 'Pending';
+    return getWorkflowStatus(approvalMap.get(c.courseId) ?? null) === 'Pending';
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE));
@@ -343,6 +399,8 @@ function PlanningMode({
             <Progress value={progressPct} className="w-32 h-2" indicatorClassName={progressPct === 100 ? 'bg-emerald-600' : 'bg-blue-600'} />
             <span className="text-xs text-gray-500 whitespace-nowrap">
               <span className="font-medium text-gray-900">{approvedCount}</span> onaylı
+              {partialCount > 0 && <>, <span className="font-medium text-gray-900">{partialCount}</span> kısmi</>}
+              {completedCount > 0 && <>, <span className="font-medium text-gray-900">{completedCount}</span> tamamlandı</>}
               {rejectedCount > 0 && <>, <span className="font-medium text-gray-900">{rejectedCount}</span> red</>}
               , <span className="font-medium text-gray-900">{pendingCount}</span> bekliyor
             </span>
@@ -418,10 +476,20 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
   const [sectionCount, setSectionCount] = useState(approval?.approvedSectionCount ?? course.recommendedSectionCount);
   const [note, setNote] = useState(approval?.note ?? '');
 
-  const status = (approval?.status ?? 'Pending') as 'Pending' | 'Approved' | 'Rejected';
+  const workflowStatus = getWorkflowStatus(approval);
   const demandPct = (course.totalPredictedDemand / maxDemand) * 100;
+  const openedSectionCount = approval?.openedSectionCount ?? 0;
+  const remainingSectionCount = approval?.remainingSectionCount ?? 0;
 
-  const rowBg = status === 'Approved' ? 'bg-green-50' : status === 'Rejected' ? 'bg-red-50' : '';
+  const rowBg = workflowStatus === 'Completed'
+    ? 'bg-green-50'
+    : workflowStatus === 'PartiallyOpened'
+      ? 'bg-amber-50'
+      : workflowStatus === 'Approved'
+        ? 'bg-blue-50/40'
+        : workflowStatus === 'Rejected'
+          ? 'bg-red-50'
+          : '';
 
   return (
     <>
@@ -450,12 +518,12 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
           </span>
         </TableCell>
         <TableCell className="text-center">
-          <Badge variant={status === 'Approved' ? 'success' : status === 'Rejected' ? 'destructive' : 'secondary'}>
-            {status === 'Approved' ? 'Onaylı' : status === 'Rejected' ? 'Red' : 'Bekliyor'}
+          <Badge variant={getWorkflowVariant(workflowStatus)}>
+            {getWorkflowLabel(workflowStatus)}
           </Badge>
         </TableCell>
         <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-          {status === 'Pending' ? (
+          {workflowStatus === 'Pending' ? (
             <div className="flex justify-center gap-1">
               <button
                 className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors disabled:opacity-40"
@@ -489,6 +557,15 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
         <TableRow className="bg-gray-50 hover:bg-gray-50">
           <TableCell colSpan={6} className="p-0">
             <div className="px-6 py-4 space-y-4">
+              {approval && workflowStatus !== 'Pending' && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                  <Badge variant={getWorkflowVariant(workflowStatus)}>{getWorkflowLabel(workflowStatus)}</Badge>
+                  <span>Onaylanan: <strong className="text-gray-900">{approval.approvedSectionCount ?? 0}</strong></span>
+                  <span>Açılan: <strong className="text-gray-900">{openedSectionCount}</strong></span>
+                  {remainingSectionCount > 0 && <span>Kalan: <strong className="text-gray-900">{remainingSectionCount}</strong></span>}
+                </div>
+              )}
+
               {/* Approval control row */}
               <div className="flex flex-wrap items-end gap-3 pb-3 border-b border-gray-200">
                 <div>

@@ -1,15 +1,21 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
+using SIS.Application.EnrollmentForecast.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
 
-public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
+public class CourseOpeningService(
+    AppDbContext context,
+    IEnrollmentForecastService forecastService,
+    IEnrollmentForecastCacheInvalidator forecastCacheInvalidator) : ICourseOpeningService
 {
     private readonly AppDbContext _context = context;
+    private readonly IEnrollmentForecastService _forecastService = forecastService;
+    private readonly IEnrollmentForecastCacheInvalidator _forecastCacheInvalidator = forecastCacheInvalidator;
 
     public async Task<OpenedCourseListDto> GetOpenedCoursesAsync(int departmentId, int termId, CancellationToken ct)
     {
@@ -39,6 +45,15 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             .Select(g => new { SectionId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.SectionId, x => x.Count, ct);
 
+        var draftOrPendingCounts = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(r =>
+                sectionIds.Contains(r.CourseSectionId)
+                && (r.Status == RegistrationStatus.Draft || r.Status == RegistrationStatus.PendingAdvisorApproval))
+            .GroupBy(r => r.CourseSectionId)
+            .Select(g => new { SectionId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SectionId, x => x.Count, ct);
+
         // Load suggested semester from curriculum
         var courseIds = sections.Select(s => s.CourseId).Distinct().ToList();
         var suggestedSemesters = await _context.CurriculumCourses
@@ -64,6 +79,7 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         {
             instructorNameMap.TryGetValue(s.InstructorId ?? 0, out var instrName);
             registeredCounts.TryGetValue(s.Id, out var regCount);
+            draftOrPendingCounts.TryGetValue(s.Id, out var draftOrPendingCount);
             suggestedSemesters.TryGetValue(s.CourseId, out var sugSem);
 
             return new OpenedCourseSectionDto
@@ -81,6 +97,7 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                 Capacity = s.Capacity,
                 EnrolledCount = s.EnrolledCount,
                 RegisteredCount = regCount,
+                DraftOrPendingCount = draftOrPendingCount,
                 InstructorId = s.InstructorId,
                 InstructorName = instrName,
                 IsActive = s.IsActive,
@@ -114,134 +131,30 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         var courseIds = curriculumCourses.Select(cc => cc.CourseId).Distinct().ToList();
         var existingSectionCounts = await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == termId && courseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == termId && cs.IsActive && courseIds.Contains(cs.CourseId))
             .GroupBy(cs => cs.CourseId)
             .Select(g => new { CourseId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
 
-        // ── Forecast data ──
+        var forecastSummary = await _forecastService.GetDepartmentSummaryAsync(departmentId);
+        var forecastMap = (forecastSummary?.CourseSummaries ?? [])
+            .Where(summary => courseIds.Contains(summary.CourseId))
+            .ToDictionary(summary => summary.CourseId);
 
-        // 1. Cross-department demand: other departments that also have these courses in active curricula
-        var crossDeptCourses = await _context.CurriculumCourses
+        var approvals = await _context.CourseSectionApprovals
             .AsNoTracking()
-            .Include(cc => cc.Curriculum).ThenInclude(c => c.Program).ThenInclude(p => p.Department)
-            .Where(cc => cc.Curriculum.IsActive && courseIds.Contains(cc.CourseId)
-                && cc.Curriculum.Program.DepartmentId != departmentId)
-            .ToListAsync(ct);
-
-        var crossDeptByCourse = crossDeptCourses
-            .GroupBy(cc => cc.CourseId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.GroupBy(cc => new
-                {
-                    DeptName = cc.Curriculum.Program.Department.Name,
-                    ProgName = cc.Curriculum.Program.Name,
-                    DeptId = cc.Curriculum.Program.DepartmentId
-                })
-                .Select(dg => new { dg.Key.DeptName, dg.Key.ProgName, dg.Key.DeptId })
-                .ToList());
-
-        // Count active students per department for cross-dept estimate
-        var crossDeptIds = crossDeptCourses.Select(cc => cc.Curriculum.Program.DepartmentId).Distinct().ToList();
-        var studentCountByDept = crossDeptIds.Count > 0
-            ? await _context.Students
-                .AsNoTracking()
-                .Where(s => s.Status == StudentStatus.Active
-                    && s.StudentPrograms.Any(sp => sp.IsActive && sp.Type == StudentProgramType.Main
-                        && crossDeptIds.Contains(sp.Program.DepartmentId)))
-                .SelectMany(s => s.StudentPrograms
-                    .Where(sp => sp.IsActive && sp.Type == StudentProgramType.Main && crossDeptIds.Contains(sp.Program.DepartmentId))
-                    .Select(sp => sp.Program.DepartmentId))
-                .GroupBy(deptId => deptId)
-                .Select(g => new { DeptId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.DeptId, x => x.Count, ct)
-            : new Dictionary<int, int>();
-
-        // 2. Retake count: students with FF/NA/U grades (distinct per student per course)
-        var retakeCounts = await _context.CourseRegistrations
-            .AsNoTracking()
-            .Include(cr => cr.CourseSection)
-            .Where(cr => courseIds.Contains(cr.CourseSection.CourseId)
-                && cr.Grade != null
-                && (cr.Grade == GradeCode.FF || cr.Grade == GradeCode.NA || cr.Grade == GradeCode.U)
-                && cr.Status != RegistrationStatus.Dropped)
-            .GroupBy(cr => cr.CourseSection.CourseId)
-            .Select(g => new { CourseId = g.Key, Count = g.Select(r => r.StudentId).Distinct().Count() })
-            .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
-
-        // 3. Active students in this department who haven't passed each course
-        var activeStudentIds = await _context.Students
-            .AsNoTracking()
-            .Where(s => s.Status == StudentStatus.Active
-                && s.StudentPrograms.Any(sp => sp.IsActive && sp.Type == StudentProgramType.Main
-                    && sp.Program.DepartmentId == departmentId))
-            .Select(s => s.Id)
-            .ToListAsync(ct);
-
-        var passedByStudent = await _context.CourseRegistrations
-            .AsNoTracking()
-            .Include(cr => cr.CourseSection)
-            .Where(cr => activeStudentIds.Contains(cr.StudentId)
-                && courseIds.Contains(cr.CourseSection.CourseId)
-                && cr.Grade != null
-                && cr.Grade != GradeCode.FF && cr.Grade != GradeCode.NA
-                && cr.Grade != GradeCode.U && cr.Grade != GradeCode.W && cr.Grade != GradeCode.I)
-            .Select(cr => new { cr.StudentId, cr.CourseSection.CourseId })
-            .Distinct()
-            .ToListAsync(ct);
-
-        var passedSet = passedByStudent.ToLookup(x => x.CourseId, x => x.StudentId);
-
-        // 4. Classroom capacity by type for recommended section count
-        var department = await _context.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == departmentId, ct);
-        var avgLectureCapacity = 40; // default
-        var avgLabCapacity = 30; // default
-        if (department != null)
-        {
-            var termClassrooms = await _context.ClassroomTermAssignments
-                .AsNoTracking()
-                .Include(cta => cta.Classroom)
-                .Where(cta => cta.TermId == termId && cta.FacultyId == department.FacultyId)
-                .Select(cta => new { cta.Classroom.Capacity, cta.Classroom.Type })
-                .ToListAsync(ct);
-
-            var lectureCapacities = termClassrooms
-                .Where(c => c.Type == ClassroomType.Lecture || c.Type == ClassroomType.Amphitheater)
-                .Select(c => c.Capacity).ToList();
-            var labCapacities = termClassrooms
-                .Where(c => c.Type == ClassroomType.Lab || c.Type == ClassroomType.Computer)
-                .Select(c => c.Capacity).ToList();
-
-            if (lectureCapacities.Count > 0)
-                avgLectureCapacity = (int)Math.Round(lectureCapacities.Average());
-            if (labCapacities.Count > 0)
-                avgLabCapacity = (int)Math.Round(labCapacities.Average());
-        }
-
-        // 5. Previous term enrollment (same semester type from previous year)
-        Dictionary<int, int> previousEnrollments = new();
-        if (term != null)
-        {
-            var previousTerm = await _context.AcademicTerms
-                .AsNoTracking()
-                .Where(t => t.Id != termId && t.Semester == term.Semester && t.Year == term.Year - 1)
-                .OrderByDescending(t => t.Year)
-                .FirstOrDefaultAsync(ct);
-
-            if (previousTerm != null)
+            .Where(approval =>
+                approval.DepartmentId == departmentId
+                && approval.TermId == termId
+                && courseIds.Contains(approval.CourseId))
+            .Select(approval => new CourseOpeningApprovalInfo
             {
-                previousEnrollments = await _context.CourseRegistrations
-                    .AsNoTracking()
-                    .Include(cr => cr.CourseSection)
-                    .Where(cr => cr.CourseSection.TermId == previousTerm.Id
-                        && courseIds.Contains(cr.CourseSection.CourseId)
-                        && cr.Status != RegistrationStatus.Dropped)
-                    .GroupBy(cr => cr.CourseSection.CourseId)
-                    .Select(g => new { CourseId = g.Key, Count = g.Count() })
-                    .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
-            }
-        }
+                CourseId = approval.CourseId,
+                Status = approval.Status,
+                ApprovedSectionCount = approval.ApprovedSectionCount,
+                Note = approval.Note
+            })
+            .ToDictionaryAsync(approval => approval.CourseId, ct);
 
         return curriculumCourses
             .GroupBy(cc => cc.CourseId)
@@ -249,43 +162,15 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             {
                 var first = g.First();
                 existingSectionCounts.TryGetValue(first.CourseId, out var sectionCount);
-                retakeCounts.TryGetValue(first.CourseId, out var retakeCount);
-                previousEnrollments.TryGetValue(first.CourseId, out var prevEnrollment);
+                forecastMap.TryGetValue(first.CourseId, out var forecast);
+                approvals.TryGetValue(first.CourseId, out var approval);
 
-                // Students who haven't passed this course
-                var passedStudentIds = passedSet[first.CourseId].ToHashSet();
-                var notPassedCount = activeStudentIds.Count(id => !passedStudentIds.Contains(id));
-
-                // Cross-dept estimate for this course
-                var crossDeptEstimate = 0;
-                var crossDeptDemandList = new List<CrossDepartmentDemandDto>();
-                if (crossDeptByCourse.TryGetValue(first.CourseId, out var depts))
-                {
-                    foreach (var d in depts)
-                    {
-                        studentCountByDept.TryGetValue(d.DeptId, out var deptStudentCount);
-                        // Rough estimate: fraction of dept students (assume ~20% take any given cross-dept course)
-                        var estimate = (int)Math.Ceiling(deptStudentCount * 0.2);
-                        crossDeptEstimate += estimate;
-                        crossDeptDemandList.Add(new CrossDepartmentDemandDto
-                        {
-                            DepartmentId = d.DeptId,
-                            DepartmentName = d.DeptName,
-                            ProgramName = d.ProgName,
-                            EstimatedStudentCount = estimate,
-                        });
-                    }
-                }
-
-                var predictedDemand = notPassedCount + retakeCount + crossDeptEstimate;
-
-                // Lab-only courses use lab classroom capacity; mixed/theory use lecture capacity
-                var isLabOnly = first.Course.LabHours > 0 && first.Course.TheoryHours == 0;
-                var effectiveCapacity = isLabOnly ? avgLabCapacity : avgLectureCapacity;
-
-                var recommendedSections = predictedDemand > 0
-                    ? (int)Math.Ceiling((double)predictedDemand / effectiveCapacity)
-                    : 1;
+                var approvedSectionCount = approval?.ApprovedSectionCount;
+                var remainingApprovedSections = approval?.Status == SectionApprovalStatus.Approved && approvedSectionCount.HasValue
+                    ? Math.Max(0, approvedSectionCount.Value - sectionCount)
+                    : 0;
+                var workflowStatus = ResolveApprovalWorkflowStatus(approval?.Status, approvedSectionCount, sectionCount);
+                var blockedReason = BuildOpeningBlockedReason(approval?.Status, approvedSectionCount, sectionCount, approval?.Note);
 
                 return new CurriculumCourseForOpeningDto
                 {
@@ -299,12 +184,27 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                     IsCompulsory = first.IsCompulsory,
                     AlreadyOpened = sectionCount > 0,
                     ExistingSectionCount = sectionCount,
-                    PredictedDemand = predictedDemand,
-                    RetakeCount = retakeCount,
-                    RecommendedSectionCount = recommendedSections,
-                    RecommendedCapacity = effectiveCapacity,
-                    CrossDepartmentDemand = crossDeptDemandList,
-                    PreviousTermEnrollment = prevEnrollment > 0 ? prevEnrollment : null,
+                    PredictedDemand = forecast?.TotalPredictedDemand ?? 0,
+                    RetakeCount = forecast?.DemandBreakdown.TotalRetake ?? 0,
+                    RecommendedSectionCount = forecast?.RecommendedSectionCount ?? 0,
+                    RecommendedCapacity = forecast?.SectionDistribution.EffectiveCapacityPerSection ?? 0,
+                    CrossDepartmentDemand = (forecast?.CrossDepartmentDemand ?? [])
+                        .Select(item => new CrossDepartmentDemandDto
+                        {
+                            DepartmentId = item.DepartmentId,
+                            DepartmentName = item.DepartmentName,
+                            ProgramName = item.ProgramName,
+                            EstimatedStudentCount = item.EstimatedStudentCount,
+                        })
+                        .ToList(),
+                    PreviousTermEnrollment = forecast?.ComparableTermEnrollment,
+                    ApprovalStatus = approval?.Status,
+                    ApprovalWorkflowStatus = workflowStatus,
+                    ApprovedSectionCount = approvedSectionCount,
+                    OpenedSectionCount = sectionCount,
+                    RemainingApprovedSectionCount = remainingApprovedSections,
+                    CanOpen = approval?.Status == SectionApprovalStatus.Approved && remainingApprovedSections > 0,
+                    OpeningBlockedReason = blockedReason,
                 };
             })
             .OrderBy(c => c.SuggestedSemester).ThenBy(c => c.CourseCode)
@@ -376,32 +276,29 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         if (request.SectionCount <= 0 || request.SectionCount > 20)
             throw new InvalidOperationException("Şube sayısı 1 ile 20 arasında olmalıdır.");
 
+        var approval = await _context.CourseSectionApprovals
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a =>
+                a.DepartmentId == departmentId
+                && a.TermId == termId
+                && a.CourseId == request.CourseId, ct);
+
         // Mevcut section'ları kontrol et (aktif/pasif fark etmez, SectionNumber çakışmasını önlemek için)
         var existingSections = await _context.CourseSections
             .Where(cs => cs.CourseId == request.CourseId && cs.TermId == termId)
             .ToListAsync(ct);
 
         var activeCount = existingSections.Count(s => s.IsActive);
-        if (activeCount > 0)
-            throw new InvalidOperationException(
-                $"'{course.Code}' dersi bu dönemde zaten {activeCount} şube ile açılmış. Yeni şube eklemek için mevcut şubeyi güncelleyin.");
+
+        ValidateOpeningApproval(approval, activeCount, request.SectionCount, course.Code);
 
         // Mevcut en yüksek SectionNumber (approve'dan gelen pasif section'lar olabilir)
         var maxSectionNumber = existingSections.Count > 0
             ? existingSections.Max(s => s.SectionNumber)
             : 0;
 
-        // InstructorId validasyonu
         if (request.InstructorId.HasValue)
-        {
-            var instructor = await _context.Instructors.AsNoTracking()
-                .FirstOrDefaultAsync(i => i.Id == request.InstructorId.Value, ct);
-            if (instructor == null)
-                throw new InvalidOperationException("Atanan öğretim üyesi bulunamadı.");
-            // Ortak ders olmadığı sürece, hocanın bölümünü kontrol et
-            if (course.DepartmentId.HasValue && instructor.DepartmentId != departmentId)
-                throw new InvalidOperationException("Öğretim üyesi bu bölüme ait değil.");
-        }
+            await ValidateInstructorAssignmentAsync(request.InstructorId.Value, course.DepartmentId, ct);
 
         var created = new List<CourseSection>();
         for (var i = 0; i < request.SectionCount; i++)
@@ -422,51 +319,57 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         }
         await _context.SaveChangesAsync(ct);
 
-        // CourseAccessPolicy: erişim politikası oluştur
-        // Mevcut politikaları temizle (tekrar açma durumunda)
         var existingPolicies = await _context.CourseAccessPolicies
             .Where(cap => cap.CourseId == request.CourseId && cap.TermId == termId)
             .ToListAsync(ct);
-        _context.CourseAccessPolicies.RemoveRange(existingPolicies);
 
-        if (request.AccessibleDepartmentIds is { Count: > 0 })
+        var shouldReplacePolicies = activeCount == 0
+            || existingPolicies.Count == 0
+            || request.AccessibleDepartmentIds is { Count: > 0 };
+
+        if (shouldReplacePolicies)
         {
-            // Kullanıcı elle seçtiyse: seçilen bölümler için politika oluştur
-            foreach (var deptId in request.AccessibleDepartmentIds.Distinct())
-            {
-                _context.CourseAccessPolicies.Add(new CourseAccessPolicy
-                {
-                    CourseId = request.CourseId,
-                    TermId = termId,
-                    DepartmentId = deptId,
-                });
-            }
-        }
-        else
-        {
-            // Otomatik: müfredattaki tüm bölümleri bul ve hepsine aç
-            var curriculumDeptIds = await _context.CurriculumCourses
-                .AsNoTracking()
-                .Where(cc => cc.CourseId == request.CourseId && cc.Curriculum.IsActive)
-                .Select(cc => cc.Curriculum.Program.DepartmentId)
-                .Distinct()
-                .ToListAsync(ct);
+            _context.CourseAccessPolicies.RemoveRange(existingPolicies);
 
-            // Açan bölümü de ekle (müfredatta olmasa bile)
-            if (!curriculumDeptIds.Contains(departmentId))
-                curriculumDeptIds.Add(departmentId);
-
-            foreach (var deptId in curriculumDeptIds)
+            if (request.AccessibleDepartmentIds is { Count: > 0 })
             {
-                _context.CourseAccessPolicies.Add(new CourseAccessPolicy
+                foreach (var deptId in request.AccessibleDepartmentIds.Distinct())
                 {
-                    CourseId = request.CourseId,
-                    TermId = termId,
-                    DepartmentId = deptId,
-                });
+                    _context.CourseAccessPolicies.Add(new CourseAccessPolicy
+                    {
+                        CourseId = request.CourseId,
+                        TermId = termId,
+                        DepartmentId = deptId,
+                    });
+                }
             }
+            else
+            {
+                var curriculumDeptIds = await _context.CurriculumCourses
+                    .AsNoTracking()
+                    .Where(cc => cc.CourseId == request.CourseId && cc.Curriculum.IsActive)
+                    .Select(cc => cc.Curriculum.Program.DepartmentId)
+                    .Distinct()
+                    .ToListAsync(ct);
+
+                if (!curriculumDeptIds.Contains(departmentId))
+                    curriculumDeptIds.Add(departmentId);
+
+                foreach (var deptId in curriculumDeptIds)
+                {
+                    _context.CourseAccessPolicies.Add(new CourseAccessPolicy
+                    {
+                        CourseId = request.CourseId,
+                        TermId = termId,
+                        DepartmentId = deptId,
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync(ct);
         }
-        await _context.SaveChangesAsync(ct);
+
+        _forecastCacheInvalidator.InvalidateForecastContext();
 
         // Resolve instructor name if set
         string? instructorName = null;
@@ -500,6 +403,7 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
                 Capacity = s.Capacity,
                 EnrolledCount = 0,
                 RegisteredCount = 0,
+                DraftOrPendingCount = 0,
                 InstructorId = s.InstructorId,
                 InstructorName = instructorName,
                 IsActive = true,
@@ -510,19 +414,41 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
     public async Task<BulkOpenCoursesResultDto> BulkOpenCoursesAsync(int departmentId, int termId, BulkOpenCoursesRequest request, CancellationToken ct)
     {
         var result = new BulkOpenCoursesResultDto();
+        if (request.Courses.Count == 0)
+            return result;
 
-        foreach (var courseReq in request.Courses)
+        var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+        await using var transaction = useTransaction
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+        OpenCourseRequest? currentCourse = null;
+
+        try
         {
-            try
+            foreach (var courseReq in request.Courses)
             {
+                currentCourse = courseReq;
                 var created = await OpenCourseAsync(departmentId, termId, courseReq, ct);
                 result.TotalCoursesOpened++;
                 result.TotalSectionsCreated += created.Count;
             }
-            catch (Exception ex)
-            {
-                result.Errors.Add($"Ders ID {courseReq.CourseId}: {ex.Message}");
-            }
+
+            if (transaction != null)
+                await transaction.CommitAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (transaction != null)
+                await transaction.RollbackAsync(ct);
+            result.TotalCoursesOpened = 0;
+            result.TotalSectionsCreated = 0;
+            result.Errors.Add($"Ders ID {currentCourse?.CourseId}: {ex.Message} Toplu işlem geri alındı.");
+        }
+        catch
+        {
+            if (transaction != null)
+                await transaction.RollbackAsync(ct);
+            throw;
         }
 
         return result;
@@ -543,20 +469,30 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         if (!section.IsActive)
             throw new InvalidOperationException("Pasif şube güncellenemez.");
 
+        var registeredCount = await GetRegisteredCountAsync(section.Id, ct);
+        var draftOrPendingCount = await GetDraftOrPendingCountAsync(section.Id, ct);
+
         if (request.InstructorId.HasValue)
+        {
+            await ValidateInstructorAssignmentAsync(request.InstructorId.Value, section.Course.DepartmentId, ct);
             section.InstructorId = request.InstructorId.Value;
+        }
 
         if (request.Capacity.HasValue)
         {
             if (request.Capacity.Value <= 0)
                 throw new InvalidOperationException("Kontenjan 0'dan büyük olmalıdır.");
-            if (request.Capacity.Value < section.EnrolledCount)
+
+            var minimumRequiredCapacity = Math.Max(section.EnrolledCount, registeredCount);
+            if (request.Capacity.Value < minimumRequiredCapacity)
                 throw new InvalidOperationException(
-                    $"Kontenjan mevcut kayıtlı öğrenci sayısından ({section.EnrolledCount}) az olamaz.");
+                    $"Kontenjan mevcut kayıtlı öğrenci sayısından ({minimumRequiredCapacity}) az olamaz.");
+
             section.Capacity = request.Capacity.Value;
         }
 
         await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
 
         // Build response
         string? instructorName = null;
@@ -565,9 +501,6 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             var nameMap = await LoadInstructorNameMapAsync([section.InstructorId.Value], ct);
             nameMap.TryGetValue(section.InstructorId.Value, out instructorName);
         }
-
-        var registeredCount = await _context.CourseRegistrations
-            .CountAsync(r => r.CourseSectionId == section.Id && r.Status != RegistrationStatus.Dropped && r.Status != RegistrationStatus.Draft, ct);
 
         var sectionNumber = await _context.CourseSections
             .Where(cs => cs.TermId == section.TermId && cs.CourseId == section.CourseId && cs.Id <= section.Id)
@@ -594,6 +527,7 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
             Capacity = section.Capacity,
             EnrolledCount = section.EnrolledCount,
             RegisteredCount = registeredCount,
+            DraftOrPendingCount = draftOrPendingCount,
             InstructorId = section.InstructorId,
             InstructorName = instructorName,
             IsActive = section.IsActive,
@@ -628,9 +562,27 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         if (activeCount > 0)
             throw new InvalidOperationException($"Aktif kayıtlı {activeCount} öğrenci bulunan şube kapatılamaz.");
 
+        var hasOtherActiveSections = await _context.CourseSections
+            .AsNoTracking()
+            .AnyAsync(cs =>
+                cs.CourseId == section.CourseId
+                && cs.TermId == section.TermId
+                && cs.IsActive
+                && cs.Id != section.Id, ct);
+
         section.IsActive = false;
         section.EnrolledCount = 0;
+
+        if (!hasOtherActiveSections)
+        {
+            var accessPolicies = await _context.CourseAccessPolicies
+                .Where(cap => cap.CourseId == section.CourseId && cap.TermId == section.TermId)
+                .ToListAsync(ct);
+            _context.CourseAccessPolicies.RemoveRange(accessPolicies);
+        }
+
         await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
     }
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
@@ -668,5 +620,117 @@ public class CourseOpeningService(AppDbContext context) : ICourseOpeningService
         return instructors.ToDictionary(
             i => i.Id,
             i => userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})");
+    }
+
+    private async Task ValidateInstructorAssignmentAsync(int instructorId, int? owningDepartmentId, CancellationToken ct)
+    {
+        var instructor = await _context.Instructors
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == instructorId, ct);
+
+        if (instructor == null)
+            throw new InvalidOperationException("Atanan öğretim üyesi bulunamadı.");
+
+        if (owningDepartmentId.HasValue && instructor.DepartmentId != owningDepartmentId.Value)
+            throw new InvalidOperationException("Öğretim üyesi bu bölüme ait değil.");
+    }
+
+    private Task<int> GetRegisteredCountAsync(int sectionId, CancellationToken ct)
+    {
+        return _context.CourseRegistrations.CountAsync(
+            r => r.CourseSectionId == sectionId
+                && r.Status != RegistrationStatus.Dropped
+                && r.Status != RegistrationStatus.Draft,
+            ct);
+    }
+
+    private Task<int> GetDraftOrPendingCountAsync(int sectionId, CancellationToken ct)
+    {
+        return _context.CourseRegistrations.CountAsync(
+            r => r.CourseSectionId == sectionId
+                && (r.Status == RegistrationStatus.Draft || r.Status == RegistrationStatus.PendingAdvisorApproval),
+            ct);
+    }
+
+    private static string ResolveApprovalWorkflowStatus(
+        SectionApprovalStatus? status,
+        int? approvedSectionCount,
+        int openedSectionCount)
+    {
+        if (status == SectionApprovalStatus.Rejected)
+            return "Rejected";
+
+        if (status != SectionApprovalStatus.Approved)
+            return "Pending";
+
+        var approvedCount = Math.Max(0, approvedSectionCount ?? 0);
+        if (approvedCount == 0 || openedSectionCount <= 0)
+            return "Approved";
+
+        return openedSectionCount >= approvedCount
+            ? "Completed"
+            : "PartiallyOpened";
+    }
+
+    private static string? BuildOpeningBlockedReason(
+        SectionApprovalStatus? status,
+        int? approvedSectionCount,
+        int openedSectionCount,
+        string? approvalNote)
+    {
+        if (status == null)
+            return "Bu ders için henüz şube onayı oluşturulmadı.";
+
+        if (status == SectionApprovalStatus.Pending)
+            return "Bu ders için bölüm onayı bekleniyor.";
+
+        if (status == SectionApprovalStatus.Rejected)
+            return string.IsNullOrWhiteSpace(approvalNote)
+                ? "Bu ders bu dönem için reddedildi."
+                : $"Bu ders bu dönem için reddedildi. Not: {approvalNote}";
+
+        var approvedCount = Math.Max(0, approvedSectionCount ?? 0);
+        if (approvedCount <= 0)
+            return "Bu ders için açılabilir şube onayı bulunmuyor.";
+
+        if (openedSectionCount >= approvedCount)
+            return $"Onaylanan toplam {approvedCount} şube zaten açıldı.";
+
+        return null;
+    }
+
+    private static void ValidateOpeningApproval(
+        CourseSectionApproval? approval,
+        int openedSectionCount,
+        int requestedSectionCount,
+        string courseCode)
+    {
+        var blockedReason = BuildOpeningBlockedReason(
+            approval?.Status,
+            approval?.ApprovedSectionCount,
+            openedSectionCount,
+            approval?.Note);
+
+        if (blockedReason != null && approval?.Status != SectionApprovalStatus.Approved)
+            throw new InvalidOperationException(blockedReason);
+
+        if (approval?.Status != SectionApprovalStatus.Approved || !approval.ApprovedSectionCount.HasValue)
+            throw new InvalidOperationException(blockedReason ?? "Bu ders için şube onayı bulunmuyor.");
+
+        var remainingApprovedSections = Math.Max(0, approval.ApprovedSectionCount.Value - openedSectionCount);
+        if (remainingApprovedSections <= 0)
+            throw new InvalidOperationException(blockedReason ?? $"'{courseCode}' için açılabilir şube kotası kalmadı.");
+
+        if (requestedSectionCount > remainingApprovedSections)
+            throw new InvalidOperationException(
+                $"'{courseCode}' için en fazla {remainingApprovedSections} ek şube açabilirsiniz. Onaylanan toplam şube: {approval.ApprovedSectionCount.Value}, halihazırda açık: {openedSectionCount}.");
+    }
+
+    private sealed class CourseOpeningApprovalInfo
+    {
+        public int CourseId { get; init; }
+        public SectionApprovalStatus Status { get; init; }
+        public int? ApprovedSectionCount { get; init; }
+        public string? Note { get; init; }
     }
 }
