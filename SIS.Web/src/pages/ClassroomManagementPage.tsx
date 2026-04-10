@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -6,8 +7,11 @@ import {
 } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
   AlertCircle, AlertTriangle, ArrowLeft, Building2, ChevronDown,
-  Layers, TrendingUp,
+  Layers, TrendingUp, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActiveTerm } from '@/hooks/useActiveTerm';
@@ -34,7 +38,7 @@ const DAY_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum'];
 const DAY_FULL: Record<number, string> = {
   1: 'Pazartesi', 2: 'Salı', 3: 'Çarşamba', 4: 'Perşembe', 5: 'Cuma',
 };
-const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+const DEFAULT_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
 const OCCUPANCY_COLORS = [
   { max: 0, bg: 'bg-gray-50', border: 'border-gray-100', label: '%0' },
@@ -63,13 +67,34 @@ export default function ClassroomManagementPage() {
   const { data: conflictsList } = useSchedulingConflicts(activeTerm?.id);
 
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [instructorFilter, setInstructorFilter] = useState<string | null>(null);
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
   const [conflictsOpen, setConflictsOpen] = useState(false);
+  const [selectedCell, setSelectedCell] = useState<{ day: number; hour: number } | null>(null);
 
   const classrooms = useMemo(() => dashboard?.classrooms ?? [], [dashboard]);
-  const filteredClassrooms = typeFilter
-    ? classrooms.filter(c => c.type === typeFilter)
-    : classrooms;
+
+  const instructors = useMemo(() => {
+    const names = new Set<string>();
+    for (const cr of classrooms) {
+      for (const s of cr.schedules) {
+        if (s.instructorName) names.add(s.instructorName);
+      }
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [classrooms]);
+
+  const hours = useMemo(() => {
+    if (!dashboard?.heatmap?.length) return DEFAULT_HOURS;
+    const unique = [...new Set(dashboard.heatmap.map(h => h.hour))].filter(h => h >= 6 && h <= 22).sort((a, b) => a - b);
+    return unique.length ? unique : DEFAULT_HOURS;
+  }, [dashboard]);
+  const filteredClassrooms = useMemo(() => {
+    let result = classrooms;
+    if (typeFilter) result = result.filter(c => c.type === typeFilter);
+    if (instructorFilter) result = result.filter(c => c.schedules.some(s => s.instructorName === instructorFilter));
+    return result;
+  }, [classrooms, typeFilter, instructorFilter]);
 
   const assignedCount = classrooms.filter(c => c.schedules.length > 0).length;
 
@@ -87,7 +112,7 @@ export default function ClassroomManagementPage() {
     if (selectedClassroom) {
       const cls = classrooms.find(c => c.id === selectedClassroom);
       if (!cls) return [];
-      return HOURS.map(hour => ({
+      return hours.map(hour => ({
         hour,
         days: DAY_LABELS.map((_, dayIdx) => {
           const slot = cls.schedules.find(s => s.day - 1 === dayIdx && hour >= s.startHour && hour <= s.endHour);
@@ -102,16 +127,17 @@ export default function ClassroomManagementPage() {
     }
 
     // Global or filtered heatmap
-    const sourceClassrooms = typeFilter ? classrooms.filter(c => c.type === typeFilter) : classrooms;
+    const sourceClassrooms = filteredClassrooms;
     const total = sourceClassrooms.length || 1;
+    const needsClientFilter = typeFilter || instructorFilter;
 
-    return HOURS.map(hour => ({
+    return hours.map(hour => ({
       hour,
       days: DAY_LABELS.map((_, dayIdx) => {
         const cell = dashboard.heatmap.find(h => h.day === dayIdx && h.hour === hour);
         if (!cell) return { occupancy: 0, usedCount: 0, total, occupations: [] };
 
-        if (typeFilter) {
+        if (needsClientFilter) {
           const filteredNames = new Set(sourceClassrooms.map(c => c.name));
           const filteredOcc = (cell.occupations ?? []).filter(o => filteredNames.has(o.classroomName));
           return { occupancy: filteredOcc.length / total, usedCount: filteredOcc.length, total, occupations: filteredOcc };
@@ -120,7 +146,7 @@ export default function ClassroomManagementPage() {
         return { occupancy: cell.occupancy, usedCount: cell.usedClassrooms, total, occupations: cell.occupations ?? [] };
       }),
     }));
-  }, [dashboard, classrooms, selectedClassroom, typeFilter]);
+  }, [dashboard, classrooms, hours, selectedClassroom, typeFilter, instructorFilter, filteredClassrooms]);
 
   if (isLoading) {
     return (
@@ -147,15 +173,24 @@ export default function ClassroomManagementPage() {
             <p className="text-[11px] text-muted-foreground">Toplam Derslik</p>
           </div>
         </div>
-        <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${(dashboard?.occupancyRate ?? 0) > 75 ? 'bg-red-50' : (dashboard?.occupancyRate ?? 0) > 50 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-            <TrendingUp className={`h-4 w-4 ${(dashboard?.occupancyRate ?? 0) > 75 ? 'text-red-600' : (dashboard?.occupancyRate ?? 0) > 50 ? 'text-amber-600' : 'text-emerald-600'}`} />
-          </div>
-          <div>
-            <p className="text-xl font-bold">%{dashboard?.occupancyRate ?? 0}</p>
-            <p className="text-[11px] text-muted-foreground">Doluluk Oranı</p>
-          </div>
-        </div>
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="bg-white border rounded-xl p-4 flex items-center gap-3 cursor-default">
+                <div className={`p-2 rounded-lg ${(dashboard?.occupancyRate ?? 0) > 75 ? 'bg-red-50' : (dashboard?.occupancyRate ?? 0) > 50 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+                  <TrendingUp className={`h-4 w-4 ${(dashboard?.occupancyRate ?? 0) > 75 ? 'text-red-600' : (dashboard?.occupancyRate ?? 0) > 50 ? 'text-amber-600' : 'text-emerald-600'}`} />
+                </div>
+                <div>
+                  <p className="text-xl font-bold">%{dashboard?.occupancyRate ?? 0}</p>
+                  <p className="text-[11px] text-muted-foreground">Doluluk Oranı</p>
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Tüm derslik-saat slotları üzerinden ortalama doluluk
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
           <div className={`p-2 rounded-lg ${conflicts.length > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
             <AlertCircle className={`h-4 w-4 ${conflicts.length > 0 ? 'text-red-600' : 'text-green-600'}`} />
@@ -193,7 +228,15 @@ export default function ClassroomManagementPage() {
                     <span className="ml-2">{c.courseName}</span>
                     <span className="text-gray-500 ml-2">— {c.message}</span>
                   </div>
-                  {c.classroomName && <span className="text-xs text-gray-500 shrink-0">{c.classroomName}</span>}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {c.classroomName && <span className="text-xs text-gray-500">{c.classroomName}</span>}
+                    <Link
+                      to="/ders-programi-olusturma"
+                      className="text-xs text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+                    >
+                      Programlamaya Git →
+                    </Link>
+                  </div>
                 </div>
               ))}
             </div>
@@ -223,6 +266,18 @@ export default function ClassroomManagementPage() {
               </button>
             ))}
           </div>
+
+          {/* Öğretim üyesi filtresi */}
+          <select
+            value={instructorFilter ?? ''}
+            onChange={(e) => setInstructorFilter(e.target.value || null)}
+            className="w-full h-8 rounded-md border border-gray-300 bg-white px-2 text-xs"
+          >
+            <option value="">Tüm öğretim üyeleri</option>
+            {instructors.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
 
           {/* Derslik listesi */}
           <div className="bg-white border rounded-xl overflow-hidden">
@@ -330,15 +385,20 @@ export default function ClassroomManagementPage() {
 
                           // Global heatmap
                           const style = getOccupancyStyle(cell.occupancy ?? 0);
+                          const isSelected = selectedCell?.day === dayIdx && selectedCell?.hour === row.hour;
                           return (
                             <td key={dayIdx} className="p-0.5">
                               <TooltipProvider delayDuration={100}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className={cn(
-                                      'h-10 rounded-md border flex items-center justify-center text-[10px] font-semibold transition-colors',
-                                      style.bg, style.border,
-                                    )}>
+                                    <div
+                                      className={cn(
+                                        'h-10 rounded-md border flex items-center justify-center text-[10px] font-semibold transition-colors cursor-pointer',
+                                        style.bg, style.border,
+                                        isSelected && 'ring-2 ring-[#003366] ring-offset-1',
+                                      )}
+                                      onClick={() => setSelectedCell(isSelected ? null : { day: dayIdx, hour: row.hour })}
+                                    >
                                       {(cell.usedCount ?? 0) > 0 ? cell.usedCount : ''}
                                     </div>
                                   </TooltipTrigger>
@@ -362,6 +422,61 @@ export default function ClassroomManagementPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Cell Detail Panel */}
+              {selectedCell && (() => {
+                const row = heatmapData.find((r: HeatmapRow) => r.hour === selectedCell.hour);
+                const cell = row?.days[selectedCell.day];
+                const occupations: HeatmapOccupation[] = cell?.occupations ?? [];
+                const dayName = DAY_FULL[selectedCell.day + 1] ?? DAY_LABELS[selectedCell.day];
+                return (
+                  <div className="mt-4 border rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-[#003366]/5 border-b">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-[#003366]">
+                          {dayName} — {String(selectedCell.hour).padStart(2, '0')}:00
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {occupations.length} ders
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setSelectedCell(null)}
+                        className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-gray-200 transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                    {occupations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">Bu saatte ders yok.</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">Derslik</TableHead>
+                            <TableHead className="text-xs">Ders</TableHead>
+                            <TableHead className="text-xs text-right">Doluluk</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {occupations.map((o: HeatmapOccupation, i: number) => (
+                            <TableRow key={i}>
+                              <TableCell className="text-xs font-medium">{o.classroomName}</TableCell>
+                              <TableCell className="text-xs">
+                                <span className="font-mono font-semibold">{o.courseCode}</span>
+                                <span className="ml-1.5 text-muted-foreground">{o.courseName}</span>
+                              </TableCell>
+                              <TableCell className="text-xs text-right font-mono">
+                                {o.enrolledCount}/{o.capacity}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Legend */}
               <div className="flex items-center gap-3 mt-4 pt-3 border-t">
