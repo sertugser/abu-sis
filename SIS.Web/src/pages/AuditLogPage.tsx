@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/table';
 import {
   AlertCircle, ArrowRight, ChevronLeft, ChevronRight, Eye,
-  Filter, RotateCcw, Search,
+  Download, Filter, RotateCcw, Search,
 } from 'lucide-react';
 import { useAuditLogs } from '../hooks/useAuditLog';
-import type { AuditLogDto } from '../api/auditLog.api';
+import { exportAuditLogsCsv, type AuditLogDto } from '../api/auditLog.api';
+import { downloadBlob } from '../lib/download';
 
 /* ────────────────────────────── Mappings ────────────────────────────── */
 
@@ -27,6 +28,7 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   CourseSection: 'Ders Seksiyonu',
   CourseRegistration: 'Ders Kaydı',
   Student: 'Öğrenci',
+  ApplicationUser: 'Kullanıcı',
   SystemConfig: 'Sistem Ayarı',
   FacultyScheduleApproval: 'Fakülte Program Onayı',
   PromotionRule: 'Yükselme Kuralı',
@@ -47,6 +49,9 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; bg: string; 
   Modified:     { label: 'Güncellendi',       color: 'text-blue-700',    bg: 'bg-blue-50 border-blue-200',      icon: '✎' },
   Deleted:      { label: 'Silindi',           color: 'text-red-700',     bg: 'bg-red-50 border-red-200',        icon: '✕' },
   LoginFailed:  { label: 'Başarısız Giriş',   color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200',    icon: '⚠' },
+  LoginSuccess: { label: 'Başarılı Giriş',    color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', icon: '✓' },
+  ScheduleAssigned:   { label: 'Program Atandı',     color: 'text-cyan-700',  bg: 'bg-cyan-50 border-cyan-200',   icon: '→' },
+  ScheduleUnassigned: { label: 'Program Kaldırıldı', color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200', icon: '←' },
   DataAccess:   { label: 'Veri Erişimi',      color: 'text-violet-700',  bg: 'bg-violet-50 border-violet-200',  icon: '◉' },
   SystemError:  { label: 'Sistem Hatası',     color: 'text-red-700',     bg: 'bg-red-50 border-red-200',        icon: '✕' },
   Unauthorized: { label: 'Yetkisiz Erişim',   color: 'text-orange-700',  bg: 'bg-orange-50 border-orange-200',  icon: '⛔' },
@@ -59,6 +64,7 @@ const ENTITY_TYPE_OPTIONS = [
   { value: 'CourseRegistration', label: 'Ders Kaydı' },
   { value: 'CourseSection', label: 'Ders Seksiyonu' },
   { value: 'Student', label: 'Öğrenci' },
+  { value: 'ApplicationUser', label: 'Kullanıcı' },
   { value: 'Course', label: 'Ders' },
   { value: 'Curriculum', label: 'Müfredat' },
   { value: 'AcademicTerm', label: 'Akademik Dönem' },
@@ -97,6 +103,23 @@ function formatJson(value: string): string {
   catch { return value; }
 }
 
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  if (
+    typeof error === 'object'
+    && error !== null
+    && 'response' in error
+    && typeof (error as { response?: { data?: { error?: unknown } } }).response?.data?.error === 'string'
+  ) {
+    return (error as { response: { data: { error: string } } }).response.data.error;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
 function getUserInitials(name: string | undefined): string {
   if (!name) return '#';
   const parts = name.trim().split(' ');
@@ -106,7 +129,7 @@ function getUserInitials(name: string | undefined): string {
 }
 
 function buildSummary(log: AuditLogDto): string {
-  const user = log.userName ?? `Kullanıcı #${log.userId}`;
+  const user = log.userName ?? (log.userId != null ? `Kullanıcı #${log.userId}` : 'Sistem');
   const entity = ENTITY_TYPE_LABELS[log.entityType] ?? log.entityType;
   const actionCfg = ACTION_CONFIG[log.action];
   const action = actionCfg?.label ?? log.action;
@@ -120,6 +143,12 @@ function buildSummary(log: AuditLogDto): string {
       return `${user}, bir ${entity} kaydını sildi`;
     case 'LoginFailed':
       return `${log.entityId ?? 'Bilinmeyen'} adresiyle başarısız giriş denemesi`;
+    case 'LoginSuccess':
+      return `${log.entityId ?? user} adresiyle başarılı giriş yapıldı`;
+    case 'ScheduleAssigned':
+      return `${user}, bir ders programı ataması yaptı`;
+    case 'ScheduleUnassigned':
+      return `${user}, bir ders programı atamasını kaldırdı`;
     case 'DataAccess':
       return `${user}, ${entity} verilerine erişim sağladı`;
     case 'SystemError':
@@ -143,6 +172,8 @@ export default function AuditLogPage() {
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<AuditLogDto | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const pageSize = 30;
 
   const { data, isLoading, isError } = useAuditLogs({
@@ -167,6 +198,26 @@ export default function AuditLogPage() {
     setPage(1);
   }
 
+  async function handleExportCsv() {
+    setExportError(null);
+    setIsExporting(true);
+
+    try {
+      const file = await exportAuditLogsCsv({
+        entityType: entityType || undefined,
+        userId: userId || undefined,
+        action: action || undefined,
+        from: from || undefined,
+        to: to || undefined,
+      });
+      downloadBlob(file, 'audit-logs.csv');
+    } catch (error) {
+      setExportError(getErrorMessage(error, 'Denetim kayıtları CSV olarak indirilemedi.'));
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-5 animate-fade-in">
 
@@ -181,6 +232,10 @@ export default function AuditLogPage() {
           )}
         </p>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={isExporting}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            {isExporting ? 'Hazırlanıyor...' : 'CSV İndir'}
+          </Button>
           {hasActiveFilter && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
@@ -203,13 +258,20 @@ export default function AuditLogPage() {
         </div>
       </div>
 
+      {exportError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{exportError}</AlertDescription>
+        </Alert>
+      )}
+
       {/* ── Filter Bar ── */}
       {showFilters && (
         <Card className="animate-fade-in border-dashed">
           <CardContent className="pt-4 pb-4">
             <div className="flex flex-wrap items-end gap-3">
               <FilterField label="Varlık Tipi">
-                <Select value={entityType || 'all'} onValueChange={v => { setEntityType(v === 'all' ? '' : v); setPage(1); }}>
+                <Select value={entityType || 'all'} onValueChange={(v: string) => { setEntityType(v === 'all' ? '' : v); setPage(1); }}>
                   <SelectTrigger className="h-9 w-48">
                     <SelectValue placeholder="Tüm Varlıklar" />
                   </SelectTrigger>
@@ -222,7 +284,7 @@ export default function AuditLogPage() {
               </FilterField>
 
               <FilterField label="İşlem Türü">
-                <Select value={action || 'all'} onValueChange={v => { setAction(v === 'all' ? '' : v); setPage(1); }}>
+                <Select value={action || 'all'} onValueChange={(v: string) => { setAction(v === 'all' ? '' : v); setPage(1); }}>
                   <SelectTrigger className="h-9 w-48">
                     <SelectValue placeholder="Tüm İşlemler" />
                   </SelectTrigger>
@@ -392,8 +454,8 @@ function AuditLogRow({ log, onViewDetail }: { log: AuditLogDto; onViewDetail: ()
   const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200', icon: '•' };
   const summary = buildSummary(log);
   const entityLabel = ENTITY_TYPE_LABELS[log.entityType] ?? log.entityType;
-  const userName = log.userName ?? `Kullanıcı #${log.userId}`;
-  const initials = getUserInitials(log.userName);
+  const userName = log.userName ?? (log.userId != null ? `Kullanıcı #${log.userId}` : 'Sistem');
+  const initials = getUserInitials(userName);
 
   return (
     <TableRow className="group hover:bg-muted/30 transition-colors">
@@ -455,7 +517,7 @@ function AuditLogRow({ log, onViewDetail }: { log: AuditLogDto; onViewDetail: ()
 function LogDetailPanel({ log }: { log: AuditLogDto }) {
   const actionCfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200', icon: '•' };
   const entityLabel = ENTITY_TYPE_LABELS[log.entityType] ?? log.entityType;
-  const userName = log.userName ?? `Kullanıcı #${log.userId}`;
+  const userName = log.userName ?? (log.userId != null ? `Kullanıcı #${log.userId}` : 'Sistem');
 
   // Parse JSON values into key-value pairs for display
   let oldObj: Record<string, unknown> | null = null;

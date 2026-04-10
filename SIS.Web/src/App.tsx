@@ -83,10 +83,13 @@ export default function App() {
                     <Route path="donem-yonetimi" element={<TermManagementPage />} />
                     <Route path="akademik-yapi" element={<AcademicStructurePage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
-                    <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
-                    <Route path="denetim-kayitlari" element={<AuditLogPage />} />
                     <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
+                  </Route>
+
+                  <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator']} />}>
+                    <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
+                    <Route path="denetim-kayitlari" element={<AuditLogPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>

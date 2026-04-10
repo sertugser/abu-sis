@@ -1,12 +1,13 @@
 import apiClient from './axios';
+import { getFilenameFromContentDisposition, type DownloadableFile } from '../lib/download';
 
 export interface AuditLogDto {
   id: number;
-  userId: string;
+  userId: number | null;
   userName?: string;
   action: string;
   entityType: string;
-  entityId: string;
+  entityId?: string | null;
   oldValue?: string;
   newValue?: string;
   timestamp: string;
@@ -22,6 +23,7 @@ export interface AuditLogPagedResult {
 
 export interface AuditLogFilters {
   entityType?: string;
+  entityId?: string;
   userId?: string;
   action?: string;
   from?: string;
@@ -36,4 +38,22 @@ export async function getAuditLogs(filters: AuditLogFilters): Promise<AuditLogPa
   );
   const { data } = await apiClient.get<AuditLogPagedResult>('/admin/audit-logs', { params });
   return data;
+}
+
+export async function exportAuditLogsCsv(filters: AuditLogFilters): Promise<DownloadableFile> {
+  const params = Object.fromEntries(
+    Object.entries(filters)
+      .filter(([, value]) => value != null && value !== '')
+      .filter(([key]) => key !== 'page' && key !== 'pageSize')
+  );
+
+  const response = await apiClient.get<Blob>('/admin/audit-logs/export/csv', {
+    params,
+    responseType: 'blob',
+  });
+
+  return {
+    blob: response.data,
+    filename: getFilenameFromContentDisposition(response.headers['content-disposition']),
+  };
 }

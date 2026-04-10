@@ -7,8 +7,6 @@ public static partial class SeedData
 {
     public static async Task SeedSystemConfigAsync(AppDbContext context)
     {
-        if (await context.SystemConfigs.AnyAsync()) return;
-
         var configs = new List<SystemConfig>
         {
             // ── Kayıt ECTS Limitleri ─────────────────────────────
@@ -18,6 +16,9 @@ public static partial class SeedData
 
             // ── GPA Eşikleri ──────────────────────────────────────
             new() { Key = "GPA.RetentionThreshold", Value = "1.70", Category = "GPA", DataType = "decimal", Description = "Bu CGPA altındaki öğrenciler sınıfta kalır (1. dönem sonrası)" },
+
+            // ── Denetim Kayıtları ─────────────────────────────────
+            new() { Key = "Audit.RetentionDays", Value = "365", Category = "General", DataType = "int", Description = "Denetim kayıtlarının saklanma süresi (gün)" },
 
             // ── Ders Çekilme Limitleri ────────────────────────────
             new() { Key = "Withdrawal.MaxCount.Undergraduate", Value = "6", Category = "Registration", DataType = "int", Description = "Lisans öğrencileri için toplam çekilme hakkı" },
@@ -76,7 +77,19 @@ public static partial class SeedData
             new() { Key = "Schedule.WorkDays", Value = "Monday,Tuesday,Wednesday,Thursday,Friday", Category = "Schedule", DataType = "string", Description = "Ders yapılan günler (virgülle ayrılmış)" },
         };
 
-        context.SystemConfigs.AddRange(configs);
+        var existingKeys = await context.SystemConfigs
+            .AsNoTracking()
+            .Select(config => config.Key)
+            .ToListAsync();
+        var existingKeySet = existingKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missingConfigs = configs
+            .Where(config => !existingKeySet.Contains(config.Key))
+            .ToList();
+
+        if (missingConfigs.Count == 0)
+            return;
+
+        context.SystemConfigs.AddRange(missingConfigs);
         await context.SaveChangesAsync();
     }
 }

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
@@ -13,11 +15,17 @@ public class FacultyPlanningService : IFacultyPlanningService
 {
     private readonly AppDbContext _context;
     private readonly ISchedulingService _schedulingService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
-    public FacultyPlanningService(AppDbContext context, ISchedulingService schedulingService)
+    public FacultyPlanningService(AppDbContext context, ISchedulingService schedulingService, IHttpContextAccessor httpContextAccessor)
     {
         _context = context;
         _schedulingService = schedulingService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<int> ResolveFacultyForUserAsync(string userId, CancellationToken ct = default)
@@ -384,6 +392,27 @@ public class FacultyPlanningService : IFacultyPlanningService
             ClassroomId = request.ClassroomId,
             InstructorId = request.InstructorId
         });
+        _context.AuditLogs.Add(new AuditLog
+        {
+            UserId = TryParseUserId(userId),
+            Action = "ScheduleAssigned",
+            EntityType = nameof(CourseSection),
+            EntityId = section.Id.ToString(),
+            NewValue = JsonSerializer.Serialize(new
+            {
+                classroomId = request.ClassroomId ?? section.ClassroomId,
+                instructorId = request.InstructorId ?? section.InstructorId,
+                slots = request.ScheduleSlots?.Select(slot => new
+                {
+                    day = slot.Day.ToString(),
+                    startTime = slot.StartTime.ToString("HH\\:mm"),
+                    endTime = slot.EndTime.ToString("HH\\:mm"),
+                    classroomId = slot.ClassroomId ?? request.ClassroomId ?? section.ClassroomId,
+                }),
+            }, JsonOptions),
+            Timestamp = DateTime.UtcNow,
+            IpAddress = GetCurrentIpAddress(),
+        });
         await _context.SaveChangesAsync(ct);
 
         return result;
@@ -408,6 +437,10 @@ public class FacultyPlanningService : IFacultyPlanningService
         if (userDeptId.HasValue && section.Course.DepartmentId != userDeptId.Value)
             throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerinin atamasini kaldirabilirsiniz.");
 
+        var previousClassroomId = section.ClassroomId;
+        var previousInstructorId = section.InstructorId;
+        var previousSlots = await GetCurrentScheduleSlotPayloadAsync(sectionId, ct);
+
         await ClearSectionScheduleRecordsAsync(sectionId, ct);
         section.ClassroomId = null;
         section.InstructorId = null;
@@ -417,6 +450,22 @@ public class FacultyPlanningService : IFacultyPlanningService
             SectionId = sectionId,
             Action = "Unassign",
             UserId = userId
+        });
+        _context.AuditLogs.Add(new AuditLog
+        {
+            UserId = TryParseUserId(userId),
+            Action = "ScheduleUnassigned",
+            EntityType = nameof(CourseSection),
+            EntityId = sectionId.ToString(),
+            NewValue = JsonSerializer.Serialize(new
+            {
+                previousClassroomId,
+                previousInstructorId,
+                slots = previousSlots,
+                note = "Assignment removed",
+            }, JsonOptions),
+            Timestamp = DateTime.UtcNow,
+            IpAddress = GetCurrentIpAddress(),
         });
 
         try
@@ -859,6 +908,32 @@ public class FacultyPlanningService : IFacultyPlanningService
         DayOfWeek.Friday => "Cum",
         _ => day.ToString()
     };
+
+    private async Task<List<object>> GetCurrentScheduleSlotPayloadAsync(int sectionId, CancellationToken ct)
+    {
+        var schedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == sectionId)
+            .OrderBy(ss => ss.TimeSlot.DayOfWeek)
+            .ThenBy(ss => ss.TimeSlot.StartTime)
+            .ToListAsync(ct);
+
+        return schedules
+            .Select(ss => new
+            {
+                day = ss.TimeSlot.DayOfWeek.ToString(),
+                startTime = ss.TimeSlot.StartTime.ToString("HH\\:mm"),
+                endTime = ss.TimeSlot.EndTime.ToString("HH\\:mm"),
+                classroomId = ss.ClassroomId,
+            })
+            .Cast<object>()
+            .ToList();
+    }
+
+    private string? GetCurrentIpAddress() => _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+
+    private static int? TryParseUserId(string userId) => int.TryParse(userId, out var parsedUserId) ? parsedUserId : null;
 
     private static double CalculateAutoScheduleScore(
         CourseSection section,

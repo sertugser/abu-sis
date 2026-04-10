@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -7,11 +8,13 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertCircle, AlertTriangle, ArrowLeft, Building2, ChevronDown,
-  Layers, TrendingUp,
+  Download, Layers, TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActiveTerm } from '@/hooks/useActiveTerm';
 import { useClassroomDashboard, useSchedulingConflicts } from '@/hooks/useScheduling';
+import { exportClassroomCsv } from '@/api/scheduling.api';
+import { downloadBlob } from '@/lib/download';
 import type { ClassroomInfo } from '../types/scheduling';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -51,6 +54,23 @@ function getOccupancyStyle(occ: number) {
   return OCCUPANCY_COLORS[OCCUPANCY_COLORS.length - 1];
 }
 
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  if (
+    typeof error === 'object'
+    && error !== null
+    && 'response' in error
+    && typeof (error as { response?: { data?: { error?: unknown } } }).response?.data?.error === 'string'
+  ) {
+    return (error as { response: { data: { error: string } } }).response.data.error;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
 interface HeatmapOccupation { classroomName: string; courseCode: string; courseName: string; enrolledCount: number; capacity: number }
 interface HeatmapDayCell { occupied?: boolean; courseCode?: string; courseName?: string; instructorName?: string; occupancy?: number; usedCount?: number; total?: number; occupations?: HeatmapOccupation[] }
 interface HeatmapRow { hour: number; days: HeatmapDayCell[] }
@@ -65,6 +85,8 @@ export default function ClassroomManagementPage() {
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
   const [conflictsOpen, setConflictsOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const classrooms = useMemo(() => dashboard?.classrooms ?? [], [dashboard]);
   const filteredClassrooms = typeFilter
@@ -72,6 +94,20 @@ export default function ClassroomManagementPage() {
     : classrooms;
 
   const assignedCount = classrooms.filter(c => c.schedules.length > 0).length;
+
+  async function handleExportCsv() {
+    setExportError(null);
+    setIsExporting(true);
+
+    try {
+      const file = await exportClassroomCsv(activeTerm?.id);
+      downloadBlob(file, 'classroom-occupancy.csv');
+    } catch (error) {
+      setExportError(getErrorMessage(error, 'Derslik doluluk CSV dosyası indirilemedi.'));
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   // Type distribution
   const typeGroups = useMemo(() => {
@@ -138,6 +174,26 @@ export default function ClassroomManagementPage() {
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Derslik Doluluk Tablosu</h1>
+          <p className="text-sm text-muted-foreground">
+            {activeTerm?.name ? `${activeTerm.name} dönemi için derslik kullanımı` : 'Aktif dönem bilgisi yükleniyor'}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!activeTerm?.id || isExporting}>
+          <Download className="mr-1.5 h-3.5 w-3.5" />
+          {isExporting ? 'Hazırlanıyor...' : 'CSV İndir'}
+        </Button>
+      </div>
+
+      {exportError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{exportError}</AlertDescription>
+        </Alert>
+      )}
+
       {/* ── Summary Kartlar ──────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white border rounded-xl p-4 flex items-center gap-3">

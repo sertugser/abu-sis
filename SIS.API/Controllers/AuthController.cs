@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SIS.Application.Auth.DTOs;
 using SIS.Application.Auth.Services;
 using SIS.Domain.Entities;
@@ -14,6 +15,10 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly AppDbContext _context;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
     public AuthController(IAuthService authService, AppDbContext context)
     {
@@ -23,7 +28,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
+    public async Task<IActionResult> Login([FromBody] LoginDto loginDto, CancellationToken ct)
     {
         var result = await _authService.LoginAsync(loginDto);
         if (!result.Success)
@@ -42,14 +47,34 @@ public class AuthController : ControllerBase
                 EntityType = "Authentication",
                 EntityId = loginDto.Email,
                 OldValue = null,
-                NewValue = JsonSerializer.Serialize(new { reason }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                NewValue = JsonSerializer.Serialize(new { reason }, JsonOptions),
                 Timestamp = DateTime.UtcNow,
                 IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
             });
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(ct);
 
             return Unauthorized(result);
         }
+
+        var normalizedEmail = loginDto.Email.Trim().ToUpperInvariant();
+        var user = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.NormalizedEmail == normalizedEmail)
+            .Select(u => new { u.Id, u.Email })
+            .FirstOrDefaultAsync(ct);
+
+        _context.AuditLogs.Add(new AuditLog
+        {
+            UserId = user?.Id,
+            Action = "LoginSuccess",
+            EntityType = "Authentication",
+            EntityId = user?.Email ?? loginDto.Email,
+            NewValue = JsonSerializer.Serialize(new { roles = result.Roles }, JsonOptions),
+            Timestamp = DateTime.UtcNow,
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+        });
+        await _context.SaveChangesAsync(ct);
+
         return Ok(result);
     }
 }

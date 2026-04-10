@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.DTOs;
@@ -25,7 +26,7 @@ public class FacultyPlanningServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        _service = new FacultyPlanningService(_context, new SchedulingService(_context));
+        _service = new FacultyPlanningService(_context, new SchedulingService(_context), new HttpContextAccessor());
 
         SeedBaseData();
     }
