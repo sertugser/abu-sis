@@ -93,7 +93,9 @@ builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomati
 
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
-builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
+builder.Services.AddScoped<EnrollmentForecastService>();
+builder.Services.AddScoped<IEnrollmentForecastService>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
+builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();

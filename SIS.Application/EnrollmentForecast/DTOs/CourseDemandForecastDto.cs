@@ -11,6 +11,7 @@ public class CourseDemandForecastDto
     public int TotalPredictedDemand { get; set; }
     public int RecommendedSectionCount { get; set; }
     public string CapacityBasis { get; set; } = string.Empty;
+    public int? ComparableTermEnrollment { get; set; }
     public List<string> Notes { get; set; } = new();
 
     // --- Enhanced fields ---
@@ -26,6 +27,9 @@ public class CourseDemandForecastDto
 
     /// <summary>Sube bazli ogrenci dagilim onerisi</summary>
     public SectionDistributionDto SectionDistribution { get; set; } = new();
+
+    /// <summary>Diger bolum/programlardan gelen gercek tahmini talep kirilimi</summary>
+    public List<CrossDepartmentDemandDto> CrossDepartmentDemand { get; set; } = new();
 }
 
 public class DemandBreakdownDto
@@ -68,4 +72,12 @@ public class SectionDistributionDto
     public int SurplusCapacity { get; set; }
     public List<int> StudentsPerSection { get; set; } = new();   // e.g. [30, 29, 29]
     public List<string> Warnings { get; set; } = new();
+}
+
+public class CrossDepartmentDemandDto
+{
+    public int DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public string ProgramName { get; set; } = string.Empty;
+    public int EstimatedStudentCount { get; set; }
 }

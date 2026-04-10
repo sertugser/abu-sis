@@ -14,6 +14,7 @@ export interface OpenedCourseSectionDto {
   capacity: number;
   enrolledCount: number;
   registeredCount: number;
+  draftOrPendingCount: number;
   instructorId: number | null;
   instructorName: string | null;
   isActive: boolean;
@@ -35,6 +36,9 @@ export interface CrossDepartmentDemandDto {
   estimatedStudentCount: number;
 }
 
+export type SectionApprovalStatus = 'Pending' | 'Approved' | 'Rejected';
+export type ApprovalWorkflowStatus = SectionApprovalStatus | 'PartiallyOpened' | 'Completed';
+
 export interface CurriculumCourseForOpeningDto {
   courseId: number;
   courseCode: string;
@@ -52,6 +56,13 @@ export interface CurriculumCourseForOpeningDto {
   recommendedCapacity?: number;
   crossDepartmentDemand?: CrossDepartmentDemandDto[];
   previousTermEnrollment?: number;
+  approvalStatus?: SectionApprovalStatus | null;
+  approvalWorkflowStatus?: ApprovalWorkflowStatus;
+  approvedSectionCount?: number | null;
+  openedSectionCount?: number;
+  remainingApprovedSectionCount?: number;
+  canOpen?: boolean;
+  openingBlockedReason?: string | null;
 }
 
 export interface InstructorOptionDto {
