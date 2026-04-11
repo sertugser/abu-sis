@@ -294,9 +294,9 @@ const ResizableDialogContent = React.forwardRef<
           style={computedStyle}
           {...props}
         >
-          {/* Drag handle — invisible bar at the top for moving */}
+          {/* Drag handle — invisible bar at the top for moving, stops before action buttons */}
           <div
-            className="absolute top-0 left-0 right-16 h-12 cursor-move z-[5]"
+            className="absolute top-0 left-0 right-[50%] h-10 cursor-move z-[5]"
             onMouseDown={startDrag}
           />
 

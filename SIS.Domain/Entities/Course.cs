@@ -19,6 +19,12 @@ public class Course
     public ElectiveSubtype? ElectiveSubtype { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public CourseLanguage Language { get; set; } = CourseLanguage.Turkish;
+    public TeachingMethod TeachingMethod { get; set; } = TeachingMethod.FaceToFace;
+    public CourseStatus Status { get; set; } = CourseStatus.Active;
+    public string? Description { get; set; }
+    public CourseLevel Level { get; set; } = CourseLevel.Undergraduate;
+    public int? NationalCredit { get; set; }
     public ICollection<CoursePrerequisite> Prerequisites { get; set; } = new List<CoursePrerequisite>();
     public ICollection<CourseEquivalency> Equivalencies { get; set; } = new List<CourseEquivalency>();
 }

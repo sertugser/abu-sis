@@ -104,6 +104,12 @@ function CourseDetailForm({ course, curriculumCourse, curriculumId, courseId, on
           isNonGpa: course.isNonGpa,
           examType: examType === 'auto' ? null : examType,
           departmentId: course.departmentId,
+          language: course.language,
+          teachingMethod: course.teachingMethod,
+          status: course.status,
+          description: course.description,
+          level: course.level,
+          nationalCredit: course.nationalCredit,
         }),
       );
     }

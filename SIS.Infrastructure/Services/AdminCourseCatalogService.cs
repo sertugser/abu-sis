@@ -14,15 +14,30 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             .Include(c => c.Department)
             .AsQueryable();
 
+        // Bölüm filtresi (bölüm seçiliyse fakülteden öncelikli)
         if (filter.DepartmentId.HasValue)
         {
             var deptId = filter.DepartmentId.Value;
-            // Müfredat bazlı filtreleme: sahip bölüm VEYA o bölümün müfredatında olan dersler
             var curriculumCourseIds = db.CurriculumCourses
                 .Where(cc => cc.Curriculum.Program.DepartmentId == deptId)
                 .Select(cc => cc.CourseId);
 
             query = query.Where(c => c.DepartmentId == deptId || curriculumCourseIds.Contains(c.Id));
+        }
+        else if (filter.FacultyId.HasValue)
+        {
+            // Fakülte filtresi — sadece bölüm seçilmemişse
+            var facultyDeptIds = db.Departments
+                .Where(d => d.FacultyId == filter.FacultyId.Value)
+                .Select(d => d.Id);
+
+            var curriculumCourseIds = db.CurriculumCourses
+                .Where(cc => facultyDeptIds.Contains(cc.Curriculum.Program.DepartmentId))
+                .Select(cc => cc.CourseId);
+
+            query = query.Where(c =>
+                (c.DepartmentId.HasValue && facultyDeptIds.Contains(c.DepartmentId.Value)) ||
+                curriculumCourseIds.Contains(c.Id));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
@@ -33,6 +48,15 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
                 c.Name.ToLower().Contains(s));
         }
 
+        if (filter.Language.HasValue)
+            query = query.Where(c => c.Language == filter.Language.Value);
+
+        if (filter.Level.HasValue)
+            query = query.Where(c => c.Level == filter.Level.Value);
+
+        if (filter.Status.HasValue)
+            query = query.Where(c => c.Status == filter.Status.Value);
+
         return await query
             .OrderBy(c => c.Code)
             .Select(c => new CourseListItemDto(
@@ -40,7 +64,8 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
                 c.Ects, c.TheoryHours, c.LabHours,
                 c.IsNonGpa, c.ExamType,
                 c.DepartmentId, c.Department != null ? c.Department.Name : null,
-                c.Prerequisites.Count, c.Equivalencies.Count))
+                c.Prerequisites.Count, c.Equivalencies.Count,
+                c.Language, c.TeachingMethod, c.Status, c.Level))
             .ToListAsync();
     }
 
@@ -82,6 +107,8 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             course.Equivalencies.Select(e => new EquivalencyDto(
                 e.EquivalentCourse.Id, e.EquivalentCourse.Code, e.EquivalentCourse.Name)).ToList(),
             curriculumAssignments,
+            course.Language, course.TeachingMethod, course.Status,
+            course.Description, course.Level, course.NationalCredit,
             stats,
             chain
         );
@@ -98,6 +125,16 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
         if (totalTimesOpened == 0) return null;
 
+        // Tüm dönemlerde toplam öğrenci
+        var totalStudentsAllTime = await db.CourseRegistrations
+            .Where(cr => cr.CourseSection.CourseId == courseId)
+            .CountAsync();
+
+        // Bu ders kaç dersin önkoşulu
+        var prerequisiteForCount = await db.CoursePrerequisites
+            .Where(cp => cp.RequiredCourseId == courseId)
+            .CountAsync();
+
         // En son dönem
         var lastTermId = await db.CourseSections
             .Where(cs => cs.CourseId == courseId && cs.IsActive)
@@ -105,23 +142,101 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             .Select(cs => cs.TermId)
             .FirstOrDefaultAsync();
 
-        if (lastTermId == 0) return null;
+        var lastTerm = lastTermId > 0
+            ? await db.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == lastTermId)
+            : null;
 
-        var lastTerm = await db.AcademicTerms
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == lastTermId);
+        var lastTermSections = lastTermId > 0
+            ? await db.CourseSections
+                .Where(cs => cs.CourseId == courseId && cs.TermId == lastTermId && cs.IsActive)
+                .ToListAsync()
+            : new List<CourseSection>();
 
-        var lastTermSections = await db.CourseSections
-            .Where(cs => cs.CourseId == courseId && cs.TermId == lastTermId && cs.IsActive)
+        var lastTermEnrolled = lastTermSections.Sum(s => s.EnrolledCount);
+        var lastTermCapacity = lastTermSections.Sum(s => s.Capacity);
+        var fillRate = lastTermCapacity > 0 ? (double)lastTermEnrolled / lastTermCapacity * 100 : 0;
+
+        // Not dağılımı (tamamlanmış kayıtlar)
+        var gradeData = await db.CourseRegistrations
+            .Where(cr => cr.CourseSection.CourseId == courseId && cr.Grade != null)
+            .GroupBy(cr => cr.Grade)
+            .Select(g => new { Grade = g.Key!.Value, Count = g.Count() })
             .ToListAsync();
 
+        var gradeDistribution = gradeData.ToDictionary(g => g.Grade.ToString(), g => g.Count);
+
+        // Başarı oranı: AA-DD arası geçen / toplam notlu
+        var totalGraded = gradeData.Sum(g => g.Count);
+        var passGrades = new[] { "AA", "BA", "BB", "CB", "CC", "DC", "DD", "S" };
+        var totalPassed = gradeData.Where(g => passGrades.Contains(g.Grade.ToString())).Sum(g => g.Count);
+        var passRate = totalGraded > 0 ? (double)totalPassed / totalGraded * 100 : 0;
+
+        // Bırakma/Çekilme
+        var totalWithdrawn = await db.CourseRegistrations
+            .Where(cr => cr.CourseSection.CourseId == courseId && cr.Status == Domain.Enums.RegistrationStatus.Withdrawn)
+            .CountAsync();
+
+        var totalDropped = await db.CourseRegistrations
+            .Where(cr => cr.CourseSection.CourseId == courseId && cr.Status == Domain.Enums.RegistrationStatus.Dropped)
+            .CountAsync();
+
+        // Dönem bazlı trend (son 5 dönem)
+        var termIds = await db.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.IsActive)
+            .Select(cs => cs.TermId)
+            .Distinct()
+            .OrderByDescending(id => id)
+            .Take(5)
+            .ToListAsync();
+
+        var termTrends = new List<TermTrendDto>();
+        if (termIds.Count > 0)
+        {
+            var terms = await db.AcademicTerms
+                .Where(t => termIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name);
+
+            var sectionsByTerm = await db.CourseSections
+                .Where(cs => cs.CourseId == courseId && cs.IsActive && termIds.Contains(cs.TermId))
+                .GroupBy(cs => cs.TermId)
+                .Select(g => new
+                {
+                    TermId = g.Key,
+                    SectionCount = g.Count(),
+                    Enrolled = g.Sum(s => s.EnrolledCount),
+                    Capacity = g.Sum(s => s.Capacity)
+                })
+                .ToListAsync();
+
+            termTrends = termIds
+                .OrderBy(id => id)
+                .Select(tid =>
+                {
+                    var s = sectionsByTerm.FirstOrDefault(x => x.TermId == tid);
+                    return new TermTrendDto(
+                        terms.GetValueOrDefault(tid, "?"),
+                        s?.SectionCount ?? 0,
+                        s?.Enrolled ?? 0,
+                        s?.Capacity ?? 0
+                    );
+                })
+                .ToList();
+        }
+
         return new CourseStatsDto(
+            TotalTimesOpened: totalTimesOpened,
+            TotalStudentsAllTime: totalStudentsAllTime,
+            PrerequisiteForCount: prerequisiteForCount,
             LastTermName: lastTerm?.Name,
             LastTermSectionCount: lastTermSections.Count,
-            LastTermTotalEnrolled: lastTermSections.Sum(s => s.EnrolledCount),
-            LastTermAvgCapacity: lastTermSections.Count > 0
-                ? (int)lastTermSections.Average(s => s.Capacity) : 0,
-            TotalTimesOpened: totalTimesOpened
+            LastTermTotalEnrolled: lastTermEnrolled,
+            LastTermTotalCapacity: lastTermCapacity,
+            LastTermFillRate: Math.Round(fillRate, 1),
+            GradeDistribution: gradeDistribution,
+            PassRate: Math.Round(passRate, 1),
+            TotalWithdrawn: totalWithdrawn,
+            TotalDropped: totalDropped,
+            TermTrends: termTrends
         );
     }
 
@@ -161,7 +276,13 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             LabHours = dto.LabHours,
             IsNonGpa = dto.IsNonGpa,
             ExamType = dto.ExamType,
-            DepartmentId = dto.DepartmentId
+            DepartmentId = dto.DepartmentId,
+            Language = dto.Language,
+            TeachingMethod = dto.TeachingMethod,
+            Status = dto.Status,
+            Description = dto.Description,
+            Level = dto.Level,
+            NationalCredit = dto.NationalCredit
         };
         db.Courses.Add(course);
         await db.SaveChangesAsync();
@@ -186,16 +307,59 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         course.IsNonGpa = dto.IsNonGpa;
         course.ExamType = dto.ExamType;
         course.DepartmentId = dto.DepartmentId;
+        course.Language = dto.Language;
+        course.TeachingMethod = dto.TeachingMethod;
+        course.Status = dto.Status;
+        course.Description = dto.Description;
+        course.Level = dto.Level;
+        course.NationalCredit = dto.NationalCredit;
         await db.SaveChangesAsync();
         return (await GetCourseByIdAsync(id))!;
     }
 
     public async Task DeleteCourseAsync(int id)
     {
-        var inUse = await db.CourseSections.AnyAsync(s => s.CourseId == id)
-            || await db.CourseRegistrations.AnyAsync(r => r.CourseSection.CourseId == id);
-        if (inUse)
-            throw new InvalidOperationException("Bu ders aktif şubelerde veya kayıtlarda kullanılıyor. Silinemez.");
+        var reasons = new List<string>();
+
+        // Aktif şubeler
+        var sectionTerms = await db.CourseSections
+            .Where(s => s.CourseId == id)
+            .Include(s => s.Term)
+            .Select(s => s.Term.Name)
+            .Distinct()
+            .ToListAsync();
+        if (sectionTerms.Count > 0)
+            reasons.Add($"Açıldığı dönemler: {string.Join(", ", sectionTerms)}");
+
+        // Kayıtlar
+        var registrationCount = await db.CourseRegistrations
+            .Where(r => r.CourseSection.CourseId == id)
+            .CountAsync();
+        if (registrationCount > 0)
+            reasons.Add($"{registrationCount} öğrenci kaydı mevcut");
+
+        // Müfredatlar
+        var curricula = await db.CurriculumCourses
+            .Where(cc => cc.CourseId == id)
+            .Include(cc => cc.Curriculum).ThenInclude(c => c.Program)
+            .Select(cc => cc.Curriculum.Program.Name + " (v" + cc.Curriculum.Version + ")")
+            .Distinct()
+            .ToListAsync();
+        if (curricula.Count > 0)
+            reasons.Add($"Müfredatlar: {string.Join(", ", curricula)}");
+
+        // Önkoşul bağımlılıkları
+        var dependentCourses = await db.CoursePrerequisites
+            .Where(cp => cp.RequiredCourseId == id)
+            .Include(cp => cp.Course)
+            .Select(cp => cp.Course.Code)
+            .ToListAsync();
+        if (dependentCourses.Count > 0)
+            reasons.Add($"Önkoşul olduğu dersler: {string.Join(", ", dependentCourses)}");
+
+        if (reasons.Count > 0)
+            throw new InvalidOperationException(
+                $"Bu ders silinemez. Kullanıldığı yerler:\n{string.Join("\n", reasons.Select(r => "• " + r))}");
 
         var course = await db.Courses.FindAsync(id)
             ?? throw new KeyNotFoundException("Ders bulunamadı.");

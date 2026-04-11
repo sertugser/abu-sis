@@ -198,7 +198,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("DepartmentId");
 
-                    b.ToTable("AcademicPrograms");
+                    b.ToTable("AcademicPrograms", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.AcademicTerm", b =>
@@ -268,7 +268,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Year", "Semester")
                         .IsUnique();
 
-                    b.ToTable("AcademicTerms");
+                    b.ToTable("AcademicTerms", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.AuditLog", b =>
@@ -313,7 +313,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("EntityType", "EntityId");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Classroom", b =>
@@ -352,7 +352,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Classrooms");
+                    b.ToTable("Classrooms", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ClassroomTermAssignment", b =>
@@ -381,7 +381,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("TermId", "ClassroomId")
                         .IsUnique();
 
-                    b.ToTable("ClassroomTermAssignments");
+                    b.ToTable("ClassroomTermAssignments", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintDefinition", b =>
@@ -435,7 +435,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("ConstraintDefinitions");
+                    b.ToTable("ConstraintDefinitions", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintException", b =>
@@ -493,7 +493,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("ConstraintDefinitionId", "InstructorId", "DepartmentId", "CourseSectionId", "TermId");
 
-                    b.ToTable("ConstraintExceptions");
+                    b.ToTable("ConstraintExceptions", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -513,6 +513,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
 
                     b.Property<int>("Ects")
                         .HasColumnType("integer");
@@ -535,9 +538,24 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("LabHours")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Language")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("NationalCredit")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TeachingMethod")
+                        .HasColumnType("integer");
 
                     b.Property<int>("TheoryHours")
                         .HasColumnType("integer");
@@ -552,7 +570,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("DepartmentId");
 
-                    b.ToTable("Courses");
+                    b.ToTable("Courses", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseAccessPolicy", b =>
@@ -585,7 +603,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("TermId");
 
-                    b.ToTable("CourseAccessPolicies");
+                    b.ToTable("CourseAccessPolicies", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseAccessRule", b =>
@@ -640,7 +658,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("CourseId");
 
-                    b.ToTable("CourseAccessRules");
+                    b.ToTable("CourseAccessRules", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseEquivalency", b =>
@@ -655,7 +673,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("EquivalentCourseId");
 
-                    b.ToTable("CourseEquivalencies");
+                    b.ToTable("CourseEquivalencies", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CoursePrerequisite", b =>
@@ -673,7 +691,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("RequiredCourseId");
 
-                    b.ToTable("CoursePrerequisites");
+                    b.ToTable("CoursePrerequisites", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseRegistration", b =>
@@ -728,7 +746,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("StudentId", "CourseSectionId")
                         .IsUnique();
 
-                    b.ToTable("CourseRegistrations");
+                    b.ToTable("CourseRegistrations", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseSection", b =>
@@ -803,7 +821,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseId", "TermId", "SectionNumber")
                         .IsUnique();
 
-                    b.ToTable("CourseSections");
+                    b.ToTable("CourseSections", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseSectionApproval", b =>
@@ -856,7 +874,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseId", "DepartmentId", "TermId")
                         .IsUnique();
 
-                    b.ToTable("CourseSectionApprovals");
+                    b.ToTable("CourseSectionApprovals", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Curriculum", b =>
@@ -921,7 +939,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("ProgramId", "Version")
                         .IsUnique();
 
-                    b.ToTable("Curricula");
+                    b.ToTable("Curricula", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CurriculumCourse", b =>
@@ -962,7 +980,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("ElectiveGroupId");
 
-                    b.ToTable("CurriculumCourses");
+                    b.ToTable("CurriculumCourses", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CurriculumElectivePool", b =>
@@ -1004,7 +1022,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CurriculumId", "ElectiveGroupId")
                         .IsUnique();
 
-                    b.ToTable("CurriculumElectivePools");
+                    b.ToTable("CurriculumElectivePools", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Department", b =>
@@ -1039,7 +1057,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("FacultyId");
 
-                    b.ToTable("Departments");
+                    b.ToTable("Departments", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>
@@ -1083,7 +1101,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("FacultyId");
 
-                    b.ToTable("ElectiveGroups");
+                    b.ToTable("ElectiveGroups", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroupCourse", b =>
@@ -1101,7 +1119,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("CourseId");
 
-                    b.ToTable("ElectiveGroupCourses");
+                    b.ToTable("ElectiveGroupCourses", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Faculty", b =>
@@ -1131,7 +1149,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Faculties");
+                    b.ToTable("Faculties", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.FacultyScheduleApproval", b =>
@@ -1164,7 +1182,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("FacultyId", "TermId")
                         .IsUnique();
 
-                    b.ToTable("FacultyScheduleApprovals");
+                    b.ToTable("FacultyScheduleApprovals", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
@@ -1199,7 +1217,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseId", "AcademicTermId", "Name")
                         .IsUnique();
 
-                    b.ToTable("GradeComponents");
+                    b.ToTable("GradeComponents", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.GradingCriteria", b =>
@@ -1244,7 +1262,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseId", "AcademicTermId")
                         .IsUnique();
 
-                    b.ToTable("GradingCriteria");
+                    b.ToTable("GradingCriteria", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Instructor", b =>
@@ -1281,7 +1299,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("Instructors");
+                    b.ToTable("Instructors", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
@@ -1322,7 +1340,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("ProgramId", "FromYear", "ToYear")
                         .IsUnique();
 
-                    b.ToTable("PromotionRules");
+                    b.ToTable("PromotionRules", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.RegistrationPlan", b =>
@@ -1361,7 +1379,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("StudentId", "TermId")
                         .IsUnique();
 
-                    b.ToTable("RegistrationPlans");
+                    b.ToTable("RegistrationPlans", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.SchedulingAuditLog", b =>
@@ -1399,7 +1417,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("SectionId", "CreatedAt");
 
-                    b.ToTable("SchedulingAuditLogs");
+                    b.ToTable("SchedulingAuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.SectionSchedule", b =>
@@ -1428,7 +1446,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseSectionId", "TimeSlotId")
                         .IsUnique();
 
-                    b.ToTable("SectionSchedules");
+                    b.ToTable("SectionSchedules", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>
@@ -1498,7 +1516,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("Students");
+                    b.ToTable("Students", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.StudentGrade", b =>
@@ -1526,7 +1544,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseRegistrationId", "GradeComponentId")
                         .IsUnique();
 
-                    b.ToTable("StudentGrades");
+                    b.ToTable("StudentGrades", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.StudentProgram", b =>
@@ -1555,7 +1573,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("ProgramId");
 
-                    b.ToTable("StudentPrograms");
+                    b.ToTable("StudentPrograms", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.SystemConfig", b =>
@@ -1590,7 +1608,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("SystemConfigs");
+                    b.ToTable("SystemConfigs", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
@@ -1627,7 +1645,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("TermId");
 
-                    b.ToTable("TermCalendarEvents");
+                    b.ToTable("TermCalendarEvents", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.TermClosingProgress", b =>
@@ -1666,7 +1684,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("DepartmentId", "TermId", "Step")
                         .IsUnique();
 
-                    b.ToTable("TermClosingProgresses");
+                    b.ToTable("TermClosingProgresses", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.TimeSlot", b =>
@@ -1701,7 +1719,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("TermId", "DayOfWeek", "StartTime")
                         .IsUnique();
 
-                    b.ToTable("TimeSlots");
+                    b.ToTable("TimeSlots", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Infrastructure.Persistence.ApplicationUser", b =>
