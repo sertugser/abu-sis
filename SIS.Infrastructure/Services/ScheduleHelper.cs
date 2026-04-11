@@ -6,7 +6,7 @@ namespace SIS.Infrastructure.Services;
 /// Lightweight time-block class used internally for schedule overlap checks
 /// and slot combination logic. Replaces the former ScheduleSlot value object.
 /// </summary>
-internal sealed class TimeBlock
+public sealed class TimeBlock
 {
     public DayOfWeek Day { get; set; }
     public TimeOnly StartTime { get; set; }

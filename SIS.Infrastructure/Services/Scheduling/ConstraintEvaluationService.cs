@@ -5,7 +5,7 @@ using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services.Scheduling;
 
-internal sealed class ConstraintEvaluationService
+public sealed class ConstraintEvaluationService
 {
     private readonly IEnumerable<IConstraintEvaluator> _evaluators;
     private readonly AppDbContext _context;

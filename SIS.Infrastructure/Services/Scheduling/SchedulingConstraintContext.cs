@@ -2,14 +2,14 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services;
 
-internal sealed class SchedulingConstraintContext : IConstraintContext
+public sealed class SchedulingConstraintContext : IConstraintContext
 {
     public required SectionSnapshot Candidate { get; init; }
     public required TermSnapshot Snapshot { get; init; }
     public required SchedulingConstraintConfig Config { get; init; }
 }
 
-internal sealed class SchedulingConstraintConfig
+public sealed class SchedulingConstraintConfig
 {
     // Hard constraint params
     public bool LunchBreakIsHard { get; init; }

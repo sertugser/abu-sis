@@ -3,7 +3,7 @@ using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services;
 
-internal sealed class TermSnapshot
+public sealed class TermSnapshot
 {
     public int TermId { get; init; }
     public string TermName { get; init; } = string.Empty;
@@ -24,14 +24,14 @@ internal sealed class CourseSchedulingMetadata
     public Dictionary<int, HashSet<int>> AccessibleDepartments { get; init; } = new();
 }
 
-internal sealed class CoEnrollmentPair
+public sealed class CoEnrollmentPair
 {
     public int CourseId1 { get; init; }
     public int CourseId2 { get; init; }
     public int StudentCount { get; init; }
 }
 
-internal sealed class SectionSnapshot
+public sealed class SectionSnapshot
 {
     public int SectionId { get; init; }
     public int CourseId { get; init; }

@@ -13,7 +13,7 @@ public class SchedulingService : ISchedulingService
     private readonly AppDbContext _context;
     private readonly ConstraintEvaluationService _constraintEvaluation;
 
-    internal SchedulingService(AppDbContext context, ConstraintEvaluationService constraintEvaluation)
+    public SchedulingService(AppDbContext context, ConstraintEvaluationService constraintEvaluation)
     {
         _context = context;
         _constraintEvaluation = constraintEvaluation;
