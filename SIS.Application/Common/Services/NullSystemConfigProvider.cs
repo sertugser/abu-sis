@@ -18,4 +18,8 @@ public sealed class NullSystemConfigProvider : ISystemConfigProvider
 
     public Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default)
         => Task.FromResult(fallback);
+
+    public void InvalidateCache(string key)
+    {
+    }
 }

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
@@ -13,11 +15,17 @@ public class FacultyPlanningService : IFacultyPlanningService
 {
     private readonly AppDbContext _context;
     private readonly ISchedulingService _schedulingService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
-    public FacultyPlanningService(AppDbContext context, ISchedulingService schedulingService)
+    public FacultyPlanningService(AppDbContext context, ISchedulingService schedulingService, IHttpContextAccessor httpContextAccessor)
     {
         _context = context;
         _schedulingService = schedulingService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<int> ResolveFacultyForUserAsync(string userId, CancellationToken ct = default)
@@ -289,104 +297,143 @@ public class FacultyPlanningService : IFacultyPlanningService
 
     public async Task<AssignmentResultDto> AssignSectionAsync(AssignSectionRequest request, string userId, CancellationToken ct = default)
     {
-        var section = await _context.CourseSections
-            .Include(cs => cs.Course)
-            .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, ct)
-            ?? throw new KeyNotFoundException("Sube bulunamadi.");
-
-        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
-            throw new InvalidOperationException(
-                $"Hoca/derslik/zaman ataması için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
-
-        if (section.IsFinalized)
-            throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
-
-        var userDeptId = await ResolveDepartmentForUserAsync(userId, ct);
-        if (userDeptId.HasValue && section.Course.DepartmentId != userDeptId.Value)
-            throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerine atama yapabilirsiniz.");
-
-        var result = new AssignmentResultDto { Success = true };
-
-        if (request.ClassroomId.HasValue)
-        {
-            if (request.ScheduleSlots == null || request.ScheduleSlots.Count == 0)
-                throw new ArgumentException("Derslik atanirken zaman slotlari da belirtilmelidir.");
-
-            var classroom = await _context.Classrooms
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == request.ClassroomId.Value, ct)
-                ?? throw new KeyNotFoundException("Derslik bulunamadi.");
-
-            if (classroom.Capacity < section.Capacity)
-                result.Warnings.Add($"Derslik kapasitesi ({classroom.Capacity}) sube kapasitesinden ({section.Capacity}) dusuk.");
-
-            var expectedType = section.Course.LabHours > 0 && section.Course.TheoryHours == 0
-                ? ClassroomType.Lab : ClassroomType.Lecture;
-            if (classroom.Type != expectedType)
-                result.Warnings.Add($"Derslik tipi uyumsuz: beklenen {expectedType}, atanan {classroom.Type}.");
-
-            section.ClassroomId = request.ClassroomId.Value;
-        }
-        else if (request.ScheduleSlots is { Count: > 0 })
-        {
-            throw new ArgumentException("Zaman slotu atanirken derslik de belirtilmelidir.");
-        }
-
-        if (request.InstructorId.HasValue)
-        {
-            var instructorExists = await _context.Instructors.AnyAsync(i => i.Id == request.InstructorId.Value, ct);
-            if (!instructorExists)
-                throw new KeyNotFoundException("Ogretim uyesi bulunamadi.");
-            section.InstructorId = request.InstructorId.Value;
-        }
-
-        // Write schedule records only if this is a NEW schedule assignment (not just an instructor change)
-        // Skip if section already has schedule records and classroom hasn't changed
-        var hasSlotLevelClassrooms = request.ScheduleSlots?.Any(s => s.ClassroomId.HasValue) == true;
-        if ((request.ClassroomId.HasValue || hasSlotLevelClassrooms) && request.ScheduleSlots is { Count: > 0 })
-        {
-            var existingScheduleCount = await _context.SectionSchedules
-                .CountAsync(ss => ss.CourseSectionId == section.Id, ct);
-
-            var classroomChanged = request.ClassroomId.HasValue && section.ClassroomId != request.ClassroomId.Value;
-            var isNewSchedule = existingScheduleCount == 0;
-
-            if (isNewSchedule || classroomChanged)
-            {
-                await WriteSectionScheduleRecordsAsync(
-                    section.Id,
-                    section.TermId,
-                    request.ClassroomId ?? section.ClassroomId ?? 0,
-                    request.ScheduleSlots,
-                    ct);
-            }
-        }
-
+        // B14: wrap entire method in a single transaction so section update, schedule write,
+        // and audit logs are all committed atomically. If we are already inside an outer
+        // transaction (e.g. called from ApplyScheduleAsync) we reuse it instead of nesting.
+        var ownsTransaction = _context.Database.CurrentTransaction == null;
+        await using var transaction = ownsTransaction
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
         try
         {
-            await _context.SaveChangesAsync(ct);
+            var section = await _context.CourseSections
+                .Include(cs => cs.Course)
+                .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, ct)
+                ?? throw new KeyNotFoundException("Sube bulunamadi.");
+
+            var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+            if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+                throw new InvalidOperationException(
+                    $"Hoca/derslik/zaman ataması için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
+            if (section.IsFinalized)
+                throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
+
+            var userDeptId = await ResolveDepartmentForUserAsync(userId, ct);
+            if (userDeptId.HasValue && section.Course.DepartmentId != userDeptId.Value)
+                throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerine atama yapabilirsiniz.");
+
+            var result = new AssignmentResultDto { Success = true };
+
+            if (request.ClassroomId.HasValue)
+            {
+                if (request.ScheduleSlots == null || request.ScheduleSlots.Count == 0)
+                    throw new ArgumentException("Derslik atanirken zaman slotlari da belirtilmelidir.");
+
+                var classroom = await _context.Classrooms
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.Id == request.ClassroomId.Value, ct)
+                    ?? throw new KeyNotFoundException("Derslik bulunamadi.");
+
+                if (classroom.Capacity < section.Capacity)
+                    result.Warnings.Add($"Derslik kapasitesi ({classroom.Capacity}) sube kapasitesinden ({section.Capacity}) dusuk.");
+
+                var expectedType = section.Course.LabHours > 0 && section.Course.TheoryHours == 0
+                    ? ClassroomType.Lab : ClassroomType.Lecture;
+                if (classroom.Type != expectedType)
+                    result.Warnings.Add($"Derslik tipi uyumsuz: beklenen {expectedType}, atanan {classroom.Type}.");
+
+                section.ClassroomId = request.ClassroomId.Value;
+            }
+            else if (request.ScheduleSlots is { Count: > 0 })
+            {
+                throw new ArgumentException("Zaman slotu atanirken derslik de belirtilmelidir.");
+            }
+
+            if (request.InstructorId.HasValue)
+            {
+                var instructorExists = await _context.Instructors.AnyAsync(i => i.Id == request.InstructorId.Value, ct);
+                if (!instructorExists)
+                    throw new KeyNotFoundException("Ogretim uyesi bulunamadi.");
+                section.InstructorId = request.InstructorId.Value;
+            }
+
+            // Write schedule records only if this is a NEW schedule assignment (not just an instructor change)
+            // Skip if section already has schedule records and classroom hasn't changed
+            var hasSlotLevelClassrooms = request.ScheduleSlots?.Any(s => s.ClassroomId.HasValue) == true;
+            if ((request.ClassroomId.HasValue || hasSlotLevelClassrooms) && request.ScheduleSlots is { Count: > 0 })
+            {
+                var existingScheduleCount = await _context.SectionSchedules
+                    .CountAsync(ss => ss.CourseSectionId == section.Id, ct);
+
+                var classroomChanged = request.ClassroomId.HasValue && section.ClassroomId != request.ClassroomId.Value;
+                var isNewSchedule = existingScheduleCount == 0;
+
+                if (isNewSchedule || classroomChanged)
+                {
+                    await WriteSectionScheduleRecordsAsync(
+                        section.Id,
+                        section.TermId,
+                        request.ClassroomId ?? section.ClassroomId ?? 0,
+                        request.ScheduleSlots,
+                        ct);
+                }
+            }
+
+            var conflicts = await _schedulingService.GetConflictsAsync(section.TermId, ct);
+            var sectionConflicts = conflicts.Where(c => c.SectionId == section.Id || c.RelatedSectionId == section.Id).ToList();
+            result.Conflicts = sectionConflicts;
+
+            _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
+            {
+                SectionId = section.Id,
+                Action = "Assign",
+                UserId = userId,
+                ClassroomId = request.ClassroomId,
+                InstructorId = request.InstructorId
+            });
+            _context.AuditLogs.Add(new AuditLog
+            {
+                UserId = TryParseUserId(userId),
+                Action = "ScheduleAssigned",
+                EntityType = nameof(CourseSection),
+                EntityId = section.Id.ToString(),
+                NewValue = JsonSerializer.Serialize(new
+                {
+                    classroomId = request.ClassroomId ?? section.ClassroomId,
+                    instructorId = request.InstructorId ?? section.InstructorId,
+                    slots = request.ScheduleSlots?.Select(slot => new
+                    {
+                        day = slot.Day.ToString(),
+                        startTime = slot.StartTime.ToString("HH\\:mm"),
+                        endTime = slot.EndTime.ToString("HH\\:mm"),
+                        classroomId = slot.ClassroomId ?? request.ClassroomId ?? section.ClassroomId,
+                    }),
+                }, JsonOptions),
+                Timestamp = DateTime.UtcNow,
+                IpAddress = GetCurrentIpAddress(),
+            });
+
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new InvalidOperationException("Bu sube baska bir kullanici tarafindan guncellendi. Lutfen yenileyip tekrar deneyin.");
+            }
+
+            if (ownsTransaction)
+                await transaction!.CommitAsync(ct);
+
+            return result;
         }
-        catch (DbUpdateConcurrencyException)
+        catch
         {
-            throw new InvalidOperationException("Bu sube baska bir kullanici tarafindan guncellendi. Lutfen yenileyip tekrar deneyin.");
+            if (ownsTransaction && transaction != null)
+                await transaction.RollbackAsync(ct);
+            throw;
         }
-
-        var conflicts = await _schedulingService.GetConflictsAsync(section.TermId, ct);
-        var sectionConflicts = conflicts.Where(c => c.SectionId == section.Id || c.RelatedSectionId == section.Id).ToList();
-        result.Conflicts = sectionConflicts;
-
-        _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
-        {
-            SectionId = section.Id,
-            Action = "Assign",
-            UserId = userId,
-            ClassroomId = request.ClassroomId,
-            InstructorId = request.InstructorId
-        });
-        await _context.SaveChangesAsync(ct);
-
-        return result;
     }
 
     public async Task UnassignSectionAsync(int sectionId, string userId, CancellationToken ct = default)
@@ -408,6 +455,10 @@ public class FacultyPlanningService : IFacultyPlanningService
         if (userDeptId.HasValue && section.Course.DepartmentId != userDeptId.Value)
             throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerinin atamasini kaldirabilirsiniz.");
 
+        var previousClassroomId = section.ClassroomId;
+        var previousInstructorId = section.InstructorId;
+        var previousSlots = await GetCurrentScheduleSlotPayloadAsync(sectionId, ct);
+
         await ClearSectionScheduleRecordsAsync(sectionId, ct);
         section.ClassroomId = null;
         section.InstructorId = null;
@@ -417,6 +468,22 @@ public class FacultyPlanningService : IFacultyPlanningService
             SectionId = sectionId,
             Action = "Unassign",
             UserId = userId
+        });
+        _context.AuditLogs.Add(new AuditLog
+        {
+            UserId = TryParseUserId(userId),
+            Action = "ScheduleUnassigned",
+            EntityType = nameof(CourseSection),
+            EntityId = sectionId.ToString(),
+            NewValue = JsonSerializer.Serialize(new
+            {
+                previousClassroomId,
+                previousInstructorId,
+                slots = previousSlots,
+                note = "Assignment removed",
+            }, JsonOptions),
+            Timestamp = DateTime.UtcNow,
+            IpAddress = GetCurrentIpAddress(),
         });
 
         try
@@ -667,10 +734,15 @@ public class FacultyPlanningService : IFacultyPlanningService
     {
         var result = new ApplyScheduleResultDto();
 
-        foreach (var item in request.Assignments)
+        // B15: wrap all assignments in a single transaction so that a failure in any
+        // assignment rolls back all previously applied assignments atomically.
+        await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+        try
         {
-            try
+            foreach (var item in request.Assignments)
             {
+                // AssignSectionAsync detects the active transaction and reuses it
+                // instead of opening a nested one.
                 var assignResult = await AssignSectionAsync(new AssignSectionRequest
                 {
                     SectionId = item.SectionId,
@@ -686,16 +758,15 @@ public class FacultyPlanningService : IFacultyPlanningService
                     result.Errors.Add($"Sube {item.SectionId}: Atama basarisiz.");
                 }
             }
-            catch (UnauthorizedAccessException)
-            {
-                result.FailedCount++;
-                result.Errors.Add($"Sube {item.SectionId}: Yetkiniz bulunmuyor.");
-            }
-            catch (Exception ex)
-            {
-                result.FailedCount++;
-                result.Errors.Add($"Sube {item.SectionId}: {ex.Message}");
-            }
+
+            await transaction.CommitAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(ct);
+            result.RolledBack = true;
+            result.FailedCount++;
+            result.Errors.Add($"Tum atamalar geri alindi: {ex.Message}");
         }
 
         return result;
@@ -859,6 +930,32 @@ public class FacultyPlanningService : IFacultyPlanningService
         DayOfWeek.Friday => "Cum",
         _ => day.ToString()
     };
+
+    private async Task<List<object>> GetCurrentScheduleSlotPayloadAsync(int sectionId, CancellationToken ct)
+    {
+        var schedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == sectionId)
+            .OrderBy(ss => ss.TimeSlot.DayOfWeek)
+            .ThenBy(ss => ss.TimeSlot.StartTime)
+            .ToListAsync(ct);
+
+        return schedules
+            .Select(ss => new
+            {
+                day = ss.TimeSlot.DayOfWeek.ToString(),
+                startTime = ss.TimeSlot.StartTime.ToString("HH\\:mm"),
+                endTime = ss.TimeSlot.EndTime.ToString("HH\\:mm"),
+                classroomId = ss.ClassroomId,
+            })
+            .Cast<object>()
+            .ToList();
+    }
+
+    private string? GetCurrentIpAddress() => _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+
+    private static int? TryParseUserId(string userId) => int.TryParse(userId, out var parsedUserId) ? parsedUserId : null;
 
     private static double CalculateAutoScheduleScore(
         CourseSection section,

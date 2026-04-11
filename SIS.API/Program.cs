@@ -13,6 +13,7 @@ using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.AcademicLevel.Services;
+using SIS.Infrastructure.Services.Scheduling;
 using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.TermClosing.Services;
@@ -90,10 +91,14 @@ builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidatio
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
+builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
-builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
+builder.Services.AddScoped<EnrollmentForecastService>();
+builder.Services.AddScoped<IEnrollmentForecastService>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
+builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
+builder.Services.AddSchedulingConstraints();
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();

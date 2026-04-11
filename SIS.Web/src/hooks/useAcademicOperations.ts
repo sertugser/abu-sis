@@ -84,6 +84,7 @@ export function useApproveCourseSections(departmentId: number, termId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
     },
   });
 }
@@ -94,6 +95,8 @@ export function useRejectCourseSections(departmentId: number, termId: number) {
     mutationFn: (request: RejectCourseSectionsRequest) => rejectCourseSections(departmentId, termId, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
     },
   });
 }
@@ -105,6 +108,7 @@ export function useBulkApproveCourseSections(departmentId: number, termId: numbe
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
     },
   });
 }

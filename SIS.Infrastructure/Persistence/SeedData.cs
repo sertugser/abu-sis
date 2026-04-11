@@ -20,5 +20,6 @@ public static partial class SeedData
         // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı
         await SeedTimeSlotsAsync(context);
         await SeedSystemConfigAsync(context);
+        await SeedConstraintDefinitionsAsync(context);
     }
 }

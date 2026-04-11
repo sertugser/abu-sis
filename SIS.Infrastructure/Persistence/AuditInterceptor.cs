@@ -18,6 +18,7 @@ public class AuditInterceptor : SaveChangesInterceptor
     // Entity types that should be audited
     private static readonly HashSet<string> AuditedEntityTypes = new(StringComparer.Ordinal)
     {
+        nameof(ApplicationUser),
         nameof(AcademicTerm),
         nameof(CourseSection),
         nameof(CourseRegistration),

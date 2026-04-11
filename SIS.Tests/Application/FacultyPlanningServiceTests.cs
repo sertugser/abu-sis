@@ -1,11 +1,16 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.FacultyPlanning.DTOs;
+using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.Scheduling;
+using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
+using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
 
@@ -22,10 +27,11 @@ public class FacultyPlanningServiceTests : IDisposable
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         _context = new AppDbContext(options);
-        _service = new FacultyPlanningService(_context, new SchedulingService(_context));
+        _service = new FacultyPlanningService(_context, new SchedulingService(_context, CreateConstraintEvaluationService()), new HttpContextAccessor());
 
         SeedBaseData();
     }
@@ -457,6 +463,38 @@ public class FacultyPlanningServiceTests : IDisposable
         var term = _context.AcademicTerms.Single(t => t.Id == TermId);
         term.Status = status;
         _context.SaveChanges();
+    }
+
+    private ConstraintEvaluationService CreateConstraintEvaluationService()
+    {
+        var evaluators = new IConstraintEvaluator[]
+        {
+            new CapacityEvaluator(),
+            new ClassroomTypeEvaluator(),
+            new FacultyClassroomEvaluator(),
+            new ClassroomConflictEvaluator(),
+            new InstructorConflictEvaluator(),
+            new CurriculumConflictEvaluator(),
+            new CourseComponentEvaluator(),
+            new SameCourseSectionEvaluator(),
+            new WeeklyLoadEvaluator(),
+            new DailyLoadEvaluator(),
+            new NoDayOffEvaluator(),
+            new CorequisiteEvaluator(),
+            new CreditHourEvaluator(),
+            new LunchBreakEvaluator(),
+            new MaxConsecutiveHoursEvaluator(),
+            new OccupancyEvaluator(),
+            new DailyLoadSoftEvaluator(),
+            new SlotCongestionEvaluator(),
+            new CoEnrollmentEvaluator(),
+            new LunchBreakSoftEvaluator(),
+            new StudentGapEvaluator(),
+            new InstructorDaySpreadEvaluator(),
+            new EarlyLateEvaluator(),
+            new WeekdayBalanceEvaluator(),
+        };
+        return new ConstraintEvaluationService(evaluators, _context);
     }
 
     public void Dispose()

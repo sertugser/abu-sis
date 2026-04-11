@@ -30,6 +30,7 @@ export const ROUTES = {
   PROMOTION_RULES: '/sinif-atlatma-kurallari',
   SCHEDULE_APPROVAL: '/program-onayi',
   CLASSROOM_ADMIN: '/derslik-yonetimi',
+  CONSTRAINT_MANAGEMENT: '/ders-programi-kisitlamalari',
 } as const;
 
 export const QUERY_KEYS = {
@@ -69,6 +70,8 @@ export const QUERY_KEYS = {
   systemConfigs: ['admin', 'systemConfigs'] as const,
   auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,
   promotionRules: (programId?: number) => ['admin', 'promotionRules', programId] as const,
+  constraints: ['constraints'] as const,
+  constraintDetail: (id: number) => ['constraints', 'detail', id] as const,
   scheduleApprovalStatus: (facultyId: number, termId?: number) => ['scheduleApproval', facultyId, termId] as const,
   adminFaculties: ['admin', 'faculties'] as const,
   adminPrograms: (departmentId?: number) => ['admin', 'programs', departmentId] as const,
@@ -124,6 +127,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/sinif-atlatma-kurallari',
   '/program-onayi',
   '/derslik-yonetimi',
+  '/ders-programi-kisitlamalari',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

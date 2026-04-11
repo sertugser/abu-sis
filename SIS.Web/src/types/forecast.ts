@@ -35,6 +35,13 @@ export interface SectionDistributionDto {
   warnings: string[];
 }
 
+export interface CrossDepartmentDemandDto {
+  departmentId: number;
+  departmentName: string;
+  programName: string;
+  estimatedStudentCount: number;
+}
+
 export interface CourseDemandForecastDto {
   courseId: number;
   courseCode: string;
@@ -45,11 +52,13 @@ export interface CourseDemandForecastDto {
   totalPredictedDemand: number;
   recommendedSectionCount: number;
   capacityBasis: string;
+  comparableTermEnrollment: number | null;
   notes: string[];
   demandBreakdown: DemandBreakdownDto;
   historicalEnrollments: HistoricalEnrollmentDto[];
   confidence: ConfidenceRangeDto;
   sectionDistribution: SectionDistributionDto;
+  crossDepartmentDemand: CrossDepartmentDemandDto[];
 }
 
 export interface DepartmentCapacitySummaryDto {

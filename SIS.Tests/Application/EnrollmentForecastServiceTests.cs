@@ -17,8 +17,11 @@ public class EnrollmentForecastServiceTests
     private const int OtherDepartmentId = 2;
     private const int ProgramId = 1;
     private const int CurriculumId = 1;
+    private const int OtherProgramId = 2;
+    private const int OtherCurriculumId = 2;
     private const int ActiveTermId = 1;
     private const int PastTermId = 2;
+    private const int ComparableFallTermId = 3;
     private const int ClassroomId = 1;
     private const int SmallClassroomId = 2;
 
@@ -234,6 +237,123 @@ public class EnrollmentForecastServiceTests
         result.TotalPredictedDemand.Should().Be(1);
     }
 
+    [Fact]
+    public async Task GetCourseDemandForecast_CrossDepartmentDemand_UsesActualEligibleStudentCounts()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddProgramAndCurriculum(context, OtherProgramId, OtherCurriculumId, OtherDepartmentId, "EEE-BSC", "Electrical Engineering");
+
+        var targetCourse = AddCourse(context, 700, "CENG410", "Data Mining", 6);
+        AddCurriculumCourse(context, targetCourse.Id, 3);
+        AddCurriculumCourse(context, targetCourse.Id, 3, curriculumId: OtherCurriculumId);
+
+        var otherDeptStudent = AddStudent(context, 50, completedSemesters: 2, programId: OtherProgramId, curriculumId: OtherCurriculumId);
+        var service = CreateService(context, otherDeptStudent.Id, 2.80m);
+
+        var result = await service.GetCourseDemandForecastAsync(targetCourse.Id);
+
+        result.Should().NotBeNull();
+        result!.TotalPredictedDemand.Should().Be(1);
+        result.CrossDepartmentDemand.Should().ContainSingle(item =>
+            item.DepartmentId == OtherDepartmentId
+            && item.EstimatedStudentCount == 1);
+    }
+
+    [Fact]
+    public async Task GetCourseDemandForecast_UsesComparableTermEnrollmentForSeasonality()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddTerm(context, ComparableFallTermId, 2024, SemesterType.Fall, isActive: false);
+
+        var targetCourse = AddCourse(context, 710, "CENG420", "Machine Learning", 6);
+        AddCurriculumCourse(context, targetCourse.Id, 3);
+
+        var springSection = AddSection(context, 7100, targetCourse.Id, PastTermId);
+        var fallSection = AddSection(context, 7101, targetCourse.Id, ComparableFallTermId);
+
+        for (var i = 0; i < 2; i++)
+        {
+            var student = AddStudent(context, 100 + i, completedSemesters: 6);
+            AddRegistration(context, 800 + i, student.Id, springSection.Id, RegistrationStatus.Completed, GradeCode.CC);
+        }
+
+        for (var i = 0; i < 8; i++)
+        {
+            var student = AddStudent(context, 200 + i, completedSemesters: 6);
+            AddRegistration(context, 900 + i, student.Id, fallSection.Id, RegistrationStatus.Completed, GradeCode.CC);
+        }
+
+        var service = CreateService(context, new Dictionary<int, decimal>());
+
+        var result = await service.GetCourseDemandForecastAsync(targetCourse.Id);
+
+        result.Should().NotBeNull();
+        result!.ComparableTermEnrollment.Should().Be(8);
+    }
+
+    [Fact]
+    public async Task GetCourseDemandForecast_ApprovalFeedbackIncreasesRecommendedSections()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddTerm(context, ComparableFallTermId, 2024, SemesterType.Fall, isActive: false);
+
+        var targetCourse = AddCourse(context, 720, "CENG430", "Distributed Systems", 6);
+        AddCurriculumCourse(context, targetCourse.Id, 3);
+        AddSection(context, 7200, targetCourse.Id, ComparableFallTermId, capacity: 5);
+        AddApproval(context, targetCourse.Id, ComparableFallTermId, recommendedSectionCount: 1, approvedSectionCount: 2);
+
+        var student1 = AddStudent(context, 301, completedSemesters: 2);
+        var student2 = AddStudent(context, 302, completedSemesters: 2);
+        var student3 = AddStudent(context, 303, completedSemesters: 2);
+
+        var service = CreateService(context, new Dictionary<int, decimal>
+        {
+            [student1.Id] = 2.60m,
+            [student2.Id] = 2.60m,
+            [student3.Id] = 2.60m
+        });
+
+        var result = await service.GetCourseDemandForecastAsync(targetCourse.Id);
+
+        result.Should().NotBeNull();
+        result!.RecommendedSectionCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetCourseDemandForecast_BehindScheduleCoursesArePrioritizedWhenEctsLimitIsTight()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+
+        var student = AddStudent(context, 400, completedSemesters: 4);
+        var behindCourse = AddCourse(context, 730, "AAA401", "Behind Course", 6);
+        var regular1 = AddCourse(context, 731, "BBB501", "Regular 1", 6);
+        var regular2 = AddCourse(context, 732, "CCC501", "Regular 2", 6);
+        var regular3 = AddCourse(context, 733, "DDD501", "Regular 3", 6);
+        var regular4 = AddCourse(context, 734, "EEE501", "Regular 4", 6);
+        var regular5 = AddCourse(context, 735, "ZZZ501", "Regular 5", 6);
+
+        AddCurriculumCourse(context, behindCourse.Id, 3);
+        AddCurriculumCourse(context, regular1.Id, 5);
+        AddCurriculumCourse(context, regular2.Id, 5);
+        AddCurriculumCourse(context, regular3.Id, 5);
+        AddCurriculumCourse(context, regular4.Id, 5);
+        AddCurriculumCourse(context, regular5.Id, 5);
+
+        var service = CreateService(context, student.Id, 1.80m);
+
+        var behindResult = await service.GetCourseDemandForecastAsync(behindCourse.Id);
+        var regularResult = await service.GetCourseDemandForecastAsync(regular5.Id);
+
+        behindResult.Should().NotBeNull();
+        regularResult.Should().NotBeNull();
+        behindResult!.PredictedEligibleCount.Should().Be(1);
+        regularResult!.PredictedEligibleCount.Should().Be(0);
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -343,6 +463,8 @@ public class EnrollmentForecastServiceTests
         AppDbContext context,
         int id,
         int completedSemesters,
+        int programId = ProgramId,
+        int curriculumId = CurriculumId,
         StudentStatus status = StudentStatus.Active,
         bool hasFinancialBlock = false)
     {
@@ -366,8 +488,8 @@ public class EnrollmentForecastServiceTests
         context.StudentPrograms.Add(new StudentProgram
         {
             StudentId = student.Id,
-            ProgramId = ProgramId,
-            CurriculumId = CurriculumId,
+            ProgramId = programId,
+            CurriculumId = curriculumId,
             Type = StudentProgramType.Main,
             EnrollmentDate = DateTime.UtcNow.AddYears(-2),
             IsActive = true
@@ -402,11 +524,11 @@ public class EnrollmentForecastServiceTests
         return course;
     }
 
-    private static void AddCurriculumCourse(AppDbContext context, int courseId, int suggestedSemester, bool isCompulsory = true)
+    private static void AddCurriculumCourse(AppDbContext context, int courseId, int suggestedSemester, bool isCompulsory = true, int curriculumId = CurriculumId)
     {
         context.CurriculumCourses.Add(new CurriculumCourse
         {
-            CurriculumId = CurriculumId,
+            CurriculumId = curriculumId,
             CourseId = courseId,
             SuggestedSemester = suggestedSemester,
             IsCompulsory = isCompulsory
@@ -421,6 +543,80 @@ public class EnrollmentForecastServiceTests
         {
             CourseId = courseId,
             RequiredCourseId = requiredCourseId
+        });
+
+        context.SaveChanges();
+    }
+
+    private static void AddProgramAndCurriculum(
+        AppDbContext context,
+        int programId,
+        int curriculumId,
+        int departmentId,
+        string code,
+        string name)
+    {
+        context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = programId,
+            Name = name,
+            Code = code,
+            DepartmentId = departmentId,
+            DegreeLevel = DegreeLevel.Bachelor,
+            EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 14,
+            TotalRequiredEcts = 240
+        });
+
+        context.Curricula.Add(new Curriculum
+        {
+            Id = curriculumId,
+            ProgramId = programId,
+            Version = "2025",
+            IsActive = true
+        });
+
+        context.SaveChanges();
+    }
+
+    private static void AddTerm(AppDbContext context, int termId, int year, SemesterType semester, bool isActive)
+    {
+        context.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = termId,
+            Name = $"{year}-{year + 1} {semester}",
+            Year = year,
+            Semester = semester,
+            RegistrationStart = DateTime.UtcNow.AddDays(-60),
+            RegistrationEnd = DateTime.UtcNow.AddDays(-50),
+            AddDropStart = DateTime.UtcNow.AddDays(-49),
+            AddDropEnd = DateTime.UtcNow.AddDays(-40),
+            WithdrawalDeadline = DateTime.UtcNow.AddDays(-20),
+            TermStart = DateTime.UtcNow.AddDays(-70),
+            TermEnd = DateTime.UtcNow.AddDays(-10),
+            IsActive = isActive
+        });
+
+        context.SaveChanges();
+    }
+
+    private static void AddApproval(
+        AppDbContext context,
+        int courseId,
+        int termId,
+        int recommendedSectionCount,
+        int approvedSectionCount)
+    {
+        context.CourseSectionApprovals.Add(new CourseSectionApproval
+        {
+            CourseId = courseId,
+            DepartmentId = DepartmentId,
+            TermId = termId,
+            RecommendedSectionCount = recommendedSectionCount,
+            ApprovedSectionCount = approvedSectionCount,
+            PredictedDemand = approvedSectionCount * 10,
+            Status = SectionApprovalStatus.Approved,
+            CreatedAt = DateTime.UtcNow
         });
 
         context.SaveChanges();

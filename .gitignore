@@ -74,3 +74,6 @@ scripts/*.dump
 .env
 .env.*
 !.env.example
+
+# Internal planning docs (not for repo)
+docs/superpowers/

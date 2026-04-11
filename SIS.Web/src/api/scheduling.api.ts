@@ -1,6 +1,7 @@
 import axios from 'axios';
 import apiClient from './axios';
 import type { BatchAutoScheduleRequest, BatchAutoScheduleResult, ClassroomDashboard, SchedulingConflict } from '../types/scheduling';
+import { getFilenameFromContentDisposition, type DownloadableFile } from '../lib/download';
 
 export async function batchAutoSchedule(request: BatchAutoScheduleRequest): Promise<BatchAutoScheduleResult> {
   const { data } = await apiClient.post('/scheduling/batch-auto-schedule', request);
@@ -55,4 +56,16 @@ export async function getSchedulingConflicts(termId?: number): Promise<Schedulin
     params: { termId }
   });
   return data;
+}
+
+export async function exportClassroomCsv(termId?: number): Promise<DownloadableFile> {
+  const response = await apiClient.get<Blob>('/admin/classroom-export/csv', {
+    params: { termId },
+    responseType: 'blob',
+  });
+
+  return {
+    blob: response.data,
+    filename: getFilenameFromContentDisposition(response.headers['content-disposition']),
+  };
 }

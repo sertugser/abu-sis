@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSystemConfigs, updateSystemConfig } from '../api/systemConfig.api';
+import { getSystemConfigs, importSystemConfigs, updateSystemConfig } from '../api/systemConfig.api';
 import { QUERY_KEYS } from '../lib/constants';
 
 export function useSystemConfigs() {
@@ -16,6 +16,19 @@ export function useUpdateSystemConfig() {
     mutationFn: ({ id, value }: { id: number; value: string }) => updateSystemConfig(id, value),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
+      qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
+    },
+  });
+}
+
+export function useImportSystemConfigs() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: unknown) => importSystemConfigs(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
+      qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },
   });
 }

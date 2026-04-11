@@ -128,6 +128,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
+      { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
     ],
   },
   {
@@ -207,6 +208,7 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
+      { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
     ],
   },
   {
@@ -257,6 +259,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.CLASSROOM_ADMIN, label: 'Derslik Yönetimi' },
       { to: ROUTES.CLASSROOM_ASSIGNMENT, label: 'Derslik-Fakülte Ataması' },
+      { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
     ],
   },
   {

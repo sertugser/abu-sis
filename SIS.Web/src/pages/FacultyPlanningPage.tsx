@@ -4,7 +4,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
@@ -16,8 +15,9 @@ import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
 import {
   useApplySchedule, useAssignSection, useAutoSchedulePreview,
-  useFacultyPlanningConflicts, useFacultyPlanningOverview,
-  useFacultyPlanningSections, useFacultyPlanningTimeSlots, useUnassignSection,
+  useAvailableClassrooms, useBatchUnassignSections, useFacultyPlanningConflicts,
+  useFacultyPlanningOverview, useFacultyPlanningSections, useFacultyPlanningTimeSlots,
+  useUnassignSection, useValidateSectionSchedule,
 } from '../hooks/useFacultyPlanning';
 import { useDepartmentInstructors } from '../hooks/useCourseOpening';
 import type {
@@ -25,7 +25,7 @@ import type {
   FacultyPlanningSection,
   FacultyPlanningTimeSlot,
 } from '../types/facultyPlanning';
-import type { SchedulingConflict } from '../types/scheduling';
+import type { ScheduleValidationResult, SchedulingConflict } from '../types/scheduling';
 
 type TabKey = 'overview' | 'sections' | 'auto-schedule' | 'conflicts';
 
@@ -428,6 +428,7 @@ function SectionListTab({
                   <SectionRow
                     key={s.sectionId}
                     section={s}
+                    termId={termId}
                     timeSlots={timeSlotsQuery.data ?? []}
                     timeSlotsLoaded={timeSlotsQuery.isSuccess}
                     expanded={expandedId === s.sectionId}
@@ -456,8 +457,9 @@ function SectionListTab({
   );
 }
 
-function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle, onAssign, onUnassign, isAssigning, isUnassigning }: {
+function SectionRow({ section: s, termId, timeSlots, timeSlotsLoaded, expanded, onToggle, onAssign, onUnassign, isAssigning, isUnassigning }: {
   section: FacultyPlanningSection;
+  termId: number | null;
   timeSlots: FacultyPlanningTimeSlot[];
   timeSlotsLoaded: boolean;
   expanded: boolean;
@@ -472,6 +474,8 @@ function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle
   const [day, setDay] = useState('1');
   const [selectedSlotKey, setSelectedSlotKey] = useState('');
   const [localError, setLocalError] = useState<string>('');
+  const [validationResult, setValidationResult] = useState<ScheduleValidationResult | null>(null);
+  const validateMutation = useValidateSectionSchedule();
   const requiredSlotCount = s.theoryHours + s.labHours || 1;
   const slotOptions = buildManualScheduleOptions(timeSlots, requiredSlotCount);
   const availableDays = Array.from(new Set(slotOptions.map(option => option.day))).sort((left, right) => left - right);
@@ -481,6 +485,14 @@ function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle
 
   const statusCfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.Unscheduled;
   const instructorsQuery = useDepartmentInstructors(s.departmentId);
+  const availableClassroomsQuery = useAvailableClassrooms(
+    termId,
+    selectedOption ? selectedOption.day : undefined,
+    selectedOption?.startTime,
+    selectedOption?.endTime,
+    s.capacity,
+  );
+  const availableClassrooms = availableClassroomsQuery.data;
 
   return (
     <>
@@ -504,14 +516,23 @@ function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle
           <TableCell colSpan={7} className="p-4">
             <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-medium">Derslik ID</label>
-                <Input
-                  className="h-8 w-24"
+                <label className="text-xs font-medium">Derslik</label>
+                <select
+                  className="h-8 w-52 rounded-md border px-2 text-sm"
                   value={classroomId}
                   onChange={e => setClassroomId(e.target.value)}
                   onClick={e => e.stopPropagation()}
-                  placeholder="Derslik ID"
-                />
+                >
+                  <option value="">Derslik seç...</option>
+                  {availableClassrooms?.map(cr => (
+                    <option key={cr.classroomId} value={cr.classroomId}>
+                      {cr.name} ({cr.capacity} kişi, {cr.type})
+                    </option>
+                  ))}
+                </select>
+                {classroomId && availableClassrooms && !availableClassrooms.some(cr => String(cr.classroomId) === classroomId) && (
+                  <p className="text-xs text-amber-600 mt-1">Seçili derslik bu saat aralığında müsait değil</p>
+                )}
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium">Hoca</label>
@@ -565,10 +586,10 @@ function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle
                 </select>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" type="button" disabled={isAssigning} onClick={(e) => {
+                <Button size="sm" type="button" disabled={isAssigning || validateMutation.isPending} onClick={(e) => {
                   e.stopPropagation();
                   if (!classroomId.trim()) {
-                    setLocalError('Atama için Derslik ID girilmelidir.');
+                    setLocalError('Atama için derslik seçilmelidir.');
                     return;
                   }
                   if (!timeSlotsLoaded) {
@@ -581,9 +602,26 @@ function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle
                   }
                   setLocalError('');
                   const slots = [{ day: selectedOption.day, startTime: selectedOption.startTime, endTime: selectedOption.endTime }];
-                  onAssign(Number(classroomId), slots, instructorId ? Number(instructorId) : undefined);
+                  validateMutation.mutate({
+                    sectionId: s.sectionId,
+                    classroomId: Number(classroomId),
+                    instructorId: instructorId ? Number(instructorId) : undefined,
+                    scheduleSlots: slots,
+                  }, {
+                    onSuccess: (result) => {
+                      if (result.isValid || result.conflicts.length === 0) {
+                        onAssign(Number(classroomId), slots, instructorId ? Number(instructorId) : undefined);
+                      } else {
+                        setValidationResult(result);
+                      }
+                    },
+                    onError: () => {
+                      // Validation endpoint başarısız olursa doğrudan atama yap
+                      onAssign(Number(classroomId), slots, instructorId ? Number(instructorId) : undefined);
+                    },
+                  });
                 }}>
-                  <Check className="h-4 w-4 mr-1" /> Ata
+                  {validateMutation.isPending ? 'Kontrol...' : <><Check className="h-4 w-4 mr-1" /> Ata</>}
                 </Button>
                 {s.status !== 'Unscheduled' && (
                   <Button size="sm" type="button" variant="destructive" disabled={isUnassigning} onClick={(e) => { e.stopPropagation(); onUnassign(); }}>
@@ -602,6 +640,36 @@ function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle
               <p className="mt-1 text-xs text-destructive">Bölüm hoca listesi yüklenemedi.</p>
             )}
             {localError && <p className="mt-2 text-xs text-destructive">{localError}</p>}
+            {validationResult && validationResult.conflicts.length > 0 && (
+              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-700">
+                    {validationResult.conflicts.length} çakışma tespit edildi
+                  </span>
+                </div>
+                <ul className="space-y-1 mb-3">
+                  {validationResult.conflicts.map((c, i) => (
+                    <li key={i} className="text-xs text-amber-700">
+                      <span className="font-mono font-bold">{c.courseCode}</span> — {c.message}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setValidationResult(null); }}>
+                    İptal
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={(e) => {
+                    e.stopPropagation();
+                    const slots = [{ day: selectedOption!.day, startTime: selectedOption!.startTime, endTime: selectedOption!.endTime }];
+                    onAssign(Number(classroomId), slots, instructorId ? Number(instructorId) : undefined);
+                    setValidationResult(null);
+                  }}>
+                    Yine de Ata
+                  </Button>
+                </div>
+              </div>
+            )}
           </TableCell>
         </TableRow>
       )}
@@ -612,7 +680,9 @@ function SectionRow({ section: s, timeSlots, timeSlotsLoaded, expanded, onToggle
 function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: number | null }) {
   const previewMutation = useAutoSchedulePreview();
   const applyMutation = useApplySchedule();
+  const batchUnassign = useBatchUnassignSections();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
 
   if (!termId) return null;
 
@@ -624,13 +694,23 @@ function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: num
     const items = (previewMutation.data?.assignments ?? [])
       .filter(a => selectedIds.has(a.sectionId))
       .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
-    if (items.length > 0) applyMutation.mutate({ assignments: items });
+    if (items.length > 0) {
+      const request = { assignments: items };
+      applyMutation.mutate(request, {
+        onSuccess: () => setLastAppliedIds(request.assignments.map(a => a.sectionId)),
+      });
+    }
   };
 
   const handleApplyAll = () => {
     const items = (previewMutation.data?.assignments ?? [])
       .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
-    if (items.length > 0) applyMutation.mutate({ assignments: items });
+    if (items.length > 0) {
+      const request = { assignments: items };
+      applyMutation.mutate(request, {
+        onSuccess: () => setLastAppliedIds(request.assignments.map(a => a.sectionId)),
+      });
+    }
   };
 
   const toggleSelect = (id: number) => setSelectedIds(prev => {
@@ -726,6 +806,25 @@ function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: num
                 {applyMutation.data.errors.map((e, i) => <p key={i} className="text-xs">{e}</p>)}
               </AlertDescription>
             </Alert>
+          )}
+
+          {lastAppliedIds.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`)) {
+                  batchUnassign.mutate(lastAppliedIds, {
+                    onSuccess: () => setLastAppliedIds([]),
+                  });
+                }
+              }}
+              disabled={batchUnassign.isPending}
+            >
+              {batchUnassign.isPending
+                ? 'Geri alınıyor...'
+                : `Son Uygulamayı Geri Al (${lastAppliedIds.length} şube)`}
+            </Button>
           )}
         </>
       )}
