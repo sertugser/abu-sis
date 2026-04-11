@@ -7,5 +7,7 @@ public class Department
     public string Code { get; set; } = string.Empty;
     public int FacultyId { get; set; }
     public Faculty Faculty { get; set; } = null!;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public ICollection<AcademicProgram> Programs { get; set; } = new List<AcademicProgram>();
 }
