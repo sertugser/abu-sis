@@ -23,7 +23,12 @@ import {
   useGradeLockReadiness,
 } from '../hooks/useAcademicOperations';
 import { getAcademicOperationsErrorMessage, type GradeLockReadiness } from '../api/academicOperations.api';
-import { buildInstructorMenuGroups } from '../components/layout/SidebarMenuGroups';
+import {
+  departmentManagerMenuGroups,
+  administrativeStaffMenuGroups,
+  deanMenuGroups,
+  systemAdminMenuGroups,
+} from '../components/layout/SidebarMenuGroups';
 import type { DepartmentForecastSummary } from '../types/academicOperations';
 import type { ScheduleValidationResult } from '../types/scheduling';
 import {
@@ -52,8 +57,17 @@ export default function ManagementDashboardPage() {
   const { data: activeTerm } = useActiveTerm();
 
   const context = contextQuery.data ?? null;
-  const departmentId = context?.defaultDepartmentId ?? null;
   const termId = activeTerm?.id;
+
+  // For roles that can view all departments (SystemAdmin, AdministrativeStaff),
+  // let the user pick which department's stats to display.
+  const canViewAll = context?.canViewAllDepartments ?? false;
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+
+  // Resolve the effective department id
+  const departmentId = canViewAll
+    ? (selectedDeptId ?? context?.accessibleDepartments[0]?.departmentId ?? null)
+    : (context?.defaultDepartmentId ?? null);
 
   const planningQuery = useAcademicPlanningSummary(departmentId, termId, !!departmentId && !!termId);
   const classListQuery = useDepartmentClassLists(departmentId, termId, !!departmentId && !!termId);
@@ -66,7 +80,7 @@ export default function ManagementDashboardPage() {
   const gradeLock = context ? gradeQuery.data : undefined;
 
   const activeDept = context?.accessibleDepartments.find(d => d.departmentId === departmentId);
-  const departmentName = activeDept?.departmentName ?? '';
+  const departmentName = canViewAll ? '' : (activeDept?.departmentName ?? '');
 
   return (
     <div className="space-y-6">
@@ -85,7 +99,22 @@ export default function ManagementDashboardPage() {
           <div className="flex flex-wrap items-center gap-2">
           </div>
         </div>
-        {context != null && context.accessibleDepartments.length > 1 && (
+        {context != null && canViewAll && context.accessibleDepartments.length > 0 && (
+          <div className="mt-3">
+            <select
+              value={departmentId ?? ''}
+              onChange={e => setSelectedDeptId(e.target.value ? Number(e.target.value) : null)}
+              className="rounded-lg bg-white/15 border border-white/30 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white/40"
+            >
+              {context.accessibleDepartments.map(dept => (
+                <option key={dept.departmentId} value={dept.departmentId} className="text-foreground bg-background">
+                  {dept.departmentCode} — {dept.departmentName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {context != null && !canViewAll && context.accessibleDepartments.length > 1 && (
           <div className="flex flex-wrap gap-1.5 mt-3">
             {context.accessibleDepartments.map(dept => (
               <span
@@ -116,7 +145,7 @@ export default function ManagementDashboardPage() {
             {getAcademicOperationsErrorMessage(contextQuery.error, 'Veriler yüklenemedi.')}
           </AlertDescription>
         </Alert>
-      ) : departmentId === null ? (
+      ) : departmentId === null && !canViewAll ? (
         <Alert variant="warning">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Bölüm atamanız bulunamadı</AlertTitle>
@@ -244,10 +273,10 @@ function CapacityStatusCard({
 
         {forecast && (
           <Link
-            to={ROUTES.MANAGEMENT_PLANNING}
+            to={ROUTES.COURSE_APPROVAL}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
           >
-            Planlama Merkezi <ArrowRight className="h-3.5 w-3.5" />
+            Ders Onay İşlemleri <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         )}
       </CardContent>
@@ -345,7 +374,7 @@ function ScheduleHealthCard({
               ))}
               {conflictCount > 2 && (
                 <Link
-                  to={ROUTES.FACULTY_PLANNING}
+                  to={ROUTES.SCHEDULE_CREATION}
                   className="text-xs text-primary hover:underline"
                 >
                   ve {conflictCount - 2} daha...
@@ -356,10 +385,10 @@ function ScheduleHealthCard({
         )}
 
         <Link
-          to={ROUTES.FACULTY_PLANNING}
+          to={ROUTES.SCHEDULE_CREATION}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
-          Fakülte Planlama <ArrowRight className="h-3.5 w-3.5" />
+          Ders Programı Oluşturma <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </CardContent>
     </Card>
@@ -450,17 +479,17 @@ function GradeEntryCard({
 const QUICK_LINKS_STORAGE_KEY = 'sis-dashboard-quick-links';
 
 const DEFAULT_QUICK_LINKS = [
-  ROUTES.MANAGEMENT_PLANNING,
-  ROUTES.MANAGEMENT_CLASS_LISTS,
-  ROUTES.FACULTY_PLANNING,
+  ROUTES.COURSE_APPROVAL,
+  ROUTES.CLASS_LISTS,
+  ROUTES.SCHEDULE_CREATION,
   ROUTES.TERM_CLOSING,
 ];
 
 /** Icon overrides for well-known routes */
 const ROUTE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  [ROUTES.MANAGEMENT_PLANNING]: Network,
-  [ROUTES.MANAGEMENT_CLASS_LISTS]: ClipboardList,
-[ROUTES.FACULTY_PLANNING]: CalendarRange,
+  [ROUTES.COURSE_APPROVAL]: Network,
+  [ROUTES.CLASS_LISTS]: ClipboardList,
+  [ROUTES.SCHEDULE_CREATION]: CalendarRange,
   [ROUTES.TERM_CLOSING]: GraduationCap,
   [ROUTES.INSTRUCTOR_SECTIONS]: Layers,
 };
@@ -473,10 +502,16 @@ interface QuickLinkOption {
 }
 
 function buildAllLinkOptions(): QuickLinkOption[] {
-  const groups = buildInstructorMenuGroups(true);
-  return groups.flatMap(g =>
+  const allGroups = [
+    ...systemAdminMenuGroups,
+    ...deanMenuGroups,
+    ...departmentManagerMenuGroups,
+    ...administrativeStaffMenuGroups,
+  ];
+  const seen = new Set<string>();
+  return allGroups.flatMap(g =>
     g.children
-      .filter(c => c.to !== ROUTES.DASHBOARD) // exclude "Ana Sayfa"
+      .filter(c => c.to !== ROUTES.DASHBOARD && !seen.has(c.to) && seen.add(c.to))
       .map(c => ({
         to: c.to,
         title: c.label,
