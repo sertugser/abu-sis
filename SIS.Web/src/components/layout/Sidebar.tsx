@@ -1,33 +1,99 @@
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   ChevronRight,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IMPLEMENTED_ROUTES } from '../../lib/constants';
 import logo from '/logo.png';
-import { studentMenuGroups, buildInstructorMenuGroups } from './SidebarMenuGroups';
+import {
+  studentMenuGroups,
+  instructorMenuGroups,
+  advisorMenuGroups,
+  departmentManagerMenuGroups,
+  administrativeStaffMenuGroups,
+  deanMenuGroups,
+  systemAdminMenuGroups,
+} from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
 
-function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
-  if (roles.includes('Instructor') || roles.includes('AcademicAdvisor') || roles.includes('DepartmentManager')) {
-    return buildInstructorMenuGroups(
-      roles.includes('Instructor')
-    );
+function findActiveGroup(pathname: string, menuGroups: MenuGroup[]): string | null {
+  for (const group of menuGroups) {
+    if (group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)))) {
+      return group.id;
+    }
   }
-  return studentMenuGroups;
+  return menuGroups[0]?.id ?? null;
+}
+
+function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
+  // Kullanıcının TÜM rollerine ait menüleri topla ve birleştir
+  const roleMenuMap: [string, MenuGroup[]][] = [
+    ['SystemAdministrator', systemAdminMenuGroups],
+    ['Dean', deanMenuGroups],
+    ['DepartmentManager', departmentManagerMenuGroups],
+    ['AdministrativeStaff', administrativeStaffMenuGroups],
+    ['AcademicAdvisor', advisorMenuGroups],
+    ['Instructor', instructorMenuGroups],
+    ['Student', studentMenuGroups],
+  ];
+
+  const allGroups: MenuGroup[] = [];
+  const seenGroupIds = new Set<string>();
+  const seenRoutes = new Set<string>();
+
+  for (const [role, menus] of roleMenuMap) {
+    if (!roles.includes(role)) continue;
+
+    for (const group of menus) {
+      if (seenGroupIds.has(group.id)) {
+        // Aynı id'li grup zaten var — children'ları birleştir
+        const existing = allGroups.find(g => g.id === group.id);
+        if (existing) {
+          for (const child of group.children) {
+            if (!seenRoutes.has(child.to)) {
+              existing.children.push(child);
+              seenRoutes.add(child.to);
+            }
+          }
+        }
+      } else {
+        // Yeni grup — duplikat route'ları filtrele
+        const filteredChildren = group.children.filter(child => {
+          if (seenRoutes.has(child.to)) return false;
+          seenRoutes.add(child.to);
+          return true;
+        });
+
+        if (filteredChildren.length > 0) {
+          allGroups.push({ ...group, children: [...filteredChildren] });
+          seenGroupIds.add(group.id);
+        }
+      }
+    }
+  }
+
+  return allGroups.length > 0 ? allGroups : studentMenuGroups;
 }
 
 function getRoleLabel(roles: string[]): string {
-  if (roles.includes('Instructor')) return 'Öğretim Üyesi Paneli';
-  if (roles.includes('AcademicAdvisor')) return 'Danışman Paneli';
-  if (roles.includes('DepartmentManager')) return 'Bölüm Başkanı Paneli';
-  if (roles.includes('SystemAdministrator')) return 'Yönetici Paneli';
-  return 'Öğrenci Bilgi Sistemi';
+  const labels: string[] = [];
+  if (roles.includes('SystemAdministrator')) labels.push('Yönetici');
+  if (roles.includes('Dean')) labels.push('Dekan');
+  if (roles.includes('DepartmentManager')) labels.push('Bölüm Başkanı');
+  if (roles.includes('AdministrativeStaff')) labels.push('İdari Personel');
+  if (roles.includes('AcademicAdvisor')) labels.push('Danışman');
+  if (roles.includes('Instructor')) labels.push('Öğretim Üyesi');
+  if (roles.includes('Student')) labels.push('Öğrenci');
+
+  if (labels.length === 0) return 'Öğrenci Bilgi Sistemi';
+  return labels.join(' / ') + ' Paneli';
 }
 
 const EXPANDED_W = 260;
@@ -41,18 +107,52 @@ interface SidebarProps {
 
 export default function Sidebar({ isCollapsed = false, onToggleSidebar }: SidebarProps) {
   const { user, logout } = useAuth();
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const location = useLocation();
 
   const roles = user?.roles ?? [];
   const menuGroups = getMenuGroupsForRole(roles);
 
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  const [openGroup, setOpenGroup] = useState<string | null>(() => findActiveGroup(location.pathname, menuGroups));
+  const [search, setSearch] = useState('');
+
+  // Sync openGroup when location changes (setState during render — React-approved derived state pattern)
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname);
+    const active = findActiveGroup(location.pathname, menuGroups);
+    if (active) setOpenGroup(active);
+  }
+
+  const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const groupBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
   const toggleGroup = (id: string) => {
     if (isCollapsed) {
-      onToggleSidebar?.();
+      const btn = groupBtnRefs.current[id];
+      if (btn) {
+        const rect = btn.getBoundingClientRect();
+        const top = Math.min(rect.top - 8, window.innerHeight - 400);
+        setFlyoutPos({ top: Math.max(8, top), left: rect.right + 8 });
+      }
+      setFlyoutGroup(prev => prev === id ? null : id);
       return;
     }
     setOpenGroup(prev => prev === id ? null : id);
   };
+
+  // Close flyout when clicking outside
+  useEffect(() => {
+    if (!flyoutGroup) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-flyout]') && !target.closest('[data-group-btn]')) {
+        setFlyoutGroup(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [flyoutGroup]);
 
   const initials = user?.name
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -61,6 +161,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   const textCls = cn('transition-opacity', DURATION, isCollapsed ? 'opacity-0' : 'opacity-100');
 
   return (
+    <>
     <aside
       className="fixed inset-y-0 left-0 z-40 hidden lg:flex flex-col bg-sidebar border-r border-border overflow-hidden"
       style={{
@@ -112,8 +213,8 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
       </div>
 
       <div
-        className="flex flex-col flex-1 min-h-0"
-        style={{ width: EXPANDED_W, minWidth: EXPANDED_W }}
+        className="flex flex-col flex-1 min-h-0 transition-all duration-200"
+        style={{ width: isCollapsed ? COLLAPSED_W : EXPANDED_W, minWidth: isCollapsed ? COLLAPSED_W : EXPANDED_W }}
       >
         <div className={cn(
           'shrink-0 overflow-hidden transition-all', DURATION,
@@ -124,67 +225,133 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3">
-          <nav className="py-2 space-y-0.5">
-            {menuGroups.map(group => {
-              const isOpen = openGroup === group.id;
-              const Icon = group.icon;
+        {/* ── Arama Barı ── */}
+        <div className={cn(
+          'shrink-0 overflow-hidden transition-all', DURATION,
+          isCollapsed ? 'max-h-0 py-0 px-0 opacity-0' : 'max-h-12 px-3 pt-2 pb-1 opacity-100'
+        )}>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Menüde ara..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="h-8 w-full rounded-md border border-border/60 bg-muted/40 pl-8 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50 focus:bg-background transition-colors"
+            />
+          </div>
+        </div>
 
-              return (
-                <div key={group.id} className="mb-1">
-                  <button
-                    onClick={() => toggleGroup(group.id)}
-                    title={group.label}
-                    className={cn(
-                      'group flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
-                      isOpen && isCollapsed
-                        ? 'bg-primary/10 text-primary shadow-sm'
-                        : isOpen && !isCollapsed
-                          ? 'bg-primary/10 text-primary'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                  >
-                    <Icon className="h-[18px] w-[18px] shrink-0" />
-                    <span className={cn('flex-1 text-left truncate', textCls)}>
-                      {group.label}
-                    </span>
-                    <ChevronRight
+        <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", isCollapsed ? "px-2" : "px-3")}>
+          <nav className={cn("py-2 space-y-0.5", isCollapsed && "flex flex-col items-center")}>
+            {search.trim() ? (
+              /* Arama sonuçları — düz liste */
+              (() => {
+                const q = search.trim().toLocaleLowerCase('tr-TR');
+                const results = menuGroups.flatMap(group =>
+                  group.children
+                    .filter(c => c.label.toLocaleLowerCase('tr-TR').includes(q))
+                    .map(c => ({ ...c, groupLabel: group.label }))
+                );
+                return results.length === 0 ? (
+                  <p className="px-3 py-4 text-[13px] text-muted-foreground/60 text-center">
+                    Sonuç bulunamadı
+                  </p>
+                ) : (
+                  results.map(child => {
+                    const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                    return (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        end={child.to === '/'}
+                        onClick={() => setSearch('')}
+                        className={({ isActive }) =>
+                          cn(
+                            'flex flex-col rounded-md px-3 py-2 text-[13px] transition-all duration-150',
+                            isDead
+                              ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                              : isActive
+                                ? 'text-primary font-semibold bg-primary/5'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          )
+                        }
+                      >
+                        <span className="font-medium">{child.label}</span>
+                        <span className="text-[11px] text-muted-foreground/60">{child.groupLabel}</span>
+                      </NavLink>
+                    );
+                  })
+                );
+              })()
+            ) : (
+              /* Normal gruplu görünüm */
+              menuGroups.map(group => {
+                const isOpen = openGroup === group.id;
+                const Icon = group.icon;
+
+                return (
+                  <div key={group.id} className="mb-1">
+                    <button
+                      ref={el => { groupBtnRefs.current[group.id] = el; }}
+                      data-group-btn
+                      onClick={() => toggleGroup(group.id)}
+                      title={group.label}
                       className={cn(
-                        'h-4 w-4 shrink-0 transition-all', DURATION,
-                        isCollapsed ? 'opacity-0' : isOpen ? 'rotate-90 opacity-100' : 'opacity-50'
+                        'group flex items-center rounded-md text-sm font-medium transition-colors duration-150',
+                        isCollapsed
+                          ? cn('w-10 h-10 justify-center',
+                              (isOpen || flyoutGroup === group.id) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')
+                          : cn('w-full gap-3 px-3 py-2',
+                              isOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')
                       )}
-                    />
-                  </button>
+                    >
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      {!isCollapsed && (
+                        <>
+                          <span className="flex-1 text-left truncate">
+                            {group.label}
+                          </span>
+                          <ChevronRight
+                            className={cn(
+                              'h-4 w-4 shrink-0 transition-transform', DURATION,
+                              isOpen ? 'rotate-90' : 'opacity-50'
+                            )}
+                          />
+                        </>
+                      )}
+                    </button>
 
-                  {isOpen && !isCollapsed && (
-                    <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
-                      {group.children.map(child => {
-                        const isDead = !IMPLEMENTED_ROUTES.has(child.to);
-                        return (
-                          <NavLink
-                            key={child.to}
-                            to={child.to}
-                            end={child.to === '/'}
-                            className={({ isActive }) =>
-                              cn(
-                                'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
-                                isDead
-                                  ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
-                                  : isActive
-                                    ? 'text-primary font-semibold bg-primary/5'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                              )
-                            }
-                          >
-                            {child.label}
-                          </NavLink>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    {isOpen && !isCollapsed && (
+                      <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
+                        {group.children.map(child => {
+                          const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                          return (
+                            <NavLink
+                              key={child.to}
+                              to={child.to}
+                              end={child.to === '/'}
+                              className={({ isActive }) =>
+                                cn(
+                                  'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
+                                  isDead
+                                    ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                                    : isActive
+                                      ? 'text-primary font-semibold bg-primary/5'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                )
+                              }
+                            >
+                              {child.label}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </nav>
         </div>
 
@@ -212,5 +379,47 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
         </div>
       </div>
     </aside>
+
+      {/* Flyout portal — rendered outside sidebar to avoid overflow clipping */}
+      {isCollapsed && flyoutGroup && (() => {
+        const group = menuGroups.find(g => g.id === flyoutGroup);
+        if (!group) return null;
+        return createPortal(
+          <div
+            data-flyout
+            className="fixed z-[60] w-56 bg-card border rounded-lg shadow-xl py-2 animate-in fade-in-0 zoom-in-95 duration-150"
+            style={{ top: flyoutPos.top, left: flyoutPos.left }}
+          >
+            <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
+            <div className="max-h-80 overflow-y-auto">
+              {group.children.map(child => {
+                const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                return (
+                  <NavLink
+                    key={child.to}
+                    to={child.to}
+                    end={child.to === '/'}
+                    onClick={() => setFlyoutGroup(null)}
+                    className={({ isActive }) =>
+                      cn(
+                        'block px-3 py-1.5 text-[13px] transition-colors duration-150',
+                        isDead
+                          ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                          : isActive
+                            ? 'text-primary font-semibold bg-primary/5'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      )
+                    }
+                  >
+                    {child.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
+    </>
   );
 }
