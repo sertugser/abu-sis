@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class FacultyClassroomEvaluator : IConstraintEvaluator
+public sealed class FacultyClassroomEvaluator : IConstraintEvaluator
 {
     public string Code => "H10";
     public string Name => "Fakülte Derslik Ataması";

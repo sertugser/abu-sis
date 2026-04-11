@@ -3,7 +3,7 @@ using SIS.Application.Scheduling.DTOs;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class InstructorConflictEvaluator : IConstraintEvaluator
+public sealed class InstructorConflictEvaluator : IConstraintEvaluator
 {
     public string Code => "H2";
     public string Name => "Öğretim Üyesi Çakışması";

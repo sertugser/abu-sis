@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class CorequisiteEvaluator : IConstraintEvaluator
+public sealed class CorequisiteEvaluator : IConstraintEvaluator
 {
     public string Code => "H11";
     public string Name => "Eşkoşul Uyumu";

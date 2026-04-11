@@ -7,7 +7,7 @@ namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 /// H5: Aynı bölüm/yıl öğrencilerinin alabileceği dersler aynı slot'ta olamaz.
 /// BUG FIX B18: Elective courses are now included in the check (not just compulsory).
 /// </summary>
-internal sealed class CurriculumConflictEvaluator : IConstraintEvaluator
+public sealed class CurriculumConflictEvaluator : IConstraintEvaluator
 {
     public string Code => "H5";
     public string Name => "Müfredat Çakışması";

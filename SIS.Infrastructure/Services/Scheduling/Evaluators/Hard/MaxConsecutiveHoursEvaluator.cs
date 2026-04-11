@@ -3,7 +3,7 @@ using SIS.Application.Scheduling.DTOs;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class MaxConsecutiveHoursEvaluator : IConstraintEvaluator
+public sealed class MaxConsecutiveHoursEvaluator : IConstraintEvaluator
 {
     public string Code => "H15";
     public string Name => "Maksimum Ardışık Ders Saati";

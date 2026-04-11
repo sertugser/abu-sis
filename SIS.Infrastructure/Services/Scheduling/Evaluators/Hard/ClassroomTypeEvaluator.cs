@@ -4,7 +4,7 @@ using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class ClassroomTypeEvaluator : IConstraintEvaluator
+public sealed class ClassroomTypeEvaluator : IConstraintEvaluator
 {
     public string Code => "H4";
     public string Name => "Derslik Tipi Uyumu";

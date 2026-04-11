@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class SlotCongestionEvaluator : IConstraintEvaluator
+public sealed class SlotCongestionEvaluator : IConstraintEvaluator
 {
     public string Code => "S3";
     public string Name => "Slot Yığılması";

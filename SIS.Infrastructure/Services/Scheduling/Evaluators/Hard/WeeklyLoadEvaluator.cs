@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class WeeklyLoadEvaluator : IConstraintEvaluator
+public sealed class WeeklyLoadEvaluator : IConstraintEvaluator
 {
     public string Code => "H-WL";
     public string Name => "Haftalık Ders Yükü";

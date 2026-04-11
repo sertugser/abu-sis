@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class EarlyLateEvaluator : IConstraintEvaluator
+public sealed class EarlyLateEvaluator : IConstraintEvaluator
 {
     public string Code => "S9";
     public string Name => "Erken Sabah / Geç Akşam";

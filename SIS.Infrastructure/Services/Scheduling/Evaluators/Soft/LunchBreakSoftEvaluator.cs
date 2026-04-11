@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class LunchBreakSoftEvaluator : IConstraintEvaluator
+public sealed class LunchBreakSoftEvaluator : IConstraintEvaluator
 {
     public string Code => "S5";
     public string Name => "Öğle Arası Tercihi";

@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class WeekdayBalanceEvaluator : IConstraintEvaluator
+public sealed class WeekdayBalanceEvaluator : IConstraintEvaluator
 {
     public string Code => "S12";
     public string Name => "Hafta İçi Denge";

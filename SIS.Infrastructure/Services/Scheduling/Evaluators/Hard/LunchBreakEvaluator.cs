@@ -3,7 +3,7 @@ using SIS.Application.Scheduling.DTOs;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class LunchBreakEvaluator : IConstraintEvaluator
+public sealed class LunchBreakEvaluator : IConstraintEvaluator
 {
     public string Code => "H13";
     public string Name => "Öğle Arası Koruması";

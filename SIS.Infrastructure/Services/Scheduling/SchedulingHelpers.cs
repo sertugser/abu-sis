@@ -3,7 +3,7 @@ using SIS.Domain.Entities;
 
 namespace SIS.Infrastructure.Services;
 
-internal static class SchedulingHelpers
+public static class SchedulingHelpers
 {
     public static List<TimeBlock> GetOverlapSlots(IReadOnlyList<TimeBlock> firstSchedule, IReadOnlyList<TimeBlock> secondSchedule)
     {

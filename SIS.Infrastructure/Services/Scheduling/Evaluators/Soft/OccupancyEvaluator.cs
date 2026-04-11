@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class OccupancyEvaluator : IConstraintEvaluator
+public sealed class OccupancyEvaluator : IConstraintEvaluator
 {
     public string Code => "S1";
     public string Name => "Derslik Doluluk Oranı";

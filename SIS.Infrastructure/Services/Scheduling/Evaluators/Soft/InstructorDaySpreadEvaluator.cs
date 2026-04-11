@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class InstructorDaySpreadEvaluator : IConstraintEvaluator
+public sealed class InstructorDaySpreadEvaluator : IConstraintEvaluator
 {
     public string Code => "S8";
     public string Name => "Öğretim Üyesi Gün Dağılımı";

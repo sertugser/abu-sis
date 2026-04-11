@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class StudentGapEvaluator : IConstraintEvaluator
+public sealed class StudentGapEvaluator : IConstraintEvaluator
 {
     public string Code => "S7";
     public string Name => "Öğrenci Boşluk Minimizasyonu";

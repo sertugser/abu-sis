@@ -3,7 +3,7 @@ using SIS.Application.Scheduling.DTOs;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class DailyLoadEvaluator : IConstraintEvaluator
+public sealed class DailyLoadEvaluator : IConstraintEvaluator
 {
     public string Code => "H-DL";
     public string Name => "Günlük Ders Yükü (9 saat)";

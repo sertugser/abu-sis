@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class CreditHourEvaluator : IConstraintEvaluator
+public sealed class CreditHourEvaluator : IConstraintEvaluator
 {
     public string Code => "H12";
     public string Name => "Kredi-Saat Uyumu";

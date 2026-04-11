@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class NoDayOffEvaluator : IConstraintEvaluator
+public sealed class NoDayOffEvaluator : IConstraintEvaluator
 {
     public string Code => "H-DO";
     public string Name => "Boş Gün Kontrolü";

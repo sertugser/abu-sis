@@ -3,7 +3,7 @@ using SIS.Application.Scheduling.DTOs;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class SameCourseSectionEvaluator : IConstraintEvaluator
+public sealed class SameCourseSectionEvaluator : IConstraintEvaluator
 {
     public string Code => "H8";
     public string Name => "Aynı Ders Şube Çakışması";

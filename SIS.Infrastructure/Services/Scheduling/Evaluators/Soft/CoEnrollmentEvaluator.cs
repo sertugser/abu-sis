@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class CoEnrollmentEvaluator : IConstraintEvaluator
+public sealed class CoEnrollmentEvaluator : IConstraintEvaluator
 {
     public string Code => "S4";
     public string Name => "Birlikte Alınan Ders Çakışması";

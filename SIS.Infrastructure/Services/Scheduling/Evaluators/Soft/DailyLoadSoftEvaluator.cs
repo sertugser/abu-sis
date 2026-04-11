@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
-internal sealed class DailyLoadSoftEvaluator : IConstraintEvaluator
+public sealed class DailyLoadSoftEvaluator : IConstraintEvaluator
 {
     public string Code => "S2";
     public string Name => "Günlük Yoğunluk Dengesi";

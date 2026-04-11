@@ -2,7 +2,7 @@ using SIS.Application.Scheduling.Constraints;
 
 namespace SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 
-internal sealed class CapacityEvaluator : IConstraintEvaluator
+public sealed class CapacityEvaluator : IConstraintEvaluator
 {
     public string Code => "H3";
     public string Name => "Kapasite Kontrolü";
