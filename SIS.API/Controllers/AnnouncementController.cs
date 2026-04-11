@@ -12,13 +12,15 @@ public class AnnouncementController : ControllerBase
 {
     private readonly IMemoryCache _cache;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<AnnouncementController> _logger;
     private const string CacheKey = "announcements";
     private const string SourceUrl = "https://ankarabilim.edu.tr/muhendislik-ve-mimarlik-fakultesi/duyurular";
 
-    public AnnouncementController(IMemoryCache cache, IHttpClientFactory httpClientFactory)
+    public AnnouncementController(IMemoryCache cache, IHttpClientFactory httpClientFactory, ILogger<AnnouncementController> logger)
     {
         _cache = cache;
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -34,8 +36,9 @@ public class AnnouncementController : ControllerBase
             _cache.Set(CacheKey, announcements, TimeSpan.FromHours(6));
             return Ok(announcements);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Duyuru çekme başarısız");
             return Ok(new List<AnnouncementDto>());
         }
     }

@@ -5,11 +5,12 @@ using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
 
-public class EnrollmentForecastService : IEnrollmentForecastService
+public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollmentForecastCacheInvalidator
 {
     private const string ForecastContextCacheKey = "ForecastContext";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
@@ -17,12 +18,14 @@ public class EnrollmentForecastService : IEnrollmentForecastService
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly IMemoryCache _cache;
+    private readonly ISystemConfigProvider _config;
 
-    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache)
+    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, ISystemConfigProvider? config = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _cache = cache;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     public async Task<CourseDemandForecastDto?> GetCourseDemandForecastAsync(int courseId)
@@ -36,6 +39,11 @@ public class EnrollmentForecastService : IEnrollmentForecastService
 
         var forecastContext = await GetOrBuildForecastContextAsync();
         return BuildCourseDemandForecast(forecastContext, course);
+    }
+
+    public void InvalidateForecastContext()
+    {
+        _cache.Remove(ForecastContextCacheKey);
     }
 
     public async Task<DepartmentForecastSummaryDto?> GetDepartmentSummaryAsync(int departmentId)
@@ -129,6 +137,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
             .AsNoTracking()
             .Include(student => student.StudentPrograms)
                 .ThenInclude(program => program.Program)
+                    .ThenInclude(program => program.Department)
             .Where(student => student.Status == StudentStatus.Active && !student.HasFinancialBlock)
             .ToListAsync();
 
@@ -239,6 +248,26 @@ public class EnrollmentForecastService : IEnrollmentForecastService
 
         var termsById = allTerms.ToDictionary(t => t.Id);
 
+        var approvalFeedback = await _context.CourseSectionApprovals
+            .AsNoTracking()
+            .Where(approval =>
+                approval.Status == SectionApprovalStatus.Approved
+                && approval.ApprovedSectionCount.HasValue
+                && approval.ApprovedSectionCount.Value > 0)
+            .Select(approval => new ApprovalFeedbackRecord
+            {
+                CourseId = approval.CourseId,
+                TermId = approval.TermId,
+                RecommendedSectionCount = approval.RecommendedSectionCount,
+                ApprovedSectionCount = approval.ApprovedSectionCount!.Value
+            })
+            .ToListAsync();
+
+        var approvalFeedbackByCourse = approvalFeedback
+            .Where(record => activeTerm == null || record.TermId != activeTerm.Id)
+            .GroupBy(record => record.CourseId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
         var cgpaCache = new Dictionary<int, decimal>();
         var studentSnapshots = new List<StudentForecastSnapshot>();
 
@@ -281,7 +310,8 @@ public class EnrollmentForecastService : IEnrollmentForecastService
                     .ToHashSet(),
             HistoricalEnrollmentsByCourse = historicalByCourseThenTerm,
             SectionCountByCourseTerm = sectionCountByCourseTerm,
-            GlobalNotes = BuildGlobalNotes(activeTerm, activeStudents.Count, activeMainPrograms.Count)
+            GlobalNotes = BuildGlobalNotes(activeTerm, activeStudents.Count, activeMainPrograms.Count),
+            ApprovalFeedbackByCourse = approvalFeedbackByCourse
         };
     }
 
@@ -301,7 +331,10 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         IDictionary<int, decimal> cgpaCache)
     {
         var cgpa = await GetEffectiveCgpaAsync(student, cgpaCache);
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa);
+        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
+        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
+        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
+        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
         var completedSemesters = Math.Max(0, student.CompletedSemesters);
         var currentSemester = completedSemesters + 1;
 
@@ -363,9 +396,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         reservedEcts += SumCourseEcts(failedCourseIds.Except(currentTermSelectedCourseIds), courses);
         var remainingEcts = Math.Max(0, ectsLimit - reservedEcts);
 
-        var regularCandidates = new List<CourseCandidate>();
-        var behindScheduleCandidates = new List<CourseCandidate>();
-        var upperCandidates = new List<CourseCandidate>();
+        var courseCandidates = new List<CourseCandidate>();
+
+        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m);
 
         if (curriculumCoursesByCurriculumId.TryGetValue(activeProgram.CurriculumId, out var curriculumCourses))
         {
@@ -386,7 +419,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
                 if (!ArePrerequisitesMet(course.Id, passedCourseIds, prerequisitesByCourseId, equivalentCourseIdsByCourseId))
                     continue;
 
-                if (RegistrationRulePolicy.HasLowCgpaRestriction(cgpa, completedSemesters)
+                if (RegistrationRulePolicy.HasLowCgpaRestriction(cgpa, completedSemesters, retentionThreshold)
                     && !RegistrationRulePolicy.IsAllowedUnderLowCgpaRestriction(
                         course,
                         curriculumCourse.SuggestedSemester,
@@ -402,25 +435,27 @@ public class EnrollmentForecastService : IEnrollmentForecastService
                     course.Id,
                     course.Ects,
                     curriculumCourse.SuggestedSemester,
-                    course.Code);
+                    course.Code,
+                    curriculumCourse.SuggestedSemester > currentSemester
+                        ? CourseCandidateBucket.UpperCourse
+                        : curriculumCourse.SuggestedSemester < currentSemester
+                            ? CourseCandidateBucket.BehindSchedule
+                            : CourseCandidateBucket.Regular,
+                    CalculateCandidatePriority(curriculumCourse.SuggestedSemester, currentSemester, cgpa));
 
-                if (curriculumCourse.SuggestedSemester > currentSemester)
-                    upperCandidates.Add(candidate);
-                else if (curriculumCourse.SuggestedSemester < currentSemester)
-                    behindScheduleCandidates.Add(candidate);
-                else
-                    regularCandidates.Add(candidate);
+                courseCandidates.Add(candidate);
             }
         }
 
-        // Track ECTS-limited courses before selecting
-        var ectsBeforeRegular = remainingEcts;
-        SelectCandidatesWithinEctsLimit(regularCandidates, regularCourseIds, ref remainingEcts);
-        SelectCandidatesWithinEctsLimit(behindScheduleCandidates, behindScheduleCourseIds, ref remainingEcts);
-        SelectCandidatesWithinEctsLimit(upperCandidates, upperCourseIds, ref remainingEcts);
+        SelectCandidatesWithinEctsLimit(
+            courseCandidates,
+            regularCourseIds,
+            behindScheduleCourseIds,
+            upperCourseIds,
+            ref remainingEcts);
 
         // Track candidates that were eligible but couldn't fit
-        foreach (var candidate in regularCandidates.Concat(behindScheduleCandidates).Concat(upperCandidates))
+        foreach (var candidate in courseCandidates)
         {
             if (!regularCourseIds.Contains(candidate.CourseId)
                 && !behindScheduleCourseIds.Contains(candidate.CourseId)
@@ -442,6 +477,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         return new StudentForecastSnapshot
         {
             StudentId = student.Id,
+            DepartmentId = activeProgram.Program?.DepartmentId ?? 0,
+            DepartmentName = activeProgram.Program?.Department?.Name ?? string.Empty,
+            ProgramName = activeProgram.Program?.Name ?? string.Empty,
             RetakeCourseIds = failedCourseIds,
             RetakeFFCourseIds = retakeFFIds,
             RetakeNACourseIds = retakeNAIds,
@@ -510,16 +548,23 @@ public class EnrollmentForecastService : IEnrollmentForecastService
 
         var ruleBasedTotal = retakeStudents.Count + regularStudents.Count
             + behindScheduleStudents.Count + upperStudents.Count;
+        var predictedStudentIds = retakeStudents
+            .Concat(regularStudents)
+            .Concat(behindScheduleStudents)
+            .Concat(upperStudents)
+            .ToHashSet();
 
         // --- Historical analysis ---
         var historicalData = BuildHistoricalEnrollments(context, course.Id);
         var historicalCounts = historicalData.Select(h => h.ActualEnrollment).ToList();
+        var comparableHistoricalData = BuildComparableHistoricalEnrollments(context, historicalData);
+        var comparableHistoricalCounts = comparableHistoricalData.Select(h => h.ActualEnrollment).ToList();
 
         // --- Hybrid blending ---
-        var blendedPrediction = BlendPrediction(ruleBasedTotal, historicalCounts);
+        var blendedPrediction = BlendPrediction(ruleBasedTotal, historicalCounts, comparableHistoricalCounts);
 
         // --- Trend adjustment ---
-        var finalPrediction = ApplyTrendAdjustment(blendedPrediction, historicalCounts);
+        var finalPrediction = ApplyTrendAdjustment(blendedPrediction, historicalCounts, comparableHistoricalCounts);
 
         // --- Confidence interval ---
         var confidence = CalculateConfidence(finalPrediction, historicalCounts);
@@ -527,8 +572,12 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         // --- Section distribution ---
         var capacityRecommendation = BuildCapacityRecommendation(context, course);
         var recommendedSections = CalculateRecommendedSectionCount(finalPrediction, capacityRecommendation.EffectiveCapacity);
+        var approvalFeedback = ApplyApprovalFeedback(context, course.Id, recommendedSections, finalPrediction);
+        recommendedSections = approvalFeedback.AdjustedSectionCount;
         var sectionDistribution = BuildSectionDistribution(
             finalPrediction, recommendedSections, capacityRecommendation.EffectiveCapacity);
+        var crossDepartmentDemand = BuildCrossDepartmentDemand(context, course, predictedStudentIds);
+        var comparableTermEnrollment = comparableHistoricalData.LastOrDefault()?.ActualEnrollment;
 
         // --- Notes ---
         var notes = new List<string>(context.GlobalNotes);
@@ -539,14 +588,20 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         if (!context.ActiveTermSectionCourseIds.Contains(course.Id))
             notes.Add("Bu ders icin aktif donemde section bulunmuyor; talep latent ihtiyac olarak hesaplandi.");
 
-        if (historicalCounts.Count >= 3)
-            notes.Add($"Tahmin, {historicalCounts.Count} donemlik gecmis veri ile harmanlanarak uretildi (agirlik: %60 kural, %40 tarihsel).");
+        if (comparableHistoricalCounts.Count >= 2)
+            notes.Add($"Tahmin, guz/bahar mevsimselligi korunarak {comparableHistoricalCounts.Count} benzer donem verisiyle agirliklandirildi.");
+        else if (historicalCounts.Count >= 3)
+            notes.Add($"Tahmin, {historicalCounts.Count} donemlik gecmis veri ile harmanlanarak uretildi (agirlik: %55 kural, %45 tarihsel).");
         else if (historicalCounts.Count >= 1)
-            notes.Add($"Tahmin, {historicalCounts.Count} donemlik gecmis veri ile harmanlanarak uretildi (agirlik: %80 kural, %20 tarihsel).");
+            notes.Add($"Tahmin, {historicalCounts.Count} donemlik gecmis veri ile harmanlanarak uretildi (agirlik: %75 kural, %25 tarihsel).");
         else
             notes.Add("Gecmis donem verisi bulunamadigi icin tahmin tamamen kural tabanli uretildi.");
 
+        if (crossDepartmentDemand.Count > 0)
+            notes.Add($"Diger bolumlerden {crossDepartmentDemand.Sum(item => item.EstimatedStudentCount)} ogrencilik gercek talep tespit edildi.");
+
         notes.AddRange(capacityRecommendation.Notes);
+        notes.AddRange(approvalFeedback.Notes);
 
         return new CourseDemandForecastDto
         {
@@ -559,6 +614,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
             TotalPredictedDemand = finalPrediction,
             RecommendedSectionCount = recommendedSections,
             CapacityBasis = capacityRecommendation.CapacityBasis,
+            ComparableTermEnrollment = comparableTermEnrollment,
             Notes = notes.Distinct().ToList(),
 
             // Enhanced fields
@@ -574,7 +630,8 @@ public class EnrollmentForecastService : IEnrollmentForecastService
             },
             HistoricalEnrollments = historicalData,
             Confidence = confidence,
-            SectionDistribution = sectionDistribution
+            SectionDistribution = sectionDistribution,
+            CrossDepartmentDemand = crossDepartmentDemand
         };
     }
 
@@ -608,36 +665,49 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         return results;
     }
 
-    private static int BlendPrediction(int ruleBasedTotal, List<int> historicalCounts)
+    private static int BlendPrediction(int ruleBasedTotal, List<int> historicalCounts, List<int> comparableHistoricalCounts)
     {
         if (historicalCounts.Count == 0)
             return ruleBasedTotal;
 
         var historicalAvg = historicalCounts.Average();
+        var seasonalAvg = comparableHistoricalCounts.Count > 0
+            ? comparableHistoricalCounts.Average()
+            : historicalAvg;
+        var historicalSignal = comparableHistoricalCounts.Count switch
+        {
+            >= 2 => (seasonalAvg * 0.70) + (historicalAvg * 0.30),
+            1 => (seasonalAvg * 0.55) + (historicalAvg * 0.45),
+            _ => historicalAvg
+        };
 
         double blended;
         if (historicalCounts.Count >= 3)
-            blended = 0.60 * ruleBasedTotal + 0.40 * historicalAvg;
+            blended = 0.55 * ruleBasedTotal + 0.45 * historicalSignal;
         else
-            blended = 0.80 * ruleBasedTotal + 0.20 * historicalAvg;
+            blended = 0.75 * ruleBasedTotal + 0.25 * historicalSignal;
 
         return (int)Math.Round(blended);
     }
 
-    private static int ApplyTrendAdjustment(int prediction, List<int> historicalCounts)
+    private static int ApplyTrendAdjustment(int prediction, List<int> historicalCounts, List<int> comparableHistoricalCounts)
     {
         if (historicalCounts.Count < 2)
             return prediction;
 
-        var recentCount = Math.Min(2, historicalCounts.Count);
-        var recent = historicalCounts.TakeLast(recentCount).Average();
-        var olderItems = historicalCounts.Take(historicalCounts.Count - recentCount).Select(x => (double)x).ToList();
+        var trendSource = comparableHistoricalCounts.Count >= 2
+            ? comparableHistoricalCounts
+            : historicalCounts;
+
+        var recentCount = Math.Min(2, trendSource.Count);
+        var recent = trendSource.TakeLast(recentCount).Average();
+        var olderItems = trendSource.Take(trendSource.Count - recentCount).Select(x => (double)x).ToList();
         var older = olderItems.Count > 0 ? olderItems.Average() : recent;
 
         if (older <= 0)
             return prediction;
 
-        var trendFactor = Math.Clamp(recent / older, 0.80, 1.20);
+        var trendFactor = Math.Clamp(recent / older, 0.85, 1.15);
         return (int)Math.Round(prediction * trendFactor);
     }
 
@@ -894,13 +964,45 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         return true;
     }
 
+    private static int CalculateCandidatePriority(int suggestedSemester, int currentSemester, decimal cgpa)
+    {
+        var semesterGap = currentSemester - suggestedSemester;
+        var priority = semesterGap switch
+        {
+            >= 2 => 340 + (semesterGap * 15),
+            1 => 320,
+            0 => 300,
+            -1 => 220,
+            _ => 180
+        };
+
+        if (semesterGap > 0 && cgpa < 2.0m)
+            priority += 20;
+
+        if (semesterGap < 0)
+        {
+            priority += cgpa switch
+            {
+                >= 3.0m => 35,
+                >= 2.5m => 15,
+                _ => 0
+            };
+        }
+
+        return priority;
+    }
+
     private static void SelectCandidatesWithinEctsLimit(
         IEnumerable<CourseCandidate> candidates,
-        ISet<int> selectedCourseIds,
+        ISet<int> regularCourseIds,
+        ISet<int> behindScheduleCourseIds,
+        ISet<int> upperCourseIds,
         ref int remainingEcts)
     {
         foreach (var candidate in candidates
-                     .OrderBy(candidate => candidate.SuggestedSemester)
+                     .OrderByDescending(candidate => candidate.Priority)
+                     .ThenBy(candidate => candidate.Ects)
+                     .ThenBy(candidate => candidate.SuggestedSemester)
                      .ThenBy(candidate => candidate.CourseCode)
                      .ThenBy(candidate => candidate.CourseId))
         {
@@ -910,7 +1012,19 @@ public class EnrollmentForecastService : IEnrollmentForecastService
             if (candidate.Ects > remainingEcts)
                 continue;
 
-            selectedCourseIds.Add(candidate.CourseId);
+            switch (candidate.Bucket)
+            {
+                case CourseCandidateBucket.BehindSchedule:
+                    behindScheduleCourseIds.Add(candidate.CourseId);
+                    break;
+                case CourseCandidateBucket.UpperCourse:
+                    upperCourseIds.Add(candidate.CourseId);
+                    break;
+                default:
+                    regularCourseIds.Add(candidate.CourseId);
+                    break;
+            }
+
             remainingEcts -= candidate.Ects;
         }
     }
@@ -977,6 +1091,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         public required Dictionary<int, Dictionary<int, int>> HistoricalEnrollmentsByCourse { get; init; }
         public required Dictionary<(int CourseId, int TermId), int> SectionCountByCourseTerm { get; init; }
         public required List<string> GlobalNotes { get; init; }
+        public required Dictionary<int, List<ApprovalFeedbackRecord>> ApprovalFeedbackByCourse { get; init; }
 
         public HashSet<int> PredictedDemandCourseIds =>
             StudentSnapshots
@@ -990,6 +1105,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService
     private sealed class StudentForecastSnapshot
     {
         public int StudentId { get; init; }
+        public int DepartmentId { get; init; }
+        public string DepartmentName { get; init; } = string.Empty;
+        public string ProgramName { get; init; } = string.Empty;
         public HashSet<int> RetakeCourseIds { get; init; } = new();
         public HashSet<int> RetakeFFCourseIds { get; init; } = new();
         public HashSet<int> RetakeNACourseIds { get; init; } = new();
@@ -1004,7 +1122,16 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         int CourseId,
         int Ects,
         int SuggestedSemester,
-        string CourseCode);
+        string CourseCode,
+        CourseCandidateBucket Bucket,
+        int Priority);
+
+    private enum CourseCandidateBucket
+    {
+        Regular,
+        BehindSchedule,
+        UpperCourse
+    }
 
     private sealed class CapacityRecommendation
     {
@@ -1018,5 +1145,147 @@ public class EnrollmentForecastService : IEnrollmentForecastService
         public int CourseId { get; init; }
         public int TermId { get; init; }
         public int EnrollmentCount { get; init; }
+    }
+
+    private sealed class ApprovalFeedbackRecord
+    {
+        public int CourseId { get; init; }
+        public int TermId { get; init; }
+        public int RecommendedSectionCount { get; init; }
+        public int ApprovedSectionCount { get; init; }
+    }
+
+    private sealed class ApprovalFeedbackResult
+    {
+        public int AdjustedSectionCount { get; init; }
+        public List<string> Notes { get; } = new();
+
+        public static ApprovalFeedbackResult NoChange(int sectionCount) => new()
+        {
+            AdjustedSectionCount = sectionCount
+        };
+    }
+    private static List<HistoricalEnrollmentDto> BuildComparableHistoricalEnrollments(
+        ForecastContextData context,
+        List<HistoricalEnrollmentDto> historicalData)
+    {
+        if (context.ActiveTerm == null)
+            return new List<HistoricalEnrollmentDto>(historicalData);
+
+        return historicalData
+            .Where(item =>
+                context.TermsById.TryGetValue(item.TermId, out var term)
+                && term.Semester == context.ActiveTerm.Semester)
+            .ToList();
+    }
+
+    private static List<CrossDepartmentDemandDto> BuildCrossDepartmentDemand(
+        ForecastContextData context,
+        Course course,
+        IEnumerable<int> predictedStudentIds)
+    {
+        var owningDepartmentId = course.DepartmentId;
+        if (!owningDepartmentId.HasValue)
+            return new List<CrossDepartmentDemandDto>();
+
+        var predictedSet = predictedStudentIds.ToHashSet();
+        if (predictedSet.Count == 0)
+            return new List<CrossDepartmentDemandDto>();
+
+        return context.StudentSnapshots
+            .Where(snapshot =>
+                predictedSet.Contains(snapshot.StudentId)
+                && snapshot.DepartmentId > 0
+                && snapshot.DepartmentId != owningDepartmentId.Value)
+            .GroupBy(snapshot => new
+            {
+                snapshot.DepartmentId,
+                snapshot.DepartmentName,
+                snapshot.ProgramName
+            })
+            .Select(group => new CrossDepartmentDemandDto
+            {
+                DepartmentId = group.Key.DepartmentId,
+                DepartmentName = group.Key.DepartmentName,
+                ProgramName = group.Key.ProgramName,
+                EstimatedStudentCount = group
+                    .Select(snapshot => snapshot.StudentId)
+                    .Distinct()
+                    .Count()
+            })
+            .OrderByDescending(item => item.EstimatedStudentCount)
+            .ThenBy(item => item.DepartmentName)
+            .ThenBy(item => item.ProgramName)
+            .ToList();
+    }
+
+    private static ApprovalFeedbackResult ApplyApprovalFeedback(
+        ForecastContextData context,
+        int courseId,
+        int recommendedSectionCount,
+        int totalPredictedDemand)
+    {
+        if (recommendedSectionCount <= 0 || totalPredictedDemand <= 0)
+            return ApprovalFeedbackResult.NoChange(recommendedSectionCount);
+
+        if (!context.ApprovalFeedbackByCourse.TryGetValue(courseId, out var history) || history.Count == 0)
+            return ApprovalFeedbackResult.NoChange(recommendedSectionCount);
+
+        var weightedDeltas = new List<(double Weight, int Delta)>();
+
+        foreach (var record in history)
+        {
+            if (!context.TermsById.TryGetValue(record.TermId, out var term))
+                continue;
+
+            var delta = record.ApprovedSectionCount - record.RecommendedSectionCount;
+            if (delta == 0)
+                continue;
+
+            var weight = 1.0;
+            if (context.ActiveTerm != null)
+            {
+                if (term.Semester == context.ActiveTerm.Semester)
+                    weight *= 1.6;
+
+                var yearGap = Math.Max(0, context.ActiveTerm.Year - term.Year);
+                weight *= yearGap switch
+                {
+                    0 => 1.4,
+                    1 => 1.2,
+                    2 => 1.0,
+                    _ => 0.8
+                };
+            }
+
+            weightedDeltas.Add((weight, delta));
+        }
+
+        if (weightedDeltas.Count == 0)
+            return ApprovalFeedbackResult.NoChange(recommendedSectionCount);
+
+        var totalWeight = weightedDeltas.Sum(item => item.Weight);
+        var weightedDelta = weightedDeltas.Sum(item => item.Weight * item.Delta) / totalWeight;
+        var dampedDelta = weightedDelta >= 0
+            ? Math.Min(1.5, weightedDelta * 0.75)
+            : Math.Max(-1.0, weightedDelta * 0.50);
+        var roundedDelta = (int)Math.Round(dampedDelta, MidpointRounding.AwayFromZero);
+
+        if (roundedDelta == 0)
+            return ApprovalFeedbackResult.NoChange(recommendedSectionCount);
+
+        var adjusted = Math.Max(1, recommendedSectionCount + roundedDelta);
+        if (adjusted == recommendedSectionCount)
+            return ApprovalFeedbackResult.NoChange(recommendedSectionCount);
+
+        var note = roundedDelta > 0
+            ? $"Gecmis onay kararlarindaki yukari yonlu sapma nedeniyle onerilen sube sayisi {adjusted} olarak yukseltilmistir."
+            : $"Gecmis onay kararlarindaki asagi yonlu sapma nedeniyle onerilen sube sayisi {adjusted} olarak dengelenmistir.";
+
+        return new ApprovalFeedbackResult
+        {
+            AdjustedSectionCount = adjusted,
+            Notes = { note }
+        };
     }
 }

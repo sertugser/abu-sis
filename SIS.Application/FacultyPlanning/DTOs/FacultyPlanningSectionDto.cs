@@ -14,7 +14,6 @@ public class FacultyPlanningSectionDto
     public string? ClassroomType { get; set; }
     public int? InstructorId { get; set; }
     public string? InstructorName { get; set; }
-    public string ScheduleJson { get; set; } = "[]";
     public string ScheduleSummary { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public int TheoryHours { get; set; }
@@ -28,4 +27,13 @@ public class FacultyPlanningSectionPageDto
     public int TotalCount { get; set; }
     public int Page { get; set; }
     public int PageSize { get; set; }
+}
+
+public class FacultyPlanningTimeSlotDto
+{
+    public int Day { get; set; }
+    public int SlotOrder { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
 }

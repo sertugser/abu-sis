@@ -14,9 +14,12 @@ public static partial class SeedData
         await SeedAcademicStructureAsync(context);
         await SeedCoursesAsync(context);
         await SeedTermsAndClassroomsAsync(context);
+        await SeedCalendarEventsAsync(context);
         await SeedUsersAsync(context, userManager);
-        await SeedInstructorAvailabilitiesAsync(context);
-        await SeedRegistrationsAsync(context);
-        await SeedSectionSchedulesAsync(context);
+        await SeedRegistrationsAsync(context);    // Geçmiş dönem transkript verileri (aktif döneme dokunmaz)
+        // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı
+        await SeedTimeSlotsAsync(context);
+        await SeedSystemConfigAsync(context);
+        await SeedConstraintDefinitionsAsync(context);
     }
 }

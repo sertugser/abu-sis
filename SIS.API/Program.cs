@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SIS.Application.AcademicOperations.Services;
+using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -11,10 +13,12 @@ using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.AcademicLevel.Services;
+using SIS.Infrastructure.Services.Scheduling;
 using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.TermClosing.Services;
 using SIS.Application.FacultyPlanning.Services;
+using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -22,10 +26,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.AddScoped<SIS.API.Filters.SensitiveDataAccessFilter>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditInterceptor>();
 
 builder.Services.AddCors(options =>
 {
@@ -38,8 +45,11 @@ builder.Services.AddCors(options =>
 });
 
 // Add EF Core + PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.AddInterceptors(serviceProvider.GetRequiredService<AuditInterceptor>());
+});
 
 // Add Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
@@ -79,11 +89,19 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
+builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
+builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
-builder.Services.AddScoped<IEnrollmentForecastService, EnrollmentForecastService>();
+builder.Services.AddScoped<EnrollmentForecastService>();
+builder.Services.AddScoped<IEnrollmentForecastService>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
+builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
+builder.Services.AddSchedulingConstraints();
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
+builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
@@ -91,6 +109,16 @@ builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
 builder.Services.AddScoped<ITermClosingService, TermClosingService>();
+
+// Admin services
+builder.Services.AddScoped<IAdminUserService, AdminUserService>();
+builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
+builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
+builder.Services.AddScoped<IAdminTermService, AdminTermService>();
+builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
+builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
+builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
+builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 
 var app = builder.Build();
 
@@ -101,6 +129,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<SIS.API.Middleware.ErrorLoggingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
@@ -115,7 +144,6 @@ if (app.Environment.IsDevelopment())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
     await SeedData.SeedAsync(context, userManager, roleManager);
-    await SeedData.AssignInstructorCoursesAsync(context);
 }
 
 app.Run();

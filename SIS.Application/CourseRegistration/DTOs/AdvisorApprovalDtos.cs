@@ -6,11 +6,31 @@ public class PendingApprovalDto
     public string StudentNumber { get; set; } = string.Empty;
     public string StudentName { get; set; } = string.Empty;
     public decimal Cgpa { get; set; }
+    public decimal Sgpa { get; set; }
     public int CompletedSemesters { get; set; }
     public bool IsScholarshipStudent { get; set; }
     public List<PendingRegistrationItemDto> Registrations { get; set; } = new();
     public int TotalEcts { get; set; }
+    public int EctsLimit { get; set; }
     public DateTime SubmittedAt { get; set; }
+    public string PlanStatus { get; set; } = string.Empty;
+
+    // Alttan dersler (FF/NA/U)
+    public List<FailedCourseDto> FailedCourses { get; set; } = new();
+
+    // Müfredat özeti
+    public int CurriculumTotalCourses { get; set; }
+    public int CurriculumCompletedCourses { get; set; }
+    public int CurriculumTotalEcts { get; set; }
+    public int CurriculumCompletedEcts { get; set; }
+}
+
+public class FailedCourseDto
+{
+    public string CourseCode { get; set; } = string.Empty;
+    public string CourseName { get; set; } = string.Empty;
+    public string Grade { get; set; } = string.Empty;
+    public bool IsSelectedInPlan { get; set; }
 }
 
 public class PendingRegistrationItemDto

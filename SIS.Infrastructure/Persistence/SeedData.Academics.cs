@@ -10,7 +10,7 @@ public static partial class SeedData
     private static async Task SeedRolesAsync(RoleManager<IdentityRole<int>> roleManager)
     {
         string[] roles = { "Student", "Instructor", "AcademicAdvisor",
-                           "AdministrativeStaff", "DepartmentManager", "SystemAdministrator" };
+                           "AdministrativeStaff", "DepartmentManager", "Dean", "SystemAdministrator" };
         foreach (var role in roles)
         {
             if (!await roleManager.RoleExistsAsync(role))

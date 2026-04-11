@@ -10,8 +10,11 @@ public class CourseSectionApprovalDto
     public string CourseName { get; set; } = string.Empty;
     public int RecommendedSectionCount { get; set; }
     public int? ApprovedSectionCount { get; set; }
+    public int OpenedSectionCount { get; set; }
+    public int RemainingSectionCount { get; set; }
     public int PredictedDemand { get; set; }
     public SectionApprovalStatus Status { get; set; }
+    public string WorkflowStatus { get; set; } = "Pending";
     public string? Note { get; set; }
     public string? DecidedByUserName { get; set; }
     public DateTime CreatedAt { get; set; }

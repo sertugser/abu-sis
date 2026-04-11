@@ -73,7 +73,7 @@ public static partial class SeedData
                     UserId = user.Id,
                     DepartmentId = depts[deptCode],
                     Title = title,
-                    MaxWeeklyHours = 20
+                    MaxWeeklyHours = ResolveMaxWeeklyHours(title)
                 });
             }
         }
@@ -84,6 +84,9 @@ public static partial class SeedData
         await EnsureUserAsync(userManager, "hakan.caglar@ankarabilim.edu.tr", "Hakan", "Çağlar", "Ogretmen123!", "DepartmentManager");
         await EnsureUserAsync(userManager, "ayhan.akbas@ankarabilim.edu.tr", "Ayhan", "Akbaş", "Ogretmen123!", "DepartmentManager");
         await EnsureUserAsync(userManager, "yavuzselim.ozdemir@ankarabilim.edu.tr", "Yavuz Selim", "Özdemir", "Ogretmen123!", "DepartmentManager");
+
+        // Dean (also has Instructor role from above — faculty-level authority)
+        await EnsureUserAsync(userManager, "halimhaldun.goktas@ankarabilim.edu.tr", "Halim Haldun", "Göktaş", "Ogretmen123!", "Dean");
 
         // ============================================================
         // 3. STUDENTS (1000 total)
@@ -117,7 +120,10 @@ public static partial class SeedData
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var programs = context.AcademicPrograms.Include(p => p.Department).ToDictionary(p => p.Code);
-        var curricula = context.Curricula.ToDictionary(c => c.ProgramId);
+        var curricula = context.Curricula
+            .Where(c => c.IsActive)
+            .GroupBy(c => c.ProgramId)
+            .ToDictionary(g => g.Key, g => g.First());
         var instructorsByDept = context.Instructors.ToList()
             .GroupBy(i => i.DepartmentId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -288,4 +294,14 @@ public static partial class SeedData
 
         return user;
     }
+
+    private static int ResolveMaxWeeklyHours(string title) => title switch
+    {
+        var t when t.StartsWith("Prof.") => 10,
+        var t when t.StartsWith("Doç.") => 12,
+        var t when t.StartsWith("Dr. Öğr.") || t.StartsWith("Dr.") => 12,
+        var t when t.StartsWith("Öğr. Gör.") => 16,
+        var t when t.Contains("Prof.") => 10, // "Emeritus Prof. Dr." etc.
+        _ => 20 // Arş. Gör. and others
+    };
 }

@@ -333,7 +333,7 @@ public static partial class SeedData
                 ("BSM-L","MATH206",true,4), ("BSM-L","SENG264",true,4), ("BSM-L","ENG202",true,4),
                 ("BSM-L","CENG351",true,5), ("BSM-L","CENG361",true,5), ("BSM-L","SENG321",true,5),
                 ("BSM-L","CENG336",true,5), ("BSM-L","ENG301",true,5),
-                ("BSM-L","ISE322",true,6), ("BSM-L","ISE332",true,6), ("BSM-L","CENG336",true,6),
+                ("BSM-L","ISE322",true,6), ("BSM-L","ISE332",true,6),
                 ("BSM-L","ISE350",true,6), ("BSM-L","ENG302",true,6),
                 ("BSM-L","ISE491",true,7), ("BSM-L","CCE401",true,7),
                 ("BSM-L","ISE492",true,8), ("BSM-L","ISE490",true,8),

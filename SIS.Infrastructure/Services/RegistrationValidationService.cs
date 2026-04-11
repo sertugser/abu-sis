@@ -1,10 +1,9 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -12,10 +11,12 @@ namespace SIS.Infrastructure.Services;
 public class RegistrationValidationService : IRegistrationValidationService
 {
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _config;
 
-    public RegistrationValidationService(AppDbContext context)
+    public RegistrationValidationService(AppDbContext context, ISystemConfigProvider? config = null)
     {
         _context = context;
+        _config = config ?? new NullSystemConfigProvider();
     }
 
     public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
@@ -95,17 +96,13 @@ public class RegistrationValidationService : IRegistrationValidationService
                 Message = "Aktif akademik donem bulunamadi."
             });
         }
-        else
+        else if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
         {
-            var now = DateTime.UtcNow;
-            if (now < activeTerm.RegistrationStart || now > activeTerm.RegistrationEnd)
+            errors.Add(new ValidationError
             {
-                errors.Add(new ValidationError
-                {
-                    Rule = "RegistrationPeriod",
-                    Message = $"Kayit donemi disindasiniz. Kayit donemi: {activeTerm.RegistrationStart:dd.MM.yyyy} - {activeTerm.RegistrationEnd:dd.MM.yyyy}"
-                });
-            }
+                Rule = "RegistrationPeriod",
+                Message = $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.Status}"
+            });
         }
 
         // If blocking errors so far, return early
@@ -241,7 +238,10 @@ public class RegistrationValidationService : IRegistrationValidationService
         var existingEcts = existingRegistrations.Sum(r => r.CourseSection.Course.Ects);
         var totalEcts = requestedEcts + existingEcts;
 
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa);
+        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
+        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
+        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
+        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
 
         if (totalEcts > ectsLimit)
         {
@@ -253,7 +253,8 @@ public class RegistrationValidationService : IRegistrationValidationService
         }
 
         // === CHECK 7: CGPA Restriction (FR-56B) ===
-        if (RegistrationRulePolicy.HasLowCgpaRestriction(student.Cgpa, student.CompletedSemesters))
+        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m);
+        if (RegistrationRulePolicy.HasLowCgpaRestriction(student.Cgpa, student.CompletedSemesters, retentionThreshold))
         {
             var studentProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
 
@@ -301,17 +302,33 @@ public class RegistrationValidationService : IRegistrationValidationService
         }
 
         // === CHECK 8: Schedule Conflict (FR-41) ===
+        // Load SectionSchedule records for all relevant sections (new + existing)
+        var allSectionIds = sections.Select(s => s.Id)
+            .Union(existingRegistrations.Select(r => r.CourseSectionId))
+            .Distinct()
+            .ToList();
+
+        var sectionSchedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => allSectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+
+        var schedulesBySectionId = sectionSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.ToTimeBlocks(g));
+
         for (int i = 0; i < sections.Count; i++)
         {
             var newSection = sections[i];
-            var newSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(newSection.ScheduleJson) ?? new();
+            var newSchedule = schedulesBySectionId.GetValueOrDefault(newSection.Id) ?? new();
 
             // Check against existing registrations
             foreach (var existing in existingRegistrations)
             {
-                var existingSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(existing.CourseSection.ScheduleJson) ?? new();
+                var existingSchedule = schedulesBySectionId.GetValueOrDefault(existing.CourseSectionId) ?? new();
 
-                var overlapType = CheckScheduleOverlap(newSchedule, existingSchedule);
+                var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, existingSchedule);
 
                 if (overlapType != ConflictOverlapType.None)
                 {
@@ -348,9 +365,9 @@ public class RegistrationValidationService : IRegistrationValidationService
             for (int j = i + 1; j < sections.Count; j++)
             {
                 var otherSection = sections[j];
-                var otherSchedule = JsonSerializer.Deserialize<List<ScheduleSlot>>(otherSection.ScheduleJson) ?? new();
+                var otherSchedule = schedulesBySectionId.GetValueOrDefault(otherSection.Id) ?? new();
 
-                var overlapType = CheckScheduleOverlap(newSchedule, otherSchedule);
+                var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, otherSchedule);
                 if (overlapType != ConflictOverlapType.None)
                 {
                     bool isRepeat = currentlyFailedCourseIds.Contains(newSection.Course.Id) || currentlyFailedCourseIds.Contains(otherSection.Course.Id);
@@ -384,37 +401,4 @@ public class RegistrationValidationService : IRegistrationValidationService
         return result;
     }
 
-    private static ConflictOverlapType CheckScheduleOverlap(List<ScheduleSlot> schedule1, List<ScheduleSlot> schedule2)
-    {
-        bool hasPartialOverlap = false;
-        bool hasFullOverlap = false;
-
-        foreach (var slot1 in schedule1)
-        {
-            foreach (var slot2 in schedule2)
-            {
-                if (slot1.Day != slot2.Day) continue;
-
-                // Check time overlap
-                if (slot1.StartTime < slot2.EndTime && slot2.StartTime < slot1.EndTime)
-                {
-                    // Check if full overlap (one slot completely contains the other)
-                    if ((slot1.StartTime == slot2.StartTime && slot1.EndTime == slot2.EndTime) ||
-                        (slot1.StartTime <= slot2.StartTime && slot1.EndTime >= slot2.EndTime) ||
-                        (slot2.StartTime <= slot1.StartTime && slot2.EndTime >= slot1.EndTime))
-                    {
-                        hasFullOverlap = true;
-                    }
-                    else
-                    {
-                        hasPartialOverlap = true;
-                    }
-                }
-            }
-        }
-
-        if (hasFullOverlap) return ConflictOverlapType.Full;
-        if (hasPartialOverlap) return ConflictOverlapType.Partial;
-        return ConflictOverlapType.None;
-    }
 }

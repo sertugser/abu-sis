@@ -75,6 +75,11 @@ public class GradeController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
+        // Guard: bileşen ekleme/düzenleme GradeEntry veya öncesi (Planning/Scheduling) olmalı
+        var termStatus = await GetTermStatusAsync(section.TermId);
+        if (termStatus >= TermStatus.Closed)
+            return BadRequest(new { error = "Kapalı veya arşivlenmiş dönemde bileşen değiştirilemez." });
+
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin bilesen degistirilemez. Once sonuclandirmayi iptal edin." });
 
@@ -128,6 +133,10 @@ public class GradeController : ControllerBase
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        var termStatus2 = await GetTermStatusAsync(section.TermId);
+        if (termStatus2 >= TermStatus.Closed)
+            return BadRequest(new { error = "Kapalı veya arşivlenmiş dönemde bileşen silinemez." });
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin bilesen silinemez. Once sonuclandirmayi iptal edin." });
@@ -253,6 +262,10 @@ public class GradeController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
+        var gradeTermStatus = await GetTermStatusAsync(section.TermId);
+        if (gradeTermStatus != TermStatus.GradeEntry)
+            return BadRequest(new { error = "Not girişi sadece 'Not Girişi' döneminde yapılabilir." });
+
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin not girilemez. Once sonuclandirmayi iptal edin." });
 
@@ -337,6 +350,10 @@ public class GradeController : ControllerBase
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        var finTermStatus = await GetTermStatusAsync(section.TermId);
+        if (finTermStatus != TermStatus.GradeEntry)
+            return BadRequest(new { error = "Sonuçlandırma sadece 'Not Girişi' döneminde yapılabilir." });
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Bu section zaten sonuclandirilmis." });
@@ -444,6 +461,10 @@ public class GradeController : ControllerBase
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        var unfTermStatus = await GetTermStatusAsync(section.TermId);
+        if (unfTermStatus != TermStatus.GradeEntry)
+            return BadRequest(new { error = "Sonuçlandırma iptali sadece 'Not Girişi' döneminde yapılabilir." });
 
         if (!section.IsFinalized)
             return BadRequest(new { error = "Bu section zaten sonuclandirilmamis." });
@@ -580,13 +601,18 @@ public class GradeController : ControllerBase
 
         if (section == null) return null;
 
-        // Bu hocanın aynı ders+dönemde herhangi bir section'a atanmış olması yeterli
-        var hasAccess = await _context.CourseSections
-            .AnyAsync(cs => cs.CourseId == section.CourseId
-                && cs.TermId == section.TermId
-                && cs.InstructorId == instructor.Id);
+        // Hocanın tam olarak bu section'a atanmış olması gerekir
+        if (section.InstructorId != instructor.Id)
+            return null;
 
-        return hasAccess ? section : null;
+        return section;
+    }
+
+    private async Task<TermStatus?> GetTermStatusAsync(int termId)
+    {
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == termId);
+        return term?.Status;
     }
 
     // ══════════════════════════════════════════════════════════

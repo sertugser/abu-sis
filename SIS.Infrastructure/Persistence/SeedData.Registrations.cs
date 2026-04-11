@@ -250,6 +250,7 @@ public static partial class SeedData
         Dictionary<(int courseId, int termId), List<CourseSection>> sectionCache)
     {
         var key = (courseId, termId);
+        int nextSectionNumber = 1;
 
         if (sectionCache.TryGetValue(key, out var cached))
         {
@@ -259,6 +260,8 @@ public static partial class SeedData
                 available.EnrolledCount++;
                 return available;
             }
+            if (cached.Count > 0)
+                nextSectionNumber = cached.Max(s => s.SectionNumber) + 1;
         }
         else
         {
@@ -275,6 +278,7 @@ public static partial class SeedData
                     available.EnrolledCount++;
                     return available;
                 }
+                nextSectionNumber = dbSections.Max(s => s.SectionNumber) + 1;
             }
         }
 
@@ -286,12 +290,12 @@ public static partial class SeedData
         {
             CourseId = courseId,
             TermId = termId,
+            SectionNumber = nextSectionNumber,
             InstructorId = instructor.Id,
             Capacity = 40,
             EnrolledCount = 1,
             IsActive = false,
-            IsFinalized = false,
-            ScheduleJson = "[]"
+            IsFinalized = false
         };
         context.CourseSections.Add(section);
         context.SaveChanges(); // immediate save for FK resolution
