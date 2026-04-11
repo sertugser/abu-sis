@@ -114,7 +114,6 @@ export interface DepartmentSectionClassList {
   instructorName: string;
   classroomName: string;
   scheduleSummary: string;
-  scheduleJson: string;
   capacity: number;
   enrolledCount: number;
   activeStudentCount: number;
@@ -187,6 +186,7 @@ export type PlanningConflict = SchedulingConflict;
 
 // Section Approval types
 export type SectionApprovalStatus = 'Pending' | 'Approved' | 'Rejected';
+export type ApprovalWorkflowStatus = SectionApprovalStatus | 'PartiallyOpened' | 'Completed';
 
 export interface CourseSectionApproval {
   id: number;
@@ -195,8 +195,11 @@ export interface CourseSectionApproval {
   courseName: string;
   recommendedSectionCount: number;
   approvedSectionCount: number | null;
+  openedSectionCount: number;
+  remainingSectionCount: number;
   predictedDemand: number;
   status: SectionApprovalStatus;
+  workflowStatus: ApprovalWorkflowStatus;
   note: string | null;
   decidedByUserName: string | null;
   createdAt: string;

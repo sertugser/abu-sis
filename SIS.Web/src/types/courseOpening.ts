@@ -12,8 +12,11 @@ export interface OpenedCourseSectionDto {
   ects: number;
   suggestedSemester: number;
   capacity: number;
+  internalQuota: number | null;
+  externalQuota: number | null;
   enrolledCount: number;
   registeredCount: number;
+  draftOrPendingCount: number;
   instructorId: number | null;
   instructorName: string | null;
   isActive: boolean;
@@ -28,6 +31,16 @@ export interface OpenedCourseListDto {
   sections: OpenedCourseSectionDto[];
 }
 
+export interface CrossDepartmentDemandDto {
+  departmentId: number;
+  departmentName: string;
+  programName: string;
+  estimatedStudentCount: number;
+}
+
+export type SectionApprovalStatus = 'Pending' | 'Approved' | 'Rejected';
+export type ApprovalWorkflowStatus = SectionApprovalStatus | 'PartiallyOpened' | 'Completed';
+
 export interface CurriculumCourseForOpeningDto {
   courseId: number;
   courseCode: string;
@@ -39,6 +52,19 @@ export interface CurriculumCourseForOpeningDto {
   isCompulsory: boolean;
   alreadyOpened: boolean;
   existingSectionCount: number;
+  predictedDemand?: number;
+  retakeCount?: number;
+  recommendedSectionCount?: number;
+  recommendedCapacity?: number;
+  crossDepartmentDemand?: CrossDepartmentDemandDto[];
+  previousTermEnrollment?: number;
+  approvalStatus?: SectionApprovalStatus | null;
+  approvalWorkflowStatus?: ApprovalWorkflowStatus;
+  approvedSectionCount?: number | null;
+  openedSectionCount?: number;
+  remainingApprovedSectionCount?: number;
+  canOpen?: boolean;
+  openingBlockedReason?: string | null;
 }
 
 export interface InstructorOptionDto {
@@ -52,7 +78,10 @@ export interface OpenCourseRequest {
   courseId: number;
   sectionCount: number;
   capacityPerSection: number;
+  internalQuota?: number;
+  externalQuota?: number;
   instructorId?: number;
+  accessibleDepartmentIds?: number[];
 }
 
 export interface BulkOpenCoursesRequest {
@@ -69,4 +98,79 @@ export interface UpdateOpenedSectionRequest {
   sectionId: number;
   instructorId?: number;
   capacity?: number;
+  internalQuota?: number | null;
+  externalQuota?: number | null;
+}
+
+// ── Bulk Assign ──
+
+export interface BulkAssignInstructorRequest {
+  assignments: { sectionId: number; instructorId: number }[];
+}
+
+export interface BulkAssignInstructorResultDto {
+  successCount: number;
+  failedCount: number;
+  errors: string[];
+}
+
+// ── Term Transfer ──
+
+export interface PreviousTermCourseDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  ects: number;
+  suggestedSemester: number;
+  isCompulsory: boolean;
+  sectionCount: number;
+  totalCapacity: number;
+  instructorName: string | null;
+  instructorId: number | null;
+  alreadyOpened: boolean;
+}
+
+export interface TransferFromTermRequest {
+  departmentId: number;
+  sourceTermId: number;
+  targetTermId: number;
+  courseIds: number[];
+}
+
+export interface TransferCourseResultItem {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  success: boolean;
+  error?: string;
+  sectionsCreated: number;
+}
+
+export interface TransferFromTermResultDto {
+  successCount: number;
+  failedCount: number;
+  totalSectionsCreated: number;
+  results: TransferCourseResultItem[];
+}
+
+// ── Instructor Workload ──
+
+export interface AssignedSectionDto {
+  sectionId: number;
+  courseCode: string;
+  courseName: string;
+  sectionNumber: number;
+  weeklyHours: number;
+  capacity: number;
+  enrolledCount: number;
+}
+
+export interface InstructorWorkloadDto {
+  instructorId: number;
+  fullName: string;
+  title: string;
+  maxWeeklyHours: number;
+  assignedWeeklyHours: number;
+  remainingCapacity: number;
+  assignedSections: AssignedSectionDto[];
 }

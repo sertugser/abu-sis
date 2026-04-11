@@ -2,9 +2,9 @@ import apiClient from './axios';
 import type {
   ApplyScheduleRequest, ApplyScheduleResult, AssignmentResult, AssignSectionRequest,
   AutoSchedulePreview, AutoScheduleRequest, AvailableClassroom,
-  FacultyPlanningOverview, FacultyPlanningSectionPage,
+  FacultyPlanningOverview, FacultyPlanningSectionPage, FacultyPlanningTimeSlot,
 } from '../types/facultyPlanning';
-import type { SchedulingConflict } from '../types/scheduling';
+import type { ScheduleSlot, ScheduleValidationResult, SchedulingConflict } from '../types/scheduling';
 
 export async function getFacultyPlanningOverview(facultyId: number, termId: number): Promise<FacultyPlanningOverview> {
   const { data } = await apiClient.get<FacultyPlanningOverview>('/faculty-planning/overview', {
@@ -31,6 +31,20 @@ export async function unassignSection(sectionId: number): Promise<void> {
   await apiClient.delete(`/faculty-planning/unassign/${sectionId}`);
 }
 
+export async function batchUnassignSections(sectionIds: number[]): Promise<{ successCount: number; failedCount: number }> {
+  let successCount = 0;
+  let failedCount = 0;
+  for (const id of sectionIds) {
+    try {
+      await apiClient.delete(`/faculty-planning/unassign/${id}`);
+      successCount++;
+    } catch {
+      failedCount++;
+    }
+  }
+  return { successCount, failedCount };
+}
+
 export async function autoSchedulePreview(request: AutoScheduleRequest): Promise<AutoSchedulePreview> {
   const { data } = await apiClient.post<AutoSchedulePreview>('/faculty-planning/auto-schedule', request);
   return data;
@@ -50,9 +64,26 @@ export async function getAvailableClassrooms(
   return data;
 }
 
+export async function getFacultyPlanningTimeSlots(termId: number): Promise<FacultyPlanningTimeSlot[]> {
+  const { data } = await apiClient.get<FacultyPlanningTimeSlot[]>('/faculty-planning/time-slots', {
+    params: { termId },
+  });
+  return data;
+}
+
 export async function getFacultyPlanningConflicts(facultyId: number, termId: number): Promise<SchedulingConflict[]> {
   const { data } = await apiClient.get<SchedulingConflict[]>('/faculty-planning/conflicts', {
     params: { facultyId, termId },
   });
+  return data;
+}
+
+export async function validateSectionSchedule(request: {
+  sectionId: number;
+  classroomId?: number;
+  instructorId?: number;
+  scheduleSlots?: ScheduleSlot[];
+}): Promise<ScheduleValidationResult> {
+  const { data } = await apiClient.post<ScheduleValidationResult>('/scheduling/validate', request);
   return data;
 }

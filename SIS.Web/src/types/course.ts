@@ -60,4 +60,5 @@ export interface ActiveTermDto {
   addDropEnd: string;
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
+  status: string;
 }

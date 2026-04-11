@@ -56,7 +56,6 @@ export interface FacultyPlanningSection {
   classroomType: string | null;
   instructorId: number | null;
   instructorName: string | null;
-  scheduleJson: string;
   scheduleSummary: string;
   status: SectionStatus;
   theoryHours: number;
@@ -69,6 +68,14 @@ export interface FacultyPlanningSectionPage {
   totalCount: number;
   page: number;
   pageSize: number;
+}
+
+export interface FacultyPlanningTimeSlot {
+  day: number;
+  slotOrder: number;
+  startTime: string;
+  endTime: string;
+  displayName: string;
 }
 
 export interface AssignSectionRequest {

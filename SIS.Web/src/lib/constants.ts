@@ -1,7 +1,6 @@
 export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
-  KULLANIM_KILAVUZU: '/kullanim-kilavuzu',
   AKADEMIK_TAKVIM: '/akademik-takvim',
   DERS_KAYIT: '/ders-kayit',
   PLAN: '/plan',
@@ -10,16 +9,33 @@ export const ROUTES = {
   MUFREDAT_DURUM: '/mufredat-durum',
   // Instructor routes
   INSTRUCTOR_SECTIONS: '/derslerim',
-  INSTRUCTOR_SCHEDULING: '/musaitlik-yonetimi',
+  INSTRUCTOR_SCHEDULING: '/ders-programim',
   GRADE_ENTRY: '/not-girisi',
-  MANAGEMENT_PLANNING: '/planlama-merkezi',
-  MANAGEMENT_CLASS_LISTS: '/sinif-listeleri',
-// New pages from technical analysis
-  CLASSROOM_MANAGEMENT: '/merkezi-derslik-yonetimi',
+  COURSE_APPROVAL: '/ders-onay-islemleri',
+  CLASS_LISTS: '/sinif-listeleri',
+  CLASSROOM_DASHBOARD: '/derslik-doluluk-tablosu',
   TERM_CLOSING: '/donem-kapatma',
-  PRE_REGISTRATION_SURVEY: '/on-kayit-anketi',
-  FACULTY_PLANNING: '/fakulte-planlama',
+  SCHEDULE_CREATION: '/ders-programi-olusturma',
+  CLASSROOM_ASSIGNMENT: '/derslik-fakulte-atamasi',
   COURSE_OPENING: '/ders-acma-islemleri',
+  INSTRUCTOR_ASSIGNMENT: '/ogretim-elemani-atama',
+  // Admin routes
+  USER_MANAGEMENT: '/kullanici-yonetimi',
+  STUDENT_DIRECTORY: '/ogrenci-rehberi',
+  INSTRUCTOR_DIRECTORY: '/personel-listesi',
+  TERM_MANAGEMENT: '/donem-yonetimi',
+  ACADEMIC_STRUCTURE: '/akademik-yapi',
+  COURSE_CATALOG_ADMIN: '/ders-katalogu',
+  SYSTEM_CONFIG: '/sistem-ayarlari',
+  AUDIT_LOG: '/denetim-kayitlari',
+  PROMOTION_RULES: '/sinif-atlatma-kurallari',
+  SCHEDULE_APPROVAL: '/program-onayi',
+  CLASSROOM_ADMIN: '/derslik-yonetimi',
+  CONSTRAINT_MANAGEMENT: '/ders-programi-kisitlamalari',
+  CURRICULUM_MANAGEMENT: '/mufredat-islemleri',
+  ELECTIVE_GROUPS: '/secmeli-ders-gruplari',
+  INSTRUCTOR_COURSES_REPORT: '/ders-veren-ogretim-uyeleri',
+  TERM_PROGRAM_TRANSFER: '/donem-programi-aktarim',
 } as const;
 
 export const QUERY_KEYS = {
@@ -30,7 +46,7 @@ export const QUERY_KEYS = {
   studentInfo: ['studentInfo'] as const,
   termGpaHistory: ['termGpaHistory'] as const,
   curriculumStatus: ['curriculumStatus'] as const,
-  instructorAvailabilities: ['instructorAvailabilities'] as const,
+  instructorTimetable: ['instructorTimetable'] as const,
   academicOperationsContext: ['academicOperationsContext'] as const,
   academicPlanningSummary: (departmentId?: number, termId?: number) => ['academicPlanningSummary', departmentId, termId] as const,
   departmentClassLists: (departmentId?: number, termId?: number) => ['departmentClassLists', departmentId, termId] as const,
@@ -48,6 +64,25 @@ export const QUERY_KEYS = {
   curriculumCoursesForOpening: (departmentId: number, termId: number) => ['courseOpening', 'curriculum', departmentId, termId] as const,
   departmentInstructors: (departmentId: number) => ['courseOpening', 'instructors', departmentId] as const,
   forecastDepartmentSummary: (departmentId: number) => ['forecast', 'department', departmentId] as const,
+  // Admin query keys
+  adminUsers: (search?: string, role?: string, isActive?: boolean, page?: number) =>
+    ['admin', 'users', search, role, isActive, page] as const,
+  adminStudents: (search?: string, programId?: number, departmentId?: number, status?: string, page?: number) =>
+    ['admin', 'students', search, programId, departmentId, status, page] as const,
+  adminInstructors: (search?: string, departmentId?: number) =>
+    ['admin', 'instructors', search, departmentId] as const,
+  adminTerms: ['admin', 'terms'] as const,
+  systemConfigs: ['admin', 'systemConfigs'] as const,
+  auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,
+  promotionRules: (programId?: number) => ['admin', 'promotionRules', programId] as const,
+  constraints: ['constraints'] as const,
+  constraintDetail: (id: number) => ['constraints', 'detail', id] as const,
+  scheduleApprovalStatus: (facultyId: number, termId?: number) => ['scheduleApproval', facultyId, termId] as const,
+  adminFaculties: ['admin', 'faculties'] as const,
+  adminPrograms: (departmentId?: number) => ['admin', 'programs', departmentId] as const,
+  electiveGroups: (subtype?: string, facultyId?: number) => ['electiveGroups', 'list', subtype, facultyId] as const,
+  electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
+  curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -57,6 +92,7 @@ export const STATUS_LABELS: Record<string, string> = {
   Completed: 'Tamamlandı',
   Dropped: 'Bırakıldı',
   Withdrawn: 'Çekildi',
+  Rejected: 'Reddedildi',
 };
 
 export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'> = {
@@ -66,28 +102,45 @@ export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructi
   Completed: 'default',
   Dropped: 'destructive',
   Withdrawn: 'outline',
+  Rejected: 'destructive',
 };
 
 /** Routes that have actual page implementations in App.tsx */
 export const IMPLEMENTED_ROUTES = new Set([
   '/',
-  '/kullanim-kilavuzu',
   '/akademik-takvim',
   '/ders-kayit',
   '/plan',
   '/alinan-dersler',
   '/donem-ortalamalari',
   '/mufredat-durum',
-  '/on-kayit-anketi',
   '/derslerim',
   '/not-girisi',
-  '/musaitlik-yonetimi',
-  '/planlama-merkezi',
+  '/ders-programim',
+  '/ders-onay-islemleri',
   '/sinif-listeleri',
-  '/fakulte-planlama',
-  '/merkezi-derslik-yonetimi',
+  '/ders-programi-olusturma',
+  '/derslik-doluluk-tablosu',
+  '/derslik-fakulte-atamasi',
   '/donem-kapatma',
   '/ders-acma-islemleri',
+  '/ogretim-elemani-atama',
+  '/kullanici-yonetimi',
+  '/ogrenci-rehberi',
+  '/personel-listesi',
+  '/donem-yonetimi',
+  '/akademik-yapi',
+  '/ders-katalogu',
+  '/sistem-ayarlari',
+  '/denetim-kayitlari',
+  '/sinif-atlatma-kurallari',
+  '/program-onayi',
+  '/derslik-yonetimi',
+  '/ders-programi-kisitlamalari',
+  '/mufredat-islemleri',
+  '/secmeli-ders-gruplari',
+  '/ders-veren-ogretim-uyeleri',
+  '/donem-programi-aktarim',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {
