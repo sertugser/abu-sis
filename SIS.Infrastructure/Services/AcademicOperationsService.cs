@@ -561,7 +561,7 @@ public class AcademicOperationsService : IAcademicOperationsService
             {
                 var dto = await ApproveCourseSectionsAsync(departmentId, termId, item, userId, cancellationToken);
                 result.ApprovedCount++;
-                totalSectionsCreated += dto.ApprovedSectionCount ?? 0;
+                totalSectionsCreated += 0;
             }
             catch (Exception ex)
             {

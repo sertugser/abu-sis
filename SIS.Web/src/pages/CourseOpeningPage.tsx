@@ -21,6 +21,13 @@ import {
 import { useDepartmentForecast } from '../hooks/useForecast';
 import type { CourseDemandForecastDto } from '../types/forecast';
 
+function getSemesterLabel(semester: number) {
+  if (semester === 0) return 'Diğer Dersler';
+  const year = Math.ceil(semester / 2);
+  const isFall = semester % 2 === 1;
+  return `${year}. Sınıf ${isFall ? 'Güz' : 'Bahar'}`;
+}
+
 export default function CourseOpeningPage() {
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
@@ -122,6 +129,7 @@ export default function CourseOpeningPage() {
   }, [openedQuery.data]);
 
   if (contextQuery.isLoading) return <Skeleton className="h-96 rounded-xl" />;
+
   if (contextQuery.isError) {
     return (
       <Alert variant="destructive">

@@ -174,3 +174,25 @@ export interface InstructorWorkloadDto {
   remainingCapacity: number;
   assignedSections: AssignedSectionDto[];
 }
+
+// ── Instructor Workload ──
+
+export interface AssignedSectionDto {
+  sectionId: number;
+  courseCode: string;
+  courseName: string;
+  sectionNumber: number;
+  weeklyHours: number;
+  capacity: number;
+  enrolledCount: number;
+}
+
+export interface InstructorWorkloadDto {
+  instructorId: number;
+  fullName: string;
+  title: string;
+  maxWeeklyHours: number;
+  assignedWeeklyHours: number;
+  remainingCapacity: number;
+  assignedSections: AssignedSectionDto[];
+}
