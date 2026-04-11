@@ -8,9 +8,12 @@ import {
   bulkOpenCourses,
   updateOpenedSection,
   closeSection,
+  bulkAssignInstructor,
+  getPreviousTermCourses,
+  transferFromTerm,
 } from '../api/courseOpening.api';
 import { QUERY_KEYS } from '../lib/constants';
-import type { OpenCourseRequest, BulkOpenCoursesRequest, UpdateOpenedSectionRequest } from '../types/courseOpening';
+import type { OpenCourseRequest, BulkOpenCoursesRequest, UpdateOpenedSectionRequest, BulkAssignInstructorRequest, TransferFromTermRequest } from '../types/courseOpening';
 
 export function useOpenedCourses(departmentId: number | null, termId: number | null) {
   return useQuery({
@@ -84,6 +87,43 @@ export function useUpdateOpenedSection(departmentId: number, termId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+    },
+  });
+}
+
+export function useBulkAssignInstructor(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: BulkAssignInstructorRequest) => bulkAssignInstructor(departmentId, termId, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+    },
+  });
+}
+
+export function usePreviousTermCourses(
+  departmentId: number | null,
+  sourceTermId: number | null,
+  targetTermId: number | null,
+) {
+  return useQuery({
+    queryKey: ['courseOpening', 'previousTerm', departmentId, sourceTermId, targetTermId],
+    queryFn: () => getPreviousTermCourses(departmentId!, sourceTermId!, targetTermId!),
+    enabled: departmentId !== null && sourceTermId !== null && targetTermId !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useTransferFromTerm(departmentId: number, targetTermId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: TransferFromTermRequest) => transferFromTerm(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, targetTermId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, targetTermId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, targetTermId) });
     },
   });
 }

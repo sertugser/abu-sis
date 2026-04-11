@@ -120,9 +120,8 @@ public class AcademicOperationsService : IAcademicOperationsService
             .Include(section => section.Registrations)
                 .ThenInclude(registration => registration.Student)
             .Where(section => section.TermId == term.Id)
-            .Where(section =>
-                section.Course.DepartmentId == departmentId
-                || (section.Instructor != null && section.Instructor.DepartmentId == departmentId));
+            // C11: Department isolation — filter by course department only
+            .Where(section => section.Course.DepartmentId == departmentId);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -215,7 +214,8 @@ public class AcademicOperationsService : IAcademicOperationsService
                     ClassroomName = section.Classroom?.Name ?? string.Empty,
                     ScheduleSummary = ScheduleHelper.FormatSchedule(sectionScheds),
                     Capacity = section.Capacity,
-                    EnrolledCount = section.EnrolledCount,
+                    // C12: EnrolledCount aligned with ActiveStudentCount
+                    EnrolledCount = activeRegistrations.Count,
                     ActiveStudentCount = activeRegistrations.Count,
                     IsActive = section.IsActive,
                     Students = studentDtos
@@ -446,10 +446,33 @@ public class AcademicOperationsService : IAcademicOperationsService
             .Select(group => new { CourseId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.CourseId, item => item.Count, cancellationToken);
 
-        var approvals = await _context.CourseSectionApprovals
+        var rawApprovals = await _context.CourseSectionApprovals
             .AsNoTracking()
             .Where(a => a.DepartmentId == departmentId && a.TermId == termId)
-            .Select(a => new CourseSectionApprovalDto
+            .Include(a => a.Course)
+            .OrderBy(a => a.Course.Code)
+            .ToListAsync(cancellationToken);
+
+        var decidedByUserIds = rawApprovals
+            .Where(a => a.DecidedByUserId != null)
+            .Select(a => int.TryParse(a.DecidedByUserId, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        var userNameMap = decidedByUserIds.Count > 0
+            ? await _context.Users.AsNoTracking()
+                .Where(u => decidedByUserIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim(), cancellationToken)
+            : new Dictionary<int, string>();
+
+        var approvals = rawApprovals.Select(a =>
+        {
+            string? decidedByName = null;
+            if (a.DecidedByUserId != null && int.TryParse(a.DecidedByUserId, out var uid))
+                userNameMap.TryGetValue(uid, out decidedByName);
+
+            return new CourseSectionApprovalDto
             {
                 Id = a.Id,
                 CourseId = a.CourseId,
@@ -460,11 +483,11 @@ public class AcademicOperationsService : IAcademicOperationsService
                 PredictedDemand = a.PredictedDemand,
                 Status = a.Status,
                 Note = a.Note,
+                DecidedByUserName = decidedByName,
                 CreatedAt = a.CreatedAt,
                 DecidedAt = a.DecidedAt
-            })
-            .OrderBy(a => a.CourseCode)
-            .ToListAsync(cancellationToken);
+            };
+        }).ToList();
 
         foreach (var approval in approvals)
         {

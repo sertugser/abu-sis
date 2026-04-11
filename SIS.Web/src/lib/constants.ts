@@ -18,6 +18,7 @@ export const ROUTES = {
   SCHEDULE_CREATION: '/ders-programi-olusturma',
   CLASSROOM_ASSIGNMENT: '/derslik-fakulte-atamasi',
   COURSE_OPENING: '/ders-acma-islemleri',
+  INSTRUCTOR_ASSIGNMENT: '/ogretim-elemani-atama',
   // Admin routes
   USER_MANAGEMENT: '/kullanici-yonetimi',
   STUDENT_DIRECTORY: '/ogrenci-rehberi',
@@ -31,6 +32,10 @@ export const ROUTES = {
   SCHEDULE_APPROVAL: '/program-onayi',
   CLASSROOM_ADMIN: '/derslik-yonetimi',
   CONSTRAINT_MANAGEMENT: '/ders-programi-kisitlamalari',
+  CURRICULUM_MANAGEMENT: '/mufredat-islemleri',
+  ELECTIVE_GROUPS: '/secmeli-ders-gruplari',
+  INSTRUCTOR_COURSES_REPORT: '/ders-veren-ogretim-uyeleri',
+  TERM_PROGRAM_TRANSFER: '/donem-programi-aktarim',
 } as const;
 
 export const QUERY_KEYS = {
@@ -75,6 +80,9 @@ export const QUERY_KEYS = {
   scheduleApprovalStatus: (facultyId: number, termId?: number) => ['scheduleApproval', facultyId, termId] as const,
   adminFaculties: ['admin', 'faculties'] as const,
   adminPrograms: (departmentId?: number) => ['admin', 'programs', departmentId] as const,
+  electiveGroups: (subtype?: string, facultyId?: number) => ['electiveGroups', 'list', subtype, facultyId] as const,
+  electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
+  curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -116,6 +124,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/derslik-fakulte-atamasi',
   '/donem-kapatma',
   '/ders-acma-islemleri',
+  '/ogretim-elemani-atama',
   '/kullanici-yonetimi',
   '/ogrenci-rehberi',
   '/personel-listesi',
@@ -128,6 +137,10 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/program-onayi',
   '/derslik-yonetimi',
   '/ders-programi-kisitlamalari',
+  '/mufredat-islemleri',
+  '/secmeli-ders-gruplari',
+  '/ders-veren-ogretim-uyeleri',
+  '/donem-programi-aktarim',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

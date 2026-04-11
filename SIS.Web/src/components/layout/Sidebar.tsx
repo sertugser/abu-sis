@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -122,13 +123,36 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     if (active) setOpenGroup(active);
   }
 
+  const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const groupBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
   const toggleGroup = (id: string) => {
     if (isCollapsed) {
-      onToggleSidebar?.();
+      const btn = groupBtnRefs.current[id];
+      if (btn) {
+        const rect = btn.getBoundingClientRect();
+        const top = Math.min(rect.top - 8, window.innerHeight - 400);
+        setFlyoutPos({ top: Math.max(8, top), left: rect.right + 8 });
+      }
+      setFlyoutGroup(prev => prev === id ? null : id);
       return;
     }
     setOpenGroup(prev => prev === id ? null : id);
   };
+
+  // Close flyout when clicking outside
+  useEffect(() => {
+    if (!flyoutGroup) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-flyout]') && !target.closest('[data-group-btn]')) {
+        setFlyoutGroup(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [flyoutGroup]);
 
   const initials = user?.name
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -137,6 +161,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   const textCls = cn('transition-opacity', DURATION, isCollapsed ? 'opacity-0' : 'opacity-100');
 
   return (
+    <>
     <aside
       className="fixed inset-y-0 left-0 z-40 hidden lg:flex flex-col bg-sidebar border-r border-border overflow-hidden"
       style={{
@@ -188,8 +213,8 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
       </div>
 
       <div
-        className="flex flex-col flex-1 min-h-0"
-        style={{ width: EXPANDED_W, minWidth: EXPANDED_W }}
+        className="flex flex-col flex-1 min-h-0 transition-all duration-200"
+        style={{ width: isCollapsed ? COLLAPSED_W : EXPANDED_W, minWidth: isCollapsed ? COLLAPSED_W : EXPANDED_W }}
       >
         <div className={cn(
           'shrink-0 overflow-hidden transition-all', DURATION,
@@ -217,8 +242,8 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3">
-          <nav className="py-2 space-y-0.5">
+        <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", isCollapsed ? "px-2" : "px-3")}>
+          <nav className={cn("py-2 space-y-0.5", isCollapsed && "flex flex-col items-center")}>
             {search.trim() ? (
               /* Arama sonuçları — düz liste */
               (() => {
@@ -268,27 +293,33 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                 return (
                   <div key={group.id} className="mb-1">
                     <button
+                      ref={el => { groupBtnRefs.current[group.id] = el; }}
+                      data-group-btn
                       onClick={() => toggleGroup(group.id)}
                       title={group.label}
                       className={cn(
-                        'group flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
-                        isOpen && isCollapsed
-                          ? 'bg-primary/10 text-primary shadow-sm'
-                          : isOpen && !isCollapsed
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        'group flex items-center rounded-md text-sm font-medium transition-colors duration-150',
+                        isCollapsed
+                          ? cn('w-10 h-10 justify-center',
+                              (isOpen || flyoutGroup === group.id) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')
+                          : cn('w-full gap-3 px-3 py-2',
+                              isOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')
                       )}
                     >
                       <Icon className="h-[18px] w-[18px] shrink-0" />
-                      <span className={cn('flex-1 text-left truncate', textCls)}>
-                        {group.label}
-                      </span>
-                      <ChevronRight
-                        className={cn(
-                          'h-4 w-4 shrink-0 transition-all', DURATION,
-                          isCollapsed ? 'opacity-0' : isOpen ? 'rotate-90 opacity-100' : 'opacity-50'
-                        )}
-                      />
+                      {!isCollapsed && (
+                        <>
+                          <span className="flex-1 text-left truncate">
+                            {group.label}
+                          </span>
+                          <ChevronRight
+                            className={cn(
+                              'h-4 w-4 shrink-0 transition-transform', DURATION,
+                              isOpen ? 'rotate-90' : 'opacity-50'
+                            )}
+                          />
+                        </>
+                      )}
                     </button>
 
                     {isOpen && !isCollapsed && (
@@ -348,5 +379,47 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
         </div>
       </div>
     </aside>
+
+      {/* Flyout portal — rendered outside sidebar to avoid overflow clipping */}
+      {isCollapsed && flyoutGroup && (() => {
+        const group = menuGroups.find(g => g.id === flyoutGroup);
+        if (!group) return null;
+        return createPortal(
+          <div
+            data-flyout
+            className="fixed z-[60] w-56 bg-card border rounded-lg shadow-xl py-2 animate-in fade-in-0 zoom-in-95 duration-150"
+            style={{ top: flyoutPos.top, left: flyoutPos.left }}
+          >
+            <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
+            <div className="max-h-80 overflow-y-auto">
+              {group.children.map(child => {
+                const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                return (
+                  <NavLink
+                    key={child.to}
+                    to={child.to}
+                    end={child.to === '/'}
+                    onClick={() => setFlyoutGroup(null)}
+                    className={({ isActive }) =>
+                      cn(
+                        'block px-3 py-1.5 text-[13px] transition-colors duration-150',
+                        isDead
+                          ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                          : isActive
+                            ? 'text-primary font-semibold bg-primary/5'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      )
+                    }
+                  >
+                    {child.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
+    </>
   );
 }

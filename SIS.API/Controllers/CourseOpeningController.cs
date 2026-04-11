@@ -55,7 +55,8 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         try
         {
-            var result = await _courseOpeningService.OpenCourseAsync(departmentId, termId, request, ct);
+            var canSkipApproval = User.IsInRole("Dean") || User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
+            var result = await _courseOpeningService.OpenCourseAsync(departmentId, termId, request, skipApproval: canSkipApproval, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -70,7 +71,8 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.BulkOpenCoursesAsync(departmentId, termId, request, ct);
+        var canSkipApproval = User.IsInRole("Dean") || User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
+        var result = await _courseOpeningService.BulkOpenCoursesAsync(departmentId, termId, request, skipApproval: canSkipApproval, ct);
         return Ok(result);
     }
 
@@ -123,6 +125,18 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    [HttpPost("bulk-assign-instructor")]
+    public async Task<IActionResult> BulkAssignInstructor(
+        [FromQuery] int departmentId, [FromQuery] int termId,
+        [FromBody] BulkAssignInstructorRequest request, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _courseOpeningService.BulkAssignInstructorAsync(departmentId, termId, request, ct);
+        return Ok(result);
     }
 
     [HttpGet("instructors/{instructorId}/workload")]
@@ -180,6 +194,28 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
             RemainingCapacity = Math.Max(0, instructor.MaxWeeklyHours - assignedWeeklyHours),
             AssignedSections = assignedSections,
         });
+    }
+
+    [HttpGet("previous-term-courses")]
+    public async Task<IActionResult> GetPreviousTermCourses(
+        [FromQuery] int departmentId, [FromQuery] int sourceTermId, [FromQuery] int targetTermId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _courseOpeningService.GetPreviousTermCoursesAsync(departmentId, sourceTermId, targetTermId, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("transfer-from-term")]
+    public async Task<IActionResult> TransferFromTerm([FromBody] TransferFromTermRequest request, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, request.DepartmentId, ct)) return Forbid();
+
+        var canSkipApproval = User.IsInRole("Dean") || User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
+        var result = await _courseOpeningService.TransferFromTermAsync(request, skipApproval: canSkipApproval, ct);
+        return Ok(result);
     }
 
     private bool TryGetUserId(out int userId)

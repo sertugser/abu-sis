@@ -11,6 +11,8 @@ public class CourseSection
     public Instructor? Instructor { get; set; }
     public int Capacity { get; set; }
     public int EnrolledCount { get; set; }
+    public int? InternalQuota { get; set; }
+    public int? ExternalQuota { get; set; }
     public int? ClassroomId { get; set; }
     public Classroom? Classroom { get; set; }
     public int SectionNumber { get; set; }

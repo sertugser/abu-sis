@@ -120,7 +120,10 @@ public static partial class SeedData
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var programs = context.AcademicPrograms.Include(p => p.Department).ToDictionary(p => p.Code);
-        var curricula = context.Curricula.ToDictionary(c => c.ProgramId);
+        var curricula = context.Curricula
+            .Where(c => c.IsActive)
+            .GroupBy(c => c.ProgramId)
+            .ToDictionary(g => g.Key, g => g.First());
         var instructorsByDept = context.Instructors.ToList()
             .GroupBy(i => i.DepartmentId)
             .ToDictionary(g => g.Key, g => g.ToList());

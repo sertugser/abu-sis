@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
 import {
@@ -34,7 +36,7 @@ export default function ScheduleApprovalPage() {
   };
 
   const handleRevoke = () => {
-    if (confirm('Onayi geri almak istediginize emin misiniz?')) {
+    if (confirm('Onayı geri almak istediğinize emin misiniz?')) {
       revokeMutation.mutate();
     }
   };
@@ -45,21 +47,19 @@ export default function ScheduleApprovalPage() {
     return (
       <Alert>
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Fakulte bulunamadi</AlertTitle>
-        <AlertDescription>Sistemde tanimli fakulte bulunmamaktadir.</AlertDescription>
+        <AlertTitle>Fakülte bulunamadı</AlertTitle>
+        <AlertDescription>Sistemde tanımlı fakülte bulunmamaktadır.</AlertDescription>
       </Alert>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold">Program Onayi</h1>
-
       {/* Faculty selector */}
-      <div className="flex items-center gap-3">
-        <label className="text-sm font-medium">Fakulte:</label>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-sm font-medium">Fakülte:</label>
         <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm min-w-[300px]"
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm w-full sm:w-auto sm:min-w-[300px]"
           value={facultyId}
           onChange={e => setSelectedFacultyId(Number(e.target.value))}
         >
@@ -78,7 +78,7 @@ export default function ScheduleApprovalPage() {
       ) : isError ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Onay durumu yuklenemedi.</AlertDescription>
+          <AlertDescription>Onay durumu yüklenemedi.</AlertDescription>
         </Alert>
       ) : status ? (
         <div className="space-y-4">
@@ -87,24 +87,24 @@ export default function ScheduleApprovalPage() {
               <CardTitle className="text-sm flex items-center gap-2">
                 Onay Durumu
                 {status.isApproved ? (
-                  <Badge variant="success">Onaylandi</Badge>
+                  <Badge variant="success">Onaylandı</Badge>
                 ) : (
-                  <Badge variant="warning">Onaylanmadi</Badge>
+                  <Badge variant="warning">Onaylanmadı</Badge>
                 )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Fakulte:</span>
+                  <span className="text-muted-foreground">Fakülte:</span>
                   <span className="ml-2 font-medium">{status.facultyName}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Donem:</span>
+                  <span className="text-muted-foreground">Dönem:</span>
                   <span className="ml-2 font-medium">{status.termName}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Toplam Sube:</span>
+                  <span className="text-muted-foreground">Toplam Şube:</span>
                   <span className="ml-2 font-medium">{status.totalSections}</span>
                 </div>
                 <div>
@@ -126,6 +126,15 @@ export default function ScheduleApprovalPage() {
                   </div>
                 )}
               </div>
+
+              {/* Progress bar */}
+              {status.totalSections > 0 && (
+                <div className="flex items-center gap-3">
+                  <Progress value={(status.scheduledSections / status.totalSections) * 100} className="w-48 h-2" />
+                  <span className="text-sm">{status.scheduledSections}/{status.totalSections} programlandı</span>
+                </div>
+              )}
+
               {status.note && (
                 <div className="text-sm">
                   <span className="text-muted-foreground">Not:</span>
@@ -135,10 +144,20 @@ export default function ScheduleApprovalPage() {
             </CardContent>
           </Card>
 
+          {/* Unscheduled warning */}
+          {status.totalSections > status.scheduledSections && (
+            <Alert variant="warning">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                {status.totalSections - status.scheduledSections} şube henüz programlanmamış.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Actions */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Islemler</CardTitle>
+              <CardTitle className="text-sm">İşlemler</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {!status.isApproved ? (
@@ -152,39 +171,49 @@ export default function ScheduleApprovalPage() {
                       rows={3}
                     />
                   </div>
-                  <Button onClick={handleApprove} disabled={approveMutation.isPending} className="gap-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    {approveMutation.isPending ? 'Onaylaniyor...' : 'Programi Onayla'}
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <Button onClick={handleApprove} disabled={approveMutation.isPending} className="gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      {approveMutation.isPending ? 'Onaylanıyor...' : 'Programı Onayla'}
+                    </Button>
+                    <Link to="/ders-programi-olusturma" className="text-sm text-blue-600 hover:underline">
+                      Programı Görüntüle →
+                    </Link>
+                  </div>
                 </>
               ) : (
-                <Button
-                  variant="destructive"
-                  onClick={handleRevoke}
-                  disabled={revokeMutation.isPending}
-                  className="gap-2"
-                >
-                  <XCircle className="h-4 w-4" />
-                  {revokeMutation.isPending ? 'Geri aliniyor...' : 'Onayi Geri Al'}
-                </Button>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="destructive"
+                    onClick={handleRevoke}
+                    disabled={revokeMutation.isPending}
+                    className="gap-2"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    {revokeMutation.isPending ? 'Geri alınıyor...' : 'Onayı Geri Al'}
+                  </Button>
+                  <Link to="/ders-programi-olusturma" className="text-sm text-blue-600 hover:underline">
+                    Programı Görüntüle →
+                  </Link>
+                </div>
               )}
 
               {approveMutation.isError && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>Onay islemi basarisiz oldu.</AlertDescription>
+                  <AlertDescription>Onay işlemi başarısız oldu.</AlertDescription>
                 </Alert>
               )}
               {approveMutation.isSuccess && (
                 <Alert variant="success">
                   <CheckCircle2 className="h-4 w-4" />
-                  <AlertDescription>Program basariyla onaylandi.</AlertDescription>
+                  <AlertDescription>Program başarıyla onaylandı.</AlertDescription>
                 </Alert>
               )}
               {revokeMutation.isError && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>Onay geri alma islemi basarisiz oldu.</AlertDescription>
+                  <AlertDescription>Onay geri alma işlemi başarısız oldu.</AlertDescription>
                 </Alert>
               )}
             </CardContent>

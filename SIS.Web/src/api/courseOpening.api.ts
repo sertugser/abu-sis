@@ -9,6 +9,11 @@ import type {
   BulkOpenCoursesRequest,
   BulkOpenCoursesResultDto,
   UpdateOpenedSectionRequest,
+  BulkAssignInstructorRequest,
+  BulkAssignInstructorResultDto,
+  PreviousTermCourseDto,
+  TransferFromTermRequest,
+  TransferFromTermResultDto,
 } from '../types/courseOpening';
 
 export async function getOpenedCourses(departmentId: number, termId: number): Promise<OpenedCourseListDto> {
@@ -53,6 +58,35 @@ export async function updateOpenedSection(request: UpdateOpenedSectionRequest): 
 
 export async function closeSection(sectionId: number): Promise<void> {
   await apiClient.delete(`/course-opening/section/${sectionId}`);
+}
+
+export async function bulkAssignInstructor(
+  departmentId: number,
+  termId: number,
+  request: BulkAssignInstructorRequest,
+): Promise<BulkAssignInstructorResultDto> {
+  const { data } = await apiClient.post<BulkAssignInstructorResultDto>(
+    '/course-opening/bulk-assign-instructor',
+    request,
+    { params: { departmentId, termId } },
+  );
+  return data;
+}
+
+export async function getPreviousTermCourses(
+  departmentId: number,
+  sourceTermId: number,
+  targetTermId: number,
+): Promise<PreviousTermCourseDto[]> {
+  const { data } = await apiClient.get<PreviousTermCourseDto[]>('/course-opening/previous-term-courses', {
+    params: { departmentId, sourceTermId, targetTermId },
+  });
+  return data;
+}
+
+export async function transferFromTerm(request: TransferFromTermRequest): Promise<TransferFromTermResultDto> {
+  const { data } = await apiClient.post<TransferFromTermResultDto>('/course-opening/transfer-from-term', request);
+  return data;
 }
 
 export async function getInstructorWorkload(instructorId: number, termId: number): Promise<InstructorWorkloadDto> {

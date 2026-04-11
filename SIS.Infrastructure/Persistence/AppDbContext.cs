@@ -43,6 +43,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
     public DbSet<ConstraintDefinition> ConstraintDefinitions => Set<ConstraintDefinition>();
     public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
+    public DbSet<ElectiveGroup> ElectiveGroups => Set<ElectiveGroup>();
+    public DbSet<ElectiveGroupCourse> ElectiveGroupCourses => Set<ElectiveGroupCourse>();
+    public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
+    public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -146,6 +150,11 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(cc => cc.CourseId)
              .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(cc => cc.ElectiveGroup)
+             .WithMany()
+             .HasForeignKey(cc => cc.ElectiveGroupId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── CoursePrerequisite (composite PK) ────────────────────
@@ -178,6 +187,77 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(ce => ce.EquivalentCourseId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── ElectiveGroup ────────────────────────────────────────
+        builder.Entity<ElectiveGroup>(e =>
+        {
+            e.HasIndex(eg => eg.Code).IsUnique();
+
+            e.HasOne(eg => eg.Faculty)
+             .WithMany()
+             .HasForeignKey(eg => eg.FacultyId)
+             .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── ElectiveGroupCourse (composite PK) ──────────────────
+        builder.Entity<ElectiveGroupCourse>(e =>
+        {
+            e.HasKey(egc => new { egc.ElectiveGroupId, egc.CourseId });
+
+            e.HasOne(egc => egc.ElectiveGroup)
+             .WithMany(eg => eg.Courses)
+             .HasForeignKey(egc => egc.ElectiveGroupId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(egc => egc.Course)
+             .WithMany()
+             .HasForeignKey(egc => egc.CourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── CurriculumElectivePool ──────────────────────────────
+        builder.Entity<CurriculumElectivePool>(e =>
+        {
+            e.HasIndex(cep => new { cep.CurriculumId, cep.ElectiveGroupId }).IsUnique();
+
+            e.HasOne(cep => cep.Curriculum)
+             .WithMany(c => c.ElectivePools)
+             .HasForeignKey(cep => cep.CurriculumId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(cep => cep.ElectiveGroup)
+             .WithMany(eg => eg.CurriculumPools)
+             .HasForeignKey(cep => cep.ElectiveGroupId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── CourseAccessRule ────────────────────────────────────
+        builder.Entity<CourseAccessRule>(e =>
+        {
+            e.HasIndex(car => car.CourseId);
+
+            e.Property(car => car.MinCgpa).HasPrecision(4, 2);
+
+            e.HasOne(car => car.Course)
+             .WithMany()
+             .HasForeignKey(car => car.CourseId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(car => car.AllowedFaculty)
+             .WithMany()
+             .HasForeignKey(car => car.AllowedFacultyId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(car => car.AllowedDepartment)
+             .WithMany()
+             .HasForeignKey(car => car.AllowedDepartmentId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(car => car.AllowedProgram)
+             .WithMany()
+             .HasForeignKey(car => car.AllowedProgramId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── StudentProgram (composite PK) ────────────────────────

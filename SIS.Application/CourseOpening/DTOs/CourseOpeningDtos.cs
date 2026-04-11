@@ -117,6 +117,26 @@ public class UpdateOpenedSectionRequest
     public int? Capacity { get; set; }
 }
 
+// ── Bulk Assign ──
+
+public class BulkAssignInstructorRequest
+{
+    public List<SectionInstructorAssignment> Assignments { get; set; } = [];
+}
+
+public class SectionInstructorAssignment
+{
+    public int SectionId { get; set; }
+    public int InstructorId { get; set; }
+}
+
+public class BulkAssignInstructorResultDto
+{
+    public int SuccessCount { get; set; }
+    public int FailedCount { get; set; }
+    public List<string> Errors { get; set; } = [];
+}
+
 public class InstructorWorkloadDto
 {
     public int InstructorId { get; set; }
@@ -137,4 +157,39 @@ public class AssignedSectionDto
     public int WeeklyHours { get; set; }
     public int Capacity { get; set; }
     public int EnrolledCount { get; set; }
+}
+
+// ── Term Transfer ──
+
+public record PreviousTermCourseDto(
+    int CourseId, string CourseCode, string CourseName,
+    int Ects, int SuggestedSemester, bool IsCompulsory,
+    int SectionCount, int TotalCapacity,
+    string? InstructorName, int? InstructorId,
+    bool AlreadyOpened);
+
+public class TransferFromTermRequest
+{
+    public int DepartmentId { get; set; }
+    public int SourceTermId { get; set; }
+    public int TargetTermId { get; set; }
+    public List<int> CourseIds { get; set; } = [];
+}
+
+public class TransferFromTermResultDto
+{
+    public int SuccessCount { get; set; }
+    public int FailedCount { get; set; }
+    public int TotalSectionsCreated { get; set; }
+    public List<TransferCourseResultItem> Results { get; set; } = [];
+}
+
+public class TransferCourseResultItem
+{
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public int SectionsCreated { get; set; }
 }

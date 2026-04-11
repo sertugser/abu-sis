@@ -1,0 +1,587 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SIS.Domain.Enums;
+using SIS.Infrastructure.Persistence;
+
+namespace SIS.API.Controllers;
+
+[ApiController]
+[Route("api/curriculum")]
+[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+public class CurriculumController(AppDbContext context) : ControllerBase
+{
+    // ── DTOs ────────────────────────────────────────────────────────
+    public record CurriculumListDto(
+        int Id, int ProgramId, string ProgramName, string ProgramCode,
+        string Version, string? Name, DateTime? StartDate, DateTime? EndDate,
+        bool IsActive, int CourseCount, int TotalEcts, DateTime CreatedAt);
+
+    public record CurriculumDetailDto(
+        int Id, int ProgramId, string ProgramName, string Version, bool IsActive,
+        string? Name, string? ShortName, string? EnglishName,
+        DateTime? StartDate, DateTime? EndDate,
+        string? DecisionDate, string? DecisionNo, string? DecisionNote,
+        string? GradingSystem, int? InternshipDuration, string? Description,
+        List<CurriculumCourseItemDto> Courses);
+
+    public record CurriculumCourseItemDto(
+        int CourseId, string CourseCode, string CourseName,
+        int Ects, int TheoryHours, int LabHours,
+        int SuggestedSemester, bool IsCompulsory,
+        bool IncludeInGpa, bool ShowOnTranscript,
+        string? CourseCategory, string? GroupCode);
+
+    public record CreateCurriculumRequest(
+        int ProgramId, string Version,
+        string? Name = null, string? ShortName = null, string? EnglishName = null,
+        DateTime? StartDate = null, DateTime? EndDate = null,
+        string? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
+        string? GradingSystem = null, int? InternshipDuration = null, string? Description = null);
+
+    public record UpdateCurriculumRequest(
+        string? Version = null, bool? IsActive = null,
+        string? Name = null, string? ShortName = null, string? EnglishName = null,
+        DateTime? StartDate = null, DateTime? EndDate = null,
+        string? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
+        string? GradingSystem = null, int? InternshipDuration = null, string? Description = null);
+
+    public record AddCourseRequest(
+        int CourseId, int SuggestedSemester, bool IsCompulsory,
+        bool IncludeInGpa = true, bool ShowOnTranscript = true,
+        string? CourseCategory = null, string? GroupCode = null);
+
+    public record UpdateCourseRequest(
+        int? SuggestedSemester = null, bool? IsCompulsory = null,
+        bool? IncludeInGpa = null, bool? ShowOnTranscript = null,
+        string? CourseCategory = null, string? GroupCode = null);
+
+    public record CopyCurriculumRequest(string NewVersion);
+
+    public record CurriculumElectivePoolDto(
+        int Id, int ElectiveGroupId, string GroupName, string GroupCode,
+        ElectiveSubtype ElectiveSubtype,
+        int SuggestedSemesterStart, int SuggestedSemesterEnd,
+        int RequiredCourseCount, int RequiredEcts, int PoolCourseCount);
+
+    public record CreatePoolRequest(
+        int ElectiveGroupId,
+        int SuggestedSemesterStart, int SuggestedSemesterEnd,
+        int RequiredCourseCount, int RequiredEcts);
+
+    public record UpdatePoolRequest(
+        int? SuggestedSemesterStart = null, int? SuggestedSemesterEnd = null,
+        int? RequiredCourseCount = null, int? RequiredEcts = null);
+
+    // ── GET /api/curriculum?programId=X ─────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> List([FromQuery] int? programId, CancellationToken ct)
+    {
+        var query = context.Curricula
+            .AsNoTracking()
+            .Include(c => c.Program)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
+            .AsQueryable();
+
+        if (programId.HasValue)
+            query = query.Where(c => c.ProgramId == programId.Value);
+
+        var list = await query
+            .OrderByDescending(c => c.IsActive)
+            .ThenByDescending(c => c.Version)
+            .Select(c => new CurriculumListDto(
+                c.Id,
+                c.ProgramId,
+                c.Program.Name,
+                c.Program.Code,
+                c.Version,
+                c.Name,
+                c.StartDate,
+                c.EndDate,
+                c.IsActive,
+                c.CurriculumCourses.Count,
+                c.CurriculumCourses.Sum(cc => cc.Course.Ects),
+                c.CreatedAt))
+            .ToListAsync(ct);
+
+        return Ok(list);
+    }
+
+    // ── GET /api/curriculum/{id} ────────────────────────────────────
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> Get(int id, CancellationToken ct)
+    {
+        var curriculum = await context.Curricula
+            .AsNoTracking()
+            .Include(c => c.Program)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (curriculum is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var dto = new CurriculumDetailDto(
+            curriculum.Id,
+            curriculum.ProgramId,
+            curriculum.Program.Name,
+            curriculum.Version,
+            curriculum.IsActive,
+            curriculum.Name,
+            curriculum.ShortName,
+            curriculum.EnglishName,
+            curriculum.StartDate,
+            curriculum.EndDate,
+            curriculum.DecisionDate,
+            curriculum.DecisionNo,
+            curriculum.DecisionNote,
+            curriculum.GradingSystem,
+            curriculum.InternshipDuration,
+            curriculum.Description,
+            curriculum.CurriculumCourses
+                .OrderBy(cc => cc.SuggestedSemester)
+                .ThenBy(cc => cc.Course.Code)
+                .Select(cc => new CurriculumCourseItemDto(
+                    cc.CourseId, cc.Course.Code, cc.Course.Name,
+                    cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
+                    cc.SuggestedSemester, cc.IsCompulsory,
+                    cc.IncludeInGpa, cc.ShowOnTranscript,
+                    cc.CourseCategory, cc.GroupCode))
+                .ToList());
+
+        return Ok(dto);
+    }
+
+    // ── POST /api/curriculum ────────────────────────────────────────
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateCurriculumRequest req, CancellationToken ct)
+    {
+        var program = await context.Set<Domain.Entities.AcademicProgram>()
+            .FirstOrDefaultAsync(p => p.Id == req.ProgramId, ct);
+        if (program is null)
+            return NotFound(new { message = "Program bulunamadı." });
+
+        var versionExists = await context.Curricula
+            .AnyAsync(c => c.ProgramId == req.ProgramId && c.Version == req.Version, ct);
+        if (versionExists)
+            return BadRequest(new { message = $"Bu program için '{req.Version}' versiyonu zaten mevcut." });
+
+        var entity = new Domain.Entities.Curriculum
+        {
+            ProgramId = req.ProgramId,
+            Version = req.Version,
+            Name = req.Name,
+            ShortName = req.ShortName,
+            EnglishName = req.EnglishName,
+            StartDate = req.StartDate,
+            EndDate = req.EndDate,
+            DecisionDate = req.DecisionDate,
+            DecisionNo = req.DecisionNo,
+            DecisionNote = req.DecisionNote,
+            GradingSystem = req.GradingSystem,
+            InternshipDuration = req.InternshipDuration,
+            Description = req.Description,
+            IsActive = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Curricula.Add(entity);
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new CurriculumListDto(
+            entity.Id, entity.ProgramId, program.Name, program.Code,
+            entity.Version, entity.Name, entity.StartDate, entity.EndDate,
+            entity.IsActive, 0, 0, entity.CreatedAt));
+    }
+
+    // ── PUT /api/curriculum/{id} ────────────────────────────────────
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateCurriculumRequest req, CancellationToken ct)
+    {
+        var curriculum = await context.Curricula
+            .Include(c => c.Program)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        if (req.Version is not null && req.Version != curriculum.Version)
+        {
+            var versionExists = await context.Curricula
+                .AnyAsync(c => c.ProgramId == curriculum.ProgramId && c.Version == req.Version && c.Id != id, ct);
+            if (versionExists)
+                return BadRequest(new { message = $"Bu program için '{req.Version}' versiyonu zaten mevcut." });
+            curriculum.Version = req.Version;
+        }
+
+        if (req.IsActive.HasValue)
+            curriculum.IsActive = req.IsActive.Value;
+
+        if (req.Name is not null) curriculum.Name = req.Name;
+        if (req.ShortName is not null) curriculum.ShortName = req.ShortName;
+        if (req.EnglishName is not null) curriculum.EnglishName = req.EnglishName;
+        if (req.StartDate.HasValue) curriculum.StartDate = req.StartDate;
+        if (req.EndDate.HasValue) curriculum.EndDate = req.EndDate;
+        if (req.DecisionDate is not null) curriculum.DecisionDate = req.DecisionDate;
+        if (req.DecisionNo is not null) curriculum.DecisionNo = req.DecisionNo;
+        if (req.DecisionNote is not null) curriculum.DecisionNote = req.DecisionNote;
+        if (req.GradingSystem is not null) curriculum.GradingSystem = req.GradingSystem;
+        if (req.InternshipDuration.HasValue) curriculum.InternshipDuration = req.InternshipDuration;
+        if (req.Description is not null) curriculum.Description = req.Description;
+
+        curriculum.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Müfredat güncellendi." });
+    }
+
+    // ── DELETE /api/curriculum/{id} ─────────────────────────────────
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        var curriculum = await context.Curricula
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var hasStudents = await context.StudentPrograms
+            .AnyAsync(sp => sp.CurriculumId == id, ct);
+        if (hasStudents)
+            return BadRequest(new { message = "Bu müfredata kayıtlı öğrenciler var, silinemez." });
+
+        context.Curricula.Remove(curriculum);
+        await context.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+
+    // ── GET /api/curriculum/{id}/courses ─────────────────────────────
+    [HttpGet("{id:int}/courses")]
+    public async Task<IActionResult> ListCourses(int id, CancellationToken ct)
+    {
+        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
+        if (!exists)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var courses = await context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => cc.CurriculumId == id)
+            .Include(cc => cc.Course)
+            .OrderBy(cc => cc.SuggestedSemester)
+            .ThenBy(cc => cc.Course.Code)
+            .Select(cc => new CurriculumCourseItemDto(
+                cc.CourseId, cc.Course.Code, cc.Course.Name,
+                cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
+                cc.SuggestedSemester, cc.IsCompulsory,
+                cc.IncludeInGpa, cc.ShowOnTranscript,
+                cc.CourseCategory, cc.GroupCode))
+            .ToListAsync(ct);
+
+        return Ok(courses);
+    }
+
+    // ── POST /api/curriculum/{id}/courses ────────────────────────────
+    [HttpPost("{id:int}/courses")]
+    public async Task<IActionResult> AddCourse(int id, [FromBody] AddCourseRequest req, CancellationToken ct)
+    {
+        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
+        if (!exists)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var course = await context.Set<Domain.Entities.Course>()
+            .FirstOrDefaultAsync(c => c.Id == req.CourseId, ct);
+        if (course is null)
+            return NotFound(new { message = "Ders bulunamadı." });
+
+        var alreadyExists = await context.CurriculumCourses
+            .AnyAsync(cc => cc.CurriculumId == id && cc.CourseId == req.CourseId, ct);
+        if (alreadyExists)
+            return BadRequest(new { message = "Bu ders müfredatta zaten mevcut." });
+
+        var entity = new Domain.Entities.CurriculumCourse
+        {
+            CurriculumId = id,
+            CourseId = req.CourseId,
+            SuggestedSemester = req.SuggestedSemester,
+            IsCompulsory = req.IsCompulsory,
+            IncludeInGpa = req.IncludeInGpa,
+            ShowOnTranscript = req.ShowOnTranscript,
+            CourseCategory = req.CourseCategory,
+            GroupCode = req.GroupCode
+        };
+
+        context.CurriculumCourses.Add(entity);
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new CurriculumCourseItemDto(
+            course.Id, course.Code, course.Name,
+            course.Ects, course.TheoryHours, course.LabHours,
+            req.SuggestedSemester, req.IsCompulsory,
+            req.IncludeInGpa, req.ShowOnTranscript,
+            req.CourseCategory, req.GroupCode));
+    }
+
+    // ── PUT /api/curriculum/{id}/courses/{courseId} ──────────────────
+    [HttpPut("{id:int}/courses/{courseId:int}")]
+    public async Task<IActionResult> UpdateCourse(int id, int courseId, [FromBody] UpdateCourseRequest req, CancellationToken ct)
+    {
+        var cc = await context.CurriculumCourses
+            .FindAsync([id, courseId], ct);
+        if (cc is null)
+            return NotFound(new { message = "Müfredat dersi bulunamadı." });
+
+        if (req.SuggestedSemester.HasValue)
+            cc.SuggestedSemester = req.SuggestedSemester.Value;
+        if (req.IsCompulsory.HasValue)
+            cc.IsCompulsory = req.IsCompulsory.Value;
+        if (req.IncludeInGpa.HasValue)
+            cc.IncludeInGpa = req.IncludeInGpa.Value;
+        if (req.ShowOnTranscript.HasValue)
+            cc.ShowOnTranscript = req.ShowOnTranscript.Value;
+        if (req.CourseCategory is not null)
+            cc.CourseCategory = req.CourseCategory;
+        if (req.GroupCode is not null)
+            cc.GroupCode = req.GroupCode;
+
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Müfredat dersi güncellendi." });
+    }
+
+    // ── DELETE /api/curriculum/{id}/courses/{courseId} ───────────────
+    [HttpDelete("{id:int}/courses/{courseId:int}")]
+    public async Task<IActionResult> RemoveCourse(int id, int courseId, CancellationToken ct)
+    {
+        var cc = await context.CurriculumCourses
+            .FindAsync([id, courseId], ct);
+        if (cc is null)
+            return NotFound(new { message = "Müfredat dersi bulunamadı." });
+
+        context.CurriculumCourses.Remove(cc);
+        await context.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+
+    // ── POST /api/curriculum/{id}/copy ────────────────────────────
+    [HttpPost("{id:int}/copy")]
+    public async Task<IActionResult> Copy(int id, [FromBody] CopyCurriculumRequest req, CancellationToken ct)
+    {
+        var source = await context.Curricula
+            .Include(c => c.Program)
+            .Include(c => c.CurriculumCourses)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (source is null)
+            return NotFound(new { message = "Kaynak müfredat bulunamadı." });
+
+        var versionExists = await context.Curricula
+            .AnyAsync(c => c.ProgramId == source.ProgramId && c.Version == req.NewVersion, ct);
+        if (versionExists)
+            return BadRequest(new { message = $"Bu program için '{req.NewVersion}' versiyonu zaten mevcut." });
+
+        var newCurriculum = new Domain.Entities.Curriculum
+        {
+            ProgramId = source.ProgramId,
+            Version = req.NewVersion,
+            Name = source.Name,
+            ShortName = source.ShortName,
+            EnglishName = source.EnglishName,
+            StartDate = source.StartDate,
+            EndDate = source.EndDate,
+            DecisionDate = source.DecisionDate,
+            DecisionNo = source.DecisionNo,
+            DecisionNote = source.DecisionNote,
+            GradingSystem = source.GradingSystem,
+            InternshipDuration = source.InternshipDuration,
+            Description = source.Description,
+            IsActive = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Curricula.Add(newCurriculum);
+        await context.SaveChangesAsync(ct);
+
+        // Copy all courses from source
+        foreach (var cc in source.CurriculumCourses)
+        {
+            context.CurriculumCourses.Add(new Domain.Entities.CurriculumCourse
+            {
+                CurriculumId = newCurriculum.Id,
+                CourseId = cc.CourseId,
+                SuggestedSemester = cc.SuggestedSemester,
+                IsCompulsory = cc.IsCompulsory,
+                IncludeInGpa = cc.IncludeInGpa,
+                ShowOnTranscript = cc.ShowOnTranscript,
+                CourseCategory = cc.CourseCategory,
+                OpeningReason = cc.OpeningReason,
+                GroupCode = cc.GroupCode
+            });
+        }
+
+        await context.SaveChangesAsync(ct);
+
+        // Return the full detail of the new curriculum
+        var detail = await context.Curricula
+            .AsNoTracking()
+            .Include(c => c.Program)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
+            .FirstAsync(c => c.Id == newCurriculum.Id, ct);
+
+        return Ok(new CurriculumDetailDto(
+            detail.Id,
+            detail.ProgramId,
+            detail.Program.Name,
+            detail.Version,
+            detail.IsActive,
+            detail.Name,
+            detail.ShortName,
+            detail.EnglishName,
+            detail.StartDate,
+            detail.EndDate,
+            detail.DecisionDate,
+            detail.DecisionNo,
+            detail.DecisionNote,
+            detail.GradingSystem,
+            detail.InternshipDuration,
+            detail.Description,
+            detail.CurriculumCourses
+                .OrderBy(cc => cc.SuggestedSemester)
+                .ThenBy(cc => cc.Course.Code)
+                .Select(cc => new CurriculumCourseItemDto(
+                    cc.CourseId, cc.Course.Code, cc.Course.Name,
+                    cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
+                    cc.SuggestedSemester, cc.IsCompulsory,
+                    cc.IncludeInGpa, cc.ShowOnTranscript,
+                    cc.CourseCategory, cc.GroupCode))
+                .ToList()));
+    }
+
+    // ── POST /api/curriculum/{id}/activate ──────────────────────────
+    [HttpPost("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id, CancellationToken ct)
+    {
+        var curriculum = await context.Curricula
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        // Aynı programa ait diğer müfredatları deaktif et
+        var siblings = await context.Curricula
+            .Where(c => c.ProgramId == curriculum.ProgramId && c.Id != id && c.IsActive)
+            .ToListAsync(ct);
+
+        foreach (var s in siblings)
+        {
+            s.IsActive = false;
+            s.UpdatedAt = DateTime.UtcNow;
+        }
+
+        curriculum.IsActive = true;
+        curriculum.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Müfredat aktif olarak ayarlandı." });
+    }
+
+    // ── GET /api/curriculum/{id}/elective-pools ─────────────────────
+    [HttpGet("{id:int}/elective-pools")]
+    public async Task<IActionResult> ListPools(int id, CancellationToken ct)
+    {
+        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
+        if (!exists)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var pools = await context.CurriculumElectivePools
+            .AsNoTracking()
+            .Where(p => p.CurriculumId == id)
+            .Include(p => p.ElectiveGroup).ThenInclude(eg => eg.Courses)
+            .OrderBy(p => p.SuggestedSemesterStart)
+            .Select(p => new CurriculumElectivePoolDto(
+                p.Id, p.ElectiveGroupId, p.ElectiveGroup.Name, p.ElectiveGroup.Code,
+                p.ElectiveGroup.ElectiveSubtype,
+                p.SuggestedSemesterStart, p.SuggestedSemesterEnd,
+                p.RequiredCourseCount, p.RequiredEcts,
+                p.ElectiveGroup.Courses.Count))
+            .ToListAsync(ct);
+
+        return Ok(pools);
+    }
+
+    // ── POST /api/curriculum/{id}/elective-pools ────────────────────
+    [HttpPost("{id:int}/elective-pools")]
+    public async Task<IActionResult> CreatePool(int id, [FromBody] CreatePoolRequest req, CancellationToken ct)
+    {
+        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
+        if (!exists)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var group = await context.ElectiveGroups
+            .Include(eg => eg.Courses)
+            .FirstOrDefaultAsync(eg => eg.Id == req.ElectiveGroupId, ct);
+        if (group is null)
+            return NotFound(new { message = "Seçmeli ders grubu bulunamadı." });
+
+        if (req.RequiredCourseCount <= 0 && req.RequiredEcts <= 0)
+            return BadRequest(new { message = "Gerekli ders sayısı veya AKTS en az biri 0'dan büyük olmalıdır." });
+
+        var alreadyExists = await context.CurriculumElectivePools
+            .AnyAsync(p => p.CurriculumId == id && p.ElectiveGroupId == req.ElectiveGroupId, ct);
+        if (alreadyExists)
+            return BadRequest(new { message = "Bu müfredatta bu seçmeli grubu zaten tanımlı." });
+
+        var entity = new Domain.Entities.CurriculumElectivePool
+        {
+            CurriculumId = id,
+            ElectiveGroupId = req.ElectiveGroupId,
+            SuggestedSemesterStart = req.SuggestedSemesterStart,
+            SuggestedSemesterEnd = req.SuggestedSemesterEnd,
+            RequiredCourseCount = req.RequiredCourseCount,
+            RequiredEcts = req.RequiredEcts,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.CurriculumElectivePools.Add(entity);
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new CurriculumElectivePoolDto(
+            entity.Id, entity.ElectiveGroupId, group.Name, group.Code,
+            group.ElectiveSubtype,
+            entity.SuggestedSemesterStart, entity.SuggestedSemesterEnd,
+            entity.RequiredCourseCount, entity.RequiredEcts,
+            group.Courses.Count));
+    }
+
+    // ── PUT /api/curriculum/{id}/elective-pools/{poolId} ────────────
+    [HttpPut("{id:int}/elective-pools/{poolId:int}")]
+    public async Task<IActionResult> UpdatePool(int id, int poolId, [FromBody] UpdatePoolRequest req, CancellationToken ct)
+    {
+        var pool = await context.CurriculumElectivePools
+            .FirstOrDefaultAsync(p => p.Id == poolId && p.CurriculumId == id, ct);
+        if (pool is null)
+            return NotFound(new { message = "Seçmeli havuz bulunamadı." });
+
+        if (req.SuggestedSemesterStart.HasValue) pool.SuggestedSemesterStart = req.SuggestedSemesterStart.Value;
+        if (req.SuggestedSemesterEnd.HasValue) pool.SuggestedSemesterEnd = req.SuggestedSemesterEnd.Value;
+        if (req.RequiredCourseCount.HasValue) pool.RequiredCourseCount = req.RequiredCourseCount.Value;
+        if (req.RequiredEcts.HasValue) pool.RequiredEcts = req.RequiredEcts.Value;
+
+        pool.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Seçmeli havuz güncellendi." });
+    }
+
+    // ── DELETE /api/curriculum/{id}/elective-pools/{poolId} ─────────
+    [HttpDelete("{id:int}/elective-pools/{poolId:int}")]
+    public async Task<IActionResult> DeletePool(int id, int poolId, CancellationToken ct)
+    {
+        var pool = await context.CurriculumElectivePools
+            .FirstOrDefaultAsync(p => p.Id == poolId && p.CurriculumId == id, ct);
+        if (pool is null)
+            return NotFound(new { message = "Seçmeli havuz bulunamadı." });
+
+        context.CurriculumElectivePools.Remove(pool);
+        await context.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+}

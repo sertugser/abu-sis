@@ -36,9 +36,9 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         return await query
             .OrderBy(c => c.Code)
             .Select(c => new CourseListItemDto(
-                c.Id, c.Code, c.Name,
+                c.Id, c.Code, c.Name, c.EnglishName,
                 c.Ects, c.TheoryHours, c.LabHours,
-                c.IsNonGpa,
+                c.IsNonGpa, c.ExamType,
                 c.DepartmentId, c.Department != null ? c.Department.Name : null,
                 c.Prerequisites.Count, c.Equivalencies.Count))
             .ToListAsync();
@@ -73,9 +73,9 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         var chain = await BuildPrerequisiteChainAsync(id, maxDepth: 3);
 
         return new CourseDetailDto(
-            course.Id, course.Code, course.Name,
+            course.Id, course.Code, course.Name, course.EnglishName,
             course.Ects, course.TheoryHours, course.LabHours,
-            course.IsNonGpa,
+            course.IsNonGpa, course.ExamType,
             course.DepartmentId, course.Department?.Name,
             course.Prerequisites.Select(p => new PrerequisiteDto(
                 p.RequiredCourse.Id, p.RequiredCourse.Code, p.RequiredCourse.Name)).ToList(),
@@ -155,10 +155,12 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         {
             Code = dto.Code,
             Name = dto.Name,
+            EnglishName = dto.EnglishName,
             Ects = dto.Ects,
             TheoryHours = dto.TheoryHours,
             LabHours = dto.LabHours,
             IsNonGpa = dto.IsNonGpa,
+            ExamType = dto.ExamType,
             DepartmentId = dto.DepartmentId
         };
         db.Courses.Add(course);
@@ -177,10 +179,12 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
         course.Code = dto.Code;
         course.Name = dto.Name;
+        course.EnglishName = dto.EnglishName;
         course.Ects = dto.Ects;
         course.TheoryHours = dto.TheoryHours;
         course.LabHours = dto.LabHours;
         course.IsNonGpa = dto.IsNonGpa;
+        course.ExamType = dto.ExamType;
         course.DepartmentId = dto.DepartmentId;
         await db.SaveChangesAsync();
         return (await GetCourseByIdAsync(id))!;

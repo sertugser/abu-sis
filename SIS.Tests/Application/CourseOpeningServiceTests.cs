@@ -121,11 +121,11 @@ public class CourseOpeningServiceTests
             CourseId = course.Id,
             SectionCount = 1,
             CapacityPerSection = 30
-        }, CancellationToken.None);
+        }, ct: CancellationToken.None);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*henüz şube onayı oluşturulmadı*");
+            .WithMessage("*onay gereklidir*");
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class CourseOpeningServiceTests
             CourseId = course.Id,
             SectionCount = 2,
             CapacityPerSection = 35
-        }, CancellationToken.None);
+        }, ct: CancellationToken.None);
 
         result.Should().HaveCount(2);
         result.Select(section => section.SectionNumber).Should().Equal(2, 3);

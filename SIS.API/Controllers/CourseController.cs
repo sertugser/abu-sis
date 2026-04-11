@@ -440,7 +440,8 @@ public class CourseController : ControllerBase
             AddDropStart = term.AddDropStart,
             AddDropEnd = term.AddDropEnd,
             IsRegistrationOpen = term.Status == TermStatus.RegistrationOpen,
-            IsAddDropOpen = term.Status == TermStatus.AddDrop
+            IsAddDropOpen = term.Status == TermStatus.AddDrop,
+            Status = term.Status.ToString()
         };
 
         return Ok(dto);

@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import {
   useAdminCourses,
   useAdminCourseDetail,
@@ -29,7 +30,7 @@ import { useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructu
 // ─── Course Form ─────────────────────────────────────────────────
 
 function emptyCourseForm(): CreateCourseDto {
-  return { code: '', name: '', ects: 6, theoryHours: 3, labHours: 0, isNonGpa: false, departmentId: null };
+  return { code: '', name: '', englishName: null, ects: 6, theoryHours: 3, labHours: 0, isNonGpa: false, examType: null, departmentId: null };
 }
 
 interface CourseFormProps {
@@ -54,6 +55,10 @@ function CourseFormFields({ form, onChange, departments }: CourseFormProps) {
       <div>
         <label className="text-sm font-medium text-foreground block mb-1">Ders Adı</label>
         <Input value={form.name} onChange={e => onChange({ ...form, name: e.target.value })} placeholder="örn. Programlamaya Giriş" />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-foreground block mb-1">İngilizce Adı</label>
+        <Input value={form.englishName ?? ''} onChange={e => onChange({ ...form, englishName: e.target.value || null })} placeholder="örn. Introduction to Programming" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -343,7 +348,7 @@ export default function CourseCatalogAdminPage() {
 
   function openCreate() { setForm(emptyCourseForm()); setFormError(''); setCreateOpen(true); }
   function openEdit(c: CourseListItemDto) {
-    setForm({ code: c.code, name: c.name, ects: c.ects, theoryHours: c.theoryHours, labHours: c.labHours, isNonGpa: c.isNonGpa, departmentId: c.departmentId });
+    setForm({ code: c.code, name: c.name, englishName: c.englishName, ects: c.ects, theoryHours: c.theoryHours, labHours: c.labHours, isNonGpa: c.isNonGpa, examType: c.examType, departmentId: c.departmentId });
     setFormError(''); setEditCourse(c);
   }
 
@@ -479,7 +484,7 @@ export default function CourseCatalogAdminPage() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={o => !o && setCreateOpen(false)}>
-        <DialogContent className="max-w-md">
+        <ResizableDialogContent defaultWidth={450} minWidth={380} minHeight={300}>
           <DialogHeader><DialogTitle>Ders Ekle</DialogTitle></DialogHeader>
           <CourseFormFields form={form} onChange={f => { setForm(f); setFormError(''); }} departments={departments} />
           {formError && <p className="text-sm text-destructive">{formError}</p>}
@@ -487,12 +492,12 @@ export default function CourseCatalogAdminPage() {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>İptal</Button>
             <Button onClick={handleCreate} disabled={createCourse.isPending}>{createCourse.isPending ? 'Kaydediliyor...' : 'Kaydet'}</Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={!!editCourse} onOpenChange={o => !o && setEditCourse(null)}>
-        <DialogContent className="max-w-md">
+        <ResizableDialogContent defaultWidth={450} minWidth={380} minHeight={300}>
           <DialogHeader><DialogTitle>Ders Düzenle</DialogTitle></DialogHeader>
           <CourseFormFields form={form} onChange={f => { setForm(f); setFormError(''); }} departments={departments} />
           {formError && <p className="text-sm text-destructive">{formError}</p>}
@@ -500,7 +505,7 @@ export default function CourseCatalogAdminPage() {
             <Button variant="outline" onClick={() => setEditCourse(null)}>İptal</Button>
             <Button onClick={handleUpdate} disabled={updateCourse.isPending}>{updateCourse.isPending ? 'Kaydediliyor...' : 'Kaydet'}</Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       {/* Delete Dialog */}

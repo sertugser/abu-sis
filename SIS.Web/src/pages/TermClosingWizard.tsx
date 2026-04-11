@@ -2,9 +2,19 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useAcademicOperationsContext } from '@/hooks/useAcademicOperations';
 import type { AccessibleDepartment } from '@/types/academicOperations';
@@ -19,6 +29,7 @@ import {
   useOpenNewTerm,
 } from '@/hooks/useTermClosing';
 import type { StudentProgressionDto } from '@/api/termClosing.api';
+import { Loader2 } from 'lucide-react';
 
 const STEPS = [
   { id: 1, label: 'Not Girisi Kilitle' },
@@ -171,10 +182,12 @@ function GradeLockStep({ departmentId, isCompleted, onNext }: { departmentId: nu
     <StepCard
       title="Adim 1: Not Girisi Kilitle"
       description="Tum ogretim uyeleri icin not girisi ve duzenleme islemlerini kilitleyin."
-      onAction={handleLock}
       actionLabel="Notlari Kilitle"
       isLoading={lockMutation.isPending}
       isCompleted={isCompleted}
+      confirmTitle="Notlari kilitlemek istiyor musunuz?"
+      confirmDescription="Bu islem tum sube'leri kilitleyecek ve notlari hesaplayacaktir. Eksik not girisi olan ogrenciler NA alacaktir. Bu islem geri alinabilir."
+      onAction={handleLock}
     >
       <div className="space-y-3">
         {!isCompleted && (
@@ -222,11 +235,13 @@ function GpaStep({ departmentId, isCompleted, onNext, onBack }: { departmentId: 
     <StepCard
       title="Adim 2: GPA Hesapla"
       description="Tum ogrenciler icin donem ve genel not ortalamasini yeniden hesaplayin."
-      onAction={handleCalc}
       actionLabel="GPA Hesapla"
       isLoading={gpaMutation.isPending}
       isCompleted={isCompleted}
       onBack={onBack}
+      confirmTitle="GPA hesaplamasini baslatmak istiyor musunuz?"
+      confirmDescription="Tum ogrencilerin donem ve genel not ortalamalari yeniden hesaplanacaktir. Bu islem geri alinabilir."
+      onAction={handleCalc}
     >
       <div className="space-y-3">
         {result && (
@@ -236,7 +251,12 @@ function GpaStep({ departmentId, isCompleted, onNext, onBack }: { departmentId: 
             <MiniStat label="Degisiklik" value={String(result.changedCount)} color={result.changedCount > 0 ? 'text-amber-600' : undefined} />
           </div>
         )}
-        {gpaMutation.isPending && <Progress value={50} className="h-2 animate-pulse" />}
+        {gpaMutation.isPending && (
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">GPA hesaplaniyor...</span>
+          </div>
+        )}
         {isCompleted && !result && <Badge variant="success">Hesaplandi</Badge>}
       </div>
     </StepCard>
@@ -265,11 +285,13 @@ function PromotionStep({ departmentId, isCompleted, onNext, onBack }: { departme
     <StepCard
       title="Adim 3: Sinif Atlama (Akademik Ilerleme)"
       description="Toplam AKTS'ye gore ogrenci sinif seviyelerini guncelleyin."
-      onAction={handlePromote}
-      actionLabel="Sinif Atlamayı Uygula"
+      actionLabel="Sinif Atlamayi Uygula"
       isLoading={promoteMutation.isPending}
       isCompleted={isCompleted}
       onBack={onBack}
+      confirmTitle="Sinif atlama islemini uygulamak istiyor musunuz?"
+      confirmDescription={`${preview ? `${preview.promotedCount} ogrenci sinif atlayacak, ${preview.stayedCount} ogrenci mevcut sinifinda kalacak.` : 'Ogrenci sinif seviyeleri AKTS toplamina gore guncellenecektir.'} Bu islem geri alinabilir.`}
+      onAction={handlePromote}
     >
       <div className="space-y-4">
         {preview && (
@@ -320,7 +342,7 @@ function PromotionStep({ departmentId, isCompleted, onNext, onBack }: { departme
 
         {isCompleted && (
           <div className="flex items-center justify-between">
-            <Badge variant="success">Uygulandı</Badge>
+            <Badge variant="success">Uyguland\u0131</Badge>
             <Button
               variant="outline"
               size="sm"
@@ -369,12 +391,14 @@ function NewTermStep({ departmentId, isCompleted, onBack }: { departmentId: numb
     <StepCard
       title="Adim 4: Yeni Donem Ac"
       description="Yeni akademik donemi olusturun ve ders kayit takvimini ayarlayin."
-      onAction={handleOpen}
       actionLabel="Donemi Ac"
       isLoading={openTermMutation.isPending}
       isCompleted={isCompleted}
       onBack={onBack}
       actionDisabled={!canSubmit}
+      confirmTitle="Yeni donemi acmak istiyor musunuz?"
+      confirmDescription={`"${termName || '(isimsiz)'}" adli yeni donem olusturulacaktir. Kayit tarihleri ve donem takvimi ayarlanacaktir.`}
+      onAction={handleOpen}
     >
       <div className="space-y-4">
         {!isCompleted && (
@@ -438,12 +462,14 @@ interface StepCardProps {
   actionLabel: string;
   isLoading: boolean;
   isCompleted: boolean;
+  confirmTitle: string;
+  confirmDescription: string;
   onBack?: () => void;
   actionDisabled?: boolean;
   children: React.ReactNode;
 }
 
-function StepCard({ title, description, onAction, actionLabel, isLoading, isCompleted, onBack, actionDisabled, children }: StepCardProps) {
+function StepCard({ title, description, onAction, actionLabel, isLoading, isCompleted, confirmTitle, confirmDescription, onBack, actionDisabled, children }: StepCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -455,9 +481,28 @@ function StepCard({ title, description, onAction, actionLabel, isLoading, isComp
         <div className="flex gap-3 pt-4 border-t">
           {onBack && <Button variant="outline" onClick={onBack}>&laquo; Geri</Button>}
           {!isCompleted && (
-            <Button onClick={onAction} disabled={isLoading || actionDisabled}>
-              {isLoading ? 'Isleniyor...' : actionLabel}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button disabled={isLoading || actionDisabled}>
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Isleniyor...
+                    </span>
+                  ) : actionLabel}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{confirmTitle}</AlertDialogTitle>
+                  <AlertDialogDescription>{confirmDescription}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Iptal</AlertDialogCancel>
+                  <AlertDialogAction onClick={onAction}>Onayla</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </CardContent>

@@ -98,6 +98,13 @@ public class TermClosingService : ITermClosingService
         if (term.Status != TermStatus.GradeEntry && term.Status != TermStatus.Closed)
             return new TermClosingStepResultDto { Success = false, Message = $"Not kilitleme sadece 'Not Girişi' veya 'Kapalı' aşamasında yapılabilir. Mevcut: {term.Status}" };
 
+        // C10: Concurrent access protection
+        var inProgress = await _context.TermClosingProgresses
+            .AnyAsync(p => p.DepartmentId == departmentId && p.TermId == term.Id
+                && p.Step == TermClosingStep.GradeLock && !p.IsCompleted, ct);
+        if (inProgress)
+            throw new InvalidOperationException("Bu adim baska bir kullanici tarafindan isleniyor.");
+
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == term.Id
@@ -108,101 +115,138 @@ public class TermClosingService : ITermClosingService
         if (sections.Count == 0)
             return new TermClosingStepResultDto { Success = false, Message = "Bu bolumde aktif section bulunamadi." };
 
-        var unfinalizedSections = sections.Where(s => !s.IsFinalized).ToList();
-        int gradeLockCount = 0;
-
-        foreach (var section in unfinalizedSections)
+        // C1: Transaction wrapper
+        var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+        await using var transaction = useTransaction
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+        try
         {
-            var components = await _context.GradeComponents
-                .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
-                .ToListAsync(ct);
-
-            var totalWeight = components.Sum(c => c.Weight);
-
-            var registrations = await _context.CourseRegistrations
-                .Where(cr => cr.CourseSectionId == section.Id
+            // C2: Grade entry check before locking
+            var allSectionIds = sections.Select(s => s.Id).ToList();
+            var allRegistrations = await _context.CourseRegistrations
+                .Where(cr => allSectionIds.Contains(cr.CourseSectionId)
                     && cr.Status != RegistrationStatus.Dropped
                     && cr.Status != RegistrationStatus.Draft)
                 .ToListAsync(ct);
 
-            if (registrations.Count == 0)
+            var notes = new List<string>();
+            var totalRegistrations = allRegistrations.Count;
+            var missingGrades = allRegistrations.Count(r => r.Grade == null);
+            if (missingGrades > 0 && totalRegistrations > 0)
             {
-                section.IsFinalized = true;
-                gradeLockCount++;
-                continue;
+                var pct = Math.Round((double)missingGrades / totalRegistrations * 100, 1);
+                notes.Add($"Uyari: {missingGrades} ogrencinin ({pct}%) notu eksik, NA olarak atanacak.");
             }
 
-            if (components.Count > 0 && totalWeight == 100)
-            {
-                var criteria = await _context.GradingCriteria
-                    .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId
-                        && gc.AcademicTermId == section.TermId, ct);
-                criteria ??= new GradingCriteria();
+            var unfinalizedSections = sections.Where(s => !s.IsFinalized).ToList();
+            int gradeLockCount = 0;
 
-                var registrationIds = registrations.Select(r => r.Id).ToList();
-                var allGrades = await _context.StudentGrades
-                    .Where(sg => registrationIds.Contains(sg.CourseRegistrationId))
+            foreach (var section in unfinalizedSections)
+            {
+                var components = await _context.GradeComponents
+                    .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
                     .ToListAsync(ct);
 
-                foreach (var reg in registrations)
+                var totalWeight = components.Sum(c => c.Weight);
+
+                var registrations = await _context.CourseRegistrations
+                    .Where(cr => cr.CourseSectionId == section.Id
+                        && cr.Status != RegistrationStatus.Dropped
+                        && cr.Status != RegistrationStatus.Draft)
+                    .ToListAsync(ct);
+
+                if (registrations.Count == 0)
                 {
-                    if (reg.Grade != null) continue;
+                    section.IsFinalized = true;
+                    gradeLockCount++;
+                    continue;
+                }
 
-                    var studentGrades = allGrades.Where(sg => sg.CourseRegistrationId == reg.Id).ToList();
-                    decimal weightedScore = 0;
-                    bool allComponentsHaveGrades = true;
+                if (components.Count > 0 && totalWeight == 100)
+                {
+                    // C5: Grading criteria must exist
+                    var criteria = await _context.GradingCriteria
+                        .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId
+                            && gc.AcademicTermId == section.TermId, ct);
+                    if (criteria == null)
+                        throw new InvalidOperationException($"'{section.Course.Code}' dersi icin not kriterleri tanimlanmamis.");
 
-                    foreach (var comp in components)
+                    var registrationIds = registrations.Select(r => r.Id).ToList();
+                    var allGrades = await _context.StudentGrades
+                        .Where(sg => registrationIds.Contains(sg.CourseRegistrationId))
+                        .ToListAsync(ct);
+
+                    foreach (var reg in registrations)
                     {
-                        var sg = studentGrades.FirstOrDefault(g => g.GradeComponentId == comp.Id);
-                        if (sg?.Score == null)
+                        if (reg.Grade != null) continue;
+
+                        var studentGrades = allGrades.Where(sg => sg.CourseRegistrationId == reg.Id).ToList();
+                        decimal weightedScore = 0;
+                        bool allComponentsHaveGrades = true;
+
+                        foreach (var comp in components)
                         {
-                            allComponentsHaveGrades = false;
-                            break;
+                            var sg = studentGrades.FirstOrDefault(g => g.GradeComponentId == comp.Id);
+                            if (sg?.Score == null)
+                            {
+                                allComponentsHaveGrades = false;
+                                break;
+                            }
+                            weightedScore += sg.Score.Value * comp.Weight / 100m;
                         }
-                        weightedScore += sg.Score.Value * comp.Weight / 100m;
+
+                        reg.Grade = allComponentsHaveGrades
+                            ? criteria.ResolveGrade((int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero))
+                            : GradeCode.NA;
+                        reg.UpdatedAt = DateTime.UtcNow;
                     }
-
-                    reg.Grade = allComponentsHaveGrades
-                        ? criteria.ResolveGrade((int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero))
-                        : GradeCode.NA;
-                    reg.UpdatedAt = DateTime.UtcNow;
                 }
-            }
-            else
-            {
-                foreach (var reg in registrations.Where(r => r.Grade == null))
+                else
                 {
-                    reg.Grade = GradeCode.NA;
-                    reg.UpdatedAt = DateTime.UtcNow;
+                    foreach (var reg in registrations.Where(r => r.Grade == null))
+                    {
+                        reg.Grade = GradeCode.NA;
+                        reg.UpdatedAt = DateTime.UtcNow;
+                    }
                 }
+
+                section.IsFinalized = true;
+                gradeLockCount++;
             }
 
-            section.IsFinalized = true;
-            gradeLockCount++;
+            // Grade assignments (IsFinalized, reg.Grade) must be persisted BEFORE GPA recalculation,
+            // otherwise RecalculateAndUpdateAsync reads stale data from DB.
+            await _context.SaveChangesAsync(ct);
+
+            var affectedStudentIds = await _context.CourseRegistrations
+                .Where(cr => sections.Select(s => s.Id).Contains(cr.CourseSectionId)
+                    && cr.Status != RegistrationStatus.Dropped
+                    && cr.Status != RegistrationStatus.Draft)
+                .Select(cr => cr.StudentId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var studentId in affectedStudentIds)
+            {
+                await _gpaService.RecalculateAndUpdateAsync(studentId);
+            }
+
+            notes.Add($"{gradeLockCount} section kilitlendi (toplam {sections.Count} section).");
+            var notesStr = string.Join(" ", notes);
+            await UpsertProgressAsync(departmentId, term.Id, TermClosingStep.GradeLock, userId, notesStr, ct);
+
+            if (transaction != null)
+                await transaction.CommitAsync(ct);
+
+            return new TermClosingStepResultDto { Success = true, Message = notesStr };
         }
-
-        // Grade assignments (IsFinalized, reg.Grade) must be persisted BEFORE GPA recalculation,
-        // otherwise RecalculateAndUpdateAsync reads stale data from DB.
-        await _context.SaveChangesAsync(ct);
-
-        var affectedStudentIds = await _context.CourseRegistrations
-            .Where(cr => sections.Select(s => s.Id).Contains(cr.CourseSectionId)
-                && cr.Status != RegistrationStatus.Dropped
-                && cr.Status != RegistrationStatus.Draft)
-            .Select(cr => cr.StudentId)
-            .Distinct()
-            .ToListAsync(ct);
-
-        foreach (var studentId in affectedStudentIds)
+        catch
         {
-            await _gpaService.RecalculateAndUpdateAsync(studentId);
+            if (transaction != null)
+                await transaction.RollbackAsync(ct);
+            throw;
         }
-
-        var notes = $"{gradeLockCount} section kilitlendi (toplam {sections.Count} section).";
-        await UpsertProgressAsync(departmentId, term.Id, TermClosingStep.GradeLock, userId, notes, ct);
-
-        return new TermClosingStepResultDto { Success = true, Message = notes };
     }
 
     public async Task<TermClosingStepResultDto> UnlockGradesAsync(int departmentId, int userId, CancellationToken ct = default)
@@ -240,14 +284,51 @@ public class TermClosingService : ITermClosingService
         if (term != null && term.Status != TermStatus.GradeEntry && term.Status != TermStatus.Closed)
             return new GpaRecalculationResultDto { Notes = { $"GPA hesaplama sadece 'Not Girişi' veya 'Kapalı' aşamasında yapılabilir. Mevcut: {term.Status}" } };
 
-        var result = await _progressionService.RecalculateDepartmentGpaAsync(departmentId, ct);
+        // C3: Step order enforcement — LockGrades must be completed first
         if (term != null)
         {
-            var notes = $"{result.RecalculatedCount} ogrenci hesaplandi, {result.ChangedCount} degisiklik.";
-            await UpsertProgressAsync(departmentId, term.Id, TermClosingStep.GpaCalculation, userId, notes, ct);
+            var progress = await _context.TermClosingProgresses
+                .Where(p => p.DepartmentId == departmentId && p.TermId == term.Id)
+                .ToListAsync(ct);
+            if (!progress.Any(p => p.Step == TermClosingStep.GradeLock && p.IsCompleted))
+                throw new InvalidOperationException("Once not girisi kilitlenmelidir.");
         }
 
-        return result;
+        // C10: Concurrent access protection
+        if (term != null)
+        {
+            var inProgress = await _context.TermClosingProgresses
+                .AnyAsync(p => p.DepartmentId == departmentId && p.TermId == term.Id
+                    && p.Step == TermClosingStep.GpaCalculation && !p.IsCompleted, ct);
+            if (inProgress)
+                throw new InvalidOperationException("Bu adim baska bir kullanici tarafindan isleniyor.");
+        }
+
+        // C1: Transaction wrapper
+        var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+        await using var transaction = useTransaction
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+        try
+        {
+            var result = await _progressionService.RecalculateDepartmentGpaAsync(departmentId, ct);
+            if (term != null)
+            {
+                var notes = $"{result.RecalculatedCount} ogrenci hesaplandi, {result.ChangedCount} degisiklik.";
+                await UpsertProgressAsync(departmentId, term.Id, TermClosingStep.GpaCalculation, userId, notes, ct);
+            }
+
+            if (transaction != null)
+                await transaction.CommitAsync(ct);
+
+            return result;
+        }
+        catch
+        {
+            if (transaction != null)
+                await transaction.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<BatchProgressionResultDto> PreviewPromotionAsync(int departmentId, CancellationToken ct = default)
@@ -259,30 +340,68 @@ public class TermClosingService : ITermClosingService
     {
         var promoteTerm = await GetActiveTermAsync(ct);
         if (promoteTerm != null && promoteTerm.Status != TermStatus.GradeEntry && promoteTerm.Status != TermStatus.Closed)
-            return new BatchProgressionResultDto { Notes = { $"Sınıf atlatma sadece 'Not Girişi' veya 'Kapalı' aşamasında yapılabilir. Mevcut: {promoteTerm.Status}" } };
+            return new BatchProgressionResultDto { Notes = { $"Sinif atlatma sadece 'Not Girisi' veya 'Kapali' asamasinda yapilabilir. Mevcut: {promoteTerm.Status}" } };
 
-        var students = await _context.Students
-            .Include(s => s.StudentPrograms)
-                .ThenInclude(sp => sp.Program)
-            .Where(s => s.Status == StudentStatus.Active
-                && s.StudentPrograms.Any(sp =>
-                    sp.Type == StudentProgramType.Main
-                    && sp.IsActive
-                    && sp.Program.DepartmentId == departmentId))
-            .ToListAsync(ct);
-
-        var snapshot = students.ToDictionary(s => s.Id, s => s.CompletedSemesters);
-        var snapshotJson = JsonSerializer.Serialize(snapshot);
-
-        var result = await _progressionService.PromoteDepartmentStudentsAsync(departmentId, dryRun: false, ct);
-
-        var term = await GetActiveTermAsync(ct);
-        if (term != null)
+        // C3: Step order enforcement — CalculateGpa must be completed first
+        if (promoteTerm != null)
         {
-            await UpsertProgressAsync(departmentId, term.Id, TermClosingStep.Promotion, userId, snapshotJson, ct);
+            var progress = await _context.TermClosingProgresses
+                .Where(p => p.DepartmentId == departmentId && p.TermId == promoteTerm.Id)
+                .ToListAsync(ct);
+            if (!progress.Any(p => p.Step == TermClosingStep.GpaCalculation && p.IsCompleted))
+                throw new InvalidOperationException("Once GPA hesaplanmalidir.");
         }
 
-        return result;
+        // C10: Concurrent access protection
+        if (promoteTerm != null)
+        {
+            var inProgress = await _context.TermClosingProgresses
+                .AnyAsync(p => p.DepartmentId == departmentId && p.TermId == promoteTerm.Id
+                    && p.Step == TermClosingStep.Promotion && !p.IsCompleted, ct);
+            if (inProgress)
+                throw new InvalidOperationException("Bu adim baska bir kullanici tarafindan isleniyor.");
+        }
+
+        // C1: Transaction wrapper
+        var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+        await using var transaction = useTransaction
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+        try
+        {
+            // C6: Snapshot BEFORE promotion (not after)
+            var students = await _context.Students
+                .Include(s => s.StudentPrograms)
+                    .ThenInclude(sp => sp.Program)
+                .Where(s => s.Status == StudentStatus.Active
+                    && s.StudentPrograms.Any(sp =>
+                        sp.Type == StudentProgramType.Main
+                        && sp.IsActive
+                        && sp.Program.DepartmentId == departmentId))
+                .ToListAsync(ct);
+
+            var snapshot = students.ToDictionary(s => s.Id, s => s.CompletedSemesters);
+            var snapshotJson = JsonSerializer.Serialize(snapshot);
+
+            var result = await _progressionService.PromoteDepartmentStudentsAsync(departmentId, dryRun: false, ct);
+
+            var term = await GetActiveTermAsync(ct);
+            if (term != null)
+            {
+                await UpsertProgressAsync(departmentId, term.Id, TermClosingStep.Promotion, userId, snapshotJson, ct);
+            }
+
+            if (transaction != null)
+                await transaction.CommitAsync(ct);
+
+            return result;
+        }
+        catch
+        {
+            if (transaction != null)
+                await transaction.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<TermClosingStepResultDto> RollbackPromotionAsync(int departmentId, int userId, CancellationToken ct = default)
@@ -344,57 +463,94 @@ public class TermClosingService : ITermClosingService
         if (currentTerm == null)
             return new NewTermResultDto { Success = false, Message = "Aktif donem bulunamadi." };
 
-        var existingTerm = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.Year == request.Year && t.Semester == request.Semester, ct);
+        // C3: Step order enforcement — Promote must be completed first
+        var progressList = await _context.TermClosingProgresses
+            .Where(p => p.DepartmentId == departmentId && p.TermId == currentTerm.Id)
+            .ToListAsync(ct);
+        if (!progressList.Any(p => p.Step == TermClosingStep.Promotion && p.IsCompleted))
+            throw new InvalidOperationException("Once sinif atlatma tamamlanmalidir.");
 
-        int newTermId;
+        // C10: Concurrent access protection
+        var inProgress = await _context.TermClosingProgresses
+            .AnyAsync(p => p.DepartmentId == departmentId && p.TermId == currentTerm.Id
+                && p.Step == TermClosingStep.NewTerm && !p.IsCompleted, ct);
+        if (inProgress)
+            throw new InvalidOperationException("Bu adim baska bir kullanici tarafindan isleniyor.");
 
-        if (existingTerm != null)
+        // C4: Date validation
+        if (request.RegistrationEnd <= request.RegistrationStart)
+            throw new InvalidOperationException("Kayit bitis tarihi baslangic tarihinden sonra olmalidir.");
+        if (request.TermEnd <= request.TermStart)
+            throw new InvalidOperationException("Donem bitis tarihi baslangic tarihinden sonra olmalidir.");
+
+        // C1: Transaction wrapper
+        var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+        await using var transaction = useTransaction
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+        try
         {
-            newTermId = existingTerm.Id;
-            if (!existingTerm.IsActive)
-                existingTerm.IsActive = true;
-        }
-        else
-        {
-            var newTerm = new AcademicTerm
+            var existingTerm = await _context.AcademicTerms
+                .FirstOrDefaultAsync(t => t.Year == request.Year && t.Semester == request.Semester, ct);
+
+            int newTermId;
+
+            if (existingTerm != null)
             {
-                Name = request.Name,
-                Year = request.Year,
-                Semester = request.Semester,
-                RegistrationStart = request.RegistrationStart,
-                RegistrationEnd = request.RegistrationEnd,
-                AddDropStart = request.RegistrationStart,
-                AddDropEnd = request.RegistrationEnd,
-                WithdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49),
-                TermStart = request.TermStart,
-                TermEnd = request.TermEnd,
-                IsActive = true
-            };
-            _context.AcademicTerms.Add(newTerm);
+                newTermId = existingTerm.Id;
+                if (!existingTerm.IsActive)
+                    existingTerm.IsActive = true;
+            }
+            else
+            {
+                var newTerm = new AcademicTerm
+                {
+                    Name = request.Name,
+                    Year = request.Year,
+                    Semester = request.Semester,
+                    RegistrationStart = request.RegistrationStart,
+                    RegistrationEnd = request.RegistrationEnd,
+                    AddDropStart = request.RegistrationStart,
+                    AddDropEnd = request.RegistrationEnd,
+                    WithdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49),
+                    TermStart = request.TermStart,
+                    TermEnd = request.TermEnd,
+                    IsActive = true
+                };
+                _context.AcademicTerms.Add(newTerm);
+                await _context.SaveChangesAsync(ct);
+                newTermId = newTerm.Id;
+            }
+
+            // NOT: currentTerm.IsActive = false yapmiyoruz -- bu donem gecisi merkezi
+            // TransitionStatusAsync uzerinden yapilmali. Bolum bazli kapatma mevcut
+            // donemin aktifligini degistirmemeli (diger bolumler hala kullaniyor olabilir).
             await _context.SaveChangesAsync(ct);
-            newTermId = newTerm.Id;
+
+            await UpsertProgressAsync(departmentId, currentTerm.Id, TermClosingStep.NewTerm, userId,
+                $"Yeni donem: {request.Name} (ID: {newTermId})", ct);
+
+            if (transaction != null)
+                await transaction.CommitAsync(ct);
+
+            return new NewTermResultDto
+            {
+                Success = true,
+                Message = $"Yeni donem '{request.Name}' olusturuldu ve aktif edildi.",
+                NewTermId = newTermId
+            };
         }
-
-        // NOT: currentTerm.IsActive = false yapmıyoruz — bu dönem geçişi merkezi
-        // TransitionStatusAsync üzerinden yapılmalı. Bölüm bazlı kapatma mevcut
-        // dönemin aktifliğini değiştirmemeli (diğer bölümler hâlâ kullanıyor olabilir).
-        await _context.SaveChangesAsync(ct);
-
-        await UpsertProgressAsync(departmentId, currentTerm.Id, TermClosingStep.NewTerm, userId,
-            $"Yeni donem: {request.Name} (ID: {newTermId})", ct);
-
-        return new NewTermResultDto
+        catch
         {
-            Success = true,
-            Message = $"Yeni donem '{request.Name}' olusturuldu ve aktif edildi.",
-            NewTermId = newTermId
-        };
+            if (transaction != null)
+                await transaction.RollbackAsync(ct);
+            throw;
+        }
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // ===================================================================
     //  HELPERS
-    // ═══════════════════════════════════════════════════════════════
+    // ===================================================================
 
     private async Task<AcademicTerm?> GetActiveTermAsync(CancellationToken ct)
     {

@@ -210,7 +210,8 @@ public class AcademicProgressionService : IAcademicProgressionService
                 }
                 else
                 {
-                    // Kural tanımlı değil — AKTS bazlı fallback
+                    // C9: Kural tanımlı değil — AKTS bazlı fallback + uyarı
+                    result.Notes.Add($"Uyari: {program?.Name ?? "Bilinmeyen program"} icin {fromYear}->{fromYear + 1} gecis kurali tanimlanmamis, AKTS bazli fallback kullanildi.");
                     var ectsForLevel = ectsPerYear * fromYear;
                     if (passedCourseEcts >= ectsForLevel)
                     {
@@ -226,10 +227,9 @@ public class AcademicProgressionService : IAcademicProgressionService
             }
             newLevel = Math.Clamp(newLevel, 1, normalDurationYears);
 
-            // CompletedSemesters: en az mevcut değeri koru, seviye yükseldiyse güncelle
-            // Tek sayı kaybını önle: sadece gerçekten seviye değiştiyse güncelle
+            // C8: CompletedSemesters: seviye farkı kadar artır (birden fazla sınıf atlayabilir)
             var newSemesters = newLevel > oldLevel
-                ? oldSemesters + 1  // Bir dönem daha tamamlandı
+                ? oldSemesters + (newLevel - oldLevel)
                 : oldSemesters;     // Seviye değişmediyse mevcut değeri koru
 
             var user = users.GetValueOrDefault(student.UserId);
@@ -309,6 +309,11 @@ public class AcademicProgressionService : IAcademicProgressionService
                 {
                     var sgpa = await _gpaCalculationService.CalculateSgpaAsync(student.Id, latestTermId);
                     student.Sgpa = Math.Round(sgpa, 4);
+                }
+                else
+                {
+                    // C7: SGPA stale — no graded term found, reset to 0
+                    student.Sgpa = 0m;
                 }
             }
         }

@@ -64,4 +64,5 @@ public class ActiveTermDto
     public DateTime AddDropEnd { get; set; }
     public bool IsRegistrationOpen { get; set; }
     public bool IsAddDropOpen { get; set; }
+    public string Status { get; set; } = string.Empty;
 }

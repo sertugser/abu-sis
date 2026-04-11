@@ -1,73 +1,125 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AlertCircle,
-  AlertTriangle,
-  Layers,
-  Package,
-  Plus,
-  TrendingUp,
-  Users,
-} from 'lucide-react';
-import { AddCourseDialog } from '../components/course-opening/AddCourseDialog';
-import { BulkOpenDialog } from '../components/course-opening/BulkOpenDialog';
-import { SemesterSectionGroup } from '../components/course-opening/SemesterSectionGroup';
+import { AlertCircle } from 'lucide-react';
+import { CourseFilterBar } from '../components/course-opening/CourseFilterBar';
+import { CurriculumPanel } from '../components/course-opening/CurriculumPanel';
+import { OpenedCoursesPanel } from '../components/course-opening/OpenedCoursesPanel';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useOpenedCourses } from '../hooks/useCourseOpening';
+import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
+import {
+  useBulkOpenCourses,
+  useCloseSection,
+  useCurriculumCoursesForOpening,
+  useDepartmentInstructors,
+  useInstructorWorkload,
+  useOpenCourse,
+  useOpenedCourses,
+  useUpdateOpenedSection,
+} from '../hooks/useCourseOpening';
 import { useDepartmentForecast } from '../hooks/useForecast';
 import type { CourseDemandForecastDto } from '../types/forecast';
-
-function getSemesterLabel(semester: number) {
-  if (semester === 0) return 'Diğer Dersler';
-  const year = Math.ceil(semester / 2);
-  const isFall = semester % 2 === 1;
-  return `${year}. Sınıf ${isFall ? 'Güz' : 'Bahar'}`;
-}
 
 export default function CourseOpeningPage() {
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
+  const { data: faculties } = useAdminFaculties();
+  const { data: structureDepartments } = useAdminDepartmentsByStructure();
   const departments = contextQuery.data?.accessibleDepartments ?? [];
+  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showBulkDialog, setShowBulkDialog] = useState(false);
+  const [semesterFilter, setSemesterFilter] = useState<number | null>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'compulsory' | 'elective'>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedInstructorId, setSelectedInstructorId] = useState<number | null>(null);
 
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const termId = activeTerm?.id ?? null;
 
   const openedQuery = useOpenedCourses(deptId, termId);
+  const curriculumQuery = useCurriculumCoursesForOpening(deptId, termId, true);
   const { data: forecastData } = useDepartmentForecast(deptId);
+  const instructorsQuery = useDepartmentInstructors(deptId);
+  const workloadQuery = useInstructorWorkload(selectedInstructorId, termId);
+
+  const openMutation = useOpenCourse(deptId ?? 0, termId ?? 0);
+  const bulkMutation = useBulkOpenCourses(deptId ?? 0, termId ?? 0);
+  const updateMutation = useUpdateOpenedSection(deptId ?? 0, termId ?? 0);
+  const closeMutation = useCloseSection(deptId ?? 0, termId ?? 0);
 
   const forecastMap = useMemo(() => {
     const map = new Map<number, CourseDemandForecastDto>();
     if (forecastData?.courseSummaries) {
-      for (const summary of forecastData.courseSummaries) {
-        map.set(summary.courseId, summary);
-      }
+      for (const s of forecastData.courseSummaries) map.set(s.courseId, s);
     }
     return map;
   }, [forecastData]);
 
-  const openedSections = openedQuery.data?.sections;
-  const sectionsBySemester = useMemo(() => {
-    if (!openedSections) return [];
+  const stats = useMemo(() => {
+    const courses = curriculumQuery.data ?? [];
+    const sections = openedQuery.data?.sections ?? [];
+    const openedCourseIds = new Set(sections.map(s => s.courseId));
+    return {
+      curriculumCount: courses.length,
+      openedCourseCount: openedCourseIds.size,
+      openedSectionCount: sections.length,
+      pendingCount: courses.filter(c => !c.alreadyOpened && c.canOpen).length,
+      totalCapacity: sections.reduce((s, sec) => s + sec.capacity, 0),
+      totalDemand: forecastData?.totalPredictedDemand ?? 0,
+    };
+  }, [curriculumQuery.data, openedQuery.data, forecastData]);
 
-    const map = new Map<number, typeof openedSections>();
-    for (const section of openedSections) {
-      const semester = section.suggestedSemester || 0;
-      if (!map.has(semester)) map.set(semester, []);
-      map.get(semester)!.push(section);
-    }
+  const handleFacultyChange = useCallback((facultyId: number | null) => {
+    setSelectedFacultyId(facultyId);
+    // Reset department when faculty changes
+    setSelectedDeptId(null);
+  }, []);
 
-    return [...map.entries()].sort((a, b) => a[0] - b[0]);
-  }, [openedSections]);
+  const toggleSelect = useCallback((courseId: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(courseId)) next.delete(courseId); else next.add(courseId);
+      return next;
+    });
+  }, []);
 
-  const totalSections = openedQuery.data?.totalSections ?? 0;
-  const totalCapacity = (openedSections ?? []).reduce((sum, section) => sum + section.capacity, 0);
-  const capSummary = forecastData?.capacitySummary;
+  const handleOpenSelected = useCallback(() => {
+    if (!deptId || !termId || selectedIds.size === 0) return;
+    const courses = curriculumQuery.data ?? [];
+    bulkMutation.mutate({
+      courses: [...selectedIds].map(courseId => {
+        const c = courses.find(x => x.courseId === courseId);
+        return {
+          courseId,
+          sectionCount: c?.recommendedSectionCount ?? 1,
+          capacityPerSection: c?.recommendedCapacity ?? 40,
+        };
+      }),
+    }, { onSuccess: () => setSelectedIds(new Set()) });
+  }, [deptId, termId, selectedIds, curriculumQuery.data, bulkMutation]);
+
+  const handleUpdateSection = useCallback(
+    (sectionId: number, capacity: number, instructorId: number | undefined, internalQuota?: number | null, externalQuota?: number | null) =>
+      updateMutation.mutate({ sectionId, capacity, instructorId, internalQuota, externalQuota }), [updateMutation]);
+
+  const handleCloseSection = useCallback(
+    (sectionId: number) => closeMutation.mutate(sectionId), [closeMutation]);
+
+  const handleAddSection = useCallback(
+    (courseId: number, capacity: number, instructorId: number | undefined, internalQuota?: number, externalQuota?: number) => {
+      if (deptId && termId) openMutation.mutate({ courseId, sectionCount: 1, capacityPerSection: capacity, instructorId, internalQuota, externalQuota });
+    }, [deptId, termId, openMutation]);
+
+  const exportCsv = useCallback(() => {
+    const secs = openedQuery.data?.sections ?? [];
+    if (!secs.length) return;
+    const csv = 'Ders Kodu,Ders Adı,Şube,Kontenjan,Kayıtlı,Hoca\n' +
+      secs.map(s => `${s.courseCode},"${s.courseName}",${s.sectionNumber},${s.capacity},${s.enrolledCount},"${s.instructorName ?? ''}"`).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    Object.assign(document.createElement('a'), { href: url, download: 'acilan-dersler.csv' }).click();
+    URL.revokeObjectURL(url);
+  }, [openedQuery.data]);
 
   if (contextQuery.isLoading) return <Skeleton className="h-96 rounded-xl" />;
 
@@ -80,7 +132,6 @@ export default function CourseOpeningPage() {
       </Alert>
     );
   }
-
   if (!termId) {
     return (
       <Alert>
@@ -92,123 +143,52 @@ export default function CourseOpeningPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Bölüm:</label>
-          <select
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-            value={deptId ?? ''}
-            onChange={event => setSelectedDeptId(Number(event.target.value))}
-          >
-            {departments.map(department => (
-              <option key={department.departmentId} value={department.departmentId}>
-                {department.departmentCode} — {department.departmentName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ml-auto flex gap-2">
-          <Button size="sm" onClick={() => setShowAddDialog(true)} disabled={!deptId || !termId}>
-            <Plus className="h-4 w-4 mr-1" /> Ekle
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowBulkDialog(true)} disabled={!deptId || !termId}>
-            <Package className="h-4 w-4 mr-1" /> Toplu Ders Aç
-          </Button>
-        </div>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="shrink-0 px-4 pt-4 pb-2">
+        <CourseFilterBar
+          departments={departments}
+          faculties={faculties ?? []}
+          structureDepartments={structureDepartments ?? []}
+          selectedFacultyId={selectedFacultyId}
+          onFacultyChange={handleFacultyChange}
+          selectedDeptId={deptId}
+          onDeptChange={setSelectedDeptId}
+          semesterFilter={semesterFilter}
+          onSemesterChange={setSemesterFilter}
+          typeFilter={typeFilter}
+          onTypeChange={setTypeFilter}
+          stats={stats}
+          onExportCsv={exportCsv}
+        />
       </div>
-
-      {!openedQuery.isLoading && !openedQuery.isError && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-blue-50 p-2 rounded-lg"><Layers className="h-4 w-4 text-blue-600" /></div>
-            <div>
-              <p className="text-xl font-bold">{totalSections}</p>
-              <p className="text-[11px] text-muted-foreground">Toplam Şube</p>
-            </div>
-          </div>
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-emerald-50 p-2 rounded-lg"><Users className="h-4 w-4 text-emerald-600" /></div>
-            <div>
-              <p className="text-xl font-bold">{totalCapacity}</p>
-              <p className="text-[11px] text-muted-foreground">Toplam Kontenjan</p>
-            </div>
-          </div>
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${capSummary && capSummary.sectionDelta > 0 ? 'bg-red-50' : capSummary && capSummary.sectionDelta < 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
-              <TrendingUp className={`h-4 w-4 ${capSummary && capSummary.sectionDelta > 0 ? 'text-red-600' : capSummary && capSummary.sectionDelta < 0 ? 'text-amber-600' : 'text-green-600'}`} />
-            </div>
-            <div>
-              <p className="text-xl font-bold">
-                {capSummary ? (capSummary.sectionDelta > 0 ? `+${capSummary.sectionDelta}` : capSummary.sectionDelta) : '—'}
-              </p>
-              <p className="text-[11px] text-muted-foreground">Tahmin Farkı (şube)</p>
-            </div>
-          </div>
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${capSummary && capSummary.coursesNeedingMoreSections > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-              <AlertTriangle className={`h-4 w-4 ${capSummary && capSummary.coursesNeedingMoreSections > 0 ? 'text-red-600' : 'text-green-600'}`} />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{capSummary?.coursesNeedingMoreSections ?? '—'}</p>
-              <p className="text-[11px] text-muted-foreground">Dikkat Gerektiren</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {openedQuery.isLoading ? (
-        <Skeleton className="h-64 rounded-xl" />
-      ) : openedQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Veriler yüklenemedi</AlertTitle>
-          <AlertDescription>
-            {(openedQuery.error as { response?: { status?: number } })?.response?.status === 403
-              ? 'Bu bölüm için yetkiniz bulunmuyor.'
-              : 'Açılan ders verileri alınamadı.'}
-          </AlertDescription>
-        </Alert>
-      ) : sectionsBySemester.length === 0 ? (
-        <div className="text-center py-16 bg-white border rounded-xl">
-          <Package className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-          <p className="text-muted-foreground">Henüz ders açılmamış.</p>
-          <Button variant="outline" className="mt-4" onClick={() => setShowBulkDialog(true)}>
-            <Package className="h-4 w-4 mr-1" /> Toplu Ders Aç
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {sectionsBySemester.map(([semester, sections]) => (
-            <SemesterSectionGroup
-              key={semester}
-              semesterLabel={getSemesterLabel(semester)}
-              sections={sections}
-              deptId={deptId!}
-              termId={termId}
-              forecastMap={forecastMap}
-            />
-          ))}
-        </div>
-      )}
-
-      {showAddDialog && deptId && (
-        <AddCourseDialog
-          departmentId={deptId}
-          termId={termId}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
+        <CurriculumPanel
+          courses={curriculumQuery.data}
+          isLoading={curriculumQuery.isLoading}
           forecastMap={forecastMap}
-          onClose={() => setShowAddDialog(false)}
+          semesterFilter={semesterFilter}
+          typeFilter={typeFilter}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onOpenSelected={handleOpenSelected}
         />
-      )}
-
-      {showBulkDialog && deptId && (
-        <BulkOpenDialog
-          departmentId={deptId}
-          termId={termId}
+        <div className="bg-gray-200 w-px hidden lg:block" />
+        <OpenedCoursesPanel
+          sections={openedQuery.data?.sections}
+          isLoading={openedQuery.isLoading}
           forecastMap={forecastMap}
-          onClose={() => setShowBulkDialog(false)}
+          instructors={instructorsQuery.data ?? []}
+          onUpdateSection={handleUpdateSection}
+          onCloseSection={handleCloseSection}
+          onAddSection={handleAddSection}
+          updatePending={updateMutation.isPending}
+          closePending={closeMutation.isPending}
+          closeError={closeMutation.error}
+          workloadData={workloadQuery.data}
+          onInstructorSelect={setSelectedInstructorId}
+          onExportCsv={exportCsv}
         />
-      )}
+      </div>
     </div>
   );
 }

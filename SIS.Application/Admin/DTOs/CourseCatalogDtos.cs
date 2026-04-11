@@ -1,17 +1,17 @@
 namespace SIS.Application.Admin.DTOs;
 
 public record CourseListItemDto(
-    int Id, string Code, string Name,
+    int Id, string Code, string Name, string? EnglishName,
     int Ects, int TheoryHours, int LabHours,
-    bool IsNonGpa,
+    bool IsNonGpa, string? ExamType,
     int? DepartmentId, string? DepartmentName,
     int PrerequisiteCount, int EquivalencyCount
 );
 
 public record CourseDetailDto(
-    int Id, string Code, string Name,
+    int Id, string Code, string Name, string? EnglishName,
     int Ects, int TheoryHours, int LabHours,
-    bool IsNonGpa,
+    bool IsNonGpa, string? ExamType,
     int? DepartmentId, string? DepartmentName,
     List<PrerequisiteDto> Prerequisites,
     List<EquivalencyDto> Equivalencies,
@@ -29,16 +29,16 @@ public record CurriculumAssignmentDto(
 );
 
 public record CreateCourseDto(
-    string Code, string Name,
+    string Code, string Name, string? EnglishName,
     int Ects, int TheoryHours, int LabHours,
-    bool IsNonGpa,
+    bool IsNonGpa, string? ExamType,
     int? DepartmentId
 );
 
 public record UpdateCourseDto(
-    string Code, string Name,
+    string Code, string Name, string? EnglishName,
     int Ects, int TheoryHours, int LabHours,
-    bool IsNonGpa,
+    bool IsNonGpa, string? ExamType,
     int? DepartmentId
 );
 

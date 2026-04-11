@@ -7,10 +7,12 @@ export interface CourseListItemDto {
   id: number;
   code: string;
   name: string;
+  englishName: string | null;
   ects: number;
   theoryHours: number;
   labHours: number;
   isNonGpa: boolean;
+  examType: string | null;
   departmentId: number | null;
   departmentName: string | null;
   prerequisiteCount: number;
@@ -47,10 +49,12 @@ export interface CourseDetailDto {
   id: number;
   code: string;
   name: string;
+  englishName: string | null;
   ects: number;
   theoryHours: number;
   labHours: number;
   isNonGpa: boolean;
+  examType: string | null;
   departmentId: number | null;
   departmentName: string | null;
   prerequisites: PrerequisiteDto[];
@@ -68,10 +72,12 @@ export interface CourseFilterParams {
 export interface CreateCourseDto {
   code: string;
   name: string;
+  englishName?: string | null;
   ects: number;
   theoryHours: number;
   labHours: number;
   isNonGpa: boolean;
+  examType?: string | null;
   departmentId?: number | null;
 }
 
