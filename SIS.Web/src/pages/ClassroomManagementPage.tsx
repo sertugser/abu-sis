@@ -483,7 +483,7 @@ export default function ClassroomManagementPage() {
               {selectedCell && (() => {
                 const row = heatmapData.find((r: HeatmapRow) => r.hour === selectedCell.hour);
                 const cell = row?.days[selectedCell.day];
-                const occupations: HeatmapOccupation[] = cell?.occupations ?? [];
+                const occupations: HeatmapOccupation[] = (cell && 'occupations' in cell && cell.occupations) ? cell.occupations : [];
                 const dayName = DAY_FULL[selectedCell.day + 1] ?? DAY_LABELS[selectedCell.day];
                 return (
                   <div className="mt-4 border rounded-lg overflow-hidden">
