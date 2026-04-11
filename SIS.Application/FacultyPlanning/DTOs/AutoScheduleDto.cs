@@ -59,5 +59,6 @@ public class ApplyScheduleResultDto
 {
     public int SuccessCount { get; set; }
     public int FailedCount { get; set; }
+    public bool RolledBack { get; set; }
     public List<string> Errors { get; set; } = new();
 }

@@ -22,4 +22,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SIS.API" />
+    <InternalsVisibleTo Include="SIS.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -1,10 +1,14 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.Scheduling;
+using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
+using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
 
@@ -26,7 +30,7 @@ public class SchedulingServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        _service = new SchedulingService(_context);
+        _service = new SchedulingService(_context, CreateConstraintEvaluationService());
 
         SeedBaseData();
     }
@@ -748,6 +752,38 @@ public class SchedulingServiceTests : IDisposable
             DisplayName = $"{day} {slotOrder}. Ders ({startTime:HH\\:mm}-{endTime:HH\\:mm})"
         });
         _context.SaveChanges();
+    }
+
+    private static ConstraintEvaluationService CreateConstraintEvaluationService()
+    {
+        var evaluators = new IConstraintEvaluator[]
+        {
+            new CapacityEvaluator(),
+            new ClassroomTypeEvaluator(),
+            new FacultyClassroomEvaluator(),
+            new ClassroomConflictEvaluator(),
+            new InstructorConflictEvaluator(),
+            new CurriculumConflictEvaluator(),
+            new CourseComponentEvaluator(),
+            new SameCourseSectionEvaluator(),
+            new WeeklyLoadEvaluator(),
+            new DailyLoadEvaluator(),
+            new NoDayOffEvaluator(),
+            new CorequisiteEvaluator(),
+            new CreditHourEvaluator(),
+            new LunchBreakEvaluator(),
+            new MaxConsecutiveHoursEvaluator(),
+            new OccupancyEvaluator(),
+            new DailyLoadSoftEvaluator(),
+            new SlotCongestionEvaluator(),
+            new CoEnrollmentEvaluator(),
+            new LunchBreakSoftEvaluator(),
+            new StudentGapEvaluator(),
+            new InstructorDaySpreadEvaluator(),
+            new EarlyLateEvaluator(),
+            new WeekdayBalanceEvaluator(),
+        };
+        return new ConstraintEvaluationService(evaluators);
     }
 
     public void Dispose()
