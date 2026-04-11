@@ -63,6 +63,9 @@ SIS.Web/dist-ssr/
 # Claude Code settings (contains local session data)
 .claude/
 
+# Superpowers planning docs (dev-only, not part of project)
+docs/superpowers/
+
 # Database backup files
 scripts/*.backup
 scripts/*.dump
@@ -71,3 +74,6 @@ scripts/*.dump
 .env
 .env.*
 !.env.example
+
+# Internal planning docs (not for repo)
+docs/superpowers/
