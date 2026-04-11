@@ -10,7 +10,7 @@ import {
   timeToGridRow,
   WEEKDAY_LABELS,
 } from '@/lib/scheduleUtils';
-import type { InstructorAvailability, ScheduleSlot } from '../../types/scheduling';
+import type { ScheduleSlot } from '../../types/scheduling';
 
 export interface TimetableEntry {
   id: string;
@@ -24,7 +24,6 @@ export interface TimetableEntry {
 
 interface WeeklyTimetableGridProps {
   entries: TimetableEntry[];
-  availabilities?: InstructorAvailability[];
   title?: string;
 }
 
@@ -43,7 +42,6 @@ const ENTRY_COLORS = [
 
 export default function WeeklyTimetableGrid({
   entries,
-  availabilities = [],
   title = 'Haftalık Görünüm',
 }: WeeklyTimetableGridProps) {
   const [hoveredEntry, setHoveredEntry] = useState<{ entryId: string; slotIdx: number } | null>(null);
@@ -57,16 +55,13 @@ export default function WeeklyTimetableGrid({
     colorMap.set(entry.id, ENTRY_COLORS[idx % ENTRY_COLORS.length]);
   });
 
-  // Build availability background regions per column
-  const availabilityByColumn = buildAvailabilityColumns(availabilities);
-
   return (
     <Card>
       <CardHeader className="flex items-center">
         <CardTitle className="text-lg">{title}</CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
-        {entries.length === 0 && availabilities.length === 0 && (
+        {entries.length === 0 && (
           <div className="mb-4 rounded-xl border border-dashed border-border bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
             Görselleştirilecek bir program kaydı bulunmuyor.
           </div>
@@ -122,25 +117,6 @@ export default function WeeklyTimetableGrid({
                   />
                 ))}
 
-                {/* Availability background regions */}
-                {(availabilityByColumn[colIdx] ?? []).map((avail, aIdx) => {
-                  const top = timeToGridRow(avail.startTime);
-                  const height = slotHeight(avail.startTime, avail.endTime);
-
-                  return (
-                    <div
-                      key={`avail-${aIdx}`}
-                      className={cn(
-                        'absolute left-0 right-0 rounded-sm pointer-events-none',
-                        avail.isPreferred
-                          ? 'bg-green-50 border-l-2 border-green-400'
-                          : 'bg-yellow-50/60 border-l-2 border-yellow-300',
-                      )}
-                      style={{ top, height }}
-                    />
-                  );
-                })}
-
                 {/* Schedule entries */}
                 {entries.map((entry) =>
                   entry.slots
@@ -187,7 +163,7 @@ export default function WeeklyTimetableGrid({
                                 )}
                                 {entry.instructorName && (
                                   <div className="flex items-center gap-1">
-                                    <span className="text-muted-foreground">Öğretim Üyesi:</span>
+                                    <span className="text-muted-foreground">Ogretim Uyesi:</span>
                                     <span>{entry.instructorName}</span>
                                   </div>
                                 )}
@@ -199,7 +175,7 @@ export default function WeeklyTimetableGrid({
                                 </div>
                                 {entry.hasConflict && (
                                   <Badge variant="destructive" className="text-[10px]">
-                                    Çakışma var
+                                    Cakisma var
                                   </Badge>
                                 )}
                               </div>
@@ -212,62 +188,8 @@ export default function WeeklyTimetableGrid({
               </div>
             ))}
           </div>
-
-          {/* Legend */}
-          {availabilities.length > 0 && (
-            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-border text-xs text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-green-50 border-l-2 border-green-400" />
-                <span>Tercihli</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-yellow-50/60 border-l-2 border-yellow-300" />
-                <span>Uygun</span>
-              </div>
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>
   );
-}
-
-interface AvailabilityRegion {
-  startTime: string;
-  endTime: string;
-  isPreferred: boolean;
-}
-
-function buildAvailabilityColumns(
-  availabilities: InstructorAvailability[],
-): Record<number, AvailabilityRegion[]> {
-  const columns: Record<number, AvailabilityRegion[]> = {};
-
-  for (const avail of availabilities) {
-    if (!avail.isAvailable) {
-      continue;
-    }
-
-    const colIdx = dayToColumnIndex(avail.dayOfWeek);
-    if (colIdx === null) {
-      continue;
-    }
-
-    if (!columns[colIdx]) {
-      columns[colIdx] = [];
-    }
-
-    const startTime = typeof avail.startTime === 'string' ? avail.startTime.slice(0, 5) : '';
-    const endTime = typeof avail.endTime === 'string' ? avail.endTime.slice(0, 5) : '';
-
-    if (startTime && endTime) {
-      columns[colIdx].push({
-        startTime,
-        endTime,
-        isPreferred: avail.isPreferred,
-      });
-    }
-  }
-
-  return columns;
 }
