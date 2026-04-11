@@ -41,6 +41,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
+    public DbSet<ConstraintDefinition> ConstraintDefinitions => Set<ConstraintDefinition>();
+    public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -508,6 +510,28 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(fsa => fsa.TermId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── ConstraintDefinition ────────────────────────────────
+        builder.Entity<ConstraintDefinition>(e =>
+        {
+            e.HasIndex(cd => cd.Code).IsUnique();
+            e.Property(cd => cd.Code).HasMaxLength(10);
+            e.Property(cd => cd.Name).HasMaxLength(100);
+            e.Property(cd => cd.Category).HasMaxLength(10);
+            e.Property(cd => cd.Scope).HasMaxLength(20);
+        });
+
+        // ── ConstraintException ─────────────────────────────────
+        builder.Entity<ConstraintException>(e =>
+        {
+            e.HasIndex(ce => new { ce.ConstraintDefinitionId, ce.InstructorId, ce.DepartmentId, ce.CourseSectionId, ce.TermId });
+            e.HasOne(ce => ce.ConstraintDefinition).WithMany(d => d.Exceptions).HasForeignKey(ce => ce.ConstraintDefinitionId);
+            e.HasOne(ce => ce.Instructor).WithMany().HasForeignKey(ce => ce.InstructorId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(ce => ce.Student).WithMany().HasForeignKey(ce => ce.StudentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(ce => ce.Department).WithMany().HasForeignKey(ce => ce.DepartmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(ce => ce.CourseSection).WithMany().HasForeignKey(ce => ce.CourseSectionId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(ce => ce.Term).WithMany().HasForeignKey(ce => ce.TermId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── Performance Indexes ──────────────────────────────────

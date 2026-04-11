@@ -754,7 +754,7 @@ public class SchedulingServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private static ConstraintEvaluationService CreateConstraintEvaluationService()
+    private ConstraintEvaluationService CreateConstraintEvaluationService()
     {
         var evaluators = new IConstraintEvaluator[]
         {
@@ -783,7 +783,7 @@ public class SchedulingServiceTests : IDisposable
             new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
         };
-        return new ConstraintEvaluationService(evaluators);
+        return new ConstraintEvaluationService(evaluators, _context);
     }
 
     public void Dispose()

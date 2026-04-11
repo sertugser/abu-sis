@@ -438,7 +438,7 @@ public abstract class SchedulingTestBase : IDisposable
         return timeSlot;
     }
 
-    private static ConstraintEvaluationService CreateConstraintEvaluationService()
+    private ConstraintEvaluationService CreateConstraintEvaluationService()
     {
         var evaluators = new IConstraintEvaluator[]
         {
@@ -469,7 +469,7 @@ public abstract class SchedulingTestBase : IDisposable
             new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
         };
-        return new ConstraintEvaluationService(evaluators);
+        return new ConstraintEvaluationService(evaluators, Context);
     }
 
     public void Dispose()
