@@ -51,6 +51,7 @@ public class TermClosingServiceTests : IDisposable
             Year = 2025,
             Semester = SemesterType.Fall,
             IsActive = true,
+            Status = TermStatus.GradeEntry,
             RegistrationStart = new DateTime(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc),
             RegistrationEnd = new DateTime(2025, 9, 15, 0, 0, 0, DateTimeKind.Utc),
             AddDropStart = new DateTime(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -162,7 +163,27 @@ public class TermClosingServiceTests : IDisposable
             Email = "mehmet@test.com", NormalizedEmail = "MEHMET@TEST.COM"
         });
 
+        _context.GradingCriteria.Add(new GradingCriteria
+        {
+            Id = 1,
+            CourseId = CourseId,
+            AcademicTermId = TermId
+        });
+
         _context.SaveChanges();
+    }
+
+    // Her adımı sırasıyla çalıştıran helper — testler birbirinden bağımsız olsun diye
+    private async Task RunLockGrades() => await _service.LockGradesAsync(DepartmentId, UserId);
+    private async Task RunCalculateGpa()
+    {
+        await RunLockGrades();
+        await _service.CalculateGpaAsync(DepartmentId, UserId);
+    }
+    private async Task RunPromote()
+    {
+        await RunCalculateGpa();
+        await _service.PromoteAsync(DepartmentId, UserId);
     }
 
     [Fact]
@@ -228,6 +249,7 @@ public class TermClosingServiceTests : IDisposable
     [Fact]
     public async Task CalculateGpa_RecalculatesAndRecordsProgress()
     {
+        await RunLockGrades();
         var result = await _service.CalculateGpaAsync(DepartmentId, UserId);
         result.TotalStudents.Should().BeGreaterThan(0);
 
@@ -240,6 +262,7 @@ public class TermClosingServiceTests : IDisposable
     [Fact]
     public async Task Promote_SavesSnapshotAndRecordsProgress()
     {
+        await RunCalculateGpa();
         var result = await _service.PromoteAsync(DepartmentId, UserId);
         result.TotalStudentsAnalyzed.Should().BeGreaterThan(0);
 
@@ -258,6 +281,7 @@ public class TermClosingServiceTests : IDisposable
     {
         var originalSemesters = (await _context.Students.FindAsync(StudentId))!.CompletedSemesters;
 
+        await RunCalculateGpa();
         await _service.PromoteAsync(DepartmentId, UserId);
         var result = await _service.RollbackPromotionAsync(DepartmentId, UserId);
 
@@ -281,6 +305,7 @@ public class TermClosingServiceTests : IDisposable
     [Fact]
     public async Task OpenNewTerm_CreatesTermAndDeactivatesOld()
     {
+        await RunPromote();
         var request = new NewTermRequestDto
         {
             Name = "2025-2026 Bahar",
@@ -298,7 +323,7 @@ public class TermClosingServiceTests : IDisposable
         result.NewTermId.Should().NotBeNull();
 
         var oldTerm = await _context.AcademicTerms.FindAsync(TermId);
-        oldTerm!.IsActive.Should().BeFalse();
+        oldTerm!.IsActive.Should().BeTrue(); // current term is no longer deactivated per-department
 
         var newTerm = await _context.AcademicTerms.FindAsync(result.NewTermId);
         newTerm!.IsActive.Should().BeTrue();
@@ -308,6 +333,7 @@ public class TermClosingServiceTests : IDisposable
     [Fact]
     public async Task OpenNewTerm_ReusesExistingTerm()
     {
+        await RunPromote();
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = 99, Name = "2025-2026 Bahar", Year = 2025, Semester = SemesterType.Spring,

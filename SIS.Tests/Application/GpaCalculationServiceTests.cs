@@ -227,16 +227,16 @@ public class GpaCalculationServiceTests : IDisposable
         _context.AcademicTerms.AddRange(
             new AcademicTerm { Id = Term1Id, Name = "2024-2025 Güz", Year = 2024, Semester = SemesterType.Fall,
                 RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadlineWeek = 7, TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false },
+                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false },
             new AcademicTerm { Id = Term2Id, Name = "2024-2025 Bahar", Year = 2024, Semester = SemesterType.Spring,
                 RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadlineWeek = 7, TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = true },
+                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = true },
             new AcademicTerm { Id = Term3Id, Name = "2023-2024 Güz", Year = 2023, Semester = SemesterType.Fall,
                 RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadlineWeek = 7, TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false },
+                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false },
             new AcademicTerm { Id = Term4Id, Name = "2023-2024 Bahar", Year = 2023, Semester = SemesterType.Spring,
                 RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadlineWeek = 7, TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false }
+                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false }
         );
 
         // Öğrenciler
@@ -391,7 +391,7 @@ public class GpaCalculationServiceTests : IDisposable
         var section = new CourseSection
         {
             Id = id, CourseId = courseId, TermId = termId,
-            Capacity = 40, EnrolledCount = 1, IsActive = false, ScheduleJson = "[]"
+            Capacity = 40, EnrolledCount = 1, IsActive = false
         };
         _context.CourseSections.Add(section);
         return section;

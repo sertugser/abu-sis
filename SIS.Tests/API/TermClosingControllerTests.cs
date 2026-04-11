@@ -21,7 +21,7 @@ public class TermClosingControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/term-closing");
-        authorizeAttribute.Roles.Should().Be("DepartmentManager,SystemAdministrator");
+        authorizeAttribute.Roles.Should().Be("DepartmentManager,Dean,SystemAdministrator");
     }
 
     [Theory]

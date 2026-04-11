@@ -62,10 +62,11 @@ public class AdvisorApprovalServiceTests : IDisposable
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
             AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadlineWeek = 7,
+            WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true
+            IsActive = true,
+            Status = TermStatus.RegistrationOpen
         });
 
         // Academic program
@@ -180,7 +181,6 @@ public class AdvisorApprovalServiceTests : IDisposable
             Capacity = capacity,
             EnrolledCount = enrolledCount,
             IsActive = true,
-            ScheduleJson = "[]",
             InstructorId = AdvisorInstructorId
         };
         _context.CourseSections.Add(section);
@@ -379,7 +379,7 @@ public class AdvisorApprovalServiceTests : IDisposable
         result.AffectedRegistrations.Should().Be(1);
 
         var reg = await _context.CourseRegistrations.FindAsync(1);
-        reg!.Status.Should().Be(RegistrationStatus.Dropped);
+        reg!.Status.Should().Be(RegistrationStatus.Rejected);
 
         var updatedSection = await _context.CourseSections.FindAsync(1);
         updatedSection!.EnrolledCount.Should().Be(0);
