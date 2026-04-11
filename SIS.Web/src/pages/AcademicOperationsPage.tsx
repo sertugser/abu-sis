@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +8,6 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
 import {
@@ -17,94 +15,143 @@ import {
   useAcademicPlanningSummary,
   useApproveCourseSections,
   useBulkApproveCourseSections,
-  useDepartmentClassLists,
   useRejectCourseSections,
   useSectionApprovals,
 } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
+import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
 import type {
+  ApprovalWorkflowStatus,
   CourseDemandForecast,
   CourseSectionApproval,
-  DepartmentSectionClassList,
 } from '../types/academicOperations';
 import type { SchedulingConflict } from '../types/scheduling';
 import {
   AlertCircle,
   AlertTriangle,
-  BarChart3,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Mail,
   Minus,
   Plus,
   Search,
-  Users,
   X,
 } from 'lucide-react';
 
-type OperationsMode = 'planning' | 'class-lists';
-
-const MODE_LINKS: { mode: OperationsMode; to: string; label: string; icon: typeof Users }[] = [
-  { mode: 'planning', to: ROUTES.MANAGEMENT_PLANNING, label: 'Planlama', icon: BarChart3 },
-  { mode: 'class-lists', to: ROUTES.MANAGEMENT_CLASS_LISTS, label: 'Sinif Listeleri', icon: Users },
-];
-
 const CONFLICT_CFG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'outline' }> = {
   ClassroomConflict: { label: 'Derslik', variant: 'destructive' },
-  InstructorConflict: { label: 'Ogretim Uyesi', variant: 'destructive' },
+  InstructorConflict: { label: 'Öğretim Üyesi', variant: 'destructive' },
   CapacityConflict: { label: 'Kapasite', variant: 'warning' },
-  InstructorAvailabilityConflict: { label: 'Musaitlik', variant: 'warning' },
-  WeeklyLoadConflict: { label: 'Yuk Asimi', variant: 'warning' },
-  InvalidScheduleJson: { label: 'Veri Hatasi', variant: 'outline' },
+  WeeklyLoadConflict: { label: 'Yük Aşımı', variant: 'warning' },
+  InvalidScheduleJson: { label: 'Veri Hatası', variant: 'outline' },
 };
 
 const DAY_LABELS: Record<number, string> = {
-  0: 'Pazar', 1: 'Pazartesi', 2: 'Sali', 3: 'Carsamba', 4: 'Persembe', 5: 'Cuma', 6: 'Cumartesi',
+  0: 'Pazar', 1: 'Pazartesi', 2: 'Salı', 3: 'Çarşamba', 4: 'Perşembe', 5: 'Cuma', 6: 'Cumartesi',
 };
 
 const ITEMS_PER_PAGE = 20;
+
+const WORKFLOW_ORDER: Record<ApprovalWorkflowStatus, number> = {
+  Pending: 0,
+  PartiallyOpened: 1,
+  Approved: 2,
+  Completed: 3,
+  Rejected: 4,
+};
+
+function getWorkflowStatus(approval: CourseSectionApproval | null): ApprovalWorkflowStatus {
+  return approval?.workflowStatus ?? approval?.status ?? 'Pending';
+}
+
+function getWorkflowLabel(status: ApprovalWorkflowStatus) {
+  switch (status) {
+    case 'Approved':
+      return 'Onaylı';
+    case 'PartiallyOpened':
+      return 'Kısmi Açıldı';
+    case 'Completed':
+      return 'Tamamlandı';
+    case 'Rejected':
+      return 'Red';
+    default:
+      return 'Bekliyor';
+  }
+}
+
+function getWorkflowVariant(status: ApprovalWorkflowStatus): 'success' | 'warning' | 'destructive' | 'secondary' | 'outline' {
+  switch (status) {
+    case 'Completed':
+      return 'success';
+    case 'PartiallyOpened':
+      return 'warning';
+    case 'Rejected':
+      return 'destructive';
+    case 'Approved':
+      return 'outline';
+    default:
+      return 'secondary';
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    Main Page — only department selector + tabs, nothing else
    ═══════════════════════════════════════════════════════════════════════ */
 
-export default function AcademicOperationsPage({ mode }: { mode: OperationsMode }) {
-  const [searchParams, setSearchParams] = useSearchParams();
+export default function AcademicOperationsPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const location = useLocation();
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
+  const { data: faculties } = useAdminFaculties();
+  const { data: structureDepartments } = useAdminDepartmentsByStructure();
 
-  const selectedDepartmentId = Number(searchParams.get('departmentId'));
   const departments = contextQuery.data?.accessibleDepartments ?? [];
-  const currentDepartmentId = departments.some(d => d.departmentId === selectedDepartmentId)
-    ? selectedDepartmentId
-    : contextQuery.data?.defaultDepartmentId ?? null;
 
-  useEffect(() => {
-    if (!currentDepartmentId) return;
-    if (searchParams.get('departmentId') === String(currentDepartmentId)) return;
-    const next = new URLSearchParams(searchParams);
-    next.set('departmentId', String(currentDepartmentId));
-    setSearchParams(next, { replace: true });
-  }, [currentDepartmentId, searchParams, setSearchParams]);
+  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
 
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchTerm), 400);
-    return () => clearTimeout(t);
-  }, [searchTerm]);
+  // Faculty filtering
+  const accessibleDeptIds = useMemo(() => new Set(departments.map(d => d.departmentId)), [departments]);
 
-  const planningQuery = useAcademicPlanningSummary(currentDepartmentId, activeTerm?.id, mode === 'planning');
-  const classListsQuery = useDepartmentClassLists(currentDepartmentId, activeTerm?.id, mode === 'class-lists', debouncedSearch || undefined);
+  const availableFaculties = useMemo(() => {
+    if (!faculties || !structureDepartments) return [];
+    const facultyIds = new Set(
+      structureDepartments
+        .filter(sd => accessibleDeptIds.has(sd.id))
+        .map(sd => sd.facultyId)
+    );
+    return faculties.filter(f => facultyIds.has(f.id));
+  }, [faculties, structureDepartments, accessibleDeptIds]);
 
-  const handleDepartmentChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('departmentId', e.target.value);
-    setSearchParams(next);
-  };
+  const filteredDepartments = useMemo(() => {
+    if (!selectedFacultyId || !structureDepartments) return departments;
+    const deptIdsInFaculty = new Set(
+      structureDepartments
+        .filter(sd => sd.facultyId === selectedFacultyId)
+        .map(sd => sd.id)
+    );
+    return departments.filter(d => deptIdsInFaculty.has(d.departmentId));
+  }, [departments, structureDepartments, selectedFacultyId]);
+
+  const currentDepartmentId = useMemo(() => {
+    if (selectedDeptId && filteredDepartments.some(d => d.departmentId === selectedDeptId)) {
+      return selectedDeptId;
+    }
+    return filteredDepartments[0]?.departmentId ?? contextQuery.data?.defaultDepartmentId ?? null;
+  }, [selectedDeptId, filteredDepartments, contextQuery.data?.defaultDepartmentId]);
+
+  const handleFacultyChange = useCallback((e: ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value ? Number(e.target.value) : null;
+    setSelectedFacultyId(val);
+    setSelectedDeptId(null);
+  }, []);
+
+  const handleDepartmentChange = useCallback((e: ChangeEvent<HTMLSelectElement>) => {
+    setSelectedDeptId(Number(e.target.value));
+  }, []);
+
+  const planningQuery = useAcademicPlanningSummary(currentDepartmentId, activeTerm?.id, true);
 
   if (contextQuery.isLoading) {
     return (
@@ -120,9 +167,9 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Sayfa yuklenemedi</AlertTitle>
+        <AlertTitle>Sayfa yüklenemedi</AlertTitle>
         <AlertDescription>
-          {getAcademicOperationsErrorMessage(contextQuery.error, 'Yetkili kapsam bilgileri alinamadi.')}
+          {getAcademicOperationsErrorMessage(contextQuery.error, 'Yetkili kapsam bilgileri alınamadı.')}
         </AlertDescription>
       </Alert>
     );
@@ -132,39 +179,37 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
 
   return (
     <div className="space-y-5">
-      {/* Department selector + tabs — single compact row */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        {departments.length > 1 && (
+      {/* Faculty + Department selector */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {availableFaculties.length > 1 && (
+          <div className="flex items-center gap-1.5">
+            <label className="font-medium whitespace-nowrap">Fakülte:</label>
+            <select
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+              value={selectedFacultyId ?? ''}
+              onChange={handleFacultyChange}
+            >
+              <option value="">Tümü</option>
+              {availableFaculties.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5">
+          <label className="font-medium whitespace-nowrap">Bölüm:</label>
           <select
+            className="h-7 rounded-md border border-input bg-background px-2 text-xs"
             value={currentDepartmentId ?? ''}
             onChange={handleDepartmentChange}
-            className="h-9 rounded-lg border border-gray-300 bg-white px-3 pr-8 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {departments.map(d => (
+            {filteredDepartments.map(d => (
               <option key={d.departmentId} value={d.departmentId}>
                 {d.departmentCode} — {d.departmentName}
               </option>
             ))}
           </select>
-        )}
-        <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-          {MODE_LINKS.map(link => {
-            const active = location.pathname === link.to;
-            const Icon = link.icon;
-            return (
-              <Link
-                key={link.mode}
-                to={link.to + (currentDepartmentId ? `?departmentId=${currentDepartmentId}` : '')}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all',
-                  active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900',
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {link.label}
-              </Link>
-            );
-          })}
         </div>
       </div>
 
@@ -172,33 +217,21 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
       {!selectedDepartment ? (
         <Card>
           <CardContent className="py-16 text-center text-gray-500">
-            Bu rol icin goruntulenebilir bolum bulunamadi.
+            Bu rol için görüntülenebilir bölüm bulunamadı.
           </CardContent>
         </Card>
       ) : (
-        <>
-          {mode === 'planning' && (
-            <PlanningMode
-              departmentId={currentDepartmentId!}
-              termId={activeTerm?.id ?? null}
-              departmentName={selectedDepartment.departmentName}
-              isLoading={planningQuery.isLoading}
-              errorMessage={planningQuery.isError ? getAcademicOperationsErrorMessage(planningQuery.error, 'Planlama verisi yuklenemedi.') : null}
-              summary={planningQuery.data ?? null}
-              searchTerm={searchTerm}
-              onSearchTermChange={setSearchTerm}
-            />
-          )}
-          {mode === 'class-lists' && (
-            <ClassListsMode
-              isLoading={classListsQuery.isLoading}
-              errorMessage={classListsQuery.isError ? getAcademicOperationsErrorMessage(classListsQuery.error, 'Sinif listeleri yuklenemedi.') : null}
-              classLists={classListsQuery.data ?? null}
-              searchTerm={searchTerm}
-              onSearchTermChange={setSearchTerm}
-            />
-          )}
-        </>
+        <PlanningMode
+          departmentId={currentDepartmentId!}
+          termId={activeTerm?.id ?? null}
+          departmentName={selectedDepartment.departmentName}
+          isLoading={planningQuery.isLoading}
+          errorMessage={planningQuery.isError ? getAcademicOperationsErrorMessage(planningQuery.error, 'Planlama verisi yüklenemedi.') : null}
+          summary={planningQuery.data ?? null}
+          searchTerm={searchTerm}
+          onSearchTermChange={setSearchTerm}
+          termStatus={activeTerm?.status}
+        />
       )}
     </div>
   );
@@ -214,15 +247,25 @@ export default function AcademicOperationsPage({ mode }: { mode: OperationsMode 
    4. Expanded detail: breakdown, confidence, historical
    ═══════════════════════════════════════════════════════════════════════ */
 
+const WORKFLOW_STATUS_HELP: Record<string, string> = {
+  'Pending': 'Henüz onay verilmemiş, karar bekleniyor.',
+  'Approved': 'Onaylandı, ders açma işlemi bekleniyor.',
+  'PartiallyOpened': 'Onaylanan şubelerin bir kısmı açıldı.',
+  'Completed': 'Tüm onaylanan şubeler açıldı.',
+  'Rejected': 'Reddedildi, bu dönem açılmayacak.',
+};
+
 function PlanningMode({
-  departmentId, termId, departmentName, isLoading, errorMessage, summary, searchTerm, onSearchTermChange,
+  departmentId, termId, departmentName, isLoading, errorMessage, summary, searchTerm, onSearchTermChange, termStatus,
 }: {
   departmentId: number; termId: number | null; departmentName: string;
   isLoading: boolean; errorMessage: string | null;
   summary: ReturnType<typeof useAcademicPlanningSummary>['data'] | null;
   searchTerm: string; onSearchTermChange: (v: string) => void;
+  termStatus: string | undefined;
 }) {
   const effectiveTermId = termId ?? summary?.termId ?? null;
+  const isPlanning = termStatus === 'Planning';
   const approvalsQuery = useSectionApprovals(departmentId, effectiveTermId, !!summary);
   const approveMut = useApproveCourseSections(departmentId, effectiveTermId ?? 0);
   const rejectMut = useRejectCourseSections(departmentId, effectiveTermId ?? 0);
@@ -251,7 +294,7 @@ function PlanningMode({
     return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Hata</AlertTitle><AlertDescription>{errorMessage}</AlertDescription></Alert>;
   }
   if (!summary) {
-    return <Card><CardContent className="py-16 text-center text-gray-500">{departmentName} icin veri bulunamadi.</CardContent></Card>;
+    return <Card><CardContent className="py-16 text-center text-gray-500">{departmentName} için veri bulunamadı.</CardContent></Card>;
   }
 
   const allCourses = summary.forecastSummary?.courseSummaries ?? [];
@@ -265,21 +308,34 @@ function PlanningMode({
 
   // Sort: pending first, then by demand desc
   const sorted = [...filtered].sort((a, b) => {
-    const aStatus = approvalMap.get(a.courseId)?.status ?? 'Pending';
-    const bStatus = approvalMap.get(b.courseId)?.status ?? 'Pending';
-    if (aStatus === 'Pending' && bStatus !== 'Pending') return -1;
-    if (aStatus !== 'Pending' && bStatus === 'Pending') return 1;
+    const aStatus = getWorkflowStatus(approvalMap.get(a.courseId) ?? null);
+    const bStatus = getWorkflowStatus(approvalMap.get(b.courseId) ?? null);
+    const orderDiff = WORKFLOW_ORDER[aStatus] - WORKFLOW_ORDER[bStatus];
+    if (orderDiff !== 0) return orderDiff;
     return b.totalPredictedDemand - a.totalPredictedDemand;
   });
 
-  const approvedCount = allCourses.filter(c => approvalMap.get(c.courseId)?.status === 'Approved').length;
-  const rejectedCount = allCourses.filter(c => approvalMap.get(c.courseId)?.status === 'Rejected').length;
-  const pendingCount = allCourses.length - approvedCount - rejectedCount;
-  const progressPct = allCourses.length > 0 ? ((approvedCount + rejectedCount) / allCourses.length) * 100 : 0;
+  const workflowCounts = allCourses.reduce<Record<ApprovalWorkflowStatus, number>>((acc, course) => {
+    const workflowStatus = getWorkflowStatus(approvalMap.get(course.courseId) ?? null);
+    acc[workflowStatus] += 1;
+    return acc;
+  }, {
+    Pending: 0,
+    Approved: 0,
+    PartiallyOpened: 0,
+    Completed: 0,
+    Rejected: 0,
+  });
+
+  const approvedCount = workflowCounts.Approved;
+  const partialCount = workflowCounts.PartiallyOpened;
+  const completedCount = workflowCounts.Completed;
+  const rejectedCount = workflowCounts.Rejected;
+  const pendingCount = workflowCounts.Pending;
+  const progressPct = allCourses.length > 0 ? ((allCourses.length - pendingCount) / allCourses.length) * 100 : 0;
 
   const pendingFiltered = sorted.filter(c => {
-    const a = approvalMap.get(c.courseId);
-    return !a || a.status === 'Pending';
+    return getWorkflowStatus(approvalMap.get(c.courseId) ?? null) === 'Pending';
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE));
@@ -295,6 +351,16 @@ function PlanningMode({
 
   return (
     <div className="space-y-4">
+      {/* 0. Planning status warning */}
+      {!isPlanning && termStatus !== undefined && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Onay işlemleri yalnızca dönem &apos;Planlama&apos; aşamasında yapılabilir.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* 1. Conflicts — shown FIRST if they exist, because they're urgent */}
       {conflicts.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50">
@@ -305,7 +371,7 @@ function PlanningMode({
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-600" />
               <span className="text-sm font-medium text-red-700">
-                {conflicts.length} cakisma tespit edildi
+                {conflicts.length} çakışma tespit edildi
               </span>
               <div className="flex gap-1 ml-2">
                 {Array.from(groupConflicts(conflicts).entries()).map(([type, count]) => (
@@ -343,7 +409,9 @@ function PlanningMode({
           <div className="flex items-center gap-2">
             <Progress value={progressPct} className="w-32 h-2" indicatorClassName={progressPct === 100 ? 'bg-emerald-600' : 'bg-blue-600'} />
             <span className="text-xs text-gray-500 whitespace-nowrap">
-              <span className="font-medium text-gray-900">{approvedCount}</span> onayli
+              <span className="font-medium text-gray-900">{approvedCount}</span> onaylı
+              {partialCount > 0 && <>, <span className="font-medium text-gray-900">{partialCount}</span> kısmi</>}
+              {completedCount > 0 && <>, <span className="font-medium text-gray-900">{completedCount}</span> tamamlandı</>}
               {rejectedCount > 0 && <>, <span className="font-medium text-gray-900">{rejectedCount}</span> red</>}
               , <span className="font-medium text-gray-900">{pendingCount}</span> bekliyor
             </span>
@@ -360,17 +428,28 @@ function PlanningMode({
             />
           </div>
           {pendingFiltered.length > 0 && (
-            <Button size="sm" onClick={handleBulkApprove} disabled={bulkApproveMut.isPending} className="h-8 gap-1 text-xs">
-              <Check className="h-3 w-3" />
-              Tumunu Onayla ({pendingFiltered.length})
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button size="sm" onClick={handleBulkApprove} disabled={bulkApproveMut.isPending || !isPlanning} className="h-8 gap-1 text-xs">
+                      <Check className="h-3 w-3" />
+                      Tümünü Onayla ({pendingFiltered.length})
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!isPlanning && (
+                  <TooltipContent>Onay işlemleri yalnızca Planlama aşamasında yapılabilir.</TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
 
       {/* 3. Course table */}
       {sorted.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">Eslesen ders bulunamadi.</p>
+        <p className="text-sm text-gray-500 py-8 text-center">Eşleşen ders bulunamadı.</p>
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
@@ -380,9 +459,9 @@ function PlanningMode({
                   <TableHead className="w-8" />
                   <TableHead>Ders</TableHead>
                   <TableHead className="text-right w-24">Talep</TableHead>
-                  <TableHead className="text-center w-16">Sube</TableHead>
+                  <TableHead className="text-center w-16">Şube</TableHead>
                   <TableHead className="text-center w-24">Durum</TableHead>
-                  <TableHead className="text-center w-20">Islem</TableHead>
+                  <TableHead className="text-center w-20">İşlem</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -396,6 +475,7 @@ function PlanningMode({
                     isApproving={approveMut.isPending}
                     isRejecting={rejectMut.isPending}
                     maxDemand={maxDemand}
+                    isPlanning={isPlanning}
                   />
                 ))}
               </TableBody>
@@ -408,21 +488,31 @@ function PlanningMode({
   );
 }
 
-function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRejecting, maxDemand }: {
+function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRejecting, maxDemand, isPlanning }: {
   course: CourseDemandForecast;
   approval: CourseSectionApproval | null;
   onApprove: (id: number, count: number, note?: string) => void;
   onReject: (id: number, note?: string) => void;
-  isApproving: boolean; isRejecting: boolean; maxDemand: number;
+  isApproving: boolean; isRejecting: boolean; maxDemand: number; isPlanning: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [sectionCount, setSectionCount] = useState(approval?.approvedSectionCount ?? course.recommendedSectionCount);
   const [note, setNote] = useState(approval?.note ?? '');
 
-  const status = (approval?.status ?? 'Pending') as 'Pending' | 'Approved' | 'Rejected';
+  const workflowStatus = getWorkflowStatus(approval);
   const demandPct = (course.totalPredictedDemand / maxDemand) * 100;
+  const openedSectionCount = approval?.openedSectionCount ?? 0;
+  const remainingSectionCount = approval?.remainingSectionCount ?? 0;
 
-  const rowBg = status === 'Approved' ? 'bg-green-50' : status === 'Rejected' ? 'bg-red-50' : '';
+  const rowBg = workflowStatus === 'Completed'
+    ? 'bg-green-50'
+    : workflowStatus === 'PartiallyOpened'
+      ? 'bg-amber-50'
+      : workflowStatus === 'Approved'
+        ? 'bg-blue-50/40'
+        : workflowStatus === 'Rejected'
+          ? 'bg-red-50'
+          : '';
 
   return (
     <>
@@ -451,24 +541,33 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
           </span>
         </TableCell>
         <TableCell className="text-center">
-          <Badge variant={status === 'Approved' ? 'success' : status === 'Rejected' ? 'destructive' : 'secondary'}>
-            {status === 'Approved' ? 'Onayli' : status === 'Rejected' ? 'Red' : 'Bekliyor'}
-          </Badge>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant={getWorkflowVariant(workflowStatus)} className="cursor-default">
+                  {getWorkflowLabel(workflowStatus)}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{WORKFLOW_STATUS_HELP[workflowStatus] ?? workflowStatus}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </TableCell>
         <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-          {status === 'Pending' ? (
+          {workflowStatus === 'Pending' ? (
             <div className="flex justify-center gap-1">
               <button
                 className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors disabled:opacity-40"
                 onClick={() => onApprove(course.courseId, sectionCount, note || undefined)}
-                disabled={isApproving}
+                disabled={isApproving || !isPlanning}
+                title={!isPlanning ? 'Onay işlemleri yalnızca Planlama aşamasında yapılabilir.' : undefined}
               >
                 <Check className="h-4 w-4" />
               </button>
               <button
                 className="h-8 w-8 inline-flex items-center justify-center rounded-md bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-40"
                 onClick={() => onReject(course.courseId, note || undefined)}
-                disabled={isRejecting}
+                disabled={isRejecting || !isPlanning}
+                title={!isPlanning ? 'Onay işlemleri yalnızca Planlama aşamasında yapılabilir.' : undefined}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -477,9 +576,10 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
             <button
               className="text-xs text-blue-600 hover:text-blue-800 font-medium underline transition-colors disabled:opacity-40"
               onClick={() => onApprove(course.courseId, sectionCount, note || undefined)}
-              disabled={isApproving}
+              disabled={isApproving || !isPlanning}
+              title={!isPlanning ? 'Onay işlemleri yalnızca Planlama aşamasında yapılabilir.' : undefined}
             >
-              Degistir
+              Değiştir
             </button>
           )}
         </TableCell>
@@ -490,28 +590,50 @@ function ForecastRow({ course, approval, onApprove, onReject, isApproving, isRej
         <TableRow className="bg-gray-50 hover:bg-gray-50">
           <TableCell colSpan={6} className="p-0">
             <div className="px-6 py-4 space-y-4">
+              {approval && workflowStatus !== 'Pending' && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant={getWorkflowVariant(workflowStatus)} className="cursor-default">{getWorkflowLabel(workflowStatus)}</Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>{WORKFLOW_STATUS_HELP[workflowStatus] ?? workflowStatus}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <span>Onaylanan: <strong className="text-gray-900">{approval.approvedSectionCount ?? 0}</strong></span>
+                  <span>Açılan: <strong className="text-gray-900">{openedSectionCount}</strong></span>
+                  {remainingSectionCount > 0 && <span>Kalan: <strong className="text-gray-900">{remainingSectionCount}</strong></span>}
+                  {approval.decidedByUserName && (
+                    <span className="text-gray-500">
+                      {workflowStatus === 'Rejected' ? 'Reddeden' : 'Onaylayan'}:{' '}
+                      <strong className="text-gray-700">{approval.decidedByUserName}</strong>
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Approval control row */}
               <div className="flex flex-wrap items-end gap-3 pb-3 border-b border-gray-200">
                 <div>
-                  <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Sube</p>
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Şube</p>
                   <div className="flex items-center gap-0.5">
-                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setSectionCount(c => Math.max(1, c - 1))}>
+                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setSectionCount(c => Math.max(1, c - 1))} disabled={sectionCount <= 1}>
                       <Minus className="h-3 w-3" />
                     </Button>
                     <span className="w-8 text-center font-bold tabular-nums">{sectionCount}</span>
-                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setSectionCount(c => c + 1)}>
+                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setSectionCount(c => Math.min(20, c + 1))} disabled={sectionCount >= 20}>
                       <Plus className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
                 <div className="flex-1 min-w-[12rem]">
                   <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Not</p>
-                  <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Karar gerekcesi..." className="h-7 text-xs" />
+                  <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Karar gerekçesi..." className="h-7 text-xs" />
                 </div>
-                <Button size="sm" className="h-7 text-xs gap-1" onClick={() => onApprove(course.courseId, sectionCount, note || undefined)} disabled={isApproving}>
-                  <Check className="h-3 w-3" />{sectionCount} Sube Onayla
+                <Button size="sm" className="h-7 text-xs gap-1" onClick={() => onApprove(course.courseId, sectionCount, note || undefined)} disabled={isApproving || !isPlanning} title={!isPlanning ? 'Onay işlemleri yalnızca Planlama aşamasında yapılabilir.' : undefined}>
+                  <Check className="h-3 w-3" />{sectionCount} Şube Onayla
                 </Button>
-                <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" onClick={() => onReject(course.courseId, note || undefined)} disabled={isRejecting}>
+                <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" onClick={() => onReject(course.courseId, note || undefined)} disabled={isRejecting || !isPlanning} title={!isPlanning ? 'Onay işlemleri yalnızca Planlama aşamasında yapılabilir.' : undefined}>
                   <X className="h-3 w-3" />Reddet
                 </Button>
               </div>
@@ -540,12 +662,12 @@ function DetailDemandBreakdown({ course }: { course: CourseDemandForecast }) {
     { label: 'NA Tekrar', value: bd.retakeNA, color: 'bg-orange-500' },
     ...(bd.retakeU > 0 ? [{ label: 'U Tekrar', value: bd.retakeU, color: 'bg-amber-500' }] : []),
     ...(bd.behindSchedule > 0 ? [{ label: 'Geride', value: bd.behindSchedule, color: 'bg-blue-500' }] : []),
-    ...(bd.upperCourse > 0 ? [{ label: 'Ustten', value: bd.upperCourse, color: 'bg-violet-500' }] : []),
+    ...(bd.upperCourse > 0 ? [{ label: 'Üstten', value: bd.upperCourse, color: 'bg-violet-500' }] : []),
   ].filter(i => i.value > 0);
 
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Talep Kirilimi</p>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Talep Kırılımı</p>
       <div className="space-y-1.5">
         {items.map(item => (
           <div key={item.label} className="flex items-center gap-2">
@@ -559,7 +681,7 @@ function DetailDemandBreakdown({ course }: { course: CourseDemandForecast }) {
       </div>
       {bd.ectsLimited > 0 && (
         <p className="text-[10px] text-amber-600 mt-2 flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" />{bd.ectsLimited} ogrenci AKTS limitinde
+          <AlertTriangle className="h-3 w-3" />{bd.ectsLimited} öğrenci AKTS limitinde
         </p>
       )}
     </div>
@@ -573,19 +695,28 @@ function DetailConfidenceAndDistribution({ course }: { course: CourseDemandForec
     <div className="space-y-3">
       {conf && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Guven Araligi</p>
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Güven Aralığı</p>
+            {conf.margin <= 10 ? (
+              <Badge variant="success" className="text-[10px] px-1.5 py-0">Yüksek Güven</Badge>
+            ) : conf.margin <= 25 ? (
+              <Badge variant="warning" className="text-[10px] px-1.5 py-0">Orta Güven</Badge>
+            ) : (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Düşük Güven</Badge>
+            )}
+          </div>
           <div className="rounded-md border p-2.5 text-xs space-y-1">
-            <Row label="Aralik" value={`${conf.lowerBound} – ${conf.upperBound}`} />
+            <Row label="Aralık" value={`${conf.lowerBound} – ${conf.upperBound}`} />
             <Row label="Marj" value={`±${conf.margin}`} />
-            <Row label="Yontem" value={conf.method} mono />
+            <Row label="Yöntem" value={conf.method} mono />
           </div>
         </div>
       )}
       {sd && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Sube Dagilimi</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Şube Dağılımı</p>
           <div className="rounded-md border p-2.5 text-xs space-y-1">
-            <Row label="Kapasite/sube" value={String(sd.effectiveCapacityPerSection)} />
+            <Row label="Kapasite/şube" value={String(sd.effectiveCapacityPerSection)} />
             <Row
               label="Doluluk"
               value={`%${(sd.utilizationRate * 100).toFixed(0)}`}
@@ -599,7 +730,7 @@ function DetailConfidenceAndDistribution({ course }: { course: CourseDemandForec
                       <TooltipTrigger asChild>
                         <span className="flex-1 text-center py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-semibold">{n}</span>
                       </TooltipTrigger>
-                      <TooltipContent>Sube {i + 1}: {n} ogrenci</TooltipContent>
+                      <TooltipContent>Şube {i + 1}: {n} öğrenci</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 ))}
@@ -623,7 +754,7 @@ function DetailHistory({ course }: { course: CourseDemandForecast }) {
   const pred = course.totalPredictedDemand || 1;
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Gecmis Donemler</p>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Geçmiş Dönemler</p>
       <div className="space-y-2">
         {hist.map(h => {
           const avg = h.sectionCount > 0 ? Math.round(h.actualEnrollment / h.sectionCount) : 0;
@@ -631,7 +762,7 @@ function DetailHistory({ course }: { course: CourseDemandForecast }) {
             <div key={h.termId} className="rounded-md border p-2.5">
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="font-medium">{h.termName}</span>
-                <span className="text-gray-500">{h.sectionCount} sube · ort {avg}/sube</span>
+                <span className="text-gray-500">{h.sectionCount} şube · ort {avg}/şube</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
@@ -644,224 +775,6 @@ function DetailHistory({ course }: { course: CourseDemandForecast }) {
         })}
       </div>
     </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   SINIF LISTELERI — Lookup-oriented: "Show me who's where + problems"
-
-   Layout:
-   1. Compact stats line + search (NOT big hero cards)
-   2. Problems banner if any (no instructor, empty, overfull)
-   3. Table with capacity bars
-   4. Expandable student rosters
-   ═══════════════════════════════════════════════════════════════════════ */
-
-function ClassListsMode({
-  isLoading, errorMessage, classLists, searchTerm, onSearchTermChange,
-}: {
-  isLoading: boolean; errorMessage: string | null;
-  classLists: ReturnType<typeof useDepartmentClassLists>['data'] | null;
-  searchTerm: string; onSearchTermChange: (v: string) => void;
-}) {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [page, setPage] = useState(0);
-
-  if (isLoading) return <div className="space-y-3"><Skeleton className="h-10 rounded-lg" /><Skeleton className="h-96 rounded-xl" /></div>;
-  if (errorMessage) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Hata</AlertTitle><AlertDescription>{errorMessage}</AlertDescription></Alert>;
-  if (!classLists) return <Card><CardContent className="py-16 text-center text-gray-500">Veri bulunamadi.</CardContent></Card>;
-
-  const sections = classLists.sections;
-  const totalPages = Math.max(1, Math.ceil(sections.length / ITEMS_PER_PAGE));
-  const paginated = sections.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
-
-  // Detect problems
-  const noInstructor = sections.filter(s => !s.instructorName);
-  const noClassroom = sections.filter(s => !s.classroomName);
-  const overfull = sections.filter(s => s.capacity > 0 && s.activeStudentCount > s.capacity);
-  const empty = sections.filter(s => s.activeStudentCount === 0);
-  const hasProblems = noInstructor.length > 0 || noClassroom.length > 0 || overfull.length > 0 || empty.length > 0;
-
-  const avgOccupancy = sections.length > 0
-    ? Math.round(sections.reduce((sum, s) => sum + (s.capacity > 0 ? s.activeStudentCount / s.capacity : 0), 0) / sections.length * 100)
-    : 0;
-
-  return (
-    <div className="space-y-4">
-      {/* Compact info bar + search */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <p className="text-sm text-gray-500">
-          <span className="font-semibold text-gray-900">{sections.length}</span> sube ·{' '}
-          <span className="font-semibold text-gray-900">{classLists.totalStudents}</span> ogrenci ·{' '}
-          %{avgOccupancy} doluluk
-        </p>
-        <div className="relative">
-          <Search className="h-3.5 w-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          <Input
-            value={searchTerm}
-            onChange={e => { onSearchTermChange(e.target.value); setPage(0); }}
-            placeholder="Ders, ogretim uyesi veya derslik..."
-            className="pl-8 h-8 w-64 text-sm"
-          />
-        </div>
-      </div>
-
-      {/* Problems banner — only shown when problems exist */}
-      {hasProblems && (
-        <div className="flex flex-wrap gap-2 text-xs">
-          {noInstructor.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-amber-700">
-              <AlertTriangle className="h-3 w-3" />
-              {noInstructor.length} sube ogretim uyesi atanmamis
-            </span>
-          )}
-          {noClassroom.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-amber-700">
-              <AlertTriangle className="h-3 w-3" />
-              {noClassroom.length} sube derslik atanmamis
-            </span>
-          )}
-          {overfull.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-200 px-2 py-1 text-red-700">
-              <AlertCircle className="h-3 w-3" />
-              {overfull.length} sube kapasite asiminda
-            </span>
-          )}
-          {empty.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 border border-gray-300 px-2 py-1 text-gray-500">
-              {empty.length} sube bos
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Table */}
-      {sections.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">Eslesen sube bulunamadi.</p>
-      ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50 text-xs">
-                  <TableHead className="w-8" />
-                  <TableHead>Ders</TableHead>
-                  <TableHead>Ogretim Uyesi</TableHead>
-                  <TableHead>Derslik</TableHead>
-                  <TableHead className="hidden lg:table-cell">Program</TableHead>
-                  <TableHead className="text-center w-28">Doluluk</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginated.map(section => (
-                  <SectionRow
-                    key={section.sectionId}
-                    section={section}
-                    isExpanded={expandedId === section.sectionId}
-                    onToggle={() => setExpandedId(c => c === section.sectionId ? null : section.sectionId)}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {totalPages > 1 && <Pagination current={page} total={totalPages} count={sections.length} onPage={setPage} />}
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function SectionRow({ section, isExpanded, onToggle }: {
-  section: DepartmentSectionClassList; isExpanded: boolean; onToggle: () => void;
-}) {
-  const pct = section.capacity > 0 ? (section.activeStudentCount / section.capacity) * 100 : 0;
-  const barColor = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500';
-  const hasIssue = !section.instructorName || !section.classroomName || pct >= 100;
-
-  return (
-    <>
-      <TableRow
-        className={cn('cursor-pointer transition-colors hover:bg-gray-100', hasIssue && 'bg-amber-50')}
-        onClick={onToggle}
-      >
-        <TableCell className="px-2">
-          <ChevronDown className={cn('h-3.5 w-3.5 text-gray-500 transition-transform', isExpanded && 'rotate-180')} />
-        </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-2">
-            <div>
-              <span className="font-mono text-xs font-bold text-blue-700">{section.courseCode}</span>
-              <span className="ml-1.5 text-sm">{section.courseName}</span>
-            </div>
-            {!section.isActive && <Badge variant="secondary" className="text-[10px] px-1 py-0">Pasif</Badge>}
-          </div>
-        </TableCell>
-        <TableCell className={cn('text-sm', !section.instructorName && 'text-amber-600 italic text-xs')}>
-          {section.instructorName || 'Atanmamis'}
-        </TableCell>
-        <TableCell className={cn('text-sm', !section.classroomName && 'text-amber-600 italic text-xs')}>
-          {section.classroomName || 'Atanmamis'}
-        </TableCell>
-        <TableCell className="hidden lg:table-cell text-xs text-gray-500">
-          {section.scheduleSummary || <span className="italic">Tanimlanmamis</span>}
-        </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-2 justify-center">
-            <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-              <div className={cn('h-full rounded-full', barColor)} style={{ width: `${Math.min(100, pct)}%` }} />
-            </div>
-            <span className="text-xs font-semibold tabular-nums whitespace-nowrap">
-              {section.activeStudentCount}/{section.capacity}
-            </span>
-          </div>
-        </TableCell>
-      </TableRow>
-
-      {isExpanded && (
-        <TableRow className="bg-gray-50 hover:bg-gray-50">
-          <TableCell colSpan={6} className="p-0">
-            <div className="px-6 py-3">
-              {section.students.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-3">Bu subede ogrenci yok.</p>
-              ) : (
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50 text-xs">
-                        <TableHead>No</TableHead>
-                        <TableHead>Ad Soyad</TableHead>
-                        <TableHead>E-posta</TableHead>
-                        <TableHead className="text-center">Durum</TableHead>
-                        <TableHead className="text-center">Not</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {section.students.map(st => (
-                        <TableRow key={st.studentId}>
-                          <TableCell className="font-mono text-xs">{st.studentNumber}</TableCell>
-                          <TableCell className="text-sm">{st.studentName}</TableCell>
-                          <TableCell className="text-xs text-gray-500">
-                            {st.email ? <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{st.email}</span> : '—'}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={st.status === 'Registered' ? 'success' : 'outline'} className="text-[10px]">{st.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-center font-mono text-xs">
-                            {st.grade ? (
-                              <span className={cn((st.grade === 'FF' || st.grade === 'NA') && 'text-red-600 font-bold')}>{st.grade}</span>
-                            ) : '—'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
-    </>
   );
 }
 
@@ -880,8 +793,8 @@ function Row({ label, value, mono, className }: { label: string; value: string; 
 
 function Pagination({ current, total, count, onPage }: { current: number; total: number; count: number; onPage: (p: number) => void }) {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-t text-xs text-gray-500">
-      <span>{count} kayit · sayfa {current + 1}/{total}</span>
+    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t text-xs text-gray-500">
+      <span>{count} kayıt · sayfa {current + 1}/{total}</span>
       <div className="flex gap-1">
         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={current === 0} onClick={() => onPage(current - 1)}>
           <ChevronLeft className="h-3.5 w-3.5" />
