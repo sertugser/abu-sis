@@ -1152,7 +1152,7 @@ export default function CourseCatalogAdminPage() {
                         }
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <Badge variant={c.status === 'Active' || c.status === 1 ? 'success' : 'secondary'} className="text-[11px]">
+                        <Badge variant={c.status === 1 ? 'success' : 'secondary'} className="text-[11px]">
                           {COURSE_STATUS_LABELS[c.status] ?? c.status}
                         </Badge>
                       </td>
