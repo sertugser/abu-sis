@@ -12,6 +12,8 @@ import RegistrationPlanPage from './pages/RegistrationPlanPage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import CurriculumStatusPage from './pages/CurriculumStatusPage';
 import TermGpaPage from './pages/TermGpaPage';
+import TranscriptPage from './pages/TranscriptPage';
+import TranscriptScenarioPage from './pages/TranscriptScenarioPage';
 import AcademicCalendarPage from './pages/AcademicCalendarPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
@@ -54,6 +56,10 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route element={<ProtectedRoute />}>
+                <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
+                  <Route path="report/transkript" element={<TranscriptPage />} />
+                </Route>
+
                 <Route element={<AppLayout />}>
                   <Route index element={<RoleDashboard />} />
 
@@ -66,7 +72,7 @@ export default function App() {
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
                     <Route path="donem-ortalamalari" element={<TermGpaPage />} />
                     <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
-
+                    <Route path="transkript-senaryosu" element={<TranscriptScenarioPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager']} />}>
