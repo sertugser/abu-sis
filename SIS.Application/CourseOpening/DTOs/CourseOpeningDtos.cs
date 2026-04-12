@@ -75,6 +75,8 @@ public class InstructorOptionDto
 {
     public int InstructorId { get; set; }
     public string FullName { get; set; } = "";
+    public int MaxWeeklyHours { get; set; }
+    public int AssignedWeeklyHours { get; set; }
 }
 
 // ── Request DTOs ──
@@ -161,12 +163,20 @@ public record PreviousTermCourseDto(
     string? InstructorName, int? InstructorId,
     bool AlreadyOpened);
 
+public class TransferCourseItem
+{
+    public int CourseId { get; set; }
+    public int? SectionCount { get; set; }
+    public int? CapacityPerSection { get; set; }
+    public int? InstructorId { get; set; }
+}
+
 public class TransferFromTermRequest
 {
     public int DepartmentId { get; set; }
     public int SourceTermId { get; set; }
     public int TargetTermId { get; set; }
-    public List<int> CourseIds { get; set; } = [];
+    public List<TransferCourseItem> Courses { get; set; } = [];
 }
 
 public class TransferFromTermResultDto

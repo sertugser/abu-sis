@@ -63,6 +63,8 @@ export interface CurriculumCourseForOpeningDto {
 export interface InstructorOptionDto {
   instructorId: number;
   fullName: string;
+  maxWeeklyHours: number;
+  assignedWeeklyHours: number;
 }
 
 // ── Request Types ──
@@ -123,11 +125,18 @@ export interface PreviousTermCourseDto {
   alreadyOpened: boolean;
 }
 
+export interface TransferCourseItem {
+  courseId: number;
+  sectionCount?: number;
+  capacityPerSection?: number;
+  instructorId?: number | null;
+}
+
 export interface TransferFromTermRequest {
   departmentId: number;
   sourceTermId: number;
   targetTermId: number;
-  courseIds: number[];
+  courses: TransferCourseItem[];
 }
 
 export interface TransferCourseResultItem {
@@ -144,28 +153,6 @@ export interface TransferFromTermResultDto {
   failedCount: number;
   totalSectionsCreated: number;
   results: TransferCourseResultItem[];
-}
-
-// ── Instructor Workload ──
-
-export interface AssignedSectionDto {
-  sectionId: number;
-  courseCode: string;
-  courseName: string;
-  sectionNumber: number;
-  weeklyHours: number;
-  capacity: number;
-  enrolledCount: number;
-}
-
-export interface InstructorWorkloadDto {
-  instructorId: number;
-  fullName: string;
-  title: string;
-  maxWeeklyHours: number;
-  assignedWeeklyHours: number;
-  remainingCapacity: number;
-  assignedSections: AssignedSectionDto[];
 }
 
 // ── Instructor Workload ──
