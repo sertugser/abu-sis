@@ -32,6 +32,7 @@ public abstract class SchedulingTestBase : IDisposable
 
     protected AppDbContext Context { get; }
     protected SchedulingService Service { get; }
+    protected ConstraintEvaluationService ConstraintService { get; }
 
     protected SchedulingTestBase()
     {
@@ -40,7 +41,8 @@ public abstract class SchedulingTestBase : IDisposable
             .Options;
 
         Context = new AppDbContext(options);
-        Service = new SchedulingService(Context, CreateConstraintEvaluationService());
+        ConstraintService = CreateConstraintEvaluationService();
+        Service = new SchedulingService(Context, ConstraintService);
 
         SeedBaseData();
         SeedSchedulingDefaults();
