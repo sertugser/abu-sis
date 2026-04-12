@@ -59,10 +59,7 @@ export function AddCourseDialog({
 
   const handleSelectCourse = (course: CurriculumCourseForOpeningDto) => {
     setSelectedCourse(course);
-    const remainingApprovedSections = course.remainingApprovedSectionCount ?? 0;
-    const suggestedSectionCount = remainingApprovedSections > 0
-      ? remainingApprovedSections
-      : course.recommendedSectionCount ?? 1;
+    const suggestedSectionCount = course.recommendedSectionCount ?? 1;
     setSectionCount(Math.max(1, suggestedSectionCount));
     if (course.recommendedCapacity != null && course.recommendedCapacity > 0) {
       setCapacity(course.recommendedCapacity);
@@ -93,9 +90,7 @@ export function AddCourseDialog({
   };
 
   const forecast = selectedCourse ? forecastMap.get(selectedCourse.courseId) : null;
-  const selectedSectionLimit = selectedCourse?.remainingApprovedSectionCount && selectedCourse.remainingApprovedSectionCount > 0
-    ? Math.min(20, selectedCourse.remainingApprovedSectionCount)
-    : 20;
+  const selectedSectionLimit = 20;
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -158,30 +153,12 @@ export function AddCourseDialog({
                         ) : '—'}
                       </TableCell>
                       <TableCell>
-                        {course.canOpen ? (
-                          <Badge
-                            variant={course.approvalWorkflowStatus === 'PartiallyOpened' ? 'warning' : 'success'}
-                            className="text-[10px]"
-                          >
-                            {course.approvalWorkflowStatus === 'PartiallyOpened'
-                              ? `Kısmi (${course.openedSectionCount ?? 0}/${course.approvedSectionCount ?? 0})`
-                              : course.approvalWorkflowStatus === 'Completed'
-                                ? 'Tamamlandı'
-                                : 'Açılabilir'}
-                          </Badge>
-                        ) : course.alreadyOpened ? (
+                        {course.alreadyOpened ? (
                           <Badge variant="secondary" className="text-[10px]">{course.existingSectionCount} şube açık</Badge>
+                        ) : course.canOpen ? (
+                          <Badge variant="success" className="text-[10px]">Açılabilir</Badge>
                         ) : (
-                          <Badge
-                            variant={course.approvalWorkflowStatus === 'Rejected' ? 'destructive' : 'outline'}
-                            className="text-[10px]"
-                          >
-                            {course.approvalWorkflowStatus === 'Rejected'
-                              ? 'Reddedildi'
-                              : course.approvalWorkflowStatus === 'Completed'
-                                ? 'Tamamlandı'
-                                : 'Onay Bekliyor'}
-                          </Badge>
+                          <Badge variant="outline" className="text-[10px]">Açılamaz</Badge>
                         )}
                       </TableCell>
                     </TableRow>
@@ -191,11 +168,6 @@ export function AddCourseDialog({
             </div>
 
             {forecast && <ForecastSummaryPanel forecast={forecast} />}
-            {selectedCourse && !selectedCourse.canOpen && selectedCourse.openingBlockedReason && (
-              <Alert className="mt-3 border-amber-200 bg-amber-50 text-amber-900">
-                <AlertDescription>{selectedCourse.openingBlockedReason}</AlertDescription>
-              </Alert>
-            )}
 
             {selectedCourse && (
               <>
@@ -209,11 +181,6 @@ export function AddCourseDialog({
                       value={sectionCount}
                       onChange={event => setSectionCount(Math.max(1, Math.min(selectedSectionLimit, Number(event.target.value))))}
                     />
-                    {selectedCourse.approvedSectionCount != null && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Onay: {selectedCourse.approvedSectionCount} · Açık: {selectedCourse.openedSectionCount ?? 0} · Kalan: {selectedCourse.remainingApprovedSectionCount ?? 0}
-                      </p>
-                    )}
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Kontenjan</label>

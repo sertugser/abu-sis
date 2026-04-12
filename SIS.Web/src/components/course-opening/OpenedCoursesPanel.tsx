@@ -12,6 +12,7 @@ import { OpenedCourseRow } from './OpenedCourseRow';
 interface Props {
   sections: OpenedCourseSectionDto[] | undefined;
   isLoading: boolean;
+  termId: number;
   forecastMap: Map<number, CourseDemandForecastDto>;
   instructors: InstructorOptionDto[];
   onUpdateSection: (sectionId: number, capacity: number, instructorId: number | undefined, internalQuota?: number | null, externalQuota?: number | null) => void;
@@ -35,6 +36,7 @@ interface CourseGroup {
 export function OpenedCoursesPanel({
   sections,
   isLoading,
+  termId,
   forecastMap,
   instructors,
   onUpdateSection,
@@ -121,6 +123,7 @@ export function OpenedCoursesPanel({
               courseCode={group.courseCode}
               courseName={group.courseName}
               courseId={group.courseId}
+              termId={termId}
               sections={group.sections}
               forecast={forecastMap.get(group.courseId)}
               instructors={instructors}

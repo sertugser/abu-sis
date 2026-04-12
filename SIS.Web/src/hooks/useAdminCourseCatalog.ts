@@ -17,6 +17,10 @@ export interface CourseListItemDto {
   departmentName: string | null;
   prerequisiteCount: number;
   equivalencyCount: number;
+  language: number;
+  teachingMethod: number;
+  status: number;
+  level: number;
 }
 
 export interface PrerequisiteDto { courseId: number; code: string; name: string; }
@@ -31,11 +35,26 @@ export interface CurriculumAssignmentDto {
 }
 
 export interface CourseStatsDto {
+  totalTimesOpened: number;
+  totalStudentsAllTime: number;
+  prerequisiteForCount: number;
   lastTermName: string | null;
   lastTermSectionCount: number;
   lastTermTotalEnrolled: number;
-  lastTermAvgCapacity: number;
-  totalTimesOpened: number;
+  lastTermTotalCapacity: number;
+  lastTermFillRate: number;
+  gradeDistribution: Record<string, number>;
+  passRate: number;
+  totalWithdrawn: number;
+  totalDropped: number;
+  termTrends: TermTrendDto[];
+}
+
+export interface TermTrendDto {
+  termName: string;
+  sectionCount: number;
+  enrolled: number;
+  capacity: number;
 }
 
 export interface PrerequisiteChainNodeDto {
@@ -60,6 +79,12 @@ export interface CourseDetailDto {
   prerequisites: PrerequisiteDto[];
   equivalencies: EquivalencyDto[];
   curriculumAssignments: CurriculumAssignmentDto[];
+  language: number;
+  teachingMethod: number;
+  status: number;
+  description: string | null;
+  level: number;
+  nationalCredit: number | null;
   stats: CourseStatsDto | null;
   prerequisiteChain: PrerequisiteChainNodeDto[] | null;
 }
@@ -67,6 +92,10 @@ export interface CourseDetailDto {
 export interface CourseFilterParams {
   search?: string;
   departmentId?: number;
+  facultyId?: number;
+  language?: number | string;
+  level?: number | string;
+  status?: number | string;
 }
 
 export interface CreateCourseDto {
@@ -79,11 +108,17 @@ export interface CreateCourseDto {
   isNonGpa: boolean;
   examType?: string | null;
   departmentId?: number | null;
+  language: number | string;
+  teachingMethod: number | string;
+  status: number | string;
+  description?: string | null;
+  level: number | string;
+  nationalCredit?: number | null;
 }
 
 export function useAdminCourses(filter?: CourseFilterParams) {
   return useQuery({
-    queryKey: ['admin', 'courses', filter?.search, filter?.departmentId],
+    queryKey: ['admin', 'courses', filter?.search, filter?.departmentId, filter?.facultyId, filter?.language, filter?.level, filter?.status],
     queryFn: async () => {
       const { data } = await apiClient.get<CourseListItemDto[]>(BASE, { params: filter });
       return data;

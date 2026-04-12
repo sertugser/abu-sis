@@ -280,7 +280,7 @@ function TermGpaBarChart({
   const getY = (val: number) => CHART_PADDING.top + ((4 - val) / 4) * innerHeight;
 
   return (
-    <svg viewBox={`0 0 900 ${CHART_HEIGHT}`} className="w-full" role="img" aria-label={ariaLabel}>
+    <svg viewBox={`0 0 900 ${CHART_HEIGHT}`} width="900" height={CHART_HEIGHT} className="w-full h-auto" role="img" aria-label={ariaLabel}>
       {GRID_VALUES.map(value => {
         const y = getY(value);
         return (

@@ -115,7 +115,6 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
     ],
   },
@@ -129,7 +128,6 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
@@ -166,7 +164,6 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
     ],
   },
   {
@@ -178,7 +175,6 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
@@ -218,7 +214,6 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
@@ -271,7 +266,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.COURSE_APPROVAL, label: 'Ders Onay İşlemleri' },
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },

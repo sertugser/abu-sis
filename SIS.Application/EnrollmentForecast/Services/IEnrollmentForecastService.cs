@@ -6,4 +6,5 @@ public interface IEnrollmentForecastService
 {
     Task<CourseDemandForecastDto?> GetCourseDemandForecastAsync(int courseId);
     Task<DepartmentForecastSummaryDto?> GetDepartmentSummaryAsync(int departmentId);
+    Task<int> CalibrateForTermAsync(int termId, CancellationToken cancellationToken = default);
 }

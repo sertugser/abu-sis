@@ -13,36 +13,21 @@ interface Props {
   forecast: CourseDemandForecastDto | undefined;
   selected: boolean;
   onToggle: (courseId: number) => void;
+  onOpenDetail: (course: CurriculumCourseForOpeningDto) => void;
 }
 
 function getStatusBadge(course: CurriculumCourseForOpeningDto) {
   if (course.alreadyOpened) {
-    if (course.approvalWorkflowStatus === 'PartiallyOpened') {
-      return (
-        <Badge variant="warning" className="text-[10px]">
-          Kısmi ({course.openedSectionCount ?? 0}/{course.approvedSectionCount ?? 0})
-        </Badge>
-      );
-    }
-    if (course.approvalWorkflowStatus === 'Completed') {
-      return <Badge variant="success" className="text-[10px]">Tamamlandı</Badge>;
-    }
     return (
       <Badge variant="success" className="text-[10px]">
         Açıldı ({course.existingSectionCount})
       </Badge>
     );
   }
-  if (course.canOpen) {
-    return <Badge variant="warning" className="text-[10px]">Bekliyor</Badge>;
-  }
-  if (course.approvalWorkflowStatus === 'Rejected') {
-    return <Badge variant="destructive" className="text-[10px]">Reddedildi</Badge>;
-  }
-  return <Badge variant="outline" className="text-[10px]">Onay Bekliyor</Badge>;
+  return <Badge variant="outline" className="text-[10px]">Açılabilir</Badge>;
 }
 
-export function CurriculumCourseRow({ course, forecast, selected, onToggle }: Props) {
+export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOpenDetail }: Props) {
   // Capacity ratio: how much of the predicted demand is covered by existing sections
   const capacityRatio = course.alreadyOpened && course.existingSectionCount > 0 && forecast && forecast.totalPredictedDemand > 0
     ? Math.min(100, Math.round(((course.existingSectionCount * (course.recommendedCapacity ?? 40)) / forecast.totalPredictedDemand) * 100))
@@ -56,6 +41,10 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle }: Pr
         selected ? 'bg-primary/5' : ''
       } ${!canSelect ? 'opacity-60' : ''}`}
       onClick={() => canSelect && onToggle(course.courseId)}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        onOpenDetail(course);
+      }}
     >
       <input
         type="checkbox"

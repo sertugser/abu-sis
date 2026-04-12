@@ -38,12 +38,12 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpGet("instructors")]
-    public async Task<IActionResult> GetDepartmentInstructors([FromQuery] int departmentId, CancellationToken ct)
+    public async Task<IActionResult> GetDepartmentInstructors([FromQuery] int departmentId, [FromQuery] int? termId = null, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetDepartmentInstructorsAsync(departmentId, ct);
+        var result = await _courseOpeningService.GetDepartmentInstructorsAsync(departmentId, termId, ct);
         return Ok(result);
     }
 
@@ -55,8 +55,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         try
         {
-            var canSkipApproval = User.IsInRole("Dean") || User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
-            var result = await _courseOpeningService.OpenCourseAsync(departmentId, termId, request, skipApproval: canSkipApproval, ct);
+            var result = await _courseOpeningService.OpenCourseAsync(departmentId, termId, request, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -71,8 +70,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var canSkipApproval = User.IsInRole("Dean") || User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
-        var result = await _courseOpeningService.BulkOpenCoursesAsync(departmentId, termId, request, skipApproval: canSkipApproval, ct);
+        var result = await _courseOpeningService.BulkOpenCoursesAsync(departmentId, termId, request, ct);
         return Ok(result);
     }
 
@@ -213,8 +211,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, request.DepartmentId, ct)) return Forbid();
 
-        var canSkipApproval = User.IsInRole("Dean") || User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
-        var result = await _courseOpeningService.TransferFromTermAsync(request, skipApproval: canSkipApproval, ct);
+        var result = await _courseOpeningService.TransferFromTermAsync(request, ct);
         return Ok(result);
     }
 

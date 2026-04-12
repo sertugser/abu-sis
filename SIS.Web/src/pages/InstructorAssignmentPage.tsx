@@ -10,11 +10,9 @@ import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useA
 import {
   useBulkAssignInstructor,
   useDepartmentInstructors,
-  useInstructorWorkload,
   useOpenedCourses,
   useUpdateOpenedSection,
 } from '../hooks/useCourseOpening';
-import type { InstructorWorkloadDto } from '../types/courseOpening';
 
 export default function InstructorAssignmentPage() {
   const contextQuery = useAcademicOperationsContext();
@@ -42,19 +40,10 @@ export default function InstructorAssignmentPage() {
   }
 
   const openedQuery = useOpenedCourses(deptId, termId);
-  const instructorsQuery = useDepartmentInstructors(deptId);
-  const workloadQuery = useInstructorWorkload(selectedInstructorId, termId);
+  const instructorsQuery = useDepartmentInstructors(deptId, termId);
   const bulkAssignMut = useBulkAssignInstructor(deptId ?? 0, termId ?? 0);
   const updateMut = useUpdateOpenedSection(deptId ?? 0, termId ?? 0);
 
-  // Collect workloads: we only have detailed workload for the selected instructor
-  const workloads = useMemo(() => {
-    const map = new Map<number, InstructorWorkloadDto>();
-    if (workloadQuery.data) map.set(workloadQuery.data.instructorId, workloadQuery.data);
-    return map;
-  }, [workloadQuery.data]);
-
-  // Filter departments by faculty
   const availableFaculties = useMemo(() => {
     if (!faculties || !structureDepartments) return [];
     const accessibleDeptIds = new Set(departments.map(d => d.departmentId));
@@ -72,10 +61,10 @@ export default function InstructorAssignmentPage() {
     return departments.filter(d => deptIdsInFaculty.has(d.departmentId));
   }, [departments, structureDepartments, selectedFacultyId]);
 
-  // Auto-hide toast
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
+    const duration = toast.type === 'error' ? 8000 : 4000;
+    const t = setTimeout(() => setToast(null), duration);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -91,26 +80,43 @@ export default function InstructorAssignmentPage() {
     });
   }, []);
 
-  const toggleAll = useCallback(() => {
-    setSelectedSectionIds(prev => {
-      if (prev.size === sections.length) return new Set();
-      return new Set(sections.map(s => s.sectionId));
-    });
-  }, [sections]);
+  const toggleAll = useCallback(
+    (visibleIds: number[]) => {
+      setSelectedSectionIds(prev => {
+        const allChecked = visibleIds.every(id => prev.has(id));
+        if (allChecked) {
+          const next = new Set(prev);
+          visibleIds.forEach(id => next.delete(id));
+          return next;
+        }
+        const next = new Set(prev);
+        visibleIds.forEach(id => next.add(id));
+        return next;
+      });
+    },
+    [],
+  );
 
   const handleInlineAssign = useCallback(
     (sectionId: number, instructorId: number) => {
-      setInlineAssignments(prev => new Map(prev).set(sectionId, instructorId));
-      // Immediately apply single inline assignment
       updateMut.mutate(
         { sectionId, instructorId },
         {
-          onSuccess: () => setToast({ type: 'success', message: 'Ogretim uyesi atandi.' }),
-          onError: (err: unknown) =>
+          onSuccess: () => {
+            setInlineAssignments(prev => new Map(prev).set(sectionId, instructorId));
+            setToast({ type: 'success', message: 'Öğretim üyesi atandı.' });
+          },
+          onError: (err: unknown) => {
+            setInlineAssignments(prev => {
+              const next = new Map(prev);
+              next.delete(sectionId);
+              return next;
+            });
             setToast({
               type: 'error',
-              message: err instanceof Error ? err.message : 'Atama basarisiz.',
-            }),
+              message: err instanceof Error ? err.message : 'Atama başarısız.',
+            });
+          },
         },
       );
     },
@@ -129,19 +135,28 @@ export default function InstructorAssignmentPage() {
         onSuccess: data => {
           const msg =
             data.failedCount > 0
-              ? `${data.successCount} basarili, ${data.failedCount} basarisiz: ${data.errors.join('; ')}`
-              : `${data.successCount} sube basariyla atandi.`;
+              ? `${data.successCount} başarılı, ${data.failedCount} başarısız: ${data.errors.join('; ')}`
+              : `${data.successCount} şube başarıyla atandı.`;
           setToast({ type: data.failedCount > 0 ? 'error' : 'success', message: msg });
           setSelectedSectionIds(new Set());
         },
         onError: (err: unknown) =>
-          setToast({ type: 'error', message: err instanceof Error ? err.message : 'Toplu atama basarisiz.' }),
+          setToast({ type: 'error', message: err instanceof Error ? err.message : 'Toplu atama başarısız.' }),
       },
     );
   }, [selectedInstructorId, selectedSectionIds, bulkAssignMut]);
 
+  const handleClearInvisibleSelections = useCallback((visibleIds: number[]) => {
+    const visibleSet = new Set(visibleIds);
+    setSelectedSectionIds(prev => {
+      const next = new Set<number>();
+      prev.forEach(id => { if (visibleSet.has(id)) next.add(id); });
+      return next;
+    });
+  }, []);
+
   const handleCopyPreviousTerm = useCallback(() => {
-    setToast({ type: 'error', message: 'Onceki donemden kopyalama henuz desteklenmiyor.' });
+    setToast({ type: 'error', message: 'Önceki dönemden kopyalama henüz desteklenmiyor.' });
   }, []);
 
   if (contextQuery.isLoading) {
@@ -154,52 +169,10 @@ export default function InstructorAssignmentPage() {
   }
 
   return (
-    <div className="flex flex-col h-full p-4 space-y-3">
-      {/* Page Title + Filter */}
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-lg font-bold">Ogretim Elemani Atama</h2>
-        <div className="flex items-center gap-1.5 text-xs">
-          <label className="font-medium">Fakulte:</label>
-          <select
-            className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-            value={selectedFacultyId ?? ''}
-            onChange={e => {
-              setSelectedFacultyId(e.target.value ? Number(e.target.value) : null);
-              setSelectedDeptId(null);
-            }}
-          >
-            <option value="">Tumu</option>
-            {availableFaculties.map(f => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs">
-          <label className="font-medium">Bolum:</label>
-          <select
-            className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-            value={selectedDeptId ?? ''}
-            onChange={e => setSelectedDeptId(Number(e.target.value))}
-          >
-            {filteredDepartments.map(d => (
-              <option key={d.departmentId} value={d.departmentId}>
-                {d.departmentCode} - {d.departmentName}
-              </option>
-            ))}
-          </select>
-        </div>
-        {activeTerm && (
-          <span className="text-xs text-muted-foreground ml-auto">
-            Donem: <strong>{activeTerm.name}</strong>
-          </span>
-        )}
-      </div>
-
+    <div className="flex flex-col h-[calc(100vh-120px)] space-y-3 overflow-hidden">
       {/* Toast */}
       {toast && (
-        <Alert variant={toast.type === 'error' ? 'destructive' : 'default'} className="py-2">
+        <Alert variant={toast.type === 'error' ? 'destructive' : 'default'} className="py-2 shrink-0">
           {toast.type === 'error' ? (
             <AlertCircle className="h-4 w-4" />
           ) : (
@@ -209,20 +182,29 @@ export default function InstructorAssignmentPage() {
         </Alert>
       )}
 
-      {/* Split Panel */}
+      {/* Split Panel — fills remaining height */}
       <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
-        {/* Left: Instructor List (40%) */}
-        <div className="w-full lg:w-[40%] min-w-0 lg:min-w-[280px]">
+        {/* Left: Instructor List (38%) */}
+        <div className="w-full lg:w-[38%] min-w-0 lg:min-w-[280px] flex flex-col min-h-0">
           <InstructorListPanel
             instructors={instructors}
-            workloads={workloads}
             selectedId={selectedInstructorId}
             onSelect={setSelectedInstructorId}
+            isLoading={instructorsQuery.isLoading}
+            faculties={availableFaculties}
+            selectedFacultyId={selectedFacultyId}
+            onFacultyChange={(id) => {
+              setSelectedFacultyId(id);
+              setSelectedDeptId(null);
+            }}
+            departments={filteredDepartments}
+            selectedDeptId={deptId}
+            onDeptChange={setSelectedDeptId}
           />
         </div>
 
-        {/* Right: Section Table (60%) */}
-        <div className="flex-1">
+        {/* Right: Section Table (62%) */}
+        <div className="flex-1 flex flex-col min-h-0">
           <SectionAssignmentTable
             sections={sections}
             instructors={instructors}
@@ -230,11 +212,13 @@ export default function InstructorAssignmentPage() {
             inlineAssignments={inlineAssignments}
             onInlineAssign={handleInlineAssign}
             selectedSectionIds={selectedSectionIds}
+            onClearInvisibleSelections={handleClearInvisibleSelections}
             onToggleSection={toggleSection}
             onToggleAll={toggleAll}
             onBulkAssign={handleBulkAssign}
             onCopyPreviousTerm={handleCopyPreviousTerm}
             bulkAssigning={bulkAssignMut.isPending}
+            isLoading={openedQuery.isLoading}
           />
         </div>
       </div>

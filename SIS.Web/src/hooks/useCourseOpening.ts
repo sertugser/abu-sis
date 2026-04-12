@@ -33,12 +33,12 @@ export function useCurriculumCoursesForOpening(departmentId: number | null, term
   });
 }
 
-export function useDepartmentInstructors(departmentId: number | null) {
+export function useDepartmentInstructors(departmentId: number | null, termId?: number | null) {
   return useQuery({
-    queryKey: QUERY_KEYS.departmentInstructors(departmentId ?? 0),
-    queryFn: () => getDepartmentInstructors(departmentId!),
+    queryKey: [...QUERY_KEYS.departmentInstructors(departmentId ?? 0), termId],
+    queryFn: () => getDepartmentInstructors(departmentId!, termId ?? undefined),
     enabled: departmentId !== null,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 }
 
@@ -59,7 +59,6 @@ export function useOpenCourse(departmentId: number, termId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
     },
   });
@@ -73,7 +72,6 @@ export function useBulkOpenCourses(departmentId: number, termId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
     },
   });
@@ -87,6 +85,8 @@ export function useUpdateOpenedSection(departmentId: number, termId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: ['courseOpening', 'workload'] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.departmentInstructors(departmentId) });
     },
   });
 }
@@ -98,6 +98,8 @@ export function useBulkAssignInstructor(departmentId: number, termId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: ['courseOpening', 'workload'] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.departmentInstructors(departmentId) });
     },
   });
 }
@@ -123,7 +125,6 @@ export function useTransferFromTerm(departmentId: number, targetTermId: number) 
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, targetTermId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, targetTermId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, targetTermId) });
     },
   });
 }
@@ -136,7 +137,6 @@ export function useCloseSection(departmentId: number, termId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sectionApprovals(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
     },
   });

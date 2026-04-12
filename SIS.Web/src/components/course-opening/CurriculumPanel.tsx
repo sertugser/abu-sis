@@ -18,6 +18,7 @@ interface Props {
   selectedIds: Set<number>;
   onToggleSelect: (courseId: number) => void;
   onOpenSelected: () => void;
+  onOpenCourseDetail: (course: CurriculumCourseForOpeningDto) => void;
 }
 
 function getSemesterLabel(semester: number) {
@@ -36,6 +37,7 @@ export function CurriculumPanel({
   selectedIds,
   onToggleSelect,
   onOpenSelected,
+  onOpenCourseDetail,
 }: Props) {
   const [search, setSearch] = useState('');
   const [collapsedSemesters, setCollapsedSemesters] = useState<Set<number>>(new Set());
@@ -136,6 +138,7 @@ export function CurriculumPanel({
                       forecast={forecastMap.get(course.courseId)}
                       selected={selectedIds.has(course.courseId)}
                       onToggle={onToggleSelect}
+                      onOpenDetail={onOpenCourseDetail}
                     />
                   ))}
                 </CollapsibleContent>

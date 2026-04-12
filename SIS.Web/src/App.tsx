@@ -16,7 +16,6 @@ import AcademicCalendarPage from './pages/AcademicCalendarPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
-import AcademicOperationsPage from './pages/AcademicOperationsPage';
 import ClassListsPage from './pages/ClassListsPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
@@ -77,8 +76,7 @@ export default function App() {
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>
-                    <Route path="ders-onay-islemleri" element={<AcademicOperationsPage />} />
-                    <Route path="sinif-listeleri" element={<ClassListsPage />} />
+<Route path="sinif-listeleri" element={<ClassListsPage />} />
                     <Route path="ders-programi-olusturma" element={<FacultyPlanningPage />} />
                     <Route path="derslik-doluluk-tablosu" element={<ClassroomManagementPage />} />
                     <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />

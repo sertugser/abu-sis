@@ -103,8 +103,6 @@ public class FacultyPlanningService : IFacultyPlanningService
         foreach (var dept in faculty.Departments)
         {
             var deptSections = sections.Where(s => s.Course.DepartmentId == dept.Id).ToList();
-            var pendingApprovals = await _context.CourseSectionApprovals
-                .CountAsync(a => a.DepartmentId == dept.Id && a.TermId == termId && a.Status == SectionApprovalStatus.Pending, ct);
 
             departmentProgress.Add(new DepartmentProgressDto
             {
@@ -113,18 +111,11 @@ public class FacultyPlanningService : IFacultyPlanningService
                 DepartmentCode = dept.Code,
                 TotalSections = deptSections.Count,
                 ScheduledSections = deptSections.Count(s => s.ClassroomId.HasValue && scheduledSet.Contains(s.Id)),
-                PendingApprovals = pendingApprovals
+                PendingApprovals = 0
             });
         }
 
-        var pendingWarnings = departmentProgress
-            .Where(d => d.PendingApprovals > 0)
-            .Select(d => new PendingApprovalWarningDto
-            {
-                DepartmentId = d.DepartmentId,
-                DepartmentName = d.DepartmentName,
-                PendingCount = d.PendingApprovals
-            }).ToList();
+        var pendingWarnings = new List<PendingApprovalWarningDto>();
 
         var recentLogs = await _context.SchedulingAuditLogs
             .AsNoTracking()

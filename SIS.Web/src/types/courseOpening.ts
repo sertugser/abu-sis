@@ -20,6 +20,8 @@ export interface OpenedCourseSectionDto {
   instructorId: number | null;
   instructorName: string | null;
   isActive: boolean;
+  departmentId: number | null;
+  departmentName: string | null;
 }
 
 export interface OpenedCourseListDto {
@@ -38,9 +40,6 @@ export interface CrossDepartmentDemandDto {
   estimatedStudentCount: number;
 }
 
-export type SectionApprovalStatus = 'Pending' | 'Approved' | 'Rejected';
-export type ApprovalWorkflowStatus = SectionApprovalStatus | 'PartiallyOpened' | 'Completed';
-
 export interface CurriculumCourseForOpeningDto {
   courseId: number;
   courseCode: string;
@@ -58,18 +57,14 @@ export interface CurriculumCourseForOpeningDto {
   recommendedCapacity?: number;
   crossDepartmentDemand?: CrossDepartmentDemandDto[];
   previousTermEnrollment?: number;
-  approvalStatus?: SectionApprovalStatus | null;
-  approvalWorkflowStatus?: ApprovalWorkflowStatus;
-  approvedSectionCount?: number | null;
-  openedSectionCount?: number;
-  remainingApprovedSectionCount?: number;
   canOpen?: boolean;
-  openingBlockedReason?: string | null;
 }
 
 export interface InstructorOptionDto {
   instructorId: number;
   fullName: string;
+  maxWeeklyHours: number;
+  assignedWeeklyHours: number;
 }
 
 // ── Request Types ──
@@ -130,11 +125,18 @@ export interface PreviousTermCourseDto {
   alreadyOpened: boolean;
 }
 
+export interface TransferCourseItem {
+  courseId: number;
+  sectionCount?: number;
+  capacityPerSection?: number;
+  instructorId?: number | null;
+}
+
 export interface TransferFromTermRequest {
   departmentId: number;
   sourceTermId: number;
   targetTermId: number;
-  courseIds: number[];
+  courses: TransferCourseItem[];
 }
 
 export interface TransferCourseResultItem {
@@ -151,28 +153,6 @@ export interface TransferFromTermResultDto {
   failedCount: number;
   totalSectionsCreated: number;
   results: TransferCourseResultItem[];
-}
-
-// ── Instructor Workload ──
-
-export interface AssignedSectionDto {
-  sectionId: number;
-  courseCode: string;
-  courseName: string;
-  sectionNumber: number;
-  weeklyHours: number;
-  capacity: number;
-  enrolledCount: number;
-}
-
-export interface InstructorWorkloadDto {
-  instructorId: number;
-  fullName: string;
-  title: string;
-  maxWeeklyHours: number;
-  assignedWeeklyHours: number;
-  remainingCapacity: number;
-  assignedSections: AssignedSectionDto[];
 }
 
 // ── Instructor Workload ──

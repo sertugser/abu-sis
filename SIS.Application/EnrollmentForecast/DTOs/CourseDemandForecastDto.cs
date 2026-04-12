@@ -30,6 +30,8 @@ public class CourseDemandForecastDto
 
     /// <summary>Diger bolum/programlardan gelen gercek tahmini talep kirilimi</summary>
     public List<CrossDepartmentDemandDto> CrossDepartmentDemand { get; set; } = new();
+
+    public decimal ShowRate { get; set; }
 }
 
 public class DemandBreakdownDto

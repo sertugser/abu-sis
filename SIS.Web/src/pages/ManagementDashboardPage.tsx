@@ -41,7 +41,6 @@ import {
   ClipboardList,
   GraduationCap,
   Layers,
-  Network,
   Pencil,
   RotateCcw,
   TrendingUp,
@@ -271,14 +270,6 @@ function CapacityStatusCard({
           </div>
         )}
 
-        {forecast && (
-          <Link
-            to={ROUTES.COURSE_APPROVAL}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-          >
-            Ders Onay İşlemleri <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        )}
       </CardContent>
     </Card>
   );
@@ -479,7 +470,6 @@ function GradeEntryCard({
 const QUICK_LINKS_STORAGE_KEY = 'sis-dashboard-quick-links';
 
 const DEFAULT_QUICK_LINKS = [
-  ROUTES.COURSE_APPROVAL,
   ROUTES.CLASS_LISTS,
   ROUTES.SCHEDULE_CREATION,
   ROUTES.TERM_CLOSING,
@@ -487,7 +477,6 @@ const DEFAULT_QUICK_LINKS = [
 
 /** Icon overrides for well-known routes */
 const ROUTE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  [ROUTES.COURSE_APPROVAL]: Network,
   [ROUTES.CLASS_LISTS]: ClipboardList,
   [ROUTES.SCHEDULE_CREATION]: CalendarRange,
   [ROUTES.TERM_CLOSING]: GraduationCap,
