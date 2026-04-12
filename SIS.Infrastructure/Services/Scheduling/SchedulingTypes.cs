@@ -46,6 +46,8 @@ public sealed class SectionSnapshot
     public string ClassroomName { get; init; } = string.Empty;
     public int ClassroomCapacity { get; init; }
     public ClassroomType ClassroomType { get; init; }         // for H4
+    public ClassroomType? TheoryClassroomType { get; init; }
+    public ClassroomType? LabClassroomType { get; init; }
     public int? InstructorId { get; init; }
     public string InstructorName { get; init; } = string.Empty;
     public int InstructorMaxWeeklyHours { get; init; }

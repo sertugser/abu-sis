@@ -797,6 +797,8 @@ public class SchedulingService : ISchedulingService
             ClassroomName = assignment.Classroom.Name,
             ClassroomCapacity = assignment.Classroom.Capacity,
             ClassroomType = assignment.Classroom.Type,
+            TheoryClassroomType = section.Course.TheoryClassroomType,
+            LabClassroomType = section.Course.LabClassroomType,
             InstructorId = section.InstructorId,
             InstructorName = section.InstructorId.HasValue && instructorNameMap.TryGetValue(section.InstructorId.Value, out var n) ? n : string.Empty,
             InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
@@ -1234,6 +1236,8 @@ public class SchedulingService : ISchedulingService
             ClassroomName = section.Classroom?.Name ?? string.Empty,
             ClassroomCapacity = section.Classroom?.Capacity ?? 0,
             ClassroomType = section.Classroom?.Type ?? ClassroomType.Lecture,
+            TheoryClassroomType = section.Course.TheoryClassroomType,
+            LabClassroomType = section.Course.LabClassroomType,
             InstructorId = instructorId,
             InstructorName = instructorId.HasValue && instructorNameMap.TryGetValue(instructorId.Value, out var instructorName)
                 ? instructorName
@@ -1375,6 +1379,8 @@ public class SchedulingService : ISchedulingService
             ClassroomName = classroom?.Name ?? string.Empty,
             ClassroomCapacity = classroom?.Capacity ?? 0,
             ClassroomType = classroom?.Type ?? ClassroomType.Lecture,
+            TheoryClassroomType = section.Course.TheoryClassroomType,
+            LabClassroomType = section.Course.LabClassroomType,
             InstructorId = instructor?.Id,
             InstructorName = instructorName,
             InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
