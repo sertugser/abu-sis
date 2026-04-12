@@ -10,13 +10,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 import { AlertCircle, BarChart3, TrendingUp } from 'lucide-react';
 import { useStudentInfo } from '../hooks/useStudentInfo';
+import { useStudentTranscript } from '../hooks/useStudentTranscript';
 import { useTermGpaHistory } from '../hooks/useTermGpaHistory';
 import type { StudentTermGpaDto } from '../types/student';
-import { cn } from '@/lib/utils';
 
-const CHART_HEIGHT = 300;
+const CHART_HEIGHT = 260;
 const CHART_PADDING = { top: 20, right: 20, bottom: 80, left: 48 };
 const GRID_VALUES = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
 const REPORT_COLORS = {
@@ -36,22 +37,20 @@ const REPORT_COLORS = {
 
 export default function TermGpaPage() {
   const studentQuery = useStudentInfo();
+  const transcriptQuery = useStudentTranscript();
   const historyQuery = useTermGpaHistory();
 
-  if (studentQuery.isLoading || historyQuery.isLoading) {
+  if (studentQuery.isLoading || transcriptQuery.isLoading || historyQuery.isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
-        </div>
-        <Skeleton className="h-[380px] rounded-xl" />
-        <Skeleton className="h-[380px] rounded-xl" />
-        <Skeleton className="h-[280px] rounded-xl" />
+      <div className="space-y-5">
+        <Skeleton className="h-[340px] rounded-xl" />
+        <Skeleton className="h-[360px] rounded-xl" />
+        <Skeleton className="h-[360px] rounded-xl" />
       </div>
     );
   }
 
-  if (studentQuery.isError || historyQuery.isError || !studentQuery.data) {
+  if (studentQuery.isError || transcriptQuery.isError || historyQuery.isError || !studentQuery.data || !transcriptQuery.data) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -64,11 +63,8 @@ export default function TermGpaPage() {
   }
 
   const student = studentQuery.data;
+  const transcript = transcriptQuery.data;
   const history = historyQuery.data ?? [];
-  const latestTerm = history.length > 0 ? history[history.length - 1] : null;
-  const totalCourses = history.reduce((sum, term) => sum + term.courseCount, 0);
-  const totalEcts = history.reduce((sum, term) => sum + term.totalEcts, 0);
-  const bestSgpa = history.length > 0 ? Math.max(...history.map(term => term.sgpa)) : 0;
 
   if (history.length === 0) {
     return (
@@ -85,17 +81,58 @@ export default function TermGpaPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="overflow-hidden border-0 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-        <CardContent className="relative p-0">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(20,184,166,0.14),transparent_24%),linear-gradient(135deg,rgba(19,35,63,1)_0%,rgba(24,43,75,0.98)_58%,rgba(17,32,58,1)_100%)]" />
-          <div className="relative px-8 py-6">
-            <div className="grid gap-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-sm lg:grid-cols-4">
-              <SummaryStripItem label="Güncel AGNO" value={student.cgpa.toFixed(2)} note="Genel not ortalaması" emphasize />
-              <SummaryStripItem label="Son Dönem ANO" value={latestTerm ? latestTerm.sgpa.toFixed(2) : '0.00'} note={latestTerm?.termName ?? '—'} />
-              <SummaryStripItem label="Toplam AKTS" value={String(totalEcts)} note={`${totalCourses} ders işlendi`} />
-              <SummaryStripItem label="İzlenen Dönem" value={String(history.length)} note={`En yüksek ANO: ${bestSgpa.toFixed(2)}`} />
-            </div>
+    <div className="space-y-5">
+      <Card className="overflow-hidden border border-slate-300 shadow-sm">
+        <div className="border-b bg-white px-4 py-3">
+          <h3 className="text-[18px] font-medium text-slate-700">
+            Dönem Ortalamaları
+          </h3>
+        </div>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b-0 bg-[#003366] hover:bg-[#003366]">
+                  <TableHead className="h-10 pl-2 text-[15px] font-semibold text-white">Dönem Adı</TableHead>
+                  <TableHead className="h-10 text-center text-[15px] font-semibold text-white">Aldığı Ders Sayısı</TableHead>
+                  <TableHead className="h-10 text-center text-[15px] font-semibold text-white">Toplam Kredi</TableHead>
+                  <TableHead className="h-10 text-center text-[15px] font-semibold text-white">Toplam AKTS</TableHead>
+                  <TableHead className="h-10 text-center text-[15px] font-semibold text-white">Dönem Ortalaması</TableHead>
+                  <TableHead className="h-10 pr-2 text-center text-[15px] font-semibold text-white">Genel Not Ortalaması</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map(term => (
+                  <TableRow
+                    key={term.termId}
+                    className={cn('border-b border-slate-200 transition-colors hover:bg-[#dce9ff]')}
+                  >
+                    <TableCell className="py-2 pl-2 text-[16px] font-medium text-slate-700">
+                      {formatTermName(term.termName)}
+                    </TableCell>
+                    <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{term.courseCount}</TableCell>
+                    <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{term.totalCredits}</TableCell>
+                    <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{term.totalEcts}</TableCell>
+                    <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{formatDecimal(term.sgpa)}</TableCell>
+                    <TableCell className="py-2 pr-2 text-center text-[16px] font-medium text-slate-700">{formatDecimal(term.cgpa)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="border-t bg-white">
+            <SummaryFootRow
+              description="Dersin Başarı ve Sonuçlanma Durumuna Bakılmaksızın (Ders tekrarlarında son alınan ders, kredi toplamına dahildir)"
+              valueLabel="Toplam Kredi"
+              value={transcript.totalAttemptedCredits}
+            />
+            <SummaryFootRow
+              description="Dersin Başarı ve Sonuçlanma Durumuna Bakılmaksızın (Ders tekrarlarında son alınan ders, AKTS toplamına dahildir)"
+              valueLabel="Toplam AKTS"
+              value={transcript.totalAttemptedEcts}
+              bordered
+            />
           </div>
         </CardContent>
       </Card>
@@ -115,84 +152,27 @@ export default function TermGpaPage() {
         history={history}
         metric="cgpa"
       />
-
-      <Card className="overflow-hidden border border-[#003366]/20 shadow-md">
-        <div className="bg-[#003366] px-5 py-3">
-          <h3 className="font-heading text-sm font-extrabold text-white uppercase tracking-tight">
-            Dönem Bazlı Özet
-          </h3>
-        </div>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="pl-6 font-bold text-foreground">Dönem</TableHead>
-                  <TableHead className="text-center font-bold text-foreground">Ders Sayısı</TableHead>
-                  <TableHead className="text-center font-bold text-foreground">Toplam Kredi</TableHead>
-                  <TableHead className="text-center font-bold text-foreground">Toplam AKTS</TableHead>
-                  <TableHead className="text-center font-bold text-foreground">ANO</TableHead>
-                  <TableHead className="text-center pr-6 font-bold text-foreground">AGNO</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-  {history.map((term, index) => (
-    <TableRow key={term.termId} className={cn(index % 2 === 1 && 'bg-muted/10')}>
-      <TableCell className="pl-6">
-        <div className="space-y-1">
-          <p className="font-semibold text-foreground">{term.termName}</p>
-          <p className="text-[11px] text-muted-foreground uppercase">{formatSemester(term.semester)} dönemi</p>
-        </div>
-      </TableCell>
-      <TableCell className="text-center font-medium">{term.courseCount}</TableCell>
-      <TableCell className="text-center font-medium">{term.totalCredits}</TableCell>
-      <TableCell className="text-center font-medium">{term.totalEcts}</TableCell>
-      
-      <TableCell className="text-center">
-        <Badge 
-          variant="outline" 
-          className="font-mono font-bold bg-[#27457f]/10 text-[#27457f] border-[#27457f]/20 shadow-sm"
-        >
-          {term.sgpa.toFixed(2)}
-        </Badge>
-      </TableCell>
-
-      <TableCell className="pr-6 text-center">
-        <Badge 
-          variant="outline" 
-          className="font-mono font-bold bg-[#1a9b84]/10 text-[#1a9b84] border-[#1a9b84]/20 shadow-sm"
-        >
-          {term.cgpa.toFixed(2)}
-        </Badge>
-      </TableCell>
-    </TableRow>
-  ))}
-</TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
-
-function SummaryStripItem({
-  label,
+function SummaryFootRow({
+  description,
+  valueLabel,
   value,
-  note,
-  emphasize = false,
+  bordered = false,
 }: {
-  label: string;
-  value: string;
-  note: string;
-  emphasize?: boolean;
+  description: string;
+  valueLabel: string;
+  value: number;
+  bordered?: boolean;
 }) {
   return (
-    <div className="border-b border-white/8 px-5 py-5 lg:border-b-0 lg:border-r lg:border-white/8 last:border-r-0">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">{label}</p>
-      <p className={`mt-3 font-heading text-4xl font-bold ${emphasize ? 'text-white' : 'text-slate-50'}`}>{value}</p>
-      <p className="mt-2 text-sm text-slate-300">{note}</p>
+    <div className={cn('flex flex-col gap-2 px-3 py-3 text-[14px] md:flex-row md:items-center md:justify-between', bordered && 'border-t')}>
+      <p className="text-slate-600">{description} [{valueLabel}] :</p>
+      <div className="flex items-center gap-3 font-semibold text-slate-700">
+        <span className="min-w-10 text-right">{value}</span>
+      </div>
     </div>
   );
 }
@@ -214,21 +194,21 @@ function ReportChartSection({
 
   return (
     <Card className="overflow-hidden border border-[#003366]/20 shadow-md">
-      <div className="bg-[#003366] px-5 py-3 border-b border-white/10">
+      <div className="border-b border-white/10 bg-[#003366] px-5 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <h3 className="font-heading text-sm font-extrabold text-white uppercase tracking-tight">
+          <h3 className="font-heading text-sm font-extrabold uppercase tracking-tight text-white">
             {title}
           </h3>
           <div className="flex flex-wrap gap-2">
             <LegendBadge label={legendLabel} tone={legendTone} />
-            <Badge variant="secondary" className="gap-1.5 bg-white/10 text-white border-white/20 hover:bg-white/20">
+            <Badge variant="secondary" className="gap-1.5 border-white/20 bg-white/10 text-white hover:bg-white/20">
               <TrendingUp className="h-3.5 w-3.5" />
               Son değer: {latestValue.toFixed(2)}
             </Badge>
           </div>
         </div>
       </div>
-      <CardContent className="p-6">
+      <CardContent className="p-5">
         <div
           className="rounded-xl border px-4 py-4 md:px-6 md:py-5"
           style={{
@@ -244,16 +224,13 @@ function ReportChartSection({
 }
 
 function LegendBadge({ label, tone }: { label: string; tone: 'sgpa' | 'cgpa' }) {
-  
   const dotColor = tone === 'sgpa' ? '#60a5fa' : '#34d399';
 
   return (
-    <span
-      className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold text-white bg-white/10 border-white/20 shadow-sm"
-    >
-      <span 
-        className="h-2 w-2 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)]" 
-        style={{ backgroundColor: dotColor }} 
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold text-white shadow-sm">
+      <span
+        className="h-2 w-2 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+        style={{ backgroundColor: dotColor }}
       />
       {label}
     </span>
@@ -302,7 +279,8 @@ function TermGpaBarChart({
         return (
           <g key={term.termId}>
             <rect
-              x={x} y={y}
+              x={x}
+              y={y}
               width={barWidth}
               height={Math.max(barHeight, 0)}
               rx={5}
@@ -327,9 +305,10 @@ function TermGpaBarChart({
   );
 }
 
-function formatSemester(semester: string) {
-  if (semester === 'Fall') return 'Güz';
-  if (semester === 'Spring') return 'Bahar';
-  if (semester === 'Summer') return 'Yaz';
-  return semester;
+function formatTermName(termName: string) {
+  return termName.endsWith('Dönemi') ? termName : `${termName} Dönemi`;
+}
+
+function formatDecimal(value: number) {
+  return value.toFixed(2).replace('.', ',');
 }

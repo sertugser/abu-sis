@@ -6,6 +6,7 @@ export function useStudentInfo() {
   return useQuery({
     queryKey: QUERY_KEYS.studentInfo,
     queryFn: getStudentInfo,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }

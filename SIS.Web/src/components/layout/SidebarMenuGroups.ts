@@ -16,7 +16,7 @@ export interface MenuGroup {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  children: { to: string; label: string }[];
+  children: { to: string; label: string; openInNewTab?: boolean }[];
 }
 
 // ─── STUDENT MENU ───────────────────────────────────────────────
@@ -40,6 +40,8 @@ export const studentMenuGroups: MenuGroup[] = [
       { to: ROUTES.PLAN, label: 'Kayıt Planım' },
       { to: '/donem-ortalamalari', label: 'Dönem Ortalamaları' },
       { to: '/mufredat-durum', label: 'Müfredat Durum' },
+      { to: ROUTES.TRANSCRIPT, label: 'Transkript', openInNewTab: true },
+      { to: ROUTES.TRANSCRIPT_SCENARIO, label: 'Transkript Senaryosu' },
     ],
   },
   {

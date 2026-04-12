@@ -6,6 +6,7 @@ export function useTermGpaHistory() {
   return useQuery({
     queryKey: QUERY_KEYS.termGpaHistory,
     queryFn: getTermGpaHistory,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }

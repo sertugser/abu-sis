@@ -158,6 +158,46 @@ public class GpaCalculationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CalculateCgpa_WithEquivalentCourseRetake_OnlyLatestEquivalentCounts()
+    {
+        var studentId = 97;
+        _context.Students.Add(new Student
+        {
+            Id = studentId, UserId = 997, StudentNumber = "9999997",
+            NationalId = "99999999997", Status = StudentStatus.Active,
+            Cgpa = 0, Sgpa = 0, CompletedSemesters = 2
+        });
+
+        var oldCourse = new Course { Id = 960, Code = "TEST960", Name = "Legacy Course", Ects = 6, IsNonGpa = false };
+        var newCourse = new Course { Id = 961, Code = "TEST961", Name = "Equivalent Course", Ects = 6, IsNonGpa = false };
+        var extraCourse = new Course { Id = 962, Code = "TEST962", Name = "Extra Course", Ects = 4, IsNonGpa = false };
+        _context.Courses.AddRange(oldCourse, newCourse, extraCourse);
+        _context.CourseEquivalencies.Add(new CourseEquivalency
+        {
+            CourseId = oldCourse.Id,
+            EquivalentCourseId = newCourse.Id
+        });
+
+        var section1 = AddSection(960, oldCourse.Id, Term3Id);
+        AddRegistration(960, studentId, section1.Id, RegistrationStatus.Active, GradeCode.FF, Term3Id);
+
+        var section2 = AddSection(961, newCourse.Id, Term4Id);
+        AddRegistration(961, studentId, section2.Id, RegistrationStatus.Active, GradeCode.BB, Term4Id);
+
+        var section3 = AddSection(962, extraCourse.Id, Term3Id);
+        AddRegistration(962, studentId, section3.Id, RegistrationStatus.Active, GradeCode.CC, Term3Id);
+
+        _context.SaveChanges();
+
+        var cgpa = await _service.CalculateCgpaAsync(studentId);
+
+        // TEST960/TEST961 eşdeğer zinciri: sadece BB(3.00) × 6 = 18
+        // TEST962: CC(2.00) × 4 = 8
+        // Toplam: 26 / 10 = 2.60
+        cgpa.Should().Be(2.60m);
+    }
+
+    [Fact]
     public async Task CalculateCgpa_NonGpaCourses_Excluded()
     {
         // Sadece S/U notlu dersleri olan öğrenci → CGPA = 0
@@ -199,6 +239,40 @@ public class GpaCalculationServiceTests : IDisposable
         history[3].Cgpa.Should().Be(1.62m);
     }
 
+    [Fact]
+    public async Task GetTermGpaHistory_IncludesWithdrawnRegistrationsWithGrades()
+    {
+        var studentId = 96;
+        _context.Students.Add(new Student
+        {
+            Id = studentId, UserId = 996, StudentNumber = "9999996",
+            NationalId = "99999999996", Status = StudentStatus.Active,
+            Cgpa = 0, Sgpa = 0, CompletedSemesters = 2
+        });
+
+        var course1 = new Course { Id = 970, Code = "TEST970", Name = "History Term 1", Ects = 6, IsNonGpa = false };
+        var course2 = new Course { Id = 971, Code = "TEST971", Name = "History Term 2", Ects = 5, IsNonGpa = false };
+        _context.Courses.AddRange(course1, course2);
+
+        var section1 = AddSection(970, course1.Id, Term3Id);
+        AddRegistration(970, studentId, section1.Id, RegistrationStatus.Withdrawn, GradeCode.BB, Term3Id);
+
+        var section2 = AddSection(971, course2.Id, Term4Id);
+        AddRegistration(971, studentId, section2.Id, RegistrationStatus.Active, GradeCode.CC, Term4Id);
+
+        _context.SaveChanges();
+
+        var history = await _service.GetTermGpaHistoryAsync(studentId);
+
+        history.Should().HaveCount(2);
+        history[0].TermId.Should().Be(Term3Id);
+        history[0].Sgpa.Should().Be(3.00m);
+        history[0].Cgpa.Should().Be(3.00m);
+        history[1].TermId.Should().Be(Term4Id);
+        history[1].Sgpa.Should().Be(2.00m);
+        history[1].Cgpa.Should().Be(2.55m);
+    }
+
     // ══════════════════════════════════════════════════════════
     //  RecalculateAndUpdate TESTİ
     // ══════════════════════════════════════════════════════════
@@ -217,26 +291,99 @@ public class GpaCalculationServiceTests : IDisposable
         result.TotalAkts.Should().BeGreaterThan(0);
     }
 
+    [Fact]
+    public async Task RecalculateAndUpdate_UsesLatestTermStartForSgpa()
+    {
+        const int oldTermId = 80;
+        const int newTermId = 70;
+        const int studentId = 95;
+
+        _context.AcademicTerms.AddRange(
+            new AcademicTerm
+            {
+                Id = oldTermId,
+                Name = "2024 Yaz",
+                Year = 2024,
+                Semester = SemesterType.Summer,
+                RegistrationStart = new DateTime(2024, 6, 1),
+                RegistrationEnd = new DateTime(2024, 6, 10),
+                AddDropStart = new DateTime(2024, 6, 1),
+                AddDropEnd = new DateTime(2024, 6, 10),
+                WithdrawalDeadline = new DateTime(2024, 7, 1),
+                TermStart = new DateTime(2024, 6, 15),
+                TermEnd = new DateTime(2024, 8, 1),
+                IsActive = false
+            },
+            new AcademicTerm
+            {
+                Id = newTermId,
+                Name = "2025 Bahar",
+                Year = 2025,
+                Semester = SemesterType.Spring,
+                RegistrationStart = new DateTime(2025, 1, 1),
+                RegistrationEnd = new DateTime(2025, 1, 10),
+                AddDropStart = new DateTime(2025, 1, 1),
+                AddDropEnd = new DateTime(2025, 1, 10),
+                WithdrawalDeadline = new DateTime(2025, 3, 1),
+                TermStart = new DateTime(2025, 2, 10),
+                TermEnd = new DateTime(2025, 6, 1),
+                IsActive = false
+            });
+
+        _context.Students.Add(new Student
+        {
+            Id = studentId, UserId = 995, StudentNumber = "9999995",
+            NationalId = "99999999995", Status = StudentStatus.Active,
+            Cgpa = 0, Sgpa = 0, CompletedSemesters = 2
+        });
+
+        var oldCourse = new Course { Id = 980, Code = "TEST980", Name = "Old Term Course", Ects = 6, IsNonGpa = false };
+        var newCourse = new Course { Id = 981, Code = "TEST981", Name = "New Term Course", Ects = 6, IsNonGpa = false };
+        _context.Courses.AddRange(oldCourse, newCourse);
+
+        var oldSection = AddSection(980, oldCourse.Id, oldTermId);
+        AddRegistration(980, studentId, oldSection.Id, RegistrationStatus.Active, GradeCode.BB, oldTermId);
+
+        var newSection = AddSection(981, newCourse.Id, newTermId);
+        AddRegistration(981, studentId, newSection.Id, RegistrationStatus.Active, GradeCode.FF, newTermId);
+
+        _context.SaveChanges();
+
+        var result = await _service.RecalculateAndUpdateAsync(studentId);
+
+        result.Sgpa.Should().Be(0m);
+        result.Cgpa.Should().Be(1.50m);
+
+        var student = await _context.Students.FindAsync(studentId);
+        student!.Sgpa.Should().Be(0m);
+        student.Cgpa.Should().Be(1.50m);
+    }
+
     // ══════════════════════════════════════════════════════════
     //  SEED DATA
     // ══════════════════════════════════════════════════════════
 
     private void SeedBaseData()
     {
+        var term3Start = new DateTime(2023, 9, 18);
+        var term4Start = new DateTime(2024, 2, 19);
+        var term1Start = new DateTime(2024, 9, 16);
+        var term2Start = new DateTime(2025, 2, 17);
+
         // Dönemler
         _context.AcademicTerms.AddRange(
             new AcademicTerm { Id = Term1Id, Name = "2024-2025 Güz", Year = 2024, Semester = SemesterType.Fall,
-                RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false },
+                RegistrationStart = term1Start.AddDays(-14), RegistrationEnd = term1Start.AddDays(-7), AddDropStart = term1Start,
+                AddDropEnd = term1Start.AddDays(7), WithdrawalDeadline = term1Start.AddDays(49), TermStart = term1Start, TermEnd = term1Start.AddMonths(4), IsActive = false },
             new AcademicTerm { Id = Term2Id, Name = "2024-2025 Bahar", Year = 2024, Semester = SemesterType.Spring,
-                RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = true },
+                RegistrationStart = term2Start.AddDays(-14), RegistrationEnd = term2Start.AddDays(-7), AddDropStart = term2Start,
+                AddDropEnd = term2Start.AddDays(7), WithdrawalDeadline = term2Start.AddDays(49), TermStart = term2Start, TermEnd = term2Start.AddMonths(4), IsActive = true },
             new AcademicTerm { Id = Term3Id, Name = "2023-2024 Güz", Year = 2023, Semester = SemesterType.Fall,
-                RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false },
+                RegistrationStart = term3Start.AddDays(-14), RegistrationEnd = term3Start.AddDays(-7), AddDropStart = term3Start,
+                AddDropEnd = term3Start.AddDays(7), WithdrawalDeadline = term3Start.AddDays(49), TermStart = term3Start, TermEnd = term3Start.AddMonths(4), IsActive = false },
             new AcademicTerm { Id = Term4Id, Name = "2023-2024 Bahar", Year = 2023, Semester = SemesterType.Spring,
-                RegistrationStart = DateTime.UtcNow, RegistrationEnd = DateTime.UtcNow, AddDropStart = DateTime.UtcNow,
-                AddDropEnd = DateTime.UtcNow, WithdrawalDeadline = DateTime.UtcNow.AddDays(49), TermStart = DateTime.UtcNow, TermEnd = DateTime.UtcNow, IsActive = false }
+                RegistrationStart = term4Start.AddDays(-14), RegistrationEnd = term4Start.AddDays(-7), AddDropStart = term4Start,
+                AddDropEnd = term4Start.AddDays(7), WithdrawalDeadline = term4Start.AddDays(49), TermStart = term4Start, TermEnd = term4Start.AddMonths(4), IsActive = false }
         );
 
         // Öğrenciler

@@ -23,6 +23,10 @@ import {
 } from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
 
+function openInNewTab(url: string) {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 function findActiveGroup(pathname: string, menuGroups: MenuGroup[]): string | null {
   for (const group of menuGroups) {
     if (group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)))) {
@@ -260,6 +264,30 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                 ) : (
                   results.map(child => {
                     const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                    const baseClassName = cn(
+                      'flex flex-col rounded-md px-3 py-2 text-[13px] transition-all duration-150',
+                      isDead
+                        ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    );
+
+                    if (child.openInNewTab) {
+                      return (
+                        <button
+                          key={child.to}
+                          type="button"
+                          onClick={() => {
+                            setSearch('');
+                            openInNewTab(child.to);
+                          }}
+                          className={cn(baseClassName, 'w-full text-left')}
+                        >
+                          <span className="font-medium">{child.label}</span>
+                          <span className="text-[11px] text-muted-foreground/60">{child.groupLabel}</span>
+                        </button>
+                      );
+                    }
+
                     return (
                       <NavLink
                         key={child.to}
@@ -268,12 +296,8 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                         onClick={() => setSearch('')}
                         className={({ isActive }) =>
                           cn(
-                            'flex flex-col rounded-md px-3 py-2 text-[13px] transition-all duration-150',
-                            isDead
-                              ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
-                              : isActive
-                                ? 'text-primary font-semibold bg-primary/5'
-                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                            baseClassName,
+                            !isDead && isActive && 'text-primary font-semibold bg-primary/5'
                           )
                         }
                       >
@@ -326,6 +350,26 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                       <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
                         {group.children.map(child => {
                           const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                          const baseClassName = cn(
+                            'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
+                            isDead
+                              ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          );
+
+                          if (child.openInNewTab) {
+                            return (
+                              <button
+                                key={child.to}
+                                type="button"
+                                onClick={() => openInNewTab(child.to)}
+                                className={cn(baseClassName, 'w-full text-left')}
+                              >
+                                {child.label}
+                              </button>
+                            );
+                          }
+
                           return (
                             <NavLink
                               key={child.to}
@@ -333,12 +377,8 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                               end={child.to === '/'}
                               className={({ isActive }) =>
                                 cn(
-                                  'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
-                                  isDead
-                                    ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
-                                    : isActive
-                                      ? 'text-primary font-semibold bg-primary/5'
-                                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                  baseClassName,
+                                  !isDead && isActive && 'text-primary font-semibold bg-primary/5'
                                 )
                               }
                             >
@@ -394,6 +434,29 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
             <div className="max-h-80 overflow-y-auto">
               {group.children.map(child => {
                 const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+                const baseClassName = cn(
+                  'block px-3 py-1.5 text-[13px] transition-colors duration-150',
+                  isDead
+                    ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                );
+
+                if (child.openInNewTab) {
+                  return (
+                    <button
+                      key={child.to}
+                      type="button"
+                      onClick={() => {
+                        setFlyoutGroup(null);
+                        openInNewTab(child.to);
+                      }}
+                      className={cn(baseClassName, 'w-full text-left')}
+                    >
+                      {child.label}
+                    </button>
+                  );
+                }
+
                 return (
                   <NavLink
                     key={child.to}
@@ -402,12 +465,8 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                     onClick={() => setFlyoutGroup(null)}
                     className={({ isActive }) =>
                       cn(
-                        'block px-3 py-1.5 text-[13px] transition-colors duration-150',
-                        isDead
-                          ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
-                          : isActive
-                            ? 'text-primary font-semibold bg-primary/5'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        baseClassName,
+                        !isDead && isActive && 'text-primary font-semibold bg-primary/5'
                       )
                     }
                   >

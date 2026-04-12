@@ -63,8 +63,13 @@ export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   if (isAuthenticated) {
-    navigate('/', { replace: true });
     return null;
   }
 
