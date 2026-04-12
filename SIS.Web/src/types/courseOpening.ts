@@ -20,6 +20,8 @@ export interface OpenedCourseSectionDto {
   instructorId: number | null;
   instructorName: string | null;
   isActive: boolean;
+  departmentId: number | null;
+  departmentName: string | null;
 }
 
 export interface OpenedCourseListDto {

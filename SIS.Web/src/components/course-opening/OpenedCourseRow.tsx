@@ -9,9 +9,11 @@ import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Edit2, Plus, Tras
 import type { OpenedCourseSectionDto, InstructorOptionDto, InstructorWorkloadDto } from '../../types/courseOpening';
 import type { CourseDemandForecastDto } from '../../types/forecast';
 import { WorkloadBar } from './WorkloadBar';
+import { AccessPolicyPopover } from './AccessPolicyPopover';
 
 interface Props {
   courseCode: string; courseName: string; courseId: number;
+  termId: number;
   sections: OpenedCourseSectionDto[];
   forecast: CourseDemandForecastDto | undefined;
   instructors: InstructorOptionDto[];
@@ -32,7 +34,7 @@ function InstructorSelect({ instructors, value, onChange }: { instructors: Instr
   );
 }
 
-export function OpenedCourseRow({ courseCode, courseName, courseId, sections, forecast, instructors, onUpdateSection, onCloseSection, onAddSection, updatePending, closePending, closeError, workloadData, onInstructorSelect }: Props) {
+export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sections, forecast, instructors, onUpdateSection, onCloseSection, onAddSection, updatePending, closePending, closeError, workloadData, onInstructorSelect }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editCap, setEditCap] = useState('');
@@ -102,24 +104,34 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, sections, fo
 
   return (
     <div className="border-b last:border-b-0">
-      <button className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent/30 transition-colors text-left" onClick={() => setExpanded(!expanded)}>
-        {expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-[#003366]">{courseCode}</span>
-            <span className="text-sm truncate">{courseName}</span>
+      <div className="flex items-center gap-1.5 px-3 py-2.5">
+        <button className="flex-1 flex items-center gap-3 hover:bg-accent/30 transition-colors text-left rounded -m-1 p-1" onClick={() => setExpanded(!expanded)}>
+          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-[#003366]">{courseCode}</span>
+              <span className="text-sm truncate">{courseName}</span>
+            </div>
+            <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
+              <span>{sections.length} şube</span><span>Kont: {totCap}</span><span>Kayıt: {totEnr}</span>
+              {forecast && <span>Talep: {forecast.totalPredictedDemand}</span>}
+            </div>
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
-            <span>{sections.length} şube</span><span>Kont: {totCap}</span><span>Kayıt: {totEnr}</span>
-            {forecast && <span>Talep: {forecast.totalPredictedDemand}</span>}
-          </div>
+          {rec > 0 && (
+            <Badge variant={sections.length < rec ? 'destructive' : sections.length === rec ? 'success' : 'warning'} className="text-[10px] shrink-0">
+              {sections.length}/{rec}
+            </Badge>
+          )}
+        </button>
+        <div className="shrink-0" onClick={e => e.stopPropagation()}>
+          <AccessPolicyPopover
+            courseId={courseId}
+            termId={termId}
+            courseDepartmentId={sections[0]?.departmentId ?? null}
+            courseDepartmentName={sections[0]?.departmentName ?? null}
+          />
         </div>
-        {rec > 0 && (
-          <Badge variant={sections.length < rec ? 'destructive' : sections.length === rec ? 'success' : 'warning'} className="text-[10px] shrink-0">
-            {sections.length}/{rec}
-          </Badge>
-        )}
-      </button>
+      </div>
 
       {expanded && (
         <div className="bg-gray-50/50 border-t">

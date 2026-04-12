@@ -176,6 +176,7 @@ export default function CourseOpeningPage() {
         <OpenedCoursesPanel
           sections={openedQuery.data?.sections}
           isLoading={openedQuery.isLoading}
+          termId={termId}
           forecastMap={forecastMap}
           instructors={instructorsQuery.data ?? []}
           onUpdateSection={handleUpdateSection}

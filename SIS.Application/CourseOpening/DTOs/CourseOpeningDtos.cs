@@ -23,6 +23,8 @@ public class OpenedCourseSectionDto
     public int? InstructorId { get; set; }
     public string? InstructorName { get; set; }
     public bool IsActive { get; set; }
+    public int? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
 }
 
 public class OpenedCourseListDto

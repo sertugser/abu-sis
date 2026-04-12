@@ -26,7 +26,7 @@ public class CourseOpeningService(
 
         var sections = await _context.CourseSections
             .AsNoTracking()
-            .Include(cs => cs.Course)
+            .Include(cs => cs.Course).ThenInclude(c => c.Department)
             .Include(cs => cs.Instructor)
             .Where(cs => cs.TermId == termId && cs.Course.DepartmentId == departmentId)
             .OrderBy(cs => cs.Course.Code).ThenBy(cs => cs.Id)
@@ -101,6 +101,8 @@ public class CourseOpeningService(
                 InstructorId = s.InstructorId,
                 InstructorName = instrName,
                 IsActive = s.IsActive,
+                DepartmentId = s.Course.DepartmentId,
+                DepartmentName = s.Course.Department?.Name,
             };
         }).ToList();
 
