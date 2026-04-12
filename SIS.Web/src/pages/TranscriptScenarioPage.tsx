@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -80,11 +80,9 @@ export default function TranscriptScenarioPage() {
   const terms = transcript ? buildScenarioTerms(transcript) : [];
   const initialCourses = transcript ? buildInitialScenarioCourses(transcript) : [];
 
-  useEffect(() => {
-    if (transcript && scenarioCourses === null) {
-      setScenarioCourses(buildInitialScenarioCourses(transcript));
-    }
-  }, [transcript, scenarioCourses]);
+  if (transcript && scenarioCourses === null) {
+    setScenarioCourses(buildInitialScenarioCourses(transcript));
+  }
 
   if (transcriptQuery.isLoading || studentQuery.isLoading || (transcript && scenarioCourses === null)) {
     return <TranscriptScenarioLoadingState />;
