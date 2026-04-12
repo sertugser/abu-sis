@@ -10,6 +10,7 @@ import {
   useAssignSection, useAvailableClassrooms, useFacultyPlanningSections,
   useFacultyPlanningTimeSlots, useUnassignSection,
 } from '../../hooks/useFacultyPlanning';
+import { useDepartmentInstructors } from '../../hooks/useCourseOpening';
 import { buildManualScheduleOptions } from './sectionUtils';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import type { AssignmentResult } from '../../types/facultyPlanning';
@@ -30,17 +31,18 @@ interface ActionFeedback {
   message: string;
 }
 
-const WEEKDAY_LABELS: Record<number, string> = { 1: 'Pzt', 2: 'Sal', 3: 'Car', 4: 'Per', 5: 'Cum' };
+const WEEKDAY_LABELS: Record<number, string> = { 1: 'Pzt', 2: 'Sal', 3: 'Çar', 4: 'Per', 5: 'Cum' };
 
 export function CalendarViewTab({ facultyId, termId }: { facultyId: number; termId: number | null }) {
   const [selectedUnscheduled, setSelectedUnscheduled] = useState<FacultyPlanningSection | null>(null);
   const [selectedScheduled, setSelectedScheduled] = useState<FacultyPlanningSection | null>(null);
   const [assignState, setAssignState] = useState<AssignState | null>(null);
   const [classroomId, setClassroomId] = useState<string>('');
+  const [instructorId, setInstructorId] = useState<string>('');
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
   const [activeDragSection, setActiveDragSection] = useState<FacultyPlanningSection | null>(null);
 
-  const sectionsQuery = useFacultyPlanningSections(facultyId, termId, undefined, undefined, 1, 500);
+  const sectionsQuery = useFacultyPlanningSections(facultyId, termId, undefined, undefined, 1, 200);
   const timeSlotsQuery = useFacultyPlanningTimeSlots(termId);
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
@@ -49,14 +51,19 @@ export function CalendarViewTab({ facultyId, termId }: { facultyId: number; term
   const timeSlots: FacultyPlanningTimeSlot[] = timeSlotsQuery.data ?? [];
   const scheduledCount = sections.filter(s => s.status !== 'Unscheduled').length;
 
-  // Available classrooms for the assign dialog
+  // Available classrooms and instructors for the assign dialog
+  const expectedClassroomType = assignState?.section
+    ? (assignState.section.labHours > 0 && assignState.section.theoryHours === 0 ? 'Lab' : 'Lecture')
+    : undefined;
   const classroomsQuery = useAvailableClassrooms(
     termId,
     assignState?.day,
     assignState?.startTime,
     assignState?.endTime,
     assignState?.section.capacity,
+    expectedClassroomType,
   );
+  const instructorsQuery = useDepartmentInstructors(assignState?.section.departmentId ?? null);
 
   const handleCellClick = (day: number, startTime: string) => {
     if (!selectedUnscheduled) return;
@@ -76,6 +83,7 @@ export function CalendarViewTab({ facultyId, termId }: { facultyId: number; term
     }
     setAssignState({ section, day: clicked.day, startTime: clicked.startTime, endTime: clicked.endTime });
     setClassroomId('');
+    setInstructorId(section.instructorId?.toString() ?? '');
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -106,7 +114,7 @@ export function CalendarViewTab({ facultyId, termId }: { facultyId: number; term
     setFeedback(null);
     const slots = [{ day: assignState.day, startTime: assignState.startTime, endTime: assignState.endTime }];
     assignMutation.mutate(
-      { sectionId: assignState.section.sectionId, classroomId: Number(classroomId), scheduleSlots: slots },
+      { sectionId: assignState.section.sectionId, classroomId: Number(classroomId), scheduleSlots: slots, instructorId: instructorId ? Number(instructorId) : undefined },
       {
         onSuccess: (result: AssignmentResult) => {
           setFeedback({
@@ -187,6 +195,22 @@ export function CalendarViewTab({ facultyId, termId }: { facultyId: number; term
                     {(classroomsQuery.data ?? []).map(cr => (
                       <option key={cr.classroomId} value={cr.classroomId}>
                         {cr.name} ({cr.capacity} kisi, {cr.type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Hoca</label>
+                  <select
+                    className="h-8 w-full sm:w-60 rounded-md border px-2 text-sm"
+                    value={instructorId}
+                    onChange={e => setInstructorId(e.target.value)}
+                    disabled={instructorsQuery.isLoading}
+                  >
+                    <option value="">Hoca atanmadi</option>
+                    {(instructorsQuery.data ?? []).map(inst => (
+                      <option key={inst.instructorId} value={inst.instructorId}>
+                        {inst.fullName}
                       </option>
                     ))}
                   </select>

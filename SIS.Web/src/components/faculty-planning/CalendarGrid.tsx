@@ -1,20 +1,17 @@
 import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
+import { parseScheduleSummary } from '@/lib/scheduleUtils';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
+import { STATUS_CONFIG } from './sectionUtils';
 
 const WEEKDAYS = [
   { day: 1, label: 'Pazartesi' },
-  { day: 2, label: 'Sali' },
-  { day: 3, label: 'Carsamba' },
-  { day: 4, label: 'Persembe' },
+  { day: 2, label: 'Salı' },
+  { day: 3, label: 'Çarşamba' },
+  { day: 4, label: 'Perşembe' },
   { day: 5, label: 'Cuma' },
 ];
-
-const DAY_ABBR: Record<string, number> = {
-  'Pzt': 1, 'Sal': 2, 'Çar': 3, 'Per': 4, 'Cum': 5,
-  'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5,
-};
 
 interface ParsedBlock {
   sectionId: number;
@@ -24,27 +21,15 @@ interface ParsedBlock {
   endTime: string;
 }
 
-function parseScheduleSummary(section: FacultyPlanningSection): ParsedBlock[] {
-  if (!section.scheduleSummary) return [];
-  const blocks: ParsedBlock[] = [];
-  // Format: "Pzt 09:00-10:50, Çar 09:00-10:50"
-  const parts = section.scheduleSummary.split(',').map(s => s.trim());
-  for (const part of parts) {
-    const match = part.match(/^(\S+)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
-    if (match) {
-      const dayNum = DAY_ABBR[match[1]];
-      if (dayNum) {
-        blocks.push({
-          sectionId: section.sectionId,
-          section,
-          day: dayNum,
-          startTime: match[2],
-          endTime: match[3],
-        });
-      }
-    }
-  }
-  return blocks;
+function parseSectionSchedule(section: FacultyPlanningSection): ParsedBlock[] {
+  const slots = parseScheduleSummary(section.scheduleSummary);
+  return slots.map(slot => ({
+    sectionId: section.sectionId,
+    section,
+    day: slot.day,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+  }));
 }
 
 function timeToMinutes(t: string): number {
@@ -52,11 +37,9 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  Scheduled: 'bg-blue-100 border-blue-300 text-blue-900 hover:bg-blue-200',
-  Conflicted: 'bg-red-100 border-red-300 text-red-900 hover:bg-red-200',
-  Partial: 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200',
-};
+function getCalendarColors(status: string): string {
+  return STATUS_CONFIG[status]?.calendarColors ?? 'bg-gray-100 border-gray-300';
+}
 
 interface DroppableCellProps {
   day: number;
@@ -118,7 +101,7 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
   const allBlocks = useMemo(() => {
     return sections
       .filter(s => s.status !== 'Unscheduled')
-      .flatMap(s => parseScheduleSummary(s));
+      .flatMap(s => parseSectionSchedule(s));
   }, [sections]);
 
   // Build a lookup: day -> startTime -> blocks
@@ -237,7 +220,7 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
                               key={b.sectionId}
                               className={cn(
                                 'rounded px-1 py-0.5 border cursor-pointer text-[10px]',
-                                STATUS_COLORS[b.section.status] ?? 'bg-gray-100 border-gray-300',
+                                getCalendarColors(b.section.status),
                                 selectedSectionId === b.sectionId && 'ring-2 ring-primary',
                               )}
                               onClick={(e) => { e.stopPropagation(); onSelectSection(b.section); }}
@@ -253,7 +236,7 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
                             key={b.sectionId}
                             className={cn(
                               'rounded px-1.5 py-1 border cursor-pointer',
-                              STATUS_COLORS[b.section.status] ?? 'bg-gray-100 border-gray-300',
+                              getCalendarColors(b.section.status),
                               selectedSectionId === b.sectionId && 'ring-2 ring-primary',
                             )}
                             onClick={(e) => { e.stopPropagation(); onSelectSection(b.section); }}

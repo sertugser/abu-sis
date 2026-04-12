@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TableCell, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Check, X } from 'lucide-react';
+import { AlertTriangle, Check, Lock, X } from 'lucide-react';
 import { useAvailableClassrooms, useValidateSectionSchedule } from '../../hooks/useFacultyPlanning';
 import { useDepartmentInstructors } from '../../hooks/useCourseOpening';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
@@ -45,12 +45,14 @@ export function SectionRow({ section: s, termId, timeSlots, timeSlotsLoaded, exp
 
   const statusCfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.Unscheduled;
   const instructorsQuery = useDepartmentInstructors(s.departmentId);
+  const expectedClassroomType = s.labHours > 0 && s.theoryHours === 0 ? 'Lab' : 'Lecture';
   const availableClassroomsQuery = useAvailableClassrooms(
     termId,
     selectedOption ? selectedOption.day : undefined,
     selectedOption?.startTime,
     selectedOption?.endTime,
     s.capacity,
+    expectedClassroomType,
   );
   const availableClassrooms = availableClassroomsQuery.data;
 
@@ -69,7 +71,12 @@ export function SectionRow({ section: s, termId, timeSlots, timeSlotsLoaded, exp
         <TableCell>{s.classroomName ?? '—'}</TableCell>
         <TableCell>{s.scheduleSummary || '—'}</TableCell>
         <TableCell>{s.instructorName ?? '—'}</TableCell>
-        <TableCell><Badge variant={statusCfg.variant}>{statusCfg.label}</Badge></TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1">
+            <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+            {s.isPinned && <Lock className="h-3.5 w-3.5 text-muted-foreground" title="Sabitlenmiş — otomatik programlama değiştiremez" />}
+          </div>
+        </TableCell>
       </TableRow>
       {expanded && (
         <TableRow className="bg-muted/20">
@@ -93,6 +100,16 @@ export function SectionRow({ section: s, termId, timeSlots, timeSlotsLoaded, exp
                 {classroomId && availableClassrooms && !availableClassrooms.some(cr => String(cr.classroomId) === classroomId) && (
                   <p className="text-xs text-amber-600 mt-1">Seçili derslik bu saat aralığında müsait değil</p>
                 )}
+                {classroomId && availableClassrooms && (() => {
+                  const selected = availableClassrooms.find(cr => String(cr.classroomId) === classroomId);
+                  if (!selected) return null;
+                  const isLabCourse = s.labHours > 0 && s.theoryHours === 0;
+                  const labTypes = ['Lab', 'Computer'];
+                  const lectureTypes = ['Lecture', 'Amphitheater'];
+                  const typeMismatch = isLabCourse ? !labTypes.includes(selected.type) : !lectureTypes.includes(selected.type);
+                  if (!typeMismatch) return null;
+                  return <p className="text-xs text-amber-600 mt-1">Derslik tipi uyumsuz: {isLabCourse ? 'Lab/Bilgisayar' : 'Derslik/Amfi'} bekleniyor, {selected.type} seçildi</p>;
+                })()}
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium">Hoca</label>
@@ -176,8 +193,7 @@ export function SectionRow({ section: s, termId, timeSlots, timeSlotsLoaded, exp
                       }
                     },
                     onError: () => {
-                      // Validation endpoint başarısız olursa doğrudan atama yap
-                      onAssign(Number(classroomId), slots, instructorId ? Number(instructorId) : undefined);
+                      setLocalError('Doğrulama servisi başarısız oldu. Lütfen tekrar deneyin.');
                     },
                   });
                 }}>

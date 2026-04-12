@@ -61,6 +61,7 @@ export interface FacultyPlanningSection {
   theoryHours: number;
   labHours: number;
   sectionIndex: number;
+  isPinned: boolean;
 }
 
 export interface FacultyPlanningSectionPage {

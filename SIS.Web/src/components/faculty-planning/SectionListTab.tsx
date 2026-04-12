@@ -22,18 +22,17 @@ interface SectionActionFeedback {
 }
 
 function getApiErrorMessage(error: unknown, fallback: string) {
-  return (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.error
-    ?? (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.message
-    ?? (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data?.title
-    ?? fallback;
+  const data = (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data;
+  return data?.error ?? data?.message ?? data?.title ?? fallback;
 }
 
 export function SectionListTab({
-  facultyId, termId, departments,
+  facultyId, termId, departments, readOnly = false,
 }: {
   facultyId: number;
   termId: number | null;
   departments: { departmentId: number; departmentCode: string; departmentName: string }[];
+  readOnly?: boolean;
 }) {
   const [filterDept, setFilterDept] = useState<number | undefined>();
   const [filterStatus, setFilterStatus] = useState<string | undefined>();
@@ -171,8 +170,8 @@ export function SectionListTab({
                     termId={termId}
                     timeSlots={timeSlotsQuery.data ?? []}
                     timeSlotsLoaded={timeSlotsQuery.isSuccess}
-                    expanded={expandedId === s.sectionId}
-                    onToggle={() => setExpandedId(prev => prev === s.sectionId ? null : s.sectionId)}
+                    expanded={!readOnly && expandedId === s.sectionId}
+                    onToggle={() => !readOnly && setExpandedId(prev => prev === s.sectionId ? null : s.sectionId)}
                     onAssign={(classroomId, slots, instructorId) => handleAssign(s.sectionId, classroomId, slots, instructorId)}
                     onUnassign={() => handleUnassign(s.sectionId)}
                     isAssigning={assignMutation.isPending}

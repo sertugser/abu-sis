@@ -55,6 +55,9 @@ export default function FacultyPlanningPage() {
     );
   }
 
+  const termStatus = activeTerm?.status;
+  const isTermEditable = termStatus === 'Planning' || termStatus === 'Scheduling';
+
   return (
     <div className="space-y-4">
       {/* Inline status bar — always visible */}
@@ -88,9 +91,20 @@ export default function FacultyPlanningPage() {
         </div>
       </div>
 
+      {/* Term status guard */}
+      {termStatus && !isTermEditable && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Dönem düzenlemeye kapalı</AlertTitle>
+          <AlertDescription>
+            Dönem durumu &quot;{termStatus}&quot; — atama işlemleri yalnızca &quot;Planning&quot; veya &quot;Scheduling&quot; aşamasında yapılabilir.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Tab content */}
       {activeTab === 'list' && (
-        <SectionListTab facultyId={facultyId} termId={termId} departments={departments} />
+        <SectionListTab facultyId={facultyId} termId={termId} departments={departments} readOnly={!isTermEditable} />
       )}
       {activeTab === 'calendar' && (
         <CalendarViewTab facultyId={facultyId} termId={termId} />

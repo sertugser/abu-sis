@@ -1,10 +1,14 @@
 import type { FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 
-export const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'warning' | 'outline' }> = {
-  Unscheduled: { label: 'Zamanlanmamış', variant: 'outline' },
-  Scheduled: { label: 'Zamanlanmış', variant: 'success' },
-  Conflicted: { label: 'Çakışmalı', variant: 'destructive' },
-  Partial: { label: 'Kısmi', variant: 'warning' },
+export const STATUS_CONFIG: Record<string, {
+  label: string;
+  variant: 'default' | 'success' | 'destructive' | 'warning' | 'outline';
+  calendarColors: string;
+}> = {
+  Unscheduled: { label: 'Zamanlanmamış', variant: 'outline', calendarColors: 'bg-gray-100 border-gray-300 text-gray-700' },
+  Scheduled: { label: 'Zamanlanmış', variant: 'success', calendarColors: 'bg-blue-100 border-blue-300 text-blue-900 hover:bg-blue-200' },
+  Conflicted: { label: 'Çakışmalı', variant: 'destructive', calendarColors: 'bg-red-100 border-red-300 text-red-900 hover:bg-red-200' },
+  Partial: { label: 'Kısmi', variant: 'warning', calendarColors: 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200' },
 };
 
 export interface ManualScheduleOption {

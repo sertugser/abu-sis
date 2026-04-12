@@ -32,17 +32,11 @@ export async function unassignSection(sectionId: number): Promise<void> {
 }
 
 export async function batchUnassignSections(sectionIds: number[]): Promise<{ successCount: number; failedCount: number }> {
-  let successCount = 0;
-  let failedCount = 0;
-  for (const id of sectionIds) {
-    try {
-      await apiClient.delete(`/faculty-planning/unassign/${id}`);
-      successCount++;
-    } catch {
-      failedCount++;
-    }
-  }
-  return { successCount, failedCount };
+  const results = await Promise.allSettled(
+    sectionIds.map(id => apiClient.delete(`/faculty-planning/unassign/${id}`)),
+  );
+  const successCount = results.filter(r => r.status === 'fulfilled').length;
+  return { successCount, failedCount: results.length - successCount };
 }
 
 export async function autoSchedulePreview(request: AutoScheduleRequest): Promise<AutoSchedulePreview> {
