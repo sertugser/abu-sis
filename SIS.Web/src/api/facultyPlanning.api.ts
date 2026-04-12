@@ -14,10 +14,10 @@ export async function getFacultyPlanningOverview(facultyId: number, termId: numb
 }
 
 export async function getFacultyPlanningSections(
-  facultyId: number, termId: number, departmentId?: number, status?: string, page = 1, pageSize = 50,
+  facultyId: number, termId: number, departmentId?: number, status?: string, page = 1, pageSize = 50, search?: string,
 ): Promise<FacultyPlanningSectionPage> {
   const { data } = await apiClient.get<FacultyPlanningSectionPage>('/faculty-planning/sections', {
-    params: { facultyId, termId, departmentId, status, page, pageSize },
+    params: { facultyId, termId, departmentId, status, page, pageSize, search: search || undefined },
   });
   return data;
 }

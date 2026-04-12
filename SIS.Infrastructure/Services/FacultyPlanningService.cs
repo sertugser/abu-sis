@@ -186,7 +186,7 @@ public class FacultyPlanningService : IFacultyPlanningService
 
     public async Task<FacultyPlanningSectionPageDto> GetSectionsAsync(
         int facultyId, int termId, int? departmentId = null, string? status = null,
-        int page = 1, int pageSize = 50, CancellationToken ct = default)
+        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default)
     {
         var departmentIds = await _context.Departments
             .AsNoTracking()
@@ -207,6 +207,14 @@ public class FacultyPlanningService : IFacultyPlanningService
 
         if (departmentId.HasValue)
             query = query.Where(cs => cs.Course.DepartmentId == departmentId.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLower();
+            query = query.Where(cs =>
+                cs.Course.Code.ToLower().Contains(q) ||
+                cs.Course.Name.ToLower().Contains(q));
+        }
 
         var allSections = await query.OrderBy(cs => cs.Course.Code).ThenBy(cs => cs.Id).ToListAsync(ct);
 

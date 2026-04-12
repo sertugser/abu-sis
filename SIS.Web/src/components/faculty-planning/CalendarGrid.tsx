@@ -2,6 +2,10 @@ import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { parseScheduleSummary } from '@/lib/scheduleUtils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { X } from 'lucide-react';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { STATUS_CONFIG } from './sectionUtils';
 
@@ -62,8 +66,8 @@ function DroppableCell({ day, startTime, endTime, isEmpty, isDraggingSection, ch
     <td
       ref={setNodeRef}
       className={cn(
-        'border p-0.5 align-top relative',
-        isEmpty && isDraggingSection && 'bg-blue-50 border-blue-200',
+        'border border-slate-200 p-0.5 align-top relative',
+        isEmpty && isDraggingSection && 'bg-blue-50/50 border-blue-200',
         isEmpty && isOver && 'bg-blue-100 border-blue-400 border-2',
       )}
       onClick={onClick}
@@ -74,16 +78,90 @@ function DroppableCell({ day, startTime, endTime, isEmpty, isDraggingSection, ch
   );
 }
 
+function SectionPopoverContent({
+  section,
+  onUnassign,
+  isUnassigning,
+}: {
+  section: FacultyPlanningSection;
+  onUnassign: (sectionId: number) => void;
+  isUnassigning: boolean;
+}) {
+  const statusCfg = STATUS_CONFIG[section.status];
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="font-mono font-bold text-sm" style={{ color: '#003366' }}>
+            {section.courseCode}
+          </span>
+          <Badge variant={statusCfg?.variant ?? 'outline'} className="text-[10px]">
+            {statusCfg?.label ?? section.status}
+          </Badge>
+        </div>
+        <p className="text-sm text-slate-700">{section.courseName}</p>
+        <p className="text-xs text-slate-500">Şube {section.sectionIndex}</p>
+      </div>
+
+      <div className="space-y-1.5 text-xs">
+        <div className="flex justify-between">
+          <span className="text-slate-500">Bölüm</span>
+          <span className="text-slate-700">{section.departmentCode}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-500">Yüklenme</span>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-300">
+            {section.theoryHours}T+{section.labHours}L
+          </Badge>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-500">Kapasite</span>
+          <span className="text-slate-700">{section.capacity}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-500">Derslik</span>
+          <span className="text-slate-700">{section.classroomName ?? '—'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-500">Hoca</span>
+          <span className="text-slate-700 text-right max-w-[140px] truncate">
+            {section.instructorName ?? '—'}
+          </span>
+        </div>
+        {section.scheduleSummary && (
+          <div>
+            <span className="text-slate-500">Program</span>
+            <p className="mt-0.5 font-mono text-slate-700">{section.scheduleSummary}</p>
+          </div>
+        )}
+      </div>
+
+      {section.status !== 'Unscheduled' && (
+        <Button
+          variant="destructive"
+          size="sm"
+          className="w-full"
+          disabled={isUnassigning}
+          onClick={() => onUnassign(section.sectionId)}
+        >
+          <X className="h-3 w-3 mr-1" />
+          {isUnassigning ? 'Kaldırılıyor...' : 'Atamayı Kaldır'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 interface CalendarGridProps {
   sections: FacultyPlanningSection[];
   timeSlots: FacultyPlanningTimeSlot[];
-  selectedSectionId: number | null;
-  onSelectSection: (section: FacultyPlanningSection) => void;
   onCellClick: (day: number, startTime: string) => void;
+  onUnassign: (sectionId: number) => void;
+  isUnassigning: boolean;
   isDraggingSection?: boolean;
 }
 
-export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectSection, onCellClick, isDraggingSection = false }: CalendarGridProps) {
+export function CalendarGrid({ sections, timeSlots, onCellClick, onUnassign, isUnassigning, isDraggingSection = false }: CalendarGridProps) {
   // Get unique time rows from time slots, grouped by slotOrder
   const timeRows = useMemo(() => {
     const seen = new Map<number, { startTime: string; endTime: string }>();
@@ -108,17 +186,14 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
   const blockMap = useMemo(() => {
     const map = new Map<string, ParsedBlock[]>();
     for (const block of allBlocks) {
-      // Find which rows this block spans
       for (const row of timeRows) {
         const rowStart = timeToMinutes(row.startTime.slice(0, 5));
         const rowEnd = timeToMinutes(row.endTime.slice(0, 5));
         const blockStart = timeToMinutes(block.startTime);
         const blockEnd = timeToMinutes(block.endTime);
-        // Block overlaps this row if block starts before row ends and block ends after row starts
         if (blockStart < rowEnd && blockEnd > rowStart) {
           const key = `${block.day}-${row.startTime}`;
           const arr = map.get(key) ?? [];
-          // avoid duplicates
           if (!arr.some(b => b.sectionId === block.sectionId)) {
             arr.push(block);
           }
@@ -151,7 +226,6 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
         const startKey = `${block.sectionId}-${block.day}-${firstRow.startTime}`;
         if (!starts.has(startKey)) {
           starts.set(startKey, { block, rowSpan: spanRows.length });
-          // Mark non-first rows as covered
           for (let k = 1; k < spanRows.length; k++) {
             covered.add(`${block.sectionId}-${block.day}-${timeRows[spanRows[k]].startTime}`);
           }
@@ -163,20 +237,20 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
 
   if (timeRows.length === 0) {
     return (
-      <div className="flex-1 border rounded-lg flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Zaman dilimi bilgisi bulunamadi</p>
+      <div className="flex-1 h-full border border-slate-200 rounded-lg flex items-center justify-center">
+        <p className="text-sm text-slate-500">Zaman dilimi bilgisi bulunamadı</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 border rounded-lg overflow-auto">
+    <div className="flex-1 h-full border border-slate-200 rounded-lg overflow-auto">
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="bg-muted/50">
-            <th className="border p-1.5 w-16 text-center font-medium">Saat</th>
+          <tr className="bg-slate-50">
+            <th className="border border-slate-200 p-1.5 w-16 text-center font-medium text-slate-600">Saat</th>
             {WEEKDAYS.map(wd => (
-              <th key={wd.day} className="border p-1.5 text-center font-medium min-w-[120px]">
+              <th key={wd.day} className="border border-slate-200 p-1.5 text-center font-medium text-slate-600 min-w-[120px]">
                 {wd.label}
               </th>
             ))}
@@ -185,7 +259,7 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
         <tbody>
           {timeRows.map((row) => (
             <tr key={row.startTime} className="h-12">
-              <td className="border p-1 text-center text-muted-foreground font-mono whitespace-nowrap">
+              <td className="border border-slate-200 p-1 text-center text-slate-500 font-mono whitespace-nowrap">
                 {row.startTime.slice(0, 5)}
               </td>
               {WEEKDAYS.map(wd => {
@@ -213,41 +287,59 @@ export function CalendarGrid({ sections, timeSlots, selectedSectionId, onSelectS
                         const isCovered = blockStartCells.covered.has(startKey);
                         const startInfo = blockStartCells.starts.get(startKey);
 
-                        // If this is a continuation cell (not the first row), render a thinner indicator
+                        // Continuation cell (not the first row)
                         if (isCovered) {
                           return (
-                            <div
-                              key={b.sectionId}
-                              className={cn(
-                                'rounded px-1 py-0.5 border cursor-pointer text-[10px]',
-                                getCalendarColors(b.section.status),
-                                selectedSectionId === b.sectionId && 'ring-2 ring-primary',
-                              )}
-                              onClick={(e) => { e.stopPropagation(); onSelectSection(b.section); }}
-                            >
-                              <span className="font-mono font-bold opacity-50">{b.section.courseCode}</span>
-                            </div>
+                            <Popover key={b.sectionId}>
+                              <PopoverTrigger asChild>
+                                <div
+                                  className={cn(
+                                    'rounded px-1 py-0.5 border cursor-pointer text-[10px]',
+                                    getCalendarColors(b.section.status),
+                                  )}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span className="font-mono font-bold opacity-50">{b.section.courseCode}</span>
+                                </div>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-72" side="right" align="start">
+                                <SectionPopoverContent
+                                  section={b.section}
+                                  onUnassign={onUnassign}
+                                  isUnassigning={isUnassigning}
+                                />
+                              </PopoverContent>
+                            </Popover>
                           );
                         }
 
                         // First row of the block
                         return (
-                          <div
-                            key={b.sectionId}
-                            className={cn(
-                              'rounded px-1.5 py-1 border cursor-pointer',
-                              getCalendarColors(b.section.status),
-                              selectedSectionId === b.sectionId && 'ring-2 ring-primary',
-                            )}
-                            onClick={(e) => { e.stopPropagation(); onSelectSection(b.section); }}
-                          >
-                            <div className="font-mono font-bold text-[11px] leading-tight">{b.section.courseCode}</div>
-                            {startInfo && startInfo.rowSpan >= 2 && (
-                              <div className="text-[10px] leading-tight truncate opacity-75">
-                                {b.section.classroomName ?? ''}
+                          <Popover key={b.sectionId}>
+                            <PopoverTrigger asChild>
+                              <div
+                                className={cn(
+                                  'rounded px-1.5 py-1 border cursor-pointer',
+                                  getCalendarColors(b.section.status),
+                                )}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="font-mono font-bold text-[11px] leading-tight">{b.section.courseCode}</div>
+                                {startInfo && startInfo.rowSpan >= 2 && (
+                                  <div className="text-[10px] leading-tight truncate opacity-75">
+                                    {b.section.classroomName ?? ''}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-72" side="right" align="start">
+                              <SectionPopoverContent
+                                section={b.section}
+                                onUnassign={onUnassign}
+                                isUnassigning={isUnassigning}
+                              />
+                            </PopoverContent>
+                          </Popover>
                         );
                       })}
                     </div>

@@ -9,7 +9,7 @@ public interface IFacultyPlanningService
 
     Task<FacultyPlanningSectionPageDto> GetSectionsAsync(
         int facultyId, int termId, int? departmentId = null, string? status = null,
-        int page = 1, int pageSize = 50, CancellationToken ct = default);
+        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default);
 
     Task<AssignmentResultDto> AssignSectionAsync(AssignSectionRequest request, string userId, CancellationToken ct = default);
 

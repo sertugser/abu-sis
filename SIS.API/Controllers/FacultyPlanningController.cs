@@ -44,6 +44,7 @@ public class FacultyPlanningController : ControllerBase
     public async Task<IActionResult> GetSections(
         [FromQuery] int facultyId, [FromQuery] int termId,
         [FromQuery] int? departmentId, [FromQuery] string? status,
+        [FromQuery] string? search,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
@@ -52,7 +53,7 @@ public class FacultyPlanningController : ControllerBase
 
         departmentId = await EnforceDepartmentScopeAsync(userId, departmentId, ct);
         pageSize = Math.Clamp(pageSize, 1, 200);
-        var result = await _service.GetSectionsAsync(facultyId, termId, departmentId, status, page, pageSize, ct);
+        var result = await _service.GetSectionsAsync(facultyId, termId, departmentId, status, page, pageSize, search, ct);
         return Ok(result);
     }
 

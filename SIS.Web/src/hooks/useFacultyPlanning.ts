@@ -21,11 +21,11 @@ export function useFacultyPlanningOverview(facultyId: number | null, termId: num
 
 export function useFacultyPlanningSections(
   facultyId: number | null, termId: number | null,
-  departmentId?: number, status?: string, page = 1, pageSize = 50,
+  departmentId?: number, status?: string, page = 1, pageSize = 50, search?: string,
 ) {
   return useQuery({
-    queryKey: QUERY_KEYS.facultyPlanningSections(facultyId ?? 0, termId ?? 0, departmentId, status, page),
-    queryFn: () => getFacultyPlanningSections(facultyId!, termId!, departmentId, status, page, pageSize),
+    queryKey: QUERY_KEYS.facultyPlanningSections(facultyId ?? 0, termId ?? 0, departmentId, status, page, pageSize, search),
+    queryFn: () => getFacultyPlanningSections(facultyId!, termId!, departmentId, status, page, pageSize, search),
     enabled: facultyId != null && termId != null,
     staleTime: 30 * 1000,
   });
