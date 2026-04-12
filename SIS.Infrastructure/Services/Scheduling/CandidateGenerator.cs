@@ -14,7 +14,18 @@ public sealed class CandidateGenerator
 {
     private const int MaxCombinations = 200;
     private const int MaxWindowsPerDay = 5;
-    private const int MaxClassroomsPerType = 3;
+    private const int MaxClassroomsPerType = 10;
+
+    /// <summary>
+    /// Classroom types considered compatible for theory/general teaching.
+    /// Lab types require exact match.
+    /// </summary>
+    private static readonly HashSet<ClassroomType> GeneralTeachingTypes = new()
+    {
+        ClassroomType.Lecture,
+        ClassroomType.Seminar,
+        ClassroomType.Amphitheater
+    };
 
     public List<BlockCombination> Generate(
         SectionSnapshot section,
@@ -142,11 +153,19 @@ public sealed class CandidateGenerator
         int requiredCapacity,
         HashSet<int> facultyClassroomIds)
     {
+        // For general teaching types (Lecture, Seminar, Amphitheater),
+        // accept any general teaching classroom. For specific lab types,
+        // require exact match.
+        var isGeneralType = GeneralTeachingTypes.Contains(requiredType);
+
         return allClassrooms
             .Where(c => facultyClassroomIds.Contains(c.Id))
-            .Where(c => c.Type == requiredType)
+            .Where(c => isGeneralType
+                ? GeneralTeachingTypes.Contains(c.Type)
+                : c.Type == requiredType)
             .Where(c => c.Capacity >= requiredCapacity)
-            .OrderBy(c => c.Capacity)
+            .OrderBy(c => c.Type == requiredType ? 0 : 1) // prefer exact match first
+            .ThenBy(c => c.Capacity) // then smallest sufficient
             .Take(MaxClassroomsPerType)
             .ToList();
     }

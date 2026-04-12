@@ -105,6 +105,18 @@ export interface AutoSchedulePreview {
   failedCount: number;
   assignments: AutoSchedulePreviewItem[];
   failures: AutoScheduleFailure[];
+  seed: number;
+  totalPenalty: number;
+  stats: AutoScheduleStats;
+}
+
+export interface AutoScheduleStats {
+  constructionPlaced: number;
+  constructionFailed: number;
+  saIterations: number;
+  saInitialPenalty: number;
+  saFinalPenalty: number;
+  elapsedSeconds: number;
 }
 
 export interface AutoSchedulePreviewItem {
@@ -126,6 +138,14 @@ export interface AutoScheduleFailure {
   courseCode: string;
   courseName: string;
   reason: string;
+  suggestions: FailureSuggestion[];
+}
+
+export interface FailureSuggestion {
+  constraintCode: string;
+  message: string;
+  suggestionType: string;
+  priority: number;
 }
 
 export interface ApplyScheduleRequest {
