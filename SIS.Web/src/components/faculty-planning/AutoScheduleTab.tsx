@@ -123,28 +123,29 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
           {previewMutation.data.failures.length > 0 && (
             <Card>
               <CardHeader><CardTitle className="text-sm text-destructive">Atanamayan Şubeler ({previewMutation.data.failures.length})</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2">
                 {previewMutation.data.failures.map(f => (
                   <div key={f.sectionId} className="border-b pb-2 last:border-0">
                     <div className="text-sm font-medium">
                       <span className="font-mono">{f.courseCode}</span> {f.courseName}
                     </div>
-                    <div className="text-sm text-muted-foreground">{f.reason}</div>
-                    {f.suggestions && f.suggestions.length > 0 && (
+                    {f.suggestions && f.suggestions.length > 0 ? (
                       <div className="mt-1 space-y-1">
                         {f.suggestions.map((s, i) => (
                           <div key={i} className="text-xs bg-muted rounded px-2 py-1 flex items-start gap-2">
                             <Badge variant="outline" className="text-[10px] shrink-0">
-                              {s.suggestionType === 'CapacityIncrease' && 'Kapasite'}
-                              {s.suggestionType === 'InstructorReassign' && 'Hoca'}
-                              {s.suggestionType === 'ClassroomAdd' && 'Derslik'}
-                              {s.suggestionType === 'TimeChange' && 'Zaman'}
-                              {s.suggestionType === 'ConstraintRelax' && 'Kisit'}
+                              {s.suggestionType === 'CapacityIncrease' ? 'Kapasite' :
+                               s.suggestionType === 'InstructorReassign' ? 'Hoca' :
+                               s.suggestionType === 'ClassroomAdd' ? 'Derslik' :
+                               s.suggestionType === 'TimeChange' ? 'Zaman' :
+                               s.suggestionType === 'ConstraintRelax' ? 'Kısıt' : s.suggestionType}
                             </Badge>
                             <span>{s.message}</span>
                           </div>
                         ))}
                       </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground mt-1">{f.reason}</div>
                     )}
                   </div>
                 ))}
