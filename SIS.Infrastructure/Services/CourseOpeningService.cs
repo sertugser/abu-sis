@@ -143,21 +143,6 @@ public class CourseOpeningService(
             .Where(summary => courseIds.Contains(summary.CourseId))
             .ToDictionary(summary => summary.CourseId);
 
-        var approvals = await _context.CourseSectionApprovals
-            .AsNoTracking()
-            .Where(approval =>
-                approval.DepartmentId == departmentId
-                && approval.TermId == termId
-                && courseIds.Contains(approval.CourseId))
-            .Select(approval => new CourseOpeningApprovalInfo
-            {
-                CourseId = approval.CourseId,
-                Status = approval.Status,
-                ApprovedSectionCount = approval.ApprovedSectionCount,
-                Note = approval.Note
-            })
-            .ToDictionaryAsync(approval => approval.CourseId, ct);
-
         return curriculumCourses
             .GroupBy(cc => cc.CourseId)
             .Select(g =>
@@ -165,14 +150,6 @@ public class CourseOpeningService(
                 var first = g.First();
                 existingSectionCounts.TryGetValue(first.CourseId, out var sectionCount);
                 forecastMap.TryGetValue(first.CourseId, out var forecast);
-                approvals.TryGetValue(first.CourseId, out var approval);
-
-                var approvedSectionCount = approval?.ApprovedSectionCount;
-                var remainingApprovedSections = approval?.Status == SectionApprovalStatus.Approved && approvedSectionCount.HasValue
-                    ? Math.Max(0, approvedSectionCount.Value - sectionCount)
-                    : 0;
-                var workflowStatus = ResolveApprovalWorkflowStatus(approval?.Status, approvedSectionCount, sectionCount);
-                var blockedReason = BuildOpeningBlockedReason(approval?.Status, approvedSectionCount, sectionCount, approval?.Note);
 
                 return new CurriculumCourseForOpeningDto
                 {
@@ -200,13 +177,7 @@ public class CourseOpeningService(
                         })
                         .ToList(),
                     PreviousTermEnrollment = forecast?.ComparableTermEnrollment,
-                    ApprovalStatus = approval?.Status,
-                    ApprovalWorkflowStatus = workflowStatus,
-                    ApprovedSectionCount = approvedSectionCount,
-                    OpenedSectionCount = sectionCount,
-                    RemainingApprovedSectionCount = remainingApprovedSections,
-                    CanOpen = approval?.Status == SectionApprovalStatus.Approved && remainingApprovedSections > 0,
-                    OpeningBlockedReason = blockedReason,
+                    CanOpen = true,
                 };
             })
             .OrderBy(c => c.SuggestedSemester).ThenBy(c => c.CourseCode)
@@ -256,7 +227,7 @@ public class CourseOpeningService(
         .ToList();
     }
 
-    public async Task<List<OpenedCourseSectionDto>> OpenCourseAsync(int departmentId, int termId, OpenCourseRequest request, bool skipApproval = false, CancellationToken ct = default)
+    public async Task<List<OpenedCourseSectionDto>> OpenCourseAsync(int departmentId, int termId, OpenCourseRequest request, CancellationToken ct = default)
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
@@ -278,87 +249,18 @@ public class CourseOpeningService(
         if (request.SectionCount <= 0 || request.SectionCount > 20)
             throw new InvalidOperationException("Şube sayısı 1 ile 20 arasında olmalıdır.");
 
+        // Onay kontrolü
+        var approval = await _context.CourseSectionApprovals
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.CourseId == request.CourseId && a.DepartmentId == departmentId && a.TermId == termId, ct);
+
+        if (approval == null || approval.Status != SectionApprovalStatus.Approved)
+            throw new InvalidOperationException($"Ders '{course.Code}' için onay gereklidir. Lütfen önce ders onay sürecini tamamlayın.");
+
         // Mevcut section'ları kontrol et (aktif/pasif fark etmez, SectionNumber çakışmasını önlemek için)
         var existingSections = await _context.CourseSections
             .Where(cs => cs.CourseId == request.CourseId && cs.TermId == termId)
             .ToListAsync(ct);
-
-        var activeCount = existingSections.Count(s => s.IsActive);
-
-        if (skipApproval)
-        {
-            // Dean/Admin/AdministrativeStaff: onay kaydı yoksa otomatik oluştur
-            var existingApproval = await _context.CourseSectionApprovals
-                .FirstOrDefaultAsync(a =>
-                    a.DepartmentId == departmentId
-                    && a.TermId == termId
-                    && a.CourseId == request.CourseId, ct);
-
-            if (existingApproval == null)
-            {
-                var autoApproval = new CourseSectionApproval
-                {
-                    DepartmentId = departmentId,
-                    TermId = termId,
-                    CourseId = request.CourseId,
-                    Status = SectionApprovalStatus.Approved,
-                    ApprovedSectionCount = Math.Max(request.SectionCount + activeCount, 20),
-                    Note = "Yetkili kullanıcı tarafından otomatik onaylandı.",
-                    DecidedAt = DateTime.UtcNow,
-                };
-                _context.CourseSectionApprovals.Add(autoApproval);
-                await _context.SaveChangesAsync(ct);
-            }
-            else if (existingApproval.Status != SectionApprovalStatus.Approved)
-            {
-                existingApproval.Status = SectionApprovalStatus.Approved;
-                existingApproval.ApprovedSectionCount = Math.Max(
-                    existingApproval.ApprovedSectionCount ?? 0,
-                    request.SectionCount + activeCount);
-                existingApproval.Note = (existingApproval.Note ?? "") + " Yetkili kullanıcı tarafından otomatik onaylandı.";
-                existingApproval.DecidedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync(ct);
-            }
-            else if (existingApproval.ApprovedSectionCount.HasValue
-                     && existingApproval.ApprovedSectionCount.Value < activeCount + request.SectionCount)
-            {
-                // Mevcut onay yeterli değilse, kotayı artır
-                existingApproval.ApprovedSectionCount = activeCount + request.SectionCount;
-                await _context.SaveChangesAsync(ct);
-            }
-        }
-        else
-        {
-            // Normal akış: onay zorunlu
-            var approval = await _context.CourseSectionApprovals
-                .AsNoTracking()
-                .FirstOrDefaultAsync(a =>
-                    a.DepartmentId == departmentId
-                    && a.TermId == termId
-                    && a.CourseId == request.CourseId, ct);
-
-            if (approval == null)
-            {
-                // Onay kaydı yoksa Pending oluştur ve hata fırlat
-                var pendingApproval = new CourseSectionApproval
-                {
-                    DepartmentId = departmentId,
-                    TermId = termId,
-                    CourseId = request.CourseId,
-                    Status = SectionApprovalStatus.Pending,
-                    ApprovedSectionCount = request.SectionCount,
-                    Note = "Bölüm yöneticisi tarafından talep edildi.",
-                };
-                _context.CourseSectionApprovals.Add(pendingApproval);
-                await _context.SaveChangesAsync(ct);
-                throw new InvalidOperationException("Bu ders için onay gereklidir. Onay talebi dekana iletildi.");
-            }
-
-            if (approval.Status == SectionApprovalStatus.Pending)
-                throw new InvalidOperationException("Bu ders için onay bekleniyor. Onay talebi dekana iletilmiştir.");
-
-            ValidateOpeningApproval(approval, activeCount, request.SectionCount, course.Code);
-        }
 
         // Mevcut en yüksek SectionNumber (approve'dan gelen pasif section'lar olabilir)
         var maxSectionNumber = existingSections.Count > 0
@@ -391,6 +293,7 @@ public class CourseOpeningService(
             .Where(cap => cap.CourseId == request.CourseId && cap.TermId == termId)
             .ToListAsync(ct);
 
+        var activeCount = existingSections.Count(s => s.IsActive);
         var shouldReplacePolicies = activeCount == 0
             || existingPolicies.Count == 0
             || request.AccessibleDepartmentIds is { Count: > 0 };
@@ -479,7 +382,7 @@ public class CourseOpeningService(
         }).ToList();
     }
 
-    public async Task<BulkOpenCoursesResultDto> BulkOpenCoursesAsync(int departmentId, int termId, BulkOpenCoursesRequest request, bool skipApproval = false, CancellationToken ct = default)
+    public async Task<BulkOpenCoursesResultDto> BulkOpenCoursesAsync(int departmentId, int termId, BulkOpenCoursesRequest request, CancellationToken ct = default)
     {
         var result = new BulkOpenCoursesResultDto();
         if (request.Courses.Count == 0)
@@ -496,7 +399,7 @@ public class CourseOpeningService(
             foreach (var courseReq in request.Courses)
             {
                 currentCourse = courseReq;
-                var created = await OpenCourseAsync(departmentId, termId, courseReq, skipApproval, ct);
+                var created = await OpenCourseAsync(departmentId, termId, courseReq, ct);
                 result.TotalCoursesOpened++;
                 result.TotalSectionsCreated += created.Count;
             }
@@ -720,80 +623,6 @@ public class CourseOpeningService(
             ct);
     }
 
-    private static string ResolveApprovalWorkflowStatus(
-        SectionApprovalStatus? status,
-        int? approvedSectionCount,
-        int openedSectionCount)
-    {
-        if (status == SectionApprovalStatus.Rejected)
-            return "Rejected";
-
-        if (status != SectionApprovalStatus.Approved)
-            return "Pending";
-
-        var approvedCount = Math.Max(0, approvedSectionCount ?? 0);
-        if (approvedCount == 0 || openedSectionCount <= 0)
-            return "Approved";
-
-        return openedSectionCount >= approvedCount
-            ? "Completed"
-            : "PartiallyOpened";
-    }
-
-    private static string? BuildOpeningBlockedReason(
-        SectionApprovalStatus? status,
-        int? approvedSectionCount,
-        int openedSectionCount,
-        string? approvalNote)
-    {
-        if (status == null)
-            return "Bu ders için henüz şube onayı oluşturulmadı.";
-
-        if (status == SectionApprovalStatus.Pending)
-            return "Bu ders için bölüm onayı bekleniyor.";
-
-        if (status == SectionApprovalStatus.Rejected)
-            return string.IsNullOrWhiteSpace(approvalNote)
-                ? "Bu ders bu dönem için reddedildi."
-                : $"Bu ders bu dönem için reddedildi. Not: {approvalNote}";
-
-        var approvedCount = Math.Max(0, approvedSectionCount ?? 0);
-        if (approvedCount <= 0)
-            return "Bu ders için açılabilir şube onayı bulunmuyor.";
-
-        if (openedSectionCount >= approvedCount)
-            return $"Onaylanan toplam {approvedCount} şube zaten açıldı.";
-
-        return null;
-    }
-
-    private static void ValidateOpeningApproval(
-        CourseSectionApproval? approval,
-        int openedSectionCount,
-        int requestedSectionCount,
-        string courseCode)
-    {
-        var blockedReason = BuildOpeningBlockedReason(
-            approval?.Status,
-            approval?.ApprovedSectionCount,
-            openedSectionCount,
-            approval?.Note);
-
-        if (blockedReason != null && approval?.Status != SectionApprovalStatus.Approved)
-            throw new InvalidOperationException(blockedReason);
-
-        if (approval?.Status != SectionApprovalStatus.Approved || !approval.ApprovedSectionCount.HasValue)
-            throw new InvalidOperationException(blockedReason ?? "Bu ders için şube onayı bulunmuyor.");
-
-        var remainingApprovedSections = Math.Max(0, approval.ApprovedSectionCount.Value - openedSectionCount);
-        if (remainingApprovedSections <= 0)
-            throw new InvalidOperationException(blockedReason ?? $"'{courseCode}' için açılabilir şube kotası kalmadı.");
-
-        if (requestedSectionCount > remainingApprovedSections)
-            throw new InvalidOperationException(
-                $"'{courseCode}' için en fazla {remainingApprovedSections} ek şube açabilirsiniz. Onaylanan toplam şube: {approval.ApprovedSectionCount.Value}, halihazırda açık: {openedSectionCount}.");
-    }
-
     public async Task<BulkAssignInstructorResultDto> BulkAssignInstructorAsync(
         int departmentId, int termId, BulkAssignInstructorRequest request, CancellationToken ct)
     {
@@ -888,7 +717,7 @@ public class CourseOpeningService(
     }
 
     public async Task<TransferFromTermResultDto> TransferFromTermAsync(
-        TransferFromTermRequest request, bool skipApproval = false, CancellationToken ct = default)
+        TransferFromTermRequest request, CancellationToken ct = default)
     {
         var result = new TransferFromTermResultDto();
         if (request.CourseIds.Count == 0)
@@ -936,7 +765,7 @@ public class CourseOpeningService(
 
             try
             {
-                var created = await OpenCourseAsync(request.DepartmentId, request.TargetTermId, openRequest, skipApproval, ct);
+                var created = await OpenCourseAsync(request.DepartmentId, request.TargetTermId, openRequest, ct);
                 result.SuccessCount++;
                 result.TotalSectionsCreated += created.Count;
                 result.Results.Add(new TransferCourseResultItem
@@ -965,11 +794,4 @@ public class CourseOpeningService(
         return result;
     }
 
-    private sealed class CourseOpeningApprovalInfo
-    {
-        public int CourseId { get; init; }
-        public SectionApprovalStatus Status { get; init; }
-        public int? ApprovedSectionCount { get; init; }
-        public string? Note { get; init; }
-    }
 }

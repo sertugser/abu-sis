@@ -71,11 +71,8 @@ export function BulkOpenDialog({
     const settings = new Map<number, CourseSettings>();
     for (const course of unopenedCourses) {
       const forecast = forecastMap.get(course.courseId);
-      const maxSections = course.remainingApprovedSectionCount && course.remainingApprovedSectionCount > 0
-        ? course.remainingApprovedSectionCount
-        : 20;
       settings.set(course.courseId, {
-        sectionCount: Math.max(1, Math.min(maxSections, forecast?.recommendedSectionCount ?? maxSections)),
+        sectionCount: Math.max(1, Math.min(20, forecast?.recommendedSectionCount ?? 20)),
         capacity: forecast?.sectionDistribution?.effectiveCapacityPerSection ?? course.recommendedCapacity ?? 40,
         instructorId: '',
       });
@@ -92,14 +89,10 @@ export function BulkOpenDialog({
     setCourseSettings(prev => {
       const next = new Map(prev);
       const current = next.get(courseId) ?? { sectionCount: 1, capacity: 40, instructorId: '' };
-      const course = unopenedCourses.find(item => item.courseId === courseId);
-      const maxSections = course?.remainingApprovedSectionCount && course.remainingApprovedSectionCount > 0
-        ? course.remainingApprovedSectionCount
-        : 20;
       next.set(courseId, {
         ...current,
         [field]: field === 'sectionCount'
-          ? Math.max(1, Math.min(maxSections, Number(value)))
+          ? Math.max(1, Math.min(20, Number(value)))
           : value,
       });
       return next;
@@ -127,11 +120,8 @@ export function BulkOpenDialog({
         const forecast = forecastMap.get(courseId);
         const course = unopenedCourses.find(item => item.courseId === courseId);
         if (forecast) {
-          const maxSections = course?.remainingApprovedSectionCount && course.remainingApprovedSectionCount > 0
-            ? course.remainingApprovedSectionCount
-            : 20;
           next.set(courseId, {
-            sectionCount: Math.max(1, Math.min(maxSections, forecast.recommendedSectionCount ?? maxSections)),
+            sectionCount: Math.max(1, Math.min(20, forecast.recommendedSectionCount ?? 20)),
             capacity: forecast.sectionDistribution?.effectiveCapacityPerSection ?? course?.recommendedCapacity ?? 40,
             instructorId: next.get(courseId)?.instructorId ?? '',
           });
@@ -183,7 +173,7 @@ export function BulkOpenDialog({
               <span className="text-sm text-muted-foreground">{selectedIds.size} ders seçili</span>
               {blockedUnopenedCount > 0 && (
                 <span className="text-xs text-amber-700">
-                  {blockedUnopenedCount} ders approval nedeniyle toplu açmaya dahil edilmedi
+                  {blockedUnopenedCount} ders toplu açmaya dahil edilmedi
                 </span>
               )}
               <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap cursor-pointer select-none ml-auto">
@@ -265,7 +255,7 @@ export function BulkOpenDialog({
                             <Input
                               type="number"
                               min={1}
-                              max={course.remainingApprovedSectionCount && course.remainingApprovedSectionCount > 0 ? course.remainingApprovedSectionCount : 20}
+                              max={20}
                               className="h-7 w-14 text-xs text-center mx-auto"
                               value={settings.sectionCount}
                               onChange={event => updateSetting(course.courseId, 'sectionCount', Number(event.target.value))}

@@ -216,9 +216,7 @@ public class CourseOpeningServiceTests
         dto.RecommendedCapacity.Should().Be(35);
         dto.PreviousTermEnrollment.Should().Be(18);
         dto.CrossDepartmentDemand.Should().ContainSingle(item => item.DepartmentId == OtherDepartmentId && item.EstimatedStudentCount == 4);
-        dto.ApprovalWorkflowStatus.Should().Be("PartiallyOpened");
         dto.CanOpen.Should().BeTrue();
-        dto.RemainingApprovedSectionCount.Should().Be(2);
     }
 
     private static AppDbContext CreateContext()

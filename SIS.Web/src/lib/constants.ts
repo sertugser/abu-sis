@@ -11,7 +11,6 @@ export const ROUTES = {
   INSTRUCTOR_SECTIONS: '/derslerim',
   INSTRUCTOR_SCHEDULING: '/ders-programim',
   GRADE_ENTRY: '/not-girisi',
-  COURSE_APPROVAL: '/ders-onay-islemleri',
   CLASS_LISTS: '/sinif-listeleri',
   CLASSROOM_DASHBOARD: '/derslik-doluluk-tablosu',
   TERM_CLOSING: '/donem-kapatma',
@@ -55,7 +54,6 @@ export const QUERY_KEYS = {
   gradeComponents: (sectionId: number) => ['gradeComponents', sectionId] as const,
   grades: (sectionId: number) => ['grades', sectionId] as const,
   gradingCriteria: (sectionId: number) => ['gradingCriteria', sectionId] as const,
-  sectionApprovals: (departmentId?: number, termId?: number) => ['sectionApprovals', departmentId, termId] as const,
   facultyPlanningOverview: (facultyId: number, termId: number) => ['facultyPlanning', 'overview', facultyId, termId] as const,
   facultyPlanningSections: (facultyId: number, termId: number, departmentId?: number, status?: string, page?: number) =>
     ['facultyPlanning', 'sections', facultyId, termId, departmentId, status, page] as const,
@@ -117,7 +115,6 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/derslerim',
   '/not-girisi',
   '/ders-programim',
-  '/ders-onay-islemleri',
   '/sinif-listeleri',
   '/ders-programi-olusturma',
   '/derslik-doluluk-tablosu',

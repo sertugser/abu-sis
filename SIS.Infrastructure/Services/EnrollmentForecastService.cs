@@ -248,25 +248,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
         var termsById = allTerms.ToDictionary(t => t.Id);
 
-        var approvalFeedback = await _context.CourseSectionApprovals
-            .AsNoTracking()
-            .Where(approval =>
-                approval.Status == SectionApprovalStatus.Approved
-                && approval.ApprovedSectionCount.HasValue
-                && approval.ApprovedSectionCount.Value > 0)
-            .Select(approval => new ApprovalFeedbackRecord
-            {
-                CourseId = approval.CourseId,
-                TermId = approval.TermId,
-                RecommendedSectionCount = approval.RecommendedSectionCount,
-                ApprovedSectionCount = approval.ApprovedSectionCount!.Value
-            })
-            .ToListAsync();
-
-        var approvalFeedbackByCourse = approvalFeedback
-            .Where(record => activeTerm == null || record.TermId != activeTerm.Id)
-            .GroupBy(record => record.CourseId)
-            .ToDictionary(group => group.Key, group => group.ToList());
+        var approvalFeedbackByCourse = new Dictionary<int, List<ApprovalFeedbackRecord>>();
 
         var cgpaCache = new Dictionary<int, decimal>();
         var studentSnapshots = new List<StudentForecastSnapshot>();

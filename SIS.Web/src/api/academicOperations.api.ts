@@ -3,14 +3,9 @@ import apiClient from './axios';
 import type {
   AcademicOperationsContext,
   AcademicPlanningSummary,
-  ApproveCourseSectionsRequest,
   BulkAcademicLevelDto,
-  BulkApprovalRequest,
-  BulkApprovalResult,
-  CourseSectionApproval,
   DepartmentClassList,
   DepartmentCurriculumOverview,
-  RejectCourseSectionsRequest,
 } from '../types/academicOperations';
 
 export async function getAcademicOperationsContext(): Promise<AcademicOperationsContext> {
@@ -56,35 +51,6 @@ export interface GradeLockReadiness {
 export async function getGradeLockReadiness(departmentId: number, termId?: number): Promise<GradeLockReadiness> {
   const { data } = await apiClient.get<GradeLockReadiness>(`/academicprogression/grade-lock-readiness/${departmentId}`, {
     params: { termId },
-  });
-  return data;
-}
-
-// Section Approval API
-export async function getSectionApprovals(departmentId: number, termId: number): Promise<CourseSectionApproval[]> {
-  const { data } = await apiClient.get<CourseSectionApproval[]>('/academicoperations/approvals', {
-    params: { departmentId, termId },
-  });
-  return data;
-}
-
-export async function approveCourseSections(departmentId: number, termId: number, request: ApproveCourseSectionsRequest): Promise<CourseSectionApproval> {
-  const { data } = await apiClient.post<CourseSectionApproval>('/academicoperations/approvals/approve', request, {
-    params: { departmentId, termId },
-  });
-  return data;
-}
-
-export async function rejectCourseSections(departmentId: number, termId: number, request: RejectCourseSectionsRequest): Promise<CourseSectionApproval> {
-  const { data } = await apiClient.post<CourseSectionApproval>('/academicoperations/approvals/reject', request, {
-    params: { departmentId, termId },
-  });
-  return data;
-}
-
-export async function bulkApproveCourseSections(departmentId: number, termId: number, request: BulkApprovalRequest): Promise<BulkApprovalResult> {
-  const { data } = await apiClient.post<BulkApprovalResult>('/academicoperations/approvals/bulk-approve', request, {
-    params: { departmentId, termId },
   });
   return data;
 }

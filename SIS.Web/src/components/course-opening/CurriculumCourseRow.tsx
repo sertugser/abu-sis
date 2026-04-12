@@ -17,16 +17,6 @@ interface Props {
 
 function getStatusBadge(course: CurriculumCourseForOpeningDto) {
   if (course.alreadyOpened) {
-    if (course.approvalWorkflowStatus === 'PartiallyOpened') {
-      return (
-        <Badge variant="warning" className="text-[10px]">
-          Kısmi ({course.openedSectionCount ?? 0}/{course.approvedSectionCount ?? 0})
-        </Badge>
-      );
-    }
-    if (course.approvalWorkflowStatus === 'Completed') {
-      return <Badge variant="success" className="text-[10px]">Tamamlandı</Badge>;
-    }
     return (
       <Badge variant="success" className="text-[10px]">
         Açıldı ({course.existingSectionCount})
@@ -36,10 +26,7 @@ function getStatusBadge(course: CurriculumCourseForOpeningDto) {
   if (course.canOpen) {
     return <Badge variant="warning" className="text-[10px]">Bekliyor</Badge>;
   }
-  if (course.approvalWorkflowStatus === 'Rejected') {
-    return <Badge variant="destructive" className="text-[10px]">Reddedildi</Badge>;
-  }
-  return <Badge variant="outline" className="text-[10px]">Onay Bekliyor</Badge>;
+  return <Badge variant="outline" className="text-[10px]">Açılamaz</Badge>;
 }
 
 export function CurriculumCourseRow({ course, forecast, selected, onToggle }: Props) {

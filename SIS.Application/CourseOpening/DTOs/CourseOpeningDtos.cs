@@ -1,5 +1,3 @@
-using SIS.Domain.Enums;
-
 namespace SIS.Application.CourseOpening.DTOs;
 
 // ── Response DTOs ──
@@ -62,14 +60,7 @@ public class CurriculumCourseForOpeningDto
     // Önceki dönem verisi
     public int? PreviousTermEnrollment { get; set; }
 
-    // Approval entegrasyonu
-    public SectionApprovalStatus? ApprovalStatus { get; set; }
-    public string ApprovalWorkflowStatus { get; set; } = "Pending";
-    public int? ApprovedSectionCount { get; set; }
-    public int OpenedSectionCount { get; set; }
-    public int RemainingApprovedSectionCount { get; set; }
     public bool CanOpen { get; set; }
-    public string? OpeningBlockedReason { get; set; }
 }
 
 public class CrossDepartmentDemandDto
