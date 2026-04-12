@@ -388,6 +388,7 @@ public abstract class SchedulingTestBase : IDisposable
         AddConfig("Schedule.MaxConsecutiveHours", "12");
         AddConfig("Schedule.BreakDurationMinutes", "5");
         AddConfig("Classroom.AmphiThreshold", "100");
+        AddConfig("Schedule.TheoryLabSplitThreshold", "4");
         Context.SaveChanges();
     }
 
@@ -458,6 +459,7 @@ public abstract class SchedulingTestBase : IDisposable
             new CreditHourEvaluator(),
             new LunchBreakEvaluator(),
             new MaxConsecutiveHoursEvaluator(),
+            new TheoryLabDaySplitEvaluator(),
             // Soft
             new OccupancyEvaluator(),
             new DailyLoadSoftEvaluator(),

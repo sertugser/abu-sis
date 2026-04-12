@@ -1436,6 +1436,7 @@ public class SchedulingService : ISchedulingService
             MaxConsecutiveHours = hard?.MaxConsecutiveHours ?? 4,
             BreakDurationMinutes = hard?.BreakDurationMinutes ?? 5,
             AmphiThreshold = hard?.AmphiThreshold ?? 100,
+            TheoryLabSplitThreshold = hard?.TheoryLabSplitThreshold ?? 4,
             S1Enabled = soft.S1Enabled,
             S1MinOccupancy = soft.S1MinOccupancy,
             S1MaxOccupancy = soft.S1MaxOccupancy,
@@ -2160,8 +2161,9 @@ public class SchedulingService : ISchedulingService
         var maxConsecutive = GetInt(config, "Schedule.MaxConsecutiveHours", 4);
         var breakDuration = GetInt(config, "Schedule.BreakDurationMinutes", 5);
         var amphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100);
+        var theoryLabSplitThreshold = GetInt(config, "Schedule.TheoryLabSplitThreshold", 4);
 
-        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration, amphiThreshold);
+        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration, amphiThreshold, theoryLabSplitThreshold);
     }
 
     private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
@@ -2195,7 +2197,8 @@ public class SchedulingService : ISchedulingService
 
     private record HardConstraintConfig(
         bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
-        int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold);
+        int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold,
+        int TheoryLabSplitThreshold = 4);
 
 
     private static class ConflictTypes

@@ -18,6 +18,7 @@ public sealed class SchedulingConstraintConfig
     public int MaxConsecutiveHours { get; init; }
     public int BreakDurationMinutes { get; init; }
     public int AmphiThreshold { get; init; }
+    public int TheoryLabSplitThreshold { get; init; }
 
     // Soft constraint params
     public bool S1Enabled { get; init; }

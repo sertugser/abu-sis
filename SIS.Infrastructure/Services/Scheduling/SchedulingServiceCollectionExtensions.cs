@@ -28,6 +28,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEvaluator, CreditHourEvaluator>();
         services.AddScoped<IConstraintEvaluator, LunchBreakEvaluator>();
         services.AddScoped<IConstraintEvaluator, MaxConsecutiveHoursEvaluator>();
+        services.AddScoped<IConstraintEvaluator, TheoryLabDaySplitEvaluator>();
 
         // Soft constraint evaluators
         services.AddScoped<IConstraintEvaluator, OccupancyEvaluator>();
