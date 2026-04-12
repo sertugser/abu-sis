@@ -1399,7 +1399,7 @@ public class FacultyPlanningService : IFacultyPlanningService
         return await _context.CourseSections
             .AsNoTracking()
             .Where(cs => cs.Id == sectionId)
-            .Select(cs => (int?)cs.Course.Department.FacultyId)
+            .Select(cs => (int?)cs.Course!.Department!.FacultyId)
             .FirstOrDefaultAsync(ct);
     }
 }
