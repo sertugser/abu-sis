@@ -59,6 +59,7 @@ export interface CourseDemandForecastDto {
   confidence: ConfidenceRangeDto;
   sectionDistribution: SectionDistributionDto;
   crossDepartmentDemand: CrossDepartmentDemandDto[];
+  showRate: number;
 }
 
 export interface DepartmentCapacitySummaryDto {

@@ -169,7 +169,7 @@ export function CourseFilterBar({
           </span>
           <span className="text-muted-foreground hidden sm:inline">|</span>
           <span>
-            Bekleyen: <Badge variant={stats.pendingCount > 0 ? 'warning' : 'secondary'} className="text-[10px] ml-0.5">{stats.pendingCount}</Badge>
+            Açılmamış: <Badge variant={stats.pendingCount > 0 ? 'outline' : 'secondary'} className="text-[10px] ml-0.5">{stats.pendingCount}</Badge>
           </span>
           <span className="text-muted-foreground hidden sm:inline">|</span>
           <span>

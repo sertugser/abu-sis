@@ -47,6 +47,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ElectiveGroupCourse> ElectiveGroupCourses => Set<ElectiveGroupCourse>();
     public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
+    public DbSet<ForecastCalibration> ForecastCalibrations => Set<ForecastCalibration>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -634,6 +635,15 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<Curriculum>(e2 =>
         {
             e2.HasIndex(c => new { c.ProgramId, c.Version }).IsUnique();
+        });
+
+        // ── ForecastCalibration ──────────────────────────────────
+        builder.Entity<ForecastCalibration>(entity =>
+        {
+            entity.HasOne(fc => fc.Course).WithMany().HasForeignKey(fc => fc.CourseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(fc => fc.Term).WithMany().HasForeignKey(fc => fc.TermId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(fc => fc.Department).WithMany().HasForeignKey(fc => fc.DepartmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(fc => new { fc.CourseId, fc.TermId }).IsUnique();
         });
     }
 }

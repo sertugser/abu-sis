@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle } from 'lucide-react';
 import { CourseFilterBar } from '../components/course-opening/CourseFilterBar';
 import { CurriculumPanel } from '../components/course-opening/CurriculumPanel';
+import { CourseDetailModal } from '../components/course-opening/CourseDetailModal';
 import { OpenedCoursesPanel } from '../components/course-opening/OpenedCoursesPanel';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
@@ -20,6 +21,7 @@ import {
 } from '../hooks/useCourseOpening';
 import { useDepartmentForecast } from '../hooks/useForecast';
 import type { CourseDemandForecastDto } from '../types/forecast';
+import type { CurriculumCourseForOpeningDto } from '../types/courseOpening';
 
 export default function CourseOpeningPage() {
   const contextQuery = useAcademicOperationsContext();
@@ -33,6 +35,7 @@ export default function CourseOpeningPage() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'compulsory' | 'elective'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedInstructorId, setSelectedInstructorId] = useState<number | null>(null);
+  const [detailCourse, setDetailCourse] = useState<CurriculumCourseForOpeningDto | null>(null);
 
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const termId = activeTerm?.id ?? null;
@@ -171,6 +174,7 @@ export default function CourseOpeningPage() {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onOpenSelected={handleOpenSelected}
+          onOpenCourseDetail={setDetailCourse}
         />
         <div className="bg-gray-200 w-px hidden lg:block" />
         <OpenedCoursesPanel
@@ -190,6 +194,21 @@ export default function CourseOpeningPage() {
           onExportCsv={exportCsv}
         />
       </div>
+      {detailCourse && (
+        <CourseDetailModal
+          open={!!detailCourse}
+          onClose={() => setDetailCourse(null)}
+          course={detailCourse}
+          forecast={forecastMap.get(detailCourse.courseId)}
+          instructors={instructorsQuery.data ?? []}
+          onOpenCourse={(request) => {
+            openMutation.mutate(request, {
+              onSuccess: () => setDetailCourse(null),
+            });
+          }}
+          isOpening={openMutation.isPending}
+        />
+      )}
     </div>
   );
 }

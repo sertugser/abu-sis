@@ -63,10 +63,10 @@ function emptyCourseForm(): CreateCourseDto {
     isNonGpa: false,
     examType: null,
     departmentId: null,
-    language: 1,
-    teachingMethod: 1,
-    status: 1,
-    level: 1,
+    language: 'Turkish',
+    teachingMethod: 'FaceToFace',
+    status: 'Active',
+    level: 'Undergraduate',
     description: null,
     nationalCredit: null,
   };
@@ -250,7 +250,7 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
             <Label className="text-xs">Dil</Label>
             <NativeSelect
               value={form.language}
-              onChange={v => onChange({ ...form, language: Number(v) })}
+              onChange={v => onChange({ ...form, language: v })}
               disabled={disabled}
             >
               {Object.entries(COURSE_LANGUAGE_LABELS).map(([k, v]) => (
@@ -262,7 +262,7 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
             <Label className="text-xs">Öğretim Şekli</Label>
             <NativeSelect
               value={form.teachingMethod}
-              onChange={v => onChange({ ...form, teachingMethod: Number(v) })}
+              onChange={v => onChange({ ...form, teachingMethod: v })}
               disabled={disabled}
             >
               {Object.entries(TEACHING_METHOD_LABELS).map(([k, v]) => (
@@ -274,7 +274,7 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
             <Label className="text-xs">Seviye</Label>
             <NativeSelect
               value={form.level}
-              onChange={v => onChange({ ...form, level: Number(v) })}
+              onChange={v => onChange({ ...form, level: v })}
               disabled={disabled}
             >
               {Object.entries(COURSE_LEVEL_LABELS).map(([k, v]) => (
@@ -286,7 +286,7 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
             <Label className="text-xs">Durum</Label>
             <NativeSelect
               value={form.status}
-              onChange={v => onChange({ ...form, status: Number(v) })}
+              onChange={v => onChange({ ...form, status: v })}
               disabled={disabled}
             >
               {Object.entries(COURSE_STATUS_LABELS).map(([k, v]) => (
@@ -906,9 +906,9 @@ export default function CourseCatalogAdminPage() {
   const [search, setSearch] = useState('');
   const [facultyId, setFacultyId] = useState<number | undefined>(undefined);
   const [departmentId, setDepartmentId] = useState<number | undefined>(undefined);
-  const [statusFilter, setStatusFilter] = useState<number | undefined>(1); // default: Aktif
-  const [languageFilter, setLanguageFilter] = useState<number | undefined>(undefined);
-  const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<string | undefined>('Active'); // default: Aktif
+  const [languageFilter, setLanguageFilter] = useState<string | undefined>(undefined);
+  const [levelFilter, setLevelFilter] = useState<string | undefined>(undefined);
   const [typeFilter, setTypeFilter] = useState<CourseTypeFilter>('all');
 
   // Dialog state
@@ -969,7 +969,7 @@ export default function CourseCatalogAdminPage() {
             {/* Durum */}
             <Select
               value={statusFilter !== undefined ? String(statusFilter) : 'all'}
-              onValueChange={v => setStatusFilter(v === 'all' ? undefined : Number(v))}
+              onValueChange={v => setStatusFilter(v === 'all' ? undefined : v)}
             >
               <SelectTrigger className="h-8 w-[95px] text-xs">
                 <SelectValue placeholder="Durum" />
@@ -985,7 +985,7 @@ export default function CourseCatalogAdminPage() {
             {/* Dil */}
             <Select
               value={languageFilter !== undefined ? String(languageFilter) : 'all'}
-              onValueChange={v => setLanguageFilter(v === 'all' ? undefined : Number(v))}
+              onValueChange={v => setLanguageFilter(v === 'all' ? undefined : v)}
             >
               <SelectTrigger className="h-8 w-[105px] text-xs">
                 <SelectValue placeholder="Tüm Diller" />
@@ -1001,7 +1001,7 @@ export default function CourseCatalogAdminPage() {
             {/* Seviye */}
             <Select
               value={levelFilter !== undefined ? String(levelFilter) : 'all'}
-              onValueChange={v => setLevelFilter(v === 'all' ? undefined : Number(v))}
+              onValueChange={v => setLevelFilter(v === 'all' ? undefined : v)}
             >
               <SelectTrigger className="h-8 w-[115px] text-xs">
                 <SelectValue placeholder="Tüm Seviyeler" />
@@ -1153,7 +1153,7 @@ export default function CourseCatalogAdminPage() {
                         }
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <Badge variant={c.status === 1 ? 'success' : 'secondary'} className="text-[11px]">
+                        <Badge variant={c.status === 'Active' || c.status === 1 ? 'success' : 'secondary'} className="text-[11px]">
                           {COURSE_STATUS_LABELS[c.status] ?? c.status}
                         </Badge>
                       </td>

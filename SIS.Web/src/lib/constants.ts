@@ -149,27 +149,27 @@ export const STUDENT_STATUS_LABELS: Record<string, string> = {
   Graduated: 'Mezun',
 };
 
-export const COURSE_LANGUAGE_LABELS: Record<number, string> = {
-  1: 'Türkçe',
-  2: 'İngilizce',
-  3: 'Fransızca',
-  4: 'Almanca',
-  5: 'Arapça',
+export const COURSE_LANGUAGE_LABELS: Record<string, string> = {
+  Turkish: 'Türkçe',
+  English: 'İngilizce',
+  French: 'Fransızca',
+  German: 'Almanca',
+  Arabic: 'Arapça',
 };
 
-export const TEACHING_METHOD_LABELS: Record<number, string> = {
-  1: 'Yüz Yüze',
-  2: 'Uzaktan',
-  3: 'Hibrit',
+export const TEACHING_METHOD_LABELS: Record<string, string> = {
+  FaceToFace: 'Yüz Yüze',
+  Online: 'Uzaktan',
+  Hybrid: 'Hibrit',
 };
 
-export const COURSE_STATUS_LABELS: Record<number, string> = {
-  1: 'Aktif',
-  2: 'Pasif',
+export const COURSE_STATUS_LABELS: Record<string, string> = {
+  Active: 'Aktif',
+  Passive: 'Pasif',
 };
 
-export const COURSE_LEVEL_LABELS: Record<number, string> = {
-  1: 'Lisans',
-  2: 'Yüksek Lisans',
-  3: 'Doktora',
+export const COURSE_LEVEL_LABELS: Record<string, string> = {
+  Undergraduate: 'Lisans',
+  Masters: 'Yüksek Lisans',
+  Doctorate: 'Doktora',
 };

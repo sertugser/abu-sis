@@ -93,9 +93,9 @@ export interface CourseFilterParams {
   search?: string;
   departmentId?: number;
   facultyId?: number;
-  language?: number;
-  level?: number;
-  status?: number;
+  language?: number | string;
+  level?: number | string;
+  status?: number | string;
 }
 
 export interface CreateCourseDto {
@@ -108,11 +108,11 @@ export interface CreateCourseDto {
   isNonGpa: boolean;
   examType?: string | null;
   departmentId?: number | null;
-  language: number;
-  teachingMethod: number;
-  status: number;
+  language: number | string;
+  teachingMethod: number | string;
+  status: number | string;
   description?: string | null;
-  level: number;
+  level: number | string;
   nationalCredit?: number | null;
 }
 

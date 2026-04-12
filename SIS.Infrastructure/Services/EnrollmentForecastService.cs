@@ -108,6 +108,85 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         };
     }
 
+    public async Task<int> CalibrateForTermAsync(int termId, CancellationToken ct = default)
+    {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new InvalidOperationException("Dönem bulunamadı.");
+
+        if (term.Status < TermStatus.AddDrop)
+            throw new InvalidOperationException("Kalibrasyon için dönem en az ek/bırak aşamasını geçmiş olmalı.");
+
+        // Already calibrated?
+        var existingCount = await _context.ForecastCalibrations.CountAsync(fc => fc.TermId == termId, ct);
+        if (existingCount > 0)
+            return 0;
+
+        var context = await GetOrBuildForecastContextAsync();
+
+        // Actual enrollments for this term
+        var actualEnrollments = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(r => r.CourseSection).ThenInclude(s => s.Course)
+            .Where(r => r.CourseSection.TermId == termId
+                && (r.Status == RegistrationStatus.Active || r.Status == RegistrationStatus.Completed))
+            .GroupBy(r => new { r.CourseSection.CourseId, DeptId = r.CourseSection.Course.DepartmentId })
+            .Select(g => new
+            {
+                CourseId = g.Key.CourseId,
+                DepartmentId = g.Key.DeptId ?? 0,
+                ActualCount = g.Select(r => r.StudentId).Distinct().Count()
+            })
+            .ToListAsync(ct);
+
+        var actualSections = await _context.CourseSections
+            .AsNoTracking()
+            .Where(s => s.TermId == termId && s.IsActive)
+            .GroupBy(s => s.CourseId)
+            .Select(g => new { CourseId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
+
+        var calibrations = new List<ForecastCalibration>();
+
+        foreach (var actual in actualEnrollments)
+        {
+            if (!context.Courses.TryGetValue(actual.CourseId, out var course))
+                continue;
+
+            var forecast = BuildCourseDemandForecast(context, course);
+            var absError = Math.Abs(forecast.TotalPredictedDemand - actual.ActualCount);
+            var pctError = actual.ActualCount > 0
+                ? (decimal)absError / actual.ActualCount * 100
+                : 0;
+
+            var ruleBasedEligible = forecast.PredictedEligibleCount + forecast.PredictedRetakeCount + forecast.PredictedOverloadOrUpperClassCount;
+            var showRate = ruleBasedEligible > 0
+                ? Math.Min(1.0m, (decimal)actual.ActualCount / ruleBasedEligible)
+                : 0.90m;
+
+            calibrations.Add(new ForecastCalibration
+            {
+                CourseId = actual.CourseId,
+                TermId = termId,
+                DepartmentId = actual.DepartmentId,
+                PredictedDemand = forecast.TotalPredictedDemand,
+                ActualEnrollment = actual.ActualCount,
+                PredictedSections = forecast.RecommendedSectionCount,
+                ActualSections = actualSections.GetValueOrDefault(actual.CourseId),
+                AbsoluteError = absError,
+                PercentageError = pctError,
+                RuleBasedWeight = 0.55m,
+                HistoricalWeight = 0.45m,
+                EligibleStudentCount = ruleBasedEligible,
+                ShowRate = showRate,
+                CalibratedAt = DateTime.UtcNow,
+            });
+        }
+
+        _context.ForecastCalibrations.AddRange(calibrations);
+        await _context.SaveChangesAsync(ct);
+        return calibrations.Count;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  FORECAST CONTEXT BUILDER
     // ═══════════════════════════════════════════════════════════════
@@ -250,6 +329,84 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
         var approvalFeedbackByCourse = new Dictionary<int, List<ApprovalFeedbackRecord>>();
 
+        // Show rate from calibration data
+        var calibrations = await _context.ForecastCalibrations
+            .AsNoTracking()
+            .Where(fc => fc.ActualEnrollment > 0 && fc.EligibleStudentCount > 0)
+            .ToListAsync();
+
+        var showRateByCourse = calibrations
+            .GroupBy(fc => fc.CourseId)
+            .ToDictionary(
+                g => g.Key,
+                g => Math.Min(1.0m, g.Average(fc => fc.ShowRate)));
+
+        // Adaptive weights from calibration data
+        var adaptiveWeights = new Dictionary<int, (decimal RuleWeight, decimal HistoricalWeight)>();
+        foreach (var group in calibrations.GroupBy(fc => fc.CourseId))
+        {
+            var records = group.OrderByDescending(fc => fc.TermId).Take(4).ToList();
+            if (records.Count < 2) continue;
+            var avgPctError = records.Average(r => r.PercentageError);
+            var ruleWeight = avgPctError switch
+            {
+                > 30m => 0.35m,
+                > 20m => 0.45m,
+                > 10m => 0.55m,
+                _ => 0.65m
+            };
+            adaptiveWeights[group.Key] = (ruleWeight, 1.0m - ruleWeight);
+        }
+
+        // Cohort growth by department
+        var cohortData = await _context.StudentPrograms
+            .AsNoTracking()
+            .Where(sp => sp.Type == StudentProgramType.Main && sp.IsActive)
+            .Select(sp => new { DeptId = sp.Program.DepartmentId, Year = sp.EnrollmentDate.Year })
+            .ToListAsync();
+
+        var cohortGrowthByDept = new Dictionary<int, decimal>();
+        foreach (var deptGroup in cohortData.GroupBy(c => c.DeptId))
+        {
+            var yearCounts = deptGroup.GroupBy(c => c.Year)
+                .OrderBy(g => g.Key)
+                .Select(g => g.Count())
+                .ToList();
+            if (yearCounts.Count >= 2)
+            {
+                var lastYear = yearCounts[^1];
+                var prevAvg = yearCounts.Take(yearCounts.Count - 1).Average();
+                cohortGrowthByDept[deptGroup.Key] = prevAvg > 0 ? (decimal)lastYear / (decimal)prevAvg : 1.0m;
+            }
+        }
+
+        // Classroom capacities by faculty
+        List<(int FacultyId, int Capacity)> classroomCapList;
+        if (activeTerm != null)
+        {
+            var rawClassrooms = await _context.ClassroomTermAssignments
+                .AsNoTracking()
+                .Where(cta => cta.TermId == activeTerm.Id)
+                .Include(cta => cta.Classroom)
+                .Where(cta => cta.Classroom != null)
+                .Select(cta => new { cta.FacultyId, cta.Classroom!.Capacity })
+                .ToListAsync();
+            classroomCapList = rawClassrooms.Select(x => (x.FacultyId, x.Capacity)).ToList();
+        }
+        else
+        {
+            classroomCapList = new List<(int, int)>();
+        }
+
+        var classroomCapsByFaculty = classroomCapList
+            .GroupBy(c => c.FacultyId)
+            .ToDictionary(g => g.Key, g => g.Select(c => c.Capacity).OrderByDescending(c => c).ToList());
+
+        // Department-Faculty map
+        var departmentFacultyMap = await _context.Departments
+            .AsNoTracking()
+            .ToDictionaryAsync(d => d.Id, d => d.FacultyId);
+
         var cgpaCache = new Dictionary<int, decimal>();
         var studentSnapshots = new List<StudentForecastSnapshot>();
 
@@ -293,7 +450,12 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             HistoricalEnrollmentsByCourse = historicalByCourseThenTerm,
             SectionCountByCourseTerm = sectionCountByCourseTerm,
             GlobalNotes = BuildGlobalNotes(activeTerm, activeStudents.Count, activeMainPrograms.Count),
-            ApprovalFeedbackByCourse = approvalFeedbackByCourse
+            ApprovalFeedbackByCourse = approvalFeedbackByCourse,
+            ShowRateByCourse = showRateByCourse,
+            CohortGrowthByDepartment = cohortGrowthByDept,
+            ClassroomCapacitiesByFaculty = classroomCapsByFaculty,
+            DepartmentFacultyMap = departmentFacultyMap,
+            AdaptiveWeightsByCourse = adaptiveWeights
         };
     }
 
@@ -536,6 +698,21 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             .Concat(upperStudents)
             .ToHashSet();
 
+        // --- Show rate adjustment ---
+        var showRate = context.ShowRateByCourse.GetValueOrDefault(course.Id, 0.90m);
+        var adjustedRuleBasedTotal = (int)Math.Round(ruleBasedTotal * showRate);
+
+        // --- Cohort growth for courses ---
+        if (course.DepartmentId.HasValue)
+        {
+            var cohortGrowth = context.CohortGrowthByDepartment.GetValueOrDefault(course.DepartmentId.Value, 1.0m);
+            if (cohortGrowth != 1.0m)
+            {
+                var cohortAdj = 1.0m + (cohortGrowth - 1.0m) * 0.5m; // 50% dampening
+                adjustedRuleBasedTotal = (int)Math.Round(adjustedRuleBasedTotal * cohortAdj);
+            }
+        }
+
         // --- Historical analysis ---
         var historicalData = BuildHistoricalEnrollments(context, course.Id);
         var historicalCounts = historicalData.Select(h => h.ActualEnrollment).ToList();
@@ -543,17 +720,37 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         var comparableHistoricalCounts = comparableHistoricalData.Select(h => h.ActualEnrollment).ToList();
 
         // --- Hybrid blending ---
-        var blendedPrediction = BlendPrediction(ruleBasedTotal, historicalCounts, comparableHistoricalCounts);
+        var adaptiveRuleWeight = context.AdaptiveWeightsByCourse.TryGetValue(course.Id, out var aw) ? (decimal?)aw.RuleWeight : null;
+        var blendedPrediction = BlendPrediction(adjustedRuleBasedTotal, historicalCounts, comparableHistoricalCounts, adaptiveRuleWeight);
 
         // --- Trend adjustment ---
         var finalPrediction = ApplyTrendAdjustment(blendedPrediction, historicalCounts, comparableHistoricalCounts);
 
         // --- Confidence interval ---
-        var confidence = CalculateConfidence(finalPrediction, historicalCounts);
+        var confidence = CalculateConfidence(finalPrediction, comparableHistoricalCounts);
 
         // --- Section distribution ---
         var capacityRecommendation = BuildCapacityRecommendation(context, course);
         var recommendedSections = CalculateRecommendedSectionCount(finalPrediction, capacityRecommendation.EffectiveCapacity);
+
+        // Classroom constraint
+        var classroomConstraintNotes = new List<string>();
+        if (course.DepartmentId.HasValue)
+        {
+            var facultyId = context.DepartmentFacultyMap.GetValueOrDefault(course.DepartmentId.Value);
+            if (facultyId > 0 && context.ClassroomCapacitiesByFaculty.TryGetValue(facultyId, out var roomCaps) && roomCaps.Count > 0)
+            {
+                var maxRoom = roomCaps[0];
+                if (capacityRecommendation.EffectiveCapacity > maxRoom && maxRoom > 0)
+                {
+                    classroomConstraintNotes.Add($"Şube kapasitesi ({capacityRecommendation.EffectiveCapacity}) fakültedeki en büyük derslikten ({maxRoom}) büyük. Derslik boyutuna indirildi.");
+                    capacityRecommendation.EffectiveCapacity = maxRoom;
+                    // Recalculate sections with new capacity
+                    recommendedSections = CalculateRecommendedSectionCount(finalPrediction, capacityRecommendation.EffectiveCapacity);
+                }
+            }
+        }
+
         var approvalFeedback = ApplyApprovalFeedback(context, course.Id, recommendedSections, finalPrediction);
         recommendedSections = approvalFeedback.AdjustedSectionCount;
         var sectionDistribution = BuildSectionDistribution(
@@ -584,6 +781,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
         notes.AddRange(capacityRecommendation.Notes);
         notes.AddRange(approvalFeedback.Notes);
+        notes.AddRange(classroomConstraintNotes);
 
         return new CourseDemandForecastDto
         {
@@ -613,7 +811,8 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             HistoricalEnrollments = historicalData,
             Confidence = confidence,
             SectionDistribution = sectionDistribution,
-            CrossDepartmentDemand = crossDepartmentDemand
+            CrossDepartmentDemand = crossDepartmentDemand,
+            ShowRate = showRate
         };
     }
 
@@ -647,7 +846,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         return results;
     }
 
-    private static int BlendPrediction(int ruleBasedTotal, List<int> historicalCounts, List<int> comparableHistoricalCounts)
+    private static int BlendPrediction(int ruleBasedTotal, List<int> historicalCounts, List<int> comparableHistoricalCounts, decimal? adaptiveRuleWeight = null)
     {
         if (historicalCounts.Count == 0)
             return ruleBasedTotal;
@@ -663,51 +862,65 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             _ => historicalAvg
         };
 
-        double blended;
-        if (historicalCounts.Count >= 3)
-            blended = 0.55 * ruleBasedTotal + 0.45 * historicalSignal;
+        double ruleWeight;
+        if (adaptiveRuleWeight.HasValue)
+        {
+            ruleWeight = (double)adaptiveRuleWeight.Value;
+        }
         else
-            blended = 0.75 * ruleBasedTotal + 0.25 * historicalSignal;
+        {
+            ruleWeight = historicalCounts.Count >= 3 ? 0.55 : 0.75;
+        }
+
+        var blended = ruleWeight * ruleBasedTotal + (1.0 - ruleWeight) * historicalSignal;
 
         return (int)Math.Round(blended);
     }
 
     private static int ApplyTrendAdjustment(int prediction, List<int> historicalCounts, List<int> comparableHistoricalCounts)
     {
-        if (historicalCounts.Count < 2)
-            return prediction;
-
         var trendSource = comparableHistoricalCounts.Count >= 2
             ? comparableHistoricalCounts
             : historicalCounts;
 
-        var recentCount = Math.Min(2, trendSource.Count);
-        var recent = trendSource.TakeLast(recentCount).Average();
-        var olderItems = trendSource.Take(trendSource.Count - recentCount).Select(x => (double)x).ToList();
-        var older = olderItems.Count > 0 ? olderItems.Average() : recent;
-
-        if (older <= 0)
+        if (trendSource.Count < 2)
             return prediction;
 
-        var trendFactor = Math.Clamp(recent / older, 0.85, 1.15);
+        var weights = new[] { 0.15, 0.20, 0.25, 0.40 };
+        var recent = trendSource.TakeLast(4).ToList();
+        var applicableWeights = weights.TakeLast(recent.Count).ToArray();
+        var totalWeight = applicableWeights.Sum();
+
+        var weightedAvg = 0.0;
+        for (var i = 0; i < recent.Count; i++)
+            weightedAvg += recent[i] * (applicableWeights[i] / totalWeight);
+
+        var simpleAvg = trendSource.Average();
+        if (simpleAvg <= 0)
+            return prediction;
+
+        var trendFactor = Math.Clamp(weightedAvg / simpleAvg, 0.85, 1.20);
         return (int)Math.Round(prediction * trendFactor);
     }
 
-    private static ConfidenceRangeDto CalculateConfidence(int prediction, List<int> historicalCounts)
+    private static ConfidenceRangeDto CalculateConfidence(int prediction, List<int> comparableHistoricalCounts)
     {
-        if (historicalCounts.Count >= 2)
+        var recent = comparableHistoricalCounts.TakeLast(4).ToList();
+
+        if (recent.Count >= 2)
         {
-            var mean = historicalCounts.Average();
-            var variance = historicalCounts.Sum(x => Math.Pow(x - mean, 2)) / historicalCounts.Count;
+            var mean = recent.Average();
+            var variance = recent.Sum(x => Math.Pow(x - mean, 2)) / recent.Count;
             var stdDev = Math.Sqrt(variance);
             var margin = (int)Math.Ceiling(stdDev * 1.96);
+            margin = Math.Max(margin, (int)Math.Ceiling(prediction * 0.10));
 
             return new ConfidenceRangeDto
             {
                 LowerBound = Math.Max(0, prediction - margin),
                 UpperBound = prediction + margin,
                 Margin = margin,
-                Method = $"Historical StdDev ({historicalCounts.Count} donem)"
+                Method = $"Son {recent.Count} karşılaştırılabilir dönem"
             };
         }
 
@@ -717,7 +930,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             LowerBound = Math.Max(0, prediction - ruleOfThumbMargin),
             UpperBound = prediction + ruleOfThumbMargin,
             Margin = ruleOfThumbMargin,
-            Method = "Rule-of-Thumb (±%15, min ±5)"
+            Method = "Tahmini (±%15)"
         };
     }
 
@@ -776,6 +989,8 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
     private CapacityRecommendation BuildCapacityRecommendation(ForecastContextData context, Course course)
     {
+        CapacityRecommendation recommendation;
+
         if (context.ActiveTerm != null)
         {
             var activeSections = context.AllSections
@@ -785,7 +1000,11 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
                 .ToList();
 
             if (TryBuildCapacity(activeSections, "Aktif donem course section ortalamasi", out var activeCapacity))
-                return activeCapacity;
+            {
+                recommendation = activeCapacity;
+                ApplyCourseTypeCapacityAdjustments(recommendation, course);
+                return recommendation;
+            }
         }
 
         var historicalSections = context.AllSections
@@ -793,7 +1012,11 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             .ToList();
 
         if (TryBuildCapacity(historicalSections, "Gecmis course section ortalamasi", out var historicalCapacity))
-            return historicalCapacity;
+        {
+            recommendation = historicalCapacity;
+            ApplyCourseTypeCapacityAdjustments(recommendation, course);
+            return recommendation;
+        }
 
         if (course.DepartmentId != null && context.ActiveTerm != null)
         {
@@ -806,7 +1029,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             if (TryBuildCapacity(activeDepartmentSections, "Aktif donem department section ortalamasi", out var departmentActiveCapacity))
             {
                 departmentActiveCapacity.Notes.Add("Bu ders icin dogrudan capacity verisi olmadigindan ayni bolumun aktif donem section kapasite ortalamasi kullanildi.");
-                return departmentActiveCapacity;
+                recommendation = departmentActiveCapacity;
+                ApplyCourseTypeCapacityAdjustments(recommendation, course);
+                return recommendation;
             }
         }
 
@@ -819,14 +1044,18 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             if (TryBuildCapacity(departmentSections, "Bolum geneli tarihsel section ortalamasi", out var departmentHistoricalCapacity))
             {
                 departmentHistoricalCapacity.Notes.Add("Bu ders icin dogrudan capacity verisi olmadigindan ayni bolumun tarihsel section kapasite ortalamasi kullanildi.");
-                return departmentHistoricalCapacity;
+                recommendation = departmentHistoricalCapacity;
+                ApplyCourseTypeCapacityAdjustments(recommendation, course);
+                return recommendation;
             }
         }
 
         if (TryBuildCapacity(context.AllSections, "Sistem geneli tarihsel section ortalamasi", out var globalCapacity))
         {
             globalCapacity.Notes.Add("Bu ders ve bolum icin capacity verisi olmadigindan sistem geneli tarihsel section kapasite ortalamasi kullanildi.");
-            return globalCapacity;
+            recommendation = globalCapacity;
+            ApplyCourseTypeCapacityAdjustments(recommendation, course);
+            return recommendation;
         }
 
         return new CapacityRecommendation
@@ -838,6 +1067,27 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
                 "Mevcut veya gecmis section/capacity verisi bulunamadigi icin onerilen section sayisi 0 donduruldu."
             }
         };
+    }
+
+    private static void ApplyCourseTypeCapacityAdjustments(CapacityRecommendation recommendation, Course course)
+    {
+        // Course type adjustments
+        if (course.LabHours > 0 && course.TheoryHours == 0)
+        {
+            recommendation.EffectiveCapacity = Math.Min(recommendation.EffectiveCapacity, 30);
+            recommendation.Notes.Add("Lab dersi: kapasite lab kapasitesiyle sınırlandırıldı (max 30).");
+        }
+        else if (course.LabHours > 0 && course.TheoryHours > 0)
+        {
+            recommendation.EffectiveCapacity = Math.Min(recommendation.EffectiveCapacity, 40);
+            recommendation.Notes.Add("Karma ders (teori+lab): kapasite lab kısıtıyla dengelendi (max 40).");
+        }
+
+        if (course.TeachingMethod == TeachingMethod.Online)
+        {
+            recommendation.EffectiveCapacity = Math.Max(recommendation.EffectiveCapacity, 100);
+            recommendation.Notes.Add("Online ders: kapasite fiziksel kısıtlara tabi değil.");
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1074,6 +1324,11 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         public required Dictionary<(int CourseId, int TermId), int> SectionCountByCourseTerm { get; init; }
         public required List<string> GlobalNotes { get; init; }
         public required Dictionary<int, List<ApprovalFeedbackRecord>> ApprovalFeedbackByCourse { get; init; }
+        public Dictionary<int, decimal> ShowRateByCourse { get; set; } = new();
+        public Dictionary<int, decimal> CohortGrowthByDepartment { get; set; } = new();
+        public Dictionary<int, List<int>> ClassroomCapacitiesByFaculty { get; set; } = new();
+        public Dictionary<int, int> DepartmentFacultyMap { get; set; } = new();
+        public Dictionary<int, (decimal RuleWeight, decimal HistoricalWeight)> AdaptiveWeightsByCourse { get; set; } = new();
 
         public HashSet<int> PredictedDemandCourseIds =>
             StudentSnapshots

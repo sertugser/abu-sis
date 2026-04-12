@@ -1179,6 +1179,68 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("FacultyScheduleApprovals");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ForecastCalibration", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AbsoluteError")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("ActualEnrollment")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ActualSections")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CalibratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EligibleStudentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("HistoricalWeight")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("PercentageError")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("PredictedDemand")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PredictedSections")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RuleBasedWeight")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ShowRate")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("TermId");
+
+                    b.HasIndex("CourseId", "TermId")
+                        .IsUnique();
+
+                    b.ToTable("ForecastCalibrations");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
                 {
                     b.Property<int>("Id")
@@ -2236,6 +2298,33 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Faculty");
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ForecastCalibration", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("Department");
 
                     b.Navigation("Term");
                 });

@@ -13,6 +13,7 @@ interface Props {
   forecast: CourseDemandForecastDto | undefined;
   selected: boolean;
   onToggle: (courseId: number) => void;
+  onOpenDetail: (course: CurriculumCourseForOpeningDto) => void;
 }
 
 function getStatusBadge(course: CurriculumCourseForOpeningDto) {
@@ -23,13 +24,10 @@ function getStatusBadge(course: CurriculumCourseForOpeningDto) {
       </Badge>
     );
   }
-  if (course.canOpen) {
-    return <Badge variant="warning" className="text-[10px]">Bekliyor</Badge>;
-  }
-  return <Badge variant="outline" className="text-[10px]">Açılamaz</Badge>;
+  return <Badge variant="outline" className="text-[10px]">Açılabilir</Badge>;
 }
 
-export function CurriculumCourseRow({ course, forecast, selected, onToggle }: Props) {
+export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOpenDetail }: Props) {
   // Capacity ratio: how much of the predicted demand is covered by existing sections
   const capacityRatio = course.alreadyOpened && course.existingSectionCount > 0 && forecast && forecast.totalPredictedDemand > 0
     ? Math.min(100, Math.round(((course.existingSectionCount * (course.recommendedCapacity ?? 40)) / forecast.totalPredictedDemand) * 100))
@@ -43,6 +41,10 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle }: Pr
         selected ? 'bg-primary/5' : ''
       } ${!canSelect ? 'opacity-60' : ''}`}
       onClick={() => canSelect && onToggle(course.courseId)}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        onOpenDetail(course);
+      }}
     >
       <input
         type="checkbox"

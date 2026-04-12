@@ -184,7 +184,7 @@ public class CourseOpeningService(
             .ToList();
     }
 
-    public async Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, CancellationToken ct)
+    public async Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, int? termId = null, CancellationToken ct = default)
     {
         // Include instructors from all departments in the same faculty,
         // so shared-course departments (e.g. BMTR, BSM, YM) can see BM instructors
@@ -197,7 +197,7 @@ public class CourseOpeningService(
         var instructors = await _context.Instructors
             .AsNoTracking()
             .Where(i => i.Department.FacultyId == facultyId)
-            .Select(i => new { i.Id, i.Title, i.UserId, i.DepartmentId })
+            .Select(i => new { i.Id, i.Title, i.UserId, i.DepartmentId, i.MaxWeeklyHours })
             .ToListAsync(ct);
 
         var userIds = instructors.Select(i => i.UserId).Distinct().ToList();
@@ -213,6 +213,19 @@ public class CourseOpeningService(
             .Where(d => deptIds.Contains(d.Id))
             .ToDictionaryAsync(d => d.Id, d => d.Code, ct);
 
+        // Load workload summary if termId provided
+        var workloadMap = new Dictionary<int, int>();
+        if (termId.HasValue)
+        {
+            var instructorIds = instructors.Select(i => i.Id).ToList();
+            workloadMap = await _context.CourseSections
+                .AsNoTracking()
+                .Where(cs => instructorIds.Contains(cs.InstructorId!.Value) && cs.TermId == termId.Value && cs.IsActive)
+                .GroupBy(cs => cs.InstructorId!.Value)
+                .Select(g => new { InstructorId = g.Key, TotalHours = g.Sum(cs => cs.Course.TheoryHours + cs.Course.LabHours) })
+                .ToDictionaryAsync(x => x.InstructorId, x => x.TotalHours, ct);
+        }
+
         return instructors.Select(i =>
         {
             var baseName = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
@@ -220,7 +233,14 @@ public class CourseOpeningService(
             var name = i.DepartmentId != departmentId && deptNameMap.TryGetValue(i.DepartmentId, out var deptCode)
                 ? $"{baseName} ({deptCode})"
                 : baseName;
-            return new InstructorOptionDto { InstructorId = i.Id, FullName = name };
+            workloadMap.TryGetValue(i.Id, out var assignedHours);
+            return new InstructorOptionDto
+            {
+                InstructorId = i.Id,
+                FullName = name,
+                MaxWeeklyHours = i.MaxWeeklyHours,
+                AssignedWeeklyHours = assignedHours,
+            };
         })
         .OrderByDescending(i => instructors.First(x => x.Id == i.InstructorId).DepartmentId == departmentId ? 1 : 0)
         .ThenBy(i => i.FullName)
@@ -720,8 +740,10 @@ public class CourseOpeningService(
         TransferFromTermRequest request, CancellationToken ct = default)
     {
         var result = new TransferFromTermResultDto();
-        if (request.CourseIds.Count == 0)
+        if (request.Courses.Count == 0)
             return result;
+
+        var courseIds = request.Courses.Select(c => c.CourseId).ToList();
 
         // Fetch source sections grouped by course
         var sourceSections = await _context.CourseSections
@@ -730,13 +752,14 @@ public class CourseOpeningService(
             .Where(cs => cs.TermId == request.SourceTermId
                 && cs.IsActive
                 && cs.Course.DepartmentId == request.DepartmentId
-                && request.CourseIds.Contains(cs.CourseId))
+                && courseIds.Contains(cs.CourseId))
             .ToListAsync(ct);
 
         var grouped = sourceSections.GroupBy(cs => cs.CourseId).ToDictionary(g => g.Key, g => g.ToList());
 
-        foreach (var courseId in request.CourseIds)
+        foreach (var item in request.Courses)
         {
+            var courseId = item.CourseId;
             if (!grouped.TryGetValue(courseId, out var sections) || sections.Count == 0)
             {
                 result.FailedCount++;
@@ -753,14 +776,14 @@ public class CourseOpeningService(
 
             var first = sections[0];
             var instrSection = sections.FirstOrDefault(s => s.InstructorId.HasValue);
-            var capacityPerSection = sections.Count > 0 ? (int)Math.Round(sections.Average(s => s.Capacity)) : 40;
+            var defaultCapacity = sections.Count > 0 ? (int)Math.Round(sections.Average(s => s.Capacity)) : 40;
 
             var openRequest = new OpenCourseRequest
             {
                 CourseId = courseId,
-                SectionCount = sections.Count,
-                CapacityPerSection = capacityPerSection,
-                InstructorId = instrSection?.InstructorId,
+                SectionCount = item.SectionCount ?? sections.Count,
+                CapacityPerSection = item.CapacityPerSection ?? defaultCapacity,
+                InstructorId = item.InstructorId ?? instrSection?.InstructorId,
             };
 
             try

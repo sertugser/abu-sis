@@ -263,6 +263,7 @@ const ResizableDialogContent = React.forwardRef<
           }
         : {
             width: defaultWidth,
+            height: defaultHeight,
             maxHeight: defaultHeight ?? '85vh',
           };
 
