@@ -44,6 +44,9 @@ public static class SchedulingServiceCollectionExtensions
         // Orchestrator
         services.AddScoped<ConstraintEvaluationService>();
 
+        // Auto-schedule engine
+        services.AddScoped<AutoScheduleEngine>();
+
         return services;
     }
 }
