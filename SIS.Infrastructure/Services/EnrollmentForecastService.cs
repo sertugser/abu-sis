@@ -327,7 +327,21 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
         var termsById = allTerms.ToDictionary(t => t.Id);
 
-        var approvalFeedbackByCourse = new Dictionary<int, List<ApprovalFeedbackRecord>>();
+        var approvalRecords = await _context.CourseSectionApprovals
+            .AsNoTracking()
+            .Where(a => a.ApprovedSectionCount.HasValue)
+            .Select(a => new ApprovalFeedbackRecord
+            {
+                CourseId = a.CourseId,
+                TermId = a.TermId,
+                RecommendedSectionCount = a.RecommendedSectionCount,
+                ApprovedSectionCount = a.ApprovedSectionCount!.Value
+            })
+            .ToListAsync();
+
+        var approvalFeedbackByCourse = approvalRecords
+            .GroupBy(a => a.CourseId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         // Show rate from calibration data
         var calibrations = await _context.ForecastCalibrations

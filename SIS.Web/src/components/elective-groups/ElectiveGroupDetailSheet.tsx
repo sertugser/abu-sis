@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,15 +43,15 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [courseToRemove, setCourseToRemove] = useState<{ id: number; code: string } | null>(null);
   const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(false);
+  const [syncedGroupId, setSyncedGroupId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (group) {
-      setName(group.name);
-      setCode(group.code);
-      setDescription(group.description ?? '');
-      setIsActive(group.isActive);
-    }
-  }, [group]);
+  if (group && syncedGroupId !== group.id) {
+    setName(group.name);
+    setCode(group.code);
+    setDescription(group.description ?? '');
+    setIsActive(group.isActive);
+    setSyncedGroupId(group.id);
+  }
 
   function handleSave() {
     if (!groupId) return;
