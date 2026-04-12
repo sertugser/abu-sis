@@ -30,9 +30,9 @@ export async function getCurriculumCoursesForOpening(departmentId: number, termI
   return data;
 }
 
-export async function getDepartmentInstructors(departmentId: number): Promise<InstructorOptionDto[]> {
+export async function getDepartmentInstructors(departmentId: number, termId?: number): Promise<InstructorOptionDto[]> {
   const { data } = await apiClient.get<InstructorOptionDto[]>('/course-opening/instructors', {
-    params: { departmentId },
+    params: { departmentId, termId },
   });
   return data;
 }
