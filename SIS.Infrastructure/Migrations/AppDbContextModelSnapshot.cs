@@ -529,6 +529,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsNonGpa")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LabClassroomType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LabHours")
                         .HasColumnType("integer");
 
@@ -549,6 +552,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("TeachingMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TheoryClassroomType")
                         .HasColumnType("integer");
 
                     b.Property<int>("TheoryHours")
