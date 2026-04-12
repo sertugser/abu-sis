@@ -54,15 +54,6 @@ public static partial class SeedData
                 ("CENG490", "Long Term Practice", "BM", 25, 0, 16, false),
                 ("CENG375", "Machine Learning", "BM", 5, 3, 0, false),
 
-                // ── BM Technical Electives ──
-                ("TE-I", "Machine Learning Fundamentals", "BM", 5, 3, 0, false),
-                ("TE-II", "Cloud Computing", "BM", 5, 3, 0, false),
-                ("TE-III", "Artificial Intelligence", "BM", 5, 3, 0, false),
-                ("TE-IV", "Cybersecurity Fundamentals", "BM", 5, 3, 0, false),
-                ("TE-V", "Mobile Application Development", "BM", 5, 3, 0, false),
-                ("TE-VI", "Data Science and Analytics", "BM", 5, 3, 0, false),
-                ("TE-VII", "Technical Elective VII", "BM", 5, 3, 0, false),
-
                 // ── BMTR (Dept: BMTR) ──
                 ("BM101", "Java ile Algoritmalar ve Programlama I", "BMTR", 6, 3, 2, false),
                 ("BM102", "Algoritmalar ve Java ile Programlama II", "BMTR", 8, 3, 4, false),
@@ -114,13 +105,6 @@ public static partial class SeedData
                 ("MATH215", "Differential Equations", null, 5, 3, 0, false),
                 ("MATH201", "Vector and Complex Calculus", null, 6, 4, 0, false),
                 ("AEE301", "Academic English V", null, 2, 2, 0, false),
-
-                // ── Elective slots (shared) ──
-                ("OC-I", "Introduction to Philosophy", null, 0, 0, 0, false),
-                ("OC-II", "Art and Civilization", null, 0, 0, 0, false),
-                ("NDE-I", "Introduction to Psychology", null, 3, 3, 0, false),
-                ("NDE-II", "Sociology and Society", null, 3, 3, 0, false),
-                ("NDE-III", "Science, Technology and Ethics", null, 3, 3, 0, false),
 
                 // ── BSM (Dept: BSM) ──
                 ("CES101", "Introduction to Programming with Java I", "BSM", 6, 3, 2, false),
@@ -291,11 +275,7 @@ public static partial class SeedData
                 ("BM-L","CENG384",true,6), ("BM-L","ENG302",true,6),
                 ("BM-L","CENG491",true,7), ("BM-L","CCE401",true,7),
                 ("BM-L","CENG492",true,8), ("BM-L","CENG490",true,8),
-                // BM-L electives
-                ("BM-L","OC-I",false,1), ("BM-L","OC-II",false,2), ("BM-L","NDE-I",false,2),
-                ("BM-L","NDE-II",false,3), ("BM-L","TE-I",false,5), ("BM-L","TE-II",false,6),
-                ("BM-L","TE-III",false,7), ("BM-L","TE-IV",false,7), ("BM-L","TE-V",false,7),
-                ("BM-L","TE-VI",false,7), ("BM-L","NDE-III",false,7),
+                // BM-L electives — managed via ElectiveGroup / CurriculumElectivePool
 
                 // ── BMTR-L ──
                 ("BMTR-L","BM101",true,1), ("BMTR-L","ISG101",true,1), ("BMTR-L","ING101",true,1),
@@ -314,11 +294,7 @@ public static partial class SeedData
                 ("BMTR-L","BM384",true,6), ("BMTR-L","ING302",true,6),
                 ("BMTR-L","BM491",true,7), ("BMTR-L","EYG401",true,7),
                 ("BMTR-L","BM492",true,8), ("BMTR-L","BM490",true,8),
-                // BMTR-L electives
-                ("BMTR-L","OC-I",false,1), ("BMTR-L","OC-II",false,2), ("BMTR-L","NDE-I",false,2),
-                ("BMTR-L","NDE-II",false,3), ("BMTR-L","TE-I",false,5), ("BMTR-L","TE-II",false,6),
-                ("BMTR-L","TE-III",false,7), ("BMTR-L","TE-IV",false,7), ("BMTR-L","TE-V",false,7),
-                ("BMTR-L","TE-VI",false,7), ("BMTR-L","NDE-III",false,7),
+                // BMTR-L electives — managed via ElectiveGroup / CurriculumElectivePool
 
                 // ── BSM-L ──
                 ("BSM-L","CES101",true,1), ("BSM-L","OHS101",true,1), ("BSM-L","ENG101",true,1),
@@ -337,12 +313,7 @@ public static partial class SeedData
                 ("BSM-L","ISE350",true,6), ("BSM-L","ENG302",true,6),
                 ("BSM-L","ISE491",true,7), ("BSM-L","CCE401",true,7),
                 ("BSM-L","ISE492",true,8), ("BSM-L","ISE490",true,8),
-                // BSM-L electives
-                ("BSM-L","NDE-I",false,1), ("BSM-L","OC-I",false,1),
-                ("BSM-L","OC-II",false,2), ("BSM-L","NDE-II",false,3),
-                ("BSM-L","TE-I",false,5), ("BSM-L","TE-II",false,6),
-                ("BSM-L","TE-III",false,7), ("BSM-L","TE-IV",false,7),
-                ("BSM-L","TE-V",false,7), ("BSM-L","TE-VI",false,7), ("BSM-L","NDE-III",false,7),
+                // BSM-L electives — managed via ElectiveGroup / CurriculumElectivePool
 
                 // ── EM-L ──
                 ("EM-L","OHS101",true,1), ("EM-L","ENG101",true,1), ("EM-L","MATH101",true,1),
@@ -376,11 +347,7 @@ public static partial class SeedData
                 ("EM-L","IE481",false,0),
                 ("EM-L","ISE211",false,0), ("EM-L","ISE361",false,0), ("EM-L","SENG231",false,0),
                 ("EM-L","CENG213",false,0), ("EM-L","CENG375",false,0), ("EM-L","CENG351",false,0),
-                ("EM-L","OC-I",false,1), ("EM-L","OC-II",false,2), ("EM-L","NDE-I",false,3),
-                ("EM-L","NDE-II",false,4), ("EM-L","NDE-III",false,5),
-                ("EM-L","TE-I",false,6), ("EM-L","TE-II",false,6),
-                ("EM-L","TE-III",false,6), ("EM-L","TE-IV",false,7), ("EM-L","TE-V",false,7),
-                ("EM-L","TE-VI",false,7), ("EM-L","TE-VII",false,7),
+                // EM-L OC/NDE/TE — managed via ElectiveGroup / CurriculumElectivePool
 
                 // ── EEM-L ──
                 ("EEM-L","CENG101",true,1), ("EEM-L","ENG101",true,1), ("EEM-L","MATH101",true,1),
@@ -410,10 +377,7 @@ public static partial class SeedData
                 ("EEM-L","EEE431",false,0), ("EEM-L","EEE433",false,0), ("EEM-L","EEE477",false,0),
                 ("EEM-L","EEE435",false,0), ("EEM-L","EEE467",false,0), ("EEM-L","EEE484",false,0),
                 ("EEM-L","EEE472",false,0),
-                ("EEM-L","OC-I",false,1), ("EEM-L","OC-II",false,2), ("EEM-L","NDE-I",false,3),
-                ("EEM-L","NDE-II",false,6), ("EEM-L","TE-I",false,6), ("EEM-L","TE-II",false,6),
-                ("EEM-L","NDE-III",false,7), ("EEM-L","TE-III",false,7), ("EEM-L","TE-IV",false,7),
-                ("EEM-L","TE-V",false,7), ("EEM-L","TE-VI",false,7),
+                // EEM-L OC/NDE/TE — managed via ElectiveGroup / CurriculumElectivePool
 
                 // ── YM-L ──
                 ("YM-L","CENG101",true,1), ("YM-L","OHS101",true,1), ("YM-L","ENG101",true,1),
@@ -432,11 +396,7 @@ public static partial class SeedData
                 ("YM-L","CENG384",true,6), ("YM-L","ENG302",true,6),
                 ("YM-L","SENG491",true,7), ("YM-L","CCE401",true,7),
                 ("YM-L","SENG492",true,8), ("YM-L","SENG490",true,8),
-                // YM-L electives
-                ("YM-L","OC-I",false,1), ("YM-L","OC-II",false,2), ("YM-L","NDE-I",false,2),
-                ("YM-L","NDE-II",false,3), ("YM-L","TE-I",false,5), ("YM-L","TE-II",false,6),
-                ("YM-L","TE-III",false,7), ("YM-L","TE-IV",false,7), ("YM-L","TE-V",false,7),
-                ("YM-L","TE-VI",false,7), ("YM-L","NDE-III",false,7),
+                // YM-L electives — managed via ElectiveGroup / CurriculumElectivePool
             };
 
             var existingCurriculumCourses = new HashSet<(int CurriculumId, int CourseId)>(

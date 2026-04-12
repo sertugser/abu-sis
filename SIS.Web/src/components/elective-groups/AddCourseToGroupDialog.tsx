@@ -85,7 +85,7 @@ export default function AddCourseToGroupDialog({ groupId, existingCourseIds, ope
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-sm text-muted-foreground text-center py-12">
-              {search ? 'Sonuc bulunamadi.' : 'Arama yapmak icin yazin.'}
+              {search ? 'Sonuç bulunamadı.' : 'Arama yapmak için yazın.'}
             </div>
           ) : (
             <Table>
@@ -93,7 +93,7 @@ export default function AddCourseToGroupDialog({ groupId, existingCourseIds, ope
                 <TableRow>
                   <TableHead className="w-10" />
                   <TableHead>Kod</TableHead>
-                  <TableHead>Ders Adi</TableHead>
+                  <TableHead>Ders Adı</TableHead>
                   <TableHead className="w-16 text-center">AKTS</TableHead>
                 </TableRow>
               </TableHeader>
@@ -110,6 +110,7 @@ export default function AddCourseToGroupDialog({ groupId, existingCourseIds, ope
                         checked={selected.has(c.id)}
                         onChange={() => toggleCourse(c.id)}
                         className="h-4 w-4 rounded border-gray-300"
+                        aria-label={`${c.code} - ${c.name} seç`}
                       />
                     </TableCell>
                     <TableCell className="font-mono text-xs">{c.code}</TableCell>
@@ -124,7 +125,7 @@ export default function AddCourseToGroupDialog({ groupId, existingCourseIds, ope
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
-            Iptal
+            İptal
           </Button>
           <Button
             onClick={handleAdd}

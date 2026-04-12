@@ -40,9 +40,9 @@ public class ElectiveGroupControllerTests : IDisposable
             Id = CurriculumId, ProgramId = ProgramId, Version = "2024", IsActive = true, CreatedAt = DateTime.UtcNow
         });
         _context.Courses.AddRange(
-            new Course { Id = 1, Code = "TE101", Name = "Elective 1", Ects = 3, IsElective = true, ElectiveSubtype = ElectiveSubtype.TechnicalElective },
-            new Course { Id = 2, Code = "TE102", Name = "Elective 2", Ects = 3, IsElective = true, ElectiveSubtype = ElectiveSubtype.TechnicalElective },
-            new Course { Id = 3, Code = "OC101", Name = "Univ Elective 1", Ects = 3, IsElective = true, ElectiveSubtype = ElectiveSubtype.UniversityElective }
+            new Course { Id = 1, Code = "TE101", Name = "Elective 1", Ects = 3 },
+            new Course { Id = 2, Code = "TE102", Name = "Elective 2", Ects = 3 },
+            new Course { Id = 3, Code = "OC101", Name = "Univ Elective 1", Ects = 3 }
         );
         _context.SaveChanges();
     }

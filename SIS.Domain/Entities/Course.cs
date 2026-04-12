@@ -15,8 +15,6 @@ public class Course
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
     public bool IsNonGpa { get; set; }                      // true = S/U graded
-    public bool IsElective { get; set; }
-    public ElectiveSubtype? ElectiveSubtype { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public CourseLanguage Language { get; set; } = CourseLanguage.Turkish;

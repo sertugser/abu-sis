@@ -10,12 +10,8 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, Loader2, Plus } from 'lucide-react';
+import { AlertCircle, FolderOpen, Loader2, Plus, RotateCcw } from 'lucide-react';
 import {
   useElectiveGroupList,
   useCreateElectiveGroup,
@@ -80,26 +76,27 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
     onOpenChange(val);
   }
 
-  const canSubmit = name.trim().length > 0 && code.trim().length > 0;
+  const canSubmit = name.trim().length > 0 && code.trim().length > 0
+    && (subtype !== 'TechnicalElective' || facultyId.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Yeni Secmeli Ders Grubu</DialogTitle>
+          <DialogTitle>Yeni Seçmeli Ders Grubu</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
-            <Label htmlFor="ceg-name">Grup Adi</Label>
-            <Input id="ceg-name" value={name} onChange={e => setName(e.target.value)} placeholder="ornegin: Teknik Secmeli Grup A" />
+            <Label htmlFor="ceg-name">Grup Adı</Label>
+            <Input id="ceg-name" value={name} onChange={e => setName(e.target.value)} placeholder="örneğin: Teknik Seçmeli Grup A" />
           </div>
           <div>
             <Label htmlFor="ceg-code">Kod</Label>
-            <Input id="ceg-code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="ornegin: TE-A" />
+            <Input id="ceg-code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="örneğin: TE-A" />
           </div>
           <div>
-            <Label>Tur</Label>
+            <Label>Tür</Label>
             <Select value={subtype} onValueChange={v => setSubtype(v as ElectiveSubtype)}>
               <SelectTrigger>
                 <SelectValue />
@@ -114,10 +111,10 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
 
           {subtype === 'TechnicalElective' && (
             <div>
-              <Label>Fakulte</Label>
+              <Label>Fakülte</Label>
               <Select value={facultyId} onValueChange={setFacultyId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Fakulte secin..." />
+                  <SelectValue placeholder="Fakülte seçin..." />
                 </SelectTrigger>
                 <SelectContent>
                   {faculties?.map(f => (
@@ -129,20 +126,20 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
           )}
 
           <div>
-            <Label htmlFor="ceg-desc">Aciklama</Label>
+            <Label htmlFor="ceg-desc">Açıklama</Label>
             <Textarea id="ceg-desc" value={description} onChange={e => setDescription(e.target.value)} rows={3} />
           </div>
         </div>
 
         {createMutation.isError && (
-          <p className="text-xs text-destructive mt-1">Grup olusturulamadi.</p>
+          <p className="text-xs text-destructive mt-1">Grup oluşturulamadı.</p>
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>Iptal</Button>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>İptal</Button>
           <Button onClick={handleCreate} disabled={!canSubmit || createMutation.isPending}>
             {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Olustur
+            Oluştur
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -153,14 +150,14 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
 // ─── Subtype Badge ─────────────────────────────────────────────────
 
 const SUBTYPE_COLORS: Record<ElectiveSubtype, string> = {
-  UniversityElective: 'bg-blue-100 text-blue-800 border-blue-200',
-  NonDepartmentElective: 'bg-purple-100 text-purple-800 border-purple-200',
-  TechnicalElective: 'bg-amber-100 text-amber-800 border-amber-200',
+  UniversityElective: 'bg-blue-50 text-blue-700 border-blue-200',
+  NonDepartmentElective: 'bg-purple-50 text-purple-700 border-purple-200',
+  TechnicalElective: 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
 function SubtypeBadge({ subtype }: { subtype: ElectiveSubtype }) {
   return (
-    <Badge variant="outline" className={`text-[10px] ${SUBTYPE_COLORS[subtype]}`}>
+    <Badge variant="outline" className={`text-[10px] font-medium ${SUBTYPE_COLORS[subtype]}`}>
       {ELECTIVE_SUBTYPE_SHORT[subtype]}
     </Badge>
   );
@@ -185,121 +182,169 @@ export default function ElectiveGroupManagementPage() {
 
   const { data: groups, isLoading, error } = useElectiveGroupList(querySubtype, queryFacultyId, queryIsActive);
 
+  const hasActiveFilters = subtypeFilter !== 'all' || facultyFilter !== 'all' || statusFilter !== 'all';
+
+  function resetFilters() {
+    setSubtypeFilter('all');
+    setFacultyFilter('all');
+    setStatusFilter('all');
+  }
+
   return (
-    <div className="p-6 space-y-4">
-      {/* ── Top bar ── */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight">Secmeli Ders Gruplari</h1>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Yeni Grup
-        </Button>
-      </div>
-
-      {/* ── Filters ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={subtypeFilter} onValueChange={v => { setSubtypeFilter(v); if (v !== 'TechnicalElective') setFacultyFilter('all'); }}>
-          <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="Tur" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tumu</SelectItem>
-            {SUBTYPES.map(s => (
-              <SelectItem key={s} value={s}>{ELECTIVE_SUBTYPE_LABELS[s]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={facultyFilter}
-          onValueChange={setFacultyFilter}
-          disabled={subtypeFilter !== 'TechnicalElective'}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Fakulte" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tumu</SelectItem>
-            {faculties?.map(f => (
-              <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[130px]">
-            <SelectValue placeholder="Durum" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tumu</SelectItem>
-            <SelectItem value="active">Aktif</SelectItem>
-            <SelectItem value="inactive">Pasif</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="p-6 space-y-5">
 
       {/* ── Error ── */}
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Gruplar yuklenirken hata olustu.</AlertDescription>
+          <AlertDescription>Gruplar yüklenirken hata oluştu.</AlertDescription>
         </Alert>
       )}
 
-      {/* ── Loading skeleton ── */}
-      {isLoading && (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full" />
-          ))}
-        </div>
-      )}
+      {/* ── Single Container ── */}
+      <div className="bg-background border border-border rounded-xl overflow-hidden">
 
-      {/* ── Table ── */}
-      {!isLoading && groups && (
-        <div className="border rounded-md">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kod</TableHead>
-                <TableHead>Grup Adi</TableHead>
-                <TableHead className="w-24">Tur</TableHead>
-                <TableHead>Fakulte</TableHead>
-                <TableHead className="w-20 text-center">Ders Sayisi</TableHead>
-                <TableHead className="w-20">Durum</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groups.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    Kayit bulunamadi.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                groups.map((g: ElectiveGroupListDto) => (
-                  <TableRow
-                    key={g.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setSelectedGroupId(g.id)}
-                  >
-                    <TableCell className="font-mono text-xs">{g.code}</TableCell>
-                    <TableCell className="text-sm font-medium">{g.name}</TableCell>
-                    <TableCell><SubtypeBadge subtype={g.electiveSubtype} /></TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{g.facultyName ?? '-'}</TableCell>
-                    <TableCell className="text-center text-sm">{g.courseCount}</TableCell>
-                    <TableCell>
-                      <Badge variant={g.isActive ? 'default' : 'secondary'} className={g.isActive ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-red-100 text-red-800 border-red-200'}>
-                        {g.isActive ? 'Aktif' : 'Pasif'}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+        {/* ── Toolbar: Filters + Action ── */}
+        <div className="flex flex-wrap gap-3 items-end px-4 py-3 border-b border-border bg-muted/40">
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Tür</span>
+            <Select value={subtypeFilter} onValueChange={v => { setSubtypeFilter(v); if (v !== 'TechnicalElective') setFacultyFilter('all'); }}>
+              <SelectTrigger className="w-[200px] h-9 bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tümü</SelectItem>
+                {SUBTYPES.map(s => (
+                  <SelectItem key={s} value={s}>{ELECTIVE_SUBTYPE_LABELS[s]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Fakülte</span>
+            <Select
+              value={facultyFilter}
+              onValueChange={setFacultyFilter}
+              disabled={subtypeFilter !== 'TechnicalElective'}
+            >
+              <SelectTrigger className="w-[180px] h-9 bg-white">
+                <SelectValue placeholder="Tümü" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tümü</SelectItem>
+                {faculties?.map(f => (
+                  <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Durum</span>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[120px] h-9 bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tümü</SelectItem>
+                <SelectItem value="active">Aktif</SelectItem>
+                <SelectItem value="inactive">Pasif</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground" onClick={resetFilters}>
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Sıfırla
+            </Button>
+          )}
+
+          <Button onClick={() => setCreateOpen(true)} className="h-9 ml-auto">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Yeni Grup
+          </Button>
         </div>
-      )}
+
+        {/* ── Table ── */}
+        <table className="w-full">
+          <thead className="bg-muted/20 border-b border-border">
+            <tr>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-28">Kod</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Grup Adı</th>
+              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Tür</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-44">Fakülte</th>
+              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-16">Ders</th>
+              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Durum</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {isLoading && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-muted-foreground" />
+                  Yükleniyor...
+                </td>
+              </tr>
+            )}
+
+            {!isLoading && groups && groups.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-16 text-center">
+                  <FolderOpen className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-foreground">
+                    {hasActiveFilters ? 'Filtrelerle eşleşen grup bulunamadı' : 'Henüz seçmeli ders grubu yok'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hasActiveFilters
+                      ? 'Farklı filtre kombinasyonlarını deneyebilir veya filtreleri sıfırlayabilirsiniz.'
+                      : 'Yukarıdaki "Yeni Grup" butonunu kullanarak ilk grubunuzu oluşturun.'
+                    }
+                  </p>
+                </td>
+              </tr>
+            )}
+
+            {!isLoading && groups && groups.map((g: ElectiveGroupListDto) => (
+              <tr
+                key={g.id}
+                className="cursor-pointer hover:bg-muted/20 transition-colors"
+                onClick={() => setSelectedGroupId(g.id)}
+              >
+                <td className="px-4 py-3 font-mono text-xs font-medium">{g.code}</td>
+                <td className="px-4 py-3 text-sm font-medium">{g.name}</td>
+                <td className="px-4 py-3 text-center">
+                  <SubtypeBadge subtype={g.electiveSubtype} />
+                </td>
+                <td className="px-4 py-3 text-sm text-muted-foreground">{g.facultyName ?? '—'}</td>
+                <td className="px-4 py-3 text-center text-sm">{g.courseCount}</td>
+                <td className="px-4 py-3 text-center">
+                  <Badge
+                    variant="outline"
+                    className={
+                      g.isActive
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-red-50 text-red-600 border-red-200'
+                    }
+                  >
+                    {g.isActive ? 'Aktif' : 'Pasif'}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ── Footer ── */}
+        {!isLoading && groups && groups.length > 0 && (
+          <div className="px-4 py-2.5 border-t border-border bg-muted/30">
+            <p className="text-xs text-muted-foreground">
+              Toplam <span className="font-medium text-foreground">{groups.length}</span> grup
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* ── Create Dialog ── */}
       <CreateElectiveGroupDialog open={createOpen} onOpenChange={setCreateOpen} />
