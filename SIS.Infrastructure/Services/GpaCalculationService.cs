@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.GpaCalculation.DTOs;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
@@ -22,61 +23,40 @@ public class GpaCalculationService : IGpaCalculationService
     /// </summary>
     public async Task<decimal> CalculateSgpaAsync(int studentId, int termId)
     {
-        var registrations = await _context.CourseRegistrations
-            .Include(cr => cr.CourseSection)
-                .ThenInclude(cs => cs.Course)
-            .Where(cr => cr.StudentId == studentId
-                && cr.CourseSection.TermId == termId
-                && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
-                && cr.Grade != null)
+        var registrations = await GetGradedRegistrationsQuery()
+            .Where(cr => cr.StudentId == studentId && cr.CourseSection.TermId == termId)
             .ToListAsync();
 
-        int totalAkts = 0;
-        decimal totalPoints = 0;
-
-        foreach (var reg in registrations)
-        {
-            var point = GradePointMap.GetPoint(reg.Grade!.Value);
-            if (point == null) continue; // S, U, W, I, NI → GPA dışı
-
-            var akts = reg.CourseSection.Course.Ects;
-            if (akts == 0) continue;
-
-            totalAkts += akts;
-            totalPoints += akts * point.Value;
-        }
-
-        if (totalAkts == 0) return 0;
-        return Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero);
+        return CalculateAverage(registrations);
     }
 
     /// <summary>
-    /// AGNO hesaplar. Aynı ders birden fazla alınmışsa sadece SON not geçerli.
-    /// Eski notun AKTS'si toplam AKTS'den çıkar, yeni not yerine geçer.
+    /// AGNO hesaplar. Aynı ders veya eşdeğer ders zinciri birden fazla alınmışsa sadece SON not geçerli.
     /// </summary>
     public async Task<decimal> CalculateCgpaAsync(int studentId)
     {
-        var (totalAkts, totalPoints) = await GetCgpaComponentsAsync(studentId);
-        if (totalAkts == 0) return 0;
+        var registrations = await GetGradedRegistrationsQuery()
+            .Where(cr => cr.StudentId == studentId)
+            .ToListAsync();
+
+        var (totalAkts, totalPoints) = await GetCgpaComponentsAsync(registrations);
+        if (totalAkts == 0)
+            return 0m;
+
         return Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero);
     }
 
     public async Task<List<TermGpaHistoryItemDto>> GetTermGpaHistoryAsync(int studentId)
     {
-        var registrations = await _context.CourseRegistrations
-            .Include(cr => cr.CourseSection)
-                .ThenInclude(cs => cs.Course)
-            .Include(cr => cr.CourseSection)
-                .ThenInclude(cs => cs.Term)
-            .Where(cr => cr.StudentId == studentId
-                && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
-                && cr.Grade != null)
+        var registrations = await GetGradedRegistrationsQuery()
+            .Where(cr => cr.StudentId == studentId)
             .ToListAsync();
 
         if (registrations.Count == 0)
-        {
             return new List<TermGpaHistoryItemDto>();
-        }
+
+        var courseChainIdByCourseId = await BuildCourseChainIdMapAsync(
+            registrations.Select(registration => registration.CourseSection.CourseId));
 
         var orderedTermGroups = registrations
             .GroupBy(cr => cr.CourseSection.TermId)
@@ -88,24 +68,22 @@ public class GpaCalculationService : IGpaCalculationService
                     .ThenBy(cr => cr.Id)
                     .ToList()
             })
-            .OrderBy(entry => entry.Term.Year)
-            .ThenBy(entry => entry.Term.Semester)
+            .OrderBy(entry => entry.Term.TermStart)
+            .ThenBy(entry => entry.Term.Id)
             .ToList();
 
-        var latestGradesByCourse = new Dictionary<int, Domain.Entities.CourseRegistration>();
+        var latestGradesByChain = new Dictionary<int, CourseRegistration>();
         var history = new List<TermGpaHistoryItemDto>(orderedTermGroups.Count);
 
         foreach (var termGroup in orderedTermGroups)
         {
-            foreach (var registration in termGroup.Registrations
-                .OrderBy(registration => registration.CourseSection.CourseId)
-                .ThenBy(registration => registration.Id))
+            foreach (var registration in termGroup.Registrations.OrderBy(registration => registration.Id))
             {
-                latestGradesByCourse[registration.CourseSection.CourseId] = registration;
+                var chainId = courseChainIdByCourseId.GetValueOrDefault(
+                    registration.CourseSection.CourseId,
+                    registration.CourseSection.CourseId);
+                latestGradesByChain[chainId] = registration;
             }
-
-            var sgpa = CalculateAverage(termGroup.Registrations);
-            var cgpa = CalculateAverage(latestGradesByCourse.Values);
 
             history.Add(new TermGpaHistoryItemDto
             {
@@ -117,8 +95,8 @@ public class GpaCalculationService : IGpaCalculationService
                 TotalCredits = termGroup.Registrations.Sum(registration =>
                     registration.CourseSection.Course.TheoryHours + registration.CourseSection.Course.LabHours),
                 TotalEcts = termGroup.Registrations.Sum(registration => registration.CourseSection.Course.Ects),
-                Sgpa = sgpa,
-                Cgpa = cgpa
+                Sgpa = CalculateAverage(termGroup.Registrations),
+                Cgpa = CalculateAverage(latestGradesByChain.Values)
             });
         }
 
@@ -133,25 +111,30 @@ public class GpaCalculationService : IGpaCalculationService
         var student = await _context.Students.FindAsync(studentId)
             ?? throw new InvalidOperationException($"Student {studentId} bulunamadi.");
 
-        // Son dönemin term ID'sini bul
-        var latestTermId = await _context.CourseRegistrations
-            .Include(cr => cr.CourseSection)
-            .Where(cr => cr.StudentId == studentId
-                && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
-                && cr.Grade != null)
-            .Select(cr => cr.CourseSection.TermId)
-            .Distinct()
-            .OrderByDescending(termId => termId)
-            .FirstOrDefaultAsync();
+        var registrations = await GetGradedRegistrationsQuery()
+            .Where(cr => cr.StudentId == studentId)
+            .ToListAsync();
 
-        var sgpa = latestTermId > 0
-            ? await CalculateSgpaAsync(studentId, latestTermId)
-            : 0;
+        var latestTermRegistrations = registrations
+            .GroupBy(registration => registration.CourseSection.TermId)
+            .Select(group => new
+            {
+                TermStart = group.First().CourseSection.Term.TermStart,
+                TermId = group.Key,
+                Registrations = group.ToList()
+            })
+            .OrderByDescending(group => group.TermStart)
+            .ThenByDescending(group => group.TermId)
+            .FirstOrDefault();
 
-        var (totalAkts, totalPoints) = await GetCgpaComponentsAsync(studentId);
+        var sgpa = latestTermRegistrations == null
+            ? 0m
+            : CalculateAverage(latestTermRegistrations.Registrations);
+
+        var (totalAkts, totalPoints) = await GetCgpaComponentsAsync(registrations);
         var cgpa = totalAkts > 0
             ? Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero)
-            : 0;
+            : 0m;
 
         student.Sgpa = sgpa;
         student.Cgpa = cgpa;
@@ -167,46 +150,13 @@ public class GpaCalculationService : IGpaCalculationService
     }
 
     /// <summary>
-    /// AGNO bileşenlerini hesaplar: her dersin sadece son notunu alır.
+    /// AGNO bileşenlerini hesaplar: her ders/eşdeğer zincir için sadece son notu alır.
     /// </summary>
-    private async Task<(int totalAkts, decimal totalPoints)> GetCgpaComponentsAsync(int studentId)
+    private async Task<(int totalAkts, decimal totalPoints)> GetCgpaComponentsAsync(
+        IReadOnlyCollection<CourseRegistration> registrations)
     {
-        var allRegistrations = await _context.CourseRegistrations
-            .Include(cr => cr.CourseSection)
-                .ThenInclude(cs => cs.Course)
-            .Include(cr => cr.CourseSection)
-                .ThenInclude(cs => cs.Term)
-            .Where(cr => cr.StudentId == studentId
-                && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
-                && cr.Grade != null)
-            .ToListAsync();
-
-        // Her ders için sadece son notu al (en son dönem, en son kayıt)
-        var latestPerCourse = allRegistrations
-            .GroupBy(cr => cr.CourseSection.CourseId)
-            .Select(g => g
-                .OrderByDescending(cr => cr.CourseSection.Term.Year)
-                .ThenByDescending(cr => cr.CourseSection.Term.Semester)
-                .ThenByDescending(cr => cr.Id)
-                .First())
-            .ToList();
-
-        int totalAkts = 0;
-        decimal totalPoints = 0;
-
-        foreach (var reg in latestPerCourse)
-        {
-            var point = GradePointMap.GetPoint(reg.Grade!.Value);
-            if (point == null) continue; // S, U, W, I, NI → GPA dışı
-
-            var akts = reg.CourseSection.Course.Ects;
-            if (akts == 0) continue;
-
-            totalAkts += akts;
-            totalPoints += akts * point.Value;
-        }
-
-        return (totalAkts, totalPoints);
+        var latestRegistrations = await GetLatestRegistrationsByChainAsync(registrations);
+        return GetAverageComponents(latestRegistrations);
     }
 
     /// <summary>
@@ -218,49 +168,150 @@ public class GpaCalculationService : IGpaCalculationService
         if (studentIds.Count == 0)
             return new Dictionary<int, decimal>();
 
-        var allRegistrations = await _context.CourseRegistrations
-            .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Course)
-            .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Term)
-            .Where(cr => studentIds.Contains(cr.StudentId)
-                && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
-                && cr.Grade != null)
+        var distinctStudentIds = studentIds.Distinct().ToList();
+        var allRegistrations = await GetGradedRegistrationsQuery()
+            .Where(cr => distinctStudentIds.Contains(cr.StudentId))
             .ToListAsync();
+        var courseChainIdByCourseId = await BuildCourseChainIdMapAsync(
+            allRegistrations.Select(registration => registration.CourseSection.CourseId));
+        var registrationsByStudent = allRegistrations
+            .GroupBy(registration => registration.StudentId)
+            .ToDictionary(group => group.Key, group => group.ToList());
 
-        var result = new Dictionary<int, decimal>();
+        var result = new Dictionary<int, decimal>(distinctStudentIds.Count);
 
-        foreach (var studentId in studentIds)
+        foreach (var studentId in distinctStudentIds)
         {
-            var studentRegs = allRegistrations.Where(r => r.StudentId == studentId).ToList();
-
-            // Same logic as GetCgpaComponentsAsync but in-memory
-            var latestPerCourse = studentRegs
-                .GroupBy(cr => cr.CourseSection.CourseId)
-                .Select(g => g.OrderByDescending(cr => cr.CourseSection.Term.Year)
-                    .ThenByDescending(cr => cr.CourseSection.Term.Semester)
-                    .ThenByDescending(cr => cr.Id).First())
-                .ToList();
-
-            int totalAkts = 0;
-            decimal totalPoints = 0;
-            foreach (var reg in latestPerCourse)
+            if (!registrationsByStudent.TryGetValue(studentId, out var studentRegs) || studentRegs.Count == 0)
             {
-                var point = GradePointMap.GetPoint(reg.Grade!.Value);
-                if (point == null) continue;
-                var akts = reg.CourseSection.Course.Ects;
-                if (akts == 0) continue;
-                totalAkts += akts;
-                totalPoints += akts * point.Value;
+                result[studentId] = 0m;
+                continue;
             }
 
-            result[studentId] = totalAkts > 0
-                ? Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero)
-                : 0;
+            var latestRegistrations = GetLatestRegistrationsByChain(studentRegs, courseChainIdByCourseId);
+            result[studentId] = CalculateAverage(latestRegistrations);
         }
 
         return result;
     }
 
-    private static decimal CalculateAverage(IEnumerable<Domain.Entities.CourseRegistration> registrations)
+    private IQueryable<CourseRegistration> GetGradedRegistrationsQuery() =>
+        _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Course)
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Term)
+            .Where(cr => cr.Grade != null
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Dropped);
+
+    private async Task<List<CourseRegistration>> GetLatestRegistrationsByChainAsync(
+        IReadOnlyCollection<CourseRegistration> registrations)
+    {
+        if (registrations.Count == 0)
+            return new List<CourseRegistration>();
+
+        var courseChainIdByCourseId = await BuildCourseChainIdMapAsync(
+            registrations.Select(registration => registration.CourseSection.CourseId));
+        return GetLatestRegistrationsByChain(registrations, courseChainIdByCourseId);
+    }
+
+    private static List<CourseRegistration> GetLatestRegistrationsByChain(
+        IEnumerable<CourseRegistration> registrations,
+        IReadOnlyDictionary<int, int> courseChainIdByCourseId)
+    {
+        return registrations
+            .GroupBy(registration => courseChainIdByCourseId.GetValueOrDefault(
+                registration.CourseSection.CourseId,
+                registration.CourseSection.CourseId))
+            .Select(group => group
+                .OrderByDescending(registration => registration.CourseSection.Term.TermStart)
+                .ThenByDescending(registration => registration.CourseSection.Term.Id)
+                .ThenByDescending(registration => registration.Id)
+                .First())
+            .ToList();
+    }
+
+    private async Task<Dictionary<int, int>> BuildCourseChainIdMapAsync(IEnumerable<int> courseIds)
+    {
+        var distinctCourseIds = courseIds.Distinct().ToList();
+        if (distinctCourseIds.Count == 0)
+            return new Dictionary<int, int>();
+
+        var relevantCourseIds = distinctCourseIds.ToHashSet();
+        var equivalentCourseIdsByCourseId = distinctCourseIds.ToDictionary(
+            courseId => courseId,
+            _ => new HashSet<int>());
+
+        var equivalencies = await _context.CourseEquivalencies
+            .AsNoTracking()
+            .Where(equivalency =>
+                relevantCourseIds.Contains(equivalency.CourseId)
+                || relevantCourseIds.Contains(equivalency.EquivalentCourseId))
+            .ToListAsync();
+
+        foreach (var equivalency in equivalencies)
+        {
+            if (!relevantCourseIds.Contains(equivalency.CourseId)
+                || !relevantCourseIds.Contains(equivalency.EquivalentCourseId))
+            {
+                continue;
+            }
+
+            equivalentCourseIdsByCourseId[equivalency.CourseId].Add(equivalency.EquivalentCourseId);
+            equivalentCourseIdsByCourseId[equivalency.EquivalentCourseId].Add(equivalency.CourseId);
+        }
+
+        return BuildCourseChainIdMap(distinctCourseIds, equivalentCourseIdsByCourseId);
+    }
+
+    private static Dictionary<int, int> BuildCourseChainIdMap(
+        IEnumerable<int> courseIds,
+        IReadOnlyDictionary<int, HashSet<int>> equivalentCourseIdsByCourseId)
+    {
+        var distinctCourseIds = courseIds.Distinct().ToList();
+        var map = distinctCourseIds.ToDictionary(courseId => courseId, courseId => courseId);
+        var relevantCourseIds = distinctCourseIds.ToHashSet();
+        var visited = new HashSet<int>();
+
+        foreach (var courseId in distinctCourseIds)
+        {
+            if (!visited.Add(courseId))
+                continue;
+
+            var queue = new Queue<int>();
+            var component = new List<int>();
+            queue.Enqueue(courseId);
+
+            while (queue.Count > 0)
+            {
+                var currentCourseId = queue.Dequeue();
+                component.Add(currentCourseId);
+
+                if (!equivalentCourseIdsByCourseId.TryGetValue(currentCourseId, out var equivalentIds))
+                    continue;
+
+                foreach (var equivalentCourseId in equivalentIds)
+                {
+                    if (!relevantCourseIds.Contains(equivalentCourseId) || !visited.Add(equivalentCourseId))
+                        continue;
+
+                    queue.Enqueue(equivalentCourseId);
+                }
+            }
+
+            var chainId = component.Min();
+            foreach (var componentCourseId in component)
+            {
+                map[componentCourseId] = chainId;
+            }
+        }
+
+        return map;
+    }
+
+    private static (int totalAkts, decimal totalPoints) GetAverageComponents(IEnumerable<CourseRegistration> registrations)
     {
         var totalAkts = 0;
         decimal totalPoints = 0;
@@ -268,30 +319,28 @@ public class GpaCalculationService : IGpaCalculationService
         foreach (var registration in registrations)
         {
             if (registration.Grade is not { } grade)
-            {
                 continue;
-            }
 
             var point = GradePointMap.GetPoint(grade);
             if (point == null)
-            {
                 continue;
-            }
 
             var akts = registration.CourseSection.Course.Ects;
             if (akts <= 0)
-            {
                 continue;
-            }
 
             totalAkts += akts;
             totalPoints += akts * point.Value;
         }
 
+        return (totalAkts, totalPoints);
+    }
+
+    private static decimal CalculateAverage(IEnumerable<CourseRegistration> registrations)
+    {
+        var (totalAkts, totalPoints) = GetAverageComponents(registrations);
         if (totalAkts == 0)
-        {
-            return 0;
-        }
+            return 0m;
 
         return Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero);
     }

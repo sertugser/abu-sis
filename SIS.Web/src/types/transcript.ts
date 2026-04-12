@@ -38,10 +38,12 @@ export interface StudentTranscriptTermDto {
 
 export interface StudentTranscriptCourseDto {
   registrationId: number;
+  courseId: number;
   courseCode: string;
   courseName: string;
   credits: number;
   ects: number;
+  equivalentCourseIds: number[];
   averageScore: number | null;
   grade: string;
   status: string;

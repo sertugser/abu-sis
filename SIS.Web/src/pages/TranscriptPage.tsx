@@ -96,7 +96,7 @@ export default function TranscriptPage() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = 'Report';
+    document.title = 'Transkript';
     return () => {
       document.title = previousTitle;
     };
@@ -136,7 +136,7 @@ export default function TranscriptPage() {
             <Globe className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="font-heading text-[1.7rem] font-semibold leading-none tracking-tight">Report</h1>
+            <h1 className="font-heading text-[1.7rem] font-semibold leading-none tracking-tight">Transkript</h1>
             <p className="mt-1 text-xs text-white/60">Öğrenci transkript raporu</p>
           </div>
         </div>

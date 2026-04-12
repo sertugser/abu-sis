@@ -30,11 +30,13 @@ export interface ScenarioTerm {
 export interface ScenarioCourse {
   scenarioId: string;
   sourceRegistrationId: number | null;
+  courseId: number | null;
   termId: number;
   courseCode: string;
   courseName: string;
   credits: number;
   ects: number;
+  equivalentCourseIds: number[];
   averageScore: number | null;
   grade: ScenarioGrade;
   excludeFromAverage: boolean;
@@ -93,27 +95,30 @@ export function buildScenarioTerms(transcript: StudentTranscriptDto): ScenarioTe
 }
 
 export function buildInitialScenarioCourses(transcript: StudentTranscriptDto): ScenarioCourse[] {
-  const rootScenarioIdByCourseCode = new Map<string, string>();
+  const rootScenarioIdByChainKey = new Map<string, string>();
+  const transcriptChainKeyByCourseId = buildTranscriptChainKeyByCourseId(transcript);
   let sortOrder = 0;
 
   return transcript.terms.flatMap(term =>
     term.courses.map(course => {
       const scenarioId = `reg-${course.registrationId}`;
-      const normalizedCourseCode = normalizeCourseCode(course.courseCode);
-      const continuationCourseId = rootScenarioIdByCourseCode.get(normalizedCourseCode) ?? scenarioId;
+      const chainKey = getTranscriptChainKey(course.courseId, course.courseCode, transcriptChainKeyByCourseId);
+      const continuationCourseId = rootScenarioIdByChainKey.get(chainKey) ?? scenarioId;
 
-      if (!rootScenarioIdByCourseCode.has(normalizedCourseCode)) {
-        rootScenarioIdByCourseCode.set(normalizedCourseCode, continuationCourseId);
+      if (!rootScenarioIdByChainKey.has(chainKey)) {
+        rootScenarioIdByChainKey.set(chainKey, continuationCourseId);
       }
 
       return {
         scenarioId,
         sourceRegistrationId: course.registrationId,
+        courseId: course.courseId,
         termId: term.termId,
         courseCode: course.courseCode,
         courseName: course.courseName,
         credits: course.credits,
         ects: course.ects,
+        equivalentCourseIds: course.equivalentCourseIds,
         averageScore: course.averageScore,
         grade: normalizeGrade(course.grade),
         excludeFromAverage: !course.countsTowardsGpa,
@@ -202,8 +207,8 @@ export function calculateScenarioReport(
 
   return {
     currentCgpa: calculateAverage(latestCourses),
-    totalAttemptedCredits: sortedCourses.reduce((sum, course) => sum + course.credits, 0),
-    totalAttemptedEcts: sortedCourses.reduce((sum, course) => sum + course.ects, 0),
+    totalAttemptedCredits: latestCourses.reduce((sum, course) => sum + course.credits, 0),
+    totalAttemptedEcts: latestCourses.reduce((sum, course) => sum + course.ects, 0),
     totalEarnedCredits: latestCourses.filter(course => course.isPassed).reduce((sum, course) => sum + course.credits, 0),
     totalEarnedEcts: latestCourses.filter(course => course.isPassed).reduce((sum, course) => sum + course.ects, 0),
     totalGpaEcts,
@@ -231,11 +236,13 @@ export function areScenarioCoursesEqual(left: ScenarioCourse[], right: ScenarioC
       .map(course => ({
         scenarioId: course.scenarioId,
         sourceRegistrationId: course.sourceRegistrationId,
+        courseId: course.courseId,
         termId: course.termId,
         courseCode: course.courseCode,
         courseName: course.courseName,
         credits: course.credits,
         ects: course.ects,
+        equivalentCourseIds: course.equivalentCourseIds,
         averageScore: course.averageScore,
         grade: course.grade,
         excludeFromAverage: course.excludeFromAverage,
@@ -254,7 +261,7 @@ export function getGradeMeta(grade: string) {
 
 export function formatGradeOptionLabel(grade: ScenarioGrade) {
   const meta = getGradeMeta(grade);
-  return `${meta.label} -> Katsayi:${meta.point == null ? 'GPA Disi' : trimNumber(meta.point)}`;
+  return `${meta.label} -> Katsayı:${meta.point == null ? 'GPA Dışı' : trimNumber(meta.point)}`;
 }
 
 export function normalizeGrade(grade: string): ScenarioGrade {
@@ -300,4 +307,71 @@ function resolveChainId(course: ScenarioCourse, coursesById: Map<string, Scenari
 
 function trimNumber(value: number) {
   return value.toString().replace(/\.0$/, '');
+}
+
+function buildTranscriptChainKeyByCourseId(transcript: StudentTranscriptDto) {
+  const transcriptCourses = transcript.terms.flatMap(term => term.courses);
+  const courseIdsInTranscript = new Set(transcriptCourses.map(course => course.courseId));
+  const adjacency = new Map<number, Set<number>>();
+
+  for (const course of transcriptCourses) {
+    const neighbors = adjacency.get(course.courseId) ?? new Set<number>();
+    neighbors.add(course.courseId);
+
+    for (const equivalentCourseId of course.equivalentCourseIds) {
+      neighbors.add(equivalentCourseId);
+
+      if (courseIdsInTranscript.has(equivalentCourseId)) {
+        const reverseNeighbors = adjacency.get(equivalentCourseId) ?? new Set<number>();
+        reverseNeighbors.add(equivalentCourseId);
+        reverseNeighbors.add(course.courseId);
+        adjacency.set(equivalentCourseId, reverseNeighbors);
+      }
+    }
+
+    adjacency.set(course.courseId, neighbors);
+  }
+
+  const chainKeyByCourseId = new Map<number, string>();
+  const visited = new Set<number>();
+  const sortedCourseIds = [...courseIdsInTranscript].sort((left, right) => left - right);
+
+  for (const courseId of sortedCourseIds) {
+    if (visited.has(courseId)) {
+      continue;
+    }
+
+    const queue = [courseId];
+    const component: number[] = [];
+    visited.add(courseId);
+
+    while (queue.length > 0) {
+      const currentCourseId = queue.shift()!;
+      component.push(currentCourseId);
+
+      for (const neighborCourseId of adjacency.get(currentCourseId) ?? []) {
+        if (!courseIdsInTranscript.has(neighborCourseId) || visited.has(neighborCourseId)) {
+          continue;
+        }
+
+        visited.add(neighborCourseId);
+        queue.push(neighborCourseId);
+      }
+    }
+
+    const chainKey = `course:${Math.min(...component)}`;
+    for (const componentCourseId of component) {
+      chainKeyByCourseId.set(componentCourseId, chainKey);
+    }
+  }
+
+  return chainKeyByCourseId;
+}
+
+function getTranscriptChainKey(
+  courseId: number,
+  courseCode: string,
+  chainKeyByCourseId: Map<number, string>,
+) {
+  return chainKeyByCourseId.get(courseId) ?? `code:${normalizeCourseCode(courseCode)}`;
 }

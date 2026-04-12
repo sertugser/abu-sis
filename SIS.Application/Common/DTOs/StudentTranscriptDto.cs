@@ -43,10 +43,12 @@ public class StudentTranscriptTermDto
 public class StudentTranscriptCourseDto
 {
     public int RegistrationId { get; set; }
+    public int CourseId { get; set; }
     public string CourseCode { get; set; } = string.Empty;
     public string CourseName { get; set; } = string.Empty;
     public int Credits { get; set; }
     public int Ects { get; set; }
+    public List<int> EquivalentCourseIds { get; set; } = new();
     public decimal? AverageScore { get; set; }
     public string Grade { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;

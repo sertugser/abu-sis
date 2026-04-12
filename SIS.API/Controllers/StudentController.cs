@@ -426,31 +426,97 @@ public class StudentController : ControllerBase
             .ToListAsync();
 
         var registrationIds = registrations.Select(registration => registration.Id).ToList();
+        var courseIds = registrations
+            .Select(registration => registration.CourseSection.CourseId)
+            .Distinct()
+            .ToList();
+        var termIds = registrations
+            .Select(registration => registration.CourseSection.TermId)
+            .Distinct()
+            .ToList();
+        var equivalentCourseIdsByCourseId = courseIds.Count == 0
+            ? new Dictionary<int, HashSet<int>>()
+            : (await _context.CourseEquivalencies
+                .AsNoTracking()
+                .Where(equivalency => courseIds.Contains(equivalency.CourseId))
+                .ToListAsync())
+                .GroupBy(equivalency => equivalency.CourseId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Select(equivalency => equivalency.EquivalentCourseId).ToHashSet());
+        var courseChainIdByCourseId = BuildCourseChainIdMap(courseIds, equivalentCourseIdsByCourseId);
+        var registrationMetadataById = registrations.ToDictionary(
+            registration => registration.Id,
+            registration => (registration.CourseSection.CourseId, registration.CourseSection.TermId));
+        var gradeComponentStatsByCourseTerm = courseIds.Count == 0 || termIds.Count == 0
+            ? new Dictionary<(int CourseId, int TermId), (decimal TotalWeight, int ComponentCount)>()
+            : (await _context.GradeComponents
+                .AsNoTracking()
+                .Where(component => courseIds.Contains(component.CourseId) && termIds.Contains(component.AcademicTermId))
+                .Select(component => new
+                {
+                    component.CourseId,
+                    TermId = component.AcademicTermId,
+                    component.Id,
+                    component.Weight
+                })
+                .ToListAsync())
+                .GroupBy(component => (component.CourseId, component.TermId))
+                .ToDictionary(
+                    group => group.Key,
+                    group => (
+                        TotalWeight: group.Sum(component => component.Weight),
+                        ComponentCount: group.Select(component => component.Id).Distinct().Count()));
         var weightedAverageMap = registrationIds.Count == 0
             ? new Dictionary<int, decimal?>()
             : (await _context.StudentGrades
                 .AsNoTracking()
+                .Include(grade => grade.GradeComponent)
                 .Where(grade => registrationIds.Contains(grade.CourseRegistrationId) && grade.Score != null)
-                .Select(grade => new
-                {
-                    grade.CourseRegistrationId,
-                    Score = grade.Score!.Value,
-                    grade.GradeComponent.Weight
-                })
                 .ToListAsync())
                 .GroupBy(grade => grade.CourseRegistrationId)
                 .ToDictionary(
                     group => group.Key,
                     group =>
                     {
-                        var totalWeight = group.Sum(item => item.Weight);
-                        if (totalWeight <= 0)
+                        if (!registrationMetadataById.TryGetValue(group.Key, out var registrationMetadata))
                             return (decimal?)null;
 
-                        var totalWeightedScore = group.Sum(item => item.Score * item.Weight / 100m);
-                        return Math.Round(totalWeightedScore * 100m / totalWeight, 2, MidpointRounding.AwayFromZero);
+                        if (!gradeComponentStatsByCourseTerm.TryGetValue(
+                                (registrationMetadata.CourseId, registrationMetadata.TermId),
+                                out var componentStats)
+                            || componentStats.TotalWeight <= 0
+                            || componentStats.ComponentCount <= 0)
+                            return (decimal?)null;
+
+                        var gradedComponents = group
+                            .Where(item => item.GradeComponent != null)
+                            .GroupBy(item => item.GradeComponentId)
+                            .Select(componentGroup =>
+                            {
+                                var grade = componentGroup.First();
+                                return new
+                                {
+                                    Score = grade.Score!.Value,
+                                    grade.GradeComponent.Weight
+                                };
+                            })
+                            .ToList();
+
+                        var actualWeight = gradedComponents.Sum(item => item.Weight);
+                        if (gradedComponents.Count != componentStats.ComponentCount || actualWeight != componentStats.TotalWeight)
+                            return (decimal?)null;
+
+                        var totalWeightedScore = gradedComponents.Sum(item => item.Score * item.Weight / 100m);
+                        return Math.Round(
+                            totalWeightedScore * 100m / componentStats.TotalWeight,
+                            2,
+                            MidpointRounding.AwayFromZero);
                     });
 
+        var repeatedChainCounts = registrations
+            .GroupBy(registration => courseChainIdByCourseId.GetValueOrDefault(registration.CourseSection.CourseId, registration.CourseSection.CourseId))
+            .ToDictionary(group => group.Key, group => group.Count());
         var latestGradesByCourse = new Dictionary<int, CourseRegistration>();
         var termGroups = registrations
             .GroupBy(cr => cr.CourseSection.TermId)
@@ -462,8 +528,8 @@ public class StudentController : ControllerBase
                     .ThenBy(cr => cr.Id)
                     .ToList()
             })
-            .OrderBy(group => group.Term.Year)
-            .ThenBy(group => group.Term.Semester)
+            .OrderBy(group => group.Term.TermStart)
+            .ThenBy(group => group.Term.Id)
             .ToList();
 
         var transcriptTerms = new List<StudentTranscriptTermDto>(termGroups.Count);
@@ -471,16 +537,19 @@ public class StudentController : ControllerBase
         foreach (var termGroup in termGroups)
         {
             foreach (var registration in termGroup.Registrations
-                .OrderBy(registration => registration.CourseSection.CourseId)
-                .ThenBy(registration => registration.Id))
+                .OrderBy(registration => registration.Id))
             {
-                latestGradesByCourse[registration.CourseSection.CourseId] = registration;
+                var chainId = courseChainIdByCourseId.GetValueOrDefault(
+                    registration.CourseSection.CourseId,
+                    registration.CourseSection.CourseId);
+                latestGradesByCourse[chainId] = registration;
             }
 
             var courseDtos = termGroup.Registrations
                 .Select(registration =>
                 {
                     var course = registration.CourseSection.Course;
+                    var chainId = courseChainIdByCourseId.GetValueOrDefault(course.Id, course.Id);
                     var credits = course.TheoryHours + course.LabHours;
                     var grade = registration.Grade!.Value;
                     var gradePoint = GradePointMap.GetPoint(grade);
@@ -491,14 +560,18 @@ public class StudentController : ControllerBase
                     return new StudentTranscriptCourseDto
                     {
                         RegistrationId = registration.Id,
+                        CourseId = course.Id,
                         CourseCode = course.Code,
                         CourseName = course.Name,
                         Credits = credits,
                         Ects = course.Ects,
+                        EquivalentCourseIds = equivalentCourseIdsByCourseId.TryGetValue(course.Id, out var equivalentIds)
+                            ? equivalentIds.OrderBy(id => id).ToList()
+                            : new List<int>(),
                         AverageScore = weightedAverageMap.GetValueOrDefault(registration.Id),
                         Grade = grade.ToString(),
                         Status = registration.Status.ToString(),
-                        IsRepeated = registration.IsRepeated,
+                        IsRepeated = registration.IsRepeated || repeatedChainCounts.GetValueOrDefault(chainId) > 1,
                         IsPassed = IsPassedGrade(grade),
                         CountsTowardsGpa = gradePoint.HasValue,
                         GradePoint = gradePoint,
@@ -554,8 +627,8 @@ public class StudentController : ControllerBase
             EnrollmentDate = activeProgram.EnrollmentDate,
             GeneratedAt = DateTime.UtcNow,
             CurrentCgpa = transcriptTerms.Count > 0 ? transcriptTerms[^1].Cgpa : student.Cgpa,
-            TotalAttemptedCredits = registrations.Sum(reg => reg.CourseSection.Course.TheoryHours + reg.CourseSection.Course.LabHours),
-            TotalAttemptedEcts = registrations.Sum(reg => reg.CourseSection.Course.Ects),
+            TotalAttemptedCredits = latestRegistrations.Sum(reg => reg.CourseSection.Course.TheoryHours + reg.CourseSection.Course.LabHours),
+            TotalAttemptedEcts = latestRegistrations.Sum(reg => reg.CourseSection.Course.Ects),
             TotalEarnedCredits = latestRegistrations.Where(reg => IsPassedGrade(reg.Grade!.Value)).Sum(reg => reg.CourseSection.Course.TheoryHours + reg.CourseSection.Course.LabHours),
             TotalEarnedEcts = latestRegistrations.Where(reg => IsPassedGrade(reg.Grade!.Value)).Sum(reg => reg.CourseSection.Course.Ects),
             TotalGpaEcts = totalGpaEcts,
@@ -609,5 +682,50 @@ public class StudentController : ControllerBase
             return 0m;
 
         return Math.Round(totalPoints / totalEcts, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private static Dictionary<int, int> BuildCourseChainIdMap(
+        IEnumerable<int> courseIds,
+        IReadOnlyDictionary<int, HashSet<int>> equivalentCourseIdsByCourseId)
+    {
+        var distinctCourseIds = courseIds.Distinct().ToList();
+        var map = distinctCourseIds.ToDictionary(courseId => courseId, courseId => courseId);
+        var relevantCourseIds = distinctCourseIds.ToHashSet();
+        var visited = new HashSet<int>();
+
+        foreach (var courseId in distinctCourseIds)
+        {
+            if (!visited.Add(courseId))
+                continue;
+
+            var queue = new Queue<int>();
+            var component = new List<int>();
+            queue.Enqueue(courseId);
+
+            while (queue.Count > 0)
+            {
+                var currentCourseId = queue.Dequeue();
+                component.Add(currentCourseId);
+
+                if (!equivalentCourseIdsByCourseId.TryGetValue(currentCourseId, out var equivalentIds))
+                    continue;
+
+                foreach (var equivalentCourseId in equivalentIds)
+                {
+                    if (!relevantCourseIds.Contains(equivalentCourseId) || !visited.Add(equivalentCourseId))
+                        continue;
+
+                    queue.Enqueue(equivalentCourseId);
+                }
+            }
+
+            var chainId = component.Min();
+            foreach (var componentCourseId in component)
+            {
+                map[componentCourseId] = chainId;
+            }
+        }
+
+        return map;
     }
 }

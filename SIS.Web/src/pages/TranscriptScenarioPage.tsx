@@ -50,11 +50,13 @@ import {
 interface ScenarioCourseDraft {
   scenarioId: string | null;
   sourceRegistrationId: number | null;
+  courseId: number | null;
   termId: string;
   courseCode: string;
   courseName: string;
   credits: string;
   ects: string;
+  equivalentCourseIds: number[];
   averageScore: string;
   grade: ScenarioGrade;
   excludeFromAverage: boolean;
@@ -92,9 +94,9 @@ export default function TranscriptScenarioPage() {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Transkript senaryosu yuklenemedi</AlertTitle>
+        <AlertTitle>Transkript senaryosu yüklenemedi</AlertTitle>
         <AlertDescription>
-          Ogrencinin senaryo bilgileri hazirlanirken bir hata olustu. Lutfen tekrar deneyin.
+          Öğrencinin senaryo bilgileri hazırlanırken bir hata oluştu. Lütfen tekrar deneyin.
         </AlertDescription>
       </Alert>
     );
@@ -105,7 +107,7 @@ export default function TranscriptScenarioPage() {
   const scenarioDelta = round2(scenarioReport.currentCgpa - transcript.currentCgpa);
   const advisorName = student.advisorName
     ? `${student.advisorTitle ? `${student.advisorTitle} ` : ''}${student.advisorName}`.trim()
-    : 'Atanmamis';
+    : 'Atanmamış';
   const continuationOptions = [...scenarioCourses].sort((left, right) => left.sortOrder - right.sortOrder);
 
   const handleReset = () => {
@@ -120,11 +122,13 @@ export default function TranscriptScenarioPage() {
     setDraft({
       scenarioId: null,
       sourceRegistrationId: null,
+      courseId: null,
       termId: lastTerm ? String(lastTerm.termId) : '',
       courseCode: '',
       courseName: '',
       credits: '3',
       ects: '5',
+      equivalentCourseIds: [],
       averageScore: '',
       grade: 'BB',
       excludeFromAverage: false,
@@ -140,11 +144,13 @@ export default function TranscriptScenarioPage() {
     setDraft({
       scenarioId: course.scenarioId,
       sourceRegistrationId: course.sourceRegistrationId,
+      courseId: course.courseId,
       termId: String(course.termId),
       courseCode: course.courseCode,
       courseName: course.courseName,
       credits: String(course.credits),
       ects: String(course.ects),
+      equivalentCourseIds: course.equivalentCourseIds,
       averageScore: course.averageScore == null ? '' : String(course.averageScore),
       grade: course.grade,
       excludeFromAverage: course.excludeFromAverage,
@@ -172,43 +178,45 @@ export default function TranscriptScenarioPage() {
       : selectedContinuationCourse.continuationCourseId;
 
     if (!selectedTerm) {
-      setDialogError('Gecerli bir donem secilmelidir.');
+      setDialogError('Geçerli bir dönem seçilmelidir.');
       return;
     }
 
     if (!draft.courseCode.trim()) {
-      setDialogError('Ders kodu bos birakilamaz.');
+      setDialogError('Ders kodu boş bırakılamaz.');
       return;
     }
 
     if (!draft.courseName.trim()) {
-      setDialogError('Ders adi bos birakilamaz.');
+      setDialogError('Ders adı boş bırakılamaz.');
       return;
     }
 
     if (!Number.isFinite(credits) || credits < 0) {
-      setDialogError('Kredi alani 0 veya daha buyuk bir sayi olmalidir.');
+      setDialogError('Kredi alanı 0 veya daha büyük bir sayı olmalıdır.');
       return;
     }
 
     if (!Number.isFinite(ects) || ects < 0) {
-      setDialogError('AKTS alani 0 veya daha buyuk bir sayi olmalidir.');
+      setDialogError('AKTS alanı 0 veya daha büyük bir sayı olmalıdır.');
       return;
     }
 
     if (averageScore != null && (!Number.isFinite(averageScore) || averageScore < 0 || averageScore > 100)) {
-      setDialogError('Ortalama alani 0 ile 100 arasinda olmalidir.');
+      setDialogError('Ortalama alanı 0 ile 100 arasında olmalıdır.');
       return;
     }
 
     const nextCourse: ScenarioCourse = {
       scenarioId,
       sourceRegistrationId: draft.sourceRegistrationId,
+      courseId: draft.courseId,
       termId: selectedTerm.termId,
       courseCode: normalizeCourseCode(draft.courseCode),
       courseName: draft.courseName.trim(),
       credits: Math.round(credits),
       ects: Math.round(ects),
+      equivalentCourseIds: draft.equivalentCourseIds,
       averageScore: averageScore == null ? null : round2(averageScore),
       grade: normalizeGrade(draft.grade),
       excludeFromAverage: draft.excludeFromAverage,
@@ -260,17 +268,17 @@ export default function TranscriptScenarioPage() {
           <div className="space-y-2">
             <div className="font-heading text-xl font-extrabold">Bilgi Notu</div>
             <p className="max-w-5xl text-sm leading-6 text-white/95">
-              Bu ekrandaki islemler sistem uzerinde herhangi bir degisiklik yapilmadan, sadece bilgilendirme amacli
-              olarak yapilmaktadir. Veriler uzerinde herhangi bir etkisi yoktur. Gercek not ortalamanizi transkript
-              uzerinden kontrol ediniz.
+              Bu ekrandaki işlemler sistem üzerinde herhangi bir değişiklik yapılmadan, sadece bilgilendirme amaçlı
+              olarak yapılmaktadır. Veriler üzerinde herhangi bir etkisi yoktur. Gerçek not ortalamanızı transkript
+              üzerinden kontrol ediniz.
             </p>
             <div className="text-sm font-medium text-white/90">
-              Ortalama hesaplari AKTS agirligina gore ve ayni dersin son denemesi esas alinarak yapilmaktadir.
+              Ortalama hesapları AKTS ağırlığına göre ve aynı dersin son denemesi esas alınarak yapılmaktadır.
             </div>
           </div>
 
           <div className="rounded-xl bg-white/10 px-4 py-3 text-sm">
-            <div className="font-semibold">Gercek AGNO: {formatNumber(transcript.currentCgpa)}</div>
+            <div className="font-semibold">Gerçek AGNO: {formatNumber(transcript.currentCgpa)}</div>
             <div className="mt-1 font-semibold">Senaryo AGNO: {formatNumber(scenarioReport.currentCgpa)}</div>
             <div className={cn('mt-1 font-semibold', scenarioDelta >= 0 ? 'text-emerald-100' : 'text-rose-100')}>
               Fark: {scenarioDelta >= 0 ? '+' : ''}{formatNumber(scenarioDelta)}
@@ -282,21 +290,21 @@ export default function TranscriptScenarioPage() {
       <Card className="border border-[#003366]/15 shadow-[0_18px_36px_rgba(15,23,42,0.08)]">
         <CardContent className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <ScenarioInfoRow label="Adi Soyadi" value={transcript.fullName} />
-            <ScenarioInfoRow label="Fakulte" value={transcript.facultyName} />
-            <ScenarioInfoRow label="Ogrenci No" value={transcript.studentNumber} />
+            <ScenarioInfoRow label="Adı Soyadı" value={transcript.fullName} />
+            <ScenarioInfoRow label="Fakülte" value={transcript.facultyName} />
+            <ScenarioInfoRow label="Öğrenci No" value={transcript.studentNumber} />
             <ScenarioInfoRow label="Program" value={transcript.programName} />
-            <ScenarioInfoRow label="Kayit Tarihi" value={formatDate(transcript.enrollmentDate)} />
-            <ScenarioInfoRow label="Danismani" value={advisorName} />
+            <ScenarioInfoRow label="Kayıt Tarihi" value={formatDate(transcript.enrollmentDate)} />
+            <ScenarioInfoRow label="Danışmanı" value={advisorName} />
             <ScenarioInfoRow label="Hesaplanan Genel Ort." value={formatNumber(scenarioReport.currentCgpa)} emphasize />
             <ScenarioInfoRow label="Durum" value={STUDENT_STATUS_LABELS[transcript.studentStatus] || transcript.studentStatus} />
-            <ScenarioInfoRow label="Toplam Gecilen AKTS" value={String(scenarioReport.totalEarnedEcts)} />
+            <ScenarioInfoRow label="Toplam Geçilen AKTS" value={String(scenarioReport.totalEarnedEcts)} />
           </div>
 
           <div className="flex flex-col gap-3">
             <Button type="button" variant="outline" onClick={handleReset} disabled={!hasScenarioChanges}>
               <RefreshCcw className="h-4 w-4" />
-              Baslangic Durumuna Getir
+              Başlangıç Durumuna Getir
             </Button>
             <Button type="button" onClick={handleAddCourse} disabled={terms.length === 0}>
               <Plus className="h-4 w-4" />
@@ -304,8 +312,8 @@ export default function TranscriptScenarioPage() {
             </Button>
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700">
               {hasScenarioChanges
-                ? 'Senaryo guncel. Tum hesaplamalar ekrandaki son degisikliklere gore yenilendi.'
-                : 'Transkript senaryosu baslangic durumunda hazir. Notlari dilediginiz gibi simule edebilirsiniz.'}
+                ? 'Senaryo güncel. Tüm hesaplamalar ekrandaki son değişikliklere göre yenilendi.'
+                : 'Transkript senaryosu başlangıç durumunda hazır. Notları dilediğiniz gibi simüle edebilirsiniz.'}
             </div>
           </div>
         </CardContent>
@@ -314,7 +322,7 @@ export default function TranscriptScenarioPage() {
       {scenarioReport.terms.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            Senaryo icin gosterilecek ders kaydi bulunmuyor.
+            Senaryo için gösterilecek ders kaydı bulunmuyor.
           </CardContent>
         </Card>
       ) : (
@@ -340,7 +348,7 @@ export default function TranscriptScenarioPage() {
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600">
                       <th className="px-2 py-2 text-left font-semibold">Ders Kodu</th>
-                      <th className="px-2 py-2 text-left font-semibold">Ders Adi</th>
+                      <th className="px-2 py-2 text-left font-semibold">Ders Adı</th>
                       <th className="px-1 py-2 text-center font-semibold">Kredi</th>
                       <th className="px-1 py-2 text-center font-semibold">AKTS</th>
                       <th className="px-1 py-2 text-center font-semibold">Ort</th>
@@ -389,7 +397,7 @@ export default function TranscriptScenarioPage() {
                             type="button"
                             onClick={() => handleEditCourse(course)}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-sky-300 bg-sky-50 text-sky-600 transition-colors hover:bg-sky-100"
-                            title="Dersi duzenle"
+                            title="Dersi düzenle"
                           >
                             <PencilLine className="h-3.5 w-3.5" />
                           </button>
@@ -403,7 +411,7 @@ export default function TranscriptScenarioPage() {
                   <span>AGNO: {formatNumber(term.cgpa)}</span>
                   <span>Toplam AKTS: {term.cumulativeGpaEcts}</span>
                   <span>ANO: {formatNumber(term.sgpa)}</span>
-                  <span>Donem AKTS: {term.attemptedEcts}</span>
+                  <span>Dönem AKTS: {term.attemptedEcts}</span>
                 </div>
               </CardContent>
             </Card>
@@ -457,10 +465,10 @@ function ScenarioEditorDialog({
           <>
             <DialogHeader className="border-b border-border/70 px-6 py-5">
               <DialogTitle className="text-[2rem] font-normal tracking-tight">
-                {draft.scenarioId ? 'Degistiriliyor...' : 'Yeni Ders Ekleniyor...'}
+                {draft.scenarioId ? 'Değiştiriliyor...' : 'Yeni Ders Ekleniyor...'}
               </DialogTitle>
               <DialogDescription>
-                Senaryo uzerindeki bu degisiklik sadece hesaplamalara yansir, sistemde kalici not degisikligi yapmaz.
+                Senaryo üzerindeki bu değişiklik sadece hesaplamalara yansır, sistemde kalıcı not değişikliği yapmaz.
               </DialogDescription>
             </DialogHeader>
 
@@ -473,13 +481,13 @@ function ScenarioEditorDialog({
               )}
 
               <div className="grid gap-x-6 gap-y-4 md:grid-cols-[170px_minmax(0,1fr)] md:items-center">
-                <FormLabel label="Donem" />
+                <FormLabel label="Dönem" />
                 <Select
                   value={draft.termId}
                   onValueChange={value => onChange(current => current ? { ...current, termId: value } : current)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Donem secin" />
+                    <SelectValue placeholder="Dönem seçin" />
                   </SelectTrigger>
                   <SelectContent>
                     {terms.map(term => (
@@ -490,13 +498,13 @@ function ScenarioEditorDialog({
                   </SelectContent>
                 </Select>
 
-                <FormLabel label="Ders Kod" />
+                <FormLabel label="Ders Kodu" />
                 <Input
                   value={draft.courseCode}
                   onChange={event => onChange(current => current ? { ...current, courseCode: event.target.value.toUpperCase() } : current)}
                 />
 
-                <FormLabel label="Ders Ad" />
+                <FormLabel label="Ders Adı" />
                 <Input
                   value={draft.courseName}
                   onChange={event => onChange(current => current ? { ...current, courseName: event.target.value } : current)}
@@ -549,7 +557,7 @@ function ScenarioEditorDialog({
                   </Select>
 
                   <Input
-                    value={selectedDraftGrade == null ? 'GPA Disi' : formatNumber(selectedDraftGrade)}
+                    value={selectedDraftGrade == null ? 'GPA Dışı' : formatNumber(selectedDraftGrade)}
                     readOnly
                     className="bg-amber-50 font-semibold text-amber-700"
                   />
@@ -563,20 +571,20 @@ function ScenarioEditorDialog({
                     onChange={event => onChange(current => current ? { ...current, excludeFromAverage: event.target.checked } : current)}
                     className="h-5 w-5 rounded border border-input"
                   />
-                  Ortalamaya Katilmaz
+                  Ortalamaya Katılmaz
                 </label>
 
-                <FormLabel label="Ders Devami" />
+                <FormLabel label="Ders Devamı" />
                 <Select
                   value={draft.continuationCourseId}
                   onValueChange={value => onChange(current => current ? { ...current, continuationCourseId: value } : current)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Ders devami secin" />
+                    <SelectValue placeholder="Ders devamı seçin" />
                   </SelectTrigger>
                   <SelectContent>
                     {!draft.scenarioId && (
-                      <SelectItem value={SELF_CONTINUATION}>Bagimsiz Ders</SelectItem>
+                      <SelectItem value={SELF_CONTINUATION}>Bağımsız Ders</SelectItem>
                     )}
                     {courses.map(course => (
                       <SelectItem key={course.scenarioId} value={course.scenarioId}>
@@ -646,7 +654,7 @@ function FormLabel({ label }: { label: string }) {
 }
 
 function findTermName(terms: ReturnType<typeof buildScenarioTerms>, termId: number) {
-  return terms.find(term => term.termId === termId)?.termName ?? 'Bilinmeyen Donem';
+  return terms.find(term => term.termId === termId)?.termName ?? 'Bilinmeyen Dönem';
 }
 
 function formatNumber(value: number) {
@@ -668,20 +676,25 @@ function getNextSortOrder(courses: ScenarioCourse[]) {
 }
 
 function removeScenarioCourse(courses: ScenarioCourse[], scenarioId: string) {
+  const removedCourse = courses.find(course => course.scenarioId === scenarioId);
   const remainingCourses = courses.filter(course => course.scenarioId !== scenarioId);
-  const fallbackCourse = [...remainingCourses]
-    .filter(course => course.continuationCourseId === scenarioId)
-    .sort((left, right) => left.sortOrder - right.sortOrder)[0];
+  const continuationTarget = removedCourse && removedCourse.continuationCourseId !== removedCourse.scenarioId
+    ? removedCourse.continuationCourseId
+    : null;
 
   return remainingCourses.map(course => {
     if (course.continuationCourseId !== scenarioId) {
       return course;
     }
 
+    const nextContinuationCourseId = continuationTarget && remainingCourses.some(item => item.scenarioId === continuationTarget)
+      ? continuationTarget
+      : course.scenarioId;
+
     return {
       ...course,
-      continuationCourseId: fallbackCourse ? fallbackCourse.scenarioId : course.scenarioId,
-      wasRepeated: !!fallbackCourse,
+      continuationCourseId: nextContinuationCourseId,
+      wasRepeated: nextContinuationCourseId !== course.scenarioId,
     };
   });
 }
