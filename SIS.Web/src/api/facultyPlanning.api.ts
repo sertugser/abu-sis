@@ -3,6 +3,7 @@ import type {
   ApplyScheduleRequest, ApplyScheduleResult, AssignmentResult, AssignSectionRequest,
   AutoSchedulePreview, AutoScheduleRequest, AvailableClassroom,
   FacultyPlanningOverview, FacultyPlanningSectionPage, FacultyPlanningTimeSlot,
+  ScheduleRunDetail, ScheduleRunSummary,
 } from '../types/facultyPlanning';
 import type { ScheduleSlot, ScheduleValidationResult, SchedulingConflict } from '../types/scheduling';
 
@@ -69,6 +70,18 @@ export async function getFacultyPlanningConflicts(facultyId: number, termId: num
   const { data } = await apiClient.get<SchedulingConflict[]>('/faculty-planning/conflicts', {
     params: { facultyId, termId },
   });
+  return data;
+}
+
+export async function getScheduleRuns(facultyId: number, termId: number): Promise<ScheduleRunSummary[]> {
+  const { data } = await apiClient.get<ScheduleRunSummary[]>('/faculty-planning/schedule-runs', {
+    params: { facultyId, termId },
+  });
+  return data;
+}
+
+export async function getScheduleRun(id: number): Promise<ScheduleRunDetail> {
+  const { data } = await apiClient.get<ScheduleRunDetail>(`/faculty-planning/schedule-runs/${id}`);
   return data;
 }
 

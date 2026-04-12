@@ -48,6 +48,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
     public DbSet<ForecastCalibration> ForecastCalibrations => Set<ForecastCalibration>();
+    public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -644,6 +645,14 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             entity.HasOne(fc => fc.Term).WithMany().HasForeignKey(fc => fc.TermId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(fc => fc.Department).WithMany().HasForeignKey(fc => fc.DepartmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(fc => new { fc.CourseId, fc.TermId }).IsUnique();
+        });
+
+        // ── ScheduleRun ──────────────────────────────────────────
+        builder.Entity<ScheduleRun>(entity =>
+        {
+            entity.HasOne(sr => sr.Faculty).WithMany().HasForeignKey(sr => sr.FacultyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(sr => sr.Term).WithMany().HasForeignKey(sr => sr.TermId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(sr => new { sr.FacultyId, sr.TermId, sr.CreatedAt });
         });
     }
 }

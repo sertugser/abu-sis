@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Zap } from 'lucide-react';
+import { History, Zap } from 'lucide-react';
 import {
   useApplySchedule, useAutoSchedulePreview, useBatchUnassignSections,
+  useScheduleRun, useScheduleRuns,
 } from '../../hooks/useFacultyPlanning';
+import type { AutoSchedulePreview } from '../../types/facultyPlanning';
 
 export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: number | null }) {
   const previewMutation = useAutoSchedulePreview();
@@ -15,15 +18,33 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
   const batchUnassign = useBatchUnassignSections();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+
+  const runsQuery = useScheduleRuns(facultyId, termId);
+  const runDetailQuery = useScheduleRun(selectedRunId);
+
+  // Auto-select the most recent run on first load
+  useEffect(() => {
+    if (runsQuery.data && runsQuery.data.length > 0 && selectedRunId === null && !previewMutation.data) {
+      setSelectedRunId(runsQuery.data[0].id);
+    }
+  }, [runsQuery.data, selectedRunId, previewMutation.data]);
 
   if (!termId) return null;
 
+  // Determine which preview data to show:
+  // - If a mutation just ran, show that
+  // - Otherwise, show the selected past run
+  const previewData: AutoSchedulePreview | undefined =
+    previewMutation.data ?? runDetailQuery.data?.result;
+
   const handlePreview = () => {
+    setSelectedRunId(null);
     previewMutation.mutate({ facultyId, termId });
   };
 
   const handleApplySelected = () => {
-    const items = (previewMutation.data?.assignments ?? [])
+    const items = (previewData?.assignments ?? [])
       .filter(a => selectedIds.has(a.sectionId))
       .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
     if (items.length > 0) {
@@ -35,7 +56,7 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
   };
 
   const handleApplyAll = () => {
-    const items = (previewMutation.data?.assignments ?? [])
+    const items = (previewData?.assignments ?? [])
       .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
     if (items.length > 0) {
       const request = { assignments: items };
@@ -45,11 +66,24 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
     }
   };
 
+  const handleRunSelect = (value: string) => {
+    const id = parseInt(value, 10);
+    setSelectedRunId(id);
+    previewMutation.reset();
+    setSelectedIds(new Set());
+    setLastAppliedIds([]);
+  };
+
   const toggleSelect = (id: number) => setSelectedIds(prev => {
     const next = new Set(prev);
     if (next.has(id)) { next.delete(id); } else { next.add(id); }
     return next;
   });
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="space-y-4">
@@ -57,35 +91,61 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Otomatik Zamanlama</CardTitle>
-            <CardDescription>Zamanlanmamış şubeler için derslik ve saat önerisi üretir.</CardDescription>
+            <CardDescription>Zamanlanmamis subeler icin derslik ve saat onerisi uretir.</CardDescription>
           </div>
           <Button onClick={handlePreview} disabled={previewMutation.isPending}>
             <Zap className="h-4 w-4 mr-1" />
-            {previewMutation.isPending ? 'Hesaplanıyor...' : 'Otomatik Ata'}
+            {previewMutation.isPending ? 'Hesaplaniyor...' : 'Otomatik Ata'}
           </Button>
         </CardHeader>
       </Card>
 
-      {previewMutation.data && (
+      {/* Run history selector */}
+      {runsQuery.data && runsQuery.data.length > 0 && (
+        <div className="flex items-center gap-3">
+          <History className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Gecmis:</span>
+          <Select
+            value={selectedRunId?.toString() ?? ''}
+            onValueChange={handleRunSelect}
+          >
+            <SelectTrigger className="w-[400px]">
+              <SelectValue placeholder="Bir calistirma secin" />
+            </SelectTrigger>
+            <SelectContent>
+              {runsQuery.data.map(run => (
+                <SelectItem key={run.id} value={run.id.toString()}>
+                  {formatDate(run.createdAt)} — {run.successCount} basarili, {run.failedCount} basarisiz (Seed: {run.seed})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {runDetailQuery.isLoading && (
+            <span className="text-xs text-muted-foreground">Yukleniyor...</span>
+          )}
+        </div>
+      )}
+
+      {previewData && (
         <>
           <div className="flex gap-2 items-center">
-            <Badge variant="success">{previewMutation.data.successCount} başarılı</Badge>
-            <Badge variant="destructive">{previewMutation.data.failedCount} başarısız</Badge>
+            <Badge variant="success">{previewData.successCount} basarili</Badge>
+            <Badge variant="destructive">{previewData.failedCount} basarisiz</Badge>
             <span className="text-xs text-muted-foreground ml-2">
-              {previewMutation.data.stats?.elapsedSeconds?.toFixed(1)}s | Seed: {previewMutation.data.seed}
+              {previewData.stats?.elapsedSeconds?.toFixed(1)}s | Seed: {previewData.seed}
             </span>
           </div>
 
-          {previewMutation.data.assignments.length > 0 && (
+          {previewData.assignments.length > 0 && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Önizleme</CardTitle>
+                <CardTitle className="text-sm">Onizleme</CardTitle>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={handleApplySelected} disabled={selectedIds.size === 0 || applyMutation.isPending}>
-                    Seçilenleri Uygula ({selectedIds.size})
+                    Secilenleri Uygula ({selectedIds.size})
                   </Button>
                   <Button size="sm" onClick={handleApplyAll} disabled={applyMutation.isPending}>
-                    Tümünü Uygula
+                    Tumunu Uygula
                   </Button>
                 </div>
               </CardHeader>
@@ -95,14 +155,14 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
                     <TableRow>
                       <TableHead className="w-8" />
                       <TableHead>Ders</TableHead>
-                      <TableHead>Bölüm</TableHead>
+                      <TableHead>Bolum</TableHead>
                       <TableHead>Derslik</TableHead>
                       <TableHead>Saat</TableHead>
                       <TableHead>Uyum</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {previewMutation.data.assignments.map(a => (
+                    {previewData.assignments.map(a => (
                       <TableRow key={a.sectionId}>
                         <TableCell>
                           <input type="checkbox" checked={selectedIds.has(a.sectionId)} onChange={() => toggleSelect(a.sectionId)} />
@@ -120,11 +180,11 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
             </Card>
           )}
 
-          {previewMutation.data.failures.length > 0 && (
+          {previewData.failures.length > 0 && (
             <Card>
-              <CardHeader><CardTitle className="text-sm text-destructive">Atanamayan Şubeler ({previewMutation.data.failures.length})</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm text-destructive">Atanamayan Subeler ({previewData.failures.length})</CardTitle></CardHeader>
               <CardContent className="space-y-2">
-                {previewMutation.data.failures.map(f => (
+                {previewData.failures.map(f => (
                   <div key={f.sectionId} className="border-b pb-2 last:border-0">
                     <div className="text-sm font-medium">
                       <span className="font-mono">{f.courseCode}</span> {f.courseName}
@@ -138,7 +198,7 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
                                s.suggestionType === 'InstructorReassign' ? 'Hoca' :
                                s.suggestionType === 'ClassroomAdd' ? 'Derslik' :
                                s.suggestionType === 'TimeChange' ? 'Zaman' :
-                               s.suggestionType === 'ConstraintRelax' ? 'Kısıt' : s.suggestionType}
+                               s.suggestionType === 'ConstraintRelax' ? 'Kisit' : s.suggestionType}
                             </Badge>
                             <span>{s.message}</span>
                           </div>
@@ -157,7 +217,7 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
             <Alert variant={applyMutation.data.failedCount > 0 ? 'destructive' : 'default'}>
               <AlertTitle>Uygulama Sonucu</AlertTitle>
               <AlertDescription>
-                {applyMutation.data.successCount} başarılı, {applyMutation.data.failedCount} başarısız
+                {applyMutation.data.successCount} basarili, {applyMutation.data.failedCount} basarisiz
                 {applyMutation.data.errors.map((e, i) => <p key={i} className="text-xs">{e}</p>)}
               </AlertDescription>
             </Alert>
@@ -168,7 +228,7 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
               variant="outline"
               size="sm"
               onClick={() => {
-                if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`)) {
+                if (confirm(`${lastAppliedIds.length} subenin atamasini kaldirmak istediginize emin misiniz?`)) {
                   batchUnassign.mutate(lastAppliedIds, {
                     onSuccess: () => setLastAppliedIds([]),
                   });
@@ -177,8 +237,8 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
               disabled={batchUnassign.isPending}
             >
               {batchUnassign.isPending
-                ? 'Geri alınıyor...'
-                : `Son Uygulamayı Geri Al (${lastAppliedIds.length} şube)`}
+                ? 'Geri aliniyor...'
+                : `Son Uygulamayi Geri Al (${lastAppliedIds.length} sube)`}
             </Button>
           )}
         </>

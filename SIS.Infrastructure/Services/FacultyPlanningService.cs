@@ -566,9 +566,69 @@ public class FacultyPlanningService : IFacultyPlanningService
             .ToList();
     }
 
-    public async Task<AutoSchedulePreviewDto> AutoSchedulePreviewAsync(AutoScheduleRequest request, CancellationToken ct = default)
+    public async Task<AutoSchedulePreviewDto> AutoSchedulePreviewAsync(AutoScheduleRequest request, string userId, CancellationToken ct = default)
     {
-        return await _autoScheduleEngine.RunAsync(request, ct);
+        var result = await _autoScheduleEngine.RunAsync(request, ct);
+
+        // Save run to DB
+        var run = new ScheduleRun
+        {
+            FacultyId = request.FacultyId,
+            TermId = request.TermId,
+            Seed = result.Seed,
+            TotalProcessed = result.TotalProcessed,
+            SuccessCount = result.SuccessCount,
+            FailedCount = result.FailedCount,
+            TotalPenalty = result.TotalPenalty,
+            ElapsedSeconds = result.Stats?.ElapsedSeconds ?? 0,
+            ResultJson = JsonSerializer.Serialize(result, JsonOptions),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = int.TryParse(userId, out var uid) ? uid : null
+        };
+        _context.ScheduleRuns.Add(run);
+        await _context.SaveChangesAsync(ct);
+
+        return result;
+    }
+
+    public async Task<List<ScheduleRunSummaryDto>> GetScheduleRunsAsync(int facultyId, int termId, CancellationToken ct = default)
+    {
+        return await _context.ScheduleRuns
+            .AsNoTracking()
+            .Where(r => r.FacultyId == facultyId && r.TermId == termId)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(20)
+            .Select(r => new ScheduleRunSummaryDto
+            {
+                Id = r.Id,
+                Seed = r.Seed,
+                TotalProcessed = r.TotalProcessed,
+                SuccessCount = r.SuccessCount,
+                FailedCount = r.FailedCount,
+                TotalPenalty = r.TotalPenalty,
+                ElapsedSeconds = r.ElapsedSeconds,
+                CreatedAt = r.CreatedAt
+            })
+            .ToListAsync(ct);
+    }
+
+    public async Task<ScheduleRunDetailDto?> GetScheduleRunAsync(int id, CancellationToken ct = default)
+    {
+        var run = await _context.ScheduleRuns
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id, ct);
+
+        if (run == null) return null;
+
+        var result = JsonSerializer.Deserialize<AutoSchedulePreviewDto>(run.ResultJson, JsonOptions);
+
+        return new ScheduleRunDetailDto
+        {
+            Id = run.Id,
+            Seed = run.Seed,
+            CreatedAt = run.CreatedAt,
+            Result = result!
+        };
     }
 
     public async Task<ApplyScheduleResultDto> ApplyScheduleAsync(ApplyScheduleRequest request, string userId, CancellationToken ct = default)

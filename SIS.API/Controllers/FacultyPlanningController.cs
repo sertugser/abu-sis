@@ -89,7 +89,7 @@ public class FacultyPlanningController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasFacultyAccessAsync(userId, request.FacultyId, ct)) return Forbid();
 
-        var result = await _service.AutoSchedulePreviewAsync(request, ct);
+        var result = await _service.AutoSchedulePreviewAsync(request, userId.ToString(), ct);
         return Ok(result);
     }
 
@@ -135,6 +135,27 @@ public class FacultyPlanningController : ControllerBase
 
         var result = await _service.GetConflictsAsync(facultyId, termId, ct);
         return Ok(result);
+    }
+
+    [HttpGet("schedule-runs")]
+    public async Task<IActionResult> GetScheduleRuns(
+        [FromQuery] int facultyId, [FromQuery] int termId, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasFacultyAccessAsync(userId, facultyId, ct)) return Forbid();
+
+        var runs = await _service.GetScheduleRunsAsync(facultyId, termId, ct);
+        return Ok(runs);
+    }
+
+    [HttpGet("schedule-runs/{id}")]
+    public async Task<IActionResult> GetScheduleRun(int id, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out _)) return Unauthorized();
+
+        var run = await _service.GetScheduleRunAsync(id, ct);
+        if (run == null) return NotFound();
+        return Ok(run);
     }
 
     private async Task<int?> EnforceDepartmentScopeAsync(int userId, int? requestedDepartmentId, CancellationToken ct)

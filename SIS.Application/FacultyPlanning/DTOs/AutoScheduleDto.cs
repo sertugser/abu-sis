@@ -78,6 +78,26 @@ public class ApplyScheduleItemRequest
     public int? InstructorId { get; set; }
 }
 
+public class ScheduleRunSummaryDto
+{
+    public int Id { get; set; }
+    public int Seed { get; set; }
+    public int TotalProcessed { get; set; }
+    public int SuccessCount { get; set; }
+    public int FailedCount { get; set; }
+    public double TotalPenalty { get; set; }
+    public double ElapsedSeconds { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class ScheduleRunDetailDto
+{
+    public int Id { get; set; }
+    public int Seed { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public AutoSchedulePreviewDto Result { get; set; } = null!;
+}
+
 public class ApplyScheduleResultDto
 {
     public int SuccessCount { get; set; }

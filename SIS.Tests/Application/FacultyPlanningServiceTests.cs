@@ -51,7 +51,7 @@ public class FacultyPlanningServiceTests : IDisposable
         {
             FacultyId = FacultyId,
             TermId = TermId
-        });
+        }, "1");
 
         result.SuccessCount.Should().Be(1);
         result.Assignments.Should().ContainSingle();
@@ -83,7 +83,7 @@ public class FacultyPlanningServiceTests : IDisposable
         {
             FacultyId = FacultyId,
             TermId = TermId
-        });
+        }, "1");
 
         result.SuccessCount.Should().Be(2);
         result.FailedCount.Should().Be(0);

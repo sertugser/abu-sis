@@ -15,7 +15,11 @@ public interface IFacultyPlanningService
 
     Task UnassignSectionAsync(int sectionId, string userId, CancellationToken ct = default);
 
-    Task<AutoSchedulePreviewDto> AutoSchedulePreviewAsync(AutoScheduleRequest request, CancellationToken ct = default);
+    Task<AutoSchedulePreviewDto> AutoSchedulePreviewAsync(AutoScheduleRequest request, string userId, CancellationToken ct = default);
+
+    Task<List<ScheduleRunSummaryDto>> GetScheduleRunsAsync(int facultyId, int termId, CancellationToken ct = default);
+
+    Task<ScheduleRunDetailDto?> GetScheduleRunAsync(int id, CancellationToken ct = default);
 
     Task<ApplyScheduleResultDto> ApplyScheduleAsync(ApplyScheduleRequest request, string userId, CancellationToken ct = default);
 

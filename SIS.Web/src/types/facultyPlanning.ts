@@ -172,3 +172,21 @@ export interface AvailableClassroom {
   type: string;
   fitScore: number;
 }
+
+export interface ScheduleRunSummary {
+  id: number;
+  seed: number;
+  totalProcessed: number;
+  successCount: number;
+  failedCount: number;
+  totalPenalty: number;
+  elapsedSeconds: number;
+  createdAt: string;
+}
+
+export interface ScheduleRunDetail {
+  id: number;
+  seed: number;
+  createdAt: string;
+  result: AutoSchedulePreview;
+}

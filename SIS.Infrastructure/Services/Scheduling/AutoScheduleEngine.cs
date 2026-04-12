@@ -103,7 +103,8 @@ public sealed class AutoScheduleEngine
                          && !cs.IsFinalized
                          && cs.IsActive
                          && cs.Course.DepartmentId.HasValue
-                         && departmentIdSet.Contains(cs.Course.DepartmentId.Value));
+                         && departmentIdSet.Contains(cs.Course.DepartmentId.Value)
+                         && cs.Course.TeachingMethod != TeachingMethod.Online);
 
         if (request.DepartmentId.HasValue)
         {
