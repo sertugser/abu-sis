@@ -388,39 +388,50 @@ public class GradeController : ControllerBase
             .Where(sg => registrationIds.Contains(sg.CourseRegistrationId))
             .ToListAsync();
 
+        var gradesByRegistration = allGrades
+            .GroupBy(grade => grade.CourseRegistrationId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var missingGrades = registrations
+            .SelectMany(reg => components
+                .Where(component => !gradesByRegistration
+                    .GetValueOrDefault(reg.Id, new List<StudentGrade>())
+                    .Any(grade => grade.GradeComponentId == component.Id && grade.Score != null))
+                .Select(component => new
+                {
+                    reg.StudentId,
+                    ComponentName = component.Name
+                }))
+            .ToList();
+
+        if (missingGrades.Count > 0)
+        {
+            return BadRequest(new
+            {
+                error = "Tüm öğrencilerin tüm not bileşenleri girilmeden ders sonuçlandırılamaz.",
+                missingCount = missingGrades.Count,
+                missing = missingGrades.Take(10)
+            });
+        }
+
         // 4. Her öğrenci için harf notu hesapla
         var results = new List<object>();
 
         foreach (var reg in registrations)
         {
-            var studentGrades = allGrades.Where(sg => sg.CourseRegistrationId == reg.Id).ToList();
+            var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
 
             // Ağırlıklı ortalama hesapla
             decimal weightedScore = 0;
-            bool allComponentsHaveGrades = true;
 
             foreach (var comp in components)
             {
-                var sg = studentGrades.FirstOrDefault(g => g.GradeComponentId == comp.Id);
-                if (sg?.Score == null)
-                {
-                    allComponentsHaveGrades = false;
-                    break;
-                }
-                weightedScore += sg.Score.Value * comp.Weight / 100m;
+                var score = studentGrades.First(g => g.GradeComponentId == comp.Id).Score!.Value;
+                weightedScore += score * comp.Weight / 100m;
             }
 
-            GradeCode letterGrade;
-            if (!allComponentsHaveGrades)
-            {
-                // Eksik notu olan öğrenci → NA (devamsızlık/eksik)
-                letterGrade = GradeCode.NA;
-            }
-            else
-            {
-                var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
-                letterGrade = criteria.ResolveGrade(roundedScore);
-            }
+            var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
+            var letterGrade = criteria.ResolveGrade(roundedScore);
 
             reg.Grade = letterGrade;
             reg.UpdatedAt = DateTime.UtcNow;

@@ -74,6 +74,24 @@ public class RegistrationController : ControllerBase
     }
 
     /// <summary>
+    /// GET api/registrations/attendance-status — list the student's active-term attendance status.
+    /// </summary>
+    [HttpGet("attendance-status")]
+    [Authorize(Roles = "Student")]
+    public async Task<IActionResult> GetAttendanceStatus([FromQuery] int? termId)
+    {
+        var studentId = await GetStudentIdAsync();
+        if (studentId == null)
+            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+
+        var status = await _registrationService.GetStudentAttendanceStatusAsync(studentId.Value, termId);
+        if (status == null)
+            return NotFound(new { error = "Dönem veya ders kaydı bulunamadı." });
+
+        return Ok(status);
+    }
+
+    /// <summary>
     /// GET api/registrations/history — list the student's course history with grades, grouped by term.
     /// </summary>
     [HttpGet("history")]

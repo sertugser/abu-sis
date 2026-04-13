@@ -31,3 +31,50 @@ export interface StudentTermGpaDto {
   sgpa: number;
   cgpa: number;
 }
+
+export interface StudentGradeStatisticsDto {
+  registrationId: number;
+  courseSectionId: number;
+  termName: string;
+  facultyProgram: string;
+  instructorName: string;
+  courseCode: string;
+  courseName: string;
+  sectionNumber: number;
+  studentLetterGrade: string | null;
+  studentWeightedAverage: number | null;
+  result: StudentResultInfoDto;
+  gradeRanges: StudentGradeRangeDto[];
+  components: StudentComponentStatisticsDto[];
+  summary: StudentSectionStatisticsSummaryDto;
+}
+
+export interface StudentResultInfoDto {
+  status: string;
+  statusDate: string | null;
+  evaluationMethod: string;
+}
+
+export interface StudentGradeRangeDto {
+  grade: string;
+  minScore: number;
+  maxScore: number;
+  studentCount: number;
+}
+
+export interface StudentComponentStatisticsDto {
+  componentId: number;
+  name: string;
+  weight: number;
+  totalStudentCount: number;
+  enteredStudentCount: number;
+  missingStudentCount: number;
+  averageScore: number | null;
+  studentScore: number | null;
+}
+
+export interface StudentSectionStatisticsSummaryDto {
+  totalStudentCount: number;
+  gradedStudentCount: number;
+  classAverage: number | null;
+}

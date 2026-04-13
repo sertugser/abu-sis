@@ -55,6 +55,9 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         ["Schedule.SlotDurationMinutes"] = (30, 180),
         ["Schedule.BreakBetweenSlotsMinutes"] = (0, 60),
         ["Schedule.EveningSlotCount"] = (0, 10),
+        ["Attendance.TermWeekCount"] = (1, 52),
+        ["Attendance.TheoryAbsenceLimitPercent"] = (0, 100),
+        ["Attendance.LabAbsenceLimitPercent"] = (0, 100),
     };
 
     private static readonly JsonSerializerOptions ExportJsonOptions = new()

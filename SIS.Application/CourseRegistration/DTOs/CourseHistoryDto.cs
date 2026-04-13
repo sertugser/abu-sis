@@ -12,6 +12,8 @@ public class CourseHistoryTermDto
 public class CourseHistoryItemDto
 {
     public int RegistrationId { get; set; }
+    public int CourseSectionId { get; set; }
+    public int SectionNumber { get; set; }
     public string CourseCode { get; set; } = string.Empty;
     public string CourseName { get; set; } = string.Empty;
     public int Ects { get; set; }

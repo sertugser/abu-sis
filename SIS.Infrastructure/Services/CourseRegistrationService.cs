@@ -484,6 +484,165 @@ public class CourseRegistrationService : ICourseRegistrationService
         }).ToList();
     }
 
+    public async Task<StudentAttendanceStatusDto?> GetStudentAttendanceStatusAsync(int studentId, int? termId = null)
+    {
+        var registeredTermRows = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(cr => cr.StudentId == studentId
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Dropped)
+            .Select(cr => new
+            {
+                TermId = cr.CourseSection.Term.Id,
+                TermName = cr.CourseSection.Term.Name,
+                cr.CourseSection.Term.Year,
+                cr.CourseSection.Term.Semester,
+                cr.CourseSection.Term.IsActive
+            })
+            .Distinct()
+            .ToListAsync();
+
+        var availableTerms = registeredTermRows
+            .GroupBy(term => term.TermId)
+            .Select(group =>
+            {
+                var term = group.First();
+                return new StudentAttendanceTermDto
+                {
+                    TermId = term.TermId,
+                    TermName = term.TermName,
+                    Year = term.Year,
+                    Semester = term.Semester.ToString(),
+                    IsActive = term.IsActive
+                };
+            })
+            .OrderByDescending(term => term.IsActive)
+            .ThenByDescending(term => term.Year)
+            .ThenByDescending(term => term.TermId)
+            .ToList();
+
+        var selectedTerm = termId.HasValue
+            ? availableTerms.FirstOrDefault(term => term.TermId == termId.Value)
+            : availableTerms.FirstOrDefault(term => term.IsActive) ?? availableTerms.FirstOrDefault();
+
+        if (selectedTerm == null && termId.HasValue)
+            return null;
+
+        if (selectedTerm == null)
+        {
+            var activeTerm = await _context.AcademicTerms
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.IsActive);
+
+            if (activeTerm == null)
+                return null;
+
+            selectedTerm = new StudentAttendanceTermDto
+            {
+                TermId = activeTerm.Id,
+                TermName = activeTerm.Name,
+                Year = activeTerm.Year,
+                Semester = activeTerm.Semester.ToString(),
+                IsActive = activeTerm.IsActive
+            };
+            availableTerms.Add(selectedTerm);
+        }
+
+        var weekCount = Math.Max(1, await _config.GetIntAsync("Attendance.TermWeekCount", 14));
+        var theoryLimitPercent = ClampPercent(await _config.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30m));
+        var labLimitPercent = ClampPercent(await _config.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20m));
+
+        var student = await _context.Students
+            .AsNoTracking()
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+                    .ThenInclude(p => p.Department)
+            .FirstOrDefaultAsync(s => s.Id == studentId);
+
+        var activeStudentProgram = student?.StudentPrograms
+            .FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+        var activeProgramId = activeStudentProgram?.ProgramId;
+        var activeProgramName = activeStudentProgram?.Program?.Name ?? string.Empty;
+
+        var curriculumMap = new Dictionary<int, int>();
+        if (activeProgramId.HasValue)
+        {
+            var curriculumCourses = await _context.CurriculumCourses
+                .AsNoTracking()
+                .Include(cc => cc.Curriculum)
+                .Where(cc => cc.Curriculum.ProgramId == activeProgramId.Value && cc.Curriculum.IsActive)
+                .Select(cc => new { cc.CourseId, cc.SuggestedSemester })
+                .ToListAsync();
+
+            curriculumMap = curriculumCourses
+                .GroupBy(cc => cc.CourseId)
+                .ToDictionary(group => group.Key, group => group.First().SuggestedSemester);
+        }
+
+        var registrations = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Course)
+                    .ThenInclude(c => c.Department)
+            .Where(cr => cr.StudentId == studentId
+                && cr.CourseSection.TermId == selectedTerm.TermId
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Dropped)
+            .OrderBy(cr => cr.CourseSection.Course.Code)
+            .ThenBy(cr => cr.CourseSection.SectionNumber)
+            .ToListAsync();
+
+        return new StudentAttendanceStatusDto
+        {
+            TermId = selectedTerm.TermId,
+            TermName = selectedTerm.TermName,
+            Year = selectedTerm.Year,
+            Semester = selectedTerm.Semester,
+            AvailableTerms = availableTerms,
+            Policy = new StudentAttendancePolicyDto
+            {
+                TermWeekCount = weekCount,
+                TheoryAbsenceLimitPercent = theoryLimitPercent,
+                LabAbsenceLimitPercent = labLimitPercent
+            },
+            Courses = registrations.Select(registration =>
+            {
+                var course = registration.CourseSection.Course;
+                var theoryTotalHours = weekCount * Math.Max(0, course.TheoryHours);
+                var labTotalHours = weekCount * Math.Max(0, course.LabHours);
+                var isInStudentProgram = curriculumMap.TryGetValue(course.Id, out var suggestedSemester);
+                var programName = isInStudentProgram && !string.IsNullOrWhiteSpace(activeProgramName)
+                    ? activeProgramName
+                    : course.Department?.Name ?? "Ortak Dersler";
+
+                return new StudentAttendanceCourseDto
+                {
+                    RegistrationId = registration.Id,
+                    CourseSectionId = registration.CourseSectionId,
+                    SectionNumber = registration.CourseSection.SectionNumber,
+                    CourseCode = course.Code,
+                    CourseName = course.Name,
+                    Ects = course.Ects,
+                    NationalCredit = course.NationalCredit ?? course.Ects,
+                    SuggestedSemester = suggestedSemester,
+                    ProgramName = programName,
+                    TheoryHours = course.TheoryHours,
+                    LabHours = course.LabHours,
+                    MandatoryAttendance = registration.MandatoryAttendance,
+                    AttendanceEntered = false,
+                    TheoryAbsenceHours = null,
+                    LabAbsenceHours = null,
+                    TotalAbsenceHours = null,
+                    TotalTheoryHours = theoryTotalHours,
+                    TotalLabHours = labTotalHours,
+                    TheoryAbsenceLimitHours = CalculateLimitHours(theoryTotalHours, theoryLimitPercent),
+                    LabAbsenceLimitHours = CalculateLimitHours(labTotalHours, labLimitPercent),
+                    AttendanceStatusLabel = "Yoklama Girişi Yapılmamış"
+                };
+            }).ToList()
+        };
+    }
+
     public async Task<List<CourseHistoryTermDto>> GetCourseHistoryAsync(int studentId)
     {
         var registrations = await _context.CourseRegistrations
@@ -523,6 +682,8 @@ public class CourseRegistrationService : ICourseRegistrationService
                     Courses = g.Select(r => new CourseHistoryItemDto
                     {
                         RegistrationId = r.Id,
+                        CourseSectionId = r.CourseSectionId,
+                        SectionNumber = r.CourseSection.SectionNumber,
                         CourseCode = r.CourseSection.Course.Code,
                         CourseName = r.CourseSection.Course.Name,
                         Ects = r.CourseSection.Course.Ects,
@@ -1198,6 +1359,21 @@ public class CourseRegistrationService : ICourseRegistrationService
             Message = $"{registrations.Count} kayit reddedildi.",
             AffectedRegistrations = registrations.Count
         };
+    }
+
+    private static decimal ClampPercent(decimal value)
+    {
+        if (value < 0m) return 0m;
+        if (value > 100m) return 100m;
+        return value;
+    }
+
+    private static int CalculateLimitHours(int totalHours, decimal limitPercent)
+    {
+        if (totalHours <= 0 || limitPercent <= 0m)
+            return 0;
+
+        return (int)Math.Ceiling(totalHours * limitPercent / 100m);
     }
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
