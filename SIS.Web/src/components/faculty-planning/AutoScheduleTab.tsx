@@ -41,10 +41,11 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
   const runDetailQuery = useScheduleRun(selectedRunId);
 
   // Auto-select first run
+  const firstRunId = runsQuery.data?.[0]?.id ?? null;
   useEffect(() => {
-    if (runsQuery.data?.length && selectedRunId === null && !previewMutation.data)
-      setSelectedRunId(runsQuery.data[0].id);
-  }, [runsQuery.data, selectedRunId, previewMutation.data]);
+    if (firstRunId !== null && selectedRunId === null && !previewMutation.data)
+      setSelectedRunId(firstRunId);
+  }, [firstRunId, selectedRunId, previewMutation.data]);
 
   const previewData: AutoSchedulePreview | undefined =
     previewMutation.data ?? runDetailQuery.data?.result;
@@ -99,7 +100,7 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
   const toggleCheck = useCallback((id: number) => {
     setSelectedIds(prev => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) { n.delete(id); } else { n.add(id); }
       return n;
     });
   }, []);

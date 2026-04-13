@@ -24,7 +24,7 @@ export function ScheduleDetailPanel({
   unscheduledCount,
   availableClassroomCount,
   hasPreviewData,
-  previewData,
+  previewData: _previewData,
 }: ScheduleDetailPanelProps) {
   if (selectedSuccess) {
     return <SuccessDetail item={selectedSuccess} isChecked={isChecked} onToggleCheck={onToggleCheck} />;
