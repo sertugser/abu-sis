@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   applySchedule, assignSection, autoSchedulePreview, batchUnassignSections,
   getAvailableClassrooms, getFacultyPlanningConflicts, getFacultyPlanningOverview,
-  getFacultyPlanningSections, getFacultyPlanningTimeSlots, unassignSection,
-  validateSectionSchedule,
+  getFacultyPlanningSections, getFacultyPlanningTimeSlots, getScheduleRun,
+  getScheduleRuns, resetAllSchedules, unassignSection, validateSectionSchedule,
 } from '../api/facultyPlanning.api';
 import type {
   ApplyScheduleRequest, AssignSectionRequest, AutoScheduleRequest,
@@ -52,8 +52,30 @@ export function useUnassignSection() {
 }
 
 export function useAutoSchedulePreview() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: AutoScheduleRequest) => autoSchedulePreview(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facultyPlanning', 'scheduleRuns'] });
+    },
+  });
+}
+
+export function useScheduleRuns(facultyId: number, termId: number | null) {
+  return useQuery({
+    queryKey: ['facultyPlanning', 'scheduleRuns', facultyId, termId],
+    queryFn: () => getScheduleRuns(facultyId, termId!),
+    enabled: termId != null,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useScheduleRun(id: number | null) {
+  return useQuery({
+    queryKey: ['facultyPlanning', 'scheduleRun', id],
+    queryFn: () => getScheduleRun(id!),
+    enabled: id != null,
+    staleTime: 60 * 1000,
   });
 }
 
@@ -107,6 +129,17 @@ export function useBatchUnassignSections() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: batchUnassignSections,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['facultyPlanning'] });
+    },
+  });
+}
+
+export function useResetAllSchedules() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ facultyId, termId }: { facultyId: number; termId: number }) =>
+      resetAllSchedules(facultyId, termId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facultyPlanning'] });
     },

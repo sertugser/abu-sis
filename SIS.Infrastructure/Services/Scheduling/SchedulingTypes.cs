@@ -1,5 +1,6 @@
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Infrastructure.Services.Scheduling;
 
 namespace SIS.Infrastructure.Services;
 
@@ -13,6 +14,8 @@ public sealed class TermSnapshot
     public Dictionary<int, int> DeptFacultyMap { get; init; } = new();                // for H10
     public List<CoursePrerequisite> Corequisites { get; init; } = new();              // for H11
     public List<CoEnrollmentPair> CoEnrollmentPairs { get; set; } = new();            // for S4
+    public HashSet<(int SectionId1, int SectionId2)>? CohortConflictPairs { get; set; }
+    public EnrollmentConflictMatrix? EnrollmentConflicts { get; set; }
     public Dictionary<int, Dictionary<int, int>> CourseSuggestedSemestersByDepartment { get; init; } = new();
     public Dictionary<int, HashSet<int>> CourseAccessibleDepartments { get; init; } = new();
 }
@@ -34,6 +37,7 @@ public sealed class CoEnrollmentPair
 public sealed class SectionSnapshot
 {
     public int SectionId { get; init; }
+    public int SectionNumber { get; init; }
     public int CourseId { get; init; }
     public string CourseCode { get; init; } = string.Empty;
     public string CourseName { get; init; } = string.Empty;
@@ -46,6 +50,8 @@ public sealed class SectionSnapshot
     public string ClassroomName { get; init; } = string.Empty;
     public int ClassroomCapacity { get; init; }
     public ClassroomType ClassroomType { get; init; }         // for H4
+    public ClassroomType? TheoryClassroomType { get; init; }
+    public ClassroomType? LabClassroomType { get; init; }
     public int? InstructorId { get; init; }
     public string InstructorName { get; init; } = string.Empty;
     public int InstructorMaxWeeklyHours { get; init; }

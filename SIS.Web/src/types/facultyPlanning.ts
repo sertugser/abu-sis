@@ -105,10 +105,23 @@ export interface AutoSchedulePreview {
   failedCount: number;
   assignments: AutoSchedulePreviewItem[];
   failures: AutoScheduleFailure[];
+  seed: number;
+  totalPenalty: number;
+  stats: AutoScheduleStats;
+}
+
+export interface AutoScheduleStats {
+  constructionPlaced: number;
+  constructionFailed: number;
+  saIterations: number;
+  saInitialPenalty: number;
+  saFinalPenalty: number;
+  elapsedSeconds: number;
 }
 
 export interface AutoSchedulePreviewItem {
   sectionId: number;
+  sectionNumber: number;
   courseCode: string;
   courseName: string;
   departmentCode: string;
@@ -123,9 +136,19 @@ export interface AutoSchedulePreviewItem {
 
 export interface AutoScheduleFailure {
   sectionId: number;
+  sectionNumber: number;
+  capacity: number;
   courseCode: string;
   courseName: string;
   reason: string;
+  suggestions: FailureSuggestion[];
+}
+
+export interface FailureSuggestion {
+  constraintCode: string;
+  message: string;
+  suggestionType: string;
+  priority: number;
 }
 
 export interface ApplyScheduleRequest {
@@ -151,4 +174,22 @@ export interface AvailableClassroom {
   capacity: number;
   type: string;
   fitScore: number;
+}
+
+export interface ScheduleRunSummary {
+  id: number;
+  seed: number;
+  totalProcessed: number;
+  successCount: number;
+  failedCount: number;
+  totalPenalty: number;
+  elapsedSeconds: number;
+  createdAt: string;
+}
+
+export interface ScheduleRunDetail {
+  id: number;
+  seed: number;
+  createdAt: string;
+  result: AutoSchedulePreview;
 }

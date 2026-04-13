@@ -14,6 +14,8 @@ public class Course
     public int Ects { get; set; }
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
+    public ClassroomType? TheoryClassroomType { get; set; }
+    public ClassroomType? LabClassroomType { get; set; }
     public bool IsNonGpa { get; set; }                      // true = S/U graded
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

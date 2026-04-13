@@ -3,6 +3,7 @@ import type {
   ApplyScheduleRequest, ApplyScheduleResult, AssignmentResult, AssignSectionRequest,
   AutoSchedulePreview, AutoScheduleRequest, AvailableClassroom,
   FacultyPlanningOverview, FacultyPlanningSectionPage, FacultyPlanningTimeSlot,
+  ScheduleRunDetail, ScheduleRunSummary,
 } from '../types/facultyPlanning';
 import type { ScheduleSlot, ScheduleValidationResult, SchedulingConflict } from '../types/scheduling';
 
@@ -39,6 +40,11 @@ export async function batchUnassignSections(sectionIds: number[]): Promise<{ suc
   return { successCount, failedCount: results.length - successCount };
 }
 
+export async function resetAllSchedules(facultyId: number, termId: number): Promise<{ resetCount: number }> {
+  const { data } = await apiClient.delete<{ resetCount: number }>(`/faculty-planning/reset-all/${facultyId}/${termId}`);
+  return data;
+}
+
 export async function autoSchedulePreview(request: AutoScheduleRequest): Promise<AutoSchedulePreview> {
   const { data } = await apiClient.post<AutoSchedulePreview>('/faculty-planning/auto-schedule', request);
   return data;
@@ -69,6 +75,18 @@ export async function getFacultyPlanningConflicts(facultyId: number, termId: num
   const { data } = await apiClient.get<SchedulingConflict[]>('/faculty-planning/conflicts', {
     params: { facultyId, termId },
   });
+  return data;
+}
+
+export async function getScheduleRuns(facultyId: number, termId: number): Promise<ScheduleRunSummary[]> {
+  const { data } = await apiClient.get<ScheduleRunSummary[]>('/faculty-planning/schedule-runs', {
+    params: { facultyId, termId },
+  });
+  return data;
+}
+
+export async function getScheduleRun(id: number): Promise<ScheduleRunDetail> {
+  const { data } = await apiClient.get<ScheduleRunDetail>(`/faculty-planning/schedule-runs/${id}`);
   return data;
 }
 
