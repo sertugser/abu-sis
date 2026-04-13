@@ -532,6 +532,49 @@ public class FacultyPlanningService : IFacultyPlanningService
         }
     }
 
+    public async Task<int> ResetAllSchedulesAsync(int facultyId, int termId, string userId, CancellationToken ct = default)
+    {
+        var departmentIds = await _context.Departments
+            .AsNoTracking()
+            .Where(d => d.FacultyId == facultyId)
+            .Select(d => d.Id)
+            .ToListAsync(ct);
+
+        var sectionIds = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.TermId == termId
+                && cs.IsActive && !cs.IsFinalized && !cs.IsPinned && !cs.IsScheduleLocked
+                && cs.Course.DepartmentId.HasValue
+                && departmentIds.Contains(cs.Course.DepartmentId.Value))
+            .Select(cs => cs.Id)
+            .ToListAsync(ct);
+
+        if (sectionIds.Count == 0) return 0;
+
+        // Remove all SectionSchedule records
+        var schedules = await _context.SectionSchedules
+            .Where(ss => sectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync(ct);
+        _context.SectionSchedules.RemoveRange(schedules);
+
+        // Clear ClassroomId on sections
+        var sections = await _context.CourseSections
+            .Where(cs => sectionIds.Contains(cs.Id))
+            .ToListAsync(ct);
+        foreach (var s in sections)
+            s.ClassroomId = null;
+
+        _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
+        {
+            SectionId = sectionIds[0],
+            Action = "ResetAll",
+            UserId = userId
+        });
+
+        await _context.SaveChangesAsync(ct);
+        return sections.Count;
+    }
+
     public async Task<List<AvailableClassroomDto>> GetAvailableClassroomsAsync(
         int termId, DayOfWeek? day = null, TimeOnly? startTime = null, TimeOnly? endTime = null,
         int? minCapacity = null, string? type = null, CancellationToken ct = default)

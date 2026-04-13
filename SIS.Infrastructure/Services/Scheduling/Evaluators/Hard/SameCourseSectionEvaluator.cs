@@ -12,6 +12,10 @@ public sealed class SameCourseSectionEvaluator : IConstraintEvaluator
     public ConstraintResult Evaluate(IConstraintContext ctx)
     {
         var context = (SchedulingConstraintContext)ctx;
+
+        if (context.Config.AllowSameCourseSectionOverlap)
+            return ConstraintResult.Ok();
+
         var c = context.Candidate;
         var conflicts = new List<SchedulingConflictDto>();
 

@@ -20,21 +20,20 @@ public sealed class OccupancyEvaluator : IConstraintEvaluator
         if (!c.ClassroomId.HasValue || c.ClassroomCapacity <= 0)
             return ConstraintResult.Ok();
 
-        var occupancyRate = c.Capacity * 100 / c.ClassroomCapacity;
-        var occupancyDouble = c.Capacity * 100.0 / c.ClassroomCapacity;
+        var occupancyRate = c.Capacity * 100.0 / c.ClassroomCapacity;
 
         if (occupancyRate < config.S1MinOccupancy)
         {
-            var penalty = (config.S1MinOccupancy - occupancyDouble) * 0.5;
+            var penalty = (config.S1MinOccupancy - occupancyRate) * 0.5;
             return ConstraintResult.WithPenalty(penalty,
-                $"S1 Uyarı: {c.CourseCode} ({c.ClassroomName}) doluluk oranı düşük (%{occupancyRate}, hedef >=%{config.S1MinOccupancy})");
+                $"S1 Uyarı: {c.CourseCode} ({c.ClassroomName}) doluluk oranı düşük (%{occupancyRate:0.#}, hedef >=%{config.S1MinOccupancy})");
         }
 
         if (occupancyRate > config.S1MaxOccupancy)
         {
-            var penalty = (occupancyDouble - config.S1MaxOccupancy) * 0.5;
+            var penalty = (occupancyRate - config.S1MaxOccupancy) * 0.5;
             return ConstraintResult.WithPenalty(penalty,
-                $"S1 Uyarı: {c.CourseCode} ({c.ClassroomName}) doluluk oranı yüksek (%{occupancyRate}, hedef <=%{config.S1MaxOccupancy})");
+                $"S1 Uyarı: {c.CourseCode} ({c.ClassroomName}) doluluk oranı yüksek (%{occupancyRate:0.#}, hedef <=%{config.S1MaxOccupancy})");
         }
 
         return ConstraintResult.Ok();

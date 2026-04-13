@@ -1426,7 +1426,7 @@ public class SchedulingService : ISchedulingService
         return (conflicts, notes);
     }
 
-    private static SchedulingConstraintConfig BuildConstraintConfig(SoftConstraintConfig soft, HardConstraintConfig? hard)
+    private SchedulingConstraintConfig BuildConstraintConfig(SoftConstraintConfig soft, HardConstraintConfig? hard)
     {
         return new SchedulingConstraintConfig
         {
@@ -1437,6 +1437,8 @@ public class SchedulingService : ISchedulingService
             BreakDurationMinutes = hard?.BreakDurationMinutes ?? 5,
             AmphiThreshold = hard?.AmphiThreshold ?? 100,
             TheoryLabSplitThreshold = hard?.TheoryLabSplitThreshold ?? 4,
+            AllowSameCourseSectionOverlap = hard?.AllowSameCourseSectionOverlap ?? false,
+            CurriculumConflictMode = hard?.CurriculumConflictMode ?? "curriculum",
             S1Enabled = soft.S1Enabled,
             S1MinOccupancy = soft.S1MinOccupancy,
             S1MaxOccupancy = soft.S1MaxOccupancy,
@@ -2162,8 +2164,10 @@ public class SchedulingService : ISchedulingService
         var breakDuration = GetInt(config, "Schedule.BreakDurationMinutes", 5);
         var amphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100);
         var theoryLabSplitThreshold = GetInt(config, "Schedule.TheoryLabSplitThreshold", 4);
+        var allowSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false);
+        var conflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var cm) ? cm : "curriculum";
 
-        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration, amphiThreshold, theoryLabSplitThreshold);
+        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration, amphiThreshold, theoryLabSplitThreshold, allowSectionOverlap, conflictMode);
     }
 
     private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
@@ -2198,7 +2202,9 @@ public class SchedulingService : ISchedulingService
     private record HardConstraintConfig(
         bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
         int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold,
-        int TheoryLabSplitThreshold = 4);
+        int TheoryLabSplitThreshold = 4,
+        bool AllowSameCourseSectionOverlap = false,
+        string CurriculumConflictMode = "curriculum");
 
 
     private static class ConflictTypes

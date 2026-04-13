@@ -228,7 +228,7 @@ public sealed class SimulatedAnnealingOptimizer
         var chosen = candidates[random.Next(candidates.Count)];
         var newBlocks = new List<BlockAssignment>();
         if (chosen.TheoryBlock != null) newBlocks.Add(chosen.TheoryBlock);
-        if (chosen.LabBlock != null) newBlocks.Add(chosen.LabBlock);
+        newBlocks.AddRange(chosen.LabBlocks);
 
         state.Assign(sectionId, snapshot, newBlocks);
 

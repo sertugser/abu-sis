@@ -1,5 +1,6 @@
 using SIS.Application.Scheduling.Constraints;
 using SIS.Domain.Entities;
+using SIS.Infrastructure.Services;
 
 namespace SIS.Infrastructure.Services.Scheduling;
 
@@ -42,235 +43,188 @@ public sealed class ConstructionSolver
         int backtrackLimit,
         MrvWeights mrvWeights)
     {
-        // Build classroom lookup for enriching snapshots
         var classroomLookup = classrooms.ToDictionary(c => c.Id);
+        var sectionLookup = targetSections.ToDictionary(s => s.SectionId);
+        var domainStore = new DomainStore();
+        var conflictStats = new ConflictStatistics();
 
-        // Step 1: Calculate MRV scores and sort descending (most constrained first)
-        var maxCapacity = targetSections.Count > 0
-            ? targetSections.Max(s => s.Capacity)
-            : 1;
-        if (maxCapacity == 0) maxCapacity = 1;
-
-        var eligibleClassroomCounts = new Dictionary<int, int>();
+        // Step 1: Initialize domains — generate candidates for each section
         foreach (var section in targetSections)
         {
-            var count = classrooms.Count(c =>
-                facultyClassroomIds.Contains(c.Id) &&
-                c.Capacity >= section.Capacity &&
-                (c.Type == (section.TheoryClassroomType ?? Domain.Enums.ClassroomType.Lecture) ||
-                 c.Type == (section.LabClassroomType ?? Domain.Enums.ClassroomType.Lab)));
-            eligibleClassroomCounts[section.SectionId] = Math.Max(count, 1);
+            var candidates = _candidateGen.Generate(
+                section, state, classrooms, timeSlotsByDay,
+                splitThreshold, facultyClassroomIds);
+            domainStore.InitDomain(section.SectionId, section, candidates);
         }
 
-        var sorted = targetSections
-            .Select(s =>
-            {
-                var totalHours = s.TheoryHours + s.LabHours;
-                var divisor = Math.Max(9 - totalHours, 1);
-                var score =
-                    mrvWeights.ClassroomWeight * (1.0 / eligibleClassroomCounts[s.SectionId]) +
-                    mrvWeights.SlotWeight * (1.0 / divisor) +
-                    mrvWeights.LabWeight * (s.LabHours > 0 ? 1.0 : 0.0) +
-                    mrvWeights.CapacityWeight * ((double)s.Capacity / maxCapacity);
-                return (Section: s, Score: score);
-            })
-            .OrderByDescending(x => x.Score)
-            .Select(x => x.Section)
-            .ToList();
-
-        // Step 2: Track assignments for backtracking
-        var assignmentHistory = new List<(int SectionId, List<BlockAssignment> Blocks, HashSet<BlockAssignment> ExcludedBlocks)>();
-        var successIds = new HashSet<int>();
+        // Step 2: Main assignment loop
+        var assignedIds = new HashSet<int>();
         var failedSectionIds = new List<int>();
 
-        // Step 3: Try to place each section
-        for (var i = 0; i < sorted.Count; i++)
+        while (true)
         {
-            var section = sorted[i];
+            // Get unassigned sections ordered by MRV (smallest domain first)
+            var unassigned = domainStore.GetUnassignedByMrv(assignedIds);
+            if (unassigned.Count == 0) break;
 
-            if (TryPlaceSection(section, state, classrooms, classroomLookup, timeSlotsByDay, config,
-                constraintState, baseSnapshot, facultyClassroomIds, splitThreshold, null,
-                out var blocks))
+            // Tiebreak: among those with same domain size, pick most-failed first
+            var bestDomainSize = domainStore.DomainSize(unassigned[0]);
+            var nextSectionId = unassigned
+                .TakeWhile(id => domainStore.DomainSize(id) == bestDomainSize)
+                .OrderByDescending(id => conflictStats.GetFailCount(id))
+                .First();
+
+            var section = sectionLookup[nextSectionId];
+
+            // Get candidates ordered by least conflicting
+            var candidates = conflictStats.OrderByLeastConflicting(
+                nextSectionId, domainStore.GetCandidates(nextSectionId));
+
+            // Empty domain → mark as failed
+            if (candidates.Count == 0)
             {
-                // TryPlaceSection leaves the assignment in state on success
-                assignmentHistory.Add((section.SectionId, blocks!, new HashSet<BlockAssignment>()));
-                successIds.Add(section.SectionId);
+                failedSectionIds.Add(nextSectionId);
+                assignedIds.Add(nextSectionId); // treat as "processed"
+                continue;
             }
-            else
-            {
-                // Backtracking: try undoing previous non-pinned assignments
-                var placed = TryBacktrackAndPlace(
-                    section, state, classrooms, classroomLookup, timeSlotsByDay, config,
-                    constraintState, baseSnapshot, facultyClassroomIds, splitThreshold,
-                    backtrackLimit, assignmentHistory, successIds);
 
-                if (!placed)
+            var placed = false;
+            foreach (var combo in candidates)
+            {
+                var blocks = new List<BlockAssignment>();
+                if (combo.TheoryBlock != null) blocks.Add(combo.TheoryBlock);
+                blocks.AddRange(combo.LabBlocks);
+                if (blocks.Count == 0) continue;
+
+                // Temporarily assign
+                state.Assign(nextSectionId, section, blocks);
+
+                // Build enriched snapshot and evaluate hard constraints
+                var rawSnap = state.ToSectionSnapshot(nextSectionId);
+                var sectionSnap = EnrichWithClassroomData(rawSnap, blocks, classroomLookup);
+                var termSnap = state.ToTermSnapshot(baseSnapshot);
+                var filteredSnapshot = BuildFilteredSnapshot(termSnap, nextSectionId);
+
+                var (conflicts, _, _) = _constraintService.EvaluateCandidate(
+                    sectionSnap, filteredSnapshot, config, constraintState);
+
+                if (conflicts.Count > 0)
                 {
-                    failedSectionIds.Add(section.SectionId);
+                    // Record each conflict for future ordering
+                    foreach (var c in conflicts)
+                    {
+                        conflictStats.RecordConflict(nextSectionId, c.ConflictType, c.Day, c.StartTime);
+                    }
+
+                    state.Unassign(nextSectionId);
+                    continue;
                 }
+
+                // No hard conflicts — run forward check
+                var fcResult = domainStore.ForwardCheck(
+                    nextSectionId, blocks, section, assignedIds,
+                    (otherId, otherCombo) => IsConflicting(
+                        otherId, otherCombo, sectionLookup, state, classroomLookup,
+                        baseSnapshot, config, constraintState));
+
+                if (fcResult.WipedOut)
+                {
+                    // Forward check caused a wipeout — undo prune and try next candidate
+                    domainStore.UndoLastPrune();
+                    state.Unassign(nextSectionId);
+                    continue;
+                }
+
+                // Assignment successful
+                assignedIds.Add(nextSectionId);
+                placed = true;
+                break;
+            }
+
+            if (!placed)
+            {
+                failedSectionIds.Add(nextSectionId);
+                assignedIds.Add(nextSectionId); // treat as "processed"
             }
         }
 
+        var successCount = assignedIds.Count - failedSectionIds.Count;
         return new ConstructionResult(
-            SuccessCount: successIds.Count,
+            SuccessCount: successCount,
             FailedCount: failedSectionIds.Count,
             FailedSectionIds: failedSectionIds);
     }
 
     /// <summary>
-    /// Tries all candidate placements for a section. On success, leaves the section
-    /// assigned in state and sets resultBlocks. On failure, state is unchanged.
+    /// Checks whether a candidate BlockCombination for a given section would cause
+    /// hard constraint violations. Used as the callback for DomainStore.ForwardCheck.
     /// </summary>
-    private bool TryPlaceSection(
-        SectionSnapshot section,
+    private bool IsConflicting(
+        int sectionId,
+        BlockCombination combo,
+        Dictionary<int, SectionSnapshot> sectionLookup,
         MutableScheduleState state,
-        List<Classroom> classrooms,
         Dictionary<int, Classroom> classroomLookup,
-        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
-        SchedulingConstraintConfig config,
-        ConstraintState constraintState,
         TermSnapshot baseSnapshot,
-        HashSet<int> facultyClassroomIds,
-        int splitThreshold,
-        HashSet<BlockAssignment>? excludeBlocks,
-        out List<BlockAssignment>? resultBlocks)
+        SchedulingConstraintConfig config,
+        ConstraintState constraintState)
     {
-        resultBlocks = null;
+        if (!sectionLookup.TryGetValue(sectionId, out var section))
+            return true;
 
-        var candidates = _candidateGen.Generate(
-            section, state, classrooms, timeSlotsByDay,
-            splitThreshold, facultyClassroomIds, excludeBlocks);
+        // Skip if section is already assigned (pinned or previously placed)
+        if (state.IsAssigned(sectionId))
+            return false;
 
-        foreach (var combo in candidates)
+        var blocks = new List<BlockAssignment>();
+        if (combo.TheoryBlock != null) blocks.Add(combo.TheoryBlock);
+        blocks.AddRange(combo.LabBlocks);
+        if (blocks.Count == 0) return true;
+
+        // Quick overlap check: if any block overlaps with an existing assignment
+        // in the same classroom or same instructor, it's conflicting.
+        // This avoids expensive full constraint evaluation for obvious conflicts.
+        foreach (var block in blocks)
         {
-            var blocks = new List<BlockAssignment>();
-            if (combo.TheoryBlock != null) blocks.Add(combo.TheoryBlock);
-            if (combo.LabBlock != null) blocks.Add(combo.LabBlock);
-            if (blocks.Count == 0) continue;
-
-            // Temporarily assign to build snapshots
-            state.Assign(section.SectionId, section, blocks);
-
-            // Build enriched snapshot with correct classroom info
-            var rawSnap = state.ToSectionSnapshot(section.SectionId);
-            var sectionSnap = EnrichWithClassroomData(rawSnap, blocks, classroomLookup);
-
-            var termSnap = state.ToTermSnapshot(baseSnapshot);
-
-            // Build a filtered snapshot that excludes the candidate for evaluation
-            var filteredSnapshot = new TermSnapshot
+            var occupancy = state.GetClassroomOccupancy(block.ClassroomId, block.Day);
+            foreach (var (_, start, end, _) in occupancy)
             {
-                TermId = termSnap.TermId,
-                TermName = termSnap.TermName,
-                ScopeName = termSnap.ScopeName,
-                Sections = termSnap.Sections.Where(s => s.SectionId != section.SectionId).ToList(),
-                ClassroomAssignments = termSnap.ClassroomAssignments,
-                DeptFacultyMap = termSnap.DeptFacultyMap,
-                Corequisites = termSnap.Corequisites,
-                CoEnrollmentPairs = termSnap.CoEnrollmentPairs,
-                CourseSuggestedSemestersByDepartment = termSnap.CourseSuggestedSemestersByDepartment,
-                CourseAccessibleDepartments = termSnap.CourseAccessibleDepartments,
-            };
-
-            var (conflicts, _, _) = _constraintService.EvaluateCandidate(
-                sectionSnap, filteredSnapshot, config, constraintState);
-
-            if (conflicts.Count == 0)
-            {
-                // Valid placement — keep it assigned
-                resultBlocks = blocks;
-                return true;
+                if (block.StartTime < end && block.EndTime > start)
+                    return true;
             }
 
-            // Conflicts found — unassign and try next candidate
-            state.Unassign(section.SectionId);
+            if (section.InstructorId.HasValue)
+            {
+                var instrOccupancy = state.GetInstructorOccupancy(section.InstructorId.Value, block.Day);
+                foreach (var (_, start, end, _) in instrOccupancy)
+                {
+                    if (block.StartTime < end && block.EndTime > start)
+                        return true;
+                }
+            }
         }
 
         return false;
     }
 
-    private bool TryBacktrackAndPlace(
-        SectionSnapshot failedSection,
-        MutableScheduleState state,
-        List<Classroom> classrooms,
-        Dictionary<int, Classroom> classroomLookup,
-        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
-        SchedulingConstraintConfig config,
-        ConstraintState constraintState,
-        TermSnapshot baseSnapshot,
-        HashSet<int> facultyClassroomIds,
-        int splitThreshold,
-        int backtrackLimit,
-        List<(int SectionId, List<BlockAssignment> Blocks, HashSet<BlockAssignment> ExcludedBlocks)> assignmentHistory,
-        HashSet<int> successIds)
+    /// <summary>
+    /// Builds a TermSnapshot that excludes the given section, for constraint evaluation.
+    /// </summary>
+    private static TermSnapshot BuildFilteredSnapshot(TermSnapshot snapshot, int excludeSectionId)
     {
-        for (var attempt = 0; attempt < backtrackLimit; attempt++)
+        return new TermSnapshot
         {
-            // Find the last non-pinned assignment to undo
-            var victimIndex = -1;
-            for (var j = assignmentHistory.Count - 1; j >= 0; j--)
-            {
-                var (sid, _, _) = assignmentHistory[j];
-                if (!state.IsPinned(sid) && successIds.Contains(sid))
-                {
-                    victimIndex = j;
-                    break;
-                }
-            }
-
-            if (victimIndex < 0) return false;
-
-            var victim = assignmentHistory[victimIndex];
-            var victimSection = state.GetPlacement(victim.SectionId)?.Snapshot;
-            if (victimSection == null) return false;
-
-            // Unassign victim
-            state.Unassign(victim.SectionId);
-            successIds.Remove(victim.SectionId);
-
-            // Add victim's previous blocks to its exclude set
-            foreach (var b in victim.Blocks)
-                victim.ExcludedBlocks.Add(b);
-            assignmentHistory[victimIndex] = victim;
-
-            // Try to place the failed section
-            if (TryPlaceSection(failedSection, state, classrooms, classroomLookup, timeSlotsByDay,
-                config, constraintState, baseSnapshot, facultyClassroomIds, splitThreshold, null,
-                out var failedBlocks))
-            {
-                // TryPlaceSection already assigned failedSection to state
-                assignmentHistory.Add((failedSection.SectionId, failedBlocks!, new HashSet<BlockAssignment>()));
-                successIds.Add(failedSection.SectionId);
-
-                // Now try to re-place the victim with different blocks
-                if (TryPlaceSection(victimSection, state, classrooms, classroomLookup, timeSlotsByDay,
-                    config, constraintState, baseSnapshot, facultyClassroomIds, splitThreshold,
-                    victim.ExcludedBlocks, out var victimBlocks))
-                {
-                    // TryPlaceSection already assigned victim to state
-                    assignmentHistory[victimIndex] = (victim.SectionId, victimBlocks!, victim.ExcludedBlocks);
-                    successIds.Add(victim.SectionId);
-                    return true;
-                }
-
-                // Victim couldn't be re-placed, but failed section was placed successfully
-                assignmentHistory.RemoveAt(victimIndex);
-                return true;
-            }
-
-            // Failed section still couldn't be placed — restore victim
-            if (TryPlaceSection(victimSection, state, classrooms, classroomLookup, timeSlotsByDay,
-                config, constraintState, baseSnapshot, facultyClassroomIds, splitThreshold,
-                victim.ExcludedBlocks, out var reBlocks))
-            {
-                // TryPlaceSection already assigned victim to state
-                assignmentHistory[victimIndex] = (victim.SectionId, reBlocks!, victim.ExcludedBlocks);
-                successIds.Add(victim.SectionId);
-            }
-            // Continue trying with the next victim
-        }
-
-        return false;
+            TermId = snapshot.TermId,
+            TermName = snapshot.TermName,
+            ScopeName = snapshot.ScopeName,
+            Sections = snapshot.Sections.Where(s => s.SectionId != excludeSectionId).ToList(),
+            ClassroomAssignments = snapshot.ClassroomAssignments,
+            DeptFacultyMap = snapshot.DeptFacultyMap,
+            Corequisites = snapshot.Corequisites,
+            CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
+            CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
+            CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments
+        };
     }
 
     /// <summary>

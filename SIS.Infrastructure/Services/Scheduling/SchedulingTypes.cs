@@ -1,5 +1,6 @@
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Infrastructure.Services.Scheduling;
 
 namespace SIS.Infrastructure.Services;
 
@@ -13,6 +14,8 @@ public sealed class TermSnapshot
     public Dictionary<int, int> DeptFacultyMap { get; init; } = new();                // for H10
     public List<CoursePrerequisite> Corequisites { get; init; } = new();              // for H11
     public List<CoEnrollmentPair> CoEnrollmentPairs { get; set; } = new();            // for S4
+    public HashSet<(int SectionId1, int SectionId2)>? CohortConflictPairs { get; set; }
+    public EnrollmentConflictMatrix? EnrollmentConflicts { get; set; }
     public Dictionary<int, Dictionary<int, int>> CourseSuggestedSemestersByDepartment { get; init; } = new();
     public Dictionary<int, HashSet<int>> CourseAccessibleDepartments { get; init; } = new();
 }

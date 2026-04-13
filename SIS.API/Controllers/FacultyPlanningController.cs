@@ -83,6 +83,16 @@ public class FacultyPlanningController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("reset-all/{facultyId}/{termId}")]
+    public async Task<IActionResult> ResetAllSchedules(int facultyId, int termId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasFacultyAccessAsync(userId, facultyId, ct)) return Forbid();
+
+        var count = await _service.ResetAllSchedulesAsync(facultyId, termId, userId.ToString(), ct);
+        return Ok(new { resetCount = count });
+    }
+
     [HttpPost("auto-schedule")]
     public async Task<IActionResult> AutoSchedule([FromBody] AutoScheduleRequest request, CancellationToken ct)
     {

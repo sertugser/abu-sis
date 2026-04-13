@@ -19,6 +19,7 @@ public sealed class SchedulingConstraintConfig
     public int BreakDurationMinutes { get; init; }
     public int AmphiThreshold { get; init; }
     public int TheoryLabSplitThreshold { get; init; }
+    public bool AllowSameCourseSectionOverlap { get; init; }
 
     // Soft constraint params
     public bool S1Enabled { get; init; }
@@ -39,4 +40,6 @@ public sealed class SchedulingConstraintConfig
     public TimeOnly S9EveningStart { get; init; }
     public bool S12Enabled { get; init; }
     public int S12MaxImbalancePercent { get; init; }
+    public string CurriculumConflictMode { get; init; } = "curriculum";
+    public int EnrollmentConflictHardThreshold { get; init; } = 1;
 }

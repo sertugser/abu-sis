@@ -3,7 +3,7 @@ import {
   applySchedule, assignSection, autoSchedulePreview, batchUnassignSections,
   getAvailableClassrooms, getFacultyPlanningConflicts, getFacultyPlanningOverview,
   getFacultyPlanningSections, getFacultyPlanningTimeSlots, getScheduleRun,
-  getScheduleRuns, unassignSection, validateSectionSchedule,
+  getScheduleRuns, resetAllSchedules, unassignSection, validateSectionSchedule,
 } from '../api/facultyPlanning.api';
 import type {
   ApplyScheduleRequest, AssignSectionRequest, AutoScheduleRequest,
@@ -129,6 +129,17 @@ export function useBatchUnassignSections() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: batchUnassignSections,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['facultyPlanning'] });
+    },
+  });
+}
+
+export function useResetAllSchedules() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ facultyId, termId }: { facultyId: number; termId: number }) =>
+      resetAllSchedules(facultyId, termId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facultyPlanning'] });
     },

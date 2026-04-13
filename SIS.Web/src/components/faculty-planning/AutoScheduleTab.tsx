@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   useApplySchedule, useAutoSchedulePreview, useAvailableClassrooms,
   useBatchUnassignSections, useFacultyPlanningOverview, useFacultyPlanningSections,
-  useScheduleRun, useScheduleRuns,
+  useResetAllSchedules, useScheduleRun, useScheduleRuns,
 } from '../../hooks/useFacultyPlanning';
 import type { AutoSchedulePreview } from '../../types/facultyPlanning';
 import { ScheduleTopBar } from './auto-schedule/ScheduleTopBar';
@@ -24,6 +24,7 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
   const previewMutation = useAutoSchedulePreview();
   const applyMutation = useApplySchedule();
   const batchUnassign = useBatchUnassignSections();
+  const resetAll = useResetAllSchedules();
 
   // Queries
   const runsQuery = useScheduleRuns(facultyId, termId);
@@ -162,6 +163,7 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
             unscheduledCount={unscheduledCount}
             availableClassroomCount={availableClassroomCount}
             hasPreviewData={!!previewData}
+            previewData={previewData}
           />
         </div>
       </div>
@@ -177,19 +179,41 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
         </Alert>
       )}
 
-      {lastAppliedIds.length > 0 && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`))
-              batchUnassign.mutate(lastAppliedIds, { onSuccess: () => setLastAppliedIds([]) });
-          }}
-          disabled={batchUnassign.isPending}
-        >
-          {batchUnassign.isPending ? 'Geri alınıyor...' : `Geri Al (${lastAppliedIds.length} şube)`}
-        </Button>
-      )}
+      <div className="flex gap-2">
+        {lastAppliedIds.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`))
+                batchUnassign.mutate(lastAppliedIds, { onSuccess: () => setLastAppliedIds([]) });
+            }}
+            disabled={batchUnassign.isPending}
+          >
+            {batchUnassign.isPending ? 'Geri alınıyor...' : `Geri Al (${lastAppliedIds.length} şube)`}
+          </Button>
+        )}
+
+        {termId && (ov?.scheduledSections ?? 0) > 0 && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              if (confirm('Fakültenin TÜM ders atamalarını sıfırlamak istediğinize emin misiniz? (Pinlenmiş ve kilitli dersler hariç)'))
+                resetAll.mutate({ facultyId, termId }, {
+                  onSuccess: (data) => {
+                    setLastAppliedIds([]);
+                    previewMutation.reset();
+                    alert(`${data.resetCount} şubenin ataması sıfırlandı.`);
+                  },
+                });
+            }}
+            disabled={resetAll.isPending}
+          >
+            {resetAll.isPending ? 'Sıfırlanıyor...' : 'Tüm Atamaları Sıfırla'}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

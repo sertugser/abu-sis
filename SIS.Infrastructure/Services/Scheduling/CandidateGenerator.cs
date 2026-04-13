@@ -7,7 +7,7 @@ namespace SIS.Infrastructure.Services.Scheduling;
 public sealed class BlockCombination
 {
     public BlockAssignment? TheoryBlock { get; init; }
-    public BlockAssignment? LabBlock { get; init; }
+    public List<BlockAssignment> LabBlocks { get; init; } = new();
 }
 
 public sealed class CandidateGenerator
@@ -18,13 +18,21 @@ public sealed class CandidateGenerator
 
     /// <summary>
     /// Classroom types considered compatible for theory/general teaching.
-    /// Lab types require exact match.
     /// </summary>
     private static readonly HashSet<ClassroomType> GeneralTeachingTypes = new()
     {
         ClassroomType.Lecture,
         ClassroomType.Seminar,
         ClassroomType.Amphitheater
+    };
+
+    /// <summary>
+    /// Lab/Computer types are interchangeable for scheduling purposes.
+    /// </summary>
+    private static readonly HashSet<ClassroomType> LabTeachingTypes = new()
+    {
+        ClassroomType.Lab,
+        ClassroomType.Computer
     };
 
     public List<BlockCombination> Generate(
@@ -84,15 +92,119 @@ public sealed class CandidateGenerator
         HashSet<int> facultyClassroomIds,
         HashSet<BlockAssignment>? excludeBlocks)
     {
+        if (blockType == BlockType.Lab)
+        {
+            return GenerateLabBlocks(
+                requiredHours, requiredClassroomType, section, state,
+                allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
+        }
+
         var classrooms = FilterClassrooms(allClassrooms, requiredClassroomType, section.Capacity, facultyClassroomIds);
         var blocks = FindBlocks(blockType, requiredHours, classrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
 
         return blocks
             .Take(MaxCombinations)
-            .Select(b => blockType == BlockType.Theory
-                ? new BlockCombination { TheoryBlock = b }
-                : new BlockCombination { LabBlock = b })
+            .Select(b => new BlockCombination { TheoryBlock = b })
             .ToList();
+    }
+
+    /// <summary>
+    /// Lab blokları üretir. Tek lab dersliği yeterliyse tek blok, yetmezse
+    /// section'ı birden fazla lab grubuna böler.
+    /// </summary>
+    private List<BlockCombination> GenerateLabBlocks(
+        int requiredHours,
+        ClassroomType requiredClassroomType,
+        SectionSnapshot section,
+        MutableScheduleState state,
+        List<Classroom> allClassrooms,
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        List<DayOfWeek> sortedDays,
+        HashSet<int> facultyClassroomIds,
+        HashSet<BlockAssignment>? excludeBlocks)
+    {
+        // Try single lab room first (capacity >= section capacity)
+        var singleRoomClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, section.Capacity, facultyClassroomIds);
+        if (singleRoomClassrooms.Count > 0)
+        {
+            var blocks = FindBlocks(BlockType.Lab, requiredHours, singleRoomClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+            return blocks
+                .Take(MaxCombinations)
+                .Select(b => new BlockCombination { LabBlocks = new List<BlockAssignment> { b } })
+                .ToList();
+        }
+
+        // No single room fits — split into multiple lab groups
+        // Find the largest lab classroom to determine group count
+        var allLabClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, 1, facultyClassroomIds);
+        if (allLabClassrooms.Count == 0)
+            return new List<BlockCombination>();
+
+        var maxLabCapacity = allLabClassrooms.Max(c => c.Capacity);
+        var groupCount = (int)Math.Ceiling((double)section.Capacity / maxLabCapacity);
+        var minCapacityPerGroup = (int)Math.Ceiling((double)section.Capacity / groupCount);
+
+        var labClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, minCapacityPerGroup, facultyClassroomIds);
+        if (labClassrooms.Count == 0)
+            return new List<BlockCombination>();
+
+        var labCandidates = FindBlocks(BlockType.Lab, requiredHours, labClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+        if (labCandidates.Count < groupCount)
+            return new List<BlockCombination>();
+
+        // Generate combinations of `groupCount` non-overlapping lab blocks
+        var results = new List<BlockCombination>();
+        for (var i = 0; i < labCandidates.Count && results.Count < MaxCombinations; i++)
+        {
+            var first = labCandidates[i];
+            if (groupCount == 2)
+            {
+                for (var j = i + 1; j < labCandidates.Count && results.Count < MaxCombinations; j++)
+                {
+                    var second = labCandidates[j];
+                    if (!HasTimeOverlap(first, second))
+                    {
+                        results.Add(new BlockCombination
+                        {
+                            LabBlocks = new List<BlockAssignment> { first, second }
+                        });
+                    }
+                }
+            }
+            else if (groupCount == 3)
+            {
+                for (var j = i + 1; j < labCandidates.Count && results.Count < MaxCombinations; j++)
+                {
+                    var second = labCandidates[j];
+                    if (HasTimeOverlap(first, second)) continue;
+                    for (var k = j + 1; k < labCandidates.Count && results.Count < MaxCombinations; k++)
+                    {
+                        var third = labCandidates[k];
+                        if (!HasTimeOverlap(first, third) && !HasTimeOverlap(second, third))
+                        {
+                            results.Add(new BlockCombination
+                            {
+                                LabBlocks = new List<BlockAssignment> { first, second, third }
+                            });
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // 4+ groups: just pair sequentially (unlikely case)
+                var group = new List<BlockAssignment> { first };
+                for (var j = i + 1; j < labCandidates.Count && group.Count < groupCount; j++)
+                {
+                    if (group.All(g => !HasTimeOverlap(g, labCandidates[j])))
+                        group.Add(labCandidates[j]);
+                }
+                if (group.Count == groupCount)
+                    results.Add(new BlockCombination { LabBlocks = group });
+            }
+        }
+
+        return results;
     }
 
     private List<BlockCombination> GenerateMixed(
@@ -109,10 +221,12 @@ public sealed class CandidateGenerator
         var labType = section.LabClassroomType ?? ClassroomType.Lab;
 
         var theoryClassrooms = FilterClassrooms(allClassrooms, theoryType, section.Capacity, facultyClassroomIds);
-        var labClassrooms = FilterClassrooms(allClassrooms, labType, section.Capacity, facultyClassroomIds);
-
         var theoryBlocks = FindBlocks(BlockType.Theory, section.TheoryHours, theoryClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
-        var labBlocks = FindBlocks(BlockType.Lab, section.LabHours, labClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+
+        // Generate lab combinations (single or multi-group)
+        var labCombos = GenerateLabBlocks(
+            section.LabHours, labType, section, state,
+            allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
 
         var totalHours = section.TheoryHours + section.LabHours;
         var mustSplitDays = totalHours > splitThreshold;
@@ -121,22 +235,25 @@ public sealed class CandidateGenerator
 
         foreach (var theory in theoryBlocks)
         {
-            foreach (var lab in labBlocks)
+            foreach (var labCombo in labCombos)
             {
-                if (mustSplitDays && theory.Day == lab.Day)
-                    continue;
-
-                if (!mustSplitDays && theory.Day == lab.Day)
+                // Check theory vs all lab blocks for overlap
+                var valid = true;
+                foreach (var lab in labCombo.LabBlocks)
                 {
-                    // Same day allowed but no time overlap
-                    if (HasTimeOverlap(theory, lab))
-                        continue;
+                    if (mustSplitDays && theory.Day == lab.Day)
+                    { valid = false; break; }
+
+                    if (!mustSplitDays && theory.Day == lab.Day && HasTimeOverlap(theory, lab))
+                    { valid = false; break; }
                 }
+
+                if (!valid) continue;
 
                 results.Add(new BlockCombination
                 {
                     TheoryBlock = theory,
-                    LabBlock = lab
+                    LabBlocks = labCombo.LabBlocks
                 });
 
                 if (results.Count >= MaxCombinations)
@@ -153,16 +270,19 @@ public sealed class CandidateGenerator
         int requiredCapacity,
         HashSet<int> facultyClassroomIds)
     {
-        // For general teaching types (Lecture, Seminar, Amphitheater),
-        // accept any general teaching classroom. For specific lab types,
-        // require exact match.
+        // For general teaching types (Lecture, Seminar, Amphitheater), accept any general teaching classroom.
+        // For lab types (Lab, Computer), accept any lab teaching classroom.
+        // For other specific types, require exact match.
         var isGeneralType = GeneralTeachingTypes.Contains(requiredType);
+        var isLabType = LabTeachingTypes.Contains(requiredType);
 
         return allClassrooms
             .Where(c => facultyClassroomIds.Contains(c.Id))
             .Where(c => isGeneralType
                 ? GeneralTeachingTypes.Contains(c.Type)
-                : c.Type == requiredType)
+                : isLabType
+                    ? LabTeachingTypes.Contains(c.Type)
+                    : c.Type == requiredType)
             .Where(c => c.Capacity >= requiredCapacity)
             .OrderBy(c => c.Type == requiredType ? 0 : 1) // prefer exact match first
             .ThenBy(c => c.Capacity) // then smallest sufficient

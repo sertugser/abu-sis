@@ -45,6 +45,10 @@ public sealed class AutoScheduleEngine
         var swapWeight = await _configProvider.GetIntAsync("Schedule.SA.SwapWeight", 35, ct);
         var chainWeight = await _configProvider.GetIntAsync("Schedule.SA.ChainWeight", 15, ct);
 
+        var lnsIterations = await _configProvider.GetIntAsync("Schedule.LNS.MaxIterations", 100, ct);
+        var lnsTimeoutSeconds = await _configProvider.GetIntAsync("Schedule.LNS.TimeoutSeconds", 30, ct);
+        var lnsDestroySize = await _configProvider.GetIntAsync("Schedule.LNS.DestroySize", 8, ct);
+
         var mrvWeights = new MrvWeights
         {
             ClassroomWeight = await _configProvider.GetIntAsync("Schedule.MRV.ClassroomWeight", 3, ct),
@@ -194,8 +198,29 @@ public sealed class AutoScheduleEngine
             CourseAccessibleDepartments = courseMetadata.AccessibleDepartments
         };
 
+        // 8b. Build cohort assignments if cohort mode enabled
+        if (constraintConfig.CurriculumConflictMode == "cohort")
+        {
+            var cohortBuilder = new CohortBuilder();
+            var allSnaps = sectionSnapshots.Values.ToList();
+            var cohortAssignment = cohortBuilder.Build(
+                allSnaps,
+                courseMetadata.SuggestedSemestersByDepartment,
+                courseMetadata.AccessibleDepartments);
+            baseSnapshot.CohortConflictPairs = cohortAssignment.ConflictPairs;
+        }
+        else if (constraintConfig.CurriculumConflictMode == "enrollment")
+        {
+            var allSectionIds = sections.Select(s => s.Id);
+            var enrollmentMatrix = await EnrollmentConflictMatrix.BuildAsync(
+                _context, request.TermId, allSectionIds,
+                constraintConfig.EnrollmentConflictHardThreshold, ct);
+            baseSnapshot.EnrollmentConflicts = enrollmentMatrix;
+        }
+
         // 9. Populate MutableScheduleState
         var state = new MutableScheduleState(request.TermId);
+        state.SetClassroomLookup(classrooms.ToDictionary(c => c.Id));
         var targetSectionIds = new HashSet<int>();
         var requestedSectionIds = request.SectionIds?.ToHashSet();
 
@@ -259,6 +284,28 @@ public sealed class AutoScheduleEngine
         else
         {
             saResult = new SAResult(0, 0, 0, 0);
+        }
+
+        // 11b. Run LNS to recover failed sections
+        LNSResult lnsResult;
+        if (constructionResult.FailedSectionIds.Count > 0 && lnsIterations > 0)
+        {
+            var lns = new LargeNeighborhoodSearch(candidateGen, _constraintService);
+            var failedIds = new List<int>(constructionResult.FailedSectionIds);
+
+            lnsResult = lns.Search(
+                state, targetSections, failedIds,
+                classrooms, timeSlotsByDay,
+                constraintConfig, constraintState, baseSnapshot,
+                facultyClassroomIds, splitThreshold, seed,
+                lnsIterations, lnsTimeoutSeconds, lnsDestroySize);
+
+            // Update failed list — remove sections that LNS recovered
+            constructionResult.FailedSectionIds.RemoveAll(id => state.IsAssigned(id));
+        }
+        else
+        {
+            lnsResult = new LNSResult(0, 0, 0, 0);
         }
 
         // 12. Run FailureAnalyzer if there are failed sections
@@ -531,6 +578,9 @@ public sealed class AutoScheduleEngine
             S9EveningStart = s9EveningStart,
             S12Enabled = GetBool(config, "SoftConstraint.S12.Enabled", true),
             S12MaxImbalancePercent = GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20),
+            AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
+            CurriculumConflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var mode) ? mode : "curriculum",
+            EnrollmentConflictHardThreshold = GetInt(config, "Schedule.EnrollmentConflictHardThreshold", 1),
         };
     }
 

@@ -1,3 +1,5 @@
+using SIS.Domain.Entities;
+
 namespace SIS.Infrastructure.Services.Scheduling;
 
 public enum BlockType { Theory, Lab }
@@ -34,6 +36,9 @@ public sealed class MutableScheduleState
     // Day-level section counts
     private readonly Dictionary<DayOfWeek, int> _daySectionCounts = new();
 
+    // Classroom lookup for enriching snapshots after SA moves
+    private IReadOnlyDictionary<int, Classroom>? _classroomLookup;
+
     public MutableScheduleState(int termId)
     {
         TermId = termId;
@@ -44,6 +49,11 @@ public sealed class MutableScheduleState
     {
         TermId = termId;
         _nextOrder = nextOrder;
+    }
+
+    public void SetClassroomLookup(IReadOnlyDictionary<int, Classroom> lookup)
+    {
+        _classroomLookup = lookup;
     }
 
     public void Assign(int sectionId, SectionSnapshot snapshot, List<BlockAssignment> blocks, bool isPinned = false)
@@ -217,6 +227,20 @@ public sealed class MutableScheduleState
         var totalHours = placement.Blocks.Sum(b =>
             (int)Math.Ceiling((b.EndTime - b.StartTime).TotalHours));
 
+        // Resolve actual classroom data from blocks (fixes stale data after SA swap/chain)
+        var actualClassroomId = placement.Blocks.Count > 0 ? placement.Blocks[0].ClassroomId : snap.ClassroomId;
+        var actualClassroomName = snap.ClassroomName;
+        var actualClassroomCapacity = snap.ClassroomCapacity;
+        var actualClassroomType = snap.ClassroomType;
+
+        if (actualClassroomId.HasValue && _classroomLookup != null
+            && _classroomLookup.TryGetValue(actualClassroomId.Value, out var actualClassroom))
+        {
+            actualClassroomName = actualClassroom.Name;
+            actualClassroomCapacity = actualClassroom.Capacity;
+            actualClassroomType = actualClassroom.Type;
+        }
+
         return new SectionSnapshot
         {
             SectionId = snap.SectionId,
@@ -229,10 +253,10 @@ public sealed class MutableScheduleState
             LabHours = snap.LabHours,
             Capacity = snap.Capacity,
             EnrolledCount = snap.EnrolledCount,
-            ClassroomId = placement.Blocks.Count > 0 ? placement.Blocks[0].ClassroomId : snap.ClassroomId,
-            ClassroomName = snap.ClassroomName,
-            ClassroomCapacity = snap.ClassroomCapacity,
-            ClassroomType = snap.ClassroomType,
+            ClassroomId = actualClassroomId,
+            ClassroomName = actualClassroomName,
+            ClassroomCapacity = actualClassroomCapacity,
+            ClassroomType = actualClassroomType,
             TheoryClassroomType = snap.TheoryClassroomType,
             LabClassroomType = snap.LabClassroomType,
             InstructorId = snap.InstructorId,
@@ -272,6 +296,7 @@ public sealed class MutableScheduleState
     public MutableScheduleState Clone()
     {
         var clone = new MutableScheduleState(TermId, _nextOrder);
+        clone._classroomLookup = _classroomLookup;
 
         // Deep copy placements
         foreach (var (sectionId, placement) in _placements)

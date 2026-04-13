@@ -215,6 +215,23 @@ public sealed class FailureAnalyzer
         // Collect all conflict types from testing up to MaxCandidatesToTest candidates
         var conflictTypes = new HashSet<string>();
 
+        // Build term snapshot from current state (not empty baseSnapshot) so inter-section
+        // conflicts (classroom, instructor, curriculum) are properly detected
+        var termSnapshot = state.ToTermSnapshot(baseSnapshot);
+        var filteredSnapshot = new TermSnapshot
+        {
+            TermId = termSnapshot.TermId,
+            TermName = termSnapshot.TermName,
+            ScopeName = termSnapshot.ScopeName,
+            Sections = termSnapshot.Sections.Where(s => s.SectionId != snapshot.SectionId).ToList(),
+            ClassroomAssignments = termSnapshot.ClassroomAssignments,
+            DeptFacultyMap = termSnapshot.DeptFacultyMap,
+            Corequisites = termSnapshot.Corequisites,
+            CoEnrollmentPairs = termSnapshot.CoEnrollmentPairs,
+            CourseSuggestedSemestersByDepartment = termSnapshot.CourseSuggestedSemestersByDepartment,
+            CourseAccessibleDepartments = termSnapshot.CourseAccessibleDepartments,
+        };
+
         var toTest = candidates.Take(MaxCandidatesToTest).ToList();
 
         foreach (var candidate in toTest)
@@ -222,7 +239,7 @@ public sealed class FailureAnalyzer
             var testSnapshot = BuildTestSnapshot(snapshot, candidate, state, baseSnapshot);
 
             var (conflicts, _, _) = _constraintService.EvaluateCandidate(
-                testSnapshot, baseSnapshot, config, constraintState);
+                testSnapshot, filteredSnapshot, config, constraintState);
 
             foreach (var conflict in conflicts)
                 conflictTypes.Add(conflict.ConflictType);
@@ -267,16 +284,16 @@ public sealed class FailureAnalyzer
             classroomId = candidate.TheoryBlock.ClassroomId;
         }
 
-        if (candidate.LabBlock != null)
+        foreach (var labBlock in candidate.LabBlocks)
         {
             timeBlocks.Add(new TimeBlock
             {
-                Day = candidate.LabBlock.Day,
-                StartTime = candidate.LabBlock.StartTime,
-                EndTime = candidate.LabBlock.EndTime,
-                ClassroomId = candidate.LabBlock.ClassroomId
+                Day = labBlock.Day,
+                StartTime = labBlock.StartTime,
+                EndTime = labBlock.EndTime,
+                ClassroomId = labBlock.ClassroomId
             });
-            classroomId ??= candidate.LabBlock.ClassroomId;
+            classroomId ??= labBlock.ClassroomId;
         }
 
         var totalHours = timeBlocks.Sum(b =>
