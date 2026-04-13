@@ -24,53 +24,44 @@ export function ScheduleTopBar({
   activeRunId,
   onRunSelect,
 }: ScheduleTopBarProps) {
+  const metrics = [
+    { icon: ClipboardList, value: unscheduledCount, label: 'Zamanlanmamış', color: 'text-amber-600', bg: 'bg-amber-500/10' },
+    { icon: School, value: availableClassroomCount ?? '—', label: 'Müsait Derslik', color: 'text-emerald-600', bg: 'bg-emerald-500/10' },
+    { icon: BarChart3, value: `%${occupancyPct}`, label: 'Doluluk', color: 'text-indigo-600', bg: 'bg-indigo-500/10' },
+  ];
+
   return (
-    <div className="bg-muted/30 border border-border/50 rounded-lg px-4 py-3 space-y-2.5">
+    <div className="border border-border/50 rounded-lg overflow-hidden">
       {/* Row 1: Metrics + Run button */}
-      <div className="flex items-center gap-3">
-        <div className="grid grid-cols-3 gap-2 flex-1">
-          {/* Metric 1: Zamanlanmamış */}
-          <div className="bg-background rounded-lg px-3 py-2 flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center">
-              <ClipboardList className="h-4 w-4 text-amber-500" />
+      <div className="flex items-stretch">
+        {metrics.map((m, i) => {
+          const Icon = m.icon;
+          return (
+            <div key={i} className={`flex-1 flex items-center gap-3 px-4 py-3 ${i < metrics.length - 1 ? 'border-r border-border/40' : ''}`}>
+              <div className={`w-9 h-9 ${m.bg} rounded-lg flex items-center justify-center shrink-0`}>
+                <Icon className={`h-4 w-4 ${m.color}`} />
+              </div>
+              <div>
+                <div className={`text-xl font-bold tabular-nums ${m.color}`}>{m.value}</div>
+                <div className="text-[10px] text-muted-foreground">{m.label}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-lg font-bold text-amber-600">{unscheduledCount}</div>
-              <div className="text-[10px] text-muted-foreground">Zamanlanmamış</div>
-            </div>
-          </div>
-
-          {/* Metric 2: Müsait derslik */}
-          <div className="bg-background rounded-lg px-3 py-2 flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
-              <School className="h-4 w-4 text-emerald-500" />
-            </div>
-            <div>
-              <div className="text-lg font-bold text-emerald-600">{availableClassroomCount ?? '—'}</div>
-              <div className="text-[10px] text-muted-foreground">Müsait Derslik</div>
-            </div>
-          </div>
-
-          {/* Metric 3: Doluluk */}
-          <div className="bg-background rounded-lg px-3 py-2 flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center">
-              <BarChart3 className="h-4 w-4 text-indigo-500" />
-            </div>
-            <div>
-              <div className="text-lg font-bold text-indigo-600">%{occupancyPct}</div>
-              <div className="text-[10px] text-muted-foreground">Doluluk</div>
-            </div>
-          </div>
+          );
+        })}
+        <div className="flex items-center px-4 border-l border-border/40">
+          <Button onClick={onRun} disabled={isPending} size="lg">
+            <Zap className="h-4 w-4 mr-1.5" />
+            {isPending ? 'Hesaplanıyor...' : 'Otomatik Programla'}
+          </Button>
         </div>
-
-        <Button onClick={onRun} disabled={isPending} className="shrink-0">
-          <Zap className="h-4 w-4 mr-1.5" />
-          {isPending ? 'Hesaplanıyor...' : 'Otomatik Çalıştır'}
-        </Button>
       </div>
 
       {/* Row 2: Chip bar */}
-      <RunChipBar runs={runs} activeRunId={activeRunId} onSelect={onRunSelect} />
+      {runs.length > 0 && (
+        <div className="px-4 py-2 border-t border-border/40 bg-muted/20">
+          <RunChipBar runs={runs} activeRunId={activeRunId} onSelect={onRunSelect} />
+        </div>
+      )}
     </div>
   );
 }

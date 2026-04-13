@@ -1,4 +1,4 @@
-import type { AutoSchedulePreviewItem, AutoScheduleFailure } from '../../../types/facultyPlanning';
+import type { AutoSchedulePreviewItem, AutoScheduleFailure, AutoSchedulePreview } from '../../../types/facultyPlanning';
 import { EmptyState } from './EmptyState';
 import { SuccessDetail } from './SuccessDetail';
 import { FailureDetail } from './FailureDetail';
@@ -9,10 +9,10 @@ interface ScheduleDetailPanelProps {
   isChecked: boolean;
   onToggleCheck: () => void;
   onNavigate: (target: string) => void;
-  // Empty state props
   unscheduledCount: number;
   availableClassroomCount: number | undefined;
   hasPreviewData: boolean;
+  previewData: AutoSchedulePreview | undefined;
 }
 
 export function ScheduleDetailPanel({
@@ -24,6 +24,7 @@ export function ScheduleDetailPanel({
   unscheduledCount,
   availableClassroomCount,
   hasPreviewData,
+  previewData,
 }: ScheduleDetailPanelProps) {
   if (selectedSuccess) {
     return <SuccessDetail item={selectedSuccess} isChecked={isChecked} onToggleCheck={onToggleCheck} />;
@@ -37,7 +38,6 @@ export function ScheduleDetailPanel({
     return <EmptyState unscheduledCount={unscheduledCount} availableClassroomCount={availableClassroomCount} />;
   }
 
-  // Preview data var ama hiçbir item seçili değil
   return (
     <div className="flex items-center justify-center h-full">
       <p className="text-sm text-muted-foreground">Detay görmek için sol listeden bir şube seçin.</p>

@@ -10,21 +10,24 @@ interface ScheduleListItemProps {
   data: ListItemData;
   isSelected: boolean;
   onClick: () => void;
+  /** Aynı courseCode'lu şubeler arasındaki sıra (1-based), ayırt etmek için */
+  groupIndex?: number;
 }
 
-export function ScheduleListItem({ data, isSelected, onClick }: ScheduleListItemProps) {
+export function ScheduleListItem({ data, isSelected, onClick, groupIndex }: ScheduleListItemProps) {
   const { kind, item } = data;
 
-  const code = kind === 'unscheduled'
-    ? `${item.courseCode}-${String(item.sectionIndex).padStart(2, '0')}`
-    : `${item.courseCode}-${String(item.sectionNumber).padStart(2, '0')}`;
+  const sectionNum = kind === 'unscheduled' ? item.sectionIndex : item.sectionNumber;
+  const displayNum = sectionNum || groupIndex || 0;
+  const code = displayNum
+    ? `${item.courseCode}-${String(displayNum).padStart(2, '0')}`
+    : item.courseCode;
 
-  const name = item.courseName;
-
-  const subtitle = kind === 'success'
-    ? `${item.departmentCode} · ${item.scheduleSummary} · ${item.classroomName}`
+  // Kısa bilgi: başarılı → derslik+saat, başarısız → constraint tipi, zamanlanmamış → kapasite
+  const meta = kind === 'success'
+    ? `${item.classroomName} · ${item.scheduleSummary}`
     : kind === 'failure'
-      ? item.suggestions?.[0]?.message ?? item.reason
+      ? TYPE_SHORT[item.suggestions?.[0]?.suggestionType ?? ''] ?? 'Atanamadı'
       : `${item.capacity} kişi`;
 
   const dotColor = kind === 'success'
@@ -37,24 +40,32 @@ export function ScheduleListItem({ data, isSelected, onClick }: ScheduleListItem
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left px-3.5 py-2.5 border-b border-border/30 cursor-pointer transition-colors ${
+      className={`w-full text-left px-3 py-2 border-b border-border/30 cursor-pointer transition-colors ${
         isSelected
           ? 'bg-indigo-500/10 border-l-[3px] border-l-indigo-500'
           : 'hover:bg-muted/40'
-      } ${kind === 'failure' ? 'bg-red-500/[0.03]' : ''}`}
+      }`}
     >
-      <div className="flex items-center justify-between">
-        <div className="min-w-0">
-          <div className="text-[13px] font-semibold text-foreground truncate">{code}</div>
-          <div className="text-[11px] text-muted-foreground truncate">{name}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex items-center gap-2">
+          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+          <span className="text-[13px] font-semibold text-foreground truncate">{code}</span>
+          <span className="text-[11px] text-muted-foreground truncate">{item.courseName}</span>
         </div>
-        <div className={`w-2 h-2 rounded-full shrink-0 ml-2 ${dotColor}`} />
-      </div>
-      <div className={`text-[10px] mt-0.5 truncate ${kind === 'failure' ? 'text-red-500' : 'text-muted-foreground'}`}>
-        {kind === 'failure' && '⚠ '}{subtitle}
+        <span className={`text-[10px] shrink-0 ${kind === 'failure' ? 'text-red-500' : 'text-muted-foreground'}`}>
+          {meta}
+        </span>
       </div>
     </button>
   );
 }
+
+const TYPE_SHORT: Record<string, string> = {
+  CapacityIncrease: 'Kapasite',
+  ClassroomAdd: 'Derslik yok',
+  TimeChange: 'Çakışma',
+  InstructorReassign: 'Hoca çakışması',
+  ConstraintRelax: 'Kısıt',
+};
 
 export type { ListItemData };

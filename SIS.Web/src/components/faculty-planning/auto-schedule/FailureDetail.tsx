@@ -68,7 +68,7 @@ export function FailureDetail({ item, onNavigate }: FailureDetailProps) {
       <div className="grid grid-cols-2 gap-2">
         {/* R1C1: Ders bilgisi */}
         <div className="bg-muted/50 rounded-lg p-3">
-          <div className="text-base font-bold text-foreground">{item.courseCode}-{String(item.sectionNumber).padStart(2, '0')}</div>
+          <div className="text-base font-bold text-foreground">{item.sectionNumber ? `${item.courseCode}-${String(item.sectionNumber).padStart(2, '0')}` : item.courseCode}</div>
           <div className="text-xs text-muted-foreground">{item.courseName}</div>
         </div>
 
@@ -76,12 +76,14 @@ export function FailureDetail({ item, onNavigate }: FailureDetailProps) {
         <div className="bg-muted/50 rounded-lg p-3 flex justify-between items-center">
           <div>
             <Badge variant="destructive" className="text-[10px]">Atanamadı</Badge>
-            <div className="text-[10px] text-muted-foreground mt-1 font-mono">{constraintType}</div>
+            <div className="text-[10px] text-muted-foreground mt-1">{typeLabel}</div>
           </div>
-          <div className="text-right">
-            <div className="text-[10px] text-muted-foreground">Kapasite</div>
-            <div className="text-lg font-bold text-foreground">{item.capacity || '?'}</div>
-          </div>
+          {item.capacity > 0 && (
+            <div className="text-right">
+              <div className="text-[10px] text-muted-foreground">Kapasite</div>
+              <div className="text-lg font-bold text-foreground">{item.capacity}</div>
+            </div>
+          )}
         </div>
 
         {/* R2: Sebep — full width */}
@@ -89,7 +91,7 @@ export function FailureDetail({ item, onNavigate }: FailureDetailProps) {
           <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
           <div className="min-w-0">
             <div className="text-[13px] font-medium text-red-400">{typeLabel}</div>
-            <div className="text-[11px] text-muted-foreground truncate">{item.reason}</div>
+            <div className="text-[11px] text-muted-foreground">{item.reason}</div>
           </div>
         </div>
 

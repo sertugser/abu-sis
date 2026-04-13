@@ -14,7 +14,7 @@ export function SuccessDetail({ item, isChecked, onToggleCheck }: SuccessDetailP
       <div className="grid grid-cols-2 gap-2">
         {/* R1C1: Ders bilgisi */}
         <div className="bg-muted/50 rounded-lg p-3">
-          <div className="text-base font-bold text-foreground">{item.courseCode}-{String(item.sectionNumber).padStart(2, '0')}</div>
+          <div className="text-base font-bold text-foreground">{item.sectionNumber ? `${item.courseCode}-${String(item.sectionNumber).padStart(2, '0')}` : item.courseCode}</div>
           <div className="text-xs text-muted-foreground">{item.courseName}</div>
           <div className="text-[10px] text-muted-foreground/70 mt-1">{item.departmentCode}</div>
         </div>

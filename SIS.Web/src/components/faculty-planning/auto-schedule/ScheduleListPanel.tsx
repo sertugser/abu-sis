@@ -7,6 +7,18 @@ import type { AutoSchedulePreview, FacultyPlanningSection } from '../../../types
 import { ScheduleListItem } from './ScheduleListItem';
 import type { ListItemData } from './ScheduleListItem';
 
+/** Aynı courseCode'lu elemanları 1-based index ile numaralandır */
+function buildGroupIndices(items: { courseCode: string; sectionId: number }[]): Map<number, number> {
+  const counts = new Map<string, number>();
+  const indices = new Map<number, number>();
+  for (const item of items) {
+    const count = (counts.get(item.courseCode) ?? 0) + 1;
+    counts.set(item.courseCode, count);
+    indices.set(item.sectionId, count);
+  }
+  return indices;
+}
+
 type FilterMode = 'all' | 'success' | 'failure';
 
 interface ScheduleListPanelProps {
@@ -40,6 +52,7 @@ export function ScheduleListPanel({
     const filtered = (unscheduledSections ?? []).filter(s =>
       !search || s.courseCode.toLowerCase().includes(searchLower) || s.courseName.toLowerCase().includes(searchLower),
     );
+    const preRunIndices = buildGroupIndices(filtered);
 
     return (
       <div className="w-[360px] border-r border-border/50 flex flex-col shrink-0">
@@ -66,6 +79,7 @@ export function ScheduleListPanel({
               data={{ kind: 'unscheduled', item: s }}
               isSelected={selectedItemId === s.sectionId}
               onClick={() => onSelectItem(s.sectionId)}
+              groupIndex={preRunIndices.get(s.sectionId)}
             />
           ))}
         </ScrollArea>
@@ -91,6 +105,7 @@ export function ScheduleListPanel({
   }
 
   const allSelected = previewData.assignments.length > 0 && previewData.assignments.every(a => selectedIds.has(a.sectionId));
+  const postRunIndices = buildGroupIndices(items.map(d => ({ courseCode: d.item.courseCode, sectionId: d.item.sectionId })));
 
   return (
     <div className="w-[360px] border-r border-border/50 flex flex-col shrink-0">
@@ -147,6 +162,7 @@ export function ScheduleListPanel({
             data={d}
             isSelected={selectedItemId === d.item.sectionId}
             onClick={() => onSelectItem(d.item.sectionId)}
+            groupIndex={postRunIndices.get(d.item.sectionId)}
           />
         ))}
       </ScrollArea>
