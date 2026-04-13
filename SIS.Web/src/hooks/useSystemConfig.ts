@@ -16,6 +16,7 @@ export function useUpdateSystemConfig() {
     mutationFn: ({ id, value }: { id: number; value: string }) => updateSystemConfig(id, value),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
+      qc.invalidateQueries({ queryKey: ['studentAttendanceStatus'] });
       qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },
   });
@@ -28,6 +29,7 @@ export function useImportSystemConfigs() {
     mutationFn: (payload: unknown) => importSystemConfigs(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
+      qc.invalidateQueries({ queryKey: ['studentAttendanceStatus'] });
       qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },
   });

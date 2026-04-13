@@ -39,6 +39,7 @@ export interface ScenarioCourse {
   equivalentCourseIds: number[];
   averageScore: number | null;
   grade: ScenarioGrade;
+  originalGrade: ScenarioGrade | null;
   excludeFromAverage: boolean;
   continuationCourseId: string;
   isAdded: boolean;
@@ -121,6 +122,7 @@ export function buildInitialScenarioCourses(transcript: StudentTranscriptDto): S
         equivalentCourseIds: course.equivalentCourseIds,
         averageScore: course.averageScore,
         grade: normalizeGrade(course.grade),
+        originalGrade: normalizeGrade(course.grade),
         excludeFromAverage: !course.countsTowardsGpa,
         continuationCourseId,
         isAdded: false,
@@ -140,10 +142,24 @@ export function calculateScenarioReport(
   const coursesById = new Map(sortedCourses.map(course => [course.scenarioId, course]));
   const chainIdByCourseId = new Map(sortedCourses.map(course => [course.scenarioId, resolveChainId(course, coursesById)]));
   const repeatedChainCounts = new Map<string, number>();
+  const failedAttemptRepairByChainId = new Map<string, number>();
 
   for (const course of sortedCourses) {
     const chainId = chainIdByCourseId.get(course.scenarioId) ?? course.scenarioId;
     repeatedChainCounts.set(chainId, (repeatedChainCounts.get(chainId) ?? 0) + 1);
+
+    const originalGradeMeta = course.originalGrade ? getGradeMeta(course.originalGrade) : null;
+    const currentGradeMeta = getGradeMeta(course.grade);
+    if (
+      course.sourceRegistrationId != null
+      && originalGradeMeta
+      && !originalGradeMeta.passed
+      && currentGradeMeta.passed
+      && currentGradeMeta.countsTowardsGpa
+      && !failedAttemptRepairByChainId.has(chainId)
+    ) {
+      failedAttemptRepairByChainId.set(chainId, course.sortOrder);
+    }
   }
 
   const latestByChainId = new Map<string, ScenarioComputedCourse>();
@@ -154,8 +170,12 @@ export function calculateScenarioReport(
       .filter(course => course.termId === term.termId)
       .map(course => {
         const gradeMeta = getGradeMeta(course.grade);
-        const countsTowardsGpa = !course.excludeFromAverage && gradeMeta.countsTowardsGpa;
         const chainId = chainIdByCourseId.get(course.scenarioId) ?? course.scenarioId;
+        const repairedFailedAttemptOrder = failedAttemptRepairByChainId.get(chainId);
+        const isSupersededOriginalRetake = course.sourceRegistrationId != null
+          && repairedFailedAttemptOrder != null
+          && course.sortOrder > repairedFailedAttemptOrder;
+        const countsTowardsGpa = !isSupersededOriginalRetake && !course.excludeFromAverage && gradeMeta.countsTowardsGpa;
 
         return {
           ...course,
@@ -171,6 +191,10 @@ export function calculateScenarioReport(
       });
 
     for (const course of termCourses) {
+      if (!course.countsTowardsGpa && wasSupersededByRepairedFailure(course, failedAttemptRepairByChainId)) {
+        continue;
+      }
+
       latestByChainId.set(course.chainId, course);
     }
 
@@ -245,6 +269,7 @@ export function areScenarioCoursesEqual(left: ScenarioCourse[], right: ScenarioC
         equivalentCourseIds: course.equivalentCourseIds,
         averageScore: course.averageScore,
         grade: course.grade,
+        originalGrade: course.originalGrade,
         excludeFromAverage: course.excludeFromAverage,
         continuationCourseId: course.continuationCourseId,
         isAdded: course.isAdded,
@@ -285,6 +310,16 @@ function calculateAverage(courses: ScenarioComputedCourse[]) {
 
   const gpaPoints = courses.reduce((sum, course) => sum + (course.weightedEcts ?? 0), 0);
   return round2(gpaPoints / gpaEcts);
+}
+
+function wasSupersededByRepairedFailure(
+  course: ScenarioComputedCourse,
+  failedAttemptRepairByChainId: Map<string, number>,
+) {
+  const repairedFailedAttemptOrder = failedAttemptRepairByChainId.get(course.chainId);
+  return course.sourceRegistrationId != null
+    && repairedFailedAttemptOrder != null
+    && course.sortOrder > repairedFailedAttemptOrder;
 }
 
 function resolveChainId(course: ScenarioCourse, coursesById: Map<string, ScenarioCourse>, visited = new Set<string>()): string {

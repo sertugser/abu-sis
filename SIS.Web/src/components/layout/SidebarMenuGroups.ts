@@ -38,6 +38,8 @@ export const studentMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DERS_KAYIT, label: 'Ders Kayıt' },
       { to: ROUTES.PLAN, label: 'Kayıt Planım' },
+      { to: ROUTES.NOT_LISTESI, label: 'Not Listesi' },
+      { to: ROUTES.DEVAMSIZLIK_DURUMU, label: 'Devamsızlık Durumu' },
       { to: '/donem-ortalamalari', label: 'Dönem Ortalamaları' },
       { to: '/mufredat-durum', label: 'Müfredat Durum' },
       { to: ROUTES.TRANSCRIPT, label: 'Transkript', openInNewTab: true },

@@ -1,5 +1,10 @@
 import apiClient from './axios';
-import type { RegistrationResponseDto, StudentRegistrationDto, CourseHistoryTermDto } from '../types/registration';
+import type {
+  RegistrationResponseDto,
+  StudentAttendanceStatusDto,
+  StudentRegistrationDto,
+  CourseHistoryTermDto,
+} from '../types/registration';
 
 export async function addToPlan(courseSectionId: number): Promise<RegistrationResponseDto> {
   const response = await apiClient.post<RegistrationResponseDto>('/registrations/plan', { courseSectionId });
@@ -13,6 +18,13 @@ export async function submitRegistration(courseSectionIds: number[]): Promise<Re
 
 export async function getMyRegistrations(): Promise<StudentRegistrationDto[]> {
   const response = await apiClient.get<StudentRegistrationDto[]>('/registrations/my');
+  return response.data;
+}
+
+export async function getMyAttendanceStatus(termId?: number | null): Promise<StudentAttendanceStatusDto> {
+  const response = await apiClient.get<StudentAttendanceStatusDto>('/registrations/attendance-status', {
+    params: termId ? { termId } : undefined,
+  });
   return response.data;
 }
 

@@ -381,6 +381,233 @@ public class StudentController : ControllerBase
     }
 
     /// <summary>
+    /// GET api/student/registrations/{registrationId}/grade-statistics - returns exam and grade statistics for the student's own registration.
+    /// </summary>
+    [HttpGet("registrations/{registrationId:int}/grade-statistics")]
+    [Authorize(Roles = "Student")]
+    public async Task<IActionResult> GetGradeStatistics(int registrationId, [FromQuery] bool commonEvaluation = false)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
+
+        var student = await _context.Students
+            .AsNoTracking()
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+                    .ThenInclude(p => p.Department)
+                        .ThenInclude(d => d.Faculty)
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+
+        if (student == null)
+            return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
+
+        var registration = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Course)
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Term)
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Instructor)
+            .FirstOrDefaultAsync(cr => cr.Id == registrationId && cr.StudentId == student.Id);
+
+        if (registration == null)
+            return NotFound(new { error = "Kayit bulunamadi." });
+
+        var section = registration.CourseSection;
+        var course = section.Course;
+        var term = section.Term;
+
+        var components = await _context.GradeComponents
+            .AsNoTracking()
+            .Where(component => component.CourseId == section.CourseId && component.AcademicTermId == section.TermId)
+            .OrderBy(component => component.Order)
+            .ThenBy(component => component.Id)
+            .ToListAsync();
+
+        var sectionRegistrations = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(item => item.CourseSectionId == section.Id
+                && item.Status != RegistrationStatus.Draft
+                && item.Status != RegistrationStatus.Dropped)
+            .ToListAsync();
+
+        var statisticRegistrations = commonEvaluation
+            ? await _context.CourseRegistrations
+                .AsNoTracking()
+                .Where(item => item.CourseSection.CourseId == section.CourseId
+                    && item.CourseSection.TermId == section.TermId
+                    && item.Status != RegistrationStatus.Draft
+                    && item.Status != RegistrationStatus.Dropped)
+                .ToListAsync()
+            : sectionRegistrations;
+
+        var registrationIds = statisticRegistrations.Select(item => item.Id).ToList();
+        var allGrades = registrationIds.Count == 0
+            ? new List<StudentGrade>()
+            : await _context.StudentGrades
+                .AsNoTracking()
+                .Where(grade => registrationIds.Contains(grade.CourseRegistrationId))
+                .ToListAsync();
+
+        var gradesByRegistration = allGrades
+            .GroupBy(grade => grade.CourseRegistrationId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var totalComponentWeight = components.Sum(component => component.Weight);
+
+        decimal? CalculateWeightedAverage(int courseRegistrationId, bool requireAllComponentScores = true)
+        {
+            if (components.Count == 0 || !gradesByRegistration.TryGetValue(courseRegistrationId, out var studentGrades))
+                return null;
+
+            if (requireAllComponentScores)
+            {
+                var hasAllScores = totalComponentWeight == 100m
+                    && components.All(component => studentGrades.Any(grade =>
+                        grade.GradeComponentId == component.Id && grade.Score != null));
+
+                if (!hasAllScores)
+                    return null;
+            }
+
+            decimal totalWeightedScore = 0;
+            decimal totalWeight = 0;
+
+            foreach (var component in components)
+            {
+                var score = studentGrades
+                    .FirstOrDefault(grade => grade.GradeComponentId == component.Id)
+                    ?.Score;
+
+                if (score == null)
+                    continue;
+
+                totalWeightedScore += score.Value * component.Weight / 100m;
+                totalWeight += component.Weight;
+            }
+
+            return totalWeight > 0
+                ? Math.Round(totalWeightedScore * 100m / totalWeight, 2, MidpointRounding.AwayFromZero)
+                : null;
+        }
+
+        var weightedAverages = statisticRegistrations
+            .Select(item => CalculateWeightedAverage(item.Id))
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToList();
+
+        var criteria = await _context.GradingCriteria
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.CourseId == section.CourseId && item.AcademicTermId == section.TermId);
+        var hasGradingCriteria = criteria != null;
+
+        var gradeCounts = statisticRegistrations
+            .Where(item => item.Grade != null)
+            .GroupBy(item => item.Grade!.Value.ToString())
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        var instructorName = string.Empty;
+        if (section.Instructor != null)
+        {
+            var instructorUser = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(user => user.Id == section.Instructor.UserId);
+
+            if (instructorUser != null)
+                instructorName = $"{section.Instructor.Title} {instructorUser.FirstName} {instructorUser.LastName}".Trim();
+        }
+
+        var activeProgram = student.StudentPrograms.FirstOrDefault(program => program.IsActive);
+        var programName = activeProgram?.Program?.Name ?? string.Empty;
+        var facultyName = activeProgram?.Program?.Department?.Faculty?.Name ?? string.Empty;
+        var ownGrades = gradesByRegistration.GetValueOrDefault(registration.Id, new List<StudentGrade>());
+        var hasAnyComponentScore = ownGrades.Any(grade => grade.Score != null);
+        var hasAllComponentScores = components.Count > 0
+            && components.All(component => ownGrades.Any(grade =>
+                grade.GradeComponentId == component.Id && grade.Score != null));
+        var isResultFinalized = section.IsFinalized
+            && hasGradingCriteria
+            && registration.Grade != null
+            && hasAllComponentScores;
+        var studentWeightedAverage = CalculateWeightedAverage(registration.Id);
+
+        var componentStatistics = components
+            .Select(component =>
+            {
+                var componentScores = allGrades
+                    .Where(grade => grade.GradeComponentId == component.Id && grade.Score != null)
+                    .Select(grade => grade.Score!.Value)
+                    .ToList();
+                var studentScore = gradesByRegistration.TryGetValue(registration.Id, out var ownGrades)
+                    ? ownGrades.FirstOrDefault(grade => grade.GradeComponentId == component.Id)?.Score
+                    : null;
+
+                return new StudentComponentStatisticsDto
+                {
+                    ComponentId = component.Id,
+                    Name = component.Name,
+                    Weight = component.Weight,
+                    TotalStudentCount = statisticRegistrations.Count,
+                    EnteredStudentCount = componentScores.Count,
+                    MissingStudentCount = statisticRegistrations.Count - componentScores.Count,
+                    AverageScore = componentScores.Count > 0
+                        ? Math.Round(componentScores.Average(), 2, MidpointRounding.AwayFromZero)
+                        : null,
+                    StudentScore = studentScore
+                };
+            })
+            .ToList();
+
+        var dto = new StudentGradeStatisticsDto
+        {
+            RegistrationId = registration.Id,
+            CourseSectionId = section.Id,
+            TermName = term.Name,
+            FacultyProgram = string.IsNullOrWhiteSpace(facultyName)
+                ? programName
+                : $"{facultyName} - {programName}",
+            InstructorName = instructorName,
+            CourseCode = course.Code,
+            CourseName = course.Name,
+            SectionNumber = section.SectionNumber,
+            StudentLetterGrade = isResultFinalized ? registration.Grade?.ToString() : null,
+            StudentWeightedAverage = studentWeightedAverage,
+            HasGradingCriteria = hasGradingCriteria,
+            HasAnyComponentScore = hasAnyComponentScore,
+            HasAllComponentScores = hasAllComponentScores,
+            IsResultFinalized = isResultFinalized,
+            IsCommonEvaluation = commonEvaluation,
+            Result = new StudentResultInfoDto
+            {
+                Status = isResultFinalized ? "Sonuçlandırılmış" : "Sonuçlandırılmamış",
+                StatusDate = isResultFinalized ? section.UpdatedAt ?? registration.UpdatedAt : null,
+                EvaluationMethod = hasGradingCriteria
+                    ? commonEvaluation ? "Mutlak - Ortak Değerlendirme" : "Mutlak"
+                    : string.Empty
+            },
+            GradeRanges = hasGradingCriteria
+                ? BuildGradeRanges(criteria!, isResultFinalized ? gradeCounts : new Dictionary<string, int>())
+                : new List<StudentGradeRangeDto>(),
+            Components = componentStatistics,
+            Summary = new StudentSectionStatisticsSummaryDto
+            {
+                TotalStudentCount = statisticRegistrations.Count,
+                GradedStudentCount = isResultFinalized
+                    ? statisticRegistrations.Count(item => item.Grade != null)
+                    : 0,
+                ClassAverage = weightedAverages.Count > 0
+                    ? Math.Round(weightedAverages.Average(), 2, MidpointRounding.AwayFromZero)
+                    : null
+            }
+        };
+
+        return Ok(dto);
+    }
+
+    /// <summary>
     /// GET api/student/transcript — returns the authenticated student's transcript document data.
     /// </summary>
     [HttpGet("transcript")]
@@ -645,6 +872,35 @@ public class StudentController : ControllerBase
         && grade != GradeCode.U
         && grade != GradeCode.W
         && grade != GradeCode.I;
+
+    private static List<StudentGradeRangeDto> BuildGradeRanges(
+        GradingCriteria criteria,
+        IReadOnlyDictionary<string, int> gradeCounts)
+    {
+        static StudentGradeRangeDto Range(
+            string grade,
+            decimal min,
+            decimal max,
+            IReadOnlyDictionary<string, int> gradeCounts) => new()
+            {
+                Grade = grade,
+                MinScore = min,
+                MaxScore = max,
+                StudentCount = gradeCounts.GetValueOrDefault(grade)
+            };
+
+        return
+        [
+            Range("AA", criteria.AAMin, 100m, gradeCounts),
+            Range("BA", criteria.BAMin, criteria.AAMin - 0.01m, gradeCounts),
+            Range("BB", criteria.BBMin, criteria.BAMin - 0.01m, gradeCounts),
+            Range("CB", criteria.CBMin, criteria.BBMin - 0.01m, gradeCounts),
+            Range("CC", criteria.CCMin, criteria.CBMin - 0.01m, gradeCounts),
+            Range("DC", criteria.DCMin, criteria.CCMin - 0.01m, gradeCounts),
+            Range("DD", criteria.DDMin, criteria.DCMin - 0.01m, gradeCounts),
+            Range("FF", 0m, criteria.DDMin - 0.01m, gradeCounts)
+        ];
+    }
 
     private static int GetGpaEcts(CourseRegistration registration) =>
         GradePointMap.IsGpaIncluded(registration.Grade!.Value)

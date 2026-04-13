@@ -59,6 +59,7 @@ interface ScenarioCourseDraft {
   equivalentCourseIds: number[];
   averageScore: string;
   grade: ScenarioGrade;
+  originalGrade: ScenarioGrade | null;
   excludeFromAverage: boolean;
   continuationCourseId: string;
   isAdded: boolean;
@@ -129,6 +130,7 @@ export default function TranscriptScenarioPage() {
       equivalentCourseIds: [],
       averageScore: '',
       grade: 'BB',
+      originalGrade: null,
       excludeFromAverage: false,
       continuationCourseId: SELF_CONTINUATION,
       isAdded: true,
@@ -151,8 +153,9 @@ export default function TranscriptScenarioPage() {
       equivalentCourseIds: course.equivalentCourseIds,
       averageScore: course.averageScore == null ? '' : String(course.averageScore),
       grade: course.grade,
+      originalGrade: course.originalGrade,
       excludeFromAverage: course.excludeFromAverage,
-      continuationCourseId: course.continuationCourseId === course.scenarioId ? course.scenarioId : course.continuationCourseId,
+      continuationCourseId: course.continuationCourseId === course.scenarioId ? SELF_CONTINUATION : course.continuationCourseId,
       isAdded: course.isAdded,
       wasRepeated: course.wasRepeated,
       sortOrder: course.sortOrder,
@@ -170,6 +173,8 @@ export default function TranscriptScenarioPage() {
     const ects = Number(draft.ects);
     const averageScore = draft.averageScore.trim() === '' ? null : Number(draft.averageScore);
     const scenarioId = draft.scenarioId ?? createScenarioId();
+    const grade = normalizeGrade(draft.grade);
+    const gradeMeta = getGradeMeta(grade);
     const selectedContinuationCourse = continuationOptions.find(course => course.scenarioId === draft.continuationCourseId);
     const continuationCourseId = draft.continuationCourseId === SELF_CONTINUATION || !selectedContinuationCourse
       ? scenarioId
@@ -216,8 +221,9 @@ export default function TranscriptScenarioPage() {
       ects: Math.round(ects),
       equivalentCourseIds: draft.equivalentCourseIds,
       averageScore: averageScore == null ? null : round2(averageScore),
-      grade: normalizeGrade(draft.grade),
-      excludeFromAverage: draft.excludeFromAverage,
+      grade,
+      originalGrade: draft.originalGrade,
+      excludeFromAverage: gradeMeta.countsTowardsGpa ? draft.excludeFromAverage : true,
       continuationCourseId,
       isAdded: draft.isAdded,
       wasRepeated: continuationCourseId !== scenarioId,
@@ -540,7 +546,20 @@ function ScenarioEditorDialog({
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_90px]">
                   <Select
                     value={draft.grade}
-                    onValueChange={value => onChange(current => current ? { ...current, grade: normalizeGrade(value) } : current)}
+                    onValueChange={value => onChange(current => {
+                      if (!current) {
+                        return current;
+                      }
+
+                      const nextGrade = normalizeGrade(value);
+                      return {
+                        ...current,
+                        grade: nextGrade,
+                        excludeFromAverage: getGradeMeta(nextGrade).countsTowardsGpa
+                          ? false
+                          : true,
+                      };
+                    })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -581,10 +600,8 @@ function ScenarioEditorDialog({
                     <SelectValue placeholder="Ders devamı seçin" />
                   </SelectTrigger>
                   <SelectContent>
-                    {!draft.scenarioId && (
-                      <SelectItem value={SELF_CONTINUATION}>Bağımsız Ders</SelectItem>
-                    )}
-                    {courses.map(course => (
+                    <SelectItem value={SELF_CONTINUATION}>Bağımsız Ders</SelectItem>
+                    {courses.filter(course => course.scenarioId !== draft.scenarioId).map(course => (
                       <SelectItem key={course.scenarioId} value={course.scenarioId}>
                         ({findTermName(terms, course.termId)}) {course.courseCode}
                       </SelectItem>

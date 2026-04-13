@@ -10,6 +10,8 @@ import LoginPage from './pages/LoginPage';
 import CourseCatalogPage from './pages/CourseCatalogPage';
 import RegistrationPlanPage from './pages/RegistrationPlanPage';
 import MyCoursesPage from './pages/MyCoursesPage';
+import GradeListPage from './pages/GradeListPage';
+import AttendanceStatusPage from './pages/AttendanceStatusPage';
 import CurriculumStatusPage from './pages/CurriculumStatusPage';
 import TermGpaPage from './pages/TermGpaPage';
 import TranscriptPage from './pages/TranscriptPage';
@@ -69,6 +71,8 @@ export default function App() {
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
                     <Route path="plan" element={<RegistrationPlanPage />} />
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
+                    <Route path="not-listesi" element={<GradeListPage />} />
+                    <Route path="devamsizlik-durumu" element={<AttendanceStatusPage />} />
                     <Route path="donem-ortalamalari" element={<TermGpaPage />} />
                     <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
                     <Route path="transkript-senaryosu" element={<TranscriptScenarioPage />} />

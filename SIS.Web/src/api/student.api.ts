@@ -1,5 +1,5 @@
 import apiClient from './axios';
-import type { StudentInfoDto, StudentTermGpaDto } from '../types/student';
+import type { StudentGradeStatisticsDto, StudentInfoDto, StudentTermGpaDto } from '../types/student';
 import type { CurriculumStatusDto } from '../types/curriculum';
 import type { StudentTranscriptDto } from '../types/transcript';
 
@@ -20,5 +20,13 @@ export async function getTermGpaHistory(): Promise<StudentTermGpaDto[]> {
 
 export async function getStudentTranscript(): Promise<StudentTranscriptDto> {
   const response = await apiClient.get<StudentTranscriptDto>('/student/transcript');
+  return response.data;
+}
+
+export async function getStudentGradeStatistics(registrationId: number, commonEvaluation = false): Promise<StudentGradeStatisticsDto> {
+  const response = await apiClient.get<StudentGradeStatisticsDto>(
+    `/student/registrations/${registrationId}/grade-statistics`,
+    { params: commonEvaluation ? { commonEvaluation } : undefined }
+  );
   return response.data;
 }

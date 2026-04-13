@@ -3,6 +3,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -18,9 +19,17 @@ import {
   useToggleConstraint,
   useUpdateConstraintCategory,
 } from '../hooks/useConstraints';
+import { useSystemConfigs, useUpdateSystemConfig } from '../hooks/useSystemConfig';
 import { SCOPE_LABELS } from '../components/constraint/helpers';
 import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPanel';
+import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
+
+const ATTENDANCE_CONFIG_FIELDS = [
+  { key: 'Attendance.TermWeekCount', label: 'Dönem hafta sayısı', suffix: 'hafta' },
+  { key: 'Attendance.TheoryAbsenceLimitPercent', label: 'Teorik devamsızlık eşiği', suffix: '%' },
+  { key: 'Attendance.LabAbsenceLimitPercent', label: 'Uygulama/lab devamsızlık eşiği', suffix: '%' },
+] as const;
 
 // ─── Constraint Row ─────────────────────────────────────────────
 function ConstraintRow({
@@ -135,6 +144,88 @@ function ConstraintRow({
 }
 
 // ─── Main Page ──────────────────────────────────────────────────
+function AttendancePolicyPanel() {
+  const { data: configs, isLoading, isError } = useSystemConfigs();
+  const attendanceConfigs = configs?.filter(config => config.category === 'Attendance') ?? [];
+
+  if (isLoading) return <Skeleton className="h-36 rounded-xl" />;
+
+  if (isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>Devamsızlık kısıtları yüklenemedi.</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Card className="border border-[#003366]/20 shadow-sm">
+      <CardContent className="space-y-4 p-4">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Devamsızlık Kısıtları</h2>
+          <p className="text-sm text-muted-foreground">
+            Öğrenci devamsızlık ekranındaki teori ve uygulama kalma eşikleri bu değerlerle hesaplanır.
+          </p>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          {ATTENDANCE_CONFIG_FIELDS.map(field => {
+            const config = attendanceConfigs.find(item => item.key === field.key);
+
+            return config ? (
+              <AttendanceConfigEditor key={`${config.id}:${config.value}`} config={config} label={field.label} suffix={field.suffix} />
+            ) : (
+              <div key={field.key} className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+                {field.label} ayarı bulunamadı.
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AttendanceConfigEditor({
+  config,
+  label,
+  suffix,
+}: {
+  config: SystemConfigDto;
+  label: string;
+  suffix: string;
+}) {
+  const [value, setValue] = useState(config.value);
+  const updateMutation = useUpdateSystemConfig();
+
+  const isChanged = value.trim() !== config.value;
+
+  return (
+    <div className="rounded-md border border-border bg-card p-3">
+      <p className="text-sm font-semibold text-foreground">{label}</p>
+      <p className="mt-0.5 min-h-8 text-xs text-muted-foreground">{config.description}</p>
+      <div className="mt-3 flex items-center gap-2">
+        <Input
+          value={value}
+          onChange={event => setValue(event.target.value)}
+          inputMode="decimal"
+          className="h-9"
+        />
+        <span className="w-10 text-sm font-semibold text-muted-foreground">{suffix}</span>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!isChanged || updateMutation.isPending}
+          onClick={() => updateMutation.mutate({ id: config.id, value: value.trim() })}
+        >
+          Kaydet
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ConstraintManagementPage() {
   const { data: constraints, isLoading, isError } = useConstraints();
   const { user } = useAuth();
@@ -160,6 +251,8 @@ export default function ConstraintManagementPage() {
           Ders programi olusturma surecinde uygulanan kisitlamalari yonetin, etkinlestirin veya istisnalar tanimlayin.
         </p>
       </div>
+
+      {isAdmin && <AttendancePolicyPanel />}
 
       <Tabs defaultValue="all">
         <TabsList>
