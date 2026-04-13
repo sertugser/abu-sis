@@ -4,6 +4,7 @@ public class ValidationResultDto
 {
     public bool IsValid { get; set; }
     public List<ValidationError> Errors { get; set; } = new();
+    public List<ValidationError> Warnings { get; set; } = new();
 }
 
 public class ValidationError

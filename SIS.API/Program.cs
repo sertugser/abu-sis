@@ -8,8 +8,11 @@ using SIS.Application.Admin.Services;
 using SIS.Application.Common.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.AdvisorConstraints.Services;
+using SIS.Application.CourseIntention.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.Recommendation.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.AcademicLevel.Services;
@@ -92,9 +95,11 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
+builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
+builder.Services.AddHostedService<SurveyAutoOpenService>();
 builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
@@ -109,6 +114,10 @@ builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
+builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
+builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<ICourseIntentionService, CourseIntentionService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();

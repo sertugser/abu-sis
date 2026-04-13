@@ -3,14 +3,18 @@ import { AlertTriangle, XCircle } from 'lucide-react';
 import type { ValidationError } from '../../types/registration';
 
 interface ValidationErrorsProps {
-  errors: ValidationError[];
+  errors?: ValidationError[];
+  warnings?: ValidationError[];
 }
 
-export default function ValidationErrors({ errors }: ValidationErrorsProps) {
-  if (!errors.length) return null;
+export default function ValidationErrors({ errors = [], warnings = [] }: ValidationErrorsProps) {
+  if (!errors.length && !warnings.length) return null;
 
   const blockingErrors = errors.filter(e => e.rule !== 'ScheduleConflict_NeedsApproval');
-  const warningErrors = errors.filter(e => e.rule === 'ScheduleConflict_NeedsApproval');
+  const warningErrors = [
+    ...errors.filter(e => e.rule === 'ScheduleConflict_NeedsApproval'),
+    ...warnings,
+  ];
 
   return (
     <div className="space-y-3">
@@ -27,7 +31,7 @@ export default function ValidationErrors({ errors }: ValidationErrorsProps) {
         <Alert key={`warn-${i}`} variant="warning">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <span className="font-semibold">Onay Gerekli: </span>
+            <span className="font-semibold">Uyari: </span>
             {error.message}
           </AlertDescription>
         </Alert>

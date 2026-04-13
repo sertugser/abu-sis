@@ -7,6 +7,12 @@ public class StudentCourseEligibilityDto
     public int StudentId { get; set; }
     public string StudentNumber { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = string.Empty;
+    public string CourseName { get; set; } = string.Empty;
+    public int Ects { get; set; }
+    public bool IsCompulsory { get; set; }
+    public int SuggestedSemester { get; set; }
     public bool IsEligible { get; set; }
     public string TakeType { get; set; } = string.Empty;      // MustRetake, Regular, BehindSchedule, UpperCourse
     public GradeCode? PreviousGrade { get; set; }

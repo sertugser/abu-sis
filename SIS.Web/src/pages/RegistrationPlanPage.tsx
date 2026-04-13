@@ -21,6 +21,7 @@ export default function RegistrationPlanPage() {
   const dropCourse = useDropCourse();
   const submitRegistration = useSubmitRegistration();
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [validationWarnings, setValidationWarnings] = useState<ValidationError[]>([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const planItems = registrations?.filter(r => r.status === 'Draft' || r.status === 'Rejected') || [];
@@ -36,19 +37,23 @@ export default function RegistrationPlanPage() {
 
   const handleSubmit = () => {
     setValidationErrors([]);
+    setValidationWarnings([]);
     setSubmitSuccess(false);
     const sectionIds = planItems.map(r => r.courseSectionId);
     submitRegistration.mutate(sectionIds, {
       onSuccess: (data) => {
         if (data.validationResult && !data.validationResult.isValid) {
           setValidationErrors(data.validationResult.errors);
+          setValidationWarnings(data.validationResult.warnings ?? []);
         } else if (data.success) {
           setSubmitSuccess(true);
           setValidationErrors([]);
+          setValidationWarnings(data.validationResult?.warnings ?? []);
         }
       },
-      onError: () => {
-        setValidationErrors([{ rule: 'System', message: 'Kayıt sırasında bir hata oluştu.' }]);
+      onError: (error) => {
+        setValidationWarnings([]);
+        setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Kayit sirasinda bir hata olustu.' }]);
       },
     });
   };
@@ -88,7 +93,9 @@ export default function RegistrationPlanPage() {
         </Alert>
       )}
 
-      {validationErrors.length > 0 && <ValidationErrors errors={validationErrors} />}
+      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+        <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
+      )}
 
       {planItems.length > 0 ? (
         <>

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -30,6 +31,37 @@ public class AdvisorController : ControllerBase
             return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
 
         var result = await _registrationService.GetPendingApprovalsAsync(instructorId.Value);
+        return Ok(result);
+    }
+
+    [HttpGet("students")]
+    public async Task<IActionResult> GetAdvisorStudents(CancellationToken cancellationToken = default)
+    {
+        var instructorId = await GetInstructorIdAsync();
+        if (instructorId == null)
+            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        var result = await (
+            from student in _context.Students.AsNoTracking()
+            join user in _context.Users.AsNoTracking() on student.UserId equals user.Id
+            join program in _context.StudentPrograms.AsNoTracking() on student.Id equals program.StudentId
+            join academicProgram in _context.AcademicPrograms.AsNoTracking() on program.ProgramId equals academicProgram.Id
+            where student.AdvisorId == instructorId.Value
+                && student.Status == StudentStatus.Active
+                && program.IsActive
+                && program.Type == StudentProgramType.Main
+            orderby user.LastName, user.FirstName
+            select new
+            {
+                StudentId = student.Id,
+                student.StudentNumber,
+                StudentName = user.FirstName + " " + user.LastName,
+                ProgramName = academicProgram.Name,
+                student.CompletedSemesters,
+                student.Cgpa
+            })
+            .ToListAsync(cancellationToken);
+
         return Ok(result);
     }
 
