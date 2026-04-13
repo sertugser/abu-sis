@@ -325,16 +325,29 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <CardContent className="pt-0 pb-4 px-4 space-y-3">
-                          <p className="text-xs text-muted-foreground border-l-2 border-muted pl-2">
+                          <p className="text-sm text-muted-foreground border-l-2 border-muted pl-3 py-1">
                             {group.message}
                           </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {group.failures.map(f => (
-                              <Badge key={f.sectionId} variant="outline" className="font-mono text-xs px-2 py-0.5">
-                                {f.courseCode}-{f.sectionNumber} ({f.capacity})
-                              </Badge>
-                            ))}
-                          </div>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Ders</TableHead>
+                                <TableHead className="text-xs">Şube</TableHead>
+                                <TableHead className="text-xs text-right">Kapasite</TableHead>
+                                <TableHead className="text-xs">Sebep</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {group.failures.map(f => (
+                                <TableRow key={f.sectionId}>
+                                  <TableCell className="font-mono text-xs py-1.5">{f.courseCode}</TableCell>
+                                  <TableCell className="text-xs py-1.5">{f.sectionNumber || '-'}</TableCell>
+                                  <TableCell className="text-xs text-right py-1.5">{f.capacity || '-'}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground py-1.5 max-w-xs truncate">{f.reason}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
                         </CardContent>
                       </CollapsibleContent>
                     </Card>
