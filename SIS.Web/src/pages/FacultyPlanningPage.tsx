@@ -147,8 +147,8 @@ export default function FacultyPlanningPage() {
           <CalendarViewTab facultyId={facultyId} termId={termId} departments={departments} />
         )}
         {activeTab === 'auto-schedule' && (
-          <div className="flex-1 overflow-auto">
-            <AutoScheduleTab facultyId={facultyId} termId={termId} />
+          <div className="flex-1 overflow-hidden">
+            <AutoScheduleTab facultyId={facultyId} termId={termId} onTabChange={(tab) => setActiveTab(tab as TabKey)} />
           </div>
         )}
       </div>
