@@ -37,6 +37,7 @@ public sealed class MaxConsecutiveHoursEvaluator : IConstraintEvaluator
                 continue;
 
             var blockMinutes = (sortedSlots[0].Slot.EndTime - sortedSlots[0].Slot.StartTime).TotalMinutes;
+            var maxBlockMinutes = blockMinutes;
 
             for (int idx = 1; idx < sortedSlots.Count; idx++)
             {
@@ -49,9 +50,12 @@ public sealed class MaxConsecutiveHoursEvaluator : IConstraintEvaluator
                 {
                     blockMinutes = (sortedSlots[idx].Slot.EndTime - sortedSlots[idx].Slot.StartTime).TotalMinutes;
                 }
+
+                if (blockMinutes > maxBlockMinutes)
+                    maxBlockMinutes = blockMinutes;
             }
 
-            var blockHours = blockMinutes / 60.0;
+            var blockHours = maxBlockMinutes / 60.0;
             if (blockHours > config.MaxConsecutiveHours)
             {
                 var dayName = SchedulingHelpers.GetDayOfWeekName(dayGroup.Key);

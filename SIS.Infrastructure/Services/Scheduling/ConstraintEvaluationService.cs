@@ -231,6 +231,8 @@ public sealed class ConstraintEvaluationService
                     ? v3.GetInt32() : baseConfig.BreakDurationMinutes,
                 AmphiThreshold = overrides.TryGetValue("AmphiThreshold", out var v4) && v4.ValueKind == System.Text.Json.JsonValueKind.Number
                     ? v4.GetInt32() : baseConfig.AmphiThreshold,
+                TheoryLabSplitThreshold = overrides.TryGetValue("TheoryLabSplitThreshold", out var vTls) && vTls.ValueKind == System.Text.Json.JsonValueKind.Number
+                    ? vTls.GetInt32() : baseConfig.TheoryLabSplitThreshold,
                 S1Enabled = baseConfig.S1Enabled,
                 S1MinOccupancy = overrides.TryGetValue("S1MinOccupancy", out var v5) && v5.ValueKind == System.Text.Json.JsonValueKind.Number
                     ? v5.GetInt32() : baseConfig.S1MinOccupancy,

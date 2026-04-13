@@ -7,9 +7,6 @@ public static partial class SeedData
 {
     public static async Task SeedConstraintDefinitionsAsync(AppDbContext context)
     {
-        if (await context.ConstraintDefinitions.AnyAsync())
-            return;
-
         var definitions = new List<ConstraintDefinition>
         {
             // ── Hard Constraints (15) ───────────────────────────────
@@ -166,6 +163,16 @@ public static partial class SeedData
                 Parameters = """{"MaxConsecutiveHours": 4}""",
                 SortOrder = 15
             },
+            new()
+            {
+                Code = "H16",
+                Name = "Teori-Lab Gün Ayrımı",
+                Description = "Dersin teori ve lab bileşenlerinin toplam saati eşiği aşıyorsa farklı günlere atanmasını zorunlu kılar.",
+                Category = "Hard",
+                Scope = "Scheduling",
+                IsEnabled = true,
+                SortOrder = 16
+            },
 
             // ── Soft Constraints (9) ────────────────────────────────
             new()
@@ -269,7 +276,17 @@ public static partial class SeedData
             },
         };
 
-        context.ConstraintDefinitions.AddRange(definitions);
+        var existingCodes = await context.ConstraintDefinitions
+            .AsNoTracking()
+            .Select(d => d.Code)
+            .ToListAsync();
+        var existingCodeSet = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = definitions.Where(d => !existingCodeSet.Contains(d.Code)).ToList();
+
+        if (missing.Count == 0)
+            return;
+
+        context.ConstraintDefinitions.AddRange(missing);
         await context.SaveChangesAsync();
     }
 }

@@ -70,6 +70,23 @@ public static partial class SeedData
             new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "Schedule", DataType = "bool", Description = "Öğle arası hard constraint mi (true) soft constraint mi (false)" },
             new() { Key = "Schedule.MaxConsecutiveHours", Value = "4", Category = "Schedule", DataType = "int", Description = "Hocanın aralıksız max ardışık ders saati" },
 
+            // ── Otomatik Programlama (SA) Parametreleri ───────────
+            new() { Key = "Schedule.SA.MaxIterations", Value = "10000", Category = "Scheduling", DataType = "int", Description = "SA algoritması max iterasyon sayısı" },
+            new() { Key = "Schedule.SA.InitialTemperature", Value = "100", Category = "Scheduling", DataType = "int", Description = "SA başlangıç sıcaklığı" },
+            new() { Key = "Schedule.SA.TimeoutSeconds", Value = "90", Category = "Scheduling", DataType = "int", Description = "SA zaman aşımı (saniye)" },
+            new() { Key = "Schedule.SA.StagnationLimit", Value = "2000", Category = "Scheduling", DataType = "int", Description = "SA durgunluk limiti (iyileşme olmayan iterasyon)" },
+            new() { Key = "Schedule.SA.BacktrackLimit", Value = "50", Category = "Scheduling", DataType = "int", Description = "Construction solver backtrack limiti" },
+            new() { Key = "Schedule.SA.RelocateWeight", Value = "50", Category = "Scheduling", DataType = "int", Description = "SA relocate hamlesi ağırlığı" },
+            new() { Key = "Schedule.SA.SwapWeight", Value = "35", Category = "Scheduling", DataType = "int", Description = "SA swap hamlesi ağırlığı" },
+            new() { Key = "Schedule.SA.ChainWeight", Value = "15", Category = "Scheduling", DataType = "int", Description = "SA chain-relocate hamlesi ağırlığı" },
+
+            // ── MRV (Minimum Remaining Values) Ağırlıkları ────────
+            new() { Key = "Schedule.MRV.ClassroomWeight", Value = "3", Category = "Scheduling", DataType = "int", Description = "MRV: derslik kısıtı ağırlığı" },
+            new() { Key = "Schedule.MRV.SlotWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: zaman dilimi kısıtı ağırlığı" },
+            new() { Key = "Schedule.MRV.LabWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: lab gereksinimi ağırlığı" },
+            new() { Key = "Schedule.MRV.CapacityWeight", Value = "1", Category = "Scheduling", DataType = "int", Description = "MRV: kapasite kısıtı ağırlığı" },
+            new() { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Scheduling", DataType = "int", Description = "Teori+lab toplamı bu değeri aşarsa ayrı günlere bölünür" },
+
             // ── Ders Programı Grid Parametreleri ─────────────────
             new() { Key = "Schedule.SlotDurationMinutes", Value = "50", Category = "Schedule", DataType = "int", Description = "Bir ders slotunun süresi (dakika)" },
             new() { Key = "Schedule.BreakBetweenSlotsMinutes", Value = "5", Category = "Schedule", DataType = "int", Description = "İki ders arası mola süresi (dakika)" },

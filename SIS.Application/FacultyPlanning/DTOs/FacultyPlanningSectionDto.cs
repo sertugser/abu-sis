@@ -19,7 +19,9 @@ public class FacultyPlanningSectionDto
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
     public int SectionIndex { get; set; }
+    public bool IsPinned { get; set; }
 }
+
 
 public class FacultyPlanningSectionPageDto
 {

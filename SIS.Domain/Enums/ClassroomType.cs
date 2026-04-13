@@ -6,5 +6,10 @@ public enum ClassroomType
     Lab,
     Seminar,
     Computer,
-    Amphitheater
+    Amphitheater,
+    PhysicsLab,
+    ChemistryLab,
+    BiologyLab,
+    ElectronicsLab,
+    DesignStudio
 }

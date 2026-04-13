@@ -529,6 +529,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsNonGpa")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LabClassroomType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LabHours")
                         .HasColumnType("integer");
 
@@ -549,6 +552,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("TeachingMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TheoryClassroomType")
                         .HasColumnType("integer");
 
                     b.Property<int>("TheoryHours")
@@ -1436,6 +1442,57 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("RegistrationPlans");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ScheduleRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("ElapsedSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Seed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SuccessCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("TotalPenalty")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("TotalProcessed")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId");
+
+                    b.HasIndex("FacultyId", "TermId", "CreatedAt");
+
+                    b.ToTable("ScheduleRuns");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.SchedulingAuditLog", b =>
@@ -2410,6 +2467,25 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Student");
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ScheduleRun", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Faculty");
 
                     b.Navigation("Term");
                 });

@@ -57,6 +57,9 @@ public class CreditHourMismatchTests : SchedulingTestBase
     [Fact]
     public async Task ValidateAsync_TimeSlotGridMatchesLongRange_DoesNotReturnCreditHourMismatch()
     {
+        // H16 disabled (threshold=0) so we isolate the CreditHour constraint only
+        SetSystemConfig("Schedule.TheoryLabSplitThreshold", "0");
+
         AddTimeSlot(ActiveTermId, DayOfWeek.Monday, 9, 0, 9, 50, 1);
         AddTimeSlot(ActiveTermId, DayOfWeek.Monday, 9, 55, 10, 45, 2);
         AddTimeSlot(ActiveTermId, DayOfWeek.Monday, 10, 50, 11, 40, 3);

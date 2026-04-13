@@ -108,7 +108,7 @@ public class CourseOpeningServiceTests
     }
 
     [Fact]
-    public async Task OpenCourseAsync_WhenApprovalMissing_Throws()
+    public async Task OpenCourseAsync_WhenNoApproval_CreatesSection()
     {
         using var context = CreateContext();
         SeedBaseData(context);
@@ -116,16 +116,14 @@ public class CourseOpeningServiceTests
         var course = AddCourse(context, 10, "CENG401");
         var service = CreateService(context);
 
-        var act = () => service.OpenCourseAsync(DepartmentId, TermId, new OpenCourseRequest
+        var result = await service.OpenCourseAsync(DepartmentId, TermId, new OpenCourseRequest
         {
             CourseId = course.Id,
             SectionCount = 1,
             CapacityPerSection = 30
         }, ct: CancellationToken.None);
 
-        await act.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*onay gereklidir*");
+        result.Should().HaveCount(1);
     }
 
     [Fact]

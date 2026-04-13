@@ -1,165 +1,217 @@
-import { useState } from 'react';
+// SIS.Web/src/components/faculty-planning/AutoScheduleTab.tsx
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
-  useApplySchedule, useAutoSchedulePreview, useBatchUnassignSections,
+  useApplySchedule, useAutoSchedulePreview, useAvailableClassrooms,
+  useBatchUnassignSections, useFacultyPlanningOverview, useFacultyPlanningSections,
+  useResetAllSchedules, useScheduleRun, useScheduleRuns,
 } from '../../hooks/useFacultyPlanning';
+import type { AutoSchedulePreview } from '../../types/facultyPlanning';
+import { ScheduleTopBar } from './auto-schedule/ScheduleTopBar';
+import { ScheduleListPanel } from './auto-schedule/ScheduleListPanel';
+import { ScheduleDetailPanel } from './auto-schedule/ScheduleDetailPanel';
 
-export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: number | null }) {
+interface AutoScheduleTabProps {
+  facultyId: number;
+  termId: number | null;
+  onTabChange?: (tab: string) => void;
+}
+
+export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoScheduleTabProps) {
+  const navigate = useNavigate();
   const previewMutation = useAutoSchedulePreview();
   const applyMutation = useApplySchedule();
   const batchUnassign = useBatchUnassignSections();
+  const resetAll = useResetAllSchedules();
+
+  // Queries
+  const runsQuery = useScheduleRuns(facultyId, termId);
+  const overviewQuery = useFacultyPlanningOverview(facultyId, termId);
+  const unscheduledQuery = useFacultyPlanningSections(facultyId, termId, undefined, 'Unscheduled', 1, 200);
+  const classroomsQuery = useAvailableClassrooms(termId);
+
+  // State
+  const [userSelectedRunId, setUserSelectedRunId] = useState<number | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
 
+  // Auto-select first run (derived, no useEffect needed)
+  const selectedRunId = previewMutation.data
+    ? null
+    : userSelectedRunId ?? runsQuery.data?.[0]?.id ?? null;
+
+  const runDetailQuery = useScheduleRun(selectedRunId);
+
+  const previewData: AutoSchedulePreview | undefined =
+    previewMutation.data ?? runDetailQuery.data?.result;
+
+  // Computed metrics
+  const ov = overviewQuery.data;
+  const unscheduledCount = ov?.unscheduledSections ?? 0;
+  const availableClassroomCount = classroomsQuery.data?.length;
+  const occupancyPct = ov && ov.totalSections > 0
+    ? Math.round((ov.scheduledSections / ov.totalSections) * 100)
+    : 0;
+
+  // Handlers
+  const handleRun = useCallback(() => {
+    if (!termId) return;
+    setUserSelectedRunId(null);
+    setSelectedItemId(null);
+    previewMutation.mutate({ facultyId, termId });
+  }, [facultyId, termId, previewMutation]);
+
+  const handleRunSelect = useCallback((id: number) => {
+    setUserSelectedRunId(id);
+    setSelectedItemId(null);
+    previewMutation.reset();
+    setSelectedIds(new Set());
+    setLastAppliedIds([]);
+  }, [previewMutation]);
+
+  const handleApply = useCallback((onlySelected: boolean) => {
+    const source = previewData?.assignments ?? [];
+    const items = (onlySelected ? source.filter(a => selectedIds.has(a.sectionId)) : source)
+      .map(a => ({
+        sectionId: a.sectionId,
+        classroomId: a.classroomId,
+        scheduleSlots: a.scheduleSlots,
+        instructorId: a.instructorId ?? undefined,
+      }));
+    if (items.length > 0) {
+      applyMutation.mutate({ assignments: items }, {
+        onSuccess: () => setLastAppliedIds(items.map(a => a.sectionId)),
+      });
+    }
+  }, [previewData, selectedIds, applyMutation]);
+
+  const handleToggleAll = useCallback(() => {
+    if (!previewData) return;
+    const allIds = previewData.assignments.map(a => a.sectionId);
+    const allSelected = allIds.every(id => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(allIds));
+  }, [previewData, selectedIds]);
+
+  const toggleCheck = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) { n.delete(id); } else { n.add(id); }
+      return n;
+    });
+  }, []);
+
+  const handleNavigate = useCallback((target: string) => {
+    if (target === 'calendar' || target === 'list') {
+      onTabChange?.(target);
+    } else {
+      navigate(target);
+    }
+  }, [navigate, onTabChange]);
+
+  // Selected item lookup
+  const selectedSuccess = useMemo(
+    () => previewData?.assignments.find(a => a.sectionId === selectedItemId),
+    [previewData, selectedItemId],
+  );
+  const selectedFailure = useMemo(
+    () => previewData?.failures.find(f => f.sectionId === selectedItemId),
+    [previewData, selectedItemId],
+  );
+
   if (!termId) return null;
 
-  const handlePreview = () => {
-    previewMutation.mutate({ facultyId, termId });
-  };
-
-  const handleApplySelected = () => {
-    const items = (previewMutation.data?.assignments ?? [])
-      .filter(a => selectedIds.has(a.sectionId))
-      .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
-    if (items.length > 0) {
-      const request = { assignments: items };
-      applyMutation.mutate(request, {
-        onSuccess: () => setLastAppliedIds(request.assignments.map(a => a.sectionId)),
-      });
-    }
-  };
-
-  const handleApplyAll = () => {
-    const items = (previewMutation.data?.assignments ?? [])
-      .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
-    if (items.length > 0) {
-      const request = { assignments: items };
-      applyMutation.mutate(request, {
-        onSuccess: () => setLastAppliedIds(request.assignments.map(a => a.sectionId)),
-      });
-    }
-  };
-
-  const toggleSelect = (id: number) => setSelectedIds(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) { next.delete(id); } else { next.add(id); }
-    return next;
-  });
-
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Otomatik Zamanlama</CardTitle>
-            <CardDescription>Zamanlanmamış şubeler için derslik ve saat önerisi üretir.</CardDescription>
-          </div>
-          <Button onClick={handlePreview} disabled={previewMutation.isPending}>
-            <Zap className="h-4 w-4 mr-1" />
-            {previewMutation.isPending ? 'Hesaplanıyor...' : 'Otomatik Ata'}
-          </Button>
-        </CardHeader>
-      </Card>
+    <div className="flex flex-col h-full gap-3">
+      {/* Üst bar */}
+      <ScheduleTopBar
+        unscheduledCount={unscheduledCount}
+        availableClassroomCount={availableClassroomCount}
+        occupancyPct={occupancyPct}
+        isPending={previewMutation.isPending}
+        onRun={handleRun}
+        runs={runsQuery.data ?? []}
+        activeRunId={selectedRunId}
+        onRunSelect={handleRunSelect}
+      />
 
-      {previewMutation.data && (
-        <>
-          <div className="flex gap-2">
-            <Badge variant="success">{previewMutation.data.successCount} başarılı</Badge>
-            <Badge variant="destructive">{previewMutation.data.failedCount} başarısız</Badge>
-          </div>
+      {/* Ana içerik: Sol panel + Sağ panel */}
+      <div className="flex flex-1 min-h-0 border border-border/50 rounded-lg overflow-hidden bg-background">
+        {/* Sol panel */}
+        <ScheduleListPanel
+          previewData={previewData}
+          unscheduledSections={unscheduledQuery.data?.items}
+          selectedItemId={selectedItemId}
+          onSelectItem={(id) => setSelectedItemId(id)}
+          selectedIds={selectedIds}
+          onToggleAll={handleToggleAll}
+          onApply={handleApply}
+          applyPending={applyMutation.isPending}
+        />
 
-          {previewMutation.data.assignments.length > 0 && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Önizleme</CardTitle>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleApplySelected} disabled={selectedIds.size === 0 || applyMutation.isPending}>
-                    Seçilenleri Uygula ({selectedIds.size})
-                  </Button>
-                  <Button size="sm" onClick={handleApplyAll} disabled={applyMutation.isPending}>
-                    Tümünü Uygula
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8" />
-                      <TableHead>Ders</TableHead>
-                      <TableHead>Bölüm</TableHead>
-                      <TableHead>Derslik</TableHead>
-                      <TableHead>Saat</TableHead>
-                      <TableHead>Uyum</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {previewMutation.data.assignments.map(a => (
-                      <TableRow key={a.sectionId}>
-                        <TableCell>
-                          <input type="checkbox" checked={selectedIds.has(a.sectionId)} onChange={() => toggleSelect(a.sectionId)} />
-                        </TableCell>
-                        <TableCell><span className="font-mono text-xs">{a.courseCode}</span> {a.courseName}</TableCell>
-                        <TableCell>{a.departmentCode}</TableCell>
-                        <TableCell>{a.classroomName}</TableCell>
-                        <TableCell>{a.scheduleSummary}</TableCell>
-                        <TableCell>%{(a.fitScore * 100).toFixed(0)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
+        {/* Sağ panel */}
+        <div className="flex-1 min-w-0">
+          <ScheduleDetailPanel
+            selectedSuccess={selectedSuccess}
+            selectedFailure={selectedFailure}
+            isChecked={selectedItemId != null && selectedIds.has(selectedItemId)}
+            onToggleCheck={() => selectedItemId && toggleCheck(selectedItemId)}
+            onNavigate={handleNavigate}
+            unscheduledCount={unscheduledCount}
+            availableClassroomCount={availableClassroomCount}
+            hasPreviewData={!!previewData}
+          />
+        </div>
+      </div>
 
-          {previewMutation.data.failures.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-sm text-destructive">Atanamayan Şubeler</CardTitle></CardHeader>
-              <CardContent>
-                {previewMutation.data.failures.map(f => (
-                  <div key={f.sectionId} className="text-sm py-1">
-                    <span className="font-mono">{f.courseCode}</span> — {f.reason}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {applyMutation.data && (
-            <Alert variant={applyMutation.data.failedCount > 0 ? 'destructive' : 'default'}>
-              <AlertTitle>Uygulama Sonucu</AlertTitle>
-              <AlertDescription>
-                {applyMutation.data.successCount} başarılı, {applyMutation.data.failedCount} başarısız
-                {applyMutation.data.errors.map((e, i) => <p key={i} className="text-xs">{e}</p>)}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {lastAppliedIds.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`)) {
-                  batchUnassign.mutate(lastAppliedIds, {
-                    onSuccess: () => setLastAppliedIds([]),
-                  });
-                }
-              }}
-              disabled={batchUnassign.isPending}
-            >
-              {batchUnassign.isPending
-                ? 'Geri alınıyor...'
-                : `Son Uygulamayı Geri Al (${lastAppliedIds.length} şube)`}
-            </Button>
-          )}
-        </>
+      {/* Apply result + Undo */}
+      {applyMutation.data && (
+        <Alert variant={applyMutation.data.failedCount > 0 ? 'destructive' : 'default'}>
+          <AlertTitle>Uygulama Sonucu</AlertTitle>
+          <AlertDescription>
+            {applyMutation.data.successCount} başarılı, {applyMutation.data.failedCount} başarısız
+            {applyMutation.data.errors.map((e, i) => <p key={i} className="text-xs mt-1">{e}</p>)}
+          </AlertDescription>
+        </Alert>
       )}
+
+      <div className="flex gap-2">
+        {lastAppliedIds.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`))
+                batchUnassign.mutate(lastAppliedIds, { onSuccess: () => setLastAppliedIds([]) });
+            }}
+            disabled={batchUnassign.isPending}
+          >
+            {batchUnassign.isPending ? 'Geri alınıyor...' : `Geri Al (${lastAppliedIds.length} şube)`}
+          </Button>
+        )}
+
+        {termId && (ov?.scheduledSections ?? 0) > 0 && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              if (confirm('Fakültenin TÜM ders atamalarını sıfırlamak istediğinize emin misiniz? (Pinlenmiş ve kilitli dersler hariç)'))
+                resetAll.mutate({ facultyId, termId }, {
+                  onSuccess: (data) => {
+                    setLastAppliedIds([]);
+                    previewMutation.reset();
+                    alert(`${data.resetCount} şubenin ataması sıfırlandı.`);
+                  },
+                });
+            }}
+            disabled={resetAll.isPending}
+          >
+            {resetAll.isPending ? 'Sıfırlanıyor...' : 'Tüm Atamaları Sıfırla'}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
