@@ -35,7 +35,8 @@ public class FacultyPlanningController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasFacultyAccessAsync(userId, facultyId, ct)) return Forbid();
 
-        var result = await _service.GetOverviewAsync(facultyId, termId, ct);
+        var scopeDeptId = await EnforceDepartmentScopeAsync(userId, null, ct);
+        var result = await _service.GetOverviewAsync(facultyId, termId, scopeDeptId, ct);
         return Ok(result);
     }
 
@@ -43,14 +44,16 @@ public class FacultyPlanningController : ControllerBase
     public async Task<IActionResult> GetSections(
         [FromQuery] int facultyId, [FromQuery] int termId,
         [FromQuery] int? departmentId, [FromQuery] string? status,
+        [FromQuery] string? search,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasFacultyAccessAsync(userId, facultyId, ct)) return Forbid();
 
+        departmentId = await EnforceDepartmentScopeAsync(userId, departmentId, ct);
         pageSize = Math.Clamp(pageSize, 1, 200);
-        var result = await _service.GetSectionsAsync(facultyId, termId, departmentId, status, page, pageSize, ct);
+        var result = await _service.GetSectionsAsync(facultyId, termId, departmentId, status, page, pageSize, search, ct);
         return Ok(result);
     }
 
@@ -58,6 +61,11 @@ public class FacultyPlanningController : ControllerBase
     public async Task<IActionResult> AssignSection([FromBody] AssignSectionRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var facultyId = await _service.ResolveFacultyIdForSectionAsync(request.SectionId, ct);
+        if (facultyId == null) return NotFound("Bölüm bulunamadı.");
+        if (!await HasFacultyAccessAsync(userId, facultyId.Value, ct)) return Forbid();
+
         var result = await _service.AssignSectionAsync(request, userId.ToString(), ct);
         return Ok(result);
     }
@@ -66,6 +74,11 @@ public class FacultyPlanningController : ControllerBase
     public async Task<IActionResult> UnassignSection(int sectionId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var facultyId = await _service.ResolveFacultyIdForSectionAsync(sectionId, ct);
+        if (facultyId == null) return NotFound("Bölüm bulunamadı.");
+        if (!await HasFacultyAccessAsync(userId, facultyId.Value, ct)) return Forbid();
+
         await _service.UnassignSectionAsync(sectionId, userId.ToString(), ct);
         return NoContent();
     }
@@ -73,6 +86,9 @@ public class FacultyPlanningController : ControllerBase
     [HttpPost("auto-schedule")]
     public async Task<IActionResult> AutoSchedule([FromBody] AutoScheduleRequest request, CancellationToken ct)
     {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasFacultyAccessAsync(userId, request.FacultyId, ct)) return Forbid();
+
         var result = await _service.AutoSchedulePreviewAsync(request, ct);
         return Ok(result);
     }
@@ -81,6 +97,14 @@ public class FacultyPlanningController : ControllerBase
     public async Task<IActionResult> ApplySchedule([FromBody] ApplyScheduleRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        if (request.Assignments.Count > 0)
+        {
+            var facultyId = await _service.ResolveFacultyIdForSectionAsync(request.Assignments[0].SectionId, ct);
+            if (facultyId == null) return NotFound("Bölüm bulunamadı.");
+            if (!await HasFacultyAccessAsync(userId, facultyId.Value, ct)) return Forbid();
+        }
+
         var result = await _service.ApplyScheduleAsync(request, userId.ToString(), ct);
         return Ok(result);
     }
@@ -99,21 +123,7 @@ public class FacultyPlanningController : ControllerBase
     [HttpGet("time-slots")]
     public async Task<IActionResult> GetTimeSlots([FromQuery] int termId, CancellationToken ct)
     {
-        var slots = await _context.TimeSlots
-            .AsNoTracking()
-            .Where(ts => ts.TermId == termId)
-            .OrderBy(ts => ts.DayOfWeek)
-            .ThenBy(ts => ts.SlotOrder)
-            .Select(ts => new FacultyPlanningTimeSlotDto
-            {
-                Day = (int)ts.DayOfWeek,
-                SlotOrder = ts.SlotOrder,
-                StartTime = ts.StartTime,
-                EndTime = ts.EndTime,
-                DisplayName = ts.DisplayName
-            })
-            .ToListAsync(ct);
-
+        var slots = await _service.GetTimeSlotsAsync(termId, ct);
         return Ok(slots);
     }
 
@@ -125,6 +135,25 @@ public class FacultyPlanningController : ControllerBase
 
         var result = await _service.GetConflictsAsync(facultyId, termId, ct);
         return Ok(result);
+    }
+
+    private async Task<int?> EnforceDepartmentScopeAsync(int userId, int? requestedDepartmentId, CancellationToken ct)
+    {
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        if (roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff") || roles.Contains("Dean"))
+            return requestedDepartmentId;
+
+        if (roles.Contains("DepartmentManager"))
+        {
+            var deptId = await _context.Instructors
+                .AsNoTracking()
+                .Where(i => i.UserId == userId)
+                .Select(i => (int?)i.DepartmentId)
+                .FirstOrDefaultAsync(ct);
+            return deptId;
+        }
+
+        return requestedDepartmentId;
     }
 
     private async Task<bool> HasFacultyAccessAsync(int userId, int facultyId, CancellationToken ct)

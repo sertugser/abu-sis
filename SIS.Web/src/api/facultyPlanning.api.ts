@@ -14,10 +14,10 @@ export async function getFacultyPlanningOverview(facultyId: number, termId: numb
 }
 
 export async function getFacultyPlanningSections(
-  facultyId: number, termId: number, departmentId?: number, status?: string, page = 1, pageSize = 50,
+  facultyId: number, termId: number, departmentId?: number, status?: string, page = 1, pageSize = 50, search?: string,
 ): Promise<FacultyPlanningSectionPage> {
   const { data } = await apiClient.get<FacultyPlanningSectionPage>('/faculty-planning/sections', {
-    params: { facultyId, termId, departmentId, status, page, pageSize },
+    params: { facultyId, termId, departmentId, status, page, pageSize, search: search || undefined },
   });
   return data;
 }
@@ -32,17 +32,11 @@ export async function unassignSection(sectionId: number): Promise<void> {
 }
 
 export async function batchUnassignSections(sectionIds: number[]): Promise<{ successCount: number; failedCount: number }> {
-  let successCount = 0;
-  let failedCount = 0;
-  for (const id of sectionIds) {
-    try {
-      await apiClient.delete(`/faculty-planning/unassign/${id}`);
-      successCount++;
-    } catch {
-      failedCount++;
-    }
-  }
-  return { successCount, failedCount };
+  const results = await Promise.allSettled(
+    sectionIds.map(id => apiClient.delete(`/faculty-planning/unassign/${id}`)),
+  );
+  const successCount = results.filter(r => r.status === 'fulfilled').length;
+  return { successCount, failedCount: results.length - successCount };
 }
 
 export async function autoSchedulePreview(request: AutoScheduleRequest): Promise<AutoSchedulePreview> {

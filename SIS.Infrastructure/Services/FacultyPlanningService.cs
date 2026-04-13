@@ -56,7 +56,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<FacultyPlanningOverviewDto> GetOverviewAsync(int facultyId, int termId, CancellationToken ct = default)
+    public async Task<FacultyPlanningOverviewDto> GetOverviewAsync(int facultyId, int termId, int? scopeDepartmentId = null, CancellationToken ct = default)
     {
         var faculty = await _context.Faculties
             .AsNoTracking()
@@ -69,7 +69,9 @@ public class FacultyPlanningService : IFacultyPlanningService
             .FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new KeyNotFoundException("Donem bulunamadi.");
 
-        var departmentIds = faculty.Departments.Select(d => d.Id).ToList();
+        var departmentIds = scopeDepartmentId.HasValue
+            ? new List<int> { scopeDepartmentId.Value }
+            : faculty.Departments.Select(d => d.Id).ToList();
 
         var sections = await _context.CourseSections
             .AsNoTracking()
@@ -100,7 +102,10 @@ public class FacultyPlanningService : IFacultyPlanningService
             .ToDictionary(g => g.Key, g => g.Count());
 
         var departmentProgress = new List<DepartmentProgressDto>();
-        foreach (var dept in faculty.Departments)
+        var visibleDepartments = scopeDepartmentId.HasValue
+            ? faculty.Departments.Where(d => d.Id == scopeDepartmentId.Value)
+            : faculty.Departments;
+        foreach (var dept in visibleDepartments)
         {
             var deptSections = sections.Where(s => s.Course.DepartmentId == dept.Id).ToList();
 
@@ -181,7 +186,7 @@ public class FacultyPlanningService : IFacultyPlanningService
 
     public async Task<FacultyPlanningSectionPageDto> GetSectionsAsync(
         int facultyId, int termId, int? departmentId = null, string? status = null,
-        int page = 1, int pageSize = 50, CancellationToken ct = default)
+        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default)
     {
         var departmentIds = await _context.Departments
             .AsNoTracking()
@@ -202,6 +207,14 @@ public class FacultyPlanningService : IFacultyPlanningService
 
         if (departmentId.HasValue)
             query = query.Where(cs => cs.Course.DepartmentId == departmentId.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLower();
+            query = query.Where(cs =>
+                cs.Course.Code.ToLower().Contains(q) ||
+                cs.Course.Name.ToLower().Contains(q));
+        }
 
         var allSections = await query.OrderBy(cs => cs.Course.Code).ThenBy(cs => cs.Id).ToListAsync(ct);
 
@@ -269,7 +282,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                     Status = sectionStatus,
                     TheoryHours = s.Course.TheoryHours,
                     LabHours = s.Course.LabHours,
-                    SectionIndex = index
+                    SectionIndex = index,
+                    IsPinned = s.IsPinned
                 });
             }
         }
@@ -315,6 +329,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                 throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerine atama yapabilirsiniz.");
 
             var result = new AssignmentResultDto { Success = true };
+            var previousClassroomId = section.ClassroomId;
 
             if (request.ClassroomId.HasValue)
             {
@@ -347,6 +362,33 @@ public class FacultyPlanningService : IFacultyPlanningService
                 if (!instructorExists)
                     throw new KeyNotFoundException("Ogretim uyesi bulunamadi.");
                 section.InstructorId = request.InstructorId.Value;
+
+                // K1: Hoca günlük yük limiti kontrolü
+                if (request.ScheduleSlots is { Count: > 0 })
+                {
+                    var instrId = request.InstructorId.Value;
+                    var requestDays = request.ScheduleSlots.Select(s => s.Day).Distinct();
+                    var existingInstructorSchedules = await _context.SectionSchedules
+                        .AsNoTracking()
+                        .Include(ss => ss.TimeSlot)
+                        .Where(ss => ss.CourseSection.InstructorId == instrId
+                            && ss.CourseSection.TermId == section.TermId
+                            && ss.CourseSectionId != section.Id)
+                        .ToListAsync(ct);
+
+                    foreach (var day in requestDays)
+                    {
+                        var existingHours = existingInstructorSchedules
+                            .Where(ss => ss.TimeSlot.DayOfWeek == day)
+                            .Sum(ss => (ss.TimeSlot.EndTime - ss.TimeSlot.StartTime).TotalHours);
+                        var newHours = request.ScheduleSlots
+                            .Where(s => s.Day == day)
+                            .Sum(s => (s.EndTime - s.StartTime).TotalHours);
+                        if (existingHours + newHours > 9)
+                            throw new InvalidOperationException(
+                                $"Ogretim uyesinin {day} gunundeki toplam yuku {existingHours + newHours:F1} saate ulasacak (limit: 9 saat). Atama reddedildi.");
+                    }
+                }
             }
 
             // Write schedule records only if this is a NEW schedule assignment (not just an instructor change)
@@ -357,7 +399,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                 var existingScheduleCount = await _context.SectionSchedules
                     .CountAsync(ss => ss.CourseSectionId == section.Id, ct);
 
-                var classroomChanged = request.ClassroomId.HasValue && section.ClassroomId != request.ClassroomId.Value;
+                var classroomChanged = request.ClassroomId.HasValue && previousClassroomId != request.ClassroomId.Value;
                 var isNewSchedule = existingScheduleCount == 0;
 
                 if (isNewSchedule || classroomChanged)
@@ -1333,4 +1375,31 @@ public class FacultyPlanningService : IFacultyPlanningService
         TermStatus.Archived         => "Arşivlendi",
         _                           => s.ToString()
     };
+
+    public async Task<List<FacultyPlanningTimeSlotDto>> GetTimeSlotsAsync(int termId, CancellationToken ct = default)
+    {
+        return await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .OrderBy(ts => ts.DayOfWeek)
+            .ThenBy(ts => ts.SlotOrder)
+            .Select(ts => new FacultyPlanningTimeSlotDto
+            {
+                Day = (int)ts.DayOfWeek,
+                SlotOrder = ts.SlotOrder,
+                StartTime = ts.StartTime,
+                EndTime = ts.EndTime,
+                DisplayName = ts.DisplayName
+            })
+            .ToListAsync(ct);
+    }
+
+    public async Task<int?> ResolveFacultyIdForSectionAsync(int sectionId, CancellationToken ct = default)
+    {
+        return await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.Id == sectionId)
+            .Select(cs => (int?)cs.Course!.Department!.FacultyId)
+            .FirstOrDefaultAsync(ct);
+    }
 }

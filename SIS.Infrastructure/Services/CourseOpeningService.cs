@@ -269,14 +269,6 @@ public class CourseOpeningService(
         if (request.SectionCount <= 0 || request.SectionCount > 20)
             throw new InvalidOperationException("Şube sayısı 1 ile 20 arasında olmalıdır.");
 
-        // Onay kontrolü
-        var approval = await _context.CourseSectionApprovals
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.CourseId == request.CourseId && a.DepartmentId == departmentId && a.TermId == termId, ct);
-
-        if (approval == null || approval.Status != SectionApprovalStatus.Approved)
-            throw new InvalidOperationException($"Ders '{course.Code}' için onay gereklidir. Lütfen önce ders onay sürecini tamamlayın.");
-
         // Mevcut section'ları kontrol et (aktif/pasif fark etmez, SectionNumber çakışmasını önlemek için)
         var existingSections = await _context.CourseSections
             .Where(cs => cs.CourseId == request.CourseId && cs.TermId == termId)

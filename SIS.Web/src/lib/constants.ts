@@ -58,8 +58,8 @@ export const QUERY_KEYS = {
   grades: (sectionId: number) => ['grades', sectionId] as const,
   gradingCriteria: (sectionId: number) => ['gradingCriteria', sectionId] as const,
   facultyPlanningOverview: (facultyId: number, termId: number) => ['facultyPlanning', 'overview', facultyId, termId] as const,
-  facultyPlanningSections: (facultyId: number, termId: number, departmentId?: number, status?: string, page?: number) =>
-    ['facultyPlanning', 'sections', facultyId, termId, departmentId, status, page] as const,
+  facultyPlanningSections: (facultyId: number, termId: number, departmentId?: number, status?: string, page?: number, pageSize?: number, search?: string) =>
+    ['facultyPlanning', 'sections', facultyId, termId, departmentId, status, page, pageSize, search] as const,
   facultyPlanningConflicts: (facultyId: number, termId: number) => ['facultyPlanning', 'conflicts', facultyId, termId] as const,
   courseOpeningList: (departmentId: number, termId: number) => ['courseOpening', 'list', departmentId, termId] as const,
   curriculumCoursesForOpening: (departmentId: number, termId: number) => ['courseOpening', 'curriculum', departmentId, termId] as const,

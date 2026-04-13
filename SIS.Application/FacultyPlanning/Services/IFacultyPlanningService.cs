@@ -5,11 +5,11 @@ namespace SIS.Application.FacultyPlanning.Services;
 
 public interface IFacultyPlanningService
 {
-    Task<FacultyPlanningOverviewDto> GetOverviewAsync(int facultyId, int termId, CancellationToken ct = default);
+    Task<FacultyPlanningOverviewDto> GetOverviewAsync(int facultyId, int termId, int? scopeDepartmentId = null, CancellationToken ct = default);
 
     Task<FacultyPlanningSectionPageDto> GetSectionsAsync(
         int facultyId, int termId, int? departmentId = null, string? status = null,
-        int page = 1, int pageSize = 50, CancellationToken ct = default);
+        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default);
 
     Task<AssignmentResultDto> AssignSectionAsync(AssignSectionRequest request, string userId, CancellationToken ct = default);
 
@@ -25,5 +25,9 @@ public interface IFacultyPlanningService
 
     Task<List<SchedulingConflictDto>> GetConflictsAsync(int facultyId, int termId, CancellationToken ct = default);
 
+    Task<List<FacultyPlanningTimeSlotDto>> GetTimeSlotsAsync(int termId, CancellationToken ct = default);
+
     Task<int> ResolveFacultyForUserAsync(string userId, CancellationToken ct = default);
+
+    Task<int?> ResolveFacultyIdForSectionAsync(int sectionId, CancellationToken ct = default);
 }
