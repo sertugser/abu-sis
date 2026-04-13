@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -174,7 +174,7 @@ function AttendancePolicyPanel() {
             const config = attendanceConfigs.find(item => item.key === field.key);
 
             return config ? (
-              <AttendanceConfigEditor key={field.key} config={config} label={field.label} suffix={field.suffix} />
+              <AttendanceConfigEditor key={`${config.id}:${config.value}`} config={config} label={field.label} suffix={field.suffix} />
             ) : (
               <div key={field.key} className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
                 {field.label} ayarı bulunamadı.
@@ -198,10 +198,6 @@ function AttendanceConfigEditor({
 }) {
   const [value, setValue] = useState(config.value);
   const updateMutation = useUpdateSystemConfig();
-
-  useEffect(() => {
-    setValue(config.value);
-  }, [config.id, config.value]);
 
   const isChanged = value.trim() !== config.value;
 

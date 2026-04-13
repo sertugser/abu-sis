@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { AlertCircle, BarChart3, BookOpen, CalendarDays, Printer, Search } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -60,17 +60,6 @@ export default function GradeListPage() {
 
   const terms = useMemo(() => history ?? [], [history]);
 
-  useEffect(() => {
-    if (terms.length === 0) {
-      setSelectedTermId(null);
-      return;
-    }
-
-    if (!selectedTermId || !terms.some(term => term.termId === selectedTermId)) {
-      setSelectedTermId(terms[0].termId);
-    }
-  }, [selectedTermId, terms]);
-
   const selectedTerm = terms.find(term => term.termId === selectedTermId) ?? terms[0] ?? null;
 
   const rows = useMemo<GradeListRow[]>(() => {
@@ -93,11 +82,11 @@ export default function GradeListPage() {
     })),
   });
 
-  const rowsWithStatistics = rows.map((row, index) => ({
+  const rowsWithStatistics = useMemo(() => rows.map((row, index) => ({
     ...row,
     statistics: gradeStatisticQueries[index]?.data ?? null,
     statisticsLoading: gradeStatisticQueries[index]?.isLoading ?? false,
-  }));
+  })), [gradeStatisticQueries, rows]);
 
   const filteredRows = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase('tr-TR');
@@ -273,6 +262,7 @@ export default function GradeListPage() {
           </DialogHeader>
           {selectedRegistrationId !== null && (
             <GradeStatisticsPopup
+              key={selectedRegistrationId}
               registrationId={selectedRegistrationId}
               fallbackTitle={selectedRow ? `${selectedRow.courseCode} - ${selectedRow.courseName}` : undefined}
             />
@@ -360,10 +350,6 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
 function GradeStatisticsPopup({ registrationId, fallbackTitle }: { registrationId: number; fallbackTitle?: string }) {
   const [commonEvaluation, setCommonEvaluation] = useState(false);
   const { data, isLoading, isError } = useStudentGradeStatistics(registrationId, commonEvaluation);
-
-  useEffect(() => {
-    setCommonEvaluation(false);
-  }, [registrationId]);
 
   if (isLoading) {
     return (

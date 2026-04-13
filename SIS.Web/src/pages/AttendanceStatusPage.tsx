@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertCircle, CalendarDays, ClipboardList, Info, ShieldAlert } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -25,20 +25,8 @@ import type { StudentAttendanceCourseDto, StudentAttendanceStatusDto } from '../
 export default function AttendanceStatusPage() {
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
   const { data, isLoading, isError } = useStudentAttendanceStatus(selectedTermId);
-  const [selectedCourse, setSelectedCourse] = useState<StudentAttendanceCourseDto | null>(null);
-
-  useEffect(() => {
-    if (data && selectedTermId == null) {
-      setSelectedTermId(data.termId);
-    }
-  }, [data, selectedTermId]);
-
-  useEffect(() => {
-    if (!data || !selectedCourse) return;
-    if (!data.courses.some(course => course.registrationId === selectedCourse.registrationId)) {
-      setSelectedCourse(null);
-    }
-  }, [data, selectedCourse]);
+  const [selectedCourseRegistrationId, setSelectedCourseRegistrationId] = useState<number | null>(null);
+  const selectedCourse = data?.courses.find(course => course.registrationId === selectedCourseRegistrationId) ?? null;
 
   const totals = useMemo(() => {
     const courses = data?.courses ?? [];
@@ -91,7 +79,7 @@ export default function AttendanceStatusPage() {
             <select
               value={selectedTermId ?? data.termId}
               onChange={event => {
-                setSelectedCourse(null);
+                setSelectedCourseRegistrationId(null);
                 setSelectedTermId(Number(event.target.value));
               }}
               className="h-10 w-full appearance-none rounded-md border border-border bg-card px-3 pr-9 text-sm font-semibold text-[#003366] shadow-sm outline-none transition-colors hover:border-[#003366]/40 focus:border-[#003366] focus:ring-2 focus:ring-[#003366]/10"
@@ -153,7 +141,7 @@ export default function AttendanceStatusPage() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => setSelectedCourse(course)}
+                        onClick={() => setSelectedCourseRegistrationId(course.registrationId)}
                         className="h-auto min-h-8 max-w-full justify-end gap-2 whitespace-normal rounded-md px-2 text-right text-[#006699] hover:bg-[#006699]/10 hover:text-[#004f73]"
                       >
                         <Info className="h-4 w-4 shrink-0" />
@@ -176,7 +164,7 @@ export default function AttendanceStatusPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={selectedCourse !== null} onOpenChange={open => { if (!open) setSelectedCourse(null); }}>
+      <Dialog open={selectedCourse !== null} onOpenChange={open => { if (!open) setSelectedCourseRegistrationId(null); }}>
         <DialogContent className="max-w-[min(760px,calc(100vw-2rem))] overflow-hidden p-0">
           <DialogHeader className="border-b bg-[#003366] px-5 py-3 text-white">
             <DialogTitle className="text-base">Devamsızlık Bilgisi</DialogTitle>
