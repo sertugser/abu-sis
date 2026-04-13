@@ -18,7 +18,7 @@ import {
   useFacultyPlanningTimeSlots, useUnassignSection,
 } from '../../hooks/useFacultyPlanning';
 import { useDepartmentInstructors } from '../../hooks/useCourseOpening';
-import { buildManualScheduleOptions, STATUS_CONFIG } from './sectionUtils';
+import { buildManualScheduleOptions } from './sectionUtils';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import type { AssignmentResult } from '../../types/facultyPlanning';
 import { CalendarGrid } from './CalendarGrid';

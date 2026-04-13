@@ -104,7 +104,7 @@ public class CandidateGeneratorTests
         results.Should().AllSatisfy(c =>
         {
             c.TheoryBlock.Should().NotBeNull();
-            c.LabBlock.Should().BeNull();
+            c.LabBlocks.Should().BeEmpty();
             c.TheoryBlock!.Type.Should().Be(BlockType.Theory);
         });
     }
@@ -130,8 +130,8 @@ public class CandidateGeneratorTests
         results.Should().AllSatisfy(c =>
         {
             c.TheoryBlock.Should().NotBeNull();
-            c.LabBlock.Should().NotBeNull();
-            c.TheoryBlock!.Day.Should().NotBe(c.LabBlock!.Day,
+            c.LabBlocks.Should().NotBeEmpty();
+            c.TheoryBlock!.Day.Should().NotBe(c.LabBlocks[0].Day,
                 "total hours exceed split threshold, so theory and lab must be on different days");
         });
     }
@@ -155,8 +155,8 @@ public class CandidateGeneratorTests
         // Assert
         results.Should().NotBeEmpty();
         var sameDayCombinations = results.Where(c =>
-            c.TheoryBlock != null && c.LabBlock != null &&
-            c.TheoryBlock.Day == c.LabBlock.Day).ToList();
+            c.TheoryBlock != null && c.LabBlocks.Count > 0 &&
+            c.TheoryBlock.Day == c.LabBlocks[0].Day).ToList();
         sameDayCombinations.Should().NotBeEmpty(
             "total hours equal to threshold should allow same-day combinations");
     }
