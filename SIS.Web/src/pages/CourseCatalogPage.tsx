@@ -140,10 +140,64 @@ export default function CourseCatalogPage() {
   }
 
   if (error) {
+    const errMsg = error instanceof Error ? error.message : '';
+
+    if (errMsg.includes('yayınlanmadı') || errMsg.includes('Dönem durumu')) {
+      return (
+        <Alert variant="default" className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+          <Clock className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800 dark:text-blue-200">
+            <p className="font-semibold">Ders katalogu henuz yayinlanmadi</p>
+            <p className="mt-1 text-sm">Aktif donem su anda planlama asamasinda. Ders katalog yayinlandiginda bu sayfada gorebilirsin.</p>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
+    if (errMsg.includes('Aktif donem bulunamadi')) {
+      return (
+        <Alert variant="default" className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+          <Calendar className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800 dark:text-blue-200">
+            <p className="font-semibold">Aktif akademik donem bulunmuyor</p>
+            <p className="mt-1 text-sm">Yeni donem acildiginda ders katalog burada gorunecek.</p>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
+    if (errMsg.includes('Aktif program bulunamadi')) {
+      return (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-semibold">Aktif programiniz bulunamadi</p>
+            <p className="mt-1 text-sm">Lutfen ogrenci isleri birimi ile iletisime gecin.</p>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
+    if (errMsg.includes('Ogrenci bilgisi bulunamadi')) {
+      return (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-semibold">Ogrenci kaydina erisilemiyor</p>
+            <p className="mt-1 text-sm">Hesabinizla iliskili ogrenci kaydi bulunamadi. Lutfen ogrenci isleri birimi ile iletisime gecin.</p>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertDescription>Dersler yüklenirken hata oluştu.</AlertDescription>
+        <AlertDescription>
+          <p className="font-semibold">Dersler yuklenirken hata olustu</p>
+          {errMsg && <p className="mt-1 text-sm">{errMsg}</p>}
+          {!errMsg && <p className="mt-1 text-sm">Lutfen sayfayi yenileyip tekrar deneyin.</p>}
+        </AlertDescription>
       </Alert>
     );
   }
