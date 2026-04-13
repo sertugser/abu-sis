@@ -2,73 +2,72 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, Hash, History, XCircle, Zap } from 'lucide-react';
+import {
+  CheckCircle2, ChevronDown, ChevronRight, History, XCircle, Zap,
+} from 'lucide-react';
 import {
   useApplySchedule, useAutoSchedulePreview, useBatchUnassignSections,
   useScheduleRun, useScheduleRuns,
 } from '../../hooks/useFacultyPlanning';
 import type { AutoScheduleFailure, AutoSchedulePreview } from '../../types/facultyPlanning';
 
-/* ── Helpers ─────────────────────────────────────────────────────── */
+/* ── Failure grouping ──────────────────────────────────────────── */
 
 interface FailureGroup {
   key: string;
   label: string;
-  color: string;
-  bgColor: string;
+  accent: string;
   message: string;
   failures: AutoScheduleFailure[];
 }
 
-const SUGGESTION_TYPE_META: Record<string, { label: string; color: string; bgColor: string }> = {
-  CapacityIncrease: { label: 'Kapasite Yetersiz', color: 'bg-orange-500', bgColor: 'bg-orange-50 border-orange-200' },
-  ClassroomAdd: { label: 'Derslik Tipi Eksik', color: 'bg-purple-500', bgColor: 'bg-purple-50 border-purple-200' },
-  TimeChange: { label: 'Zaman Çakışması', color: 'bg-blue-500', bgColor: 'bg-blue-50 border-blue-200' },
-  InstructorReassign: { label: 'Hoca Çakışması', color: 'bg-yellow-500', bgColor: 'bg-yellow-50 border-yellow-200' },
-  ConstraintRelax: { label: 'Kısıt Sorunu', color: 'bg-red-500', bgColor: 'bg-red-50 border-red-200' },
-  Unknown: { label: 'Diğer', color: 'bg-gray-500', bgColor: 'bg-gray-50 border-gray-200' },
+const TYPE_META: Record<string, { label: string; accent: string }> = {
+  CapacityIncrease: { label: 'Kapasite Yetersiz', accent: 'border-l-amber-500' },
+  ClassroomAdd:     { label: 'Derslik Tipi Eksik', accent: 'border-l-violet-500' },
+  TimeChange:       { label: 'Zaman Çakışması', accent: 'border-l-blue-500' },
+  InstructorReassign: { label: 'Hoca Çakışması', accent: 'border-l-orange-500' },
+  ConstraintRelax:  { label: 'Kısıt Sorunu', accent: 'border-l-red-500' },
+  Unknown:          { label: 'Diğer', accent: 'border-l-slate-400' },
 };
 
 function groupFailures(failures: AutoScheduleFailure[]): FailureGroup[] {
   const groups = new Map<string, { failures: AutoScheduleFailure[]; message: string }>();
-
   for (const f of failures) {
     const type = f.suggestions?.[0]?.suggestionType ?? 'Unknown';
     const message = f.suggestions?.[0]?.message ?? f.reason;
-    if (!groups.has(type)) {
-      groups.set(type, { failures: [], message });
-    }
+    if (!groups.has(type)) groups.set(type, { failures: [], message });
     groups.get(type)!.failures.push(f);
   }
-
-  return Array.from(groups.entries()).map(([key, { failures: items, message }]) => {
-    const meta = SUGGESTION_TYPE_META[key] ?? SUGGESTION_TYPE_META.Unknown;
-    return { key, label: meta.label, color: meta.color, bgColor: meta.bgColor, message, failures: items };
-  }).sort((a, b) => b.failures.length - a.failures.length);
+  return Array.from(groups.entries())
+    .map(([key, { failures: items, message }]) => {
+      const meta = TYPE_META[key] ?? TYPE_META.Unknown;
+      return { key, label: meta.label, accent: meta.accent, message, failures: items };
+    })
+    .sort((a, b) => b.failures.length - a.failures.length);
 }
 
-/* ── Component ───────────────────────────────────────────────────── */
+/* ── Component ─────────────────────────────────────────────────── */
 
 export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; termId: number | null }) {
   const previewMutation = useAutoSchedulePreview();
-  const applyMutation = useApplySchedule();
-  const batchUnassign = useBatchUnassignSections();
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const applyMutation   = useApplySchedule();
+  const batchUnassign   = useBatchUnassignSections();
+
+  const [selectedIds, setSelectedIds]       = useState<Set<number>>(new Set());
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [selectedRunId, setSelectedRunId]   = useState<number | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  const runsQuery = useScheduleRuns(facultyId, termId);
+  const runsQuery      = useScheduleRuns(facultyId, termId);
   const runDetailQuery = useScheduleRun(selectedRunId);
 
   useEffect(() => {
-    if (runsQuery.data && runsQuery.data.length > 0 && selectedRunId === null && !previewMutation.data) {
+    if (runsQuery.data?.length && selectedRunId === null && !previewMutation.data)
       setSelectedRunId(runsQuery.data[0].id);
-    }
   }, [runsQuery.data, selectedRunId, previewMutation.data]);
 
   const previewData: AutoSchedulePreview | undefined =
@@ -79,276 +78,255 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
     [previewData?.failures],
   );
 
-  // Auto-expand the first group when data changes
   useEffect(() => {
-    if (failureGroups.length > 0) {
-      setExpandedGroups(new Set([failureGroups[0].key]));
-    }
+    if (failureGroups.length > 0) setExpandedGroups(new Set([failureGroups[0].key]));
   }, [failureGroups]);
 
   if (!termId) return null;
 
+  /* handlers */
   const handlePreview = () => {
     setSelectedRunId(null);
     previewMutation.mutate({ facultyId, termId });
   };
 
-  const handleApplySelected = () => {
-    const items = (previewData?.assignments ?? [])
-      .filter(a => selectedIds.has(a.sectionId))
-      .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
+  const handleApply = (onlySelected: boolean) => {
+    const source = previewData?.assignments ?? [];
+    const items = (onlySelected ? source.filter(a => selectedIds.has(a.sectionId)) : source)
+      .map(a => ({
+        sectionId: a.sectionId,
+        classroomId: a.classroomId,
+        scheduleSlots: a.scheduleSlots,
+        instructorId: a.instructorId ?? undefined,
+      }));
     if (items.length > 0) {
-      const request = { assignments: items };
-      applyMutation.mutate(request, {
-        onSuccess: () => setLastAppliedIds(request.assignments.map(a => a.sectionId)),
+      applyMutation.mutate({ assignments: items }, {
+        onSuccess: () => setLastAppliedIds(items.map(a => a.sectionId)),
       });
     }
   };
 
-  const handleApplyAll = () => {
-    const items = (previewData?.assignments ?? [])
-      .map(a => ({ sectionId: a.sectionId, classroomId: a.classroomId, scheduleSlots: a.scheduleSlots, instructorId: a.instructorId ?? undefined }));
-    if (items.length > 0) {
-      const request = { assignments: items };
-      applyMutation.mutate(request, {
-        onSuccess: () => setLastAppliedIds(request.assignments.map(a => a.sectionId)),
-      });
-    }
-  };
-
-  const handleRunSelect = (value: string) => {
-    const id = parseInt(value, 10);
-    setSelectedRunId(id);
+  const handleRunSelect = (v: string) => {
+    setSelectedRunId(parseInt(v, 10));
     previewMutation.reset();
     setSelectedIds(new Set());
     setLastAppliedIds([]);
   };
 
-  const toggleSelect = (id: number) => setSelectedIds(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) { next.delete(id); } else { next.add(id); }
-    return next;
+  const toggle = (id: number) => setSelectedIds(prev => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
   });
 
   const toggleGroup = (key: string) => setExpandedGroups(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) { next.delete(key); } else { next.add(key); }
-    return next;
+    const n = new Set(prev);
+    n.has(key) ? n.delete(key) : n.add(key);
+    return n;
   });
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
+  const fmtDate = (s: string) =>
+    new Date(s).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const total = previewData ? previewData.successCount + previewData.failedCount : 0;
+  const successPct = total > 0 ? Math.round((previewData!.successCount / total) * 100) : 0;
 
   return (
     <div className="space-y-4">
-      {/* ── Section 1: Header + Controls ─────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Otomatik Zamanlama</CardTitle>
-            <CardDescription>Zamanlanmamış şubeler için derslik ve saat önerisi üretir.</CardDescription>
-          </div>
-          <Button onClick={handlePreview} disabled={previewMutation.isPending}>
-            <Zap className="h-4 w-4 mr-1" />
-            {previewMutation.isPending ? 'Hesaplanıyor...' : 'Otomatik Ata'}
-          </Button>
-        </CardHeader>
-      </Card>
 
-      {/* Run history selector */}
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Otomatik Zamanlama</h2>
+          <p className="text-xs text-muted-foreground">Zamanlanmamış şubeler için derslik ve saat önerisi üretir.</p>
+        </div>
+        <Button onClick={handlePreview} disabled={previewMutation.isPending}>
+          <Zap className="h-4 w-4 mr-1.5" />
+          {previewMutation.isPending ? 'Hesaplanıyor...' : 'Otomatik Ata'}
+        </Button>
+      </div>
+
+      {/* ── Run history ─────────────────────────────────────────── */}
       {runsQuery.data && runsQuery.data.length > 0 && (
-        <div className="flex items-center gap-3">
-          <History className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Geçmiş:</span>
-          <Select
-            value={selectedRunId?.toString() ?? ''}
-            onValueChange={handleRunSelect}
-          >
-            <SelectTrigger className="w-[400px]">
-              <SelectValue placeholder="Bir çalıştırma seçin" />
+        <div className="flex items-center gap-2">
+          <History className="h-3.5 w-3.5 text-muted-foreground" />
+          <Select value={selectedRunId?.toString() ?? ''} onValueChange={handleRunSelect}>
+            <SelectTrigger className="h-8 w-[380px] text-xs">
+              <SelectValue placeholder="Geçmiş çalıştırma seçin" />
             </SelectTrigger>
             <SelectContent>
-              {runsQuery.data.map(run => (
-                <SelectItem key={run.id} value={run.id.toString()}>
-                  {formatDate(run.createdAt)} — {run.successCount} başarılı, {run.failedCount} başarısız (Seed: {run.seed})
+              {runsQuery.data.map(r => (
+                <SelectItem key={r.id} value={r.id.toString()} className="text-xs">
+                  {fmtDate(r.createdAt)} — {r.successCount}/{r.successCount + r.failedCount} başarılı
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {runDetailQuery.isLoading && (
-            <span className="text-xs text-muted-foreground">Yükleniyor...</span>
-          )}
+          {runDetailQuery.isLoading && <span className="text-xs text-muted-foreground animate-pulse">Yükleniyor...</span>}
         </div>
       )}
 
       {previewData && (
         <>
-          {/* ── Section 2: Summary ───────────────────────────────── */}
-          <div className="grid grid-cols-4 gap-3">
-            <Card>
-              <CardContent className="pt-4 pb-3 px-4 flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="text-2xl font-bold text-green-700">{previewData.successCount}</p>
-                  <p className="text-xs text-muted-foreground">Başarılı</p>
+          {/* ── Summary strip ───────────────────────────────────── */}
+          <Card>
+            <CardContent className="py-4 px-5">
+              <div className="flex items-center gap-6">
+                {/* Success / Fail counts */}
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span className="text-sm font-semibold text-emerald-700">{previewData.successCount}</span>
+                  <span className="text-xs text-muted-foreground">başarılı</span>
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4 pb-3 px-4 flex items-center gap-3">
-                <XCircle className="h-5 w-5 text-red-600" />
-                <div>
-                  <p className="text-2xl font-bold text-red-700">{previewData.failedCount}</p>
-                  <p className="text-xs text-muted-foreground">Başarısız</p>
+                <div className="flex items-center gap-2">
+                  <XCircle className="h-4 w-4 text-red-500" />
+                  <span className="text-sm font-semibold text-red-600">{previewData.failedCount}</span>
+                  <span className="text-xs text-muted-foreground">başarısız</span>
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4 pb-3 px-4 flex items-center gap-3">
-                <Clock className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-2xl font-bold">{previewData.stats?.elapsedSeconds?.toFixed(1)}s</p>
-                  <p className="text-xs text-muted-foreground">Süre</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4 pb-3 px-4 flex items-center gap-3">
-                <Hash className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-2xl font-bold">{previewData.seed}</p>
-                  <p className="text-xs text-muted-foreground">Seed</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
 
-          {/* Failure breakdown bar */}
-          {failureGroups.length > 0 && (
-            <Card>
-              <CardContent className="pt-4 pb-3 px-4 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Başarısızlık Dağılımı</p>
-                {failureGroups.map(group => {
-                  const pct = previewData.failedCount > 0
-                    ? (group.failures.length / previewData.failedCount) * 100
-                    : 0;
-                  return (
-                    <div key={group.key} className="flex items-center gap-2">
-                      <span className="text-xs w-36 truncate">{group.label}</span>
-                      <div className="flex-1 h-4 bg-muted rounded overflow-hidden">
-                        <div
-                          className={`h-full ${group.color} rounded transition-all`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-mono w-8 text-right">{group.failures.length}</span>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          )}
+                {/* Mini progress bar */}
+                <div className="flex items-center gap-2 flex-1 max-w-xs">
+                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${successPct}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground">%{successPct}</span>
+                </div>
 
-          {/* ── Section 3a: Başarılı Atamalar ────────────────────── */}
+                {/* Meta */}
+                <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>{previewData.stats?.elapsedSeconds?.toFixed(1)}s</span>
+                  <span className="font-mono">Seed {previewData.seed}</span>
+                </div>
+              </div>
+
+              {/* Failure breakdown — compact inline pills */}
+              {failureGroups.length > 0 && (
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/60">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium shrink-0">Sorunlar:</span>
+                  {failureGroups.map(g => (
+                    <Badge key={g.key} variant="outline" className="text-[11px] gap-1 font-normal">
+                      {g.label}
+                      <span className="font-semibold">{g.failures.length}</span>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Başarılı Atamalar ───────────────────────────────── */}
           {previewData.assignments.length > 0 && (
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Başarılı Atamalar</CardTitle>
+              <CardHeader className="py-3 px-5 flex flex-row items-center justify-between border-b border-border/60">
+                <CardTitle className="text-sm font-semibold">
+                  Başarılı Atamalar
+                  <Badge variant="success" className="ml-2 text-[10px]">{previewData.assignments.length}</Badge>
+                </CardTitle>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleApplySelected} disabled={selectedIds.size === 0 || applyMutation.isPending}>
+                  <Button variant="outline" size="sm" onClick={() => handleApply(true)} disabled={selectedIds.size === 0 || applyMutation.isPending}>
                     Seçilenleri Uygula ({selectedIds.size})
                   </Button>
-                  <Button size="sm" onClick={handleApplyAll} disabled={applyMutation.isPending}>
+                  <Button size="sm" onClick={() => handleApply(false)} disabled={applyMutation.isPending}>
                     Tümünü Uygula
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8" />
-                      <TableHead>Ders</TableHead>
-                      <TableHead>Bölüm</TableHead>
-                      <TableHead>Derslik</TableHead>
-                      <TableHead>Saat</TableHead>
-                      <TableHead>Uyum</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {previewData.assignments.map(a => (
-                      <TableRow key={a.sectionId}>
-                        <TableCell>
-                          <input type="checkbox" checked={selectedIds.has(a.sectionId)} onChange={() => toggleSelect(a.sectionId)} />
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-mono text-xs">{a.courseCode}-{a.sectionNumber}</span>{' '}
-                          <span className="text-muted-foreground">{a.courseName}</span>
-                        </TableCell>
-                        <TableCell>{a.departmentCode}</TableCell>
-                        <TableCell>{a.classroomName}</TableCell>
-                        <TableCell>{a.scheduleSummary}</TableCell>
-                        <TableCell>%{(a.fitScore * 100).toFixed(0)}</TableCell>
+              <CardContent className="p-0">
+                <div className="border rounded-b-2xl overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="w-10 pl-4" />
+                        <TableHead className="text-xs font-semibold">Ders</TableHead>
+                        <TableHead className="text-xs font-semibold">Bölüm</TableHead>
+                        <TableHead className="text-xs font-semibold">Derslik</TableHead>
+                        <TableHead className="text-xs font-semibold">Program</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {previewData.assignments.map(a => (
+                        <TableRow key={a.sectionId} className="hover:bg-muted/30 transition-colors">
+                          <TableCell className="pl-4">
+                            <input
+                              type="checkbox"
+                              className="rounded border-slate-300"
+                              checked={selectedIds.has(a.sectionId)}
+                              onChange={() => toggle(a.sectionId)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono text-xs font-medium">{a.courseCode}-{a.sectionNumber}</span>
+                            <span className="text-xs text-muted-foreground ml-1.5">{a.courseName}</span>
+                          </TableCell>
+                          <TableCell className="text-xs">{a.departmentCode}</TableCell>
+                          <TableCell className="text-xs">{a.classroomName}</TableCell>
+                          <TableCell className="text-xs font-mono">{a.scheduleSummary}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           )}
 
-          {/* ── Section 3b: Atanamayan Şubeler (grouped) ─────────── */}
+          {/* ── Atanamayan Şubeler ──────────────────────────────── */}
           {failureGroups.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-destructive">
-                Atanamayan Şubeler ({previewData.failures.length})
+              <h3 className="text-sm font-semibold text-destructive flex items-center gap-2">
+                Atanamayan Şubeler
+                <Badge variant="destructive" className="text-[10px]">{previewData.failures.length}</Badge>
               </h3>
+
               {failureGroups.map(group => {
                 const isOpen = expandedGroups.has(group.key);
                 return (
                   <Collapsible key={group.key} open={isOpen} onOpenChange={() => toggleGroup(group.key)}>
-                    <Card className={`border ${isOpen ? group.bgColor : ''}`}>
+                    <Card className={`border-l-4 ${group.accent} transition-all`}>
                       <CollapsibleTrigger asChild>
                         <button className="w-full text-left">
-                          <CardHeader className="py-3 px-4 flex flex-row items-center gap-2 cursor-pointer hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors">
                             {isOpen
-                              ? <ChevronDown className="h-4 w-4 shrink-0" />
-                              : <ChevronRight className="h-4 w-4 shrink-0" />
+                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             }
-                            <div className={`h-3 w-3 rounded-full ${group.color} shrink-0`} />
                             <span className="text-sm font-medium">{group.label}</span>
-                            <Badge variant="secondary" className="ml-1">{group.failures.length} şube</Badge>
-                          </CardHeader>
+                            <Badge variant="secondary" className="text-[10px] ml-1">{group.failures.length}</Badge>
+                            {!isOpen && (
+                              <span className="text-xs text-muted-foreground ml-2 truncate max-w-md">{group.message}</span>
+                            )}
+                          </div>
                         </button>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <CardContent className="pt-0 pb-4 px-4 space-y-3">
-                          <p className="text-sm text-muted-foreground border-l-2 border-muted pl-3 py-1">
-                            {group.message}
-                          </p>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="text-xs">Ders</TableHead>
-                                <TableHead className="text-xs">Şube</TableHead>
-                                <TableHead className="text-xs text-right">Kapasite</TableHead>
-                                <TableHead className="text-xs">Sebep</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {group.failures.map(f => (
-                                <TableRow key={f.sectionId}>
-                                  <TableCell className="font-mono text-xs py-1.5">{f.courseCode}</TableCell>
-                                  <TableCell className="text-xs py-1.5">{f.sectionNumber || '-'}</TableCell>
-                                  <TableCell className="text-xs text-right py-1.5">{f.capacity || '-'}</TableCell>
-                                  <TableCell className="text-xs text-muted-foreground py-1.5 max-w-xs truncate">{f.reason}</TableCell>
+                        <div className="px-4 pb-3 space-y-2">
+                          <p className="text-xs text-muted-foreground pl-6">{group.message}</p>
+                          <div className="pl-6">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="border-b border-border/40">
+                                  <TableHead className="text-[11px] font-semibold py-1.5 pl-0">Ders Kodu</TableHead>
+                                  <TableHead className="text-[11px] font-semibold py-1.5">Ad</TableHead>
+                                  <TableHead className="text-[11px] font-semibold py-1.5 text-right pr-0">Kapasite</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </CardContent>
+                              </TableHeader>
+                              <TableBody>
+                                {group.failures.map(f => (
+                                  <TableRow key={f.sectionId} className="border-b border-border/20">
+                                    <TableCell className="font-mono text-xs py-1 pl-0">
+                                      {f.courseCode}-{f.sectionNumber || '?'}
+                                    </TableCell>
+                                    <TableCell className="text-xs py-1 text-muted-foreground">{f.courseName}</TableCell>
+                                    <TableCell className="text-xs py-1 text-right font-mono pr-0">{f.capacity || '?'}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
                       </CollapsibleContent>
                     </Card>
                   </Collapsible>
@@ -357,13 +335,13 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
             </div>
           )}
 
-          {/* ── Apply result ─────────────────────────────────────── */}
+          {/* ── Apply result / Undo ─────────────────────────────── */}
           {applyMutation.data && (
             <Alert variant={applyMutation.data.failedCount > 0 ? 'destructive' : 'default'}>
               <AlertTitle>Uygulama Sonucu</AlertTitle>
               <AlertDescription>
                 {applyMutation.data.successCount} başarılı, {applyMutation.data.failedCount} başarısız
-                {applyMutation.data.errors.map((e, i) => <p key={i} className="text-xs">{e}</p>)}
+                {applyMutation.data.errors.map((e, i) => <p key={i} className="text-xs mt-1">{e}</p>)}
               </AlertDescription>
             </Alert>
           )}
@@ -373,17 +351,12 @@ export function AutoScheduleTab({ facultyId, termId }: { facultyId: number; term
               variant="outline"
               size="sm"
               onClick={() => {
-                if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`)) {
-                  batchUnassign.mutate(lastAppliedIds, {
-                    onSuccess: () => setLastAppliedIds([]),
-                  });
-                }
+                if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`))
+                  batchUnassign.mutate(lastAppliedIds, { onSuccess: () => setLastAppliedIds([]) });
               }}
               disabled={batchUnassign.isPending}
             >
-              {batchUnassign.isPending
-                ? 'Geri alınıyor...'
-                : `Son Uygulamayı Geri Al (${lastAppliedIds.length} şube)`}
+              {batchUnassign.isPending ? 'Geri alınıyor...' : `Geri Al (${lastAppliedIds.length} şube)`}
             </Button>
           )}
         </>
