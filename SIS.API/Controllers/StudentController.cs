@@ -385,7 +385,7 @@ public class StudentController : ControllerBase
     /// </summary>
     [HttpGet("registrations/{registrationId:int}/grade-statistics")]
     [Authorize(Roles = "Student")]
-    public async Task<IActionResult> GetGradeStatistics(int registrationId)
+    public async Task<IActionResult> GetGradeStatistics(int registrationId, [FromQuery] bool commonEvaluation = false)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
@@ -433,7 +433,17 @@ public class StudentController : ControllerBase
                 && item.Status != RegistrationStatus.Dropped)
             .ToListAsync();
 
-        var registrationIds = sectionRegistrations.Select(item => item.Id).ToList();
+        var statisticRegistrations = commonEvaluation
+            ? await _context.CourseRegistrations
+                .AsNoTracking()
+                .Where(item => item.CourseSection.CourseId == section.CourseId
+                    && item.CourseSection.TermId == section.TermId
+                    && item.Status != RegistrationStatus.Draft
+                    && item.Status != RegistrationStatus.Dropped)
+                .ToListAsync()
+            : sectionRegistrations;
+
+        var registrationIds = statisticRegistrations.Select(item => item.Id).ToList();
         var allGrades = registrationIds.Count == 0
             ? new List<StudentGrade>()
             : await _context.StudentGrades
@@ -445,10 +455,22 @@ public class StudentController : ControllerBase
             .GroupBy(grade => grade.CourseRegistrationId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
-        decimal? CalculateWeightedAverage(int courseRegistrationId)
+        var totalComponentWeight = components.Sum(component => component.Weight);
+
+        decimal? CalculateWeightedAverage(int courseRegistrationId, bool requireAllComponentScores = true)
         {
             if (components.Count == 0 || !gradesByRegistration.TryGetValue(courseRegistrationId, out var studentGrades))
                 return null;
+
+            if (requireAllComponentScores)
+            {
+                var hasAllScores = totalComponentWeight == 100m
+                    && components.All(component => studentGrades.Any(grade =>
+                        grade.GradeComponentId == component.Id && grade.Score != null));
+
+                if (!hasAllScores)
+                    return null;
+            }
 
             decimal totalWeightedScore = 0;
             decimal totalWeight = 0;
@@ -471,7 +493,7 @@ public class StudentController : ControllerBase
                 : null;
         }
 
-        var weightedAverages = sectionRegistrations
+        var weightedAverages = statisticRegistrations
             .Select(item => CalculateWeightedAverage(item.Id))
             .Where(value => value.HasValue)
             .Select(value => value!.Value)
@@ -479,10 +501,10 @@ public class StudentController : ControllerBase
 
         var criteria = await _context.GradingCriteria
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.CourseId == section.CourseId && item.AcademicTermId == section.TermId)
-            ?? new GradingCriteria();
+            .FirstOrDefaultAsync(item => item.CourseId == section.CourseId && item.AcademicTermId == section.TermId);
+        var hasGradingCriteria = criteria != null;
 
-        var gradeCounts = sectionRegistrations
+        var gradeCounts = statisticRegistrations
             .Where(item => item.Grade != null)
             .GroupBy(item => item.Grade!.Value.ToString())
             .ToDictionary(group => group.Key, group => group.Count());
@@ -502,12 +524,15 @@ public class StudentController : ControllerBase
         var programName = activeProgram?.Program?.Name ?? string.Empty;
         var facultyName = activeProgram?.Program?.Department?.Faculty?.Name ?? string.Empty;
         var ownGrades = gradesByRegistration.GetValueOrDefault(registration.Id, new List<StudentGrade>());
+        var hasAnyComponentScore = ownGrades.Any(grade => grade.Score != null);
         var hasAllComponentScores = components.Count > 0
             && components.All(component => ownGrades.Any(grade =>
                 grade.GradeComponentId == component.Id && grade.Score != null));
         var isResultFinalized = section.IsFinalized
+            && hasGradingCriteria
             && registration.Grade != null
             && hasAllComponentScores;
+        var studentWeightedAverage = CalculateWeightedAverage(registration.Id);
 
         var componentStatistics = components
             .Select(component =>
@@ -525,9 +550,9 @@ public class StudentController : ControllerBase
                     ComponentId = component.Id,
                     Name = component.Name,
                     Weight = component.Weight,
-                    TotalStudentCount = sectionRegistrations.Count,
+                    TotalStudentCount = statisticRegistrations.Count,
                     EnteredStudentCount = componentScores.Count,
-                    MissingStudentCount = sectionRegistrations.Count - componentScores.Count,
+                    MissingStudentCount = statisticRegistrations.Count - componentScores.Count,
                     AverageScore = componentScores.Count > 0
                         ? Math.Round(componentScores.Average(), 2, MidpointRounding.AwayFromZero)
                         : null,
@@ -549,19 +574,30 @@ public class StudentController : ControllerBase
             CourseName = course.Name,
             SectionNumber = section.SectionNumber,
             StudentLetterGrade = isResultFinalized ? registration.Grade?.ToString() : null,
-            StudentWeightedAverage = CalculateWeightedAverage(registration.Id),
+            StudentWeightedAverage = studentWeightedAverage,
+            HasGradingCriteria = hasGradingCriteria,
+            HasAnyComponentScore = hasAnyComponentScore,
+            HasAllComponentScores = hasAllComponentScores,
+            IsResultFinalized = isResultFinalized,
+            IsCommonEvaluation = commonEvaluation,
             Result = new StudentResultInfoDto
             {
                 Status = isResultFinalized ? "Sonuçlandırılmış" : "Sonuçlandırılmamış",
-                StatusDate = section.UpdatedAt ?? registration.UpdatedAt ?? registration.CreatedAt,
-                EvaluationMethod = "Mutlak"
+                StatusDate = isResultFinalized ? section.UpdatedAt ?? registration.UpdatedAt : null,
+                EvaluationMethod = hasGradingCriteria
+                    ? commonEvaluation ? "Mutlak - Ortak Değerlendirme" : "Mutlak"
+                    : string.Empty
             },
-            GradeRanges = BuildGradeRanges(criteria, gradeCounts),
+            GradeRanges = hasGradingCriteria
+                ? BuildGradeRanges(criteria!, isResultFinalized ? gradeCounts : new Dictionary<string, int>())
+                : new List<StudentGradeRangeDto>(),
             Components = componentStatistics,
             Summary = new StudentSectionStatisticsSummaryDto
             {
-                TotalStudentCount = sectionRegistrations.Count,
-                GradedStudentCount = sectionRegistrations.Count(item => item.Grade != null),
+                TotalStudentCount = statisticRegistrations.Count,
+                GradedStudentCount = isResultFinalized
+                    ? statisticRegistrations.Count(item => item.Grade != null)
+                    : 0,
                 ClassAverage = weightedAverages.Count > 0
                     ? Math.Round(weightedAverages.Average(), 2, MidpointRounding.AwayFromZero)
                     : null

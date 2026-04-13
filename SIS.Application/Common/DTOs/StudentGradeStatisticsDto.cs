@@ -12,6 +12,11 @@ public class StudentGradeStatisticsDto
     public int SectionNumber { get; set; }
     public string? StudentLetterGrade { get; set; }
     public decimal? StudentWeightedAverage { get; set; }
+    public bool HasGradingCriteria { get; set; }
+    public bool HasAnyComponentScore { get; set; }
+    public bool HasAllComponentScores { get; set; }
+    public bool IsResultFinalized { get; set; }
+    public bool IsCommonEvaluation { get; set; }
     public StudentResultInfoDto Result { get; set; } = new();
     public List<StudentGradeRangeDto> GradeRanges { get; set; } = new();
     public List<StudentComponentStatisticsDto> Components { get; set; } = new();

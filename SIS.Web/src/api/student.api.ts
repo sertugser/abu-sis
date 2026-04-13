@@ -23,7 +23,10 @@ export async function getStudentTranscript(): Promise<StudentTranscriptDto> {
   return response.data;
 }
 
-export async function getStudentGradeStatistics(registrationId: number): Promise<StudentGradeStatisticsDto> {
-  const response = await apiClient.get<StudentGradeStatisticsDto>(`/student/registrations/${registrationId}/grade-statistics`);
+export async function getStudentGradeStatistics(registrationId: number, commonEvaluation = false): Promise<StudentGradeStatisticsDto> {
+  const response = await apiClient.get<StudentGradeStatisticsDto>(
+    `/student/registrations/${registrationId}/grade-statistics`,
+    { params: commonEvaluation ? { commonEvaluation } : undefined }
+  );
   return response.data;
 }

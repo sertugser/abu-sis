@@ -370,11 +370,12 @@ public class GradeController : ControllerBase
         if (totalWeight != 100)
             return BadRequest(new { error = $"Bilesen agirliklarinin toplami %100 olmalidir. Simdi: %{totalWeight}" });
 
-        // 2. GradingCriteria al (yoksa varsayılan kullan)
+        // 2. Harf notu aralıkları sonuçlandırmadan önce kaydedilmiş olmalı.
         var criteria = await _context.GradingCriteria
             .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
 
-        criteria ??= new GradingCriteria();
+        if (criteria == null)
+            return BadRequest(new { error = "Harf notu aralıkları girilmeden ders sonuçlandırılamaz." });
 
         // 3. Section'daki aktif öğrencileri al
         var registrations = await _context.CourseRegistrations

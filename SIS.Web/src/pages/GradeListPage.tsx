@@ -142,7 +142,7 @@ export default function GradeListPage() {
           <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-4">
             <SummaryCell label="Dönem" value={selectedTerm?.termName ?? '-'} />
             <SummaryCell label="Ders" value={String(rows.length)} />
-            <SummaryCell label="Notlanan" value={String(rows.filter(row => row.grade).length)} />
+            <SummaryCell label="Notlanan" value={String(rowsWithStatistics.filter(row => shouldShowLetterGrade(row.statistics)).length)} />
             <SummaryCell label="Tekrar" value={String(rows.filter(row => row.isRepeated).length)} />
           </div>
         </CardContent>
@@ -215,7 +215,7 @@ export default function GradeListPage() {
                       <ExamScores statistics={row.statistics} isLoading={row.statisticsLoading} />
                     </TableCell>
                     <TableCell className="text-center font-mono text-sm">
-                      {row.statisticsLoading ? '...' : formatNullable(row.statistics?.studentWeightedAverage ?? null)}
+                      {row.statisticsLoading ? '...' : formatWeightedAverage(row.statistics)}
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge variant="secondary" className="font-mono">{row.ects}</Badge>
@@ -358,7 +358,12 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
 }
 
 function GradeStatisticsPopup({ registrationId, fallbackTitle }: { registrationId: number; fallbackTitle?: string }) {
-  const { data, isLoading, isError } = useStudentGradeStatistics(registrationId);
+  const [commonEvaluation, setCommonEvaluation] = useState(false);
+  const { data, isLoading, isError } = useStudentGradeStatistics(registrationId, commonEvaluation);
+
+  useEffect(() => {
+    setCommonEvaluation(false);
+  }, [registrationId]);
 
   if (isLoading) {
     return (
@@ -381,11 +386,30 @@ function GradeStatisticsPopup({ registrationId, fallbackTitle }: { registrationI
     );
   }
 
-  return <ExamStatisticsPanel data={data} fallbackTitle={fallbackTitle} />;
+  return (
+    <ExamStatisticsPanel
+      data={data}
+      fallbackTitle={fallbackTitle}
+      commonEvaluation={commonEvaluation}
+      onCommonEvaluationChange={setCommonEvaluation}
+    />
+  );
 }
 
-function ExamStatisticsPanel({ data, fallbackTitle }: { data: StudentGradeStatisticsDto; fallbackTitle?: string }) {
-  const maxGradeCount = Math.max(1, ...data.gradeRanges.map(range => range.studentCount));
+function ExamStatisticsPanel({
+  data,
+  fallbackTitle,
+  commonEvaluation,
+  onCommonEvaluationChange,
+}: {
+  data: StudentGradeStatisticsDto;
+  fallbackTitle?: string;
+  commonEvaluation: boolean;
+  onCommonEvaluationChange: (value: boolean) => void;
+}) {
+  const visibleComponents = data.components.filter(component =>
+    component.enteredStudentCount > 0 || component.studentScore != null
+  );
 
   return (
     <div className="max-h-[92vh] overflow-auto bg-[#f3f3f3] text-[13px] text-slate-900">
@@ -409,70 +433,117 @@ function ExamStatisticsPanel({ data, fallbackTitle }: { data: StudentGradeStatis
       </div>
 
       <div className="grid gap-px bg-slate-300 lg:grid-cols-[1fr_1fr]">
-        <section className="bg-white">
-          <SectionTitle>Harf Aralıkları Dağılımı</SectionTitle>
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#666] text-white">
-                <th className="px-2 py-1 text-left font-medium">Harf</th>
-                <th className="px-2 py-1 text-left font-medium">Baş.</th>
-                <th className="px-2 py-1 text-left font-medium">Bit.</th>
-                <th className="px-2 py-1 text-left font-medium">Öğrenci Sayıları</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.gradeRanges.map(range => (
-                <tr key={range.grade} className={cn('border-b border-slate-200', range.grade === data.studentLetterGrade && 'bg-blue-100')}>
-                  <td className="px-2 py-1 font-mono">{range.grade}</td>
-                  <td className="px-2 py-1">{formatScore(range.minScore)}</td>
-                  <td className="px-2 py-1">{formatScore(range.maxScore)}</td>
-                  <td className="px-2 py-1">
-                    <div className="flex items-center gap-2">
-                      <span className="w-8 text-right">{range.studentCount}</span>
-                      <div className="h-4 bg-green-700" style={{ width: `${Math.max(4, (range.studentCount / maxGradeCount) * 120)}px` }} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section className="bg-white">
-          <SectionTitle>Sonuç</SectionTitle>
-          <div className="border-b border-slate-200">
-            <InfoRow label="Sonuç Durumu" value={data.result.status} strongValue tone="red" />
-            <InfoRow label="Sonuç Durum Tarihi" value={formatDate(data.result.statusDate)} />
-            <InfoRow label="Değerlendirme Şekli" value={data.result.evaluationMethod} />
-            <InfoRow label="Dönem" value={data.termName} />
-            <InfoRow label="Şube" value={String(data.sectionNumber)} />
-            <InfoRow label="Sınıf Ortalaması" value={formatNullable(data.summary.classAverage)} />
-            <InfoRow label="Harf Notunuz" value={data.studentLetterGrade ?? '-'} strongValue tone="blue" />
-            <InfoRow label="Ağırlıklı Ortalamanız" value={formatNullable(data.studentWeightedAverage)} />
-          </div>
-        </section>
+        <GradeRangeDistribution data={data} />
+        <ResultOverview data={data} />
       </div>
 
       <section className="mt-4 border border-slate-300 bg-white">
         <div className="flex items-center gap-2 border-b border-slate-300 bg-[#f7f7f7] px-2 py-1">
           <span>Sınav Öğrenci Sayıları</span>
           <label className="inline-flex items-center gap-1 text-xs text-slate-700">
-            <input type="checkbox" disabled className="h-3.5 w-3.5" />
+            <input
+              type="checkbox"
+              checked={commonEvaluation}
+              onChange={event => onCommonEvaluationChange(event.target.checked)}
+              className="h-3.5 w-3.5"
+            />
             Ortak Değerlendirme Sonucu
           </label>
         </div>
 
-        {data.components.length === 0 ? (
-          <p className="px-2 py-6 text-center text-sm text-slate-500">Bu ders için not bileşeni bulunmuyor.</p>
+        {visibleComponents.length === 0 ? (
+          <p className="px-2 py-6 text-center text-sm text-slate-500">Bu ders için henüz not girişi yapılmamış.</p>
         ) : (
           <div className="divide-y divide-slate-200">
-            {data.components.map(component => (
+            {visibleComponents.map(component => (
               <ComponentStatisticsBlock key={component.componentId} component={component} />
             ))}
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+function GradeRangeDistribution({ data }: { data: StudentGradeStatisticsDto }) {
+  if (!data.hasGradingCriteria) {
+    return (
+      <section className="bg-white">
+        <SectionTitle>Harf Aralıkları Dağılımı</SectionTitle>
+        <p className="px-3 py-8 text-center text-sm text-slate-500">
+          Harf notu aralıkları henüz girilmediği için dağılım grafiği oluşturulmadı.
+        </p>
+      </section>
+    );
+  }
+
+  const showDistribution = data.isResultFinalized && data.summary.gradedStudentCount > 0;
+  const maxGradeCount = Math.max(1, ...data.gradeRanges.map(range => range.studentCount));
+
+  return (
+    <section className="bg-white">
+      <SectionTitle>Harf Aralıkları Dağılımı</SectionTitle>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="bg-[#666] text-white">
+            <th className="px-2 py-1 text-left font-medium">Harf</th>
+            <th className="px-2 py-1 text-left font-medium">Baş.</th>
+            <th className="px-2 py-1 text-left font-medium">Bit.</th>
+            <th className="px-2 py-1 text-left font-medium">Öğrenci Sayıları</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.gradeRanges.map(range => (
+            <tr key={range.grade} className={cn('border-b border-slate-200', range.grade === data.studentLetterGrade && 'bg-blue-100')}>
+              <td className="px-2 py-1 font-mono">{range.grade}</td>
+              <td className="px-2 py-1">{formatScore(range.minScore)}</td>
+              <td className="px-2 py-1">{formatScore(range.maxScore)}</td>
+              <td className="px-2 py-1">
+                {showDistribution ? (
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 text-right">{range.studentCount}</span>
+                    <div className="h-4 bg-green-700" style={{ width: `${Math.max(4, (range.studentCount / maxGradeCount) * 120)}px` }} />
+                  </div>
+                ) : (
+                  <span className="text-slate-500">Harf notları atanmadı</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function ResultOverview({ data }: { data: StudentGradeStatisticsDto }) {
+  return (
+    <section className="bg-white">
+      <SectionTitle>Sonuç</SectionTitle>
+      <div className="border-b border-slate-200">
+        <InfoRow label="Sonuç Durumu" value={data.result.status} strongValue tone={data.isResultFinalized ? 'blue' : 'red'} />
+        <InfoRow label="Değerlendirme Kapsamı" value={data.isCommonEvaluation ? 'Ortak Değerlendirme' : 'Şube Bazlı'} />
+        <InfoRow label="Not Girişleri" value={getGradeEntryStatus(data)} />
+        <InfoRow label="Harf Notu Kriterleri" value={data.hasGradingCriteria ? 'Girildi' : 'Bekleniyor'} />
+        {data.result.statusDate && (
+          <InfoRow label="Sonuç Durum Tarihi" value={formatDate(data.result.statusDate)} />
+        )}
+        {data.result.evaluationMethod && (
+          <InfoRow label="Değerlendirme Şekli" value={data.result.evaluationMethod} />
+        )}
+        <InfoRow label="Dönem" value={data.termName} />
+        <InfoRow label="Şube" value={String(data.sectionNumber)} />
+        {data.summary.classAverage != null && (
+          <InfoRow label="Sınıf Ortalaması" value={formatNullable(data.summary.classAverage)} />
+        )}
+        {shouldShowLetterGrade(data) && (
+          <InfoRow label="Harf Notunuz" value={data.studentLetterGrade!} strongValue tone="blue" />
+        )}
+        {canShowWeightedAverage(data) && (
+          <InfoRow label="Ağırlıklı Ortalamanız" value={formatNullable(data.studentWeightedAverage)} />
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -537,12 +608,31 @@ function shouldShowLetterGrade(statistics: StudentGradeStatisticsDto | null | un
 
 function isGradeFinalized(statistics: StudentGradeStatisticsDto | null | undefined) {
   if (!statistics) return false;
+  if (typeof statistics.isResultFinalized === 'boolean') {
+    return statistics.isResultFinalized;
+  }
 
   const status = statistics.result.status.toLocaleLowerCase('tr-TR');
   if (status.includes('sonuçlandırılmam') || status.includes('sonuclandirilmam'))
     return false;
 
   return status.includes('sonuçlandırıl') || status.includes('sonuclandiril') || Boolean(statistics.studentLetterGrade);
+}
+
+function canShowWeightedAverage(statistics: StudentGradeStatisticsDto | null | undefined) {
+  return Boolean(statistics?.hasAllComponentScores && statistics.studentWeightedAverage != null);
+}
+
+function formatWeightedAverage(statistics: StudentGradeStatisticsDto | null | undefined) {
+  return canShowWeightedAverage(statistics)
+    ? formatNullable(statistics!.studentWeightedAverage!)
+    : '-';
+}
+
+function getGradeEntryStatus(statistics: StudentGradeStatisticsDto) {
+  if (statistics.hasAllComponentScores) return 'Tüm notlar girildi';
+  if (statistics.hasAnyComponentScore) return 'Kısmi not girişi yapıldı';
+  return 'Not girişi yapılmamış';
 }
 
 function getCourseResult(grade: string): { label: string; variant: 'success' | 'destructive' | 'warning' | 'outline' | 'secondary' } {

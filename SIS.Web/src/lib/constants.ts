@@ -48,7 +48,7 @@ export const QUERY_KEYS = {
   myRegistrations: ['myRegistrations'] as const,
   studentAttendanceStatus: (termId?: number | null) => ['studentAttendanceStatus', termId] as const,
   studentInfo: ['studentInfo'] as const,
-  studentGradeStatistics: (registrationId?: number | null) => ['studentGradeStatistics', registrationId] as const,
+  studentGradeStatistics: (registrationId?: number | null, commonEvaluation = false) => ['studentGradeStatistics', registrationId, commonEvaluation] as const,
   termGpaHistory: ['termGpaHistory'] as const,
   curriculumStatus: ['curriculumStatus'] as const,
   studentTranscript: ['studentTranscript'] as const,

@@ -43,6 +43,11 @@ export interface StudentGradeStatisticsDto {
   sectionNumber: number;
   studentLetterGrade: string | null;
   studentWeightedAverage: number | null;
+  hasGradingCriteria: boolean;
+  hasAnyComponentScore: boolean;
+  hasAllComponentScores: boolean;
+  isResultFinalized: boolean;
+  isCommonEvaluation: boolean;
   result: StudentResultInfoDto;
   gradeRanges: StudentGradeRangeDto[];
   components: StudentComponentStatisticsDto[];
