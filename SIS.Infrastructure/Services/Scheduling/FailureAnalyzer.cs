@@ -8,6 +8,8 @@ namespace SIS.Infrastructure.Services.Scheduling;
 public sealed class FailureAnalyzerResult
 {
     public int SectionId { get; init; }
+    public int SectionNumber { get; init; }
+    public int Capacity { get; init; }
     public string CourseCode { get; init; } = string.Empty;
     public string CourseName { get; init; } = string.Empty;
     public string Reason { get; init; } = string.Empty;
@@ -60,11 +62,13 @@ public sealed class FailureAnalyzer
 
             var reason = suggestions.Count > 0
                 ? suggestions[0].Message
-                : "Could not be placed due to scheduling constraints.";
+                : "Zamanlama kısıtlamaları nedeniyle atanamadı.";
 
             results.Add(new FailureAnalyzerResult
             {
                 SectionId = sectionId,
+                SectionNumber = snapshot.SectionNumber,
+                Capacity = snapshot.Capacity,
                 CourseCode = snapshot.CourseCode,
                 CourseName = snapshot.CourseName,
                 Reason = reason,
@@ -129,7 +133,7 @@ public sealed class FailureAnalyzer
                     suggestions.Add(new FailureSuggestionDto
                     {
                         ConstraintCode = "ClassroomTypeConflict",
-                        Message = $"No {theoryType} classroom is assigned to this faculty. Add a classroom of the required type.",
+                        Message = $"Fakülteye {theoryType} tipinde derslik atanmamış. Gerekli tipte derslik ekleyin.",
                         SuggestionType = "ClassroomAdd",
                         Priority = 5
                     });
@@ -139,7 +143,7 @@ public sealed class FailureAnalyzer
                     suggestions.Add(new FailureSuggestionDto
                     {
                         ConstraintCode = "CapacityConflict",
-                        Message = $"No {theoryType} classroom has sufficient capacity ({snapshot.Capacity} seats) in this faculty. Increase classroom capacity or reduce section size.",
+                        Message = $"Fakültede {snapshot.Capacity} kişilik {theoryType} derslik yok. Derslik kapasitesini artırın veya şubeyi bölün.",
                         SuggestionType = "CapacityIncrease",
                         Priority = 1
                     });
@@ -166,7 +170,7 @@ public sealed class FailureAnalyzer
                     suggestions.Add(new FailureSuggestionDto
                     {
                         ConstraintCode = "ClassroomTypeConflict",
-                        Message = $"No {labType} classroom is assigned to this faculty. Add a classroom of the required type.",
+                        Message = $"Fakülteye {labType} tipinde derslik atanmamış. Gerekli tipte derslik ekleyin.",
                         SuggestionType = "ClassroomAdd",
                         Priority = 5
                     });
@@ -176,7 +180,7 @@ public sealed class FailureAnalyzer
                     suggestions.Add(new FailureSuggestionDto
                     {
                         ConstraintCode = "CapacityConflict",
-                        Message = $"No {labType} classroom has sufficient capacity ({snapshot.Capacity} seats) in this faculty. Increase classroom capacity or reduce section size.",
+                        Message = $"Fakültede {snapshot.Capacity} kişilik {labType} derslik yok. Derslik kapasitesini artırın veya şubeyi bölün.",
                         SuggestionType = "CapacityIncrease",
                         Priority = 1
                     });
@@ -191,7 +195,7 @@ public sealed class FailureAnalyzer
             suggestions.Add(new FailureSuggestionDto
             {
                 ConstraintCode = "NoAvailableSlot",
-                Message = "No available time slots found for this section. Add more time slots or free up existing slots.",
+                Message = "Uygun boş zaman dilimi bulunamadı. Zaman dilimi ekleyin veya mevcut slotları boşaltın.",
                 SuggestionType = "TimeChange",
                 Priority = 4
             });
@@ -281,6 +285,7 @@ public sealed class FailureAnalyzer
         return new SectionSnapshot
         {
             SectionId = snapshot.SectionId,
+            SectionNumber = snapshot.SectionNumber,
             CourseId = snapshot.CourseId,
             CourseCode = snapshot.CourseCode,
             CourseName = snapshot.CourseName,
@@ -315,56 +320,56 @@ public sealed class FailureAnalyzer
             "CapacityConflict" => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = "Section capacity exceeds available classroom capacity. Increase classroom capacity or split the section.",
+                Message = "Şube kapasitesi mevcut dersliklerin kapasitesini aşıyor. Derslik kapasitesini artırın veya şubeyi bölün.",
                 SuggestionType = "CapacityIncrease",
                 Priority = 1
             },
             "InstructorConflict" => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = "Instructor has a scheduling conflict. Reassign the instructor or adjust their other sections.",
+                Message = "Öğretim üyesinin ders saati çakışması var. Başka öğretim üyesi atayın veya diğer derslerini düzenleyin.",
                 SuggestionType = "InstructorReassign",
                 Priority = 2
             },
             "DailyLoadConflict" => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = "Instructor's daily load limit would be exceeded. Move some sections to a different day.",
+                Message = "Öğretim üyesinin günlük ders yükü limitini aşıyor. Dersleri farklı günlere dağıtın.",
                 SuggestionType = "TimeChange",
                 Priority = 2
             },
             "CurriculumConflict" => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = "Section overlaps with another course in the same curriculum year. Change the time slot.",
+                Message = "Aynı müfredat yılındaki başka bir dersle çakışıyor. Zaman dilimini değiştirin.",
                 SuggestionType = "TimeChange",
                 Priority = 3
             },
             "ClassroomConflict" => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = "Classroom is occupied at the requested time. Change the time slot or classroom.",
+                Message = "Derslik bu saatte dolu. Zaman dilimini veya dersliği değiştirin.",
                 SuggestionType = "TimeChange",
                 Priority = 3
             },
             "ClassroomTypeConflict" => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = "No classroom of the required type is available. Add a classroom of the required type to the faculty.",
+                Message = "Gerekli tipte derslik mevcut değil. Fakülteye uygun tipte derslik ekleyin.",
                 SuggestionType = "ClassroomAdd",
                 Priority = 5
             },
             "TheoryLabDaySplitConflict" => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = "Theory and lab components cannot be scheduled on the same day given total hours. Relax the split constraint or reduce total hours.",
+                Message = "Teori ve lab bileşenleri toplam saat nedeniyle aynı güne atanamıyor. Eşik kısıtlamasını gevşetin.",
                 SuggestionType = "ConstraintRelax",
                 Priority = 1
             },
             _ => new FailureSuggestionDto
             {
                 ConstraintCode = conflictType,
-                Message = $"Scheduling conflict: {conflictType}. Review constraint configuration.",
+                Message = $"Zamanlama çakışması: {conflictType}. Kısıt ayarlarını gözden geçirin.",
                 SuggestionType = "ConstraintRelax",
                 Priority = 3
             }

@@ -34,6 +34,7 @@ public sealed class CoEnrollmentPair
 public sealed class SectionSnapshot
 {
     public int SectionId { get; init; }
+    public int SectionNumber { get; init; }
     public int CourseId { get; init; }
     public string CourseCode { get; init; } = string.Empty;
     public string CourseName { get; init; } = string.Empty;

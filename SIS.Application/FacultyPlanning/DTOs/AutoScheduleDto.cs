@@ -26,6 +26,7 @@ public class AutoSchedulePreviewDto
 public class AutoSchedulePreviewItemDto
 {
     public int SectionId { get; set; }
+    public int SectionNumber { get; set; }
     public string CourseCode { get; set; } = string.Empty;
     public string CourseName { get; set; } = string.Empty;
     public string DepartmentCode { get; set; } = string.Empty;
@@ -41,6 +42,8 @@ public class AutoSchedulePreviewItemDto
 public class AutoScheduleFailureDto
 {
     public int SectionId { get; set; }
+    public int SectionNumber { get; set; }
+    public int Capacity { get; set; }
     public string CourseCode { get; set; } = string.Empty;
     public string CourseName { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;

@@ -121,6 +121,7 @@ export interface AutoScheduleStats {
 
 export interface AutoSchedulePreviewItem {
   sectionId: number;
+  sectionNumber: number;
   courseCode: string;
   courseName: string;
   departmentCode: string;
@@ -135,6 +136,8 @@ export interface AutoSchedulePreviewItem {
 
 export interface AutoScheduleFailure {
   sectionId: number;
+  sectionNumber: number;
+  capacity: number;
   courseCode: string;
   courseName: string;
   reason: string;

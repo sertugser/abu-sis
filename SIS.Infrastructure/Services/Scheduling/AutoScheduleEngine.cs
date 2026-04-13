@@ -323,6 +323,7 @@ public sealed class AutoScheduleEngine
             assignments.Add(new AutoSchedulePreviewItemDto
             {
                 SectionId = sectionId,
+                SectionNumber = snap.SectionNumber,
                 CourseCode = snap.CourseCode,
                 CourseName = snap.CourseName,
                 DepartmentCode = deptCode,
@@ -339,6 +340,8 @@ public sealed class AutoScheduleEngine
         var failures = failureResults.Select(f => new AutoScheduleFailureDto
         {
             SectionId = f.SectionId,
+            SectionNumber = f.SectionNumber,
+            Capacity = f.Capacity,
             CourseCode = f.CourseCode,
             CourseName = f.CourseName,
             Reason = f.Reason,
@@ -397,6 +400,7 @@ public sealed class AutoScheduleEngine
         return new SectionSnapshot
         {
             SectionId = section.Id,
+            SectionNumber = section.SectionNumber,
             CourseId = section.CourseId,
             CourseCode = section.Course.Code,
             CourseName = section.Course.Name,

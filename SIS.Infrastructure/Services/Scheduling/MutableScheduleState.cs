@@ -220,6 +220,7 @@ public sealed class MutableScheduleState
         return new SectionSnapshot
         {
             SectionId = snap.SectionId,
+            SectionNumber = snap.SectionNumber,
             CourseId = snap.CourseId,
             CourseCode = snap.CourseCode,
             CourseName = snap.CourseName,
