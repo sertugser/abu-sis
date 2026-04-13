@@ -1,5 +1,5 @@
 // SIS.Web/src/components/faculty-planning/AutoScheduleTab.tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -33,19 +33,17 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
   const classroomsQuery = useAvailableClassrooms(termId);
 
   // State
-  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [userSelectedRunId, setUserSelectedRunId] = useState<number | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
 
-  const runDetailQuery = useScheduleRun(selectedRunId);
+  // Auto-select first run (derived, no useEffect needed)
+  const selectedRunId = previewMutation.data
+    ? null
+    : userSelectedRunId ?? runsQuery.data?.[0]?.id ?? null;
 
-  // Auto-select first run
-  const firstRunId = runsQuery.data?.[0]?.id ?? null;
-  useEffect(() => {
-    if (firstRunId !== null && selectedRunId === null && !previewMutation.data)
-      setSelectedRunId(firstRunId);
-  }, [firstRunId, selectedRunId, previewMutation.data]);
+  const runDetailQuery = useScheduleRun(selectedRunId);
 
   const previewData: AutoSchedulePreview | undefined =
     previewMutation.data ?? runDetailQuery.data?.result;
@@ -61,13 +59,13 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
   // Handlers
   const handleRun = useCallback(() => {
     if (!termId) return;
-    setSelectedRunId(null);
+    setUserSelectedRunId(null);
     setSelectedItemId(null);
     previewMutation.mutate({ facultyId, termId });
   }, [facultyId, termId, previewMutation]);
 
   const handleRunSelect = useCallback((id: number) => {
-    setSelectedRunId(id);
+    setUserSelectedRunId(id);
     setSelectedItemId(null);
     previewMutation.reset();
     setSelectedIds(new Set());
@@ -164,7 +162,6 @@ export function AutoScheduleTab({ facultyId, termId, onTabChange }: AutoSchedule
             unscheduledCount={unscheduledCount}
             availableClassroomCount={availableClassroomCount}
             hasPreviewData={!!previewData}
-            previewData={previewData}
           />
         </div>
       </div>

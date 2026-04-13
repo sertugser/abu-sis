@@ -1,4 +1,4 @@
-import type { AutoSchedulePreviewItem, AutoScheduleFailure, AutoSchedulePreview } from '../../../types/facultyPlanning';
+import type { AutoSchedulePreviewItem, AutoScheduleFailure } from '../../../types/facultyPlanning';
 import { EmptyState } from './EmptyState';
 import { SuccessDetail } from './SuccessDetail';
 import { FailureDetail } from './FailureDetail';
@@ -12,7 +12,6 @@ interface ScheduleDetailPanelProps {
   unscheduledCount: number;
   availableClassroomCount: number | undefined;
   hasPreviewData: boolean;
-  previewData: AutoSchedulePreview | undefined;
 }
 
 export function ScheduleDetailPanel({
@@ -24,7 +23,6 @@ export function ScheduleDetailPanel({
   unscheduledCount,
   availableClassroomCount,
   hasPreviewData,
-  previewData: _previewData,
 }: ScheduleDetailPanelProps) {
   if (selectedSuccess) {
     return <SuccessDetail item={selectedSuccess} isChecked={isChecked} onToggleCheck={onToggleCheck} />;
