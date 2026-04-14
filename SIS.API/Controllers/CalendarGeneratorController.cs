@@ -73,6 +73,25 @@ public class CalendarGeneratorController : ControllerBase
         }
     }
 
+    [HttpGet("drafts")]
+    public async Task<IActionResult> ListDrafts([FromQuery] int take = 50, CancellationToken ct = default) =>
+        Ok(await _generatorService.ListDraftsAsync(take, ct));
+
+    [HttpDelete("drafts/{id:int}")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> DeleteDraft(int id, CancellationToken ct)
+    {
+        try
+        {
+            await _generatorService.DeleteDraftAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     [HttpPut("drafts/{id:int}/events/{eventId}")]
     public async Task<IActionResult> UpdateDraftEvent(int id, string eventId, [FromBody] UpdateDraftEventDto dto, CancellationToken ct)
     {
