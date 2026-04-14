@@ -82,20 +82,4 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service) : 
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
     }
 
-    [HttpPost("{id:int}/curriculum-assignments")]
-    [Authorize(Roles = "SystemAdministrator")]
-    public async Task<IActionResult> AssignToCurriculum(int id, [FromBody] AssignToCurriculumDto dto)
-    {
-        try { await service.AssignToCurriculumAsync(id, dto); return NoContent(); }
-        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
-    }
-
-    [HttpDelete("{id:int}/curriculum-assignments/{curriculumId:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
-    public async Task<IActionResult> RemoveFromCurriculum(int id, int curriculumId)
-    {
-        try { await service.RemoveFromCurriculumAsync(id, curriculumId); return NoContent(); }
-        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
-    }
 }
