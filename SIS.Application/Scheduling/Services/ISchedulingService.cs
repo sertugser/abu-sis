@@ -21,4 +21,14 @@ public interface ISchedulingService
         int? maxCapacity = null,
         CancellationToken cancellationToken = default);
     Task<ClassroomFilterOptionsDto> GetClassroomFilterOptionsAsync(int termId, CancellationToken cancellationToken = default);
+    Task<List<AvailableClassroomResultDto>> SearchAvailableClassroomsAsync(
+        int termId,
+        List<int> days,
+        int startHour,
+        int endHour,
+        int? minCapacity = null,
+        string? classroomType = null,
+        int? facultyId = null,
+        string? buildingName = null,
+        CancellationToken cancellationToken = default);
 }

@@ -55,6 +55,31 @@ public class SchedulingController : ControllerBase
             termId, facultyId, buildingName, classroomType, minCapacity, maxCapacity, cancellationToken));
     }
 
+    [HttpGet("available-classrooms")]
+    public async Task<IActionResult> SearchAvailableClassrooms(
+        [FromQuery] int termId,
+        [FromQuery] string days,
+        [FromQuery] int startHour,
+        [FromQuery] int endHour,
+        [FromQuery] int? minCapacity,
+        [FromQuery] string? classroomType,
+        [FromQuery] int? facultyId,
+        [FromQuery] string? buildingName,
+        CancellationToken cancellationToken)
+    {
+        if (termId <= 0) return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
+        if (string.IsNullOrWhiteSpace(days)) return BadRequest(new { error = "En az bir gun secilmelidir." });
+
+        var dayList = days.Split(',').Select(d => int.TryParse(d.Trim(), out var v) ? v : -1).Where(d => d >= 1 && d <= 5).ToList();
+        if (dayList.Count == 0) return BadRequest(new { error = "Gecerli gun degerleri gonderilmelidir (1-5)." });
+
+        if (startHour < 8 || startHour > 17 || endHour < 8 || endHour > 17 || startHour > endHour)
+            return BadRequest(new { error = "Saat araligi 8-17 arasi olmalidir." });
+
+        return Ok(await _schedulingService.SearchAvailableClassroomsAsync(
+            termId, dayList, startHour, endHour, minCapacity, classroomType, facultyId, buildingName, cancellationToken));
+    }
+
     [HttpGet("classroom-filters")]
     public async Task<IActionResult> GetClassroomFilters([FromQuery] int termId, CancellationToken cancellationToken)
     {
