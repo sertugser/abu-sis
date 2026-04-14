@@ -18,6 +18,10 @@ public class ClassroomInfoDto
     public string Name { get; set; } = string.Empty;
     public int Capacity { get; set; }
     public string Type { get; set; } = string.Empty;
+    public string BuildingName { get; set; } = string.Empty;
+    public int Floor { get; set; }
+    public int FacultyId { get; set; }
+    public string FacultyName { get; set; } = string.Empty;
     public List<ClassroomScheduleSlotDto> Schedules { get; set; } = new();
 }
 

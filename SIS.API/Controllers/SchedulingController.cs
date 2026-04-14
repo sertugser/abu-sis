@@ -39,13 +39,20 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpGet("dashboard")]
-    public async Task<IActionResult> GetDashboard([FromQuery] int? termId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetDashboard(
+        [FromQuery] int? termId,
+        [FromQuery] int? facultyId,
+        [FromQuery] string? buildingName,
+        [FromQuery] string? classroomType,
+        [FromQuery] int? minCapacity,
+        [FromQuery] int? maxCapacity,
+        CancellationToken cancellationToken)
     {
         if (termId.HasValue && termId <= 0)
             return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
 
-        var dashboard = await _schedulingService.GetClassroomDashboardAsync(termId, cancellationToken);
-        return Ok(dashboard);
+        return Ok(await _schedulingService.GetClassroomDashboardAsync(
+            termId, facultyId, buildingName, classroomType, minCapacity, maxCapacity, cancellationToken));
     }
 
     [HttpGet("classroom-filters")]

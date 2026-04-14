@@ -1002,7 +1002,14 @@ public class SchedulingService : ISchedulingService
         public List<ScheduleSlotDto>? AssignedSlots { get; init; }
     }
 
-    public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(int? termId = null, CancellationToken cancellationToken = default)
+    public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(
+        int? termId = null,
+        int? facultyId = null,
+        string? buildingName = null,
+        string? classroomType = null,
+        int? minCapacity = null,
+        int? maxCapacity = null,
+        CancellationToken cancellationToken = default)
     {
         var result = new ClassroomDashboardDto();
         var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
@@ -1015,7 +1022,39 @@ public class SchedulingService : ISchedulingService
         var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
         result.ConflictsCount = evaluation.Conflicts?.Count ?? 0;
 
-        var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(cancellationToken);
+        // Fakulte filtresi: ClassroomTermAssignment uzerinden
+        var classroomIdsForTerm = await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Where(a => a.TermId == resolvedTerm.Id)
+            .Where(a => !facultyId.HasValue || a.FacultyId == facultyId.Value)
+            .Select(a => new { a.ClassroomId, a.FacultyId, FacultyName = a.Faculty.Name })
+            .ToListAsync(cancellationToken);
+
+        var facultyLookup = classroomIdsForTerm
+            .GroupBy(x => x.ClassroomId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var classroomQuery = _context.Classrooms.AsNoTracking().AsQueryable();
+
+        if (facultyId.HasValue)
+        {
+            var assignedIds = classroomIdsForTerm.Select(x => x.ClassroomId).ToHashSet();
+            classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(buildingName))
+            classroomQuery = classroomQuery.Where(c => c.BuildingName == buildingName);
+
+        if (!string.IsNullOrWhiteSpace(classroomType) && Enum.TryParse<ClassroomType>(classroomType, out var parsedType))
+            classroomQuery = classroomQuery.Where(c => c.Type == parsedType);
+
+        if (minCapacity.HasValue)
+            classroomQuery = classroomQuery.Where(c => c.Capacity >= minCapacity.Value);
+
+        if (maxCapacity.HasValue)
+            classroomQuery = classroomQuery.Where(c => c.Capacity <= maxCapacity.Value);
+
+        var classrooms = await classroomQuery.ToListAsync(cancellationToken);
         result.TotalClassrooms = classrooms.Count;
 
         // Her derslik için o donemdeki dersleri haritala
@@ -1035,14 +1074,24 @@ public class SchedulingService : ISchedulingService
                 })).ToList()
             );
 
-        result.Classrooms = classrooms.Select(c => new ClassroomInfoDto
+        result.Classrooms = classrooms.Select(c =>
         {
-            Id = c.Id,
-            Name = c.Name,
-            Capacity = c.Capacity,
-            Type = c.Type.ToString(),
-            Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
+            var fac = facultyLookup.TryGetValue(c.Id, out var f) ? f : null;
+            return new ClassroomInfoDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Capacity = c.Capacity,
+                Type = c.Type.ToString(),
+                BuildingName = c.BuildingName,
+                Floor = c.Floor,
+                FacultyId = fac?.FacultyId ?? 0,
+                FacultyName = fac?.FacultyName ?? string.Empty,
+                Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
+            };
         }).OrderBy(c => c.Name).ToList();
+
+        var filteredClassroomIds = classrooms.Select(c => c.Id).ToHashSet();
 
         var heatmapMap = new Dictionary<(int day, int hour), int>();
         for (int day = 0; day < 5; day++)
@@ -1056,7 +1105,7 @@ public class SchedulingService : ISchedulingService
         var occupationMap = new Dictionary<(int day, int hour), List<ClassroomOccupationDto>>();
         foreach (var section in snapshot.Sections)
         {
-            if (section.ClassroomId.HasValue)
+            if (section.ClassroomId.HasValue && filteredClassroomIds.Contains(section.ClassroomId.Value))
             {
                 foreach (var slot in section.TimeBlocks)
                 {
