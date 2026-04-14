@@ -11,18 +11,14 @@ import { CALENDAR_EVENT_LABELS, EVENT_TYPE_OPTIONS, calendarEventBadgeVariant } 
 import {
   type CalendarConstraintInputDto,
   type CalendarDraftDto,
-  type CalendarTemplateDto,
   type GenerateCalendarResultDto,
   type GeneratedCalendarEventDto,
   type SemesterType,
-  type UpsertCalendarTemplateDto,
   useApplyDraft,
   useCalendarDraft,
-  useCalendarTemplates,
   useGenerateCalendar,
   useHolidayDefinitions,
   useRollbackDraft,
-  useSaveCalendarTemplates,
   useUpdateDraftEvent,
   useWhatIfCalendar,
 } from '../hooks/useCalendarGenerator';
@@ -79,10 +75,6 @@ function getErrorMessage(error: unknown) {
   return maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? fallback;
 }
 
-function templatePayload(templates: CalendarTemplateDto[]): UpsertCalendarTemplateDto[] {
-  return templates.map(({ name, chainCode, isActive, items }) => ({ name, chainCode, isActive, items }));
-}
-
 function qualityClass(score: number) {
   if (score >= 90) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (score >= 75) return 'bg-yellow-50 text-yellow-700 border-yellow-200';
@@ -111,11 +103,8 @@ export default function AcademicCalendarGeneratorPage() {
   const [generated, setGenerated] = useState<GenerateCalendarResultDto | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', startDate: '', endDate: '', note: '' });
-  const [templateText, setTemplateText] = useState('');
-  const [templateDirty, setTemplateDirty] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const templates = useCalendarTemplates();
   const holidays = useHolidayDefinitions();
   const draft = useCalendarDraft(selectedDraftId);
   const generate = useGenerateCalendar();
@@ -123,7 +112,6 @@ export default function AcademicCalendarGeneratorPage() {
   const whatIf = useWhatIfCalendar();
   const applyDraft = useApplyDraft();
   const rollbackDraft = useRollbackDraft();
-  const saveTemplates = useSaveCalendarTemplates();
 
   const calendar = (draft.data ?? generated) as CalendarView | null;
   const activeDraftId = getDraftId(calendar, selectedDraftId);
@@ -152,12 +140,6 @@ export default function AcademicCalendarGeneratorPage() {
     setFallStartDate(`${parsedStart}-09-22`);
     setSpringStartDate(`${parsedStart + 1}-02-23`);
   }, [academicYear]);
-
-  useEffect(() => {
-    if (templates.data && !templateDirty) {
-      setTemplateText(JSON.stringify(templatePayload(templates.data), null, 2));
-    }
-  }, [templates.data, templateDirty]);
 
   function selectEvent(ev: GeneratedCalendarEventDto) {
     setSelectedEventId(ev.draftEventId);
@@ -272,26 +254,6 @@ export default function AcademicCalendarGeneratorPage() {
       onSuccess: result => setNotice(`${result.message} Donemler: ${result.termIds.join(', ')}`),
       onError: error => setNotice(getErrorMessage(error)),
     });
-  }
-
-  function handleSaveTemplates() {
-    try {
-      const parsed = JSON.parse(templateText) as UpsertCalendarTemplateDto[];
-      if (!Array.isArray(parsed)) {
-        setNotice('Sablon JSON dizi formatinda olmali.');
-        return;
-      }
-      saveTemplates.mutate(parsed, {
-        onSuccess: data => {
-          setTemplateDirty(false);
-          setTemplateText(JSON.stringify(templatePayload(data), null, 2));
-          setNotice('Sablonlar kaydedildi.');
-        },
-        onError: error => setNotice(getErrorMessage(error)),
-      });
-    } catch {
-      setNotice('Sablon JSON gecersiz.');
-    }
   }
 
   function renderGeneratorTab() {
@@ -461,7 +423,7 @@ export default function AcademicCalendarGeneratorPage() {
                     <span className="text-xs text-slate-600">{daySpan(ev)}</span>
                     <span className="text-xs text-slate-500">{ev.chainCode}</span>
                     <span className="flex flex-wrap gap-1">
-                      <Badge variant={calendarEventBadgeVariant(ev.eventType)}>{ev.isHoliday ? 'Tatil' : 'Akis'}</Badge>
+                      <Badge variant={calendarEventBadgeVariant(ev.eventType)}>{ev.isHoliday ? 'Tatil' : 'Süreç'}</Badge>
                       {ev.isFailed && <Badge variant="destructive">Hata</Badge>}
                     </span>
                   </button>
@@ -601,66 +563,44 @@ export default function AcademicCalendarGeneratorPage() {
     );
   }
 
-  function renderTemplatesTab() {
+  function renderHolidaysTab() {
     return (
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="font-semibold text-slate-900">Sablon JSON</h2>
-              <p className="text-sm text-slate-500">MAIN, ADMISSIONS ve SUMMER zincirleri burada duzenlenir.</p>
-            </div>
-            <Button type="button" onClick={handleSaveTemplates} disabled={saveTemplates.isPending}>
-              <Save className="h-4 w-4" />
-              Kaydet
-            </Button>
+          <h2 className="font-semibold text-slate-900">Tatil tanimlari</h2>
+          <p className="mt-1 text-sm text-slate-500">Sabit resmi tatiller, dini bayramlar ve bloklayici onemli gunler.</p>
+          <div className="mt-3 max-h-[560px] space-y-2 overflow-auto">
+            {holidays.isLoading ? (
+              <p className="text-sm text-slate-500">Yukleniyor...</p>
+            ) : holidays.data?.map(holiday => (
+              <div key={holiday.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-800">{holiday.name}</span>
+                  <Badge variant={holiday.blocksAcademicEvents ? 'success' : 'outline'}>{holiday.type}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {holiday.fixedMonth ? `${holiday.fixedDay}.${holiday.fixedMonth}` : `Hicri ${holiday.hijriDay}.${holiday.hijriMonth}`} - {holiday.durationDays} gun
+                </div>
+                {holiday.overrides.length > 0 && (
+                  <div className="mt-1 text-xs text-slate-500">
+                    Override: {holiday.overrides.map(o => `${o.year}: ${dateInput(o.startDate)}-${dateInput(o.endDate)}`).join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-          <Textarea
-            value={templateText}
-            onChange={e => {
-              setTemplateText(e.target.value);
-              setTemplateDirty(true);
-            }}
-            className="mt-4 min-h-[520px] font-mono text-xs"
-            placeholder="Sablonlar yukleniyor..."
-          />
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Tatil tanimlari</h2>
-            <div className="mt-3 max-h-[360px] space-y-2 overflow-auto">
-              {holidays.isLoading ? (
-                <p className="text-sm text-slate-500">Yukleniyor...</p>
-              ) : holidays.data?.map(holiday => (
-                <div key={holiday.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-800">{holiday.name}</span>
-                    <Badge variant={holiday.blocksAcademicEvents ? 'success' : 'outline'}>{holiday.type}</Badge>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {holiday.fixedMonth ? `${holiday.fixedDay}.${holiday.fixedMonth}` : `Hicri ${holiday.hijriDay}.${holiday.hijriMonth}`} - {holiday.durationDays} gun
-                  </div>
-                  {holiday.overrides.length > 0 && (
-                    <div className="mt-1 text-xs text-slate-500">
-                      Override: {holiday.overrides.map(o => `${o.year}: ${dateInput(o.startDate)}-${dateInput(o.endDate)}`).join(', ')}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Olay tipleri</h2>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              {EVENT_TYPE_OPTIONS.map(option => (
-                <div key={option.value} className="rounded-lg border border-slate-200 px-2 py-1">
-                  <span className="font-mono text-slate-500">{option.value}</span>
-                  <span className="block text-slate-700">{option.label}</span>
-                </div>
-              ))}
-            </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="font-semibold text-slate-900">Olay tipleri</h2>
+          <p className="mt-1 text-sm text-slate-500">Takvimde kullanilan akademik olay siniflari.</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            {EVENT_TYPE_OPTIONS.map(option => (
+              <div key={option.value} className="rounded-lg border border-slate-200 px-2 py-1">
+                <span className="font-mono text-slate-500">{option.value}</span>
+                <span className="block text-slate-700">{option.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -695,11 +635,11 @@ export default function AcademicCalendarGeneratorPage() {
         <TabsList className="bg-white">
           <TabsTrigger value="generator">Kisit & Uret</TabsTrigger>
           <TabsTrigger value="draft">Taslak & Domino</TabsTrigger>
-          <TabsTrigger value="templates">Sablon & Tatil</TabsTrigger>
+          <TabsTrigger value="holidays">Tatil Tanimlari</TabsTrigger>
         </TabsList>
         <TabsContent value="generator">{renderGeneratorTab()}</TabsContent>
         <TabsContent value="draft">{renderDraftTab()}</TabsContent>
-        <TabsContent value="templates">{renderTemplatesTab()}</TabsContent>
+        <TabsContent value="holidays">{renderHolidaysTab()}</TabsContent>
       </Tabs>
     </div>
   );
