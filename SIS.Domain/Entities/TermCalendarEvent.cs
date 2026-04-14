@@ -13,4 +13,9 @@ public class TermCalendarEvent
     public DateTime? EndDate { get; set; }
     public bool IsPublic { get; set; } = true;
     public string? Note { get; set; }
+    public bool IsGenerated { get; set; }
+    public string? ChainCode { get; set; }
+    public string? TemplateItemKey { get; set; }
+    public int? GeneratedDraftId { get; set; }
+    public bool BlocksAcademicEvents { get; set; }
 }

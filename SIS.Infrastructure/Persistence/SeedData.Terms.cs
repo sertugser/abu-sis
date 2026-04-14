@@ -24,8 +24,9 @@ public static partial class SeedData
                 ("2023-2024 Bahar", "23-24 Bahar", "Spring 2023-2024", 2023, SemesterType.Spring, TermType.Regular, "2024-02-01", "2024-02-15", "2024-02-16", "2024-02-28", "2024-02-16", "2024-06-15", "2024-04-05", false, TermStatus.Archived),
                 ("2024-2025 Güz",   "24-25 Güz",   "Fall 2024-2025",   2024, SemesterType.Fall,   TermType.Regular, "2024-09-01", "2024-09-15", "2024-09-16", "2024-09-30", "2024-09-16", "2025-01-10", "2024-11-04", false, TermStatus.Archived),
                 ("2024-2025 Bahar", "24-25 Bahar", "Spring 2024-2025", 2024, SemesterType.Spring, TermType.Regular, "2025-02-01", "2025-02-15", "2025-02-16", "2025-02-28", "2025-02-16", "2025-06-15", "2025-04-07", false, TermStatus.Archived),
-                ("2025-2026 Güz",   "25-26 Güz",   "Fall 2025-2026",   2025, SemesterType.Fall,   TermType.Regular, "2026-03-01", "2026-04-15", "2026-04-16", "2026-04-30", "2026-03-01", "2026-07-15", "2026-04-19", false, TermStatus.Draft),
+                ("2025-2026 Güz",   "25-26 Güz",   "Fall 2025-2026",   2025, SemesterType.Fall,   TermType.Regular, "2025-09-15", "2025-09-19", "2025-09-29", "2025-10-03", "2025-09-22", "2026-01-02", "2025-11-07", false, TermStatus.Draft),
                 ("2025-2026 Bahar", "25-26 Bahar", "Spring 2025-2026", 2025, SemesterType.Spring, TermType.Regular, "2026-02-16", "2026-02-20", "2026-03-02", "2026-03-06", "2026-02-23", "2026-06-05", "2026-04-03", true, TermStatus.Draft),
+                ("2025-2026 Yaz",   "25-26 Yaz",   "Summer 2025-2026", 2025, SemesterType.Summer, TermType.Summer, "2026-06-30", "2026-07-03", "2026-06-30", "2026-07-03", "2026-07-13", "2026-08-28", "2026-08-28", false, TermStatus.Draft),
             };
 
             foreach (var t in terms)
@@ -88,6 +89,10 @@ public static partial class SeedData
 
         var springTerm = await context.AcademicTerms
             .FirstOrDefaultAsync(t => t.Year == 2025 && t.Semester == SemesterType.Spring);
+        var fallTerm = await context.AcademicTerms
+            .FirstOrDefaultAsync(t => t.Year == 2025 && t.Semester == SemesterType.Fall);
+        var summerTerm = await context.AcademicTerms
+            .FirstOrDefaultAsync(t => t.Year == 2025 && t.Semester == SemesterType.Summer);
 
         if (springTerm is null)
             return;
@@ -120,7 +125,71 @@ public static partial class SeedData
             new TermCalendarEvent { TermId = springTerm.Id, EventType = CalendarEventType.MakeupGradePublication, Title = "Bütünleme Notlarının Yayımlanması",    StartDate = Utc(2026,  7,  8), EndDate = null,              IsPublic = true },
         };
 
+        foreach (var ev in events)
+        {
+            ev.IsGenerated = true;
+            ev.ChainCode = "SEED";
+            ev.BlocksAcademicEvents = ev.EventType is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday or CalendarEventType.ImportantDay;
+        }
+
         context.TermCalendarEvents.AddRange(events);
+
+        if (fallTerm is not null)
+        {
+            context.TermCalendarEvents.AddRange(
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.TuitionPayment, Title = "Erken Odemeler", StartDate = Utc(2025, 6, 25), EndDate = Utc(2025, 7, 4), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_early_payment" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.InternationalStudentApplication, Title = "Uluslararasi Ogrenci Basvuru ve Kayitlari", StartDate = Utc(2025, 7, 1), EndDate = Utc(2025, 11, 28), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_international" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.NationalHoliday, Title = "Demokrasi ve Milli Birlik Gunu", StartDate = Utc(2025, 7, 15), IsPublic = true, IsGenerated = true, ChainCode = "HOLIDAY", BlocksAcademicEvents = true },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.HorizontalTransfer, Title = "Yatay Gecis Basvurulari", StartDate = Utc(2025, 8, 1), EndDate = Utc(2025, 8, 15), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_transfer_app" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.DoubleMajor, Title = "Cift Anadal ve Yandal Programi Basvurulari", StartDate = Utc(2025, 8, 1), EndDate = Utc(2025, 8, 15), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_double_major" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.GraduateApplication, Title = "Lisansustu Programlari Basvurulari", StartDate = Utc(2025, 8, 4), EndDate = Utc(2025, 9, 11), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_graduate_app" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.TuitionPayment, Title = "Ogrenim Ucretlerinin Odenmesi", StartDate = Utc(2025, 8, 4), EndDate = Utc(2025, 8, 15), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_tuition" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.TransferEvaluation, Title = "Yatay Gecis Basvurularinin Degerlendirilmesi", StartDate = Utc(2025, 8, 18), EndDate = Utc(2025, 9, 1), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_transfer_eval" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.NationalHoliday, Title = "Zafer Bayrami", StartDate = Utc(2025, 8, 30), IsPublic = true, IsGenerated = true, ChainCode = "HOLIDAY", BlocksAcademicEvents = true },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.TransferResult, Title = "Yatay Gecis, Cift Anadal ve Yandal Sonuclarinin Ilani", StartDate = Utc(2025, 9, 5), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_transfer_result" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.TransferRegistration, Title = "Yatay Gecis Kabul Edilen Ogrencilerin Kayitlari", StartDate = Utc(2025, 9, 8), EndDate = Utc(2025, 9, 12), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_transfer_registration_main" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.PrepSchoolExam, Title = "Hazirlik Muafiyet Sinavlari", StartDate = Utc(2025, 9, 9), EndDate = Utc(2025, 9, 12), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_prep_exam" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.CourseExemptionResult, Title = "Ders Muafiyet Sonuclarinin Ilani", StartDate = Utc(2025, 9, 12), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_exemption_result" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.GraduateResult, Title = "Lisansustu Program Basvuru Sonuclarinin Ilani", StartDate = Utc(2025, 9, 12), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_graduate_result" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.Orientation, Title = "Yeni Kayit Olan Ogrenciler icin Oryantasyon", StartDate = Utc(2025, 9, 15), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_orientation" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.CourseRegistration, Title = "Ders Kayit ve Danisman Onaylari", StartDate = Utc(2025, 9, 15), EndDate = Utc(2025, 9, 19), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_course_registration" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.GraduateRegistration, Title = "Lisansustu Ucret Odeme, Ders Kayitlari ve Danisman Onaylari", StartDate = Utc(2025, 9, 15), EndDate = Utc(2025, 9, 19), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_graduate_registration" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ClassesStart, Title = "Derslerin Baslamasi", StartDate = Utc(2025, 9, 22), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "classes_start" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.AddDrop, Title = "Ders Ekleme - Birakma", StartDate = Utc(2025, 9, 29), EndDate = Utc(2025, 10, 3), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "add_drop" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ScholarshipApplication, Title = "Burs Basvurularinin Alinmasi", StartDate = Utc(2025, 9, 29), EndDate = Utc(2025, 10, 10), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_scholarship_app" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.NationalHoliday, Title = "Cumhuriyet Bayrami", StartDate = Utc(2025, 10, 28), EndDate = Utc(2025, 10, 29), IsPublic = true, IsGenerated = true, ChainCode = "HOLIDAY", BlocksAcademicEvents = true },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.CourseWithdrawal, Title = "Dersten Cekilme Basvurularinin Son Gunu", StartDate = Utc(2025, 11, 7), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "withdrawal_deadline" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.RegistrationFreezeDeadline, Title = "Kayit Dondurma Basvurularinin Son Gunu", StartDate = Utc(2025, 11, 7), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "freeze_deadline" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ScholarshipResult, Title = "Burs Basvuru Sonuclarinin Aciklanmasi", StartDate = Utc(2025, 11, 7), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_scholarship_result" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ImportantDay, Title = "Ataturk'u Anma Gunu", StartDate = Utc(2025, 11, 10), IsPublic = true, IsGenerated = true, ChainCode = "HOLIDAY", BlocksAcademicEvents = true },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.MidtermExam, Title = "Ara Sinavlar", StartDate = Utc(2025, 11, 10), EndDate = Utc(2025, 11, 15), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "midterm_exam" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ExcuseExamApplication, Title = "Mazeret Sinav Basvurularinin Son Gunu", StartDate = Utc(2025, 11, 17), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "midterm_excuse_application" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ExcuseExam, Title = "Mazeret Sinavlari", StartDate = Utc(2025, 11, 19), EndDate = Utc(2025, 11, 21), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "midterm_excuse_exam" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.MidtermGradePublication, Title = "Ara Sinavlarin Ilaninin Son Gunu", StartDate = Utc(2025, 11, 28), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "midterm_publication" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ScholarshipRefund, Title = "Burs Iadelerinin Yapilmasi", StartDate = Utc(2025, 11, 28), IsPublic = true, IsGenerated = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_scholarship_refund" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.NationalHoliday, Title = "Yilbasi Tatili", StartDate = Utc(2026, 1, 1), IsPublic = true, IsGenerated = true, ChainCode = "HOLIDAY", BlocksAcademicEvents = true },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.ClassesEnd, Title = "Derslerin Sona Ermesi", StartDate = Utc(2026, 1, 2), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "classes_end" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.FinalExam, Title = "Donem Sonu Sinavlari", StartDate = Utc(2026, 1, 5), EndDate = Utc(2026, 1, 16), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "final_exam" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.PrepSchoolExam, Title = "Hazirlik Muafiyet Sinavlari", StartDate = Utc(2026, 1, 12), EndDate = Utc(2026, 1, 15), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "prep_final_exam" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.FinalGradePublication, Title = "Donem Sonu Sinav Sonuclarinin Ilani", StartDate = Utc(2026, 1, 21), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "final_publication" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.MakeupExam, Title = "Butunleme Sinavlari Basvuru Son Gunu", StartDate = Utc(2026, 1, 23), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "makeup_application" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.MakeupExam, Title = "Butunleme Sinavlari", StartDate = Utc(2026, 1, 26), EndDate = Utc(2026, 1, 31), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "makeup_exam" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.MakeupGradePublication, Title = "Butunleme Sinavlari Sonuclarinin Ilaninin Son Gunu", StartDate = Utc(2026, 2, 6), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "makeup_publication" },
+                new TermCalendarEvent { TermId = fallTerm.Id, EventType = CalendarEventType.SemesterBreak, Title = "Yariyil Tatili", StartDate = Utc(2026, 1, 30), EndDate = Utc(2026, 2, 20), IsPublic = true, IsGenerated = true, ChainCode = "MAIN", TemplateItemKey = "fall_semester_break" });
+        }
+
+        if (summerTerm is not null)
+        {
+            context.TermCalendarEvents.AddRange(
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.SummerSchoolRegistration, Title = "Yaz Ogretimi Ucret Odemeleri ve Ders Kayitlari", StartDate = Utc(2026, 6, 30), EndDate = Utc(2026, 7, 3), IsPublic = true, IsGenerated = true, ChainCode = "SUMMER", TemplateItemKey = "summer_registration" },
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.ClassesStart, Title = "Yaz Ogretimi Derslerin Baslamasi", StartDate = Utc(2026, 7, 13), IsPublic = true, IsGenerated = true, ChainCode = "SUMMER", TemplateItemKey = "summer_classes_start" },
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.NationalHoliday, Title = "Demokrasi ve Milli Birlik Gunu", StartDate = Utc(2026, 7, 15), IsPublic = true, IsGenerated = true, ChainCode = "HOLIDAY", BlocksAcademicEvents = true },
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.SummerSchoolExam, Title = "Yaz Ogretimi Sinavlari", StartDate = Utc(2026, 8, 24), EndDate = Utc(2026, 8, 28), IsPublic = true, IsGenerated = true, ChainCode = "SUMMER", TemplateItemKey = "summer_exam" },
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.ClassesEnd, Title = "Yaz Ogretimi Derslerin Sona Ermesi", StartDate = Utc(2026, 8, 28), IsPublic = true, IsGenerated = true, ChainCode = "SUMMER", TemplateItemKey = "summer_classes_end" },
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.ExcuseExamApplication, Title = "Mazeret Sinav Basvurularinin Son Gunu", StartDate = Utc(2026, 8, 31), IsPublic = true, IsGenerated = true, ChainCode = "SUMMER", TemplateItemKey = "summer_excuse_application" },
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.ExcuseExam, Title = "Mazeret Sinavlari", StartDate = Utc(2026, 9, 2), IsPublic = true, IsGenerated = true, ChainCode = "SUMMER", TemplateItemKey = "summer_excuse_exam" },
+                new TermCalendarEvent { TermId = summerTerm.Id, EventType = CalendarEventType.SummerSchoolGradePublication, Title = "Yaz Ogretimi Sinav Sonuclarinin Ilaninin Son Gunu", StartDate = Utc(2026, 9, 4), IsPublic = true, IsGenerated = true, ChainCode = "SUMMER", TemplateItemKey = "summer_publication" });
+        }
         await context.SaveChangesAsync();
     }
 

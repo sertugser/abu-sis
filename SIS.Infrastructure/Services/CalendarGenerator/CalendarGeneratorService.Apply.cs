@@ -1,0 +1,194 @@
+using Microsoft.EntityFrameworkCore;
+using SIS.Application.CalendarGenerator.DTOs;
+using SIS.Domain.Entities;
+using SIS.Domain.Enums;
+
+namespace SIS.Infrastructure.Services.CalendarGenerator;
+
+public partial class CalendarGeneratorService
+{
+    public async Task<ApplyCalendarDraftResultDto> ApplyAsync(int draftId, ApplyCalendarDraftRequestDto request, int? userId, CancellationToken ct = default)
+    {
+        var draft = await LoadDraftAsync(draftId, ct);
+        EnsureEditable(draft);
+
+        var events = Deserialize<List<GeneratedCalendarEventDto>>(draft.EventsJson);
+        if (events.Any(e => e.IsFailed))
+            throw new InvalidOperationException("Yerlesemeyen etkinlikler varken taslak uygulanamaz.");
+
+        var startYear = ParseAcademicYearStart(draft.AcademicYear);
+        var termIds = new List<int>();
+        var snapshot = new List<TermSnapshot>();
+
+        await using var tx = _context.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory"
+            ? null
+            : await _context.Database.BeginTransactionAsync(ct);
+
+        try
+        {
+            foreach (var group in events.GroupBy(e => e.Semester))
+            {
+                var term = await _context.AcademicTerms
+                    .Include(t => t.CalendarEvents)
+                    .FirstOrDefaultAsync(t => t.Year == startYear && t.Semester == group.Key, ct);
+
+                if (term == null)
+                {
+                    term = CreateTermShell(draft.AcademicYear, startYear, group.Key);
+                    _context.AcademicTerms.Add(term);
+                    await _context.SaveChangesAsync(ct);
+                    await _context.Entry(term).Collection(t => t.CalendarEvents).LoadAsync(ct);
+                }
+
+                if (term.Status >= TermStatus.Closed)
+                    throw new InvalidOperationException("Kapali veya arsivlenmis doneme takvim uygulanamaz.");
+                if (term.Status >= TermStatus.Published && !request.ForceOverwrite)
+                    throw new InvalidOperationException("Yayinlanmis veya daha ileri durumdaki donem icin forceOverwrite gerekir.");
+
+                snapshot.Add(TermSnapshot.From(term));
+                ApplyTermDates(term, group.ToList());
+
+                _context.TermCalendarEvents.RemoveRange(term.CalendarEvents.Where(e => e.IsGenerated));
+                await _context.SaveChangesAsync(ct);
+
+                foreach (var ev in group.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()))
+                {
+                    await _ruleService.ValidateCalendarEventAsync(term, ev.EventType, ev.StartDate, ev.EndDate, ct);
+                    _context.TermCalendarEvents.Add(new TermCalendarEvent
+                    {
+                        TermId = term.Id,
+                        EventType = ev.EventType,
+                        Title = ev.Title,
+                        StartDate = EnsureUtcDate(ev.StartDate),
+                        EndDate = ev.EndDate.HasValue ? EnsureUtcDate(ev.EndDate.Value) : null,
+                        IsPublic = ev.IsPublic,
+                        Note = ev.Note,
+                        IsGenerated = true,
+                        ChainCode = ev.ChainCode,
+                        TemplateItemKey = ev.TemplateItemKey,
+                        GeneratedDraftId = draft.Id,
+                        BlocksAcademicEvents = ev.BlocksAcademicEvents
+                    });
+                }
+
+                term.UpdatedAt = DateTime.UtcNow;
+                termIds.Add(term.Id);
+            }
+
+            draft.PreviousSnapshotJson = Serialize(snapshot);
+            draft.Status = GeneratedCalendarDraftStatus.Applied;
+            draft.AppliedAt = DateTime.UtcNow;
+            draft.AppliedByUserId = userId;
+            draft.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(ct);
+
+            if (tx != null)
+                await tx.CommitAsync(ct);
+
+            return new ApplyCalendarDraftResultDto(true, "Akademik takvim uygulandi.", termIds);
+        }
+        catch
+        {
+            if (tx != null)
+                await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<ApplyCalendarDraftResultDto> RollbackAsync(int draftId, int? userId, CancellationToken ct = default)
+    {
+        var draft = await LoadDraftAsync(draftId, ct);
+        if (draft.Status != GeneratedCalendarDraftStatus.Applied)
+            throw new InvalidOperationException("Sadece uygulanmis taslak geri alinabilir.");
+
+        var snapshots = Deserialize<List<TermSnapshot>>(draft.PreviousSnapshotJson ?? "[]");
+        var restored = new List<int>();
+
+        foreach (var snapshot in snapshots)
+        {
+            var term = await _context.AcademicTerms
+                .Include(t => t.CalendarEvents)
+                .FirstOrDefaultAsync(t => t.Id == snapshot.TermId, ct);
+            if (term == null || term.Status >= TermStatus.Closed)
+                continue;
+
+            term.RegistrationStart = snapshot.RegistrationStart;
+            term.RegistrationEnd = snapshot.RegistrationEnd;
+            term.AddDropStart = snapshot.AddDropStart;
+            term.AddDropEnd = snapshot.AddDropEnd;
+            term.WithdrawalDeadline = snapshot.WithdrawalDeadline;
+            term.TermStart = snapshot.TermStart;
+            term.TermEnd = snapshot.TermEnd;
+            term.UpdatedAt = DateTime.UtcNow;
+
+            _context.TermCalendarEvents.RemoveRange(term.CalendarEvents.Where(e => e.IsGenerated));
+            foreach (var ev in snapshot.GeneratedEvents)
+            {
+                _context.TermCalendarEvents.Add(new TermCalendarEvent
+                {
+                    TermId = term.Id,
+                    EventType = ev.EventType,
+                    Title = ev.Title,
+                    StartDate = ev.StartDate,
+                    EndDate = ev.EndDate,
+                    IsPublic = ev.IsPublic,
+                    Note = ev.Note,
+                    IsGenerated = true,
+                    ChainCode = ev.ChainCode,
+                    TemplateItemKey = ev.TemplateItemKey,
+                    GeneratedDraftId = ev.GeneratedDraftId,
+                    BlocksAcademicEvents = ev.BlocksAcademicEvents
+                });
+            }
+
+            restored.Add(term.Id);
+        }
+
+        draft.Status = GeneratedCalendarDraftStatus.RolledBack;
+        draft.UpdatedAt = DateTime.UtcNow;
+        draft.AppliedByUserId = userId;
+        await _context.SaveChangesAsync(ct);
+
+        return new ApplyCalendarDraftResultDto(true, "Akademik takvim geri alindi.", restored);
+    }
+
+    private record TermSnapshot(
+        int TermId,
+        DateTime RegistrationStart,
+        DateTime RegistrationEnd,
+        DateTime AddDropStart,
+        DateTime AddDropEnd,
+        DateTime WithdrawalDeadline,
+        DateTime TermStart,
+        DateTime TermEnd,
+        IReadOnlyList<TermCalendarEventSnapshot> GeneratedEvents)
+    {
+        public static TermSnapshot From(AcademicTerm term) =>
+            new(
+                term.Id,
+                term.RegistrationStart,
+                term.RegistrationEnd,
+                term.AddDropStart,
+                term.AddDropEnd,
+                term.WithdrawalDeadline,
+                term.TermStart,
+                term.TermEnd,
+                term.CalendarEvents.Where(e => e.IsGenerated).Select(TermCalendarEventSnapshot.From).ToList());
+    }
+
+    private record TermCalendarEventSnapshot(
+        CalendarEventType EventType,
+        string Title,
+        DateTime StartDate,
+        DateTime? EndDate,
+        bool IsPublic,
+        string? Note,
+        string? ChainCode,
+        string? TemplateItemKey,
+        int? GeneratedDraftId,
+        bool BlocksAcademicEvents)
+    {
+        public static TermCalendarEventSnapshot From(TermCalendarEvent ev) =>
+            new(ev.EventType, ev.Title, ev.StartDate, ev.EndDate, ev.IsPublic, ev.Note, ev.ChainCode, ev.TemplateItemKey, ev.GeneratedDraftId, ev.BlocksAcademicEvents);
+    }
+}

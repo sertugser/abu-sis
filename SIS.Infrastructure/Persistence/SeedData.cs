@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using SIS.Domain.Entities;
+using SIS.Infrastructure.Services.CalendarGenerator;
 
 namespace SIS.Infrastructure.Persistence;
 
@@ -15,6 +16,7 @@ public static partial class SeedData
         await SeedCoursesAsync(context);
         await SeedTermsAndClassroomsAsync(context);
         await SeedCalendarEventsAsync(context);
+        await new CalendarTemplateService(context).EnsureDefaultsAsync();
         await SeedUsersAsync(context, userManager);
         await SeedRegistrationsAsync(context);    // Geçmiş dönem transkript verileri (aktif döneme dokunmaz)
         // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı

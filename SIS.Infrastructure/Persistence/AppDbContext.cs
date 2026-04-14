@@ -32,6 +32,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<SchedulingAuditLog> SchedulingAuditLogs => Set<SchedulingAuditLog>();
     public DbSet<TermClosingProgress> TermClosingProgresses => Set<TermClosingProgress>();
     public DbSet<TermCalendarEvent> TermCalendarEvents => Set<TermCalendarEvent>();
+    public DbSet<CalendarTemplate> CalendarTemplates => Set<CalendarTemplate>();
+    public DbSet<HolidayDefinition> HolidayDefinitions => Set<HolidayDefinition>();
+    public DbSet<CalendarConstraint> CalendarConstraints => Set<CalendarConstraint>();
+    public DbSet<GeneratedCalendarDraft> GeneratedCalendarDrafts => Set<GeneratedCalendarDraft>();
     public DbSet<TimeSlot> TimeSlots => Set<TimeSlot>();
     public DbSet<SectionSchedule> SectionSchedules => Set<SectionSchedule>();
     public DbSet<ClassroomTermAssignment> ClassroomTermAssignments => Set<ClassroomTermAssignment>();
@@ -431,6 +435,47 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany(t => t.CalendarEvents)
              .HasForeignKey(ev => ev.TermId)
              .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(ev => new { ev.TermId, ev.StartDate });
+            e.HasIndex(ev => new { ev.IsGenerated, ev.GeneratedDraftId });
+        });
+
+        // ── Academic Calendar Generator ────────────────────────
+        builder.Entity<CalendarTemplate>(e =>
+        {
+            e.Property(t => t.Name).HasMaxLength(160);
+            e.Property(t => t.ChainCode).HasMaxLength(40);
+            e.Property(t => t.ItemsJson).HasColumnType("jsonb");
+            e.HasIndex(t => t.ChainCode).IsUnique();
+        });
+
+        builder.Entity<HolidayDefinition>(e =>
+        {
+            e.Property(h => h.Name).HasMaxLength(160);
+            e.Property(h => h.EnglishName).HasMaxLength(160);
+            e.Property(h => h.Source).HasMaxLength(80);
+            e.Property(h => h.DurationDays).HasPrecision(4, 1);
+            e.Property(h => h.OverridesJson).HasColumnType("jsonb");
+            e.HasIndex(h => h.Name).IsUnique();
+        });
+
+        builder.Entity<CalendarConstraint>(e =>
+        {
+            e.Property(c => c.AcademicYear).HasMaxLength(20);
+            e.Property(c => c.TargetChainCode).HasMaxLength(40);
+            e.Property(c => c.ParameterJson).HasColumnType("jsonb");
+            e.HasIndex(c => new { c.AcademicYear, c.ConstraintType });
+        });
+
+        builder.Entity<GeneratedCalendarDraft>(e =>
+        {
+            e.Property(d => d.AcademicYear).HasMaxLength(20);
+            e.Property(d => d.EventsJson).HasColumnType("jsonb");
+            e.Property(d => d.HolidaysJson).HasColumnType("jsonb");
+            e.Property(d => d.WarningsJson).HasColumnType("jsonb");
+            e.Property(d => d.PreviousSnapshotJson).HasColumnType("jsonb");
+            e.HasIndex(d => new { d.AcademicYear, d.Status });
+            e.HasIndex(d => d.ExpiresAt);
         });
 
         // ── TermClosingProgress ────────────────────────────────────────

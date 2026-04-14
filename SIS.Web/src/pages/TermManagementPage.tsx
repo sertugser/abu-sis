@@ -77,7 +77,31 @@ const EVENT_TYPE_OPTIONS = [
   { value: 'GraduateApplication',     label: 'Lisansüstü Başvuru' },
   { value: 'HorizontalTransfer',      label: 'Yatay Geçiş' },
   { value: 'DoubleMajor',             label: 'Çift Anadal/Yan Dal' },
-  { value: 'Other',                   label: 'Diğer' },
+  { value: 'ExcuseExamApplication',   label: 'Mazeret Basvurusu' },
+  { value: 'ExcuseExam',              label: 'Mazeret Sinavi' },
+  { value: 'ExcuseExamResult',        label: 'Mazeret Sonucu' },
+  { value: 'Orientation',             label: 'Oryantasyon' },
+  { value: 'SemesterBreak',           label: 'Donem Arasi' },
+  { value: 'CourseExemptionApplication', label: 'Ders Muafiyet Basvurusu' },
+  { value: 'CourseExemptionResult',   label: 'Ders Muafiyet Sonucu' },
+  { value: 'ScholarshipApplication',  label: 'Burs Basvurusu' },
+  { value: 'ScholarshipResult',       label: 'Burs Sonucu' },
+  { value: 'ScholarshipRefund',       label: 'Burs Iadesi' },
+  { value: 'PrepSchoolExam',          label: 'Hazirlik Sinavi' },
+  { value: 'RegistrationFreezeDeadline', label: 'Kayit Dondurma Son Gunu' },
+  { value: 'SummerSchoolRegistration', label: 'Yaz Okulu Kaydi' },
+  { value: 'SummerSchoolExam',        label: 'Yaz Okulu Sinavi' },
+  { value: 'SummerSchoolGradePublication', label: 'Yaz Okulu Not Ilani' },
+  { value: 'SimurgApplication',       label: 'Simurg Basvurusu' },
+  { value: 'SimurgResult',            label: 'Simurg Sonucu' },
+  { value: 'InternationalStudentApplication', label: 'Uluslararasi Ogrenci Basvurusu' },
+  { value: 'TransferEvaluation',      label: 'Yatay Gecis Degerlendirme' },
+  { value: 'TransferResult',          label: 'Yatay Gecis Sonucu' },
+  { value: 'TransferRegistration',    label: 'Yatay Gecis Kaydi' },
+  { value: 'GraduateResult',          label: 'Lisansustu Basvuru Sonucu' },
+  { value: 'GraduateRegistration',    label: 'Lisansustu Kayit' },
+  { value: 'ImportantDay',            label: 'Onemli Gun' },
+  { value: 'Other',                   label: 'Diger' },
 ];
 
 const EVENT_TYPE_DEFAULTS: Record<string, string> = {
@@ -105,6 +129,30 @@ const EVENT_TYPE_DEFAULTS: Record<string, string> = {
   GraduateApplication: 'Lisansüstü Program Başvuruları',
   HorizontalTransfer: 'Yatay Geçiş Başvuruları',
   DoubleMajor: 'Çift Anadal / Yan Dal Başvuruları',
+  ExcuseExamApplication: 'Mazeret Basvurusu',
+  ExcuseExam: 'Mazeret Sinavi',
+  ExcuseExamResult: 'Mazeret Sonucu',
+  Orientation: 'Oryantasyon',
+  SemesterBreak: 'Donem Arasi',
+  CourseExemptionApplication: 'Ders Muafiyet Basvurusu',
+  CourseExemptionResult: 'Ders Muafiyet Sonucu',
+  ScholarshipApplication: 'Burs Basvurusu',
+  ScholarshipResult: 'Burs Sonucu',
+  ScholarshipRefund: 'Burs Iadesi',
+  PrepSchoolExam: 'Hazirlik Sinavi',
+  RegistrationFreezeDeadline: 'Kayit Dondurma Son Gunu',
+  SummerSchoolRegistration: 'Yaz Okulu Kaydi',
+  SummerSchoolExam: 'Yaz Okulu Sinavi',
+  SummerSchoolGradePublication: 'Yaz Okulu Not Ilani',
+  SimurgApplication: 'Simurg Basvurusu',
+  SimurgResult: 'Simurg Sonucu',
+  InternationalStudentApplication: 'Uluslararasi Ogrenci Basvurusu',
+  TransferEvaluation: 'Yatay Gecis Degerlendirme',
+  TransferResult: 'Yatay Gecis Sonucu',
+  TransferRegistration: 'Yatay Gecis Kaydi',
+  GraduateResult: 'Lisansustu Basvuru Sonucu',
+  GraduateRegistration: 'Lisansustu Kayit',
+  ImportantDay: 'Onemli Gun',
   Other: '',
 };
 
@@ -172,11 +220,11 @@ function fmtShort(iso: string) {
 }
 
 function eventBadgeVariant(eventType: string): 'destructive' | 'default' | 'success' | 'warning' | 'secondary' | 'outline' | 'info' {
-  if (['MidtermExam', 'FinalExam', 'MakeupExam'].includes(eventType)) return 'destructive';
-  if (['CourseRegistration', 'NewStudentRegistration', 'AddDrop', 'AdvisorApproval', 'AddDropApproval'].includes(eventType)) return 'info';
-  if (['NationalHoliday', 'ReligiousHoliday'].includes(eventType)) return 'success';
-  if (['CourseWithdrawal', 'AdvisorWithdrawal'].includes(eventType)) return 'warning';
-  if (['MidtermGradeEntry', 'MidtermGradePublication', 'FinalGradeEntry', 'FinalGradePublication', 'MakeupGradeEntry', 'MakeupGradePublication'].includes(eventType)) return 'secondary';
+  if (['MidtermExam', 'FinalExam', 'MakeupExam', 'ExcuseExam', 'PrepSchoolExam', 'SummerSchoolExam'].includes(eventType)) return 'destructive';
+  if (['CourseRegistration', 'NewStudentRegistration', 'AddDrop', 'AdvisorApproval', 'AddDropApproval', 'TransferRegistration', 'GraduateRegistration', 'SummerSchoolRegistration'].includes(eventType)) return 'info';
+  if (['NationalHoliday', 'ReligiousHoliday', 'ImportantDay'].includes(eventType)) return 'success';
+  if (['CourseWithdrawal', 'AdvisorWithdrawal', 'RegistrationFreezeDeadline', 'ExcuseExamApplication'].includes(eventType)) return 'warning';
+  if (['MidtermGradeEntry', 'MidtermGradePublication', 'FinalGradeEntry', 'FinalGradePublication', 'MakeupGradeEntry', 'MakeupGradePublication', 'SummerSchoolGradePublication', 'ExcuseExamResult', 'CourseExemptionResult', 'ScholarshipResult', 'SimurgResult', 'TransferResult', 'GraduateResult'].includes(eventType)) return 'secondary';
   return 'outline';
 }
 
