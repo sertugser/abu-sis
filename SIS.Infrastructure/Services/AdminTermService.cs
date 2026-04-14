@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -13,11 +15,13 @@ public class AdminTermService : IAdminTermService
     private readonly AppDbContext _context;
     private readonly ITimeSlotService _timeSlotService;
     private readonly ISchedulingService _schedulingService;
+    private readonly IAcademicCalendarRuleService _calendarRuleService;
 
-    public AdminTermService(AppDbContext context, ITimeSlotService timeSlotService, ISchedulingService schedulingService)
+    public AdminTermService(AppDbContext context, ITimeSlotService timeSlotService, ISchedulingService schedulingService, IAcademicCalendarRuleService calendarRuleService)
     {
         _timeSlotService = timeSlotService;
         _schedulingService = schedulingService;
+        _calendarRuleService = calendarRuleService;
         _context = context;
     }
 
@@ -260,6 +264,15 @@ public class AdminTermService : IAdminTermService
 
                 if (unfinalized > 0)
                     errors.Add($"{unfinalized} şubede not girişi tamamlanmamış (finalize edilmemiş).");
+
+                try
+                {
+                    await _calendarRuleService.ValidateTermCanCloseAsync(term);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    errors.Add(ex.Message);
+                }
                 break;
         }
 
@@ -362,13 +375,15 @@ public class AdminTermService : IAdminTermService
     {
         var calTerm = await _context.AcademicTerms.FindAsync(termId)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {termId}");
-        if (calTerm.Status == TermStatus.Archived)
+        if (calTerm.Status >= TermStatus.Closed)
             throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği oluşturulamaz.");
+        var eventType = ParseCalendarEventType(dto.EventType);
+        await _calendarRuleService.ValidateCalendarEventAsync(calTerm, eventType, dto.StartDate, dto.EndDate);
 
         var ev = new TermCalendarEvent
         {
             TermId = termId,
-            EventType = ParseCalendarEventType(dto.EventType),
+            EventType = eventType,
             Title = dto.Title,
             StartDate = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Utc),
             EndDate = dto.EndDate.HasValue
@@ -386,14 +401,17 @@ public class AdminTermService : IAdminTermService
     public async Task<TermCalendarEventDto> UpdateCalendarEventAsync(int termId, int eventId, UpdateCalendarEventDto dto)
     {
         var calTerm2 = await _context.AcademicTerms.FindAsync(termId);
-        if (calTerm2?.Status == TermStatus.Archived)
+        if (calTerm2?.Status >= TermStatus.Closed)
             throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği düzenlenemez.");
 
         var ev = await _context.TermCalendarEvents
             .FirstOrDefaultAsync(e => e.Id == eventId && e.TermId == termId)
             ?? throw new KeyNotFoundException($"Takvim etkinliği bulunamadı: {eventId}");
 
-        ev.EventType = ParseCalendarEventType(dto.EventType);
+        var eventType = ParseCalendarEventType(dto.EventType);
+        await _calendarRuleService.ValidateCalendarEventAsync(calTerm2!, eventType, dto.StartDate, dto.EndDate);
+
+        ev.EventType = eventType;
         ev.Title = dto.Title;
         ev.StartDate = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Utc);
         ev.EndDate = dto.EndDate.HasValue
@@ -409,7 +427,7 @@ public class AdminTermService : IAdminTermService
     public async Task DeleteCalendarEventAsync(int termId, int eventId)
     {
         var calTerm3 = await _context.AcademicTerms.FindAsync(termId);
-        if (calTerm3?.Status == TermStatus.Archived)
+        if (calTerm3?.Status >= TermStatus.Closed)
             throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği silinemez.");
 
         var ev = await _context.TermCalendarEvents
@@ -469,35 +487,7 @@ public class AdminTermService : IAdminTermService
             e.Id,
             e.TermId,
             e.EventType.ToString(),
-            e.EventType switch
-            {
-                CalendarEventType.CourseRegistration => "Ders Kayıt",
-                CalendarEventType.NewStudentRegistration => "Yeni Öğrenci Ders Kayıt",
-                CalendarEventType.AdvisorApproval => "Danışman Onayı",
-                CalendarEventType.AddDrop => "Ders Ekle/Bırak",
-                CalendarEventType.AddDropApproval => "Ders Ekle/Bırak Onayı",
-                CalendarEventType.CourseWithdrawal => "Ders Çekilme",
-                CalendarEventType.AdvisorWithdrawal => "Danışman Dersten Çekme",
-                CalendarEventType.MidtermExam => "Ara Sınav",
-                CalendarEventType.MidtermGradeEntry => "Ara Sınav Not Girişi",
-                CalendarEventType.MidtermGradePublication => "Ara Sınav Not Yayımlama",
-                CalendarEventType.FinalExam => "Dönem Sonu Sınavı",
-                CalendarEventType.FinalGradeEntry => "Final Not Girişi",
-                CalendarEventType.FinalGradePublication => "Final Not Yayımlama",
-                CalendarEventType.MakeupExam => "Bütünleme Sınavı",
-                CalendarEventType.MakeupGradeEntry => "Bütünleme Not Girişi",
-                CalendarEventType.MakeupGradePublication => "Bütünleme Not Yayımlama",
-                CalendarEventType.NationalHoliday => "Milli Tatil",
-                CalendarEventType.ReligiousHoliday => "Dini Tatil",
-                CalendarEventType.ClassesStart => "Derslerin Başlangıcı",
-                CalendarEventType.ClassesEnd => "Derslerin Bitişi",
-                CalendarEventType.TuitionPayment => "Harç Ödeme",
-                CalendarEventType.GraduateApplication => "Lisansüstü Başvuru",
-                CalendarEventType.HorizontalTransfer => "Yatay Geçiş",
-                CalendarEventType.DoubleMajor => "Çift Anadal/Yan Dal",
-                CalendarEventType.Other => "Diğer",
-                _ => e.EventType.ToString()
-            },
+            CalendarEventTypeLabels.GetLabel(e.EventType),
             e.Title,
             e.StartDate,
             e.EndDate,
@@ -522,33 +512,8 @@ public class AdminTermService : IAdminTermService
         _ => throw new ArgumentException($"Geçersiz dönem türü: {s}")
     };
 
-    private static CalendarEventType ParseCalendarEventType(string s) => s switch
-    {
-        "CourseRegistration" => CalendarEventType.CourseRegistration,
-        "NewStudentRegistration" => CalendarEventType.NewStudentRegistration,
-        "AdvisorApproval" => CalendarEventType.AdvisorApproval,
-        "AddDrop" => CalendarEventType.AddDrop,
-        "AddDropApproval" => CalendarEventType.AddDropApproval,
-        "CourseWithdrawal" => CalendarEventType.CourseWithdrawal,
-        "AdvisorWithdrawal" => CalendarEventType.AdvisorWithdrawal,
-        "MidtermExam" => CalendarEventType.MidtermExam,
-        "MidtermGradeEntry" => CalendarEventType.MidtermGradeEntry,
-        "MidtermGradePublication" => CalendarEventType.MidtermGradePublication,
-        "FinalExam" => CalendarEventType.FinalExam,
-        "FinalGradeEntry" => CalendarEventType.FinalGradeEntry,
-        "FinalGradePublication" => CalendarEventType.FinalGradePublication,
-        "MakeupExam" => CalendarEventType.MakeupExam,
-        "MakeupGradeEntry" => CalendarEventType.MakeupGradeEntry,
-        "MakeupGradePublication" => CalendarEventType.MakeupGradePublication,
-        "NationalHoliday" => CalendarEventType.NationalHoliday,
-        "ReligiousHoliday" => CalendarEventType.ReligiousHoliday,
-        "ClassesStart" => CalendarEventType.ClassesStart,
-        "ClassesEnd" => CalendarEventType.ClassesEnd,
-        "TuitionPayment" => CalendarEventType.TuitionPayment,
-        "GraduateApplication" => CalendarEventType.GraduateApplication,
-        "HorizontalTransfer" => CalendarEventType.HorizontalTransfer,
-        "DoubleMajor" => CalendarEventType.DoubleMajor,
-        "Other" => CalendarEventType.Other,
-        _ => throw new ArgumentException($"Geçersiz etkinlik tipi: {s}")
-    };
+    private static CalendarEventType ParseCalendarEventType(string s) =>
+        Enum.TryParse<CalendarEventType>(s, ignoreCase: false, out var value)
+            ? value
+            : throw new ArgumentException($"Geçersiz etkinlik tipi: {s}");
 }

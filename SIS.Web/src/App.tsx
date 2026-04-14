@@ -17,6 +17,7 @@ import TermGpaPage from './pages/TermGpaPage';
 import TranscriptPage from './pages/TranscriptPage';
 import TranscriptScenarioPage from './pages/TranscriptScenarioPage';
 import AcademicCalendarPage from './pages/AcademicCalendarPage';
+import AcademicCalendarGeneratorPage from './pages/AcademicCalendarGeneratorPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
@@ -97,6 +98,7 @@ export default function App() {
                     <Route path="ogrenci-rehberi" element={<StudentDirectoryPage />} />
                     <Route path="personel-listesi" element={<InstructorDirectoryPage />} />
                     <Route path="donem-yonetimi" element={<TermManagementPage />} />
+                    <Route path="akademik-takvim-olusturma" element={<AcademicCalendarGeneratorPage />} />
                     <Route path="akademik-yapi" element={<AcademicStructurePage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
                     <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />

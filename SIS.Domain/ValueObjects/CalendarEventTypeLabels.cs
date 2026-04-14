@@ -1,0 +1,60 @@
+using SIS.Domain.Enums;
+
+namespace SIS.Domain.ValueObjects;
+
+public static class CalendarEventTypeLabels
+{
+    public static string GetLabel(CalendarEventType type) => type switch
+    {
+        CalendarEventType.CourseRegistration => "Ders Kayit",
+        CalendarEventType.NewStudentRegistration => "Yeni Ogrenci Kayit",
+        CalendarEventType.AdvisorApproval => "Danisman Onayi",
+        CalendarEventType.AddDrop => "Ders Ekle/Birak",
+        CalendarEventType.AddDropApproval => "Ders Ekle/Birak Onayi",
+        CalendarEventType.CourseWithdrawal => "Ders Cekilme",
+        CalendarEventType.AdvisorWithdrawal => "Danisman Dersten Cekme",
+        CalendarEventType.MidtermExam => "Ara Sinav",
+        CalendarEventType.MidtermGradeEntry => "Ara Sinav Not Girisi",
+        CalendarEventType.MidtermGradePublication => "Ara Sinav Not Ilani",
+        CalendarEventType.FinalExam => "Donem Sonu Sinavi",
+        CalendarEventType.FinalGradeEntry => "Final Not Girisi",
+        CalendarEventType.FinalGradePublication => "Final Not Ilani",
+        CalendarEventType.MakeupExam => "Butunleme Sinavi",
+        CalendarEventType.MakeupGradeEntry => "Butunleme Not Girisi",
+        CalendarEventType.MakeupGradePublication => "Butunleme Not Ilani",
+        CalendarEventType.NationalHoliday => "Milli Tatil",
+        CalendarEventType.ReligiousHoliday => "Dini Tatil",
+        CalendarEventType.ClassesStart => "Derslerin Baslangici",
+        CalendarEventType.ClassesEnd => "Derslerin Bitisi",
+        CalendarEventType.TuitionPayment => "Ucret Odeme",
+        CalendarEventType.GraduateApplication => "Lisansustu Basvuru",
+        CalendarEventType.HorizontalTransfer => "Yatay Gecis",
+        CalendarEventType.DoubleMajor => "Cift Anadal/Yan Dal",
+        CalendarEventType.ExcuseExamApplication => "Mazeret Sinav Basvurusu",
+        CalendarEventType.ExcuseExam => "Mazeret Sinavi",
+        CalendarEventType.ExcuseExamResult => "Mazeret Sinav Ilani",
+        CalendarEventType.Orientation => "Oryantasyon",
+        CalendarEventType.SemesterBreak => "Yariyil Tatili",
+        CalendarEventType.CourseExemptionApplication => "Ders Muafiyet Basvurusu",
+        CalendarEventType.CourseExemptionResult => "Ders Muafiyet Sonucu",
+        CalendarEventType.ScholarshipApplication => "Burs Basvurusu",
+        CalendarEventType.ScholarshipResult => "Burs Sonucu",
+        CalendarEventType.ScholarshipRefund => "Burs Iadesi",
+        CalendarEventType.PrepSchoolExam => "Hazirlik Sinavi",
+        CalendarEventType.RegistrationFreezeDeadline => "Kayit Dondurma Son Gunu",
+        CalendarEventType.SummerSchoolRegistration => "Yaz Ogretimi Kayit",
+        CalendarEventType.SummerSchoolExam => "Yaz Ogretimi Sinavi",
+        CalendarEventType.SummerSchoolGradePublication => "Yaz Ogretimi Not Ilani",
+        CalendarEventType.SimurgApplication => "Simurg Basvurusu",
+        CalendarEventType.SimurgResult => "Simurg Sonucu",
+        CalendarEventType.InternationalStudentApplication => "Uluslararasi Ogrenci Basvurusu",
+        CalendarEventType.TransferEvaluation => "Yatay Gecis Degerlendirme",
+        CalendarEventType.TransferResult => "Yatay Gecis Sonucu",
+        CalendarEventType.TransferRegistration => "Yatay Gecis Kaydi",
+        CalendarEventType.GraduateResult => "Lisansustu Sonuc Ilani",
+        CalendarEventType.GraduateRegistration => "Lisansustu Kayit",
+        CalendarEventType.ImportantDay => "Onemli Gun",
+        CalendarEventType.Other => "Diger",
+        _ => type.ToString()
+    };
+}

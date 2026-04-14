@@ -12,6 +12,7 @@ using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
+using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.AcademicLevel.Services;
 using SIS.Infrastructure.Services.Scheduling;
 using SIS.Application.AcademicProgression.Services;
@@ -21,6 +22,7 @@ using SIS.Application.FacultyPlanning.Services;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.CalendarGenerator;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -120,6 +122,10 @@ builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
 builder.Services.AddScoped<IAdminTermService, AdminTermService>();
 builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
+builder.Services.AddScoped<ICalendarTemplateService, CalendarTemplateService>();
+builder.Services.AddScoped<IHolidayCalculatorService, HolidayCalculatorService>();
+builder.Services.AddScoped<IAcademicCalendarRuleService, AcademicCalendarRuleService>();
+builder.Services.AddScoped<ICalendarGeneratorService, CalendarGeneratorService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
