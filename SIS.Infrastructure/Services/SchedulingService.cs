@@ -1116,6 +1116,46 @@ public class SchedulingService : ISchedulingService
         return result;
     }
 
+    public async Task<ClassroomFilterOptionsDto> GetClassroomFilterOptionsAsync(int termId, CancellationToken cancellationToken = default)
+    {
+        var assignments = await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Include(a => a.Faculty)
+            .Include(a => a.Classroom)
+            .Where(a => a.TermId == termId)
+            .ToListAsync(cancellationToken);
+
+        var faculties = assignments
+            .Select(a => new ClassroomFacultyOption { Id = a.FacultyId, Name = a.Faculty.Name })
+            .DistinctBy(f => f.Id)
+            .OrderBy(f => f.Name)
+            .ToList();
+
+        var buildings = assignments
+            .Select(a => a.Classroom.BuildingName)
+            .Where(b => !string.IsNullOrWhiteSpace(b))
+            .Distinct()
+            .OrderBy(b => b)
+            .ToList();
+
+        // Client-side evaluation: EF Core cannot translate enum .ToString() to SQL
+        var classroomTypes = (await _context.Classrooms
+            .AsNoTracking()
+            .Select(c => c.Type)
+            .Distinct()
+            .ToListAsync(cancellationToken))
+            .Select(t => t.ToString())
+            .OrderBy(t => t)
+            .ToList();
+
+        return new ClassroomFilterOptionsDto
+        {
+            Faculties = faculties,
+            Buildings = buildings,
+            ClassroomTypes = classroomTypes
+        };
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────
 
     private async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)

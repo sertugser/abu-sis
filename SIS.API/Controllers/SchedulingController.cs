@@ -48,6 +48,13 @@ public class SchedulingController : ControllerBase
         return Ok(dashboard);
     }
 
+    [HttpGet("classroom-filters")]
+    public async Task<IActionResult> GetClassroomFilters([FromQuery] int termId, CancellationToken cancellationToken)
+    {
+        if (termId <= 0) return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
+        return Ok(await _schedulingService.GetClassroomFilterOptionsAsync(termId, cancellationToken));
+    }
+
     [HttpPost("validate")]
     public async Task<IActionResult> Validate([FromBody] ScheduleValidationRequestDto request, CancellationToken cancellationToken)
     {
