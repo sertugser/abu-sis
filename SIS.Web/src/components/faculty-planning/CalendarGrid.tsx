@@ -1,11 +1,9 @@
 import { Fragment, useMemo } from 'react';
-import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { parseScheduleSummary } from '@/lib/scheduleUtils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, MapPin, User, Users, Clock, Wifi } from 'lucide-react';
+import { MapPin, User, Users, Clock, Wifi } from 'lucide-react';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { STATUS_CONFIG } from './sectionUtils';
 
@@ -40,18 +38,14 @@ const COURSE_COLORS = [
 
 const CONFLICT_COLOR = { bg: 'bg-red-50', border: 'border-red-400', text: 'text-red-900', accent: '#dc2626' };
 
-function hashCode(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
+/** Müfredat yılına göre renk: 1.sınıf = mavi, 2.sınıf = yeşil, 3.sınıf = mor, 4.sınıf = turuncu */
+const YEAR_COLOR_MAP: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3 };
 
-function getCourseColor(courseCode: string, status: string) {
+function getBlockColor(suggestedSemester: number, status: string) {
   if (status === 'Conflicted') return CONFLICT_COLOR;
-  return COURSE_COLORS[hashCode(courseCode) % COURSE_COLORS.length];
+  const year = suggestedSemester > 0 ? Math.ceil(suggestedSemester / 2) : 0;
+  const colorIdx = YEAR_COLOR_MAP[year] ?? (year % COURSE_COLORS.length);
+  return COURSE_COLORS[colorIdx];
 }
 
 /** Saat >= 18:00 ise akşam (online) dilimi */
@@ -85,35 +79,19 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
-/* ── Droppable Cell — HER HÜCRE droppable ── */
-function DroppableCell({
-  day, startTime, endTime, hasSelection, isDraggingSection, isEvening, children, onClick,
+/* ── Plain CalendarCell ── */
+function CalendarCell({
+  isEvening, children,
 }: {
-  day: number;
-  startTime: string;
-  endTime: string;
-  hasSelection: boolean;
-  isDraggingSection: boolean;
   isEvening: boolean;
   children: React.ReactNode;
-  onClick: () => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `cell-${day}-${startTime}`,
-    data: { day, startTime, endTime },
-  });
-
   return (
     <td
-      ref={setNodeRef}
       className={cn(
-        'border border-slate-200/80 p-1 align-top relative transition-colors cursor-pointer',
+        'border border-slate-200/80 p-1 align-top',
         isEvening ? 'bg-slate-50/60' : 'bg-white',
-        hasSelection && 'hover:bg-blue-50/60 hover:border-blue-300',
-        isDraggingSection && 'bg-blue-50/30 border-blue-200/50',
-        isOver && 'bg-blue-100/70 border-blue-400 border-2 shadow-inner',
       )}
-      onClick={onClick}
       style={{ minHeight: 56 }}
     >
       {children}
@@ -123,11 +101,9 @@ function DroppableCell({
 
 /* ── Popover detay ── */
 function SectionPopoverContent({
-  section, onUnassign, isUnassigning, color,
+  section, color,
 }: {
   section: FacultyPlanningSection;
-  onUnassign: (sectionId: number) => void;
-  isUnassigning: boolean;
   color: typeof COURSE_COLORS[0];
 }) {
   const statusCfg = STATUS_CONFIG[section.status];
@@ -182,34 +158,19 @@ function SectionPopoverContent({
           </div>
         )}
       </div>
-
-      {section.status !== 'Unscheduled' && !section.isPinned && (
-        <Button
-          variant="destructive"
-          size="sm"
-          className="w-full"
-          disabled={isUnassigning}
-          onClick={() => onUnassign(section.sectionId)}
-        >
-          <X className="h-3.5 w-3.5 mr-1.5" />
-          {isUnassigning ? 'Kaldırılıyor...' : 'Atamayı Kaldır'}
-        </Button>
-      )}
     </div>
   );
 }
 
 /* ── Tek ders bloğu ── */
 function SectionBlock({
-  section, rowSpan, onUnassign, isUnassigning, isContinuation,
+  section, rowSpan, isContinuation,
 }: {
   section: FacultyPlanningSection;
   rowSpan: number;
-  onUnassign: (sectionId: number) => void;
-  isUnassigning: boolean;
   isContinuation: boolean;
 }) {
-  const color = getCourseColor(section.courseCode, section.status);
+  const color = getBlockColor(section.suggestedSemester, section.status);
 
   return (
     <Popover>
@@ -257,8 +218,6 @@ function SectionBlock({
       <PopoverContent className="w-80" side="right" align="start">
         <SectionPopoverContent
           section={section}
-          onUnassign={onUnassign}
-          isUnassigning={isUnassigning}
           color={color}
         />
       </PopoverContent>
@@ -270,16 +229,10 @@ function SectionBlock({
 export interface CalendarGridProps {
   sections: FacultyPlanningSection[];
   timeSlots: FacultyPlanningTimeSlot[];
-  onCellClick: (day: number, startTime: string) => void;
-  onUnassign: (sectionId: number) => void;
-  isUnassigning: boolean;
-  isDraggingSection?: boolean;
-  hasSelection?: boolean;
 }
 
 export function CalendarGrid({
-  sections, timeSlots, onCellClick, onUnassign, isUnassigning,
-  isDraggingSection = false, hasSelection = false,
+  sections, timeSlots,
 }: CalendarGridProps) {
   /* Zaman satırları */
   const timeRows = useMemo(() => {
@@ -423,16 +376,7 @@ export function CalendarGrid({
                     const cellBlocks = blockMap.get(cellKey) ?? [];
 
                     return (
-                      <DroppableCell
-                        key={cellKey}
-                        day={wd.day}
-                        startTime={row.startTime}
-                        endTime={row.endTime}
-                        hasSelection={hasSelection}
-                        isDraggingSection={isDraggingSection}
-                        isEvening={isEvening}
-                        onClick={() => onCellClick(wd.day, row.startTime)}
-                      >
+                      <CalendarCell key={cellKey} isEvening={isEvening}>
                         <div className={cn('flex flex-col gap-1', cellBlocks.length > 0 && 'min-h-[3.5rem]')}>
                           {cellBlocks.map(b => {
                             const startKey = `${b.sectionId}-${b.day}-${row.startTime}`;
@@ -444,14 +388,12 @@ export function CalendarGrid({
                                 key={b.sectionId}
                                 section={b.section}
                                 rowSpan={startInfo?.rowSpan ?? 1}
-                                onUnassign={onUnassign}
-                                isUnassigning={isUnassigning}
                                 isContinuation={isContinuation}
                               />
                             );
                           })}
                         </div>
-                      </DroppableCell>
+                      </CalendarCell>
                     );
                   })}
                 </tr>
