@@ -83,7 +83,7 @@ interface HeatmapRow { hour: number; days: HeatmapDayCell[] }
 
 export default function ClassroomManagementPage() {
   const { data: activeTerm } = useActiveTerm();
-  const { data: dashboard, isLoading } = useClassroomDashboard(activeTerm?.id);
+  const { data: dashboard, isLoading } = useClassroomDashboard({ termId: activeTerm?.id });
   const { data: conflictsList } = useSchedulingConflicts(activeTerm?.id);
 
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
