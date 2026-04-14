@@ -12,6 +12,8 @@ import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useA
 import {
   useBulkOpenCourses,
   useCloseSection,
+  useCloseAllSections,
+  useReactivateSection,
   useCurriculumCoursesForOpening,
   useDepartmentInstructors,
   useInstructorWorkload,
@@ -50,6 +52,8 @@ export default function CourseOpeningPage() {
   const bulkMutation = useBulkOpenCourses(deptId ?? 0, termId ?? 0);
   const updateMutation = useUpdateOpenedSection(deptId ?? 0, termId ?? 0);
   const closeMutation = useCloseSection(deptId ?? 0, termId ?? 0);
+  const closeAllMutation = useCloseAllSections(deptId ?? 0, termId ?? 0);
+  const reactivateMutation = useReactivateSection(deptId ?? 0, termId ?? 0);
 
   const forecastMap = useMemo(() => {
     const map = new Map<number, CourseDemandForecastDto>();
@@ -108,6 +112,12 @@ export default function CourseOpeningPage() {
 
   const handleCloseSection = useCallback(
     (sectionId: number) => closeMutation.mutate(sectionId), [closeMutation]);
+
+  const handleCloseAllSections = useCallback(
+    (courseId: number) => closeAllMutation.mutateAsync(courseId), [closeAllMutation]);
+
+  const handleReactivateSection = useCallback(
+    (sectionId: number) => reactivateMutation.mutateAsync(sectionId), [reactivateMutation]);
 
   const handleAddSection = useCallback(
     (courseId: number, capacity: number, instructorId: number | undefined, internalQuota?: number, externalQuota?: number) => {
@@ -185,6 +195,8 @@ export default function CourseOpeningPage() {
           instructors={instructorsQuery.data ?? []}
           onUpdateSection={handleUpdateSection}
           onCloseSection={handleCloseSection}
+          onCloseAllSections={handleCloseAllSections}
+          onReactivateSection={handleReactivateSection}
           onAddSection={handleAddSection}
           updatePending={updateMutation.isPending}
           closePending={closeMutation.isPending}

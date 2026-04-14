@@ -17,6 +17,8 @@ interface Props {
   instructors: InstructorOptionDto[];
   onUpdateSection: (sectionId: number, capacity: number, instructorId: number | undefined, internalQuota?: number | null, externalQuota?: number | null) => void;
   onCloseSection: (sectionId: number) => void;
+  onCloseAllSections: (courseId: number) => Promise<unknown>;
+  onReactivateSection: (sectionId: number) => Promise<unknown>;
   onAddSection: (courseId: number, capacity: number, instructorId: number | undefined, internalQuota?: number, externalQuota?: number) => void;
   updatePending: boolean;
   closePending: boolean;
@@ -41,6 +43,8 @@ export function OpenedCoursesPanel({
   instructors,
   onUpdateSection,
   onCloseSection,
+  onCloseAllSections,
+  onReactivateSection,
   onAddSection,
   updatePending,
   closePending,
@@ -129,6 +133,8 @@ export function OpenedCoursesPanel({
               instructors={instructors}
               onUpdateSection={onUpdateSection}
               onCloseSection={(sec) => onCloseSection(sec.sectionId)}
+              onCloseAllSections={onCloseAllSections}
+              onReactivateSection={onReactivateSection}
               onAddSection={onAddSection}
               updatePending={updatePending}
               closePending={closePending}

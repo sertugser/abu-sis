@@ -125,6 +125,52 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         }
     }
 
+    [HttpDelete("course/{courseId}")]
+    public async Task<IActionResult> CloseAllSections(int courseId, [FromQuery] int termId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == courseId, ct);
+        if (course == null) return NotFound(new { error = "Ders bulunamadı." });
+        if (course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            var result = await _courseOpeningService.CloseAllSectionsAsync(courseId, termId, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("section/{id}/reactivate")]
+    public async Task<IActionResult> ReactivateSection(int id, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var section = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == id, ct);
+
+        if (section == null) return NotFound(new { error = "Şube bulunamadı." });
+        if (section.Course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, section.Course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            await _courseOpeningService.ReactivateSectionAsync(id, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPost("bulk-assign-instructor")]
     public async Task<IActionResult> BulkAssignInstructor(
         [FromQuery] int departmentId, [FromQuery] int termId,

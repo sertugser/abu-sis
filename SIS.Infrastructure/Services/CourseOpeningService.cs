@@ -568,6 +568,113 @@ public class CourseOpeningService(
         _forecastCacheInvalidator.InvalidateForecastContext();
     }
 
+    public async Task<CloseAllSectionsResultDto> CloseAllSectionsAsync(int courseId, int termId, CancellationToken ct)
+    {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new InvalidOperationException("Dönem bulunamadı.");
+        if (term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Ders kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
+        var sections = await _context.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.IsActive)
+            .ToListAsync(ct);
+
+        if (sections.Count == 0)
+            throw new InvalidOperationException("Bu ders için kapatılacak aktif şube bulunamadı.");
+
+        // Aktif kayıtlı öğrenci kontrolü (tüm section'lar için toplu)
+        var sectionIds = sections.Select(s => s.Id).ToList();
+        var activeCount = await _context.CourseRegistrations
+            .CountAsync(cr => sectionIds.Contains(cr.CourseSectionId) && cr.Status == RegistrationStatus.Active, ct);
+        if (activeCount > 0)
+            throw new InvalidOperationException($"Toplam {activeCount} aktif kayıtlı öğrenci bulunan ders kapatılamaz. Önce öğrencileri başka şubelere aktarın veya kayıtlarını düşürün.");
+
+        // Draft/Pending kayıtları temizle
+        var pendingRegistrations = await _context.CourseRegistrations
+            .Where(cr => sectionIds.Contains(cr.CourseSectionId)
+                && (cr.Status == RegistrationStatus.Draft || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+            .ToListAsync(ct);
+
+        foreach (var reg in pendingRegistrations)
+        {
+            reg.Status = RegistrationStatus.Dropped;
+            reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Tüm section'ları kapat
+        foreach (var section in sections)
+        {
+            section.IsActive = false;
+            section.EnrolledCount = 0;
+        }
+
+        // Access policy temizliği
+        var accessPolicies = await _context.CourseAccessPolicies
+            .Where(cap => cap.CourseId == courseId && cap.TermId == termId)
+            .ToListAsync(ct);
+        _context.CourseAccessPolicies.RemoveRange(accessPolicies);
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+
+        return new CloseAllSectionsResultDto(
+            ClosedSectionCount: sections.Count,
+            DroppedRegistrationCount: pendingRegistrations.Count
+        );
+    }
+
+    public async Task ReactivateSectionAsync(int sectionId, CancellationToken ct)
+    {
+        var section = await _context.CourseSections
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == sectionId, ct)
+            ?? throw new InvalidOperationException("Şube bulunamadı.");
+
+        if (section.IsActive)
+            throw new InvalidOperationException("Şube zaten aktif.");
+
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Şube yeniden açmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
+        section.IsActive = true;
+        // EnrolledCount 0 kalır — kapatılırken sıfırlanmıştı
+
+        // Bu ders için CourseAccessPolicy yoksa yeniden oluştur
+        var hasAccessPolicy = await _context.CourseAccessPolicies
+            .AnyAsync(cap => cap.CourseId == section.CourseId && cap.TermId == section.TermId, ct);
+
+        if (!hasAccessPolicy && section.Course.DepartmentId.HasValue)
+        {
+            // Müfredatında bu ders olan bölümleri bul
+            var deptIds = await _context.CurriculumCourses
+                .Include(cc => cc.Curriculum)
+                .ThenInclude(c => c.Program)
+                .Where(cc => cc.CourseId == section.CourseId)
+                .Select(cc => cc.Curriculum.Program.DepartmentId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (deptIds.Count == 0)
+                deptIds.Add(section.Course.DepartmentId.Value);
+
+            foreach (var deptId in deptIds)
+            {
+                _context.CourseAccessPolicies.Add(new Domain.Entities.CourseAccessPolicy
+                {
+                    CourseId = section.CourseId,
+                    TermId = section.TermId,
+                    DepartmentId = deptId,
+                });
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+    }
+
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
         TermStatus.Draft            => "Taslak",

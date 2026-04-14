@@ -196,3 +196,5 @@ public class TransferCourseResultItem
     public string? Error { get; set; }
     public int SectionsCreated { get; set; }
 }
+
+public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);

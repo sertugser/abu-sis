@@ -8,6 +8,8 @@ import {
   bulkOpenCourses,
   updateOpenedSection,
   closeSection,
+  closeAllSections,
+  reactivateSection,
   bulkAssignInstructor,
   getPreviousTermCourses,
   transferFromTerm,
@@ -133,6 +135,32 @@ export function useCloseSection(departmentId: number, termId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (sectionId: number) => closeSection(sectionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+    },
+  });
+}
+
+export function useCloseAllSections(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (courseId: number) => closeAllSections(courseId, termId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+    },
+  });
+}
+
+export function useReactivateSection(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sectionId: number) => reactivateSection(sectionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });

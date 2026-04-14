@@ -1,10 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ChevronDown, ChevronRight, Info, Loader2, Pencil, Plus, Trash2, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Info, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { CurriculumCourseItemDto } from '../../types/curriculumManagement';
 
@@ -43,8 +42,6 @@ export default function SemesterGroup({
   isUpdating,
   isRemoving,
 }: Props) {
-  const [editingCourseId, setEditingCourseId] = useState<number | null>(null);
-  const [editSemester, setEditSemester] = useState(semester);
   const [collapsed, setCollapsed] = useState(false);
 
   // Bulk selection state
@@ -55,13 +52,6 @@ export default function SemesterGroup({
   const totalTheory = courses.reduce((sum, c) => sum + c.theoryHours, 0);
   const totalLab = courses.reduce((sum, c) => sum + c.labHours, 0);
 
-
-  function handleSaveSemester(courseId: number) {
-    if (editSemester !== semester) {
-      onUpdateCourse(courseId, { suggestedSemester: editSemester });
-    }
-    setEditingCourseId(null);
-  }
 
   function toggleSelect(courseId: number) {
     setSelectedIds(prev => {
@@ -161,39 +151,7 @@ export default function SemesterGroup({
                   <td className="text-center px-3 py-1.5 w-16">{c.ects}</td>
                   <td className="text-center px-3 py-1.5 w-16">{c.theoryHours}+{c.labHours}</td>
                   <td className="text-center px-3 py-1.5 w-16">
-                    {editingCourseId === c.courseId ? (
-                      <div className="flex items-center gap-1 justify-center">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={12}
-                          value={editSemester}
-                          onChange={e => setEditSemester(Number(e.target.value))}
-                          className="h-7 w-14 text-center text-xs"
-                        />
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6"
-                          onClick={() => handleSaveSemester(c.courseId)}
-                          disabled={isUpdating}
-                        >
-                          {isUpdating
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : <Check className="h-3 w-3" />}
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6"
-                          onClick={() => setEditingCourseId(null)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      c.suggestedSemester
-                    )}
+                    {c.suggestedSemester}
                   </td>
                   <td className="text-center px-3 py-1.5 w-24">
                     <button
@@ -220,18 +178,6 @@ export default function SemesterGroup({
                         </Button>
                       )}
                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            setEditingCourseId(c.courseId);
-                            setEditSemester(c.suggestedSemester);
-                          }}
-                          title="Yarıyıl Değiştir"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"

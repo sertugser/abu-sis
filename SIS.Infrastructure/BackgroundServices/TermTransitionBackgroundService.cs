@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SIS.Application.EnrollmentForecast.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -99,6 +100,9 @@ public class TermTransitionBackgroundService : BackgroundService
                 term.Status = TermStatus.AddDrop;
                 transitioned = true;
                 _logger.LogInformation("Dönem '{Term}' otomatik olarak AddDrop'a geçirildi. {Count} bekleyen kayıt iptal edildi.", term.Name, pendingRegistrations.Count);
+
+                // Otomatik tahmin kalibrasyonu — gerçek kayıtlarla tahmin doğruluğunu ölç
+                await RunAutoCalibrationAsync(scope, term, ct);
             }
 
             // AddDrop → WithdrawalPeriod (AddDropEnd tarihi geldiğinde)
@@ -107,6 +111,9 @@ public class TermTransitionBackgroundService : BackgroundService
                 term.Status = TermStatus.WithdrawalPeriod;
                 transitioned = true;
                 _logger.LogInformation("Dönem '{Term}' otomatik olarak WithdrawalPeriod'a geçirildi.", term.Name);
+
+                // İkinci kalibrasyon geçişi — add/drop sonrası daha stabil veriyle
+                await RunAutoCalibrationAsync(scope, term, ct);
             }
 
             // WithdrawalPeriod → GradeEntry (WithdrawalDeadline geçtiğinde)
@@ -122,6 +129,29 @@ public class TermTransitionBackgroundService : BackgroundService
                 term.UpdatedAt = now;
                 await context.SaveChangesAsync(ct);
             }
+        }
+    }
+
+    private async Task RunAutoCalibrationAsync(IServiceScope scope, Domain.Entities.AcademicTerm term, CancellationToken ct)
+    {
+        try
+        {
+            var forecastService = scope.ServiceProvider.GetRequiredService<IEnrollmentForecastService>();
+            var calibratedCount = await forecastService.CalibrateForTermAsync(term.Id, ct);
+
+            if (calibratedCount > 0)
+            {
+                var cacheInvalidator = scope.ServiceProvider.GetRequiredService<IEnrollmentForecastCacheInvalidator>();
+                cacheInvalidator.InvalidateForecastContext();
+                _logger.LogInformation(
+                    "Otomatik kalibrasyon tamamlandı. Dönem '{Term}', {Count} ders kalibre edildi.",
+                    term.Name, calibratedCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Kalibrasyon başarısız olsa da dönem geçişini engelleme
+            _logger.LogWarning(ex, "Dönem '{Term}' otomatik kalibrasyonu başarısız oldu.", term.Name);
         }
     }
 }

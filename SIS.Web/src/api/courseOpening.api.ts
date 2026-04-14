@@ -60,6 +60,15 @@ export async function closeSection(sectionId: number): Promise<void> {
   await apiClient.delete(`/course-opening/section/${sectionId}`);
 }
 
+export async function closeAllSections(courseId: number, termId: number): Promise<{ closedSectionCount: number; droppedRegistrationCount: number }> {
+  const { data } = await apiClient.delete(`/course-opening/course/${courseId}`, { params: { termId } });
+  return data;
+}
+
+export async function reactivateSection(sectionId: number): Promise<void> {
+  await apiClient.put(`/course-opening/section/${sectionId}/reactivate`);
+}
+
 export async function bulkAssignInstructor(
   departmentId: number,
   termId: number,

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Edit2, Plus, Trash2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Edit2, Plus, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import type { OpenedCourseSectionDto, InstructorOptionDto, InstructorWorkloadDto } from '../../types/courseOpening';
 import type { CourseDemandForecastDto } from '../../types/forecast';
 import { WorkloadBar } from './WorkloadBar';
@@ -19,6 +19,8 @@ interface Props {
   instructors: InstructorOptionDto[];
   onUpdateSection: (sectionId: number, capacity: number, instructorId: number | undefined, internalQuota?: number | null, externalQuota?: number | null) => void;
   onCloseSection: (section: OpenedCourseSectionDto) => void;
+  onCloseAllSections: (courseId: number) => Promise<unknown>;
+  onReactivateSection: (sectionId: number) => Promise<unknown>;
   onAddSection: (courseId: number, capacity: number, instructorId: number | undefined, internalQuota?: number, externalQuota?: number) => void;
   updatePending: boolean; closePending: boolean; closeError: Error | null;
   workloadData: InstructorWorkloadDto | undefined;
@@ -34,7 +36,7 @@ function InstructorSelect({ instructors, value, onChange }: { instructors: Instr
   );
 }
 
-export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sections, forecast, instructors, onUpdateSection, onCloseSection, onAddSection, updatePending, closePending, closeError, workloadData, onInstructorSelect }: Props) {
+export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sections, forecast, instructors, onUpdateSection, onCloseSection, onCloseAllSections, onReactivateSection, onAddSection, updatePending, closePending, closeError, workloadData, onInstructorSelect }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editCap, setEditCap] = useState('');
@@ -42,6 +44,10 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
   const [editExternalQuota, setEditExternalQuota] = useState('');
   const [editInsId, setEditInsId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<OpenedCourseSectionDto | null>(null);
+  const [closeAllOpen, setCloseAllOpen] = useState(false);
+  const [closeAllPending, setCloseAllPending] = useState(false);
+  const [closeAllError, setCloseAllError] = useState<string | null>(null);
+  const [reactivating, setReactivating] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [newCap, setNewCap] = useState('40');
   const [newInternalQuota, setNewInternalQuota] = useState('');
@@ -123,13 +129,20 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
             </Badge>
           )}
         </button>
-        <div className="shrink-0" onClick={e => e.stopPropagation()}>
+        <div className="shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
           <AccessPolicyPopover
             courseId={courseId}
             termId={termId}
             courseDepartmentId={sections[0]?.departmentId ?? null}
             courseDepartmentName={sections[0]?.departmentName ?? null}
           />
+          {sections.some(s => s.isActive) && (
+            <TooltipProvider delayDuration={200}><Tooltip><TooltipTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => { setCloseAllError(null); setCloseAllOpen(true); }}>
+                <XCircle className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger><TooltipContent side="top" className="text-xs">Dersi Kapat (Tüm Şubeler)</TooltipContent></Tooltip></TooltipProvider>
+          )}
         </div>
       </div>
 
@@ -172,8 +185,24 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
                 </TooltipTrigger><TooltipContent side="top" className="text-xs"><p>Kontenjan: {sec.capacity}</p>{sec.internalQuota != null && <p>Bölüm İçi: {sec.internalQuota}</p>}{sec.externalQuota != null && <p>Bölüm Dışı: {sec.externalQuota}</p>}<p>Doluluk: {sec.enrolledCount}</p><p>Kayıtlı: {sec.registeredCount}</p></TooltipContent></Tooltip></TooltipProvider>
                 <span className="text-xs flex-1 min-w-0 truncate">{sec.instructorName ?? <span className="text-muted-foreground">Atanmadı</span>}</span>
                 <div className="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button size="icon" variant="ghost" className="h-6 w-6 text-gray-400 hover:text-gray-600" onClick={() => startEdit(sec)} disabled={!sec.isActive}><Edit2 className="h-3 w-3" /></Button>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 text-gray-400 hover:text-red-600" onClick={() => setDeleteTarget(sec)} disabled={!sec.isActive}><Trash2 className="h-3 w-3" /></Button>
+                  {sec.isActive ? (<>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-gray-400 hover:text-gray-600" onClick={() => startEdit(sec)}><Edit2 className="h-3 w-3" /></Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-gray-400 hover:text-red-600" onClick={() => setDeleteTarget(sec)}><Trash2 className="h-3 w-3" /></Button>
+                  </>) : (
+                    <TooltipProvider delayDuration={200}><Tooltip><TooltipTrigger asChild>
+                      <Button
+                        size="icon" variant="ghost"
+                        className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-50"
+                        disabled={reactivating === sec.sectionId}
+                        onClick={() => {
+                          setReactivating(sec.sectionId);
+                          onReactivateSection(sec.sectionId).finally(() => setReactivating(null));
+                        }}
+                      >
+                        <RotateCcw className={`h-3 w-3 ${reactivating === sec.sectionId ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </TooltipTrigger><TooltipContent side="top" className="text-xs">Şubeyi Yeniden Aç</TooltipContent></Tooltip></TooltipProvider>
+                  )}
                 </div>
               </>)}
             </div>
@@ -225,6 +254,38 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Vazgeç</Button>
             <Button variant="destructive" onClick={() => { if (deleteTarget) { onCloseSection(deleteTarget); setDeleteTarget(null); } }} disabled={closePending}>{closePending ? 'Kapatılıyor...' : 'Kapat'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={closeAllOpen} onOpenChange={() => setCloseAllOpen(false)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Dersi Kapat</DialogTitle></DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p><strong>{courseCode} — {courseName}</strong> dersinin tüm <strong>{sections.filter(s => s.isActive).length} aktif şubesi</strong> kapatılacak.</p>
+            <p>Draft/Pending durumdaki kayıtlar otomatik olarak Dropped'a düşecek.</p>
+            {closeAllError && (
+              <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertDescription>{closeAllError}</AlertDescription></Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCloseAllOpen(false)}>Vazgeç</Button>
+            <Button
+              variant="destructive"
+              disabled={closeAllPending}
+              onClick={() => {
+                setCloseAllPending(true);
+                setCloseAllError(null);
+                onCloseAllSections(courseId)
+                  .then(() => setCloseAllOpen(false))
+                  .catch((err: { response?: { data?: { error?: string } } }) => {
+                    setCloseAllError(err?.response?.data?.error ?? 'Ders kapatılamadı.');
+                  })
+                  .finally(() => setCloseAllPending(false));
+              }}
+            >
+              {closeAllPending ? 'Kapatılıyor...' : 'Tüm Şubeleri Kapat'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

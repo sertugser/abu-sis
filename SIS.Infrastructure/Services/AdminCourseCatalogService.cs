@@ -118,7 +118,7 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
     {
         // Toplam kaç dönem açılmış
         var totalTimesOpened = await db.CourseSections
-            .Where(cs => cs.CourseId == courseId && cs.IsActive)
+            .Where(cs => cs.CourseId == courseId)
             .Select(cs => cs.TermId)
             .Distinct()
             .CountAsync();
@@ -137,7 +137,7 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
         // En son dönem
         var lastTermId = await db.CourseSections
-            .Where(cs => cs.CourseId == courseId && cs.IsActive)
+            .Where(cs => cs.CourseId == courseId)
             .OrderByDescending(cs => cs.TermId)
             .Select(cs => cs.TermId)
             .FirstOrDefaultAsync();
@@ -148,7 +148,7 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
         var lastTermSections = lastTermId > 0
             ? await db.CourseSections
-                .Where(cs => cs.CourseId == courseId && cs.TermId == lastTermId && cs.IsActive)
+                .Where(cs => cs.CourseId == courseId && cs.TermId == lastTermId)
                 .ToListAsync()
             : new List<CourseSection>();
 
@@ -182,7 +182,7 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
         // Dönem bazlı trend (son 5 dönem)
         var termIds = await db.CourseSections
-            .Where(cs => cs.CourseId == courseId && cs.IsActive)
+            .Where(cs => cs.CourseId == courseId)
             .Select(cs => cs.TermId)
             .Distinct()
             .OrderByDescending(id => id)
@@ -197,7 +197,7 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
                 .ToDictionaryAsync(t => t.Id, t => t.Name);
 
             var sectionsByTerm = await db.CourseSections
-                .Where(cs => cs.CourseId == courseId && cs.IsActive && termIds.Contains(cs.TermId))
+                .Where(cs => cs.CourseId == courseId && termIds.Contains(cs.TermId))
                 .GroupBy(cs => cs.TermId)
                 .Select(g => new
                 {
@@ -445,31 +445,4 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         await db.SaveChangesAsync();
     }
 
-    public async Task AssignToCurriculumAsync(int courseId, AssignToCurriculumDto dto)
-    {
-        if (!await db.Courses.AnyAsync(c => c.Id == courseId))
-            throw new KeyNotFoundException("Ders bulunamadı.");
-        if (!await db.Curricula.AnyAsync(c => c.Id == dto.CurriculumId))
-            throw new KeyNotFoundException("Müfredat bulunamadı.");
-        if (await db.CurriculumCourses.AnyAsync(cc => cc.CurriculumId == dto.CurriculumId && cc.CourseId == courseId))
-            throw new InvalidOperationException("Bu ders zaten bu müfredatta mevcut.");
-
-        db.CurriculumCourses.Add(new CurriculumCourse
-        {
-            CurriculumId = dto.CurriculumId,
-            CourseId = courseId,
-            SuggestedSemester = dto.SuggestedSemester,
-            IsCompulsory = dto.IsCompulsory
-        });
-        await db.SaveChangesAsync();
-    }
-
-    public async Task RemoveFromCurriculumAsync(int courseId, int curriculumId)
-    {
-        var cc = await db.CurriculumCourses
-            .FirstOrDefaultAsync(c => c.CourseId == courseId && c.CurriculumId == curriculumId)
-            ?? throw new KeyNotFoundException("Müfredat ataması bulunamadı.");
-        db.CurriculumCourses.Remove(cc);
-        await db.SaveChangesAsync();
-    }
 }
