@@ -9,7 +9,7 @@ import ClassroomWeeklyGrid from './ClassroomWeeklyGrid';
 import type { ClassroomInfo } from '@/types/scheduling';
 
 const TYPE_LABELS: Record<string, string> = {
-  Lecture: 'Normal S\u0131n\u0131f',
+  Lecture: 'Normal Sınıf',
   Lab: 'Laboratuvar',
   Computer: 'Bilgisayar Lab',
   Seminar: 'Seminer',
@@ -86,7 +86,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Derslik ad\u0131 veya ders kodu ara..."
+            placeholder="Derslik adı veya ders kodu ara..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="h-9 w-full rounded-lg border bg-white pl-9 pr-3 text-sm"
@@ -98,10 +98,10 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
             onChange={e => setSortField(e.target.value as SortField)}
             className="h-9 rounded-lg border bg-white px-3 text-sm"
           >
-            <option value="name">Ada G\u00f6re</option>
-            <option value="occupancy">Doluluk Oran\u0131na G\u00f6re</option>
-            <option value="courseCount">Ders Say\u0131s\u0131na G\u00f6re</option>
-            <option value="capacity">Kapasiteye G\u00f6re</option>
+            <option value="name">Ada Göre</option>
+            <option value="occupancy">Doluluk Oranına Göre</option>
+            <option value="courseCount">Ders Sayısına Göre</option>
+            <option value="capacity">Kapasiteye Göre</option>
           </select>
           <div className="flex border rounded-lg overflow-hidden">
             <button
@@ -122,7 +122,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
 
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm bg-white border rounded-xl">
-          Araman\u0131za uygun derslik bulunamad\u0131.
+          Aramanıza uygun derslik bulunamadı.
         </div>
       ) : viewMode === 'card' ? (
         /* Card View */
@@ -146,13 +146,13 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
                         <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border', TYPE_COLORS[c.type] ?? 'bg-gray-100')}>
                           {TYPE_LABELS[c.type] ?? c.type}
                         </span>
-                        <span className="text-[11px] text-muted-foreground">{c.capacity} ki\u015fi</span>
+                        <span className="text-[11px] text-muted-foreground">{c.capacity} kişi</span>
                       </div>
                     </div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Haftal\u0131k Doluluk</span>
+                      <span className="text-muted-foreground">Haftalık Doluluk</span>
                       <span className="font-semibold">%{occ}</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -164,7 +164,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
                         style={{ width: `${Math.min(occ, 100)}%` }}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">{courseCount} ders \u00b7 {totalHours} saat/hafta</p>
+                    <p className="text-xs text-muted-foreground">{courseCount} ders · {totalHours} saat/hafta</p>
                   </div>
                 </button>
 
@@ -180,7 +180,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
                               <span className="font-mono font-semibold">{s.courseCode}</span>
                               <span className="ml-1.5 text-muted-foreground">{s.courseName}</span>
                             </div>
-                            <span className="text-muted-foreground">{s.instructorName || 'Atanmam\u0131\u015f'}</span>
+                            <span className="text-muted-foreground">{s.instructorName || 'Atanmamış'}</span>
                           </div>
                         ))}
                       </div>

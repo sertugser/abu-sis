@@ -65,15 +65,14 @@ export default function ClassroomManagementPage() {
   return (
     <>
       <div className={showPrintReport ? 'hidden' : 'space-y-4'}>
-        {/* Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-bold">Derslik Doluluk Tablosu</h1>
-            <p className="text-sm text-muted-foreground">
-              {activeTerm?.name ? `${activeTerm.name} dönemi için derslik kullanımı` : 'Aktif dönem bilgisi yükleniyor'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        {/* Filters + Actions bar */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <ClassroomFilters
+            filters={filters}
+            onChange={setFilters}
+            options={filterOptions}
+          />
+          <div className="flex items-center gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!activeTerm?.id || isExporting}>
               <Download className="mr-1.5 h-3.5 w-3.5" />
               {isExporting ? 'Hazırlanıyor...' : 'CSV'}
@@ -92,13 +91,6 @@ export default function ClassroomManagementPage() {
             <AlertDescription>{exportError}</AlertDescription>
           </Alert>
         )}
-
-        {/* Filters */}
-        <ClassroomFilters
-          filters={filters}
-          onChange={setFilters}
-          options={filterOptions}
-        />
 
         {/* Tabs */}
         <Tabs defaultValue="heatmap" className="space-y-4">
