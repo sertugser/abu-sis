@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { displayTurkishText } from '@/lib/turkishText';
 import { useAcademicCalendar, type PublicCalendarEventDto } from '../hooks/useAcademicCalendar';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
@@ -172,7 +173,7 @@ function normalizeEvents(events: PublicCalendarEventDto[]): NormalizedEvent[] {
   return events.map(e => ({
     id: e.id,
     eventType: e.eventType,
-    title: e.title,
+    title: displayTurkishText(e.title),
     startDate: isoToDateStr(e.startDate),
     endDate: e.endDate ? isoToDateStr(e.endDate) : isoToDateStr(e.startDate),
     note: e.note,
@@ -241,7 +242,7 @@ export default function AcademicCalendarPage() {
         </div>
       ) : !calendarData ? (
         <div className="border border-gray-200 rounded-xl bg-white shadow-sm p-10 text-center text-gray-400">
-          Aktif dönem takvimi bulunamadı.
+          Henüz akademik takvim oluşturucudan onaylanmış bir takvim yok.
         </div>
       ) : (
         <>

@@ -56,7 +56,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
                     if (semester == SemesterType.Summer && !request.IncludeSummer)
                         continue;
 
-                    var effectiveItem = ApplyDurationOverride(item, request.TemplateDurationOverrides);
+                    var effectiveItem = ApplyDurationOverride(item, semester, request.TemplateDurationOverrides);
                     events.Add(PlaceTemplateItem(request.AcademicYear, template.ChainCode, effectiveItem, semester, termStarts[semester], holidays, constraints, warnings));
                 }
             }
@@ -66,7 +66,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         events = events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList();
 
         ValidateChronology(events, warnings);
-        warnings.AddRange(ValidateTeachingWeekRules(events, holidays));
+        warnings.AddRange(ValidateRegulationRules(events, holidays));
         var qualityScore = CalculateQualityScore(warnings);
         var summaries = BuildTermSummaries(events, holidays);
 
@@ -96,6 +96,28 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         return ToDraftDto(draft);
     }
 
+    public async Task<IReadOnlyList<CalendarDraftSummaryDto>> ListDraftsAsync(int take = 50, CancellationToken ct = default)
+    {
+        var limit = Math.Clamp(take, 1, 100);
+        var drafts = await _context.GeneratedCalendarDrafts
+            .AsNoTracking()
+            .OrderByDescending(d => d.Id)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return drafts.Select(ToDraftSummaryDto).ToList();
+    }
+
+    public async Task DeleteDraftAsync(int draftId, CancellationToken ct = default)
+    {
+        var draft = await LoadDraftAsync(draftId, ct);
+        _context.GeneratedCalendarDrafts.Remove(draft);
+        await _context.SaveChangesAsync(ct);
+
+        if (!await _context.GeneratedCalendarDrafts.AnyAsync(ct))
+            await ResetDraftNumberingAsync(ct);
+    }
+
     public async Task<CalendarDraftDto> UpdateDraftEventAsync(int draftId, string draftEventId, UpdateDraftEventDto dto, CancellationToken ct = default)
     {
         var draft = await LoadDraftAsync(draftId, ct);
@@ -120,14 +142,22 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
                 : e)
             .ToList();
 
-        events = Propagate(events, draftEventId, oldStart, oldEnd, newStart, newEnd);
+        var propagateChanges = IsCriticalEvent(target.EventType) || dto.PropagateChanges != false;
+        if (propagateChanges)
+            events = Propagate(events, draftEventId, oldStart, oldEnd, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
         var warnings = new List<CalendarWarningDto>
         {
-            new("DOMINO", "Info", "Etkinlik degisikligi bagimli sonraki etkinliklere yansitildi.", draftEventId)
+            new(
+                propagateChanges ? "DOMINO" : "SINGLE_EVENT_UPDATE",
+                "Info",
+                propagateChanges
+                    ? "Etkinlik değişikliği bağımlı sonraki etkinliklere yansıtıldı."
+                    : "Etkinlik değişikliği sadece seçili etkinliğe uygulandı.",
+                draftEventId)
         };
         ValidateChronology(events, warnings);
-        warnings.AddRange(ValidateTeachingWeekRules(events, holidays));
+        warnings.AddRange(ValidateRegulationRules(events, holidays));
 
         draft.EventsJson = Serialize(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList());
         draft.WarningsJson = Serialize(warnings);
@@ -152,14 +182,22 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
                 : e)
             .ToList();
 
-        events = Propagate(events, request.DraftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
+        var propagateChanges = IsCriticalEvent(target.EventType) || request.PropagateChanges != false;
+        if (propagateChanges)
+            events = Propagate(events, request.DraftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
         var warnings = new List<CalendarWarningDto>
         {
-            new("WHAT_IF", "Info", "Bu sonuc taslak kaydedilmeden hesaplandi.", request.DraftEventId)
+            new(
+                "WHAT_IF",
+                "Info",
+                propagateChanges
+                    ? "Bu sonuc taslak kaydedilmeden, domino etkisi dahil hesaplandi."
+                    : "Bu sonuç taslak kaydedilmeden, sadece seçili etkinlik değiştirilerek hesaplandı.",
+                request.DraftEventId)
         };
         ValidateChronology(events, warnings);
-        warnings.AddRange(ValidateTeachingWeekRules(events, holidays));
+        warnings.AddRange(ValidateRegulationRules(events, holidays));
 
         return new WhatIfResultDto(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList(), warnings, CalculateQualityScore(warnings));
     }

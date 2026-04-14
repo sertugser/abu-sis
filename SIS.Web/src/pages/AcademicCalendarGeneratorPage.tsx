@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, GitBranch, RefreshCw, RotateCcw, Save, Wand2 } from 'lucide-react';
+import { CheckCircle2, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,15 +7,21 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { CALENDAR_EVENT_LABELS, EVENT_TYPE_OPTIONS, calendarEventBadgeVariant } from '@/lib/calendarEventTypes';
+import { CALENDAR_EVENT_LABELS, calendarEventBadgeVariant, calendarEventCategory } from '@/lib/calendarEventTypes';
+import { displayTurkishText } from '@/lib/turkishText';
 import {
   type CalendarConstraintInputDto,
   type CalendarDraftDto,
+  type CalendarDraftSummaryDto,
   type GenerateCalendarResultDto,
   type GeneratedCalendarEventDto,
+  type HolidayDefinitionDto,
   type SemesterType,
   useApplyDraft,
   useCalendarDraft,
+  useCalendarDrafts,
+  useCalendarTemplates,
+  useDeleteCalendarDraft,
   useGenerateCalendar,
   useHolidayDefinitions,
   useRollbackDraft,
@@ -24,14 +30,60 @@ import {
 } from '../hooks/useCalendarGenerator';
 
 type CalendarView = GenerateCalendarResultDto | CalendarDraftDto;
+type ConfirmTone = 'default' | 'danger' | 'info';
+
+type ConfirmOptions = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  showCancel?: boolean;
+  tone?: ConfirmTone;
+};
+
+type PendingConfirm = ConfirmOptions & {
+  resolve: (value: boolean) => void;
+};
+
+type CalendarProcessOption = {
+  key: string;
+  templateItemKey: string;
+  eventType: string;
+  eventTypeLabel: string;
+  title: string;
+  defaultDurationDays: number;
+  semester: SemesterType;
+  chainCode: string;
+};
 
 const SEMESTERS: { value: SemesterType; label: string }[] = [
-  { value: 'Fall', label: 'Guz' },
+  { value: 'Fall', label: 'Güz' },
   { value: 'Spring', label: 'Bahar' },
   { value: 'Summer', label: 'Yaz' },
 ];
 
-const DEFAULT_EVENT = 'ClassesStart';
+function displayText(value?: string | null) {
+  return displayTurkishText(value);
+}
+
+const CRITICAL_EVENT_TYPES = new Set([
+  'ClassesStart',
+  'ClassesEnd',
+  'CourseRegistration',
+  'AddDrop',
+  'CourseWithdrawal',
+  'RegistrationFreezeDeadline',
+  'MidtermExam',
+  'FinalExam',
+  'MakeupExam',
+  'ExcuseExam',
+  'MidtermGradePublication',
+  'FinalGradePublication',
+  'MakeupGradePublication',
+  'SummerSchoolRegistration',
+  'SummerSchoolExam',
+  'SummerSchoolGradePublication',
+]);
 
 function defaultAcademicYear() {
   const now = new Date();
@@ -55,6 +107,32 @@ function utcDate(value: string | null) {
 function fmt(value?: string | null) {
   if (!value) return '-';
   return new Date(value).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function fmtLong(value?: string | null) {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function fixedDayMonth(day?: number | null, month?: number | null) {
+  if (!day || !month) return '-';
+  const date = new Date(2026, month - 1, day);
+  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+}
+
+function holidayDateText(holiday: HolidayDefinitionDto) {
+  if (holiday.fixedDay && holiday.fixedMonth)
+    return fixedDayMonth(holiday.fixedDay, holiday.fixedMonth);
+
+  if (holiday.overrides.length > 0) {
+    return holiday.overrides
+      .map(override => dateInput(override.startDate) === dateInput(override.endDate)
+        ? fmtLong(override.startDate)
+        : `${fmtLong(override.startDate)} - ${fmtLong(override.endDate)}`)
+      .join(', ');
+  }
+
+  return `Hicri ${holiday.hijriDay}.${holiday.hijriMonth}`;
 }
 
 function daySpan(ev: GeneratedCalendarEventDto) {
@@ -82,6 +160,143 @@ function qualityClass(score: number) {
   return 'bg-red-50 text-red-700 border-red-200';
 }
 
+function isCriticalEvent(ev: GeneratedCalendarEventDto | null) {
+  return !!ev && CRITICAL_EVENT_TYPES.has(ev.eventType);
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  exam: 'Sınav',
+  registration: 'Kayıt',
+  holiday: 'Tatil',
+  deadline: 'Kritik Gün',
+  result: 'İlan',
+  application: 'Başvuru',
+  academic: 'Akademik',
+};
+
+function eventCategoryLabel(eventType: string, isHoliday: boolean) {
+  if (isHoliday) return 'Tatil';
+  const category = calendarEventCategory(eventType);
+  return CATEGORY_LABELS[category] ?? 'Akademik';
+}
+
+function deduplicateWarnings(warnings: { code: string; severity: string; message: string; draftEventId?: string | null }[]) {
+  const seen = new Set<string>();
+  return warnings.filter(w => {
+    const key = `${w.code}::${w.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function processOptionSemesterLabel(option: CalendarProcessOption) {
+  return SEMESTERS.find(s => s.value === option.semester)?.label ?? option.semester;
+}
+
+function processOptionLabel(option: CalendarProcessOption) {
+  return `${displayText(option.title)} ${processOptionSemesterLabel(option)}`;
+}
+
+function normalizeSearch(value: string) {
+  return value.trim().toLocaleLowerCase('tr-TR');
+}
+
+function filterProcessOptions(options: CalendarProcessOption[], query: string) {
+  const normalized = normalizeSearch(query);
+  if (!normalized) return options;
+
+  return options.filter(option => [
+    displayText(option.title),
+    displayText(option.eventTypeLabel),
+    option.chainCode,
+    processOptionSemesterLabel(option),
+  ].some(value => normalizeSearch(value).includes(normalized)));
+}
+
+function draftStatusBadgeVariant(status: string) {
+  if (status === 'Draft') return 'secondary';
+  if (status === 'Applied') return 'success';
+  if (status === 'RolledBack') return 'warning';
+  return 'outline';
+}
+
+function SearchableProcessSelect({
+  options,
+  selectedKey,
+  onChange,
+  disabled,
+  placeholder = 'Etkinlik seçin',
+}: {
+  options: CalendarProcessOption[];
+  selectedKey: string;
+  onChange: (key: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = options.find(option => option.key === selectedKey) ?? null;
+  const filtered = useMemo(() => filterProcessOptions(options, query), [options, query]);
+
+  function selectOption(key: string) {
+    onChange(key);
+    setOpen(false);
+    setQuery('');
+  }
+
+  return (
+    <div
+      className="relative"
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(prev => !prev)}
+        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm text-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <span className="min-w-0 truncate">{selected ? processOptionLabel(selected) : placeholder}</span>
+        <span className="shrink-0 text-slate-500">v</span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-11 z-30 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+          <Input
+            autoFocus
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Ara..."
+            className="h-9"
+          />
+          <div className="mt-2 max-h-64 overflow-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-slate-500">Sonuç bulunamadı.</div>
+            ) : filtered.map(option => (
+              <button
+                key={option.key}
+                type="button"
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => selectOption(option.key)}
+                className={cn(
+                  'block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-cyan-50',
+                  selectedKey === option.key ? 'bg-cyan-50 font-semibold text-cyan-900' : 'text-slate-700',
+                )}
+              >
+                <span className="block truncate">{processOptionLabel(option)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AcademicCalendarGeneratorPage() {
   const initialYear = defaultAcademicYear();
   const startYear = academicYearStart(initialYear);
@@ -91,30 +306,67 @@ export default function AcademicCalendarGeneratorPage() {
   const [springStartDate, setSpringStartDate] = useState(`${startYear + 1}-02-23`);
   const [includeSummer, setIncludeSummer] = useState(true);
   const [forceOverwrite, setForceOverwrite] = useState(false);
-  const [durationText, setDurationText] = useState('{}');
+  const [durationOverrides, setDurationOverrides] = useState<Record<string, number>>({});
+  const [durationEventKey, setDurationEventKey] = useState('');
+  const [durationDays, setDurationDays] = useState('');
+  const [pinEventKey, setPinEventKey] = useState('');
   const [constraints, setConstraints] = useState<CalendarConstraintInputDto[]>([]);
-  const [constraintEvent, setConstraintEvent] = useState(DEFAULT_EVENT);
   const [pinDate, setPinDate] = useState('');
   const [pinEndDate, setPinEndDate] = useState('');
-  const [blockFrom, setBlockFrom] = useState('');
-  const [blockTo, setBlockTo] = useState('');
   const [selectedSemester, setSelectedSemester] = useState<SemesterType>('Fall');
   const [selectedDraftId, setSelectedDraftId] = useState<number | null>(null);
   const [generated, setGenerated] = useState<GenerateCalendarResultDto | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', startDate: '', endDate: '', note: '' });
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [showDraftHistory, setShowDraftHistory] = useState(false);
 
   const holidays = useHolidayDefinitions();
+  const templates = useCalendarTemplates();
+  const drafts = useCalendarDrafts(showDraftHistory);
   const draft = useCalendarDraft(selectedDraftId);
   const generate = useGenerateCalendar();
   const updateDraftEvent = useUpdateDraftEvent();
   const whatIf = useWhatIfCalendar();
   const applyDraft = useApplyDraft();
   const rollbackDraft = useRollbackDraft();
+  const deleteDraft = useDeleteCalendarDraft();
 
   const calendar = (draft.data ?? generated) as CalendarView | null;
   const activeDraftId = getDraftId(calendar, selectedDraftId);
+  const durationOptions = useMemo(() => {
+    const options: CalendarProcessOption[] = [];
+
+    for (const template of templates.data ?? []) {
+      for (const item of template.items) {
+        for (const semester of item.applicableSemesters) {
+          options.push({
+            key: `${item.key}:${semester}`,
+            templateItemKey: item.key,
+            eventType: item.eventType,
+            eventTypeLabel: CALENDAR_EVENT_LABELS[item.eventType] ?? item.eventType,
+            title: item.title,
+            defaultDurationDays: item.defaultDurationDays,
+            semester,
+            chainCode: template.chainCode,
+          });
+        }
+      }
+    }
+
+    return options.sort((a, b) => processOptionLabel(a).localeCompare(processOptionLabel(b), 'tr'));
+  }, [templates.data]);
+
+  const selectedDurationOption = useMemo(
+    () => durationOptions.find(option => option.key === durationEventKey) ?? null,
+    [durationEventKey, durationOptions],
+  );
+
+  const selectedPinOption = useMemo(
+    () => durationOptions.find(option => option.key === pinEventKey) ?? null,
+    [pinEventKey, durationOptions],
+  );
 
   const semesterEvents = useMemo(
     () => (calendar?.events ?? []).filter(e => e.semester === selectedSemester).sort((a, b) => a.startDate.localeCompare(b.startDate)),
@@ -135,55 +387,207 @@ export default function AcademicCalendarGeneratorPage() {
       .slice(0, 12);
   }, [calendar, whatIf.data]);
 
+  function eventDatesChanged(ev: GeneratedCalendarEventDto | null) {
+    if (!ev) return false;
+    const oldStart = dateInput(ev.startDate);
+    const oldEnd = dateInput(ev.endDate) || oldStart;
+    return oldStart !== editForm.startDate || oldEnd !== (editForm.endDate || editForm.startDate);
+  }
+
+  function askConfirm(options: ConfirmOptions) {
+    return new Promise<boolean>(resolve => {
+      setPendingConfirm({ ...options, resolve });
+    });
+  }
+
+  function closeConfirm(value: boolean) {
+    const resolver = pendingConfirm?.resolve;
+    setPendingConfirm(null);
+    resolver?.(value);
+  }
+
+  function handleDurationEventChange(key: string) {
+    const option = durationOptions.find(item => item.key === key);
+    setDurationEventKey(key);
+    setDurationDays(String(durationOverrides[key] ?? option?.defaultDurationDays ?? 1));
+  }
+
+  function handlePinEventChange(key: string) {
+    setPinEventKey(key);
+  }
+
+  async function askDominoPreference(ev: GeneratedCalendarEventDto, actionLabel: string) {
+    if (!eventDatesChanged(ev))
+      return false;
+
+    if (isCriticalEvent(ev)) {
+      await askConfirm({
+        title: 'Kritik olay',
+        message: `${actionLabel}: Bu kritik akademik olay değiştiğinde takvim sırası korunmak için bağımlı sonraki olaylar da kaydırılır.`,
+        confirmLabel: 'Tamam',
+        showCancel: false,
+        tone: 'info',
+      });
+      return true;
+    }
+
+    return askConfirm({
+      title: 'Domino uygulansın mı?',
+      message:
+        `${actionLabel}: ${displayText(ev.title)} tarihi ${daySpan(ev)} -> ${fmt(utcDate(editForm.startDate))}${editForm.endDate && editForm.endDate !== editForm.startDate ? ` - ${fmt(utcDate(editForm.endDate))}` : ''} olacak.\n\n` +
+        'Bağımlı sonraki olaylar da aynı fark kadar kaydırılsın mı?',
+      confirmLabel: 'Evet, domino uygula',
+      cancelLabel: 'Hayır, sadece bu etkinlik',
+      tone: 'info',
+    });
+  }
+
   useEffect(() => {
     const parsedStart = academicYearStart(academicYear);
     setFallStartDate(`${parsedStart}-09-22`);
     setSpringStartDate(`${parsedStart + 1}-02-23`);
   }, [academicYear]);
 
+  useEffect(() => {
+    if (durationOptions.length === 0) return;
+
+    if (durationEventKey && !durationOptions.some(option => option.key === durationEventKey)) {
+      setDurationEventKey('');
+      setDurationDays('');
+    }
+
+    if (pinEventKey && !durationOptions.some(option => option.key === pinEventKey)) {
+      setPinEventKey('');
+    }
+  }, [durationEventKey, durationOptions, pinEventKey]);
+
   function selectEvent(ev: GeneratedCalendarEventDto) {
     setSelectedEventId(ev.draftEventId);
-    setEditForm({ title: ev.title, startDate: dateInput(ev.startDate), endDate: dateInput(ev.endDate), note: ev.note ?? '' });
+    setEditForm({ title: displayText(ev.title), startDate: dateInput(ev.startDate), endDate: dateInput(ev.endDate), note: ev.note ?? '' });
     whatIf.reset();
   }
 
-  function addPinConstraint() {
-    if (!pinDate) return;
+  async function addPinConstraint() {
+    if (!pinDate || !selectedPinOption) return;
+    const label = processOptionLabel(selectedPinOption);
+    const shouldAdd = await askConfirm({
+      title: 'Tarih sabitlensin mi?',
+      message: `${label} etkinliği ${pinDate}${pinEndDate ? ` - ${pinEndDate}` : ''} tarihine sabitlenecek.\n\nBu kısıt bir sonraki taslak üretiminde dikkate alınacak. Devam edilsin mi?`,
+      confirmLabel: 'Evet, ekle',
+      cancelLabel: 'Vazgeç',
+    });
+    if (!shouldAdd)
+      return;
+
     setConstraints(prev => [...prev, {
       constraintType: 'Pin',
-      targetEventType: constraintEvent,
-      targetChainCode: null,
-      parameterJson: JSON.stringify({ startDate: utcDate(pinDate), endDate: utcDate(pinEndDate || pinDate) }),
+      targetEventType: selectedPinOption.eventType,
+      targetChainCode: selectedPinOption.chainCode,
+      parameterJson: JSON.stringify({
+        startDate: utcDate(pinDate),
+        endDate: utcDate(pinEndDate || pinDate),
+        templateItemKey: selectedPinOption.templateItemKey,
+        semester: selectedPinOption.semester,
+      }),
       isHard: true,
       priority: 1,
-      description: `${CALENDAR_EVENT_LABELS[constraintEvent] ?? constraintEvent} sabitlendi`,
+      description: `${label} sabitlendi`,
     }]);
     setPinDate('');
     setPinEndDate('');
+    setNotice(`${label} için tarih sabitleme kısıtı eklendi.`);
   }
 
-  function addProhibitionConstraint() {
-    if (!blockFrom || !blockTo) return;
-    setConstraints(prev => [...prev, {
-      constraintType: 'Prohibition',
-      targetEventType: null,
-      targetChainCode: null,
-      parameterJson: JSON.stringify({ from: utcDate(blockFrom), to: utcDate(blockTo) }),
-      isHard: true,
-      priority: 1,
-      description: `Yasak aralik: ${blockFrom} - ${blockTo}`,
-    }]);
-    setBlockFrom('');
-    setBlockTo('');
+  async function addDurationOverride() {
+    if (!selectedDurationOption) return;
+
+    const days = Number(durationDays);
+    if (!Number.isInteger(days) || days <= 0) {
+      setNotice('Süre ayarı en az 1 tam gün olmalı.');
+      return;
+    }
+
+    const label = processOptionLabel(selectedDurationOption);
+    const shouldAdd = await askConfirm({
+      title: 'Süre ayarı eklensin mi?',
+      message:
+        `${label} süresi bu taslak üretiminde ${selectedDurationOption.defaultDurationDays} gün yerine ${days} gün olacak.\n\n` +
+        'Bu ayar sadece yeni taslak üretirken kullanılır; mevcut takvime hemen yazılmaz.',
+      confirmLabel: 'Evet, süreyi ayarla',
+      cancelLabel: 'Vazgeç',
+      tone: 'info',
+    });
+    if (!shouldAdd)
+      return;
+
+    setDurationOverrides(prev => ({ ...prev, [selectedDurationOption.key]: days }));
+    setNotice(`${label} için süre ayarı ${days} gün olarak eklendi.`);
   }
 
-  function handleGenerate() {
+  function removeDurationOverride(key: string) {
+    setDurationOverrides(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setNotice('Süre ayarı kaldırıldı.');
+  }
+
+  function openDraftFromHistory(summary: CalendarDraftSummaryDto) {
+    setGenerated(null);
+    setSelectedDraftId(summary.id);
+    setSelectedEventId(null);
+    setSelectedSemester('Fall');
+    setActiveTab('draft');
+    setShowDraftHistory(false);
+    setNotice(`Taslak #${summary.id} açıldı.`);
+  }
+
+  async function deleteDraftFromHistory(summary: CalendarDraftSummaryDto) {
+    const shouldDelete = await askConfirm({
+      title: 'Taslak silinsin mi?',
+      message:
+        `Taslak #${summary.id} (${summary.academicYear}) silinecek.\n\n` +
+        'Bu işlem sadece taslak kaydını kaldırır. Daha önce gerçek akademik takvime uygulanmış etkinlikler silinmez; ancak bu taslak üzerinden geri alma yapılamaz.',
+      confirmLabel: 'Evet, sil',
+      cancelLabel: 'Vazgeç',
+      tone: 'danger',
+    });
+    if (!shouldDelete)
+      return;
+
+    deleteDraft.mutate(summary.id, {
+      onSuccess: () => {
+        if (activeDraftId === summary.id) {
+          setGenerated(null);
+          setSelectedDraftId(null);
+          setSelectedEventId(null);
+        }
+        setNotice(`Taslak #${summary.id} silindi.`);
+      },
+      onError: error => setNotice(getErrorMessage(error)),
+    });
+  }
+
+  async function handleGenerate() {
     setNotice(null);
-    let durationOverrides: Record<string, number> = {};
-    try {
-      durationOverrides = JSON.parse(durationText || '{}') as Record<string, number>;
-    } catch {
-      setNotice('Sure override JSON gecersiz.');
+    const durationOverrideCount = Object.keys(durationOverrides).length;
+    const shouldGenerate = await askConfirm({
+      title: 'Taslak üretilecek',
+      message:
+        `${academicYear} akademik yılı için yeni bir taslak üretilecek.\n\n` +
+        `Güz başlangıcı: ${fallStartDate}\n` +
+        `Bahar başlangıcı: ${springStartDate}\n` +
+        `Yaz okulu: ${includeSummer ? 'dahil' : 'dahil değil'}\n` +
+        `Ek kısıt: ${constraints.length}\n` +
+        `Süre ayarı: ${durationOverrideCount}\n\n` +
+        'Bu işlem gerçek akademik takvime yazmaz; sadece 30 gün saklanan bir taslak oluşturur. Devam edilsin mi?',
+      confirmLabel: 'Evet, üret',
+      cancelLabel: 'Vazgeç',
+      tone: 'info',
+    });
+    if (!shouldGenerate) {
+      setNotice('Taslak üretme işlemi iptal edildi.');
       return;
     }
     generate.mutate({
@@ -192,7 +596,7 @@ export default function AcademicCalendarGeneratorPage() {
       springStartDate: utcDate(springStartDate),
       includeSummer,
       constraints,
-      templateDurationOverrides: durationOverrides,
+      templateDurationOverrides: durationOverrideCount > 0 ? durationOverrides : null,
     }, {
       onSuccess: data => {
         setGenerated(data);
@@ -200,26 +604,46 @@ export default function AcademicCalendarGeneratorPage() {
         setSelectedSemester('Fall');
         setSelectedEventId(null);
         setActiveTab('draft');
-        setNotice(`Taslak #${data.draftId} olusturuldu.`);
+        setNotice(`Taslak #${data.draftId} oluşturuldu. Bu aşamada akademik takvim sayfasına yazılmaz; aktarmak için "Onayla ve kaydet" kullanın.`);
       },
       onError: error => setNotice(getErrorMessage(error)),
     });
   }
 
-  function handleWhatIf() {
+  async function handleWhatIf() {
     if (!activeDraftId || !selectedEvent) return;
+    const propagateChanges = await askDominoPreference(selectedEvent, 'Domino ön izleme');
     whatIf.mutate({
       draftId: activeDraftId,
       dto: {
         draftEventId: selectedEvent.draftEventId,
         startDate: utcDate(editForm.startDate) ?? selectedEvent.startDate,
         endDate: utcDate(editForm.endDate || editForm.startDate),
+        propagateChanges,
       },
-    }, { onError: error => setNotice(getErrorMessage(error)) });
+    }, {
+      onSuccess: data => setNotice(`What-if hesaplandı. ${propagateChanges ? 'Domino dahil edildi.' : 'Sadece seçili etkinlik denendi.'} Kalite skoru: ${data.qualityScore}.`),
+      onError: error => setNotice(getErrorMessage(error)),
+    });
   }
 
-  function handleUpdateEvent() {
+  async function handleUpdateEvent() {
     if (!activeDraftId || !selectedEvent) return;
+    const propagateChanges = await askDominoPreference(selectedEvent, 'Taslağa yaz');
+    const shouldUpdate = await askConfirm({
+      title: 'Taslağa yazılsın mı?',
+      message:
+        `${displayText(selectedEvent.title)} taslakta güncellenecek.\n\n` +
+        `Yeni tarih: ${editForm.startDate}${editForm.endDate && editForm.endDate !== editForm.startDate ? ` - ${editForm.endDate}` : ''}\n` +
+        `Domino: ${propagateChanges ? 'uygulanacak' : 'uygulanmayacak'}\n\n` +
+        'Bu işlem taslağı değiştirir ama gerçek akademik takvime henüz yazmaz. Devam edilsin mi?',
+      confirmLabel: 'Evet, taslağa yaz',
+      cancelLabel: 'Vazgeç',
+    });
+    if (!shouldUpdate) {
+      setNotice('Taslak güncelleme işlemi iptal edildi.');
+      return;
+    }
     updateDraftEvent.mutate({
       draftId: activeDraftId,
       eventId: selectedEvent.draftEventId,
@@ -228,30 +652,65 @@ export default function AcademicCalendarGeneratorPage() {
         endDate: utcDate(editForm.endDate || editForm.startDate),
         title: editForm.title,
         note: editForm.note || null,
+        propagateChanges,
       },
     }, {
       onSuccess: data => {
         setGenerated(null);
         setSelectedDraftId(data.id);
         setSelectedEventId(null);
-        setNotice('Taslak etkinligi guncellendi; bagimli tarihler yeniden hesaplandi.');
+        setNotice(propagateChanges
+          ? 'Taslak etkinliği güncellendi; bağımlı tarihler yeniden hesaplandı.'
+          : 'Taslak etkinliği güncellendi; domino uygulanmadı, sadece seçili etkinlik değişti.');
       },
       onError: error => setNotice(getErrorMessage(error)),
     });
   }
 
-  function handleApply() {
+  async function handleApply() {
     if (!activeDraftId) return;
+    const shouldApply = await askConfirm({
+      title: 'Akademik takvime kaydedilsin mi?',
+      message:
+        `Taslak #${activeDraftId} gerçek akademik takvime uygulanacak.\n\n` +
+        'Sonuç: ilgili dönemlerin mevcut takvim işaretleri temizlenir ve bu taslaktaki etkinlikler yazılır.\n' +
+        `${forceOverwrite ? 'Yayınlanmış dönemlerin üzerine yazma açık; sistem sadece kapalı/arşivlenmiş dönemleri engeller.' : 'Yayınlanmış veya daha ileri durumda bir dönem varsa işlem reddedilir; önce üzerine yazma izni açılmalıdır.'}\n\n` +
+        'Devam etmek istiyor musunuz?',
+      confirmLabel: 'Evet, onayla ve kaydet',
+      cancelLabel: 'Vazgeç',
+      tone: forceOverwrite ? 'danger' : 'default',
+    });
+    if (!shouldApply) {
+      setNotice('Onayla ve kaydet işlemi iptal edildi.');
+      return;
+    }
     applyDraft.mutate({ draftId: activeDraftId, forceOverwrite }, {
-      onSuccess: result => setNotice(`${result.message} Donemler: ${result.termIds.join(', ')}`),
+      onSuccess: result => {
+        const terms = result.termIds.length > 0 ? result.termIds.join(', ') : 'yok';
+        setNotice(`İşlem başarılı. ${result.message} Akademik takvim sayfasına aktarıldı. Güncellenen dönemler: ${terms}.`);
+      },
       onError: error => setNotice(getErrorMessage(error)),
     });
   }
 
-  function handleRollback() {
+  async function handleRollback() {
     if (!activeDraftId) return;
+    const shouldRollback = await askConfirm({
+      title: 'Geri alınsın mı?',
+      message:
+        `Taslak #${activeDraftId} geri alınacak.\n\n` +
+        'Sonuç: uygulanmış taslağın önceki snapshot verisi geri yüklenir. Kapalı dönemler değiştirilmez.\n\n' +
+        'Devam etmek istiyor musunuz?',
+      confirmLabel: 'Evet, geri al',
+      cancelLabel: 'Vazgeç',
+      tone: 'danger',
+    });
+    if (!shouldRollback) {
+      setNotice('Geri alma işlemi iptal edildi.');
+      return;
+    }
     rollbackDraft.mutate(activeDraftId, {
-      onSuccess: result => setNotice(`${result.message} Donemler: ${result.termIds.join(', ')}`),
+      onSuccess: result => setNotice(`${result.message} Dönemler: ${result.termIds.join(', ')}`),
       onError: error => setNotice(getErrorMessage(error)),
     });
   }
@@ -262,15 +721,15 @@ export default function AcademicCalendarGeneratorPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-4 md:grid-cols-4">
             <label className="space-y-1 text-sm font-medium text-slate-700">
-              Akademik yil
+              Akademik yıl
               <Input value={academicYear} onChange={e => setAcademicYear(e.target.value)} placeholder="2025-2026" />
             </label>
             <label className="space-y-1 text-sm font-medium text-slate-700">
-              Guz ders baslangici
+              Güz ders başlangıcı
               <Input type="date" value={fallStartDate} onChange={e => setFallStartDate(e.target.value)} />
             </label>
             <label className="space-y-1 text-sm font-medium text-slate-700">
-              Bahar ders baslangici
+              Bahar ders başlangıcı
               <Input type="date" value={springStartDate} onChange={e => setSpringStartDate(e.target.value)} />
             </label>
             <div className="flex items-end">
@@ -281,69 +740,118 @@ export default function AcademicCalendarGeneratorPage() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="mt-5">
             <div className="rounded-lg border border-slate-200 p-3">
               <div className="mb-3 flex items-center gap-2 font-semibold text-slate-800">
                 <GitBranch className="h-4 w-4" />
-                Pin tarih
+                Tarih Sabitleme
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <select
-                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-                  value={constraintEvent}
-                  onChange={e => setConstraintEvent(e.target.value)}
-                >
-                  {EVENT_TYPE_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Belirli bir etkinliğin tarihini sabitlemek için seçin ve başlangıç / bitiş tarihini girin.
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.5fr)_140px_140px]">
+                <SearchableProcessSelect
+                  options={durationOptions}
+                  selectedKey={pinEventKey}
+                  onChange={handlePinEventChange}
+                  disabled={templates.isLoading || durationOptions.length === 0}
+                  placeholder={templates.isLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
+                />
                 <Input type="date" value={pinDate} onChange={e => setPinDate(e.target.value)} />
                 <Input type="date" value={pinEndDate} onChange={e => setPinEndDate(e.target.value)} />
               </div>
-              <Button type="button" size="sm" className="mt-3" onClick={addPinConstraint}>
-                Kisit ekle
-              </Button>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 p-3">
-              <div className="mb-3 flex items-center gap-2 font-semibold text-slate-800">
-                <AlertTriangle className="h-4 w-4" />
-                Yasak aralik
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input type="date" value={blockFrom} onChange={e => setBlockFrom(e.target.value)} />
-                <Input type="date" value={blockTo} onChange={e => setBlockTo(e.target.value)} />
-              </div>
-              <Button type="button" size="sm" className="mt-3" onClick={addProhibitionConstraint}>
-                Aralik ekle
+              {selectedPinOption && (
+                <p className="mt-2 text-sm font-medium text-slate-700">
+                  Seçilen süreç: {processOptionLabel(selectedPinOption)}. Bu sabitleme yalnızca seçilen dönem için uygulanır.
+                </p>
+              )}
+              <Button type="button" size="sm" className="mt-3" onClick={addPinConstraint} disabled={!pinEventKey || !selectedPinOption}>
+                Kısıt Ekle
               </Button>
             </div>
           </div>
 
-          <label className="mt-4 block space-y-1 text-sm font-medium text-slate-700">
-            Sure override JSON
-            <Textarea
-              value={durationText}
-              onChange={e => setDurationText(e.target.value)}
-              className="font-mono text-xs"
-              placeholder='{"final_exam": 12}'
-            />
-          </label>
+          <div className="mt-4 rounded-lg border border-slate-200 p-3">
+            <div className="font-semibold text-slate-800">Süre Ayarları</div>
+            <p className="mt-1 text-xs text-slate-500">
+              Bir etkinliğin varsayılan süresini değiştirmek için seçin ve yeni gün sayısını girin.
+            </p>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.5fr)_140px_auto]">
+              <SearchableProcessSelect
+                options={durationOptions}
+                selectedKey={durationEventKey}
+                onChange={handleDurationEventChange}
+                disabled={templates.isLoading || durationOptions.length === 0}
+                placeholder={templates.isLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
+              />
+              <Input
+                type="number"
+                min={1}
+                value={durationDays}
+                onChange={e => setDurationDays(e.target.value)}
+                placeholder="Gün"
+              />
+              <Button type="button" size="sm" onClick={addDurationOverride} disabled={!selectedDurationOption}>
+                Süre ayarı ekle
+              </Button>
+            </div>
+            {selectedDurationOption && (
+              <p className="mt-2 text-sm font-medium text-slate-700">
+                Seçilen süreç: {processOptionLabel(selectedDurationOption)}. Varsayılan: {selectedDurationOption.defaultDurationDays} gün.
+              </p>
+            )}
+
+
+            <div className="mt-3 space-y-2">
+              {Object.keys(durationOverrides).length === 0 ? (
+                <p className="text-xs text-slate-500">Henüz süre ayarı yok.</p>
+              ) : Object.entries(durationOverrides).map(([key, days]) => {
+                const option = durationOptions.find(item => item.key === key);
+                return (
+                  <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <div>
+                      <div className="font-medium text-slate-800">{option ? processOptionLabel(option) : key}</div>
+                      <div className="text-xs text-slate-500">
+                        {option ? `${option.defaultDurationDays} gün yerine ` : ''}{days} gün
+                      </div>
+                    </div>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => removeDurationOverride(key)}>
+                      Sil
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button onClick={handleGenerate} disabled={generate.isPending}>
               {generate.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-              Taslak uret
+              Taslak Üret
             </Button>
-            <span className="text-xs text-slate-500">Taslaklar 30 gun saklanir; apply sadece generator kaynakli etkinlikleri gunceller.</span>
+            <Button type="button" variant="outline" onClick={() => {
+              setConstraints([]);
+              setDurationOverrides({});
+              setDurationEventKey('');
+              setDurationDays('');
+              setPinEventKey('');
+              setPinDate('');
+              setPinEndDate('');
+              setNotice('Tüm kısıtlar ve süre ayarları sıfırlandı.');
+            }}>
+              <Trash2 className="h-4 w-4" />
+              Sıfırla
+            </Button>
+            <span className="text-xs text-slate-500">Taslaklar 30 gün saklanır. Onaylama yalnızca takvim oluşturucu kaynaklı etkinlikleri günceller.</span>
           </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Aktif kisitlar</h2>
+          <h2 className="font-semibold text-slate-900">Aktif Kısıtlar</h2>
           <div className="mt-3 space-y-2">
             {constraints.length === 0 ? (
-              <p className="text-sm text-slate-500">Henuz ek kisit yok.</p>
+              <p className="text-sm text-slate-500">Henüz ek kısıt yok.</p>
             ) : constraints.map((constraint, index) => (
               <div key={`${constraint.constraintType}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
                 <div>
@@ -356,6 +864,16 @@ export default function AcademicCalendarGeneratorPage() {
               </div>
             ))}
           </div>
+
+          <div className="mt-5 border-t border-cyan-200 pt-4 text-sm text-cyan-900">
+            <div className="font-semibold">Yönetmelik Kontrolü</div>
+            <div className="mt-2 space-y-1 text-xs">
+              <div>Normal dönem: 14 hafta ders, sınavlarla 16 hafta.</div>
+              <div>Yaz okulu: sınavlar hariç 7 hafta.</div>
+              <div>Çekilme ve kayıt dondurma: yedinci hafta sonuna kadar.</div>
+              <div>Sınav sonuçları: en geç 10 iş günü.</div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -365,19 +883,21 @@ export default function AcademicCalendarGeneratorPage() {
     if (!calendar) {
       return (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          Once bir taslak uret.
+          Henüz taslak yok. "Kısıtlar & Üret" sekmesinden bir taslak oluşturun.
         </div>
       );
     }
 
     return (
       <div className="space-y-4">
+        {renderWarningsPanel(calendar)}
+
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="font-semibold text-slate-900">Taslak #{activeDraftId}</h2>
-                <p className="text-sm text-slate-500">{calendar.academicYear} icin {calendar.events.length} etkinlik uretildi.</p>
+                <p className="text-sm text-slate-500">{calendar.academicYear} için {calendar.events.length} etkinlik üretildi.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {SEMESTERS.map(tab => (
@@ -403,7 +923,7 @@ export default function AcademicCalendarGeneratorPage() {
                 <span>Etkinlik</span>
                 <span>Tarih</span>
                 <span>Zincir</span>
-                <span>Durum</span>
+                <span>Tür</span>
               </div>
               <div className="max-h-[560px] overflow-auto">
                 {semesterEvents.map(ev => (
@@ -417,13 +937,15 @@ export default function AcademicCalendarGeneratorPage() {
                     )}
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-medium text-slate-800">{ev.title}</span>
-                      <span className="text-xs text-slate-500">{ev.eventTypeLabel}</span>
+                      <span className="block truncate font-medium text-slate-800">{displayText(ev.title)}</span>
+                      <span className="text-xs text-slate-500">{displayText(ev.eventTypeLabel)}</span>
                     </span>
                     <span className="text-xs text-slate-600">{daySpan(ev)}</span>
                     <span className="text-xs text-slate-500">{ev.chainCode}</span>
                     <span className="flex flex-wrap gap-1">
-                      <Badge variant={calendarEventBadgeVariant(ev.eventType)}>{ev.isHoliday ? 'Tatil' : 'Süreç'}</Badge>
+                      <Badge variant={calendarEventBadgeVariant(ev.eventType)}>
+                        {eventCategoryLabel(ev.eventType, ev.isHoliday)}
+                      </Badge>
                       {ev.isFailed && <Badge variant="destructive">Hata</Badge>}
                     </span>
                   </button>
@@ -434,22 +956,22 @@ export default function AcademicCalendarGeneratorPage() {
 
           <div className="space-y-4">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="font-semibold text-slate-900">What-if duzenleme</h2>
+              <h2 className="font-semibold text-slate-900">Tarih Düzenleme</h2>
               {!selectedEvent ? (
-                <p className="mt-2 text-sm text-slate-500">Bir etkinlik sec, tarih alanini degistir ve domino farkini hesapla.</p>
+                <p className="mt-2 text-sm text-slate-500">Bir etkinlik seçin, tarihi değiştirin ve domino etkisini hesaplayın.</p>
               ) : (
                 <div className="mt-3 space-y-3">
                   <label className="block space-y-1 text-sm font-medium text-slate-700">
-                    Baslik
+                    Başlık
                     <Input value={editForm.title} onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))} />
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block space-y-1 text-sm font-medium text-slate-700">
-                      Baslangic
+                      Başlangıç
                       <Input type="date" value={editForm.startDate} onChange={e => setEditForm(prev => ({ ...prev, startDate: e.target.value }))} />
                     </label>
                     <label className="block space-y-1 text-sm font-medium text-slate-700">
-                      Bitis
+                      Bitiş
                       <Input type="date" value={editForm.endDate} onChange={e => setEditForm(prev => ({ ...prev, endDate: e.target.value }))} />
                     </label>
                   </div>
@@ -460,11 +982,11 @@ export default function AcademicCalendarGeneratorPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="outline" onClick={handleWhatIf} disabled={whatIf.isPending}>
                       <GitBranch className="h-4 w-4" />
-                      Dominoyu goster
+                      Domino Önizle
                     </Button>
                     <Button type="button" size="sm" onClick={handleUpdateEvent} disabled={updateDraftEvent.isPending}>
                       <Save className="h-4 w-4" />
-                      Taslaga yaz
+                      Taslağa Yaz
                     </Button>
                   </div>
                 </div>
@@ -473,8 +995,6 @@ export default function AcademicCalendarGeneratorPage() {
             {renderDraftSidePanels(calendar)}
           </div>
         </div>
-
-        {renderDraftSummaries(calendar)}
       </div>
     );
   }
@@ -483,21 +1003,21 @@ export default function AcademicCalendarGeneratorPage() {
     return (
       <>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Domino farki</h2>
+          <h2 className="font-semibold text-slate-900">Domino Farkı</h2>
           {whatIfDiffs.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">Hesaplanmis fark yok.</p>
+            <p className="mt-2 text-sm text-slate-500">Hesaplanmış fark yok.</p>
           ) : (
             <div className="mt-3 space-y-2">
               {whatIfDiffs.map(({ next, prev }) => (
                 <div key={next.draftEventId} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
-                  <div className="font-semibold text-slate-800">{next.title}</div>
+                  <div className="font-semibold text-slate-800">{displayText(next.title)}</div>
                   <div className="mt-1 text-slate-500">
                     {fmt(prev?.startDate)} -&gt; {fmt(next.startDate)}
                   </div>
                 </div>
               ))}
               <div className={cn('rounded-lg border px-3 py-2 text-sm font-semibold', qualityClass(whatIf.data?.qualityScore ?? current.qualityScore))}>
-                What-if kalite skoru: {whatIf.data?.qualityScore}
+                Tahmini kalite skoru: {whatIf.data?.qualityScore}
               </div>
             </div>
           )}
@@ -507,14 +1027,19 @@ export default function AcademicCalendarGeneratorPage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold text-slate-900">Onayla ve kaydet</h2>
-              <p className="text-xs text-slate-500">Published ve sonrasi icin force gerekir.</p>
+              <p className="mt-1 max-w-md text-sm leading-6 text-slate-600">
+                Onayladığınızda ilgili Güz, Bahar ve Yaz dönemlerindeki eski takvim oluşturucu kayıtları temizlenir,
+                bu taslaktaki etkinlikler gerçek akademik takvime yazılır. Dönem durumu Published veya daha ileriyse
+                sistem normalde üzerine yazmaz; bu anahtar açıkken yayınlanmış takvimi bilinçli olarak yenilersiniz.
+                Closed ve Archived dönemler yine korunur.
+              </p>
             </div>
             <Switch checked={forceOverwrite} onCheckedChange={setForceOverwrite} />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button type="button" onClick={handleApply} disabled={!activeDraftId || applyDraft.isPending}>
-              <CheckCircle2 className="h-4 w-4" />
-              Onayla
+              {applyDraft.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {applyDraft.isPending ? 'Kaydediliyor' : 'Onayla'}
             </Button>
             <Button type="button" variant="outline" onClick={handleRollback} disabled={!activeDraftId || rollbackDraft.isPending}>
               <RotateCcw className="h-4 w-4" />
@@ -522,42 +1047,47 @@ export default function AcademicCalendarGeneratorPage() {
             </Button>
           </div>
         </div>
+
+        {renderTermSummaryPanel(current)}
       </>
     );
   }
 
-  function renderDraftSummaries(current: CalendarView) {
+  function renderWarningsPanel(current: CalendarView) {
+    const uniqueWarnings = deduplicateWarnings(current.warnings);
     return (
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Uyarilar</h2>
-          <div className="mt-3 space-y-2">
-            {current.warnings.length === 0 ? (
-              <p className="text-sm text-slate-500">Uyari yok.</p>
-            ) : current.warnings.map((warning, index) => (
-              <div key={`${warning.code}-${index}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <Badge variant={warning.severity === 'Error' ? 'destructive' : warning.severity === 'Warning' ? 'warning' : 'secondary'}>
-                  {warning.severity}
-                </Badge>
-                <span className="ml-2 text-slate-700">{warning.message}</span>
-              </div>
-            ))}
-          </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="font-semibold text-slate-900">Uyarılar</h2>
+        <div className="mt-3 space-y-2">
+          {uniqueWarnings.length === 0 ? (
+            <p className="text-sm text-slate-500">Uyarı yok.</p>
+          ) : uniqueWarnings.map((warning, index) => (
+            <div key={`${warning.code}-${index}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <Badge variant={warning.severity === 'Error' ? 'destructive' : warning.severity === 'Warning' ? 'warning' : 'secondary'}>
+                {warning.severity}
+              </Badge>
+              <span className="ml-2 text-slate-700">{warning.message}</span>
+            </div>
+          ))}
         </div>
+      </div>
+    );
+  }
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Donem ozeti</h2>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {current.termSummaries.map(summary => (
-              <div key={summary.semester} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <div className="font-semibold text-slate-800">{SEMESTERS.find(s => s.value === summary.semester)?.label}</div>
-                <div className="mt-1 text-xs text-slate-500">{fmt(summary.termStart)} - {fmt(summary.termEnd)}</div>
-                <div className="mt-2 text-xs text-slate-600">
-                  {summary.teachingDays} ders gunu, {summary.holidayDaysInTerm} tatil gunu, {summary.examDays} sinav gunu
-                </div>
+  function renderTermSummaryPanel(current: CalendarView) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="font-semibold text-slate-900">Dönem özeti</h2>
+        <div className="mt-3 grid gap-2">
+          {current.termSummaries.map(summary => (
+            <div key={summary.semester} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <div className="font-semibold text-slate-800">{SEMESTERS.find(s => s.value === summary.semester)?.label}</div>
+              <div className="mt-1 text-xs text-slate-500">{fmt(summary.termStart)} - {fmt(summary.termEnd)}</div>
+              <div className="mt-2 text-xs text-slate-600">
+                {summary.teachingDays} ders günü, {summary.holidayDaysInTerm} tatil günü, {summary.examDays} sınav günü
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -565,42 +1095,97 @@ export default function AcademicCalendarGeneratorPage() {
 
   function renderHolidaysTab() {
     return (
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Tatil tanimlari</h2>
-          <p className="mt-1 text-sm text-slate-500">Sabit resmi tatiller, dini bayramlar ve bloklayici onemli gunler.</p>
-          <div className="mt-3 max-h-[560px] space-y-2 overflow-auto">
-            {holidays.isLoading ? (
-              <p className="text-sm text-slate-500">Yukleniyor...</p>
-            ) : holidays.data?.map(holiday => (
-              <div key={holiday.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-slate-800">{holiday.name}</span>
-                  <Badge variant={holiday.blocksAcademicEvents ? 'success' : 'outline'}>{holiday.type}</Badge>
-                </div>
-                <div className="mt-1 text-xs text-slate-500">
-                  {holiday.fixedMonth ? `${holiday.fixedDay}.${holiday.fixedMonth}` : `Hicri ${holiday.hijriDay}.${holiday.hijriMonth}`} - {holiday.durationDays} gun
-                </div>
-                {holiday.overrides.length > 0 && (
-                  <div className="mt-1 text-xs text-slate-500">
-                    Override: {holiday.overrides.map(o => `${o.year}: ${dateInput(o.startDate)}-${dateInput(o.endDate)}`).join(', ')}
-                  </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="font-semibold text-slate-900">Tatil tanımları</h2>
+        <p className="mt-1 text-sm text-slate-600">Sabit resmi tatiller, dini bayramlar ve bloklayıcı önemli günler.</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {holidays.isLoading ? (
+            <p className="text-sm text-slate-500">Yükleniyor...</p>
+          ) : holidays.data?.map(holiday => (
+            <div key={holiday.id} className="rounded-lg border border-slate-200 px-3 py-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-800">{displayText(holiday.name)}</span>
+                {holiday.type === 'HijriCalculated' && (
+                  <Badge variant="info">Hicri hesaplandı</Badge>
                 )}
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Olay tipleri</h2>
-          <p className="mt-1 text-sm text-slate-500">Takvimde kullanilan akademik olay siniflari.</p>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-            {EVENT_TYPE_OPTIONS.map(option => (
-              <div key={option.value} className="rounded-lg border border-slate-200 px-2 py-1">
-                <span className="font-mono text-slate-500">{option.value}</span>
-                <span className="block text-slate-700">{option.label}</span>
+              <div className="mt-2 font-medium text-slate-700">
+                {holidayDateText(holiday)}
               </div>
-            ))}
+              <div className="mt-1 text-xs text-slate-600">
+                Süre: {holiday.durationDays} gün
+              </div>
+              {holiday.overrides.length > 0 && (
+                <div className="mt-1 text-xs text-slate-500">
+                  Kaynak tarih: {holiday.overrides.map(o => `${o.year}: ${fmtLong(o.startDate)}${dateInput(o.startDate) === dateInput(o.endDate) ? '' : ` - ${fmtLong(o.endDate)}`}`).join(', ')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderDraftHistoryDialog() {
+    if (!showDraftHistory) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6">
+        <div className="w-full max-w-4xl rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Taslak geçmişi</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Önceden üretilen taslakları açabilir veya artık gerek olmayanları silebilirsin.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => drafts.refetch()} disabled={drafts.isFetching}>
+                Yenile
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setShowDraftHistory(false)}>
+                Kapat
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 max-h-[70vh] overflow-auto">
+            {drafts.isLoading ? (
+              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">Taslaklar yükleniyor...</p>
+            ) : (drafts.data?.length ?? 0) === 0 ? (
+              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">Henüz taslak yok.</p>
+            ) : (
+              <div className="space-y-2">
+                {drafts.data?.map(summary => (
+                  <div key={summary.id} className="grid gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-slate-900">Taslak #{summary.id}</span>
+                        <Badge variant={draftStatusBadgeVariant(summary.status)}>{summary.status}</Badge>
+                        <span className={cn('rounded-md border px-2 py-0.5 text-xs font-semibold', qualityClass(summary.qualityScore))}>
+                          Kalite {summary.qualityScore}
+                        </span>
+                      </div>
+                      <div className="mt-2 text-slate-700">
+                        {summary.academicYear} · {summary.eventCount} etkinlik · {summary.warningCount} uyarı
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        Güncelleme: {fmt(summary.updatedAt)} · Saklama bitişi: {fmt(summary.expiresAt)}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 md:justify-end">
+                      <Button type="button" size="sm" variant="outline" onClick={() => openDraftFromHistory(summary)}>
+                        Aç
+                      </Button>
+                      <Button type="button" size="sm" variant="destructive" onClick={() => deleteDraftFromHistory(summary)} disabled={deleteDraft.isPending}>
+                        Sil
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -608,39 +1193,69 @@ export default function AcademicCalendarGeneratorPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <CalendarDays className="h-4 w-4" />
-            Akademik isler
+    <div className="space-y-3">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList className="bg-white">
+            <TabsTrigger value="generator">Kısıtlar & Üret</TabsTrigger>
+            <TabsTrigger value="draft">Taslak & Domino</TabsTrigger>
+            <TabsTrigger value="holidays">Tatil Tanımları</TabsTrigger>
+          </TabsList>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowDraftHistory(true)}>
+              Taslak geçmişi
+            </Button>
+            <div className={cn('rounded-lg border px-3 py-2 text-sm font-semibold', qualityClass(calendar?.qualityScore ?? 0))}>
+              Kalite: {calendar?.qualityScore ?? '-'}
+            </div>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">Akademik Takvim Olusturma</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Guz, Bahar ve Yaz donemlerini birlikte uret; tatil cakismalarini, domino etkisini ve not ilani siralamasini tek taslakta kontrol et.
-          </p>
         </div>
-        <div className={cn('rounded-lg border px-4 py-3 text-sm font-semibold', qualityClass(calendar?.qualityScore ?? 0))}>
-          Kalite skoru: {calendar?.qualityScore ?? '-'}
-        </div>
-      </div>
 
-      {notice && (
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-          {notice}
-        </div>
-      )}
+        {notice && (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+            {notice}
+          </div>
+        )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="bg-white">
-          <TabsTrigger value="generator">Kisit & Uret</TabsTrigger>
-          <TabsTrigger value="draft">Taslak & Domino</TabsTrigger>
-          <TabsTrigger value="holidays">Tatil Tanimlari</TabsTrigger>
-        </TabsList>
         <TabsContent value="generator">{renderGeneratorTab()}</TabsContent>
         <TabsContent value="draft">{renderDraftTab()}</TabsContent>
         <TabsContent value="holidays">{renderHolidaysTab()}</TabsContent>
       </Tabs>
+
+      {renderDraftHistoryDialog()}
+
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 px-4 py-6">
+          <div
+            className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-confirm-title"
+          >
+            <h2 id="calendar-confirm-title" className="text-lg font-semibold text-slate-900">
+              {pendingConfirm.title}
+            </h2>
+            <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">
+              {pendingConfirm.message}
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              {pendingConfirm.showCancel !== false && (
+                <Button type="button" variant="outline" onClick={() => closeConfirm(false)}>
+                  {pendingConfirm.cancelLabel ?? 'Vazgeç'}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant={pendingConfirm.tone === 'danger' ? 'destructive' : 'default'}
+                className={pendingConfirm.tone === 'info' ? 'bg-cyan-700 hover:bg-cyan-800' : undefined}
+                onClick={() => closeConfirm(true)}
+              >
+                {pendingConfirm.confirmLabel}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

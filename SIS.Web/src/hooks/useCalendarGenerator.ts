@@ -148,17 +148,32 @@ export interface CalendarDraftDto {
   termSummaries: TermSummaryDto[];
 }
 
+export interface CalendarDraftSummaryDto {
+  id: number;
+  academicYear: string;
+  status: string;
+  qualityScore: number;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  appliedAt: string | null;
+  eventCount: number;
+  warningCount: number;
+}
+
 export interface UpdateDraftEventDto {
   startDate: string;
   endDate: string | null;
   title: string | null;
   note: string | null;
+  propagateChanges?: boolean | null;
 }
 
 export interface WhatIfRequestDto {
   draftEventId: string;
   startDate: string;
   endDate: string | null;
+  propagateChanges?: boolean | null;
 }
 
 export interface WhatIfResultDto {
@@ -205,11 +220,24 @@ export function useHolidayDefinitions() {
 }
 
 export function useGenerateCalendar() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (request: GenerateCalendarRequestDto) => {
       const { data } = await apiClient.post<GenerateCalendarResultDto>(`${API}/generate`, request);
       return data;
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] }),
+  });
+}
+
+export function useCalendarDrafts(enabled = true) {
+  return useQuery({
+    queryKey: ['calendar-generator', 'drafts'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CalendarDraftSummaryDto[]>(`${API}/drafts`, { params: { take: 100 } });
+      return data;
+    },
+    enabled,
   });
 }
 
@@ -253,10 +281,14 @@ export function useApplyDraft() {
       const { data } = await apiClient.post<ApplyCalendarDraftResultDto>(`${API}/drafts/${draftId}/apply`, { forceOverwrite });
       return data;
     },
-    onSuccess: (_, variables) => {
-      qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', variables.draftId] });
-      qc.invalidateQueries({ queryKey: ['admin', 'terms'] });
-      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', variables.draftId] }),
+        qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] }),
+        qc.invalidateQueries({ queryKey: ['admin', 'terms'] }),
+        qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] }),
+      ]);
+      await qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' });
     },
   });
 }
@@ -268,10 +300,27 @@ export function useRollbackDraft() {
       const { data } = await apiClient.post<ApplyCalendarDraftResultDto>(`${API}/drafts/${draftId}/rollback`);
       return data;
     },
+    onSuccess: async (_, draftId) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', draftId] }),
+        qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] }),
+        qc.invalidateQueries({ queryKey: ['admin', 'terms'] }),
+        qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] }),
+      ]);
+      await qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' });
+    },
+  });
+}
+
+export function useDeleteCalendarDraft() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (draftId: number) => {
+      await apiClient.delete(`${API}/drafts/${draftId}`);
+    },
     onSuccess: (_, draftId) => {
-      qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', draftId] });
-      qc.invalidateQueries({ queryKey: ['admin', 'terms'] });
-      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
+      qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] });
+      qc.removeQueries({ queryKey: ['calendar-generator', 'draft', draftId] });
     },
   });
 }

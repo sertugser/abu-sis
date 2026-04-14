@@ -15,6 +15,11 @@ public partial class CalendarGeneratorService
         var events = Deserialize<List<GeneratedCalendarEventDto>>(draft.EventsJson);
         if (events.Any(e => e.IsFailed))
             throw new InvalidOperationException("Yerlesemeyen etkinlikler varken taslak uygulanamaz.");
+        var blockingWarnings = Deserialize<List<CalendarWarningDto>>(draft.WarningsJson)
+            .Where(w => string.Equals(w.Severity, "Error", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (blockingWarnings.Count > 0)
+            throw new InvalidOperationException("Yönetmelik veya kronoloji hataları giderilmeden taslak uygulanamaz: " + string.Join(" | ", blockingWarnings.Select(w => w.Message)));
 
         var startYear = ParseAcademicYearStart(draft.AcademicYear);
         var termIds = new List<int>();
@@ -41,14 +46,14 @@ public partial class CalendarGeneratorService
                 }
 
                 if (term.Status >= TermStatus.Closed)
-                    throw new InvalidOperationException("Kapali veya arsivlenmis doneme takvim uygulanamaz.");
+                    throw new InvalidOperationException("Kapalı veya arşivlenmiş döneme takvim uygulanamaz.");
                 if (term.Status >= TermStatus.Published && !request.ForceOverwrite)
-                    throw new InvalidOperationException("Yayinlanmis veya daha ileri durumdaki donem icin forceOverwrite gerekir.");
+                    throw new InvalidOperationException("Yayınlanmış veya daha ileri durumdaki dönem için forceOverwrite gerekir.");
 
                 snapshot.Add(TermSnapshot.From(term));
                 ApplyTermDates(term, group.ToList());
 
-                _context.TermCalendarEvents.RemoveRange(term.CalendarEvents.Where(e => e.IsGenerated));
+                _context.TermCalendarEvents.RemoveRange(term.CalendarEvents);
                 await _context.SaveChangesAsync(ct);
 
                 foreach (var ev in group.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()))
@@ -85,7 +90,7 @@ public partial class CalendarGeneratorService
             if (tx != null)
                 await tx.CommitAsync(ct);
 
-            return new ApplyCalendarDraftResultDto(true, "Akademik takvim uygulandi.", termIds);
+            return new ApplyCalendarDraftResultDto(true, "Akademik takvim uygulandı.", termIds);
         }
         catch
         {
@@ -99,7 +104,7 @@ public partial class CalendarGeneratorService
     {
         var draft = await LoadDraftAsync(draftId, ct);
         if (draft.Status != GeneratedCalendarDraftStatus.Applied)
-            throw new InvalidOperationException("Sadece uygulanmis taslak geri alinabilir.");
+            throw new InvalidOperationException("Sadece uygulanmış taslak geri alınabilir.");
 
         var snapshots = Deserialize<List<TermSnapshot>>(draft.PreviousSnapshotJson ?? "[]");
         var restored = new List<int>();
@@ -121,7 +126,7 @@ public partial class CalendarGeneratorService
             term.TermEnd = snapshot.TermEnd;
             term.UpdatedAt = DateTime.UtcNow;
 
-            _context.TermCalendarEvents.RemoveRange(term.CalendarEvents.Where(e => e.IsGenerated));
+            _context.TermCalendarEvents.RemoveRange(term.CalendarEvents);
             foreach (var ev in snapshot.GeneratedEvents)
             {
                 _context.TermCalendarEvents.Add(new TermCalendarEvent
@@ -133,7 +138,7 @@ public partial class CalendarGeneratorService
                     EndDate = ev.EndDate,
                     IsPublic = ev.IsPublic,
                     Note = ev.Note,
-                    IsGenerated = true,
+                    IsGenerated = ev.IsGenerated,
                     ChainCode = ev.ChainCode,
                     TemplateItemKey = ev.TemplateItemKey,
                     GeneratedDraftId = ev.GeneratedDraftId,
@@ -149,7 +154,7 @@ public partial class CalendarGeneratorService
         draft.AppliedByUserId = userId;
         await _context.SaveChangesAsync(ct);
 
-        return new ApplyCalendarDraftResultDto(true, "Akademik takvim geri alindi.", restored);
+        return new ApplyCalendarDraftResultDto(true, "Akademik takvim geri alındı.", restored);
     }
 
     private record TermSnapshot(
@@ -173,7 +178,7 @@ public partial class CalendarGeneratorService
                 term.WithdrawalDeadline,
                 term.TermStart,
                 term.TermEnd,
-                term.CalendarEvents.Where(e => e.IsGenerated).Select(TermCalendarEventSnapshot.From).ToList());
+                term.CalendarEvents.Select(TermCalendarEventSnapshot.From).ToList());
     }
 
     private record TermCalendarEventSnapshot(
@@ -186,9 +191,10 @@ public partial class CalendarGeneratorService
         string? ChainCode,
         string? TemplateItemKey,
         int? GeneratedDraftId,
-        bool BlocksAcademicEvents)
+        bool BlocksAcademicEvents,
+        bool IsGenerated)
     {
         public static TermCalendarEventSnapshot From(TermCalendarEvent ev) =>
-            new(ev.EventType, ev.Title, ev.StartDate, ev.EndDate, ev.IsPublic, ev.Note, ev.ChainCode, ev.TemplateItemKey, ev.GeneratedDraftId, ev.BlocksAcademicEvents);
+            new(ev.EventType, ev.Title, ev.StartDate, ev.EndDate, ev.IsPublic, ev.Note, ev.ChainCode, ev.TemplateItemKey, ev.GeneratedDraftId, ev.BlocksAcademicEvents, ev.IsGenerated);
     }
 }

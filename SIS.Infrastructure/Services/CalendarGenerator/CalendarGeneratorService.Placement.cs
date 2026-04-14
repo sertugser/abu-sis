@@ -25,11 +25,11 @@ public partial class CalendarGeneratorService
         IReadOnlyList<CalendarConstraintInputDto> constraints,
         List<CalendarWarningDto> warnings)
     {
-        var duration = ApplyDurationConstraint(Math.Max(1, item.DefaultDurationDays), item, chainCode, constraints);
+        var duration = ApplyDurationConstraint(Math.Max(1, item.DefaultDurationDays), item, chainCode, semester, constraints);
         var start = termStart.AddDays(item.OffsetDays);
         var end = start.AddDays(duration - 1);
 
-        var pin = FindPinConstraint(item, chainCode, constraints);
+        var pin = FindPinConstraint(item, chainCode, semester, constraints);
         if (pin != null)
         {
             start = pin.Value.Start;
@@ -42,7 +42,7 @@ public partial class CalendarGeneratorService
             var delta = (prohibited.Value.End.Date - start.Date).Days + 1;
             start = start.AddDays(delta);
             end = end.AddDays(delta);
-            warnings.Add(new("PROHIBITION_SHIFT", "Warning", $"{item.Title} yasak araliktan sonraya kaydirildi.", EventId(academicYear, semester, item.Key)));
+            warnings.Add(new("PROHIBITION_SHIFT", "Warning", $"{item.Title} yasak aralıktan sonraya kaydırıldı.", EventId(academicYear, semester, item.Key)));
         }
 
         if (item.AvoidHolidayConflict && IsCriticalEvent(item.EventType))
@@ -56,10 +56,10 @@ public partial class CalendarGeneratorService
             }
 
             if (attempts > 0)
-                warnings.Add(new("HOLIDAY_SHIFT", "Warning", $"{item.Title} tatil/onemli gun cakismasi nedeniyle {attempts} gun kaydirildi.", EventId(academicYear, semester, item.Key)));
+                warnings.Add(new("HOLIDAY_SHIFT", "Warning", $"{item.Title} tatil/önemli gün çakışması nedeniyle {attempts} gün kaydırıldı.", EventId(academicYear, semester, item.Key)));
 
             if (attempts >= 14)
-                return BuildEvent(academicYear, semester, item, chainCode, start, end, true, "Otomatik yerlesim basarisiz.");
+                return BuildEvent(academicYear, semester, item, chainCode, start, end, true, "Otomatik yerleşim başarısız.");
         }
 
         return BuildEvent(academicYear, semester, item, chainCode, start, end, false, null);
@@ -117,7 +117,7 @@ public partial class CalendarGeneratorService
                 true,
                 holiday.BlocksAcademicEvents,
                 false,
-                holiday.IsEstimated ? "Dini gun tarihi Hicri fallback ile tahmini hesaplandi." : holiday.Source);
+                holiday.IsEstimated ? "Dini gün tarihi Hicri fallback ile tahmini hesaplandı." : holiday.Source);
         }
     }
 
@@ -130,14 +130,22 @@ public partial class CalendarGeneratorService
         return SemesterType.Summer;
     }
 
-    private static CalendarTemplateItemDto ApplyDurationOverride(CalendarTemplateItemDto item, Dictionary<string, int>? overrides) =>
-        overrides != null && overrides.TryGetValue(item.Key, out var days) && days > 0
+    private static CalendarTemplateItemDto ApplyDurationOverride(CalendarTemplateItemDto item, SemesterType semester, Dictionary<string, int>? overrides)
+    {
+        if (overrides == null)
+            return item;
+
+        if (overrides.TryGetValue($"{item.Key}:{semester}", out var semesterDays) && semesterDays > 0)
+            return item with { DefaultDurationDays = semesterDays };
+
+        return overrides.TryGetValue(item.Key, out var days) && days > 0
             ? item with { DefaultDurationDays = days }
             : item;
+    }
 
-    private static int ApplyDurationConstraint(int currentDuration, CalendarTemplateItemDto item, string chainCode, IReadOnlyList<CalendarConstraintInputDto> constraints)
+    private static int ApplyDurationConstraint(int currentDuration, CalendarTemplateItemDto item, string chainCode, SemesterType semester, IReadOnlyList<CalendarConstraintInputDto> constraints)
     {
-        var match = constraints.Where(c => c.ConstraintType == CalendarConstraintType.Duration && Matches(c, item.EventType, chainCode))
+        var match = constraints.Where(c => c.ConstraintType == CalendarConstraintType.Duration && Matches(c, item.EventType, chainCode, item.Key, semester))
             .OrderByDescending(c => c.IsHard).ThenBy(c => c.Priority).FirstOrDefault();
         if (match == null) return currentDuration;
 
@@ -152,9 +160,9 @@ public partial class CalendarGeneratorService
         return currentDuration;
     }
 
-    private static (DateTime Start, DateTime? End)? FindPinConstraint(CalendarTemplateItemDto item, string chainCode, IReadOnlyList<CalendarConstraintInputDto> constraints)
+    private static (DateTime Start, DateTime? End)? FindPinConstraint(CalendarTemplateItemDto item, string chainCode, SemesterType semester, IReadOnlyList<CalendarConstraintInputDto> constraints)
     {
-        var match = constraints.Where(c => c.ConstraintType == CalendarConstraintType.Pin && Matches(c, item.EventType, chainCode))
+        var match = constraints.Where(c => c.ConstraintType == CalendarConstraintType.Pin && Matches(c, item.EventType, chainCode, item.Key, semester))
             .OrderByDescending(c => c.IsHard).ThenBy(c => c.Priority).FirstOrDefault();
         if (match == null) return null;
 

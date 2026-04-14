@@ -176,17 +176,32 @@ public record CalendarDraftDto(
     IReadOnlyList<TermSummaryDto> TermSummaries
 );
 
+public record CalendarDraftSummaryDto(
+    int Id,
+    string AcademicYear,
+    string Status,
+    int QualityScore,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    DateTime ExpiresAt,
+    DateTime? AppliedAt,
+    int EventCount,
+    int WarningCount
+);
+
 public record UpdateDraftEventDto(
     DateTime StartDate,
     DateTime? EndDate,
     string? Title,
-    string? Note
+    string? Note,
+    bool? PropagateChanges = null
 );
 
 public record WhatIfRequestDto(
     string DraftEventId,
     DateTime StartDate,
-    DateTime? EndDate
+    DateTime? EndDate,
+    bool? PropagateChanges = null
 );
 
 public record WhatIfResultDto(
