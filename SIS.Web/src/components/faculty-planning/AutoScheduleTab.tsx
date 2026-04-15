@@ -1,5 +1,6 @@
 // SIS.Web/src/components/faculty-planning/AutoScheduleTab.tsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SlotAssignSheet } from './SlotAssignSheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -47,6 +48,12 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
   const [lastTrigger, setLastTrigger] = useState(0);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [assignSlot, setAssignSlot] = useState<{
+    day: number;
+    slotOrder: number;
+    startTime: string;
+    endTime: string;
+  } | null>(null);
 
   const selectedRunId = previewMutation.data
     ? null
@@ -372,7 +379,13 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
 
       {/* ── Takvim — tam alan ── */}
       <div className="flex-1 min-h-0">
-        <CalendarGrid sections={sections} timeSlots={timeSlots} />
+        <CalendarGrid
+          sections={sections}
+          timeSlots={timeSlots}
+          onEmptyCellClick={(day, slotOrder, startTime, endTime) => {
+            setAssignSlot({ day, slotOrder, startTime, endTime });
+          }}
+        />
       </div>
 
       {/* ── Sonuç Modalı — hesaplama bitince otomatik açılır ── */}
@@ -384,6 +397,19 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
           onApplyAll={handleApplyAll}
           onViewCalendar={() => setShowResultModal(false)}
           applyPending={applyMutation.isPending}
+        />
+      )}
+
+      {assignSlot && termId && (
+        <SlotAssignSheet
+          open={!!assignSlot}
+          onOpenChange={(open) => { if (!open) setAssignSlot(null); }}
+          day={assignSlot.day}
+          slotOrder={assignSlot.slotOrder}
+          startTime={assignSlot.startTime}
+          endTime={assignSlot.endTime}
+          termId={termId}
+          sections={sections}
         />
       )}
     </div>
