@@ -4,6 +4,7 @@ import {
   getCurriculumCoursesForOpening,
   getDepartmentInstructors,
   getInstructorWorkload,
+  getExternalCourses,
   openCourse,
   bulkOpenCourses,
   updateOpenedSection,
@@ -50,6 +51,15 @@ export function useInstructorWorkload(instructorId: number | null, termId: numbe
     queryFn: () => getInstructorWorkload(instructorId!, termId!),
     enabled: instructorId !== null && instructorId > 0 && termId !== null,
     staleTime: 30 * 1000,
+  });
+}
+
+export function useExternalCourses(departmentId: number | null, termId: number | null) {
+  return useQuery({
+    queryKey: ['courseOpening', 'externalCourses', departmentId, termId],
+    queryFn: () => getExternalCourses(departmentId!, termId!),
+    enabled: departmentId !== null && termId !== null,
+    staleTime: 60 * 1000,
   });
 }
 

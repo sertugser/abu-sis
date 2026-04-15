@@ -97,7 +97,7 @@ export function CurriculumPanel({
               <BookOpen className="h-3.5 w-3.5 text-blue-600" />
             </div>
             <h2 className="font-semibold text-sm text-gray-800">Müfredat Dersleri</h2>
-            <Badge variant="secondary" className="text-[10px] rounded-full">{filteredCourses.length}</Badge>
+            <Badge variant="secondary" className="text-xs rounded-full">{filteredCourses.length}</Badge>
           </div>
         </div>
         <div className="relative">
@@ -150,11 +150,14 @@ export function CurriculumPanel({
                           {getSemesterLabel(semester)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {openedCount > 0 && (
-                          <Badge variant="success" className="text-[9px] px-1.5 py-0">{openedCount} açık</Badge>
-                        )}
-                        <Badge variant="outline" className="text-[10px]">{semCourses.length}</Badge>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 tabular-nums">{openedCount}/{semCourses.length}</span>
+                        <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all"
+                            style={{ width: `${semCourses.length > 0 ? (openedCount / semCourses.length) * 100 : 0}%` }}
+                          />
+                        </div>
                       </div>
                     </button>
                   </CollapsibleTrigger>

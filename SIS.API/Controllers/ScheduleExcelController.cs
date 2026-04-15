@@ -28,6 +28,18 @@ public class ScheduleExcelController : ControllerBase
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "ders-programi.xlsx");
     }
 
+    [HttpGet("export-pdf")]
+    public async Task<IActionResult> ExportPdf(
+        [FromQuery] int termId,
+        [FromQuery] int facultyId,
+        [FromQuery] int? departmentId = null,
+        CancellationToken ct = default)
+    {
+        var bytes = await _excelService.ExportPdfAsync(termId, facultyId, departmentId, ct);
+        var fileName = departmentId.HasValue ? "ders-programi.pdf" : "ders-programi-tum.pdf";
+        return File(bytes, "application/pdf", fileName);
+    }
+
     [HttpPost("import-preview")]
     public async Task<ActionResult<ImportPreviewDto>> ImportPreview(
         [FromQuery] int termId,

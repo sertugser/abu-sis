@@ -98,6 +98,25 @@ export async function transferFromTerm(request: TransferFromTermRequest): Promis
   return data;
 }
 
+export interface ExternalCourseDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  ects: number;
+  ownerDepartmentName: string;
+  sectionCount: number;
+  totalCapacity: number;
+  totalEnrolled: number;
+  predictedDemand: number;
+}
+
+export async function getExternalCourses(departmentId: number, termId: number): Promise<ExternalCourseDto[]> {
+  const { data } = await apiClient.get<ExternalCourseDto[]>('/course-opening/external-courses', {
+    params: { departmentId, termId },
+  });
+  return data;
+}
+
 export async function getInstructorWorkload(instructorId: number, termId: number): Promise<InstructorWorkloadDto> {
   const { data } = await apiClient.get<InstructorWorkloadDto>(
     `/course-opening/instructors/${instructorId}/workload`,

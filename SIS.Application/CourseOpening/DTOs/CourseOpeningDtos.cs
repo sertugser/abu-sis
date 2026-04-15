@@ -15,6 +15,8 @@ public class OpenedCourseSectionDto
     public int Ects { get; set; }
     public int SuggestedSemester { get; set; }
     public int Capacity { get; set; }
+    public int? InternalQuota { get; set; }
+    public int? ExternalQuota { get; set; }
     public int EnrolledCount { get; set; }
     public int RegisteredCount { get; set; }
     public int DraftOrPendingCount { get; set; }
@@ -86,6 +88,8 @@ public class OpenCourseRequest
     public int CourseId { get; set; }
     public int SectionCount { get; set; } = 1;
     public int CapacityPerSection { get; set; } = 40;
+    public int? InternalQuota { get; set; }
+    public int? ExternalQuota { get; set; }
     public int? InstructorId { get; set; }
     /// <summary>
     /// Dersin hangi bölümlere açık olacağı. Null/boş ise müfredattaki tüm bölümlere otomatik açılır.
@@ -110,6 +114,8 @@ public class UpdateOpenedSectionRequest
     public int SectionId { get; set; }
     public int? InstructorId { get; set; }
     public int? Capacity { get; set; }
+    public int? InternalQuota { get; set; }
+    public int? ExternalQuota { get; set; }
 }
 
 // ── Bulk Assign ──
@@ -198,3 +204,18 @@ public class TransferCourseResultItem
 }
 
 public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);
+
+// ── External Courses (opened by other departments but in our curriculum) ──
+
+public class ExternalCourseDto
+{
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int Ects { get; set; }
+    public string OwnerDepartmentName { get; set; } = "";
+    public int SectionCount { get; set; }
+    public int TotalCapacity { get; set; }
+    public int TotalEnrolled { get; set; }
+    public int PredictedDemand { get; set; }
+}

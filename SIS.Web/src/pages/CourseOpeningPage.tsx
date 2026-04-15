@@ -16,6 +16,7 @@ import {
   useReactivateSection,
   useCurriculumCoursesForOpening,
   useDepartmentInstructors,
+  useExternalCourses,
   useInstructorWorkload,
   useOpenCourse,
   useOpenedCourses,
@@ -47,6 +48,7 @@ export default function CourseOpeningPage() {
   const { data: forecastData } = useDepartmentForecast(deptId);
   const instructorsQuery = useDepartmentInstructors(deptId);
   const workloadQuery = useInstructorWorkload(selectedInstructorId, termId);
+  const externalCoursesQuery = useExternalCourses(deptId, termId);
 
   const openMutation = useOpenCourse(deptId ?? 0, termId ?? 0);
   const bulkMutation = useBulkOpenCourses(deptId ?? 0, termId ?? 0);
@@ -171,7 +173,6 @@ export default function CourseOpeningPage() {
           typeFilter={typeFilter}
           onTypeChange={setTypeFilter}
           stats={stats}
-          onExportCsv={exportCsv}
         />
       </div>
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] mx-4 mb-4 rounded-xl border border-gray-200 shadow-sm bg-white" style={{ overflow: 'hidden' }}>
@@ -204,6 +205,7 @@ export default function CourseOpeningPage() {
           workloadData={workloadQuery.data}
           onInstructorSelect={setSelectedInstructorId}
           onExportCsv={exportCsv}
+          externalCourses={externalCoursesQuery.data}
         />
       </div>
       {detailCourse && (

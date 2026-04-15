@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
@@ -6,7 +7,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, TrendingUp } from 'lucide-react';
+import { CheckCircle2, ChevronRight, TrendingUp } from 'lucide-react';
 import type { CurriculumCourseForOpeningDto } from '../../types/courseOpening';
 import type { CourseDemandForecastDto } from '../../types/forecast';
 
@@ -24,7 +25,7 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOp
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0 transition-colors cursor-pointer',
+        'flex items-center gap-3 px-3 py-3 border-b last:border-b-0 transition-colors cursor-pointer',
         selected ? 'bg-blue-50/60' : 'hover:bg-gray-50/80',
         !canSelect && 'opacity-50',
       )}
@@ -49,22 +50,22 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOp
           <span className="text-sm text-gray-800 truncate">{course.courseName}</span>
           <Badge
             variant={course.isCompulsory ? 'default' : 'outline'}
-            className="text-[9px] px-1 py-0 shrink-0 rounded"
+            className="text-[11px] px-1.5 py-0 shrink-0 rounded"
           >
-            {course.isCompulsory ? 'Z' : 'S'}
+            {course.isCompulsory ? 'Zorunlu' : 'Seçmeli'}
           </Badge>
         </div>
 
         {/* Line 2: Metadata */}
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-[10px] text-gray-400 tabular-nums">{course.ects} AKTS</span>
-          <span className="text-[10px] text-gray-400 tabular-nums">{course.theoryHours}+{course.labHours}</span>
+          <span className="text-xs text-gray-400 tabular-nums">{course.ects} AKTS</span>
+          <span className="text-xs text-gray-400 tabular-nums">{course.theoryHours}+{course.labHours}</span>
           {forecast && (
             <TooltipProvider delayDuration={150}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-gray-600">
-                    <TrendingUp className="h-2.5 w-2.5" />
+                  <span className="inline-flex items-center gap-0.5 text-xs font-medium text-gray-600">
+                    <TrendingUp className="h-3 w-3" />
                     {forecast.totalPredictedDemand}
                     {course.retakeCount != null && course.retakeCount > 0 && (
                       <span className="text-red-500">+{course.retakeCount}</span>
@@ -85,7 +86,7 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOp
             <TooltipProvider delayDuration={150}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 text-sky-600 border-sky-200">
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0 text-sky-600 border-sky-200">
                     +{course.crossDepartmentDemand.length} bölüm
                   </Badge>
                 </TooltipTrigger>
@@ -100,16 +101,27 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOp
         </div>
       </div>
 
-      {/* Status */}
-      <div className="shrink-0">
+      {/* Status + Detail button */}
+      <div className="flex items-center gap-1.5 shrink-0">
         {course.alreadyOpened ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
             <CheckCircle2 className="h-3 w-3" />
             {course.existingSectionCount} şube
           </span>
+        ) : course.canOpen ? (
+          <Badge variant="outline" className="text-xs">Açılabilir</Badge>
         ) : (
-          <Badge variant="outline" className="text-[10px]">Açılabilir</Badge>
+          <Badge variant="secondary" className="text-xs text-gray-400">Dış ders</Badge>
         )}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 shrink-0 opacity-50 hover:opacity-100"
+          onClick={e => { e.stopPropagation(); onOpenDetail(course); }}
+          title="Ders detayı ve tahmin"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
       </div>
     </div>
   );

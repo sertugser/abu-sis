@@ -1,7 +1,5 @@
 import { useMemo } from 'react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Download } from 'lucide-react';
 import type { AccessibleDepartment } from '../../types/academicOperations';
 import type { FacultyDto, DepartmentDto } from '../../hooks/useAdminAcademicStructure';
 
@@ -25,7 +23,6 @@ interface FilterBarProps {
     totalCapacity: number;
     totalDemand: number;
   };
-  onExportCsv: () => void;
 }
 
 const CLASS_YEARS = [
@@ -200,9 +197,7 @@ export function CourseFilterBar({
           ))}
         </div>
 
-        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-lg" onClick={onExportCsv}>
-          <Download className="h-3 w-3" /> CSV
-        </Button>
+        {/* CSV export is in the opened courses panel's bottom bar */}
       </div>
     </div>
   );

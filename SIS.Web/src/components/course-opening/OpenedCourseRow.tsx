@@ -96,7 +96,7 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
       {/* ── Summary Row ── */}
       <div
         className={cn(
-          'flex items-center gap-2 px-3 py-2.5 cursor-pointer transition-colors group',
+          'flex items-center gap-2 px-3 py-3 cursor-pointer transition-colors group',
           expanded ? 'bg-blue-50/40' : 'hover:bg-gray-50/80',
         )}
         onClick={() => setExpanded(!expanded)}
@@ -112,35 +112,53 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
             <span className="font-mono text-xs font-bold text-blue-700 shrink-0">{courseCode}</span>
             <span className="text-sm text-gray-800 truncate">{courseName}</span>
           </div>
-          {/* Metrics as inline pills */}
+          {/* Metrics */}
           <div className="flex items-center gap-1.5 mt-1">
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
-              <Layers className="h-2.5 w-2.5" />{sections.length} şube
+            <span className="inline-flex items-center gap-0.5 text-xs text-gray-500">
+              <Layers className="h-3 w-3" />{sections.length} şube
             </span>
             <span className="text-gray-300">·</span>
-            <span className="text-[10px] text-gray-500 tabular-nums">Kont: <strong className="text-gray-700">{totCap}</strong></span>
+            <span className="text-xs text-gray-500 tabular-nums">Kont: <strong className="text-gray-700">{totCap}</strong></span>
             <span className="text-gray-300">·</span>
-            <span className="text-[10px] text-gray-500 tabular-nums">Kayıt: <strong className={totEnr > 0 ? 'text-gray-700' : 'text-gray-400'}>{totEnr}</strong></span>
+            <span className="text-xs text-gray-500 tabular-nums">Kayıt: <strong className={totEnr > 0 ? 'text-gray-700' : 'text-gray-400'}>{totEnr}</strong></span>
             {forecast && (
               <>
                 <span className="text-gray-300">·</span>
-                <span className={cn('text-[10px] tabular-nums font-medium', forecast.totalPredictedDemand > totCap ? 'text-red-600' : 'text-gray-500')}>
+                <span className={cn('text-xs tabular-nums font-medium', forecast.totalPredictedDemand > totCap ? 'text-red-600' : 'text-gray-500')}>
                   Talep: {forecast.totalPredictedDemand}
                 </span>
               </>
             )}
           </div>
+          {/* Capacity vs Enrollment mini bar */}
+          {totCap > 0 && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', totEnr / totCap > 0.9 ? 'bg-red-500' : totEnr / totCap > 0.7 ? 'bg-amber-500' : 'bg-blue-500')}
+                  style={{ width: `${Math.min((totEnr / totCap) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="text-[11px] text-gray-400 tabular-nums">
+                %{Math.round((totEnr / totCap) * 100)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Section/Rec badge + Actions */}
         <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
           {rec > 0 && (
-            <Badge
-              variant={sections.length < rec ? 'destructive' : sections.length === rec ? 'success' : 'warning'}
-              className="text-[10px] tabular-nums"
-            >
-              {sections.length}/{rec}
-            </Badge>
+            <TooltipProvider delayDuration={200}><Tooltip><TooltipTrigger asChild>
+              <Badge
+                variant={sections.length < rec ? 'destructive' : sections.length === rec ? 'success' : 'warning'}
+                className="text-xs tabular-nums cursor-default"
+              >
+                {sections.length}/{rec}
+              </Badge>
+            </TooltipTrigger><TooltipContent side="top" className="text-xs">
+              {sections.length < rec ? 'Önerilen şube sayısından az açılmış' : sections.length === rec ? 'Önerilen şube sayısı ile eşleşiyor' : 'Önerilenden fazla şube açılmış'}
+            </TooltipContent></Tooltip></TooltipProvider>
           )}
           <AccessPolicyPopover courseId={courseId} termId={termId} courseDepartmentId={sections[0]?.departmentId ?? null} courseDepartmentName={sections[0]?.departmentName ?? null} />
           {sections.some(s => s.isActive) && (
@@ -157,7 +175,7 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
       {expanded && (
         <div className="bg-gray-50/50 border-t">
           {/* Section header */}
-          <div className="flex items-center gap-3 px-6 py-1.5 text-[10px] font-medium text-gray-400 border-b">
+          <div className="flex items-center gap-3 px-6 py-1.5 text-xs font-medium text-gray-400 border-b">
             <span className="w-8 text-center">#</span>
             <span className="w-20">Kontenjan</span>
             <span className="flex-1">Öğretim Üyesi</span>
@@ -166,7 +184,7 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
 
           {sections.map(sec => (
             <div key={sec.sectionId} className={cn(
-              'flex items-center gap-3 px-6 py-2 border-b last:border-b-0 group',
+              'flex items-center gap-3 px-6 py-2.5 border-b last:border-b-0 group',
               !sec.isActive && 'opacity-40',
             )}>
               <span className="font-mono text-xs w-8 text-center text-gray-500 shrink-0">{sec.sectionNumber}</span>
@@ -213,7 +231,7 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
                     {sec.instructorName ?? <span className="text-gray-400 italic">Atanmadı</span>}
                   </span>
 
-                  <div className="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-0.5 shrink-0 opacity-50 hover:opacity-100 transition-opacity">
                     {sec.isActive ? (
                       <>
                         <Button size="icon" variant="ghost" className="h-6 w-6 text-gray-400 hover:text-gray-700" onClick={() => startEdit(sec)}><Edit2 className="h-3 w-3" /></Button>
@@ -325,8 +343,8 @@ export function OpenedCourseRow({ courseCode, courseName, courseId, termId, sect
 function FieldInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[9px] text-gray-400 font-medium">{label}</span>
-      <Input className="h-7 w-14 text-xs rounded-md" value={value} onChange={e => onChange(e.target.value)} type="number" min={0} max={500} placeholder={placeholder} />
+      <span className="text-[11px] text-gray-400 font-medium">{label}</span>
+      <Input className="h-7 w-20 text-xs rounded-md" value={value} onChange={e => onChange(e.target.value)} type="number" min={0} max={500} placeholder={placeholder} />
     </div>
   );
 }

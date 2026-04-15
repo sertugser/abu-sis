@@ -261,6 +261,16 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         return Ok(result);
     }
 
+    [HttpGet("external-courses")]
+    public async Task<IActionResult> GetExternalCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _courseOpeningService.GetExternalCoursesAsync(departmentId, termId, ct);
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out int userId)
     {
         userId = 0;
