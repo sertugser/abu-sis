@@ -16,6 +16,7 @@ import {
 import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { CalendarGrid } from './CalendarGrid';
 import { ScheduleResultModal } from './ScheduleResultModal';
+import InlineConfirmButton from './InlineConfirmButton';
 import { cn } from '@/lib/utils';
 
 interface AutoScheduleTabProps {
@@ -310,31 +311,29 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
           )}
 
           {/* Geri al */}
-          {lastAppliedIds.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-[11px] gap-1"
-              onClick={() => {
-                const unpinnedIds = lastAppliedIds.filter(id => {
-                  const section = sections.find(s => s.id === id);
-                  return !section?.isPinned;
-                });
-                if (unpinnedIds.length === 0) return;
-                if (confirm(`${unpinnedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`))
-                  batchUnassign.mutate(unpinnedIds, {
-                    onSuccess: () => {
-                      setLastAppliedIds([]);
-                      applyMutation.reset();
-                    },
-                  });
-              }}
-              disabled={batchUnassign.isPending}
-            >
-              <RotateCcw className="h-3 w-3" />
-              {batchUnassign.isPending ? 'Geri alınıyor...' : `Geri Al (${lastAppliedIds.length})`}
-            </Button>
-          )}
+          {lastAppliedIds.length > 0 && (() => {
+            const unpinnedIds = lastAppliedIds.filter(id => {
+              const section = sections.find(s => s.id === id);
+              return !section?.isPinned;
+            });
+            if (unpinnedIds.length === 0) return null;
+            return (
+              <InlineConfirmButton
+                label={batchUnassign.isPending ? 'Geri alınıyor...' : `Geri Al (${unpinnedIds.length})`}
+                confirmLabel={`${unpinnedIds.length} şubeyi geri al? Onayla`}
+                variant="outline"
+                icon={<RotateCcw className="h-3 w-3 mr-1" />}
+                disabled={batchUnassign.isPending}
+                onConfirm={() => batchUnassign.mutate(unpinnedIds, {
+                  onSuccess: () => {
+                    setLastAppliedIds([]);
+                    applyMutation.reset();
+                  },
+                })}
+                className="h-7 text-[11px]"
+              />
+            );
+          })()}
 
           <div className="flex-1" />
 
@@ -352,24 +351,21 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
 
           {/* Tümünü Sıfırla */}
           {termId && (ov?.scheduledSections ?? 0) > 0 && (
-            <Button
+            <InlineConfirmButton
+              label={resetAll.isPending ? 'Sıfırlanıyor...' : 'Tümünü Sıfırla'}
+              confirmLabel="TÜM atamaları sıfırla? Onayla"
               variant="ghost"
-              size="sm"
-              className="h-7 text-[11px] gap-1 text-red-500 hover:text-red-600 hover:bg-red-50"
-              onClick={() => {
-                if (confirm('Fakültenin TÜM ders atamalarını sıfırlamak istediğinize emin misiniz?'))
-                  resetAll.mutate({ facultyId, termId }, {
-                    onSuccess: (data) => {
-                      clearPreview();
-                      alert(`${data.resetCount} şubenin ataması sıfırlandı.`);
-                    },
-                  });
-              }}
+              confirmVariant="destructive"
+              icon={<Trash2 className="h-3 w-3 mr-1" />}
               disabled={resetAll.isPending}
-            >
-              <Trash2 className="h-3 w-3" />
-              {resetAll.isPending ? 'Sıfırlanıyor...' : 'Tümünü Sıfırla'}
-            </Button>
+              onConfirm={() => resetAll.mutate({ facultyId, termId }, {
+                onSuccess: (data) => {
+                  clearPreview();
+                  alert(`${data.resetCount} şubenin ataması sıfırlandı.`);
+                },
+              })}
+              className="h-7 text-[11px] text-red-600 hover:text-red-700"
+            />
           )}
         </div>
       )}
