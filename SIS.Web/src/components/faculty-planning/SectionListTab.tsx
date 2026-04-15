@@ -4,14 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Download, Search, Upload, X } from 'lucide-react';
 import {
   useAssignSection, useFacultyPlanningSections, useFacultyPlanningTimeSlots, useUnassignSection,
 } from '../../hooks/useFacultyPlanning';
+import { useExportExcel } from '../../hooks/useExcelSchedule';
 import type { AssignmentResult } from '../../types/facultyPlanning';
 import type { SchedulingConflict } from '../../types/scheduling';
 import { InlineSectionRow } from './InlineSectionRow';
 import { STATUS_CONFIG } from './sectionUtils';
+import { ExcelImportModal } from './ExcelImportModal';
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
@@ -40,12 +42,14 @@ export function SectionListTab({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   const debouncedSearch = useDebounce(searchText, 400);
   const sectionsQuery = useFacultyPlanningSections(facultyId, termId, filterDept, filterStatus, page, pageSize, debouncedSearch || undefined);
   const timeSlotsQuery = useFacultyPlanningTimeSlots(termId);
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
+  const exportMutation = useExportExcel();
 
   const totalCount = sectionsQuery.data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -158,6 +162,31 @@ export function SectionListTab({
           </button>
         )}
 
+        {/* Excel actions */}
+        {!readOnly && (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 gap-1.5 border-slate-200 text-slate-700"
+              disabled={exportMutation.isPending}
+              onClick={() => exportMutation.mutate({ facultyId, termId: termId! })}
+            >
+              <Download className="h-4 w-4" />
+              Excel
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 gap-1.5 border-slate-200 text-slate-700"
+              onClick={() => setImportModalOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+              Yükle
+            </Button>
+          </>
+        )}
+
         {/* Sağ: Sayfalama */}
         <div className="flex items-center gap-2 ml-auto">
           <span className="text-sm text-slate-500 tabular-nums">
@@ -171,6 +200,14 @@ export function SectionListTab({
           </Button>
         </div>
       </div>
+
+      {/* ── Excel Import Modal ── */}
+      <ExcelImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        facultyId={facultyId}
+        termId={termId!}
+      />
 
       {/* ── Tablo ── */}
       {sectionsQuery.isLoading ? (
