@@ -144,6 +144,19 @@ export function SectionListTab({
         >
           {PAGE_SIZES.map(n => <option key={n} value={n}>{n} satır</option>)}
         </select>
+        {(filterDept !== undefined || filterStatus !== undefined || searchText) && (
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            onClick={() => {
+              setFilterDept(undefined);
+              setFilterStatus(undefined);
+              setSearchText('');
+              setPage(1);
+            }}
+          >
+            Temizle
+          </button>
+        )}
 
         {/* Sağ: Sayfalama */}
         <div className="flex items-center gap-2 ml-auto">
