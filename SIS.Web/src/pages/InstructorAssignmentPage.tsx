@@ -19,8 +19,7 @@ export default function InstructorAssignmentPage() {
   const { data: activeTerm } = useActiveTerm();
   const { data: faculties } = useAdminFaculties();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
-  const accessibleDepartments = contextQuery.data?.accessibleDepartments;
-  const departments = useMemo(() => accessibleDepartments ?? [], [accessibleDepartments]);
+  const departments = contextQuery.data?.accessibleDepartments ?? [];
 
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);

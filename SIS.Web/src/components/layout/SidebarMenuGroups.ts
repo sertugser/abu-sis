@@ -259,7 +259,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
-      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Olusturucu' },
     ],
   },
   {
@@ -289,7 +288,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
-      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Olusturucu' },
     ],
   },
   {
