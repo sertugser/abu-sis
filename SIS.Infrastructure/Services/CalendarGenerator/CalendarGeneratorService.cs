@@ -93,6 +93,9 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
     public async Task<CalendarDraftDto> GetDraftAsync(int draftId, CancellationToken ct = default)
     {
         var draft = await LoadDraftAsync(draftId, ct);
+        if (RemoveLegacyShiftWarnings(draft))
+            await _context.SaveChangesAsync(ct);
+
         return ToDraftDto(draft);
     }
 
@@ -100,10 +103,16 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
     {
         var limit = Math.Clamp(take, 1, 100);
         var drafts = await _context.GeneratedCalendarDrafts
-            .AsNoTracking()
             .OrderByDescending(d => d.Id)
             .Take(limit)
             .ToListAsync(ct);
+
+        var removedLegacyWarnings = false;
+        foreach (var draft in drafts)
+            removedLegacyWarnings |= RemoveLegacyShiftWarnings(draft);
+
+        if (removedLegacyWarnings)
+            await _context.SaveChangesAsync(ct);
 
         return drafts.Select(ToDraftSummaryDto).ToList();
     }
