@@ -88,6 +88,7 @@ export const QUERY_KEYS = {
   electiveGroups: (subtype?: string, facultyId?: number) => ['electiveGroups', 'list', subtype, facultyId] as const,
   electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
+  gradeLockReadiness: (departmentId?: number, termId?: number) => ['gradeLockReadiness', departmentId, termId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {

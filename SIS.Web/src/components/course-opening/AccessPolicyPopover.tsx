@@ -93,15 +93,15 @@ export function AccessPolicyPopover({ courseId, termId, courseDepartmentId, cour
               {policies.map(p => (
                 <div
                   key={p.id}
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs ${
                     p.facultyId
-                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
-                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                      ? 'bg-blue-50 text-blue-800 border-blue-200'
+                      : 'bg-gray-50 text-gray-800 border-gray-200'
                   }`}
                 >
-                  <span>{p.facultyName ?? p.departmentName}</span>
+                  <span className="font-medium truncate max-w-[180px]">{p.facultyName ?? p.departmentName}</span>
                   <button
-                    className="hover:text-destructive transition-colors"
+                    className="shrink-0 rounded-full p-0.5 hover:bg-red-100 hover:text-red-600 transition-colors"
                     onClick={() => deleteMut.mutate({ id: p.id, courseId, termId })}
                     disabled={deleteMut.isPending}
                   >

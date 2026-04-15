@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Search } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Download, Layers, Search, Users } from 'lucide-react';
 import type { OpenedCourseSectionDto, InstructorOptionDto } from '../../types/courseOpening';
 import type { CourseDemandForecastDto } from '../../types/forecast';
 import type { InstructorWorkloadDto } from '../../types/courseOpening';
@@ -54,6 +55,9 @@ export function OpenedCoursesPanel({
   onExportCsv,
 }: Props) {
   const [search, setSearch] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showTopShadow, setShowTopShadow] = useState(false);
+  const [showBottomShadow, setShowBottomShadow] = useState(true);
 
   const courseGroups: CourseGroup[] = useMemo(() => {
     if (!sections) return [];
@@ -86,75 +90,120 @@ export function OpenedCoursesPanel({
   const totalCapacity = (sections ?? []).reduce((s, sec) => s + sec.capacity, 0);
   const totalEnrolled = (sections ?? []).reduce((s, sec) => s + sec.enrolledCount, 0);
 
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowTopShadow(el.scrollTop > 4);
+    setShowBottomShadow(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-white border-b px-4 py-3 space-y-2">
+    <div className="flex flex-col min-h-0 h-full overflow-hidden">
+      {/* Header — fixed */}
+      <div className="shrink-0 bg-white border-b px-4 py-3 space-y-2.5 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-sm">Açılan Dersler</h2>
-            <Badge variant="secondary" className="text-[10px]">{filtered.length} ders</Badge>
-            <Badge variant="outline" className="text-[10px]">{totalSections} şube</Badge>
+            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-emerald-50">
+              <Layers className="h-3.5 w-3.5 text-emerald-600" />
+            </div>
+            <h2 className="font-semibold text-sm text-gray-800">Açılan Dersler</h2>
+            <Badge variant="secondary" className="text-[10px] rounded-full">{filtered.length} ders</Badge>
+            <Badge variant="outline" className="text-[10px] rounded-full">{totalSections} şube</Badge>
           </div>
         </div>
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
           <Input
             placeholder="Açılan derslerde ara..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm"
+            className="pl-8 h-8 text-xs rounded-lg"
           />
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        {isLoading ? (
-          <div className="p-4 space-y-3">
-            <Skeleton className="h-10" />
-            <Skeleton className="h-10" />
-            <Skeleton className="h-10" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground text-sm">
-            {courseGroups.length === 0 ? 'Henüz ders açılmamış.' : 'Eşleşen açılan ders bulunamadı.'}
-          </div>
-        ) : (
-          filtered.map(group => (
-            <OpenedCourseRow
-              key={group.courseId}
-              courseCode={group.courseCode}
-              courseName={group.courseName}
-              courseId={group.courseId}
-              termId={termId}
-              sections={group.sections}
-              forecast={forecastMap.get(group.courseId)}
-              instructors={instructors}
-              onUpdateSection={onUpdateSection}
-              onCloseSection={(sec) => onCloseSection(sec.sectionId)}
-              onCloseAllSections={onCloseAllSections}
-              onReactivateSection={onReactivateSection}
-              onAddSection={onAddSection}
-              updatePending={updatePending}
-              closePending={closePending}
-              closeError={closeError}
-              workloadData={workloadData}
-              onInstructorSelect={onInstructorSelect}
-            />
-          ))
-        )}
+      {/* Scrollable content */}
+      <div className="relative flex-1 min-h-0">
+        {/* Top scroll shadow */}
+        <div className={cn(
+          'absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-black/[0.06] to-transparent z-[5] pointer-events-none transition-opacity',
+          showTopShadow ? 'opacity-100' : 'opacity-0',
+        )} />
+
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="h-full overflow-y-auto overscroll-contain"
+        >
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center py-16 text-gray-400">
+              {courseGroups.length === 0 ? (
+                <>
+                  <Layers className="h-8 w-8 mb-2" />
+                  <p className="text-sm">Henüz ders açılmamış.</p>
+                  <p className="text-xs mt-1">Sol panelden müfredat derslerini seçip açabilirsiniz.</p>
+                </>
+              ) : (
+                <>
+                  <Search className="h-8 w-8 mb-2" />
+                  <p className="text-sm">Eşleşen açılan ders bulunamadı.</p>
+                </>
+              )}
+            </div>
+          ) : (
+            filtered.map(group => (
+              <OpenedCourseRow
+                key={group.courseId}
+                courseCode={group.courseCode}
+                courseName={group.courseName}
+                courseId={group.courseId}
+                termId={termId}
+                sections={group.sections}
+                forecast={forecastMap.get(group.courseId)}
+                instructors={instructors}
+                onUpdateSection={onUpdateSection}
+                onCloseSection={(sec) => onCloseSection(sec.sectionId)}
+                onCloseAllSections={onCloseAllSections}
+                onReactivateSection={onReactivateSection}
+                onAddSection={onAddSection}
+                updatePending={updatePending}
+                closePending={closePending}
+                closeError={closeError}
+                workloadData={workloadData}
+                onInstructorSelect={onInstructorSelect}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Bottom scroll shadow */}
+        <div className={cn(
+          'absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-black/[0.06] to-transparent z-[5] pointer-events-none transition-opacity',
+          showBottomShadow ? 'opacity-100' : 'opacity-0',
+        )} />
       </div>
 
-      {/* Bottom bar */}
-      <div className="sticky bottom-0 bg-white border-t px-4 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span><strong>{totalSections}</strong> şube</span>
-          <span><strong>{totalCapacity}</strong> kontenjan</span>
-          <span><strong>{totalEnrolled}</strong> kayıtlı</span>
+      {/* Bottom bar — fixed */}
+      <div className="shrink-0 bg-white border-t px-4 py-2.5 flex items-center justify-between z-10">
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <span className="flex items-center gap-1">
+            <Layers className="h-3 w-3" />
+            <strong className="text-gray-700">{totalSections}</strong> şube
+          </span>
+          <span className="flex items-center gap-1">
+            <Users className="h-3 w-3" />
+            <strong className="text-gray-700">{totalCapacity}</strong> kontenjan
+          </span>
+          <span>
+            <strong className={cn('tabular-nums', totalEnrolled > 0 ? 'text-gray-700' : 'text-gray-400')}>{totalEnrolled}</strong> kayıtlı
+          </span>
         </div>
-        <Button size="sm" variant="outline" onClick={onExportCsv}>
-          <Download className="h-3.5 w-3.5 mr-1" /> CSV
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 rounded-lg" onClick={onExportCsv}>
+          <Download className="h-3 w-3" /> CSV
         </Button>
       </div>
     </div>

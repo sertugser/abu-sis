@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Download } from 'lucide-react';
 import type { AccessibleDepartment } from '../../types/academicOperations';
 import type { FacultyDto, DepartmentDto } from '../../hooks/useAdminAcademicStructure';
@@ -28,16 +28,18 @@ interface FilterBarProps {
   onExportCsv: () => void;
 }
 
-const SEMESTERS = [
+const CLASS_YEARS = [
   { value: null, label: 'Tümü' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 4, label: '4' },
-  { value: 5, label: '5' },
-  { value: 6, label: '6' },
-  { value: 7, label: '7' },
-  { value: 8, label: '8' },
+  { value: 1, label: '1. Sınıf' },
+  { value: 2, label: '2. Sınıf' },
+  { value: 3, label: '3. Sınıf' },
+  { value: 4, label: '4. Sınıf' },
+];
+
+const TERMS = [
+  { value: null, label: 'Tümü' },
+  { value: 'fall', label: 'Güz' },
+  { value: 'spring', label: 'Bahar' },
 ];
 
 const TYPE_TABS: { value: FilterBarProps['typeFilter']; label: string }[] = [
@@ -58,10 +60,8 @@ export function CourseFilterBar({
   onSemesterChange,
   typeFilter,
   onTypeChange,
-  stats,
   onExportCsv,
 }: FilterBarProps) {
-  // Map accessible department IDs to their faculty via structureDepartments
   const accessibleDeptIds = useMemo(() => new Set(departments.map(d => d.departmentId)), [departments]);
 
   const availableFaculties = useMemo(() => {
@@ -83,105 +83,125 @@ export function CourseFilterBar({
     return departments.filter(d => deptIdsInFaculty.has(d.departmentId));
   }, [departments, structureDepartments, selectedFacultyId]);
 
+  // Derive classYear and term from semesterFilter
+  const activeClassYear = semesterFilter !== null ? Math.ceil(semesterFilter / 2) : null;
+  const activeTerm = semesterFilter !== null ? (semesterFilter % 2 === 1 ? 'fall' : 'spring') : null;
+
+  const handleClassYearChange = (year: number | null) => {
+    if (year === null) {
+      onSemesterChange(null);
+    } else {
+      // Default to fall when selecting a class year, or keep current term
+      const term = activeTerm ?? 'fall';
+      onSemesterChange((year - 1) * 2 + (term === 'fall' ? 1 : 2));
+    }
+  };
+
+  const handleTermChange = (term: 'fall' | 'spring' | null) => {
+    if (term === null) {
+      onSemesterChange(null);
+    } else {
+      const year = activeClassYear ?? 1;
+      onSemesterChange((year - 1) * 2 + (term === 'fall' ? 1 : 2));
+    }
+  };
+
   return (
-    <div className="space-y-2">
-      {/* Filter Row */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <div className="flex items-center gap-1.5">
-          <label className="font-medium whitespace-nowrap">Fakülte:</label>
-          <select
-            className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-            value={selectedFacultyId ?? ''}
-            onChange={e => {
-              const val = e.target.value ? Number(e.target.value) : null;
-              onFacultyChange(val);
-            }}
-          >
-            <option value="">Tümü</option>
-            {availableFaculties.map(f => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-        </div>
+    <div className="flex flex-wrap items-center gap-3">
+      {/* Fakülte */}
+      <div className="flex items-center rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <span className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 border-r border-gray-200 whitespace-nowrap">Fakülte</span>
+        <select
+          className="h-8 border-0 bg-transparent px-2.5 text-xs focus:ring-0 focus:outline-none min-w-[160px]"
+          value={selectedFacultyId ?? ''}
+          onChange={e => onFacultyChange(e.target.value ? Number(e.target.value) : null)}
+        >
+          <option value="">Tümü</option>
+          {availableFaculties.map(f => (
+            <option key={f.id} value={f.id}>{f.name}</option>
+          ))}
+        </select>
+      </div>
 
-        <div className="flex items-center gap-1.5">
-          <label className="font-medium whitespace-nowrap">Bölüm:</label>
-          <select
-            className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-            value={selectedDeptId ?? ''}
-            onChange={e => onDeptChange(Number(e.target.value))}
-          >
-            {filteredDepartments.map(d => (
-              <option key={d.departmentId} value={d.departmentId}>
-                {d.departmentCode} — {d.departmentName}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Bölüm */}
+      <div className="flex items-center rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <span className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 border-r border-gray-200 whitespace-nowrap">Bölüm</span>
+        <select
+          className="h-8 border-0 bg-transparent px-2.5 text-xs focus:ring-0 focus:outline-none min-w-[200px]"
+          value={selectedDeptId ?? ''}
+          onChange={e => onDeptChange(Number(e.target.value))}
+        >
+          {filteredDepartments.map(d => (
+            <option key={d.departmentId} value={d.departmentId}>
+              {d.departmentCode} — {d.departmentName}
+            </option>
+          ))}
+        </select>
+      </div>
 
-        <div className="flex items-center gap-1">
-          <label className="font-medium whitespace-nowrap">Yarıyıl:</label>
-          <div className="flex gap-0.5">
-            {SEMESTERS.map(s => (
-              <button
-                key={s.label}
-                onClick={() => onSemesterChange(s.value)}
-                className={`h-6 px-1.5 text-[11px] rounded border transition-colors ${
-                  semesterFilter === s.value
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-input hover:bg-accent'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 ml-auto">
-          <div className="flex gap-0.5 bg-muted rounded-lg p-0.5">
-            {TYPE_TABS.map(t => (
-              <button
-                key={t.value}
-                onClick={() => onTypeChange(t.value)}
-                className={`h-6 px-2 text-[11px] rounded transition-colors ${
-                  typeFilter === t.value
-                    ? 'bg-background shadow-sm font-medium'
-                    : 'hover:bg-background/50'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+      {/* Sınıf */}
+      <div className="flex items-center rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <span className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 border-r border-gray-200 whitespace-nowrap">Sınıf</span>
+        <div className="flex px-1 gap-0.5 items-center">
+          {CLASS_YEARS.map(c => (
+            <button
+              key={c.label}
+              onClick={() => handleClassYearChange(c.value)}
+              className={cn(
+                'h-6 px-2 text-[11px] rounded-md font-medium transition-colors whitespace-nowrap',
+                activeClassYear === c.value || (c.value === null && semesterFilter === null)
+                  ? 'bg-gray-900 text-white'
+                  : 'text-gray-600 hover:bg-gray-100',
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Stats Row */}
-      <div className="flex flex-wrap items-center gap-2 bg-white border rounded-lg px-3 py-1.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs flex-1">
-          <span>
-            Müfredat: <strong>{stats.curriculumCount}</strong> ders
-          </span>
-          <span className="text-muted-foreground hidden sm:inline">|</span>
-          <span>
-            Açılan: <strong className="text-emerald-700">{stats.openedCourseCount}</strong> ders / <strong>{stats.openedSectionCount}</strong> şube
-          </span>
-          <span className="text-muted-foreground hidden sm:inline">|</span>
-          <span>
-            Açılmamış: <Badge variant={stats.pendingCount > 0 ? 'outline' : 'secondary'} className="text-[10px] ml-0.5">{stats.pendingCount}</Badge>
-          </span>
-          <span className="text-muted-foreground hidden sm:inline">|</span>
-          <span>
-            Kontenjan: <strong>{stats.totalCapacity}</strong>
-          </span>
-          <span className="text-muted-foreground hidden sm:inline">|</span>
-          <span>
-            Talep: <strong className={stats.totalDemand > stats.totalCapacity ? 'text-red-600' : 'text-emerald-700'}>{stats.totalDemand}</strong>
-          </span>
+      {/* Dönem */}
+      <div className="flex items-center rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <span className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 border-r border-gray-200 whitespace-nowrap">Dönem</span>
+        <div className="flex px-1 gap-0.5 items-center">
+          {TERMS.map(t => (
+            <button
+              key={t.label}
+              onClick={() => handleTermChange(t.value as 'fall' | 'spring' | null)}
+              className={cn(
+                'h-6 px-2.5 text-[11px] rounded-md font-medium transition-colors whitespace-nowrap',
+                activeTerm === t.value || (t.value === null && semesterFilter === null)
+                  ? 'bg-gray-900 text-white'
+                  : 'text-gray-600 hover:bg-gray-100',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onExportCsv}>
-          <Download className="h-3 w-3 mr-1" /> CSV
+      </div>
+
+      {/* Type toggle + CSV — pushed right */}
+      <div className="flex items-center gap-2 ml-auto">
+        <div className="flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 shadow-sm">
+          {TYPE_TABS.map(t => (
+            <button
+              key={t.value}
+              onClick={() => onTypeChange(t.value)}
+              className={cn(
+                'h-7 px-3 text-[11px] rounded-md font-medium transition-colors',
+                typeFilter === t.value
+                  ? 'bg-white shadow-sm text-gray-900'
+                  : 'text-gray-500 hover:text-gray-700',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-lg" onClick={onExportCsv}>
+          <Download className="h-3 w-3" /> CSV
         </Button>
       </div>
     </div>

@@ -157,7 +157,7 @@ export default function CourseOpeningPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
-      <div className="shrink-0 px-4 pt-4 pb-2">
+      <div className="shrink-0 px-4 pt-4 pb-3">
         <CourseFilterBar
           departments={departments}
           faculties={faculties ?? []}
@@ -174,7 +174,7 @@ export default function CourseOpeningPage() {
           onExportCsv={exportCsv}
         />
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] mx-4 mb-4 rounded-xl border border-gray-200 shadow-sm bg-white" style={{ overflow: 'hidden' }}>
         <CurriculumPanel
           courses={curriculumQuery.data}
           isLoading={curriculumQuery.isLoading}

@@ -55,7 +55,7 @@ export function useDepartmentAcademicLevels(departmentId: number | null, enabled
 
 export function useGradeLockReadiness(departmentId: number | null, termId?: number, enabled = true) {
   return useQuery({
-    queryKey: ['gradeLockReadiness', departmentId, termId],
+    queryKey: QUERY_KEYS.gradeLockReadiness(departmentId ?? undefined, termId),
     queryFn: () => getGradeLockReadiness(departmentId!, termId),
     enabled: enabled && departmentId !== null,
     staleTime: 60 * 1000,
