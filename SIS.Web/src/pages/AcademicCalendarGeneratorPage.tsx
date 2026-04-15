@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -513,12 +513,8 @@ function SearchableProcessSelect({
 }
 
 export default function AcademicCalendarGeneratorPage() {
-  const initialYear = defaultAcademicYear();
-  const startYear = academicYearStart(initialYear);
   const [activeTab, setActiveTab] = useState('generator');
-  const [academicYear, setAcademicYear] = useState(initialYear);
-  const [fallStartDate, setFallStartDate] = useState(`${startYear}-09-22`);
-  const [springStartDate, setSpringStartDate] = useState(`${startYear + 1}-02-23`);
+  const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
   const [includeSummer, setIncludeSummer] = useState(true);
   const [forceOverwrite, setForceOverwrite] = useState(false);
   const [durationOverrides, setDurationOverrides] = useState<Record<string, number>>({});
@@ -536,6 +532,21 @@ export default function AcademicCalendarGeneratorPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [showDraftHistory, setShowDraftHistory] = useState(false);
+  const defaultStartDates = useMemo(() => {
+    const parsedStart = academicYearStart(academicYear);
+    return {
+      fallStartDate: `${parsedStart}-09-22`,
+      springStartDate: `${parsedStart + 1}-02-23`,
+    };
+  }, [academicYear]);
+  const [customStartDates, setCustomStartDates] = useState<{
+    academicYear: string;
+    fallStartDate: string;
+    springStartDate: string;
+  } | null>(null);
+  const hasCustomStartDates = customStartDates?.academicYear === academicYear;
+  const fallStartDate = hasCustomStartDates ? customStartDates.fallStartDate : defaultStartDates.fallStartDate;
+  const springStartDate = hasCustomStartDates ? customStartDates.springStartDate : defaultStartDates.springStartDate;
 
   const holidays = useHolidayDefinitions();
   const templates = useCalendarTemplates();
@@ -572,15 +583,18 @@ export default function AcademicCalendarGeneratorPage() {
 
     return options.sort((a, b) => processOptionLabel(a).localeCompare(processOptionLabel(b), 'tr'));
   }, [templates.data]);
+  const durationOptionKeys = useMemo(() => new Set(durationOptions.map(option => option.key)), [durationOptions]);
+  const activeDurationEventKey = durationOptionKeys.has(durationEventKey) ? durationEventKey : '';
+  const activePinEventKey = durationOptionKeys.has(pinEventKey) ? pinEventKey : '';
 
   const selectedDurationOption = useMemo(
-    () => durationOptions.find(option => option.key === durationEventKey) ?? null,
-    [durationEventKey, durationOptions],
+    () => durationOptions.find(option => option.key === activeDurationEventKey) ?? null,
+    [activeDurationEventKey, durationOptions],
   );
 
   const selectedPinOption = useMemo(
-    () => durationOptions.find(option => option.key === pinEventKey) ?? null,
-    [pinEventKey, durationOptions],
+    () => durationOptions.find(option => option.key === activePinEventKey) ?? null,
+    [activePinEventKey, durationOptions],
   );
 
   const semesterEvents = useMemo(
@@ -621,6 +635,26 @@ export default function AcademicCalendarGeneratorPage() {
     resolver?.(value);
   }
 
+  function setFallStartDate(value: string) {
+    setCustomStartDates(current => ({
+      academicYear,
+      fallStartDate: value,
+      springStartDate: current?.academicYear === academicYear
+        ? current.springStartDate
+        : defaultStartDates.springStartDate,
+    }));
+  }
+
+  function setSpringStartDate(value: string) {
+    setCustomStartDates(current => ({
+      academicYear,
+      fallStartDate: current?.academicYear === academicYear
+        ? current.fallStartDate
+        : defaultStartDates.fallStartDate,
+      springStartDate: value,
+    }));
+  }
+
   function handleDurationEventChange(key: string) {
     const option = durationOptions.find(item => item.key === key);
     setDurationEventKey(key);
@@ -656,25 +690,6 @@ export default function AcademicCalendarGeneratorPage() {
       tone: 'info',
     });
   }
-
-  useEffect(() => {
-    const parsedStart = academicYearStart(academicYear);
-    setFallStartDate(`${parsedStart}-09-22`);
-    setSpringStartDate(`${parsedStart + 1}-02-23`);
-  }, [academicYear]);
-
-  useEffect(() => {
-    if (durationOptions.length === 0) return;
-
-    if (durationEventKey && !durationOptions.some(option => option.key === durationEventKey)) {
-      setDurationEventKey('');
-      setDurationDays('');
-    }
-
-    if (pinEventKey && !durationOptions.some(option => option.key === pinEventKey)) {
-      setPinEventKey('');
-    }
-  }, [durationEventKey, durationOptions, pinEventKey]);
 
   function selectEvent(ev: GeneratedCalendarEventDto) {
     setSelectedEventId(ev.draftEventId);
@@ -1002,7 +1017,7 @@ export default function AcademicCalendarGeneratorPage() {
               <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.5fr)_140px_140px]">
                 <SearchableProcessSelect
                   options={durationOptions}
-                  selectedKey={pinEventKey}
+                  selectedKey={activePinEventKey}
                   onChange={handlePinEventChange}
                   disabled={templates.isLoading || durationOptions.length === 0}
                   placeholder={templates.isLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
@@ -1015,7 +1030,7 @@ export default function AcademicCalendarGeneratorPage() {
                   Seçilen süreç: {processOptionLabel(selectedPinOption)}. Bu sabitleme yalnızca seçilen dönem için uygulanır.
                 </p>
               )}
-              <Button type="button" size="sm" className="mt-3" onClick={addPinConstraint} disabled={!pinEventKey || !selectedPinOption}>
+              <Button type="button" size="sm" className="mt-3" onClick={addPinConstraint} disabled={!activePinEventKey || !selectedPinOption}>
                 Kısıt Ekle
               </Button>
             </div>
@@ -1030,7 +1045,7 @@ export default function AcademicCalendarGeneratorPage() {
             <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.5fr)_140px_auto]">
               <SearchableProcessSelect
                 options={durationOptions}
-                selectedKey={durationEventKey}
+                selectedKey={activeDurationEventKey}
                 onChange={handleDurationEventChange}
                 disabled={templates.isLoading || durationOptions.length === 0}
                 placeholder={templates.isLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
