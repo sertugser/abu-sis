@@ -316,8 +316,13 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
               size="sm"
               className="h-7 text-[11px] gap-1"
               onClick={() => {
-                if (confirm(`${lastAppliedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`))
-                  batchUnassign.mutate(lastAppliedIds, {
+                const unpinnedIds = lastAppliedIds.filter(id => {
+                  const section = sections.find(s => s.id === id);
+                  return !section?.isPinned;
+                });
+                if (unpinnedIds.length === 0) return;
+                if (confirm(`${unpinnedIds.length} şubenin atamasını kaldırmak istediğinize emin misiniz?`))
+                  batchUnassign.mutate(unpinnedIds, {
                     onSuccess: () => {
                       setLastAppliedIds([]);
                       applyMutation.reset();
