@@ -37,6 +37,7 @@ export function useAssignSection() {
     mutationFn: (req: AssignSectionRequest) => assignSection(req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
+      qc.invalidateQueries({ queryKey: ['facultyPlanningConflicts'] });
     },
   });
 }
@@ -47,6 +48,7 @@ export function useUnassignSection() {
     mutationFn: (sectionId: number) => unassignSection(sectionId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
+      qc.invalidateQueries({ queryKey: ['facultyPlanningConflicts'] });
     },
   });
 }
@@ -85,6 +87,7 @@ export function useApplySchedule() {
     mutationFn: (req: ApplyScheduleRequest) => applySchedule(req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
+      qc.invalidateQueries({ queryKey: ['facultyPlanningConflicts'] });
     },
   });
 }
@@ -97,7 +100,7 @@ export function useAvailableClassrooms(
     queryKey: ['availableClassrooms', termId, day, startTime, endTime, minCapacity, type],
     queryFn: () => getAvailableClassrooms(termId!, day, startTime, endTime, minCapacity, type),
     enabled: termId != null,
-    staleTime: 15 * 1000,
+    staleTime: 0,
   });
 }
 
@@ -106,7 +109,7 @@ export function useFacultyPlanningConflicts(facultyId: number | null, termId: nu
     queryKey: QUERY_KEYS.facultyPlanningConflicts(facultyId ?? 0, termId ?? 0),
     queryFn: () => getFacultyPlanningConflicts(facultyId!, termId!),
     enabled: facultyId != null && termId != null,
-    staleTime: 30 * 1000,
+    staleTime: 0,
   });
 }
 
@@ -131,6 +134,7 @@ export function useBatchUnassignSections() {
     mutationFn: batchUnassignSections,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facultyPlanning'] });
+      queryClient.invalidateQueries({ queryKey: ['facultyPlanningConflicts'] });
     },
   });
 }
@@ -142,6 +146,7 @@ export function useResetAllSchedules() {
       resetAllSchedules(facultyId, termId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facultyPlanning'] });
+      queryClient.invalidateQueries({ queryKey: ['facultyPlanningConflicts'] });
     },
   });
 }
