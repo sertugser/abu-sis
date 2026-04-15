@@ -113,6 +113,7 @@ builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
 builder.Services.AddScoped<ITermClosingService, TermClosingService>();
+builder.Services.AddScoped<IExcelScheduleService, ExcelScheduleService>();
 
 // Admin services
 builder.Services.AddScoped<IAdminUserService, AdminUserService>();
