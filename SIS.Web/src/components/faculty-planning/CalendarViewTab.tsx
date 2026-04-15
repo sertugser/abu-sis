@@ -272,8 +272,10 @@ export function CalendarViewTab({ facultyId, termId, departments = [] }: {
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
 
-  const sections = sectionsQuery.data?.items ?? [];
-  const timeSlots: FacultyPlanningTimeSlot[] = timeSlotsQuery.data ?? [];
+  const sectionItems = sectionsQuery.data?.items;
+  const sections = useMemo(() => sectionItems ?? [], [sectionItems]);
+  const timeSlotItems = timeSlotsQuery.data;
+  const timeSlots: FacultyPlanningTimeSlot[] = useMemo(() => timeSlotItems ?? [], [timeSlotItems]);
   const scheduledCount = sections.filter(s => s.status !== 'Unscheduled').length;
   const unscheduledSections = useMemo(() => sections.filter(s => s.status === 'Unscheduled'), [sections]);
 
