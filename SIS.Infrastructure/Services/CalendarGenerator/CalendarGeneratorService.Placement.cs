@@ -42,21 +42,40 @@ public partial class CalendarGeneratorService
             var delta = (prohibited.Value.End.Date - start.Date).Days + 1;
             start = start.AddDays(delta);
             end = end.AddDays(delta);
-            warnings.Add(new("PROHIBITION_SHIFT", "Warning", $"{item.Title} yasak aralıktan sonraya kaydırıldı.", EventId(academicYear, semester, item.Key)));
+            var prohibitionText = string.IsNullOrWhiteSpace(prohibited.Value.Description)
+                ? "yasak aralık"
+                : prohibited.Value.Description.Trim();
+            warnings.Add(new("PROHIBITION_SHIFT", "Warning", $"{item.Title} {prohibitionText} ({FormatDateRange(prohibited.Value.Start, prohibited.Value.End)}) nedeniyle {delta} gün kaydırıldı. Yeni tarih: {FormatDateRange(start, end)}.", EventId(academicYear, semester, item.Key)));
         }
 
         if (item.AvoidHolidayConflict && IsCriticalEvent(item.EventType))
         {
             var attempts = 0;
-            while ((OverlapsBlockingHoliday(start, end, holidays) || StartsOnWeekend(start, item.EventType)) && attempts < 14)
+            var shiftReasons = new List<string>();
+            while (attempts < 14)
             {
+                var conflicts = FindBlockingConflictDescriptions(start, end, item.EventType, holidays);
+                if (conflicts.Count == 0)
+                    break;
+
+                foreach (var conflict in conflicts)
+                {
+                    if (!shiftReasons.Any(existing => string.Equals(existing, conflict, StringComparison.OrdinalIgnoreCase)))
+                        shiftReasons.Add(conflict);
+                }
+
                 start = start.AddDays(1);
                 end = end.AddDays(1);
                 attempts++;
             }
 
             if (attempts > 0)
-                warnings.Add(new("HOLIDAY_SHIFT", "Warning", $"{item.Title} tatil/önemli gün çakışması nedeniyle {attempts} gün kaydırıldı.", EventId(academicYear, semester, item.Key)));
+            {
+                var reasonText = shiftReasons.Count > 0
+                    ? string.Join(", ", shiftReasons)
+                    : "takvim çakışması";
+                warnings.Add(new("HOLIDAY_SHIFT", "Warning", $"{item.Title} {reasonText} nedeniyle {attempts} gün kaydırıldı. Yeni tarih: {FormatDateRange(start, end)}.", EventId(academicYear, semester, item.Key)));
+            }
 
             if (attempts >= 14)
                 return BuildEvent(academicYear, semester, item, chainCode, start, end, true, "Otomatik yerleşim başarısız.");
@@ -176,7 +195,7 @@ public partial class CalendarGeneratorService
         catch (JsonException) { return null; }
     }
 
-    private static (DateTime Start, DateTime End)? FindProhibitionOverlap(DateTime start, DateTime end, IReadOnlyList<CalendarConstraintInputDto> constraints)
+    private static (DateTime Start, DateTime End, string? Description)? FindProhibitionOverlap(DateTime start, DateTime end, IReadOnlyList<CalendarConstraintInputDto> constraints)
     {
         foreach (var constraint in constraints.Where(c => c.ConstraintType == CalendarConstraintType.Prohibition).OrderBy(c => c.Priority))
         {
@@ -186,7 +205,7 @@ public partial class CalendarGeneratorService
                 var from = ReadDate(doc.RootElement, "from");
                 var to = ReadDate(doc.RootElement, "to");
                 if (from.HasValue && to.HasValue && DateRangesOverlap(start, end, from.Value, to.Value))
-                    return (EnsureUtcDate(from.Value), EnsureUtcDate(to.Value));
+                    return (EnsureUtcDate(from.Value), EnsureUtcDate(to.Value), constraint.Description);
             }
             catch (JsonException) { }
         }

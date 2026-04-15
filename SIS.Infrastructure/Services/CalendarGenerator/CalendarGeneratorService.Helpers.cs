@@ -265,6 +265,31 @@ public partial class CalendarGeneratorService
         return new CalendarDraftDto(draft.Id, draft.AcademicYear, draft.Status.ToString(), draft.QualityScore, draft.CreatedAt, draft.UpdatedAt, draft.ExpiresAt, events, holidays, warnings, BuildTermSummaries(events, holidays));
     }
 
+    private static bool RemoveLegacyShiftWarnings(GeneratedCalendarDraft draft)
+    {
+        List<CalendarWarningDto> warnings;
+        try
+        {
+            warnings = Deserialize<List<CalendarWarningDto>>(draft.WarningsJson);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        var cleanedWarnings = warnings.Where(w => !IsLegacyShiftWarning(w)).ToList();
+        if (cleanedWarnings.Count == warnings.Count)
+            return false;
+
+        draft.WarningsJson = Serialize(cleanedWarnings);
+        draft.QualityScore = CalculateQualityScore(cleanedWarnings);
+        return true;
+    }
+
+    private static bool IsLegacyShiftWarning(CalendarWarningDto warning) =>
+        warning.Code is "HOLIDAY_SHIFT" or "PROHIBITION_SHIFT"
+        && !warning.Message.Contains("Yeni tarih:", StringComparison.OrdinalIgnoreCase);
+
     private static CalendarDraftSummaryDto ToDraftSummaryDto(GeneratedCalendarDraft draft) =>
         new(
             draft.Id,
@@ -375,6 +400,33 @@ public partial class CalendarGeneratorService
 
     private static bool OverlapsBlockingHoliday(DateTime start, DateTime end, IReadOnlyList<ResolvedHolidayDto> holidays) =>
         holidays.Any(h => h.BlocksAcademicEvents && DateRangesOverlap(start, end, h.StartDate, h.EndDate));
+
+    private static IReadOnlyList<string> FindBlockingConflictDescriptions(DateTime start, DateTime end, CalendarEventType eventType, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var descriptions = holidays
+            .Where(h => h.BlocksAcademicEvents && DateRangesOverlap(start, end, h.StartDate, h.EndDate))
+            .OrderBy(h => h.StartDate)
+            .ThenBy(h => h.Name)
+            .Select(h => $"{h.Name} ({FormatDateRange(h.StartDate, h.EndDate)})")
+            .ToList();
+
+        if (StartsOnWeekend(start, eventType))
+            descriptions.Add($"hafta sonu ({FormatDate(start)})");
+
+        return descriptions
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string FormatDate(DateTime date) =>
+        date.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+    private static string FormatDateRange(DateTime start, DateTime end)
+    {
+        var startText = FormatDate(start);
+        var endText = FormatDate(end);
+        return startText == endText ? startText : $"{startText} - {endText}";
+    }
 
     private static bool DateRangesOverlap(DateTime aStart, DateTime aEnd, DateTime bStart, DateTime bEnd) =>
         aStart.Date <= bEnd.Date && bStart.Date <= aEnd.Date;

@@ -1,11 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
-using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -15,13 +13,11 @@ public class AdminTermService : IAdminTermService
     private readonly AppDbContext _context;
     private readonly ITimeSlotService _timeSlotService;
     private readonly ISchedulingService _schedulingService;
-    private readonly IAcademicCalendarRuleService _calendarRuleService;
 
-    public AdminTermService(AppDbContext context, ITimeSlotService timeSlotService, ISchedulingService schedulingService, IAcademicCalendarRuleService calendarRuleService)
+    public AdminTermService(AppDbContext context, ITimeSlotService timeSlotService, ISchedulingService schedulingService)
     {
         _timeSlotService = timeSlotService;
         _schedulingService = schedulingService;
-        _calendarRuleService = calendarRuleService;
         _context = context;
     }
 
@@ -294,15 +290,6 @@ public class AdminTermService : IAdminTermService
 
                 if (unfinalized > 0)
                     errors.Add($"{unfinalized} şubede not girişi tamamlanmamış (finalize edilmemiş).");
-
-                try
-                {
-                    await _calendarRuleService.ValidateTermCanCloseAsync(term);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    errors.Add(ex.Message);
-                }
                 break;
         }
 
@@ -386,88 +373,6 @@ public class AdminTermService : IAdminTermService
             throw new InvalidOperationException("Çekilme tarihi dönem başlangıç tarihinden önce olamaz.");
     }
 
-    // ── Calendar Events ──────────────────────────────────────────────────────
-
-    public async Task<List<TermCalendarEventDto>> GetCalendarEventsAsync(int termId)
-    {
-        _ = await _context.AcademicTerms.FindAsync(termId)
-            ?? throw new KeyNotFoundException($"Dönem bulunamadı: {termId}");
-
-        var events = await _context.TermCalendarEvents
-            .Where(e => e.TermId == termId)
-            .OrderBy(e => e.StartDate)
-            .ToListAsync();
-
-        return events.Select(ToEventDto).ToList();
-    }
-
-    public async Task<TermCalendarEventDto> CreateCalendarEventAsync(int termId, CreateCalendarEventDto dto)
-    {
-        var calTerm = await _context.AcademicTerms.FindAsync(termId)
-            ?? throw new KeyNotFoundException($"Dönem bulunamadı: {termId}");
-        if (calTerm.Status >= TermStatus.Closed)
-            throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği oluşturulamaz.");
-        var eventType = ParseCalendarEventType(dto.EventType);
-        await _calendarRuleService.ValidateCalendarEventAsync(calTerm, eventType, dto.StartDate, dto.EndDate);
-
-        var ev = new TermCalendarEvent
-        {
-            TermId = termId,
-            EventType = eventType,
-            Title = dto.Title,
-            StartDate = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Utc),
-            EndDate = dto.EndDate.HasValue
-                ? DateTime.SpecifyKind(dto.EndDate.Value, DateTimeKind.Utc)
-                : null,
-            IsPublic = dto.IsPublic,
-            Note = dto.Note
-        };
-
-        _context.TermCalendarEvents.Add(ev);
-        await _context.SaveChangesAsync();
-        return ToEventDto(ev);
-    }
-
-    public async Task<TermCalendarEventDto> UpdateCalendarEventAsync(int termId, int eventId, UpdateCalendarEventDto dto)
-    {
-        var calTerm2 = await _context.AcademicTerms.FindAsync(termId);
-        if (calTerm2?.Status >= TermStatus.Closed)
-            throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği düzenlenemez.");
-
-        var ev = await _context.TermCalendarEvents
-            .FirstOrDefaultAsync(e => e.Id == eventId && e.TermId == termId)
-            ?? throw new KeyNotFoundException($"Takvim etkinliği bulunamadı: {eventId}");
-
-        var eventType = ParseCalendarEventType(dto.EventType);
-        await _calendarRuleService.ValidateCalendarEventAsync(calTerm2!, eventType, dto.StartDate, dto.EndDate);
-
-        ev.EventType = eventType;
-        ev.Title = dto.Title;
-        ev.StartDate = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Utc);
-        ev.EndDate = dto.EndDate.HasValue
-            ? DateTime.SpecifyKind(dto.EndDate.Value, DateTimeKind.Utc)
-            : null;
-        ev.IsPublic = dto.IsPublic;
-        ev.Note = dto.Note;
-
-        await _context.SaveChangesAsync();
-        return ToEventDto(ev);
-    }
-
-    public async Task DeleteCalendarEventAsync(int termId, int eventId)
-    {
-        var calTerm3 = await _context.AcademicTerms.FindAsync(termId);
-        if (calTerm3?.Status >= TermStatus.Closed)
-            throw new InvalidOperationException("Arşivlenmiş dönemde takvim etkinliği silinemez.");
-
-        var ev = await _context.TermCalendarEvents
-            .FirstOrDefaultAsync(e => e.Id == eventId && e.TermId == termId)
-            ?? throw new KeyNotFoundException($"Takvim etkinliği bulunamadı: {eventId}");
-
-        _context.TermCalendarEvents.Remove(ev);
-        await _context.SaveChangesAsync();
-    }
-
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static AdminTermDto ToDto(AcademicTerm t)
@@ -512,18 +417,6 @@ public class AdminTermService : IAdminTermService
         );
     }
 
-    private static TermCalendarEventDto ToEventDto(TermCalendarEvent e) =>
-        new(
-            e.Id,
-            e.TermId,
-            e.EventType.ToString(),
-            CalendarEventTypeLabels.GetLabel(e.EventType),
-            e.Title,
-            e.StartDate,
-            e.EndDate,
-            e.IsPublic,
-            e.Note
-        );
 
     private static SemesterType ParseSemester(string s) => s switch
     {
@@ -541,9 +434,4 @@ public class AdminTermService : IAdminTermService
         "Exemption" => TermType.Exemption,
         _ => throw new ArgumentException($"Geçersiz dönem türü: {s}")
     };
-
-    private static CalendarEventType ParseCalendarEventType(string s) =>
-        Enum.TryParse<CalendarEventType>(s, ignoreCase: false, out var value)
-            ? value
-            : throw new ArgumentException($"Geçersiz etkinlik tipi: {s}");
 }

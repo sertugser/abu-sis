@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CalendarGenerator.DTOs;
@@ -10,6 +12,12 @@ namespace SIS.Tests.Application;
 
 public class CalendarGeneratorTests : IDisposable
 {
+    private static readonly JsonSerializerOptions TestJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private readonly AppDbContext _context;
     private readonly CalendarTemplateService _templateService;
     private readonly HolidayCalculatorService _holidayService;
@@ -113,6 +121,55 @@ public class CalendarGeneratorTests : IDisposable
         result.Warnings.Should().NotContain(w => w.Code.StartsWith("REG_", StringComparison.Ordinal));
         result.Events.Single(e => e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_exam")
             .StartDate.Should().BeAfter(result.Events.Single(e => e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_classes_end").StartDate);
+    }
+
+    [Fact]
+    public async Task Generator_HolidayShiftWarning_IncludesConcreteConflictAndNewDate()
+    {
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        result.Warnings.Should().Contain(w =>
+            w.Code == "HOLIDAY_SHIFT"
+            && w.Message.Contains("hafta sonu (01.11.2025)", StringComparison.Ordinal)
+            && w.Message.Contains("hafta sonu (02.11.2025)", StringComparison.Ordinal)
+            && w.Message.Contains("Yeni tarih: 03.11.2025", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetDraft_RemovesLegacyShiftWarnings_FromStoredDraft()
+    {
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var draft = await _context.GeneratedCalendarDrafts.SingleAsync(d => d.Id == result.DraftId);
+        draft.WarningsJson = Json(new List<CalendarWarningDto>
+        {
+            new CalendarWarningDto("HOLIDAY_SHIFT", "Warning", "old generic shift warning", "legacy-event"),
+            new CalendarWarningDto("REG_TEST", "Error", "real warning", "real-event")
+        });
+        draft.QualityScore = 75;
+        await _context.SaveChangesAsync();
+
+        var loaded = await _generatorService.GetDraftAsync(result.DraftId);
+
+        loaded.Warnings.Should().NotContain(w => w.Code == "HOLIDAY_SHIFT");
+        loaded.Warnings.Should().ContainSingle(w => w.Code == "REG_TEST");
+        loaded.QualityScore.Should().Be(80);
+
+        var persisted = await _context.GeneratedCalendarDrafts.AsNoTracking().SingleAsync(d => d.Id == result.DraftId);
+        persisted.WarningsJson.Should().NotContain("old generic shift warning");
+        persisted.QualityScore.Should().Be(80);
     }
 
     [Fact]
@@ -401,4 +458,7 @@ public class CalendarGeneratorTests : IDisposable
 
     private static DateTime Utc(int year, int month, int day) =>
         new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
+
+    private static string Json<T>(T value) =>
+        JsonSerializer.Serialize(value, TestJsonOptions);
 }

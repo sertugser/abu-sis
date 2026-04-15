@@ -13,6 +13,7 @@ import {
   type CalendarConstraintInputDto,
   type CalendarDraftDto,
   type CalendarDraftSummaryDto,
+  type CalendarWarningDto,
   type GenerateCalendarResultDto,
   type GeneratedCalendarEventDto,
   type HolidayDefinitionDto,
@@ -31,6 +32,20 @@ import {
 
 type CalendarView = GenerateCalendarResultDto | CalendarDraftDto;
 type ConfirmTone = 'default' | 'danger' | 'info';
+type WarningRow = {
+  warning: CalendarWarningDto;
+  message: string;
+  detail: string | null;
+  key: string;
+};
+
+type ShiftWarningRow = WarningRow & {
+  titles: string[];
+  semester: string;
+  reason: string;
+  shiftText: string;
+  newDate: string;
+};
 
 type ConfirmOptions = {
   title: string;
@@ -180,14 +195,214 @@ function eventCategoryLabel(eventType: string, isHoliday: boolean) {
   return CATEGORY_LABELS[category] ?? 'Akademik';
 }
 
-function deduplicateWarnings(warnings: { code: string; severity: string; message: string; draftEventId?: string | null }[]) {
+function semesterLabel(semester?: SemesterType | string | null) {
+  return SEMESTERS.find(s => s.value === semester)?.label ?? semester ?? 'Genel';
+}
+
+function isLegacyShiftWarning(warning: CalendarWarningDto) {
+  return isShiftWarning(warning)
+    && !displayText(warning.message).toLocaleLowerCase('tr-TR').includes('yeni tarih:');
+}
+
+function isShiftWarning(warning: CalendarWarningDto) {
+  return warning.code === 'HOLIDAY_SHIFT' || warning.code === 'PROHIBITION_SHIFT';
+}
+
+function parseShiftDays(message: string) {
+  const match = displayText(message).match(/(\d+)\s*g[üu]n/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function parseDateOnly(value?: string | null) {
+  const input = dateInput(value);
+  if (!input) return null;
+  const [year, month, day] = input.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+  return aStart.getTime() <= bEnd.getTime() && bStart.getTime() <= aEnd.getTime();
+}
+
+function isWeekend(date: Date) {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function fmtDateOnly(date: Date) {
+  return date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+function holidayRangeText(start: Date, end: Date) {
+  const startText = fmtDateOnly(start);
+  const endText = fmtDateOnly(end);
+  return startText === endText ? startText : `${startText} - ${endText}`;
+}
+
+function reconstructLegacyHolidayReasons(current: CalendarView, event: GeneratedCalendarEventDto, shiftDays: number) {
+  const finalStart = parseDateOnly(event.startDate);
+  const finalEnd = parseDateOnly(event.endDate ?? event.startDate);
+  if (!finalStart || !finalEnd) return [];
+
+  const originalStart = addDays(finalStart, -shiftDays);
+  const originalEnd = addDays(finalEnd, -shiftDays);
+  const reasons: string[] = [];
+
+  for (let offset = 0; offset < shiftDays; offset++) {
+    const start = addDays(originalStart, offset);
+    const end = addDays(originalEnd, offset);
+
+    current.holidays
+      .filter(holiday => holiday.blocksAcademicEvents)
+      .forEach(holiday => {
+        const holidayStart = parseDateOnly(holiday.startDate);
+        const holidayEnd = parseDateOnly(holiday.endDate);
+        if (holidayStart && holidayEnd && rangesOverlap(start, end, holidayStart, holidayEnd)) {
+          reasons.push(`${displayText(holiday.name)} (${holidayRangeText(holidayStart, holidayEnd)})`);
+        }
+      });
+
+    if (isWeekend(start))
+      reasons.push(`hafta sonu (${fmtDateOnly(start)})`);
+  }
+
+  return [...new Set(reasons)];
+}
+
+function extractShiftReason(message: string, title: string) {
+  const text = displayText(message).replace(displayText(title), '').trim();
+  const [reason] = text.split(/\s+nedeniyle\s+/i);
+  return reason?.trim() || 'takvim çakışması';
+}
+
+function joinedTitles(titles: string[]) {
+  if (titles.length <= 1) return titles[0] ?? 'Etkinlik';
+  if (titles.length === 2) return `${titles[0]} ve ${titles[1]}`;
+  return `${titles.slice(0, -1).join(', ')} ve ${titles[titles.length - 1]}`;
+}
+
+function readableShiftReason(reason: string) {
+  const cleanReason = displayText(reason).trim();
+  const weekendDates = [...cleanReason.matchAll(/hafta sonu \(([^)]+)\)/gi)]
+    .map(match => match[1])
+    .filter(Boolean);
+  const otherReason = cleanReason
+    .replace(/hafta sonu \([^)]+\)(,\s*)?/gi, '')
+    .replace(/,\s*$/, '')
+    .trim();
+  const parts: string[] = [];
+
+  if (weekendDates.length > 0) {
+    parts.push(
+      `${joinedTitles(weekendDates)} ${weekendDates.length === 1 ? 'tarihinin' : 'tarihlerinin'} hafta sonuna denk gelmesi`
+    );
+  }
+
+  if (otherReason) {
+    parts.push(
+      otherReason === 'yasak aralık'
+        ? 'tanımlı yasak aralıkla çakışması'
+        : `${otherReason} ile çakışması`
+    );
+  }
+
+  return parts.length > 0 ? joinedTitles(parts) : cleanReason;
+}
+
+function shiftWarningMessage(row: ShiftWarningRow) {
+  const subject = row.titles.length === 1 ? row.titles[0] : `${row.titles.length} etkinlik`;
+  return `${row.semester} döneminde ${subject}, ${readableShiftReason(row.reason)} nedeniyle ${row.newDate} tarihine kaydırıldı.`;
+}
+
+function buildShiftWarningRow(current: CalendarView, warning: CalendarWarningDto, event: GeneratedCalendarEventDto): ShiftWarningRow | null {
+  const shiftDays = parseShiftDays(warning.message);
+  if (isLegacyShiftWarning(warning) && !shiftDays)
+    return null;
+
+  const title = displayText(event.title);
+  const reason = warning.code === 'HOLIDAY_SHIFT' && shiftDays
+    ? reconstructLegacyHolidayReasons(current, event, shiftDays).join(', ') || 'takvim çakışması'
+    : extractShiftReason(warning.message, title);
+  const shiftText = shiftDays ? `${shiftDays} gün kaydırıldı` : 'kaydırıldı';
+  const semester = semesterLabel(event.semester);
+  const newDate = daySpan(event);
+  const key = `${warning.severity}::${warning.code}::${event.semester}::${reason}::${shiftText}::${newDate}`;
+  const row: ShiftWarningRow = {
+    warning,
+    message: '',
+    detail: `Etkilenen etkinlikler: ${title}`,
+    key,
+    titles: [title],
+    semester,
+    reason,
+    shiftText,
+    newDate,
+  };
+  row.message = shiftWarningMessage(row);
+  return row;
+}
+
+function legacyShiftMessage(current: CalendarView, warning: CalendarWarningDto, event: GeneratedCalendarEventDto) {
+  const shiftDays = parseShiftDays(warning.message);
+  const reason = warning.code === 'HOLIDAY_SHIFT' && shiftDays
+    ? reconstructLegacyHolidayReasons(current, event, shiftDays).join(', ') || 'takvim çakışması'
+    : 'yasak aralık';
+  const shiftText = shiftDays ? `${shiftDays} gün kaydırıldı` : 'kaydırıldı';
+  return `${semesterLabel(event.semester)}: ${displayText(event.title)} ${reason} nedeniyle ${shiftText}. Yeni tarih: ${daySpan(event)}.`;
+}
+
+function warningRows(current: CalendarView) {
   const seen = new Set<string>();
-  return warnings.filter(w => {
-    const key = `${w.code}::${w.message}`;
-    if (seen.has(key)) return false;
+  const shiftGroups = new Map<string, ShiftWarningRow>();
+  return current.warnings.reduce<WarningRow[]>((rows, warning) => {
+    const event = warning.draftEventId
+      ? current.events.find(item => item.draftEventId === warning.draftEventId) ?? null
+      : null;
+
+    if (isShiftWarning(warning) && event) {
+      const nextRow = buildShiftWarningRow(current, warning, event);
+      if (!nextRow)
+        return rows;
+
+      const existing = shiftGroups.get(nextRow.key);
+      if (existing) {
+        for (const title of nextRow.titles) {
+          if (!existing.titles.includes(title))
+            existing.titles.push(title);
+        }
+        existing.message = shiftWarningMessage(existing);
+        existing.detail = `Etkilenen etkinlikler: ${joinedTitles(existing.titles)}`;
+        return rows;
+      }
+
+      shiftGroups.set(nextRow.key, nextRow);
+      rows.push(nextRow);
+      return rows;
+    }
+
+    const message = isLegacyShiftWarning(warning)
+      ? event ? legacyShiftMessage(current, warning, event) : null
+      : displayText(warning.message);
+
+    if (!message)
+      return rows;
+
+    const detail = event ? `Etkinlik: ${semesterLabel(event.semester)} · ${daySpan(event)}` : null;
+    const key = `${warning.severity}::${warning.code}::${message}`;
+    if (seen.has(key)) return rows;
     seen.add(key);
-    return true;
-  });
+    rows.push({ warning, message, detail, key });
+    return rows;
+  }, []);
 }
 
 function processOptionSemesterLabel(option: CalendarProcessOption) {
@@ -567,6 +782,41 @@ export default function AcademicCalendarGeneratorPage() {
       },
       onError: error => setNotice(getErrorMessage(error)),
     });
+  }
+
+  async function deleteAllDraftsFromHistory() {
+    const summaries = drafts.data ?? [];
+    if (summaries.length === 0)
+      return;
+
+    const shouldDelete = await askConfirm({
+      title: 'Tüm taslaklar silinsin mi?',
+      message:
+        `${summaries.length} taslak silinecek.\n\n` +
+        'Bu işlem sadece taslak kayıtlarını kaldırır. Daha önce gerçek akademik takvime uygulanmış etkinlikler silinmez; ancak silinen taslaklar üzerinden geri alma yapılamaz.',
+      confirmLabel: 'Evet, tümünü sil',
+      cancelLabel: 'Vazgeç',
+      tone: 'danger',
+    });
+    if (!shouldDelete)
+      return;
+
+    try {
+      for (const summary of summaries) {
+        await deleteDraft.mutateAsync(summary.id);
+      }
+
+      if (activeDraftId && summaries.some(summary => summary.id === activeDraftId)) {
+        setGenerated(null);
+        setSelectedDraftId(null);
+        setSelectedEventId(null);
+      }
+
+      setNotice(`${summaries.length} taslak silindi.`);
+      await drafts.refetch();
+    } catch (error) {
+      setNotice(getErrorMessage(error));
+    }
   }
 
   async function handleGenerate() {
@@ -1054,19 +1304,22 @@ export default function AcademicCalendarGeneratorPage() {
   }
 
   function renderWarningsPanel(current: CalendarView) {
-    const uniqueWarnings = deduplicateWarnings(current.warnings);
+    const rows = warningRows(current);
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="font-semibold text-slate-900">Uyarılar</h2>
         <div className="mt-3 space-y-2">
-          {uniqueWarnings.length === 0 ? (
+          {rows.length === 0 ? (
             <p className="text-sm text-slate-500">Uyarı yok.</p>
-          ) : uniqueWarnings.map((warning, index) => (
-            <div key={`${warning.code}-${index}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              <Badge variant={warning.severity === 'Error' ? 'destructive' : warning.severity === 'Warning' ? 'warning' : 'secondary'}>
-                {warning.severity}
+          ) : rows.map(row => (
+            <div key={row.key} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <Badge variant={row.warning.severity === 'Error' ? 'destructive' : row.warning.severity === 'Warning' ? 'warning' : 'secondary'}>
+                {row.warning.severity}
               </Badge>
-              <span className="ml-2 text-slate-700">{warning.message}</span>
+              <span className="ml-2 text-slate-700">{row.message}</span>
+              {row.detail && (
+                <div className="mt-1 text-xs text-slate-500">{row.detail}</div>
+              )}
             </div>
           ))}
         </div>
@@ -1143,6 +1396,15 @@ export default function AcademicCalendarGeneratorPage() {
             <div className="flex gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => drafts.refetch()} disabled={drafts.isFetching}>
                 Yenile
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={deleteAllDraftsFromHistory}
+                disabled={deleteDraft.isPending || drafts.isLoading || (drafts.data?.length ?? 0) === 0}
+              >
+                Tümünü Sil
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => setShowDraftHistory(false)}>
                 Kapat
