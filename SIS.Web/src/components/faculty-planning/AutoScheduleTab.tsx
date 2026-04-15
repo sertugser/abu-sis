@@ -1,5 +1,6 @@
 // SIS.Web/src/components/faculty-planning/AutoScheduleTab.tsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SlotAssignSheet } from './SlotAssignSheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CheckCircle2, XCircle, ChevronDown,
-  RotateCcw, Trash2,
+  RotateCcw, Trash2, Wand2,
 } from 'lucide-react';
 import {
   useApplySchedule, useAutoSchedulePreview,
@@ -26,9 +27,10 @@ interface AutoScheduleTabProps {
   filterDept?: number;
   triggerRun?: number;
   onRunStateChange?: (isPending: boolean) => void;
+  actionBarPortal?: HTMLElement | null;
 }
 
-export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onRunStateChange }: AutoScheduleTabProps) {
+export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onRunStateChange, actionBarPortal }: AutoScheduleTabProps) {
   const previewMutation = useAutoSchedulePreview();
   const applyMutation = useApplySchedule();
   const batchUnassign = useBatchUnassignSections();
@@ -182,41 +184,26 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
 
   if (!termId) return null;
 
-  return (
-    <div className="flex flex-col h-full">
+  const actionBarVisible = hasPreview || lastAppliedIds.length > 0 || (ov?.scheduledSections ?? 0) > 0;
 
-      {/* ── Sonuç bar + Geri al / Sıfırla — takvimin üstünde ── */}
-      {(hasPreview || lastAppliedIds.length > 0 || (ov?.scheduledSections ?? 0) > 0) && (
-        <div className="flex items-center gap-2 px-1 py-1.5 shrink-0">
-          {/* Sonuçlar popover — seçici uygulama için */}
+  const actionBar = actionBarVisible ? (
+        <div className="flex items-center gap-2">
+          {/* Sonuç: popover ile seçici uygulama */}
           {hasPreview && (
             <Popover>
               <PopoverTrigger asChild>
-                <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm hover:bg-slate-50 transition-colors">
-                  <span className="font-bold text-[#003366] tabular-nums">%{previewPct}</span>
-                  <Badge className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
-                    {successCount}
-                  </Badge>
-                  {failureCount > 0 && (
-                    <Badge className="text-[9px] bg-red-50 text-red-600 border border-red-200 hover:bg-red-50">
-                      {failureCount}
-                    </Badge>
-                  )}
-                  <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                </button>
+                <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1.5">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                  {successCount} başarılı
+                  {failureCount > 0 && <span className="text-red-500">· {failureCount} başarısız</span>}
+                  <ChevronDown className="h-3 w-3 text-slate-400" />
+                </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[520px] p-0" align="start" sideOffset={4}>
-                {/* Header */}
                 <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100">
-                  <span className="text-sm font-bold text-[#003366] tabular-nums">%{previewPct}</span>
-                  <Badge className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
-                    {successCount} başarılı
-                  </Badge>
-                  {failureCount > 0 && (
-                    <Badge className="text-[9px] bg-red-50 text-red-600 border border-red-200 hover:bg-red-50">
-                      {failureCount} başarısız
-                    </Badge>
-                  )}
+                  <span className="text-xs font-medium text-slate-600">
+                    %{previewPct} başarı · {successCount} atanabilir · {failureCount} başarısız
+                  </span>
                   {runHistory.length > 0 && (
                     <>
                       <div className="flex-1" />
@@ -241,7 +228,6 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
                   )}
                 </div>
 
-                {/* Kart grid */}
                 <ScrollArea className="max-h-[300px]">
                   <div className="flex flex-wrap gap-1.5 p-3">
                     {(previewData?.assignments ?? []).map(a => (
@@ -278,7 +264,6 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
                   </div>
                 </ScrollArea>
 
-                {/* Footer */}
                 <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100">
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
@@ -289,24 +274,34 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
                     />
                     <span className="text-xs text-slate-500">Tümünü Seç</span>
                   </label>
-                  <Button
-                    size="sm"
-                    onClick={handleApplySelected}
-                    disabled={applyMutation.isPending}
-                    className="h-7 text-[11px] px-4 bg-[#003366] hover:bg-[#002244]"
-                  >
-                    {applyMutation.isPending
-                      ? 'Uygulanıyor...'
-                      : selectedIds.size > 0
-                        ? `Uygula (${selectedIds.size})`
-                        : 'Tümünü Uygula'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px]"
+                      onClick={() => setShowResultModal(true)}
+                    >
+                      Detaylı Rapor
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleApplySelected}
+                      disabled={applyMutation.isPending}
+                      className="h-7 text-[11px] px-4 bg-[#003366] hover:bg-[#002244]"
+                    >
+                      {applyMutation.isPending
+                        ? 'Uygulanıyor...'
+                        : selectedIds.size > 0
+                          ? `Uygula (${selectedIds.size})`
+                          : 'Tümünü Uygula'}
+                    </Button>
+                  </div>
                 </div>
               </PopoverContent>
             </Popover>
           )}
 
-          {/* Apply result text */}
+          {/* Uygulama sonucu */}
           {applyMutation.data && (
             <span className={cn(
               'text-[11px]',
@@ -344,18 +339,6 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
 
           <div className="flex-1" />
 
-          {/* Raporu tekrar gör */}
-          {hasPreview && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-[11px]"
-              onClick={() => setShowResultModal(true)}
-            >
-              Rapor
-            </Button>
-          )}
-
           {/* Tümünü Sıfırla */}
           {termId && (ov?.scheduledSections ?? 0) > 0 && (
             <InlineConfirmButton
@@ -375,10 +358,23 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
             />
           )}
         </div>
+  ) : null;
+
+  return (
+    <div className="flex flex-col h-full">
+
+      {/* Aksiyon bar: portal varsa toolbar'a, yoksa yerinde */}
+      {actionBar && (actionBarPortal ? createPortal(actionBar, actionBarPortal) : actionBar)}
+
+      {/* Boş takvim bilgisi */}
+      {sections.filter(s => s.status !== 'Unscheduled').length === 0 && timeSlots.length > 0 && !previewMutation.isPending && (
+        <p className="text-xs text-muted-foreground py-1 shrink-0">
+          Henüz atama yok — hücreye tıklayın veya Otomatik Programla kullanın
+        </p>
       )}
 
       {/* ── Takvim — tam alan ── */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 relative">
         <CalendarGrid
           sections={sections}
           timeSlots={timeSlots}
