@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { exportScheduleExcel, importScheduleApply, importSchedulePreview } from '../api/scheduleExcel.api';
+import { exportScheduleExcel, exportSchedulePdf, importScheduleApply, importSchedulePreview } from '../api/scheduleExcel.api';
 import type { ImportPreviewDto } from '../types/scheduleExcel';
 
 export function useExportExcel() {
@@ -11,6 +11,21 @@ export function useExportExcel() {
       const a = document.createElement('a');
       a.href = url;
       a.download = 'schedule-export.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+}
+
+export function useExportPdf() {
+  return useMutation({
+    mutationFn: ({ termId, facultyId, departmentId }: { termId: number; facultyId: number; departmentId?: number }) =>
+      exportSchedulePdf(termId, facultyId, departmentId),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ders-programi.pdf';
       a.click();
       URL.revokeObjectURL(url);
     },

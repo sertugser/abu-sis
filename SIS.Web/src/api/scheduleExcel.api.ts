@@ -39,3 +39,10 @@ export async function importScheduleApply(
   });
   return data;
 }
+
+export async function exportSchedulePdf(termId: number, facultyId: number, departmentId?: number): Promise<Blob> {
+  const params = new URLSearchParams({ termId: String(termId), facultyId: String(facultyId) });
+  if (departmentId) params.set('departmentId', String(departmentId));
+  const res = await apiClient.get(`/schedule-excel/export-pdf?${params}`, { responseType: 'blob' });
+  return res.data;
+}

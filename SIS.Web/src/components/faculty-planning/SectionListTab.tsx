@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Download, Search, Upload, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Download, FileText, Search, Upload, X } from 'lucide-react';
 import {
   useAssignSection, useFacultyPlanningSections, useFacultyPlanningTimeSlots, useUnassignSection,
 } from '../../hooks/useFacultyPlanning';
-import { useExportExcel } from '../../hooks/useExcelSchedule';
+import { useExportExcel, useExportPdf } from '../../hooks/useExcelSchedule';
 import type { AssignmentResult } from '../../types/facultyPlanning';
 import type { SchedulingConflict } from '../../types/scheduling';
 import { InlineSectionRow } from './InlineSectionRow';
@@ -50,6 +50,7 @@ export function SectionListTab({
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
   const exportMutation = useExportExcel();
+  const exportPdf = useExportPdf();
 
   const totalCount = sectionsQuery.data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -183,6 +184,16 @@ export function SectionListTab({
             >
               <Upload className="h-4 w-4" />
               Yükle
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              disabled={exportPdf.isPending}
+              onClick={() => exportPdf.mutate({ termId: termId!, facultyId: facultyId!, departmentId: filterDept ?? undefined })}
+            >
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              PDF
             </Button>
           </>
         )}
