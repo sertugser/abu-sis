@@ -56,9 +56,11 @@ export default function TermProgramTransferPage() {
   const coursesQuery = usePreviousTermCourses(deptId, sourceTermId, targetTermId);
   const transferMutation = useTransferFromTerm(deptId ?? 0, targetTermId ?? 0);
   const instructorsQuery = useDepartmentInstructors(deptId, targetTermId);
-  const instructors = instructorsQuery.data ?? [];
-  const courses = coursesQuery.data ?? [];
-  const transferable = courses.filter((c) => !c.alreadyOpened);
+  const instructorItems = instructorsQuery.data;
+  const instructors = useMemo(() => instructorItems ?? [], [instructorItems]);
+  const courseItems = coursesQuery.data;
+  const courses = useMemo(() => courseItems ?? [], [courseItems]);
+  const transferable = useMemo(() => courses.filter((c) => !c.alreadyOpened), [courses]);
 
   const filteredCourses = useMemo(() => {
     let result = courses;
