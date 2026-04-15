@@ -8,6 +8,7 @@ public class ClassroomDashboardDto
     public double OccupancyRate { get; set; }
     public int ConflictsCount { get; set; }
     public int EmptySlots { get; set; }
+    public int SlotsPerDay { get; set; }
     public List<ClassroomHeatmapCellDto> Heatmap { get; set; } = new();
     public List<ClassroomInfoDto> Classrooms { get; set; } = new();
 }

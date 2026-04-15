@@ -95,6 +95,21 @@ public class AcademicProgressionService : IAcademicProgressionService
 
         var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m, cancellationToken);
 
+        // Batch CGPA hesaplama — N+1 query yerine tek sorgu
+        var cgpaMap = await _gpaCalculationService.BatchCalculateCgpaAsync(studentIds);
+
+        // Batch latestTermId hesaplama — dryRun olmayan durumda N+1 önlemi
+        var latestTermIdByStudent = !dryRun
+            ? await _context.CourseRegistrations
+                .Include(cr => cr.CourseSection)
+                .Where(cr => studentIds.Contains(cr.StudentId)
+                    && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
+                    && cr.Grade != null)
+                .GroupBy(cr => cr.StudentId)
+                .Select(g => new { StudentId = g.Key, LatestTermId = g.Max(cr => cr.CourseSection.TermId) })
+                .ToDictionaryAsync(x => x.StudentId, x => x.LatestTermId, cancellationToken)
+            : new Dictionary<int, int>();
+
         foreach (var student in students)
         {
             var mainProgram = student.StudentPrograms
@@ -117,7 +132,7 @@ public class AcademicProgressionService : IAcademicProgressionService
                 .GroupBy(r => r.CourseSection.CourseId)
                 .Sum(g => g.First().CourseSection.Course?.Ects ?? 0);
 
-            var cgpa = await _gpaCalculationService.CalculateCgpaAsync(student.Id);
+            var cgpa = cgpaMap.GetValueOrDefault(student.Id, 0m);
 
             // Mevcut seviye: CompletedSemesters bazlı
             var oldSemesters = student.CompletedSemesters;
@@ -128,8 +143,10 @@ public class AcademicProgressionService : IAcademicProgressionService
             var rules = rulesByProgram.GetValueOrDefault(programId) ?? new List<PromotionRule>();
             var promotionDetails = new List<string>();
 
-            int newLevel = 1;
-            for (int fromYear = 1; fromYear < normalDurationYears; fromYear++)
+            // Mevcut seviyeden başla — geçmişte kazanılmış seviyeyi koruyoruz.
+            // Sadece mevcut seviyeden ileriye doğru terfi değerlendirilir.
+            int newLevel = Math.Max(1, oldLevel);
+            for (int fromYear = newLevel; fromYear < normalDurationYears; fromYear++)
             {
                 var rule = rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1);
 
@@ -294,16 +311,8 @@ public class AcademicProgressionService : IAcademicProgressionService
                 student.CompletedSemesters = newSemesters;
                 student.Cgpa = Math.Round(cgpa, 4);
 
-                // SGPA güncelle: son dönemin ANO'sunu hesapla
-                var latestTermId = await _context.CourseRegistrations
-                    .Include(cr => cr.CourseSection)
-                    .Where(cr => cr.StudentId == student.Id
-                        && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.Completed)
-                        && cr.Grade != null)
-                    .Select(cr => cr.CourseSection.TermId)
-                    .Distinct()
-                    .OrderByDescending(tid => tid)
-                    .FirstOrDefaultAsync(cancellationToken);
+                // SGPA güncelle: batch'te hesaplanan latestTermId kullan
+                var latestTermId = latestTermIdByStudent.GetValueOrDefault(student.Id, 0);
 
                 if (latestTermId > 0)
                 {

@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,7 +15,8 @@ import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  AlertCircle, ChevronDown, ChevronUp, HelpCircle,
+  AlertCircle, Building2, BookOpen, ChevronDown, ChevronUp,
+  Clock, GraduationCap, Info, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -20,15 +25,19 @@ import {
   useUpdateConstraintCategory,
 } from '../hooks/useConstraints';
 import { useSystemConfigs, useUpdateSystemConfig } from '../hooks/useSystemConfig';
-import { SCOPE_LABELS } from '../components/constraint/helpers';
+import {
+  CATEGORY_LABELS, SCOPE_LABELS, CONSTRAINT_GROUPS,
+} from '../components/constraint/helpers';
 import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPanel';
 import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
+const GROUP_ICONS = { Building2, GraduationCap, BookOpen, Clock } as const;
+
 const ATTENDANCE_CONFIG_FIELDS = [
-  { key: 'Attendance.TermWeekCount', label: 'Dönem hafta sayısı', suffix: 'hafta' },
-  { key: 'Attendance.TheoryAbsenceLimitPercent', label: 'Teorik devamsızlık eşiği', suffix: '%' },
-  { key: 'Attendance.LabAbsenceLimitPercent', label: 'Uygulama/lab devamsızlık eşiği', suffix: '%' },
+  { key: 'Attendance.TermWeekCount', label: 'Dönem hafta sayısı', suffix: 'hafta', desc: 'Devamsızlık hesabında kullanılan aktif dönem hafta sayısı' },
+  { key: 'Attendance.TheoryAbsenceLimitPercent', label: 'Teorik devamsızlık eşiği', suffix: '%', desc: 'Teorik derslerde devamsızlıktan kalma eşiği (%)' },
+  { key: 'Attendance.LabAbsenceLimitPercent', label: 'Uygulama/lab devamsızlık eşiği', suffix: '%', desc: 'Uygulama/lab derslerinde devamsızlıktan kalma eşiği (%)' },
 ] as const;
 
 // ─── Constraint Row ─────────────────────────────────────────────
@@ -40,95 +49,99 @@ function ConstraintRow({
   isAdmin: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showToggleConfirm, setShowToggleConfirm] = useState(false);
+  const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
   const toggleMutation = useToggleConstraint();
   const categoryMutation = useUpdateConstraintCategory();
 
-  function handleCategoryToggle() {
-    const next = constraint.category === 'Hard' ? 'Soft' : 'Hard';
-    categoryMutation.mutate({ id: constraint.id, category: next });
+  const nextCategory = constraint.category === 'Hard' ? 'Soft' : 'Hard';
+  const nextCategoryLabel = CATEGORY_LABELS[nextCategory];
+
+  function handleToggleClick() {
+    if (constraint.isEnabled && constraint.category === 'Hard' && isAdmin) {
+      setShowToggleConfirm(true);
+    } else {
+      toggleMutation.mutate(constraint.id);
+    }
   }
 
+  function handleCategoryClick() {
+    if (isAdmin) {
+      setShowCategoryConfirm(true);
+    }
+  }
+
+  const categoryBadgeClass = constraint.category === 'Hard'
+    ? 'bg-red-600 text-white border-red-600 dark:bg-red-700 dark:border-red-700'
+    : 'bg-amber-400 text-white border-amber-400 dark:bg-amber-500 dark:border-amber-500';
+
   return (
-    <Card className="mb-2">
-      <CardContent className="py-3 px-4">
-        <div className="flex items-center gap-3 flex-wrap">
+    <>
+      <div className={`rounded-lg border px-4 py-3 transition-colors ${
+        constraint.isEnabled
+          ? 'bg-card border-border'
+          : 'bg-muted/40 border-border/50 opacity-70'
+      }`}>
+        <div className="flex items-center gap-3">
           {/* Toggle */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <Switch
-                  checked={constraint.isEnabled}
-                  onCheckedChange={() => toggleMutation.mutate(constraint.id)}
-                  disabled={toggleMutation.isPending}
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">
-                {constraint.isEnabled ? 'Aktif - tikla devre disi birak' : 'Devre disi - tikla etkinlestir'}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Code */}
-          <Badge variant="outline" className="font-mono text-[11px]">
-            {constraint.code}
-          </Badge>
-
-          {/* Name */}
-          <span className="text-sm font-medium flex-1 min-w-0 truncate">{constraint.name}</span>
-
-          {/* Category badge */}
-          <Badge variant={constraint.category === 'Hard' ? 'destructive' : 'default'} className="text-[10px]">
-            {constraint.category}
-          </Badge>
-
-          {/* Scope */}
-          <Badge variant="secondary" className="text-[10px]">
-            {SCOPE_LABELS[constraint.scope] ?? constraint.scope}
-          </Badge>
-
-          {/* Params summary */}
-          {constraint.parameters && (
+          {isAdmin ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                <div>
+                  <Switch
+                    checked={constraint.isEnabled}
+                    onCheckedChange={handleToggleClick}
+                    disabled={toggleMutation.isPending}
+                  />
+                </div>
               </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <pre className="text-[10px] whitespace-pre-wrap">{constraint.parameters}</pre>
+              <TooltipContent>
+                <p className="text-xs">
+                  {constraint.isEnabled ? 'Devre dışı bırak' : 'Etkinleştir'}
+                </p>
               </TooltipContent>
             </Tooltip>
+          ) : (
+            <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${constraint.isEnabled ? 'bg-green-500' : 'bg-gray-300'}`} />
           )}
+
+          {/* Category badge */}
+          <Badge variant="outline" className={`text-[10px] shrink-0 ${categoryBadgeClass}`}>
+            {CATEGORY_LABELS[constraint.category]}
+          </Badge>
+
+          {/* Name + description */}
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-medium block truncate">{constraint.name}</span>
+            {constraint.description && (
+              <span className="text-xs text-muted-foreground block truncate mt-0.5">
+                {constraint.description}
+              </span>
+            )}
+          </div>
 
           {/* Exception count */}
           {constraint.exceptionCount > 0 && (
-            <Badge variant="warning" className="text-[10px]">
+            <Badge variant="secondary" className="text-[10px] shrink-0">
               {constraint.exceptionCount} istisna
             </Badge>
           )}
 
           {/* Category change (admin only) */}
           {isAdmin && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleCategoryToggle}
-                  disabled={categoryMutation.isPending}
-                >
-                  {constraint.category === 'Hard' ? 'Soft Yap' : 'Hard Yap'}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">Kategoriyi degistir</p>
-              </TooltipContent>
-            </Tooltip>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs shrink-0"
+              onClick={handleCategoryClick}
+              disabled={categoryMutation.isPending}
+            >
+              {nextCategoryLabel} Yap
+            </Button>
           )}
 
           {/* Expand */}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setExpanded(v => !v)}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setExpanded(v => !v)}>
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </div>
@@ -138,43 +151,144 @@ function ConstraintRow({
             <ConstraintDetailPanel constraint={constraint} isAdmin={isAdmin} />
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Toggle confirmation */}
+      <AlertDialog open={showToggleConfirm} onOpenChange={setShowToggleConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Zorunlu kısıtlamayı devre dışı bırak?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>"{constraint.name}"</strong> zorunlu bir kısıtlamadır.
+              Devre dışı bırakıldığında ders programı oluşturulurken bu kural kontrol edilmeyecek
+              ve istenmeyen çakışmalara yol açabilir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => toggleMutation.mutate(constraint.id)}
+            >
+              Devre Dışı Bırak
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Category change confirmation */}
+      <AlertDialog open={showCategoryConfirm} onOpenChange={setShowCategoryConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Kısıtlamayı {nextCategoryLabel.toLowerCase()} yap?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>"{constraint.name}"</strong> kısıtlamasını{' '}
+              <strong>{CATEGORY_LABELS[constraint.category].toLowerCase()}</strong> &rarr;{' '}
+              <strong>{nextCategoryLabel.toLowerCase()}</strong> olarak değiştirmek istediğinizden emin misiniz?
+              {nextCategory === 'Soft' && (
+                <span className="block mt-2 text-amber-600 dark:text-amber-400">
+                  Tercihli olarak değiştirildiğinde bu kural ihlal edilebilir hale gelir.
+                  Program kalitesi düşebilir ancak engelleme yapılmaz.
+                </span>
+              )}
+              {nextCategory === 'Hard' && (
+                <span className="block mt-2 text-red-600 dark:text-red-400">
+                  Zorunlu olarak değiştirildiğinde bu kural kesinlikle ihlal edilemez.
+                  İhlal durumunda program oluşturulamaz.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => categoryMutation.mutate({ id: constraint.id, category: nextCategory })}
+            >
+              {nextCategoryLabel} Yap
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
-// ─── Main Page ──────────────────────────────────────────────────
+// ─── Group Section ──────────────────────────────────────────────
+function GroupSection({
+  group,
+  constraints,
+  isAdmin,
+}: {
+  group: typeof CONSTRAINT_GROUPS[number];
+  constraints: ConstraintDefinitionDto[];
+  isAdmin: boolean;
+}) {
+  const [open, setOpen] = useState(true);
+  const Icon = GROUP_ICONS[group.icon];
+  const hardCount = constraints.filter(c => c.category === 'Hard').length;
+  const softCount = constraints.filter(c => c.category === 'Soft').length;
+
+  if (constraints.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        className="flex items-center gap-2 w-full text-left py-1.5 group"
+        onClick={() => setOpen(v => !v)}
+      >
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-semibold flex-1">{group.label}</span>
+        <span className="text-xs text-muted-foreground">
+          {hardCount > 0 && <span className="text-red-600 dark:text-red-400">{hardCount} zorunlu</span>}
+          {hardCount > 0 && softCount > 0 && ' / '}
+          {softCount > 0 && <span className="text-amber-600 dark:text-amber-400">{softCount} tercihli</span>}
+        </span>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      {open && (
+        <div className="space-y-1.5 pl-6">
+          {constraints.map(c => (
+            <ConstraintRow key={c.id} constraint={c} isAdmin={isAdmin} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Attendance Panel ───────────────────────────────────────────
 function AttendancePolicyPanel() {
   const { data: configs, isLoading, isError } = useSystemConfigs();
   const attendanceConfigs = configs?.filter(config => config.category === 'Attendance') ?? [];
 
   if (isLoading) return <Skeleton className="h-36 rounded-xl" />;
-
   if (isError) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertDescription>Devamsızlık kısıtları yüklenemedi.</AlertDescription>
+        <AlertDescription>Devamsızlık ayarları yüklenemedi.</AlertDescription>
       </Alert>
     );
   }
 
   return (
-    <Card className="border border-[#003366]/20 shadow-sm">
+    <Card>
       <CardContent className="space-y-4 p-4">
         <div>
-          <h2 className="text-base font-bold text-foreground">Devamsızlık Kısıtları</h2>
-          <p className="text-sm text-muted-foreground">
-            Öğrenci devamsızlık ekranındaki teori ve uygulama kalma eşikleri bu değerlerle hesaplanır.
+          <h2 className="text-sm font-semibold text-foreground">Devamsızlık Eşikleri</h2>
+          <p className="text-xs text-muted-foreground">
+            Öğrenci devamsızlık hesaplamalarında kullanılan genel ayarlar.
+            Bu değerler ders programı kısıtlamalarından bağımsızdır.
           </p>
         </div>
-
         <div className="grid gap-3 lg:grid-cols-3">
           {ATTENDANCE_CONFIG_FIELDS.map(field => {
             const config = attendanceConfigs.find(item => item.key === field.key);
-
             return config ? (
-              <AttendanceConfigEditor key={`${config.id}:${config.value}`} config={config} label={field.label} suffix={field.suffix} />
+              <AttendanceConfigEditor key={`${config.id}:${config.value}`} config={config} label={field.label} suffix={field.suffix} desc={field.desc} />
             ) : (
               <div key={field.key} className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
                 {field.label} ayarı bulunamadı.
@@ -188,23 +302,21 @@ function AttendancePolicyPanel() {
 }
 
 function AttendanceConfigEditor({
-  config,
-  label,
-  suffix,
+  config, label, suffix, desc,
 }: {
   config: SystemConfigDto;
   label: string;
   suffix: string;
+  desc: string;
 }) {
   const [value, setValue] = useState(config.value);
   const updateMutation = useUpdateSystemConfig();
-
   const isChanged = value.trim() !== config.value;
 
   return (
     <div className="rounded-md border border-border bg-card p-3">
       <p className="text-sm font-semibold text-foreground">{label}</p>
-      <p className="mt-0.5 min-h-8 text-xs text-muted-foreground">{config.description}</p>
+      <p className="mt-0.5 min-h-8 text-xs text-muted-foreground">{desc}</p>
       <div className="mt-3 flex items-center gap-2">
         <Input
           value={value}
@@ -226,66 +338,117 @@ function AttendanceConfigEditor({
   );
 }
 
+// ─── Info Banner ────────────────────────────────────────────────
+function ConstraintInfoBanner() {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="flex items-start gap-3 rounded-lg border border-red-300 bg-white p-3 dark:border-red-800 dark:bg-card">
+        <ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">Zorunlu Kısıtlamalar</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Kesinlikle ihlal edilemez. Bu kurallardan biri karşılanamazsa
+            ilgili ders o zaman dilimine atanamaz.
+          </p>
+        </div>
+      </div>
+      <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-white p-3 dark:border-amber-800 dark:bg-card">
+        <ShieldCheck className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">Tercihli Kısıtlamalar</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Mümkün olduğunca karşılanır. İhlal edilirse program kalitesi
+            düşer ancak atama engellenmez.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────────
 export default function ConstraintManagementPage() {
   const { data: constraints, isLoading, isError } = useConstraints();
   const { user } = useAuth();
   const isAdmin = user?.roles.includes('SystemAdministrator') ?? false;
+
+  const items = constraints ?? [];
+
+  const groupedConstraints = useMemo(() => {
+    return CONSTRAINT_GROUPS.map(group => ({
+      group,
+      items: group.codes
+        .map(code => items.find(c => c.code === code))
+        .filter((c): c is ConstraintDefinitionDto => c !== undefined),
+    }));
+  }, [items]);
+
+  function filterByCategory(category: 'Hard' | 'Soft' | 'all') {
+    return groupedConstraints.map(({ group, items: groupItems }) => ({
+      group,
+      items: category === 'all' ? groupItems : groupItems.filter(c => c.category === category),
+    }));
+  }
 
   if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
   if (isError) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertDescription>Kisitlamalar yuklenemedi.</AlertDescription>
+        <AlertDescription>Kısıtlamalar yüklenemedi.</AlertDescription>
       </Alert>
     );
   }
 
-  const items = constraints ?? [];
+  const hardCount = items.filter(c => c.category === 'Hard').length;
+  const softCount = items.filter(c => c.category === 'Soft').length;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold">Program Kisitlamalari</h1>
-        <p className="text-sm text-muted-foreground">
-          Ders programi olusturma surecinde uygulanan kisitlamalari yonetin, etkinlestirin veya istisnalar tanimlayin.
-        </p>
-      </div>
-
-      {isAdmin && <AttendancePolicyPanel />}
+      <ConstraintInfoBanner />
 
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">Tumu ({items.length})</TabsTrigger>
+          <TabsTrigger value="all">Tümü ({items.length})</TabsTrigger>
           <TabsTrigger value="hard">
-            Hard ({items.filter(c => c.category === 'Hard').length})
+            Zorunlu ({hardCount})
           </TabsTrigger>
           <TabsTrigger value="soft">
-            Soft ({items.filter(c => c.category === 'Soft').length})
+            Tercihli ({softCount})
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="all">
-          {items.map(c => <ConstraintRow key={c.id} constraint={c} isAdmin={isAdmin} />)}
-        </TabsContent>
-        <TabsContent value="hard">
-          {items.filter(c => c.category === 'Hard').map(c => (
-            <ConstraintRow key={c.id} constraint={c} isAdmin={isAdmin} />
-          ))}
-        </TabsContent>
-        <TabsContent value="soft">
-          {items.filter(c => c.category === 'Soft').map(c => (
-            <ConstraintRow key={c.id} constraint={c} isAdmin={isAdmin} />
-          ))}
-        </TabsContent>
+        {(['all', 'hard', 'soft'] as const).map(tab => (
+          <TabsContent key={tab} value={tab} className="space-y-5 mt-4">
+            {filterByCategory(tab === 'all' ? 'all' : tab === 'hard' ? 'Hard' : 'Soft').map(({ group, items: groupItems }) => (
+              <GroupSection
+                key={group.key}
+                group={group}
+                constraints={groupItems}
+                isAdmin={isAdmin}
+              />
+            ))}
+          </TabsContent>
+        ))}
       </Tabs>
 
       {items.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">Henuz kisitlama tanimlanmamis.</p>
+            <p className="text-sm text-muted-foreground">Henüz kısıtlama tanımlanmamış.</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Attendance - separate section */}
+      {isAdmin && (
+        <div className="space-y-3 border-t pt-6">
+          <div className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-base font-semibold">Genel Ayarlar</h2>
+          </div>
+          <AttendancePolicyPanel />
+        </div>
       )}
     </div>
   );

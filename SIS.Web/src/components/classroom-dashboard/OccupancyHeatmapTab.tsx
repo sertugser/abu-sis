@@ -29,27 +29,54 @@ function getOccupancyStyle(occ: number) {
   return OCCUPANCY_COLORS[OCCUPANCY_COLORS.length - 1];
 }
 
+interface SlotDef {
+  slotOrder: number;
+  startTime: string;
+  endTime: string;
+  label: string;
+}
+
 interface OccupancyHeatmapTabProps {
   dashboard: ClassroomDashboard | undefined;
-  conflictsCount: number;
   isLoading: boolean;
 }
 
-export default function OccupancyHeatmapTab({ dashboard, conflictsCount, isLoading }: OccupancyHeatmapTabProps) {
-  const [selectedCell, setSelectedCell] = useState<{ day: number; hour: number } | null>(null);
+export default function OccupancyHeatmapTab({ dashboard, isLoading }: OccupancyHeatmapTabProps) {
+  const [selectedCell, setSelectedCell] = useState<{ day: number; slotOrder: number } | null>(null);
 
   const assignedCount = dashboard ? dashboard.classrooms.filter(c => c.schedules.length > 0).length : 0;
 
-  const hours = useMemo(() => {
-    if (!dashboard?.heatmap?.length) return [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-    const unique = [...new Set(dashboard.heatmap.map(h => h.hour))].filter(h => h >= 6 && h <= 22).sort((a, b) => a - b);
-    return unique.length ? unique : [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+  const slots = useMemo<SlotDef[]>(() => {
+    if (!dashboard?.heatmap?.length) return [];
+    const slotMap = new Map<number, SlotDef>();
+    for (const cell of dashboard.heatmap) {
+      if (!slotMap.has(cell.slotOrder)) {
+        slotMap.set(cell.slotOrder, {
+          slotOrder: cell.slotOrder,
+          startTime: cell.startTime,
+          endTime: cell.endTime,
+          label: cell.label,
+        });
+      }
+    }
+    return [...slotMap.values()].sort((a, b) => a.slotOrder - b.slotOrder);
+  }, [dashboard]);
+
+  const peakSlot = useMemo(() => {
+    if (!dashboard?.heatmap?.length) return null;
+    let best = dashboard.heatmap[0];
+    for (const cell of dashboard.heatmap) {
+      if (cell.occupancy > best.occupancy) best = cell;
+    }
+    return best.occupancy > 0
+      ? { day: best.day, hour: best.hour, startTime: best.startTime, occupancy: best.occupancy }
+      : null;
   }, [dashboard]);
 
   const cellMap = useMemo(() => {
     const map = new Map<string, ClassroomHeatmapCell>();
     for (const cell of dashboard?.heatmap ?? []) {
-      map.set(`${cell.day}-${cell.hour}`, cell);
+      map.set(`${cell.day}-${cell.slotOrder}`, cell);
     }
     return map;
   }, [dashboard]);
@@ -65,41 +92,44 @@ export default function OccupancyHeatmapTab({ dashboard, conflictsCount, isLoadi
     );
   }
 
-  const selectedHeatmapCell = selectedCell ? cellMap.get(`${selectedCell.day}-${selectedCell.hour}`) : null;
+  const selectedHeatmapCell = selectedCell ? cellMap.get(`${selectedCell.day}-${selectedCell.slotOrder}`) : null;
+  const selectedSlotDef = selectedCell ? slots.find(s => s.slotOrder === selectedCell.slotOrder) : null;
 
   return (
     <div className="space-y-4">
-      <ClassroomSummaryCards
-        totalClassrooms={dashboard?.totalClassrooms ?? 0}
-        occupancyRate={dashboard?.occupancyRate ?? 0}
-        conflictsCount={conflictsCount}
-        assignedCount={assignedCount}
-      />
-
       <div className="bg-white border rounded-xl p-5">
-        <h3 className="text-sm font-semibold mb-4">Doluluk Haritası</h3>
+        <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+          <h3 className="text-sm font-semibold">Doluluk Haritası</h3>
+          <ClassroomSummaryCards
+            totalClassrooms={dashboard?.totalClassrooms ?? 0}
+            occupancyRate={dashboard?.occupancyRate ?? 0}
+            assignedCount={assignedCount}
+            emptySlots={dashboard?.emptySlots ?? 0}
+            peakSlot={peakSlot}
+          />
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="w-14 text-xs text-muted-foreground font-medium text-left py-1">Saat</th>
+                <th className="w-24 text-xs text-muted-foreground font-medium text-left py-1">Slot</th>
                 {DAY_LABELS.map(d => (
                   <th key={d} className="text-xs text-muted-foreground font-medium text-center py-1">{d}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {hours.map(hour => (
-                <tr key={hour}>
-                  <td className="text-xs text-muted-foreground font-mono py-0.5 pr-2">
-                    {String(hour).padStart(2, '0')}:00
+              {slots.map(slot => (
+                <tr key={slot.slotOrder}>
+                  <td className="text-[11px] text-muted-foreground font-mono py-0.5 pr-2 whitespace-nowrap">
+                    {slot.label}
                   </td>
                   {DAY_LABELS.map((_, dayIdx) => {
-                    const cell = cellMap.get(`${dayIdx}-${hour}`);
+                    const cell = cellMap.get(`${dayIdx}-${slot.slotOrder}`);
                     const occ = cell?.occupancy ?? 0;
                     const style = getOccupancyStyle(occ);
-                    const isSelected = selectedCell?.day === dayIdx && selectedCell?.hour === hour;
+                    const isSelected = selectedCell?.day === dayIdx && selectedCell?.slotOrder === slot.slotOrder;
 
                     return (
                       <td key={dayIdx} className="p-0.5">
@@ -112,13 +142,13 @@ export default function OccupancyHeatmapTab({ dashboard, conflictsCount, isLoadi
                                   style.bg, style.border,
                                   isSelected && 'ring-2 ring-[#003366] ring-offset-1',
                                 )}
-                                onClick={() => setSelectedCell(isSelected ? null : { day: dayIdx, hour })}
+                                onClick={() => setSelectedCell(isSelected ? null : { day: dayIdx, slotOrder: slot.slotOrder })}
                               >
                                 {(cell?.usedClassrooms ?? 0) > 0 ? cell!.usedClassrooms : ''}
                               </div>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs max-w-xs">
-                              <p className="font-semibold">{DAY_LABELS[dayIdx]} {String(hour).padStart(2, '0')}:00</p>
+                              <p className="font-semibold">{DAY_LABELS[dayIdx]} {slot.label}</p>
                               <p>{cell?.usedClassrooms ?? 0}/{dashboard?.totalClassrooms ?? 0} derslik dolu (%{Math.round(occ * 100)})</p>
                               {cell?.occupations?.slice(0, 5).map((o, i) => (
                                 <p key={i} className="text-muted-foreground">{o.classroomName}: {o.courseCode} ({o.enrolledCount}/{o.capacity})</p>
@@ -144,7 +174,7 @@ export default function OccupancyHeatmapTab({ dashboard, conflictsCount, isLoadi
             <div className="flex items-center justify-between px-4 py-2.5 bg-[#003366]/5 border-b">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-[#003366]">
-                  {DAY_FULL[selectedCell.day] ?? DAY_LABELS[selectedCell.day]} — {String(selectedCell.hour).padStart(2, '0')}:00
+                  {DAY_FULL[selectedCell.day] ?? DAY_LABELS[selectedCell.day]} — {selectedSlotDef?.label ?? ''}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {selectedHeatmapCell?.occupations?.length ?? 0} ders
@@ -155,7 +185,7 @@ export default function OccupancyHeatmapTab({ dashboard, conflictsCount, isLoadi
               </button>
             </div>
             {!selectedHeatmapCell?.occupations?.length ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Bu saatte ders yok.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Bu slotta ders yok.</p>
             ) : (
               <Table>
                 <TableHeader>

@@ -82,6 +82,10 @@ export interface ClassroomOccupation {
 export interface ClassroomHeatmapCell {
   day: number;
   hour: number;
+  slotOrder: number;
+  startTime: string;
+  endTime: string;
+  label: string;
   occupancy: number;
   usedClassrooms: number;
   details: string;
@@ -114,6 +118,7 @@ export interface ClassroomDashboard {
   occupancyRate: number;
   conflictsCount: number;
   emptySlots: number;
+  slotsPerDay: number;
   heatmap: ClassroomHeatmapCell[];
   classrooms: ClassroomInfo[];
 }

@@ -103,7 +103,6 @@ export default function ClassroomManagementPage() {
           <TabsContent value="heatmap">
             <OccupancyHeatmapTab
               dashboard={dashboard}
-              conflictsCount={conflicts.length}
               isLoading={isLoading}
             />
           </TabsContent>

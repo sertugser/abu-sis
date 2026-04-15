@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { ClassroomDashboard } from '@/types/scheduling';
 
 const DAY_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum'];
@@ -10,8 +11,19 @@ interface ClassroomPrintReportProps {
 }
 
 export default function ClassroomPrintReport({ dashboard, termName, conflictsCount, filterSummary }: ClassroomPrintReportProps) {
-  const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-  const cellMap = new Map(dashboard.heatmap.map(h => [`${h.day}-${h.hour}`, h]));
+  const slots = useMemo(() => {
+    const slotMap = new Map<number, { slotOrder: number; label: string }>();
+    for (const cell of dashboard.heatmap) {
+      if (!slotMap.has(cell.slotOrder)) {
+        slotMap.set(cell.slotOrder, { slotOrder: cell.slotOrder, label: cell.label });
+      }
+    }
+    return [...slotMap.values()].sort((a, b) => a.slotOrder - b.slotOrder);
+  }, [dashboard.heatmap]);
+
+  const cellMap = new Map(dashboard.heatmap.map(h => [`${h.day}-${h.slotOrder}`, h]));
+
+  const slotsPerDay = dashboard.slotsPerDay || 10;
 
   return (
     <div className="p-8 max-w-4xl mx-auto bg-white print:p-4">
@@ -55,18 +67,18 @@ export default function ClassroomPrintReport({ dashboard, termName, conflictsCou
           <table className="w-full border-collapse border text-xs">
             <thead>
               <tr>
-                <th className="border p-1.5 text-left">Saat</th>
+                <th className="border p-1.5 text-left">Slot</th>
                 {DAY_LABELS.map(d => (
                   <th key={d} className="border p-1.5 text-center">{d}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {hours.map(h => (
-                <tr key={h}>
-                  <td className="border p-1.5 font-mono">{String(h).padStart(2, '0')}:00</td>
+              {slots.map(slot => (
+                <tr key={slot.slotOrder}>
+                  <td className="border p-1.5 font-mono">{slot.label}</td>
                   {DAY_LABELS.map((_, dayIdx) => {
-                    const cell = cellMap.get(`${dayIdx}-${h}`);
+                    const cell = cellMap.get(`${dayIdx}-${slot.slotOrder}`);
                     return (
                       <td key={dayIdx} className="border p-1.5 text-center">
                         {cell?.usedClassrooms ?? 0}
@@ -94,8 +106,9 @@ export default function ClassroomPrintReport({ dashboard, termName, conflictsCou
             <tbody>
               {dashboard.classrooms.map(c => {
                 const courseCount = new Set(c.schedules.map(s => s.courseCode)).size;
-                const used = c.schedules.reduce((acc, s) => acc + (s.endHour - s.startHour + 1), 0);
-                const occ = Math.round((used / 50) * 100);
+                const totalWeeklySlots = 5 * slotsPerDay;
+                const usedSlots = c.schedules.length;
+                const occ = totalWeeklySlots > 0 ? Math.round((usedSlots / totalWeeklySlots) * 100) : 0;
                 return (
                   <tr key={c.id}>
                     <td className="border p-1.5">{c.name}</td>

@@ -1093,45 +1093,110 @@ public class SchedulingService : ISchedulingService
 
         var filteredClassroomIds = classrooms.Select(c => c.Id).ToHashSet();
 
-        var heatmapMap = new Dictionary<(int day, int hour), int>();
-        for (int day = 0; day < 5; day++)
+        // TimeSlot'lardan heatmap grid'i oluştur
+        var timeSlots = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == resolvedTerm.Id)
+            .OrderBy(ts => ts.DayOfWeek).ThenBy(ts => ts.SlotOrder)
+            .ToListAsync(cancellationToken);
+
+        var distinctSlots = timeSlots
+            .GroupBy(ts => ts.SlotOrder)
+            .Select(g => g.First())
+            .OrderBy(ts => ts.SlotOrder)
+            .ToList();
+
+        var workDayIndices = timeSlots
+            .Select(ts => (int)ts.DayOfWeek - 1)
+            .Distinct()
+            .Where(d => d >= 0 && d <= 4)
+            .OrderBy(d => d)
+            .ToList();
+
+        // TimeSlot yoksa fallback: 8-17
+        if (distinctSlots.Count == 0)
         {
-            for (int hour = 8; hour <= 17; hour++)
+            for (int d = 0; d < 5; d++) workDayIndices.Add(d);
+            workDayIndices = workDayIndices.Distinct().OrderBy(d => d).ToList();
+            for (int h = 8; h <= 17; h++)
             {
-                heatmapMap[(day, hour)] = 0;
+                distinctSlots.Add(new Domain.Entities.TimeSlot
+                {
+                    SlotOrder = h - 7,
+                    StartTime = new TimeOnly(h, 0),
+                    EndTime = new TimeOnly(h, 50),
+                });
             }
         }
 
-        var occupationMap = new Dictionary<(int day, int hour), List<ClassroomOccupationDto>>();
+        var heatmapMap = new Dictionary<(int day, int slotOrder), int>();
+        foreach (var dayIdx in workDayIndices)
+        {
+            foreach (var slot in distinctSlots)
+            {
+                heatmapMap[(dayIdx, slot.SlotOrder)] = 0;
+            }
+        }
+
+        var timeSlotsPerDay = timeSlots
+            .GroupBy(ts => (int)ts.DayOfWeek - 1)
+            .ToDictionary(g => g.Key, g => g.OrderBy(ts => ts.SlotOrder).ToList());
+
+        var occupationMap = new Dictionary<(int day, int slotOrder), List<ClassroomOccupationDto>>();
         foreach (var section in snapshot.Sections)
         {
             if (section.ClassroomId.HasValue && filteredClassroomIds.Contains(section.ClassroomId.Value))
             {
-                foreach (var slot in section.TimeBlocks)
+                foreach (var block in section.TimeBlocks)
                 {
-                    int dayIndex = (int)slot.Day - 1;
+                    int dayIndex = (int)block.Day - 1;
                     if (dayIndex >= 0 && dayIndex <= 4)
                     {
-                        int startHour = slot.StartTime.Hour;
-                        int endHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1;
-
-                        for (int h = startHour; h <= endHour && h <= 17; h++)
+                        if (timeSlotsPerDay.TryGetValue(dayIndex, out var daySlots))
                         {
-                            if (h >= 8)
+                            foreach (var ts in daySlots)
                             {
-                                var key = (dayIndex, h);
-                                if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
-                                heatmapMap[key]++;
-
-                                if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
-                                occupationMap[key].Add(new ClassroomOccupationDto
+                                if (block.StartTime < ts.EndTime && ts.StartTime < block.EndTime)
                                 {
-                                    ClassroomName = section.ClassroomName,
-                                    CourseCode = section.CourseCode,
-                                    CourseName = section.CourseName,
-                                    EnrolledCount = section.EnrolledCount,
-                                    Capacity = section.ClassroomCapacity
-                                });
+                                    var key = (dayIndex, ts.SlotOrder);
+                                    if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
+                                    heatmapMap[key]++;
+
+                                    if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
+                                    occupationMap[key].Add(new ClassroomOccupationDto
+                                    {
+                                        ClassroomName = section.ClassroomName,
+                                        CourseCode = section.CourseCode,
+                                        CourseName = section.CourseName,
+                                        EnrolledCount = section.EnrolledCount,
+                                        Capacity = section.ClassroomCapacity
+                                    });
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Fallback: TimeSlot yoksa saat bazlı eşleştir
+                            int startHour = block.StartTime.Hour;
+                            int endHour = block.EndTime.Minute > 0 ? block.EndTime.Hour : block.EndTime.Hour - 1;
+                            foreach (var s in distinctSlots)
+                            {
+                                if (startHour < s.EndTime.Hour + 1 && s.StartTime.Hour <= endHour)
+                                {
+                                    var key = (dayIndex, s.SlotOrder);
+                                    if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
+                                    heatmapMap[key]++;
+
+                                    if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
+                                    occupationMap[key].Add(new ClassroomOccupationDto
+                                    {
+                                        ClassroomName = section.ClassroomName,
+                                        CourseCode = section.CourseCode,
+                                        CourseName = section.CourseName,
+                                        EnrolledCount = section.EnrolledCount,
+                                        Capacity = section.ClassroomCapacity
+                                    });
+                                }
                             }
                         }
                     }
@@ -1139,26 +1204,35 @@ public class SchedulingService : ISchedulingService
             }
         }
 
-        int totalSlots = result.TotalClassrooms * 5 * 10;
+        int slotsPerDay = distinctSlots.Count;
+        int totalDays = workDayIndices.Count;
+        int totalSlots = result.TotalClassrooms * totalDays * slotsPerDay;
         int usedSlots = heatmapMap.Values.Sum();
         result.EmptySlots = Math.Max(0, totalSlots - usedSlots);
         result.OccupancyRate = totalSlots > 0 ? Math.Round((double)usedSlots / totalSlots * 100) : 0;
+        result.SlotsPerDay = slotsPerDay;
 
+        var slotLookup = distinctSlots.ToDictionary(s => s.SlotOrder);
         foreach (var kvp in heatmapMap)
         {
             var day = kvp.Key.day;
-            var hour = kvp.Key.hour;
+            var slotOrder = kvp.Key.slotOrder;
             var used = kvp.Value;
             var total = result.TotalClassrooms;
+            var slotDef = slotLookup[slotOrder];
 
             result.Heatmap.Add(new ClassroomHeatmapCellDto
             {
                 Day = day,
-                Hour = hour,
+                Hour = slotDef.StartTime.Hour,
+                SlotOrder = slotOrder,
+                StartTime = slotDef.StartTime.ToString("HH:mm"),
+                EndTime = slotDef.EndTime.ToString("HH:mm"),
+                Label = $"{slotDef.StartTime:HH:mm}-{slotDef.EndTime:HH:mm}",
                 UsedClassrooms = used,
                 Occupancy = total > 0 ? Math.Min(1, (double)used / total) : 0,
-                Details = $"{GetDayName(day)} {hour:D2}:00 — {used}/{total} derslik dolu",
-                Occupations = occupationMap.TryGetValue((day, hour), out var occList) ? occList : new()
+                Details = $"{GetDayName(day)} {slotDef.StartTime:HH:mm}-{slotDef.EndTime:HH:mm} — {used}/{total} derslik dolu",
+                Occupations = occupationMap.TryGetValue((day, slotOrder), out var occList) ? occList : new()
             });
         }
 
