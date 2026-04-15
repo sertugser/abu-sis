@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { parseScheduleSummary } from '@/lib/scheduleUtils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, User, Users, Clock, Wifi } from 'lucide-react';
+import { MapPin, Plus, User, Users, Clock, Wifi } from 'lucide-react';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { STATUS_CONFIG } from './sectionUtils';
 
@@ -229,17 +229,18 @@ function SectionBlock({
 export interface CalendarGridProps {
   sections: FacultyPlanningSection[];
   timeSlots: FacultyPlanningTimeSlot[];
+  onEmptyCellClick?: (day: number, slotOrder: number, startTime: string, endTime: string) => void;
 }
 
 export function CalendarGrid({
-  sections, timeSlots,
+  sections, timeSlots, onEmptyCellClick,
 }: CalendarGridProps) {
   /* Zaman satırları */
   const timeRows = useMemo(() => {
-    const seen = new Map<number, { startTime: string; endTime: string }>();
+    const seen = new Map<number, { slotOrder: number; startTime: string; endTime: string }>();
     for (const slot of timeSlots) {
       if (!seen.has(slot.slotOrder)) {
-        seen.set(slot.slotOrder, { startTime: slot.startTime, endTime: slot.endTime });
+        seen.set(slot.slotOrder, { slotOrder: slot.slotOrder, startTime: slot.startTime, endTime: slot.endTime });
       }
     }
     return Array.from(seen.entries())
@@ -375,9 +376,18 @@ export function CalendarGrid({
                     const cellKey = `${wd.day}-${row.startTime}`;
                     const cellBlocks = blockMap.get(cellKey) ?? [];
 
+                    const isClickableEmpty = cellBlocks.length === 0 && !isEvening && onEmptyCellClick != null;
+
                     return (
                       <CalendarCell key={cellKey} isEvening={isEvening}>
-                        <div className={cn('flex flex-col gap-1', cellBlocks.length > 0 && 'min-h-[3.5rem]')}>
+                        <div
+                          className={cn(
+                            'flex flex-col gap-1',
+                            cellBlocks.length > 0 && 'min-h-[3.5rem]',
+                            isClickableEmpty && 'cursor-pointer hover:bg-blue-50/50 rounded transition-colors group min-h-[3.5rem] items-center justify-center',
+                          )}
+                          onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime) : undefined}
+                        >
                           {cellBlocks.map(b => {
                             const startKey = `${b.sectionId}-${b.day}-${row.startTime}`;
                             const isContinuation = blockStartCells.covered.has(startKey);
@@ -392,6 +402,9 @@ export function CalendarGrid({
                               />
                             );
                           })}
+                          {isClickableEmpty && (
+                            <Plus className="h-4 w-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          )}
                         </div>
                       </CalendarCell>
                     );
