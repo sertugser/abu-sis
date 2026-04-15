@@ -24,6 +24,10 @@ export interface AdminTermDto {
   withdrawalDeadline: string;
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
+  calendarEventCount: number;
+  generatedCalendarEventCount: number;
+  generatedCalendarDraftId: number | null;
+  hasGeneratedCalendar: boolean;
   status: string;
   statusLabel: string;
   allowedTransitions: string[];

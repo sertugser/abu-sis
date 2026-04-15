@@ -22,7 +22,11 @@ public record AdminTermDto(
     DateTime TermEnd,
     DateTime WithdrawalDeadline,
     bool IsRegistrationOpen,
-    bool IsAddDropOpen
+    bool IsAddDropOpen,
+    int CalendarEventCount,
+    int GeneratedCalendarEventCount,
+    int? GeneratedCalendarDraftId,
+    bool HasGeneratedCalendar
 );
 
 public record TransitionTermStatusDto(string TargetStatus);

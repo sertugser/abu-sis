@@ -162,6 +162,12 @@ function DateCell({ start, end, active }: { start: string; end: string; active?:
     </div>
   );
 }
+
+function academicCalendarSourceText(term: AdminTermDto) {
+  if (!term.hasGeneratedCalendar) return null;
+  const draftText = term.generatedCalendarDraftId ? `Taslak #${term.generatedCalendarDraftId}` : 'Taslak';
+  return `${draftText} · ${term.generatedCalendarEventCount} takvim kaydı`;
+}
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TermManagementPage() {
@@ -344,9 +350,17 @@ export default function TermManagementPage() {
                         <p className="text-xs text-muted-foreground">
                           {term.shortName} · {term.termTypeLabel}
                         </p>
+                        {term.hasGeneratedCalendar && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Akademik takvim: {academicCalendarSourceText(term)}
+                          </p>
+                        )}
                       </div>
                       {term.isActive && (
                         <Badge variant="success" className="text-xs shrink-0">Aktif</Badge>
+                      )}
+                      {term.hasGeneratedCalendar && (
+                        <Badge variant="outline" className="text-xs shrink-0">Aktarıldı</Badge>
                       )}
                     </div>
                   </td>

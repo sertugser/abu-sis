@@ -24,6 +24,7 @@ public class AdminTermService : IAdminTermService
     public async Task<List<AdminTermDto>> GetAllTermsAsync()
     {
         var terms = await _context.AcademicTerms
+            .Include(t => t.CalendarEvents)
             .OrderByDescending(t => t.Year)
             .ThenByDescending(t => t.Semester)
             .ToListAsync();
@@ -33,7 +34,9 @@ public class AdminTermService : IAdminTermService
 
     public async Task<AdminTermDto> GetTermByIdAsync(int id)
     {
-        var term = await _context.AcademicTerms.FindAsync(id)
+        var term = await _context.AcademicTerms
+            .Include(t => t.CalendarEvents)
+            .FirstOrDefaultAsync(t => t.Id == id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
         return ToDto(term);
     }
@@ -378,6 +381,11 @@ public class AdminTermService : IAdminTermService
     private static AdminTermDto ToDto(AcademicTerm t)
     {
         var now = DateTime.UtcNow;
+        var generatedEvents = t.CalendarEvents.Where(e => e.IsGenerated).ToList();
+        var generatedDraftId = generatedEvents
+            .Select(e => e.GeneratedDraftId)
+            .Where(id => id.HasValue)
+            .Max();
         return new AdminTermDto(
             t.Id,
             t.Name,
@@ -413,7 +421,11 @@ public class AdminTermService : IAdminTermService
             t.TermEnd,
             t.WithdrawalDeadline,
             t.IsActive && now >= t.RegistrationStart && now <= t.RegistrationEnd,
-            t.IsActive && now >= t.AddDropStart && now <= t.AddDropEnd
+            t.IsActive && now >= t.AddDropStart && now <= t.AddDropEnd,
+            t.CalendarEvents.Count,
+            generatedEvents.Count,
+            generatedDraftId,
+            generatedEvents.Count > 0
         );
     }
 

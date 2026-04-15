@@ -286,9 +286,14 @@ export function useApplyDraft() {
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', variables.draftId] }),
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] }),
         qc.invalidateQueries({ queryKey: ['admin', 'terms'] }),
+        qc.invalidateQueries({ queryKey: ['activeTerm'] }),
         qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] }),
       ]);
-      await qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' });
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ['admin', 'terms'], type: 'active' }),
+        qc.refetchQueries({ queryKey: ['activeTerm'], type: 'active' }),
+        qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' }),
+      ]);
     },
   });
 }
@@ -305,9 +310,14 @@ export function useRollbackDraft() {
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', draftId] }),
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] }),
         qc.invalidateQueries({ queryKey: ['admin', 'terms'] }),
+        qc.invalidateQueries({ queryKey: ['activeTerm'] }),
         qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] }),
       ]);
-      await qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' });
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ['admin', 'terms'], type: 'active' }),
+        qc.refetchQueries({ queryKey: ['activeTerm'], type: 'active' }),
+        qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' }),
+      ]);
     },
   });
 }
