@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
+using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -216,14 +217,267 @@ public class ExcelScheduleService : IExcelScheduleService
         return stream.ToArray();
     }
 
-    public Task<ImportPreviewDto> PreviewImportAsync(Stream fileStream, int termId, int facultyId, CancellationToken ct = default)
+    public async Task<ImportPreviewDto> PreviewImportAsync(Stream fileStream, int termId, int facultyId, CancellationToken ct = default)
     {
-        throw new NotImplementedException();
+        // Turkish day name → DayOfWeek (normalised: lowercase, no diacritics for resilience)
+        var dayMap = new Dictionary<string, DayOfWeek>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Pazartesi", DayOfWeek.Monday },
+            { "Salı",      DayOfWeek.Tuesday },
+            { "Sali",      DayOfWeek.Tuesday },
+            { "Çarşamba",  DayOfWeek.Wednesday },
+            { "Carsamba",  DayOfWeek.Wednesday },
+            { "Perşembe",  DayOfWeek.Thursday },
+            { "Persembe",  DayOfWeek.Thursday },
+            { "Cuma",      DayOfWeek.Friday },
+        };
+
+        // Pre-load reference data for the term/faculty to avoid N+1 queries
+        var sections = await _db.CourseSections
+            .Where(s => s.TermId == termId && s.Course.Department!.FacultyId == facultyId)
+            .Include(s => s.Course)
+            .Include(s => s.SectionSchedules)
+            .ToListAsync(ct);
+
+        var sectionLookup = sections.ToDictionary(
+            s => (s.Course.Code, s.SectionNumber),
+            s => s);
+
+        var timeSlots = await _db.TimeSlots
+            .Where(ts => ts.TermId == termId)
+            .ToListAsync(ct);
+
+        var classrooms = await _db.Classrooms.ToListAsync(ct);
+        var classroomLookup = classrooms
+            .GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        // Existing schedules (all sections in term/faculty) for conflict detection
+        var existingSchedules = await _db.SectionSchedules
+            .Where(ss => ss.CourseSection.TermId == termId
+                      && ss.CourseSection.Course.Department!.FacultyId == facultyId)
+            .Include(ss => ss.CourseSection)
+                .ThenInclude(cs => cs.Instructor)
+            .ToListAsync(ct);
+
+        using var workbook = new XLWorkbook(fileStream);
+        var sheet = workbook.Worksheets.FirstOrDefault(ws => ws.Name == "Program Verisi")
+                    ?? workbook.Worksheet(1);
+
+        var preview = new ImportPreviewDto();
+        var importedSchedules = new List<(int SectionId, int TimeSlotId, int ClassroomId, int RowNumber)>();
+
+        int lastRow = sheet.LastRowUsed()?.RowNumber() ?? 1;
+
+        for (int r = 2; r <= lastRow; r++)
+        {
+            var row = new ImportRowDto { RowNumber = r };
+
+            string courseCode     = sheet.Cell(r, 1).GetValue<string>().Trim();
+            string sectionCodeRaw = sheet.Cell(r, 3).GetValue<string>().Trim();
+            string dayRaw         = sheet.Cell(r, 5).GetValue<string>().Trim();
+            string startTimeRaw   = sheet.Cell(r, 6).GetValue<string>().Trim();
+            string endTimeRaw     = sheet.Cell(r, 7).GetValue<string>().Trim();
+            string classroomName  = sheet.Cell(r, 8).GetValue<string>().Trim();
+            string capacityRaw    = sheet.Cell(r, 9).GetValue<string>().Trim();
+
+            // Skip rows with no course code (likely empty)
+            if (string.IsNullOrWhiteSpace(courseCode))
+                continue;
+
+            row.CourseCode    = courseCode;
+            row.SectionCode   = sectionCodeRaw;
+            row.Day           = dayRaw;
+            row.StartTime     = startTimeRaw;
+            row.EndTime       = endTimeRaw;
+            row.ClassroomName = classroomName;
+            _ = int.TryParse(capacityRaw, out int capacity);
+            row.Capacity      = capacity;
+
+            // Skip rows with no day/time (unassigned — no change intended)
+            if (string.IsNullOrWhiteSpace(dayRaw) || string.IsNullOrWhiteSpace(startTimeRaw))
+            {
+                row.Status  = "Skipped";
+                row.Message = "Gün veya saat bilgisi yok, atlandı.";
+                preview.Rows.Add(row);
+                continue;
+            }
+
+            var errors = new List<string>();
+
+            // Validate: section number
+            if (!int.TryParse(sectionCodeRaw, out int sectionNumber))
+            {
+                errors.Add($"Şube kodu geçersiz: '{sectionCodeRaw}'");
+            }
+
+            // Validate: course + section exists
+            CourseSection? section = null;
+            if (errors.Count == 0 && !sectionLookup.TryGetValue((courseCode, sectionNumber), out section))
+            {
+                errors.Add($"Şube bulunamadı: {courseCode}-{sectionNumber}");
+            }
+
+            // Validate: day name
+            DayOfWeek dayOfWeek = DayOfWeek.Monday;
+            if (!dayMap.TryGetValue(dayRaw, out dayOfWeek))
+            {
+                errors.Add($"Geçersiz gün adı: '{dayRaw}'");
+            }
+
+            // Validate: start/end time parse
+            TimeOnly startTime = default, endTime = default;
+            if (!TimeOnly.TryParse(startTimeRaw, out startTime))
+                errors.Add($"Geçersiz başlangıç saati: '{startTimeRaw}'");
+            if (!string.IsNullOrWhiteSpace(endTimeRaw) && !TimeOnly.TryParse(endTimeRaw, out endTime))
+                errors.Add($"Geçersiz bitiş saati: '{endTimeRaw}'");
+
+            // Validate: timeslot exists
+            TimeSlot? timeSlot = null;
+            if (errors.Count == 0)
+            {
+                timeSlot = timeSlots.FirstOrDefault(ts =>
+                    ts.DayOfWeek == dayOfWeek &&
+                    ts.StartTime == startTime);
+
+                if (timeSlot == null)
+                    errors.Add($"Zaman dilimi bulunamadı: {dayRaw} {startTimeRaw}");
+            }
+
+            // Validate: classroom exists
+            Classroom? classroom = null;
+            if (!string.IsNullOrWhiteSpace(classroomName) &&
+                !classroomLookup.TryGetValue(classroomName, out classroom))
+            {
+                errors.Add($"Derslik bulunamadı: '{classroomName}'");
+            }
+            else if (string.IsNullOrWhiteSpace(classroomName))
+            {
+                errors.Add("Derslik adı boş olamaz.");
+            }
+
+            if (errors.Count > 0)
+            {
+                row.Status  = "Error";
+                row.Message = string.Join("; ", errors);
+                preview.Rows.Add(row);
+                continue;
+            }
+
+            // At this point all lookups succeeded
+            row.SectionId  = section!.Id;
+            row.TimeSlotId = timeSlot!.Id;
+            row.ClassroomId = classroom!.Id;
+
+            var warnings = new List<string>();
+
+            // Conflict check 1: classroom already used in this timeslot (existing DB schedules)
+            bool classroomConflictDb = existingSchedules.Any(ss =>
+                ss.ClassroomId == classroom.Id &&
+                ss.TimeSlotId  == timeSlot.Id &&
+                ss.CourseSection.Id != section.Id);
+
+            // Conflict check 2: classroom used in another import row (within this import batch)
+            bool classroomConflictImport = importedSchedules.Any(i =>
+                i.ClassroomId == classroom.Id &&
+                i.TimeSlotId  == timeSlot.Id &&
+                i.SectionId   != section.Id);
+
+            if (classroomConflictDb || classroomConflictImport)
+                warnings.Add($"Derslik çakışması: {classroomName} bu saatte başka bir şubede kullanılıyor.");
+
+            // Conflict check 3: instructor conflict
+            if (section.InstructorId.HasValue)
+            {
+                bool instructorConflictDb = existingSchedules.Any(ss =>
+                    ss.CourseSection.InstructorId == section.InstructorId &&
+                    ss.TimeSlotId == timeSlot.Id &&
+                    ss.CourseSection.Id != section.Id);
+
+                bool instructorConflictImport = importedSchedules.Any(i =>
+                {
+                    var imp = sections.FirstOrDefault(s => s.Id == i.SectionId);
+                    return imp?.InstructorId == section.InstructorId &&
+                           i.TimeSlotId == timeSlot.Id &&
+                           i.SectionId  != section.Id;
+                });
+
+                if (instructorConflictDb || instructorConflictImport)
+                    warnings.Add("Öğretim üyesi çakışması: Hoca bu saatte başka bir şubede.");
+            }
+
+            // Capacity warning
+            if (capacity > 0 && classroom.Capacity < capacity)
+                warnings.Add($"Kapasite uyarısı: Derslik kapasitesi ({classroom.Capacity}) şube kapasitesinden ({capacity}) küçük.");
+
+            if (warnings.Count > 0)
+            {
+                row.Status  = "Warning";
+                row.Message = string.Join("; ", warnings);
+            }
+            else
+            {
+                row.Status  = "Valid";
+                row.Message = "Hazır.";
+            }
+
+            importedSchedules.Add((section.Id, timeSlot.Id, classroom.Id, r));
+            preview.Rows.Add(row);
+        }
+
+        preview.TotalRows = preview.Rows.Count;
+        return preview;
     }
 
-    public Task<ImportResultDto> ApplyImportAsync(int termId, List<int> rowNumbers, ImportPreviewDto preview, CancellationToken ct = default)
+    public async Task<ImportResultDto> ApplyImportAsync(int termId, List<int> rowNumbers, ImportPreviewDto preview, CancellationToken ct = default)
     {
-        throw new NotImplementedException();
+        var result = new ImportResultDto();
+        var rowSet = new HashSet<int>(rowNumbers);
+
+        var rowsToApply = preview.Rows
+            .Where(r => rowSet.Contains(r.RowNumber) &&
+                        (r.Status == "Valid" || r.Status == "Warning") &&
+                        r.SectionId.HasValue &&
+                        r.ClassroomId.HasValue &&
+                        r.TimeSlotId.HasValue)
+            .ToList();
+
+        foreach (var row in rowsToApply)
+        {
+            try
+            {
+                // Remove existing schedules for this section
+                var existing = await _db.SectionSchedules
+                    .Where(ss => ss.CourseSectionId == row.SectionId!.Value)
+                    .ToListAsync(ct);
+
+                _db.SectionSchedules.RemoveRange(existing);
+
+                // Create new schedule entry
+                var newSchedule = new SIS.Domain.Entities.SectionSchedule
+                {
+                    CourseSectionId = row.SectionId!.Value,
+                    TimeSlotId      = row.TimeSlotId!.Value,
+                    ClassroomId     = row.ClassroomId!.Value,
+                };
+                _db.SectionSchedules.Add(newSchedule);
+
+                result.AppliedCount++;
+            }
+            catch (Exception ex)
+            {
+                result.FailedCount++;
+                result.Failures.Add(new ImportFailureDto
+                {
+                    RowNumber  = row.RowNumber,
+                    CourseCode = row.CourseCode,
+                    Reason     = ex.Message,
+                });
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return result;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
