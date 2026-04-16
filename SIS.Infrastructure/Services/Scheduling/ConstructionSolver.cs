@@ -223,7 +223,8 @@ public sealed class ConstructionSolver
             Corequisites = snapshot.Corequisites,
             CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments
+            CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+            InstructorPreferences = snapshot.InstructorPreferences,
         };
     }
 

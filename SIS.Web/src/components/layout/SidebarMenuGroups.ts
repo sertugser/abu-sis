@@ -75,6 +75,7 @@ export const instructorMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
+      { to: ROUTES.INSTRUCTOR_PREFERENCES, label: 'Tercihlerim' },
       { to: '/not-girisi', label: 'Not Girişi' },
     ],
   },
@@ -106,6 +107,7 @@ export const advisorMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
+      { to: ROUTES.INSTRUCTOR_PREFERENCES, label: 'Tercihlerim' },
       { to: '/not-girisi', label: 'Not Girişi' },
     ],
   },
@@ -135,6 +137,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
+      { to: ROUTES.INSTRUCTOR_PREFERENCES, label: 'Öğretim Üyesi Tercihleri' },
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
@@ -155,6 +158,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
+      { to: ROUTES.INSTRUCTOR_PREFERENCES, label: 'Tercihlerim' },
       { to: '/not-girisi', label: 'Not Girişi' },
     ],
   },
@@ -223,6 +227,7 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
+      { to: ROUTES.INSTRUCTOR_PREFERENCES, label: 'Öğretim Üyesi Tercihleri' },
       { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
@@ -244,6 +249,7 @@ export const deanMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
+      { to: ROUTES.INSTRUCTOR_PREFERENCES, label: 'Tercihlerim' },
       { to: '/not-girisi', label: 'Not Girişi' },
     ],
   },
@@ -275,6 +281,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
+      { to: ROUTES.INSTRUCTOR_PREFERENCES, label: 'Öğretim Üyesi Tercihleri' },
       { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },

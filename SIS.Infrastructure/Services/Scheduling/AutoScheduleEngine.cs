@@ -195,7 +195,12 @@ public sealed class AutoScheduleEngine
             Corequisites = corequisites,
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments
+            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
+            InstructorPreferences = await _context.InstructorPreferences
+                .AsNoTracking()
+                .Where(p => p.TermId == null || p.TermId == request.TermId)
+                .Where(p => p.IsApproved)
+                .ToListAsync(ct),
         };
 
         // 8b. Build cohort assignments if cohort mode enabled

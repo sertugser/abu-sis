@@ -44,6 +44,7 @@ import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import ElectiveGroupManagementPage from './pages/ElectiveGroupManagementPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
 import TermProgramTransferPage from './pages/TermProgramTransferPage';
+import InstructorPreferencePage from './pages/InstructorPreferencePage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
@@ -83,6 +84,7 @@ export default function App() {
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
                     <Route path="ders-programim" element={<InstructorSchedulingPage />} />
+                    <Route path="ogretim-uyesi-tercihleri" element={<InstructorPreferencePage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>

@@ -1475,6 +1475,13 @@ public class SchedulingService : ISchedulingService
             ? await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, cancellationToken)
             : new List<CoEnrollmentPair>();
 
+        // Load instructor preferences for IP1/IP2 evaluators
+        var instructorPreferences = await _context.InstructorPreferences
+            .AsNoTracking()
+            .Where(p => p.TermId == null || p.TermId == termId)
+            .Where(p => p.IsApproved)
+            .ToListAsync(cancellationToken);
+
         var snapshots = sections
             .Select(section => BuildExistingSectionSnapshot(
                 section,
@@ -1495,7 +1502,8 @@ public class SchedulingService : ISchedulingService
             Corequisites = corequisites,
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments
+            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
+            InstructorPreferences = instructorPreferences,
         };
     }
 
