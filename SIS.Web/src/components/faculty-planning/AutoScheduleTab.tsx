@@ -366,13 +366,6 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
       {/* Aksiyon bar: portal varsa toolbar'a, yoksa yerinde */}
       {actionBar && (actionBarPortal ? createPortal(actionBar, actionBarPortal) : actionBar)}
 
-      {/* Boş takvim bilgisi */}
-      {sections.filter(s => s.status !== 'Unscheduled').length === 0 && timeSlots.length > 0 && !previewMutation.isPending && (
-        <p className="text-xs text-muted-foreground py-1 shrink-0">
-          Henüz atama yok — hücreye tıklayın veya Otomatik Programla kullanın
-        </p>
-      )}
-
       {/* ── Takvim — tam alan ── */}
       <div className="flex-1 min-h-0 relative">
         <CalendarGrid

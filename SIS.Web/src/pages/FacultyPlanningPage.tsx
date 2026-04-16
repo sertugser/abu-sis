@@ -3,7 +3,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, Calendar, Download, FileText, LayoutList, Upload, Wand2 } from 'lucide-react';
+import { AlertCircle, Calendar, Download, FileText, LayoutList, Search, Upload, Wand2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { STATUS_CONFIG } from '../components/faculty-planning/sectionUtils';
 import { cn } from '@/lib/utils';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
@@ -15,6 +17,7 @@ import { AutoScheduleTab } from '../components/faculty-planning/AutoScheduleTab'
 import { ExcelImportModal } from '../components/faculty-planning/ExcelImportModal';
 
 type TabKey = 'list' | 'auto-schedule';
+const PAGE_SIZES = [10, 25, 50, 100];
 
 export default function FacultyPlanningPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('auto-schedule');
@@ -23,9 +26,7 @@ export default function FacultyPlanningPage() {
   const { data: activeTerm } = useActiveTerm();
   const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
 
-  const departments = contextQuery.data?.accessibleDepartments ?? [];
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
-  const [filterDept, setFilterDept] = useState<number | undefined>();
   const facultyId = selectedFacultyId ?? faculties?.[0]?.id ?? null;
   const termId = activeTerm?.id ?? null;
 
@@ -34,6 +35,11 @@ export default function FacultyPlanningPage() {
 
   const [triggerRun, setTriggerRun] = useState(0);
   const [autoIsPending, setAutoIsPending] = useState(false);
+
+  // Liste filtreleri (toolbar'da gösterilir)
+  const [filterStatus, setFilterStatus] = useState<string | undefined>();
+  const [searchText, setSearchText] = useState('');
+  const [pageSize, setPageSize] = useState(25);
 
   const [actionBarNode, setActionBarNode] = useState<HTMLDivElement | null>(null);
 
@@ -72,16 +78,41 @@ export default function FacultyPlanningPage() {
           ))}
         </select>
         {activeTab === 'list' && (
-          <select
-            className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 shrink-0"
-            value={filterDept ?? ''}
-            onChange={e => setFilterDept(e.target.value ? Number(e.target.value) : undefined)}
-          >
-            <option value="">Tüm Bölümler</option>
-            {departments.map(d => (
-              <option key={d.departmentId} value={d.departmentId}>{d.departmentCode}</option>
-            ))}
-          </select>
+          <>
+            <div className="w-px h-5 bg-slate-200" />
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <Input
+                placeholder="Ders kodu veya adı..."
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                className="pl-8 h-8 w-44 text-sm border-slate-200"
+              />
+            </div>
+            <select
+              className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 shrink-0"
+              value={filterStatus ?? ''}
+              onChange={e => setFilterStatus(e.target.value || undefined)}
+            >
+              <option value="">Tüm Durumlar</option>
+              {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+            <select
+              className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 shrink-0"
+              value={pageSize}
+              onChange={e => setPageSize(Number(e.target.value))}
+            >
+              {PAGE_SIZES.map(n => <option key={n} value={n}>{n} satır</option>)}
+            </select>
+            {(filterStatus !== undefined || searchText) && (
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                onClick={() => { setFilterStatus(undefined); setSearchText(''); }}
+              >
+                Temizle
+              </button>
+            )}
+          </>
         )}
 
         {/* AutoScheduleTab aksiyon bar'ı buraya portal ile render edilir */}
@@ -122,7 +153,7 @@ export default function FacultyPlanningPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={exportExcel.isPending}
-                  onClick={() => exportExcel.mutate({ termId: termId!, facultyId: facultyId!, departmentId: filterDept })}>
+                  onClick={() => exportExcel.mutate({ termId: termId!, facultyId: facultyId!, departmentId: undefined })}>
                   <Download className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -133,7 +164,7 @@ export default function FacultyPlanningPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={exportPdf.isPending}
-                  onClick={() => exportPdf.mutate({ termId: termId!, facultyId: facultyId!, departmentId: filterDept })}>
+                  onClick={() => exportPdf.mutate({ termId: termId!, facultyId: facultyId!, departmentId: undefined })}>
                   <FileText className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -160,7 +191,7 @@ export default function FacultyPlanningPage() {
         {/* Otomatik Programla */}
         <Button
           size="sm"
-          className="h-8 text-sm bg-[#003366] hover:bg-[#002244] text-white rounded-lg"
+          className="btn-magic-schedule h-8 text-sm text-white rounded-lg border-0"
           disabled={autoIsPending || !isTermEditable}
           onClick={() => {
             if (activeTab !== 'auto-schedule') setActiveTab('auto-schedule');
@@ -185,7 +216,15 @@ export default function FacultyPlanningPage() {
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {activeTab === 'list' && (
           <div className="flex-1 overflow-auto">
-            <SectionListTab facultyId={facultyId} termId={termId} departments={departments} readOnly={!isTermEditable} />
+            <SectionListTab
+              facultyId={facultyId}
+              termId={termId}
+              readOnly={!isTermEditable}
+              filterDept={undefined}
+              filterStatus={filterStatus}
+              searchText={searchText}
+              pageSize={pageSize}
+            />
           </div>
         )}
         {activeTab === 'auto-schedule' && (

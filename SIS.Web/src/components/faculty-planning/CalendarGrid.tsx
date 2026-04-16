@@ -321,8 +321,17 @@ export function CalendarGrid({
     );
   }
 
+  const isEmpty = allBlocks.length === 0;
+
   return (
-    <div className="h-full border border-slate-200 rounded-xl overflow-auto bg-white shadow-sm">
+    <div className="h-full border border-slate-200 rounded-xl overflow-auto bg-white shadow-sm relative">
+      {isEmpty && (
+        <div className="sticky top-0 z-20 flex items-center justify-center gap-2 bg-slate-50/90 backdrop-blur-sm border-b border-slate-200/60 py-1.5 text-xs text-slate-400">
+          <span>Henüz atama yok</span>
+          <span className="text-slate-300">—</span>
+          <span>Hücreye tıklayın veya <span className="font-medium text-slate-500">Otomatik Programla</span> kullanın</span>
+        </div>
+      )}
       <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 72 }} />
