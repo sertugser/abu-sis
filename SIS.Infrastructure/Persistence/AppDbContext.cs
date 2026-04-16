@@ -56,6 +56,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<DistributionConstraintCourse> DistributionConstraintCourses => Set<DistributionConstraintCourse>();
     public DbSet<ConstraintExceptionRequest> ConstraintExceptionRequests => Set<ConstraintExceptionRequest>();
     public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
+    public DbSet<ConstraintViolationSnapshot> ConstraintViolationSnapshots => Set<ConstraintViolationSnapshot>();
+    public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -667,6 +669,19 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         {
             e.HasIndex(s => new { s.RequestId, s.StepOrder });
             e.HasOne(s => s.Request).WithMany(r => r.ApprovalSteps).HasForeignKey(s => s.RequestId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ConstraintViolationSnapshot ────────────────────────────
+        builder.Entity<ConstraintViolationSnapshot>(e =>
+        {
+            e.HasIndex(s => new { s.TermId, s.SnapshotAt });
+            e.HasOne(s => s.Term).WithMany().HasForeignKey(s => s.TermId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ConstraintViolationSnapshotDetail>(e =>
+        {
+            e.HasIndex(d => d.SnapshotId);
+            e.HasOne(d => d.Snapshot).WithMany(s => s.Details).HasForeignKey(d => d.SnapshotId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Performance Indexes ──────────────────────────────────

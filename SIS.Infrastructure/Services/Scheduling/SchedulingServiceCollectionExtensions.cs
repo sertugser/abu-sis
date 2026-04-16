@@ -59,6 +59,9 @@ public static class SchedulingServiceCollectionExtensions
         // What-if simulation engine
         services.AddScoped<ISimulationService, SimulationService>();
 
+        // Constraint snapshot / analytics
+        services.AddScoped<IConstraintSnapshotService, ConstraintSnapshotService>();
+
         return services;
     }
 }

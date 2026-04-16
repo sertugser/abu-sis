@@ -669,6 +669,80 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("ConstraintProfileItems");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsFeasible")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("SnapshotAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SnapshotType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalHardViolations")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("TotalSoftPenalty")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId", "SnapshotAt");
+
+                    b.ToTable("ConstraintViolationSnapshots");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshotDetail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AffectedSectionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ConstraintCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("Penalty")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("SnapshotId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ViolationCount")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("WeightedPenalty")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotId");
+
+                    b.ToTable("ConstraintViolationSnapshotDetails");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
                 {
                     b.Property<int>("Id")
@@ -2397,6 +2471,28 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Profile");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshotDetail", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintViolationSnapshot", "Snapshot")
+                        .WithMany("Details")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Department", "Department")
@@ -3075,6 +3171,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
+                {
+                    b.Navigation("Details");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
