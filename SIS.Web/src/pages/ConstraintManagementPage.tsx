@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
   AlertCircle, Building2, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
-  Clock, GraduationCap, Info, Link2, ShieldAlert, ShieldCheck,
+  Clock, FlaskConical, GraduationCap, Info, Link2, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -39,6 +39,7 @@ import ProfileSelector from '../components/constraint/ProfileSelector';
 import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDashboard';
 import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
 import ApprovalPanel from '../components/constraint/ApprovalPanel';
+import SimulationDrawer from '../components/constraint/SimulationDrawer';
 import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
@@ -410,6 +411,7 @@ export default function ConstraintManagementPage() {
   const isAdmin = user?.roles.includes('SystemAdministrator') ?? false;
 
   const [profileToast, setProfileToast] = useState<string | null>(null);
+  const [simulationOpen, setSimulationOpen] = useState(false);
 
   useEffect(() => {
     if (!profileToast) return;
@@ -490,6 +492,15 @@ export default function ConstraintManagementPage() {
               </SelectContent>
             </Select>
             <ProfileSelector onApplied={setProfileToast} />
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setSimulationOpen(true)}
+            >
+              <FlaskConical className="h-4 w-4" />
+              Simulasyon
+            </Button>
           </div>
           <ScoreBreakdownDashboard breakdown={breakdown} isLoading={breakdownLoading} />
         </div>
@@ -550,6 +561,14 @@ export default function ConstraintManagementPage() {
           <AttendancePolicyPanel />
         </div>
       )}
+
+      {/* Simulation Drawer */}
+      <SimulationDrawer
+        open={simulationOpen}
+        onOpenChange={setSimulationOpen}
+        termId={effectiveTermId}
+        constraints={items}
+      />
     </div>
   );
 }

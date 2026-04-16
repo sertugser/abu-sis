@@ -1405,7 +1405,7 @@ public class SchedulingService : ISchedulingService
 
     // ── Private helpers ──────────────────────────────────────────────────
 
-    private async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
+    internal async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
     {
         var sectionsQuery = _context.CourseSections
             .AsNoTracking()
@@ -1729,7 +1729,7 @@ public class SchedulingService : ISchedulingService
         return (conflicts, notes);
     }
 
-    private SchedulingConstraintConfig BuildConstraintConfig(SoftConstraintConfig soft, HardConstraintConfig? hard)
+    internal SchedulingConstraintConfig BuildConstraintConfig(SoftConstraintConfig soft, HardConstraintConfig? hard)
     {
         return new SchedulingConstraintConfig
         {
@@ -2361,13 +2361,13 @@ public class SchedulingService : ISchedulingService
 
     // ── Soft constraint config helpers ────────────────────────────────────
 
-    private async Task<Dictionary<string, string>> LoadSystemConfigAsync(CancellationToken ct)
+    internal async Task<Dictionary<string, string>> LoadSystemConfigAsync(CancellationToken ct)
     {
         return await _context.SystemConfigs.AsNoTracking()
             .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
     }
 
-    private async Task<SoftConstraintConfig> LoadSoftConstraintConfigAsync(CancellationToken ct)
+    internal async Task<SoftConstraintConfig> LoadSoftConstraintConfigAsync(CancellationToken ct)
     {
         var config = await LoadSystemConfigAsync(ct);
 
@@ -2401,7 +2401,7 @@ public class SchedulingService : ISchedulingService
     /// Loads co-enrollment pairs from the last 3 terms (before the given term).
     /// Finds course pairs frequently taken by the same student in the same term.
     /// </summary>
-    private async Task<List<CoEnrollmentPair>> LoadCoEnrollmentPairsAsync(int currentTermId, int minThreshold, CancellationToken ct)
+    internal async Task<List<CoEnrollmentPair>> LoadCoEnrollmentPairsAsync(int currentTermId, int minThreshold, CancellationToken ct)
     {
         // Get last 3 term IDs before the current term
         var recentTermIds = await _context.AcademicTerms.AsNoTracking()
@@ -2454,7 +2454,7 @@ public class SchedulingService : ISchedulingService
             .ToList();
     }
 
-    private async Task<HardConstraintConfig> LoadHardConstraintConfigAsync(CancellationToken ct)
+    internal async Task<HardConstraintConfig> LoadHardConstraintConfigAsync(CancellationToken ct)
     {
         var config = await LoadSystemConfigAsync(ct);
 
@@ -2491,7 +2491,7 @@ public class SchedulingService : ISchedulingService
 
     // ── Constants & inner types ──────────────────────────────────────────
 
-    private record SoftConstraintConfig(
+    internal record SoftConstraintConfig(
         bool S1Enabled, int S1MinOccupancy, int S1MaxOccupancy,
         bool S2Enabled, int S2MaxDailyHours,
         bool S3Enabled, int S3MaxSectionsPerSlot,
@@ -2502,7 +2502,7 @@ public class SchedulingService : ISchedulingService
         bool S9Enabled, TimeOnly S9MorningStart, TimeOnly S9EveningStart,
         bool S12Enabled, int S12MaxImbalancePercent);
 
-    private record HardConstraintConfig(
+    internal record HardConstraintConfig(
         bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
         int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold,
         int TheoryLabSplitThreshold = 4,

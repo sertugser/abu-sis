@@ -56,6 +56,9 @@ public static class SchedulingServiceCollectionExtensions
         // Approval workflow
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
 
+        // What-if simulation engine
+        services.AddScoped<ISimulationService, SimulationService>();
+
         return services;
     }
 }
