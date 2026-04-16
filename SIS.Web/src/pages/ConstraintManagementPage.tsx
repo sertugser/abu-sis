@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -18,7 +18,7 @@ import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  AlertCircle, Building2, BookOpen, ChevronDown, ChevronUp,
+  AlertCircle, Building2, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
   Clock, GraduationCap, Info, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +35,7 @@ import {
   CATEGORY_LABELS, SCOPE_LABELS, CONSTRAINT_GROUPS,
 } from '../components/constraint/helpers';
 import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPanel';
+import ProfileSelector from '../components/constraint/ProfileSelector';
 import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDashboard';
 import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
@@ -406,6 +407,14 @@ export default function ConstraintManagementPage() {
   const { user } = useAuth();
   const isAdmin = user?.roles.includes('SystemAdministrator') ?? false;
 
+  const [profileToast, setProfileToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!profileToast) return;
+    const t = setTimeout(() => setProfileToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [profileToast]);
+
   // Default to the active term, fallback to latest
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
   const effectiveTermId = useMemo(() => {
@@ -450,6 +459,14 @@ export default function ConstraintManagementPage() {
 
   return (
     <div className="space-y-6">
+      {/* Profile toast */}
+      {profileToast && (
+        <Alert variant="default" className="py-2">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription className="text-xs">{profileToast}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Term selector + Score breakdown */}
       {isAdmin && terms && terms.length > 0 && (
         <div className="space-y-4">
@@ -470,6 +487,7 @@ export default function ConstraintManagementPage() {
                 ))}
               </SelectContent>
             </Select>
+            <ProfileSelector onApplied={setProfileToast} />
           </div>
           <ScoreBreakdownDashboard breakdown={breakdown} isLoading={breakdownLoading} />
         </div>

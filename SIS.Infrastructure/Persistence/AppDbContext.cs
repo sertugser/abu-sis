@@ -49,6 +49,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
     public DbSet<ForecastCalibration> ForecastCalibrations => Set<ForecastCalibration>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
+    public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
+    public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -614,6 +616,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasOne(ce => ce.Department).WithMany().HasForeignKey(ce => ce.DepartmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(ce => ce.CourseSection).WithMany().HasForeignKey(ce => ce.CourseSectionId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(ce => ce.Term).WithMany().HasForeignKey(ce => ce.TermId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── ConstraintProfile ────────────────────────────────────
+        builder.Entity<ConstraintProfileItem>(e =>
+        {
+            e.HasIndex(i => new { i.ProfileId, i.ConstraintDefinitionId }).IsUnique();
+
+            e.HasOne(i => i.Profile)
+             .WithMany(p => p.Items)
+             .HasForeignKey(i => i.ProfileId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(i => i.ConstraintDefinition)
+             .WithMany()
+             .HasForeignKey(i => i.ConstraintDefinitionId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── Performance Indexes ──────────────────────────────────

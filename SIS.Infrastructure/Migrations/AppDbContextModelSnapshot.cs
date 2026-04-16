@@ -502,6 +502,75 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("ConstraintExceptions");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ConstraintProfiles");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfileItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ConstraintDefinitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Parameters")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Weight")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConstraintDefinitionId");
+
+                    b.HasIndex("ProfileId", "ConstraintDefinitionId")
+                        .IsUnique();
+
+                    b.ToTable("ConstraintProfileItems");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
                 {
                     b.Property<int>("Id")
@@ -2057,6 +2126,25 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Term");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfileItem", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintDefinition", "ConstraintDefinition")
+                        .WithMany()
+                        .HasForeignKey("ConstraintDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.ConstraintProfile", "Profile")
+                        .WithMany("Items")
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConstraintDefinition");
+
+                    b.Navigation("Profile");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Department", "Department")
@@ -2656,6 +2744,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintDefinition", b =>
                 {
                     b.Navigation("Exceptions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
