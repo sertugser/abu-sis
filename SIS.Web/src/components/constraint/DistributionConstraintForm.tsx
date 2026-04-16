@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -26,11 +26,11 @@ const DISTRIBUTION_TYPES = [
 ] as const;
 
 const PREFERENCE_LEVELS = [
-  { value: 'Preferred', label: 'Tercih Edilir', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-  { value: 'StronglyPreferred', label: 'Kesinlikle Tercih Edilir', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' },
-  { value: 'Discouraged', label: 'Tercih Edilmez', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' },
-  { value: 'StronglyDiscouraged', label: 'Kesinlikle Tercih Edilmez', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' },
-  { value: 'Unavailable', label: 'Kesin Yasak (Hard)', color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
+  { value: 'Preferred', label: 'Tercih Edilir', color: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700' },
+  { value: 'StronglyPreferred', label: 'Kesinlikle Tercih Edilir', color: 'border-green-600 bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 dark:border-green-700' },
+  { value: 'Discouraged', label: 'Tercih Edilmez', color: 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700' },
+  { value: 'StronglyDiscouraged', label: 'Kesinlikle Tercih Edilmez', color: 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-700' },
+  { value: 'Unavailable', label: 'Kesin Yasak (Hard)', color: 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 dark:border-red-700' },
 ] as const;
 
 interface SelectedCourse {
@@ -127,18 +127,18 @@ export default function DistributionConstraintForm({
   const isValid = selectedCourses.length >= 2;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {editing ? 'Kural Duzenle' : 'Yeni Iliskisel Kisitlama'}
-          </DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>
+            {editing ? 'Kural Düzenle' : 'Yeni İlişkisel Kısıtlama'}
+          </SheetTitle>
+        </SheetHeader>
 
         <div className="space-y-4 py-2">
           {/* Distribution Type */}
           <div className="space-y-1.5">
-            <Label>Kisitlama Tipi</Label>
+            <Label>Kısıtlama Tipi</Label>
             <Select value={distType} onValueChange={setDistType}>
               <SelectTrigger>
                 <SelectValue />
@@ -180,7 +180,7 @@ export default function DistributionConstraintForm({
             <Label>Dersler (en az 2)</Label>
             <div className="relative">
               <Input
-                placeholder="Ders kodu veya adi ile arama..."
+                placeholder="Ders kodu veya adı ile arama..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -254,7 +254,7 @@ export default function DistributionConstraintForm({
               ))}
               {selectedCourses.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-3">
-                  Henuz ders eklenmedi. Yukaridaki arama kutusundan ders ekleyin.
+                  Henüz ders eklenmedi. Yukarıdaki arama kutusundan ders ekleyin.
                 </p>
               )}
             </div>
@@ -262,25 +262,25 @@ export default function DistributionConstraintForm({
 
           {/* Reason */}
           <div className="space-y-1.5">
-            <Label>Aciklama (opsiyonel)</Label>
+            <Label>Açıklama (opsiyonel)</Label>
             <Input
-              placeholder="Bu kisitlamanin nedeni..."
+              placeholder="Bu kısıtlamanın nedeni..."
               value={reason}
               onChange={e => setReason(e.target.value)}
             />
           </div>
         </div>
 
-        <DialogFooter>
+        <SheetFooter className="flex-row justify-end gap-2 pt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            Iptal
+            İptal
           </Button>
           <Button onClick={handleSubmit} disabled={!isValid || isPending}>
             <Plus className="h-4 w-4 mr-1" />
-            {editing ? 'Guncelle' : 'Olustur'}
+            {editing ? 'Güncelle' : 'Oluştur'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

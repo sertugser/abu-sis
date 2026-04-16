@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -58,33 +57,6 @@ export default function ScoreBreakdownDashboard({
 
   return (
     <div className="space-y-4 mb-6">
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">Hard Ihlaller</div>
-            <div className="text-2xl font-bold text-destructive">
-              {breakdown.totalHardViolations}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">Soft Penalty</div>
-            <div className="text-2xl font-bold text-amber-600">
-              {breakdown.totalSoftPenalty.toFixed(1)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">Durum</div>
-            <Badge variant={breakdown.feasible ? 'default' : 'destructive'} className="mt-1">
-              {breakdown.feasible ? 'Uygulanabilir' : 'Ihlal Var'}
-            </Badge>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Trend + Snapshot */}
       {trendData && trendData.dataPoints.length > 1 && (
         <div className="flex items-start gap-4">
