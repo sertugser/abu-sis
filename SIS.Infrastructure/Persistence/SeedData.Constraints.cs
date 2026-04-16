@@ -296,6 +296,17 @@ public static partial class SeedData
                 Parameters = """{"Weight": 2}""",
                 SortOrder = 111
             },
+            new()
+            {
+                Code = "DIST",
+                Name = "İlişkisel Kısıtlamalar",
+                Description = "Dersler arası ilişkisel kuralları (aynı gün, ardışık, aynı derslik, sıralama) kontrol eder.",
+                Category = "Soft",
+                Scope = "Scheduling",
+                IsEnabled = true,
+                Parameters = """{"Weight": 3}""",
+                SortOrder = 112
+            },
         };
 
         var existingCodes = await context.ConstraintDefinitions

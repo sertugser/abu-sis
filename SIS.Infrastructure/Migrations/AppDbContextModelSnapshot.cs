@@ -1135,6 +1135,78 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("Departments");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DistributionType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PreferenceLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("TermId");
+
+                    b.ToTable("DistributionConstraints");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraintCourse", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DistributionConstraintId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.HasIndex("CourseSectionId");
+
+                    b.HasIndex("DistributionConstraintId", "CourseId", "CourseSectionId");
+
+                    b.ToTable("DistributionConstraintCourses");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>
                 {
                     b.Property<int>("Id")
@@ -2471,6 +2543,50 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Faculty");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraint", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraintCourse", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
+                        .WithMany()
+                        .HasForeignKey("CourseSectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIS.Domain.Entities.DistributionConstraint", "DistributionConstraint")
+                        .WithMany("Courses")
+                        .HasForeignKey("DistributionConstraintId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("CourseSection");
+
+                    b.Navigation("DistributionConstraint");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
@@ -2860,6 +2976,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.Department", b =>
                 {
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraint", b =>
+                {
+                    b.Navigation("Courses");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>

@@ -1482,6 +1482,13 @@ public class SchedulingService : ISchedulingService
             .Where(p => p.IsApproved)
             .ToListAsync(cancellationToken);
 
+        // Load distribution constraints for DIST evaluator
+        var distributionConstraints = await _context.DistributionConstraints
+            .AsNoTracking()
+            .Include(d => d.Courses)
+            .Where(d => d.TermId == termId)
+            .ToListAsync(cancellationToken);
+
         var snapshots = sections
             .Select(section => BuildExistingSectionSnapshot(
                 section,
@@ -1504,6 +1511,7 @@ public class SchedulingService : ISchedulingService
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
             CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
             InstructorPreferences = instructorPreferences,
+            DistributionConstraints = distributionConstraints,
         };
     }
 

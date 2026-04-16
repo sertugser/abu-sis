@@ -46,7 +46,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'time',
     label: 'Zaman & Dağılım Kısıtlamaları',
     icon: 'Clock',
-    codes: ['H13', 'S3', 'S5', 'S7', 'S9', 'S12'],
+    codes: ['H13', 'S3', 'S5', 'S7', 'S9', 'S12', 'DIST'],
   },
 ];
 
@@ -147,6 +147,9 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
     { key: 'MildBonus', label: 'Hafif Tercih Bonusu', type: 'number', min: -50, max: 0 },
   ],
   'IP2': [
+    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+  ],
+  'DIST': [
     { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
   ],
 };

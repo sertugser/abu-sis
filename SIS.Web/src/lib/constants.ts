@@ -91,6 +91,7 @@ export const QUERY_KEYS = {
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
   gradeLockReadiness: (departmentId?: number, termId?: number) => ['gradeLockReadiness', departmentId, termId] as const,
   instructorPreferences: (instructorId?: number, termId?: number) => ['instructorPreferences', instructorId, termId] as const,
+  distributionConstraints: (termId: number) => ['distributionConstraints', termId] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {

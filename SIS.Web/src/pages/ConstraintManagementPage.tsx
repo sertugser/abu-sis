@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
   AlertCircle, Building2, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
-  Clock, GraduationCap, Info, ShieldAlert, ShieldCheck,
+  Clock, GraduationCap, Info, Link2, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -37,6 +37,7 @@ import {
 import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPanel';
 import ProfileSelector from '../components/constraint/ProfileSelector';
 import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDashboard';
+import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
 import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
@@ -526,6 +527,13 @@ export default function ConstraintManagementPage() {
             <p className="text-sm text-muted-foreground">Henüz kısıtlama tanımlanmamış.</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Distribution Constraints */}
+      {isAdmin && effectiveTermId && (
+        <div className="space-y-3 border-t pt-6">
+          <DistributionConstraintPanel termId={effectiveTermId} />
+        </div>
       )}
 
       {/* Attendance - separate section */}

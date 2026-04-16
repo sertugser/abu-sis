@@ -52,6 +52,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
     public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
     public DbSet<InstructorPreference> InstructorPreferences => Set<InstructorPreference>();
+    public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
+    public DbSet<DistributionConstraintCourse> DistributionConstraintCourses => Set<DistributionConstraintCourse>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -633,6 +635,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(i => i.ConstraintDefinitionId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── DistributionConstraint ──────────────────────────────
+        builder.Entity<DistributionConstraint>(e =>
+        {
+            e.HasIndex(d => d.TermId);
+            e.HasOne(d => d.Term).WithMany().HasForeignKey(d => d.TermId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(d => d.Department).WithMany().HasForeignKey(d => d.DepartmentId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<DistributionConstraintCourse>(e =>
+        {
+            e.HasIndex(c => new { c.DistributionConstraintId, c.CourseId, c.CourseSectionId });
+            e.HasOne(c => c.DistributionConstraint).WithMany(d => d.Courses).HasForeignKey(c => c.DistributionConstraintId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.Course).WithMany().HasForeignKey(c => c.CourseId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.CourseSection).WithMany().HasForeignKey(c => c.CourseSectionId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── Performance Indexes ──────────────────────────────────

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using SIS.Application.Scheduling.Constraints;
+using SIS.Infrastructure.Services.Scheduling.Evaluators;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
@@ -42,6 +43,9 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEvaluator, WeekdayBalanceEvaluator>();
         services.AddScoped<IConstraintEvaluator, InstructorTimePreferenceEvaluator>();
         services.AddScoped<IConstraintEvaluator, InstructorClassroomPreferenceEvaluator>();
+
+        // Distribution constraint evaluator (hard/soft depending on preference level)
+        services.AddScoped<IConstraintEvaluator, DistributionConstraintEvaluator>();
 
         // Orchestrator
         services.AddScoped<ConstraintEvaluationService>();

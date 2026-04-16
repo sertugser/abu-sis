@@ -17,6 +17,7 @@ public sealed class TermSnapshot
     public HashSet<(int SectionId1, int SectionId2)>? CohortConflictPairs { get; set; }
     public EnrollmentConflictMatrix? EnrollmentConflicts { get; set; }
     public List<InstructorPreference>? InstructorPreferences { get; set; }
+    public List<DistributionConstraint>? DistributionConstraints { get; set; }
     public Dictionary<int, Dictionary<int, int>> CourseSuggestedSemestersByDepartment { get; init; } = new();
     public Dictionary<int, HashSet<int>> CourseAccessibleDepartments { get; init; } = new();
 }
