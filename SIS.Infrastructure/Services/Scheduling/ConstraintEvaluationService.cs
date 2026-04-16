@@ -172,6 +172,112 @@ public sealed class ConstraintEvaluationService
     }
 
     /// <summary>
+    /// Evaluate all sections and return per-constraint score breakdown.
+    /// </summary>
+    public ScoreBreakdownDto EvaluateWithBreakdown(
+        TermSnapshot snapshot, SchedulingConstraintConfig config,
+        ConstraintState state, Dictionary<string, int> weightMap)
+    {
+        var perConstraint = new Dictionary<string, (List<SchedulingConflictDto> Conflicts, List<string> Notes, double Penalty)>();
+
+        foreach (var section in snapshot.Sections)
+        {
+            var filteredSnapshot = new TermSnapshot
+            {
+                TermId = snapshot.TermId,
+                TermName = snapshot.TermName,
+                ScopeName = snapshot.ScopeName,
+                Sections = snapshot.Sections.Where(s => s.SectionId != section.SectionId).ToList(),
+                ClassroomAssignments = snapshot.ClassroomAssignments,
+                DeptFacultyMap = snapshot.DeptFacultyMap,
+                Corequisites = snapshot.Corequisites,
+                CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
+                CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
+                CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+            };
+
+            var context = new SchedulingConstraintContext
+            {
+                Candidate = section,
+                Snapshot = filteredSnapshot,
+                Config = config,
+            };
+
+            foreach (var evaluator in _evaluators)
+            {
+                if (state.IsDisabled(evaluator.Code)) continue;
+                if (state.IsExempt(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId)) continue;
+
+                var paramOverride = state.GetParameterOverride(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId);
+                if (paramOverride != null)
+                {
+                    context = new SchedulingConstraintContext
+                    {
+                        Candidate = context.Candidate,
+                        Snapshot = context.Snapshot,
+                        Config = MergeParameterOverride(config, paramOverride),
+                    };
+                }
+
+                var result = evaluator.Evaluate(context);
+
+                if (!perConstraint.ContainsKey(evaluator.Code))
+                    perConstraint[evaluator.Code] = (new List<SchedulingConflictDto>(), new List<string>(), 0);
+
+                var entry = perConstraint[evaluator.Code];
+                entry.Conflicts.AddRange(result.Conflicts);
+                entry.Notes.AddRange(result.Notes);
+                perConstraint[evaluator.Code] = (entry.Conflicts, entry.Notes, entry.Penalty + result.SoftPenalty);
+            }
+        }
+
+        var items = new List<ConstraintScoreItemDto>();
+        int totalHard = 0;
+        double totalSoft = 0;
+
+        foreach (var evaluator in _evaluators)
+        {
+            if (!perConstraint.TryGetValue(evaluator.Code, out var data)) continue;
+
+            var weight = weightMap.GetValueOrDefault(evaluator.Code, 5);
+            var seen = new HashSet<string>();
+            var deduped = data.Conflicts.Where(c => seen.Add(BuildConflictKey(c))).ToList();
+
+            var rawPenalty = data.Penalty;
+            var weightedPenalty = evaluator.Category == ConstraintCategory.Soft ? rawPenalty * weight : 0;
+
+            if (evaluator.Category == ConstraintCategory.Hard)
+                totalHard += deduped.Count;
+            else
+                totalSoft += weightedPenalty;
+
+            if (deduped.Count > 0 || rawPenalty > 0)
+            {
+                items.Add(new ConstraintScoreItemDto(
+                    evaluator.Code, evaluator.Name,
+                    evaluator.Category.ToString(), weight,
+                    deduped.Count, Math.Round(rawPenalty, 1), Math.Round(weightedPenalty, 1), 0,
+                    deduped.Select(c => c.SectionId).Distinct().Count(),
+                    deduped.Take(5).Select(c => c.Message).ToList()));
+            }
+        }
+
+        var totalValue = totalHard + totalSoft;
+        if (totalValue > 0)
+        {
+            items = items.Select(i => i with
+            {
+                Percentage = Math.Round(
+                    (i.Category == "Hard" ? i.ViolationCount : i.WeightedPenalty) / totalValue * 100, 1)
+            }).ToList();
+        }
+
+        items = items.OrderByDescending(i => i.Category == "Hard" ? i.ViolationCount * 1000 : i.WeightedPenalty).ToList();
+
+        return new ScoreBreakdownDto(totalHard, Math.Round(totalSoft, 1), totalHard == 0, items);
+    }
+
+    /// <summary>
     /// Calculate soft penalty score only (for auto-scheduling scoring).
     /// </summary>
     public double CalculatePenalty(

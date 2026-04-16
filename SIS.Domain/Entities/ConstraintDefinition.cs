@@ -11,6 +11,8 @@ public class ConstraintDefinition
     public bool IsEnabled { get; set; } = true;
     public string? Parameters { get; set; }                     // JSON: {"MaxConsecutiveHours": 4}
     public int SortOrder { get; set; }                          // Display order
+    public int Weight { get; set; } = 5;                        // 1-10, soft constraint penalty multiplier
+    public int Priority { get; set; }                           // UI ordering within groups (drag-drop)
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 

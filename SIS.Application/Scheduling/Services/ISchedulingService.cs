@@ -1,9 +1,11 @@
+using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 
 namespace SIS.Application.Scheduling.Services;
 
 public interface ISchedulingService
 {
+    Task<ScoreBreakdownDto> GetScoreBreakdownAsync(int termId, CancellationToken cancellationToken = default);
     Task<List<SchedulingConflictDto>> GetConflictsAsync(int? termId = null, CancellationToken cancellationToken = default);
     Task<List<SchedulingConflictDto>> GetConflictsByDepartmentAsync(int departmentId, int? termId = null, CancellationToken cancellationToken = default);
     Task<ScheduleValidationResultDto> ValidateAsync(ScheduleValidationRequestDto request, CancellationToken cancellationToken = default);

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -1382,6 +1383,24 @@ public class SchedulingService : ISchedulingService
         }
 
         return results.OrderBy(r => r.Name).ToList();
+    }
+
+    // ── Score Breakdown ────────────────────────────────────────────────
+
+    public async Task<ScoreBreakdownDto> GetScoreBreakdownAsync(int termId, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await BuildTermSnapshotAsync(termId, null, null, cancellationToken);
+        var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+
+        if (softConfig.S4Enabled)
+            snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, cancellationToken);
+
+        var config = BuildConstraintConfig(softConfig, hardConfig);
+        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
+        var weightMap = state.Definitions.ToDictionary(d => d.Key, d => d.Value.Weight);
+
+        return _constraintEvaluation.EvaluateWithBreakdown(snapshot, config, state, weightMap);
     }
 
     // ── Private helpers ──────────────────────────────────────────────────

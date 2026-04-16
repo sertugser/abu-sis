@@ -7,6 +7,8 @@ import {
   updateConstraintParameters,
   addConstraintException,
   deleteConstraintException,
+  getScoreBreakdown,
+  updateConstraintWeight,
 } from '../api/constraint.api';
 import { QUERY_KEYS } from '../lib/constants';
 import type { AddExceptionRequest } from '../types/constraint';
@@ -81,6 +83,25 @@ export function useDeleteConstraintException() {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
       // Invalidate all constraint details
       qc.invalidateQueries({ queryKey: ['constraints', 'detail'] });
+    },
+  });
+}
+
+export function useScoreBreakdown(termId: number | null) {
+  return useQuery({
+    queryKey: [...QUERY_KEYS.constraints, 'score-breakdown', termId],
+    queryFn: () => getScoreBreakdown(termId!),
+    enabled: termId != null,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useUpdateConstraintWeight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, weight }: { id: number; weight: number }) => updateConstraintWeight(id, weight),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
     },
   });
 }

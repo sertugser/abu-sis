@@ -4,6 +4,7 @@ import type {
   ConstraintDefinitionDetailDto,
   ConstraintExceptionDto,
   AddExceptionRequest,
+  ScoreBreakdownDto,
 } from '../types/constraint';
 
 export async function getConstraints(): Promise<ConstraintDefinitionDto[]> {
@@ -41,4 +42,13 @@ export async function addConstraintException(
 
 export async function deleteConstraintException(exceptionId: number): Promise<void> {
   await apiClient.delete(`/constraints/exceptions/${exceptionId}`);
+}
+
+export async function getScoreBreakdown(termId: number): Promise<ScoreBreakdownDto> {
+  const { data } = await apiClient.get<ScoreBreakdownDto>(`/constraints/score-breakdown?termId=${termId}`);
+  return data;
+}
+
+export async function updateConstraintWeight(id: number, weight: number): Promise<void> {
+  await apiClient.put(`/constraints/${id}/weight`, { weight });
 }

@@ -35,7 +35,7 @@ public class ConstraintController : ControllerBase
             .Select(d => new ConstraintDefinitionDto(
                 d.Id, d.Code, d.Name, d.Description,
                 d.Category, d.Scope, d.IsEnabled,
-                d.Parameters, d.SortOrder,
+                d.Parameters, d.SortOrder, d.Weight, d.Priority,
                 d.Exceptions.Count))
             .ToListAsync(ct);
 
@@ -249,5 +249,35 @@ public class ConstraintController : ControllerBase
 
         var result = await _schedulingService.ValidateAsync(request, ct);
         return Ok(result);
+    }
+
+    // ── GET /api/constraints/score-breakdown ─────────────────────────────
+    [HttpGet("score-breakdown")]
+    public async Task<IActionResult> GetScoreBreakdown([FromQuery] int termId, CancellationToken ct)
+    {
+        if (termId <= 0)
+            return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
+
+        var breakdown = await _schedulingService.GetScoreBreakdownAsync(termId, ct);
+        return Ok(breakdown);
+    }
+
+    // ── PUT /api/constraints/{id}/weight ─────────────────────────────────
+    [HttpPut("{id:int}/weight")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> UpdateWeight(int id, [FromBody] UpdateWeightRequest request, CancellationToken ct)
+    {
+        if (request.Weight < 1 || request.Weight > 10)
+            return BadRequest(new { error = "Weight 1-10 arasinda olmalidir." });
+
+        var def = await _context.ConstraintDefinitions.FindAsync(new object[] { id }, ct);
+        if (def == null)
+            return NotFound(new { error = "Constraint tanimi bulunamadi." });
+
+        def.Weight = request.Weight;
+        def.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new { def.Id, def.Weight });
     }
 }

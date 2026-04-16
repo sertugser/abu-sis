@@ -8,6 +8,8 @@ export interface ConstraintDefinitionDto {
   isEnabled: boolean;
   parameters: string | null;
   sortOrder: number;
+  weight: number;
+  priority: number;
   exceptionCount: number;
 }
 
@@ -33,6 +35,26 @@ export interface ConstraintExceptionDto {
 
 export interface ConstraintDefinitionDetailDto extends Omit<ConstraintDefinitionDto, 'exceptionCount'> {
   exceptions: ConstraintExceptionDto[];
+}
+
+export interface ScoreBreakdownDto {
+  totalHardViolations: number;
+  totalSoftPenalty: number;
+  feasible: boolean;
+  constraints: ConstraintScoreItemDto[];
+}
+
+export interface ConstraintScoreItemDto {
+  code: string;
+  name: string;
+  category: 'Hard' | 'Soft';
+  weight: number;
+  violationCount: number;
+  rawPenalty: number;
+  weightedPenalty: number;
+  percentage: number;
+  affectedSectionCount: number;
+  sampleViolations: string[];
 }
 
 export interface AddExceptionRequest {

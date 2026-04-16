@@ -419,6 +419,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("Parameters")
                         .HasColumnType("text");
 
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -429,6 +432,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Weight")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

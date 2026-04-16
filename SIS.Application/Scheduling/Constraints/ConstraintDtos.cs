@@ -3,7 +3,8 @@ namespace SIS.Application.Scheduling.Constraints;
 public record ConstraintDefinitionDto(
     int Id, string Code, string Name, string? Description,
     string Category, string Scope, bool IsEnabled,
-    string? Parameters, int SortOrder, int ExceptionCount);
+    string? Parameters, int SortOrder, int Weight, int Priority,
+    int ExceptionCount);
 
 public record ConstraintDefinitionDetailDto(
     int Id, string Code, string Name, string? Description,
@@ -28,3 +29,22 @@ public record AddExceptionRequest(
 
 public record UpdateParametersRequest(string Parameters);
 public record UpdateCategoryRequest(string Category);
+public record UpdateWeightRequest(int Weight);
+
+public sealed record ScoreBreakdownDto(
+    int TotalHardViolations,
+    double TotalSoftPenalty,
+    bool Feasible,
+    IReadOnlyList<ConstraintScoreItemDto> Constraints);
+
+public sealed record ConstraintScoreItemDto(
+    string Code,
+    string Name,
+    string Category,
+    int Weight,
+    int ViolationCount,
+    double RawPenalty,
+    double WeightedPenalty,
+    double Percentage,
+    int AffectedSectionCount,
+    IReadOnlyList<string> SampleViolations);
