@@ -592,6 +592,338 @@ public class TermClosingService : ITermClosingService
     }
 
     // ===================================================================
+    //  NEW: GRADE READINESS DETAIL (section-level breakdown)
+    // ===================================================================
+
+    public async Task<GradeLockDetailResultDto> GetGradeReadinessDetailAsync(int departmentId, CancellationToken ct = default)
+    {
+        var term = await GetActiveTermAsync(ct);
+        if (term == null)
+            return new GradeLockDetailResultDto();
+
+        var sections = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .Include(cs => cs.Instructor)
+            .Where(cs => cs.TermId == term.Id
+                && cs.IsActive
+                && cs.Course.DepartmentId == departmentId)
+            .ToListAsync(ct);
+
+        var sectionIds = sections.Select(s => s.Id).ToList();
+
+        // Instructor userId -> ad soyad
+        var instructorUserIds = sections
+            .Where(s => s.Instructor != null)
+            .Select(s => s.Instructor!.UserId)
+            .Distinct()
+            .ToList();
+
+        var userNames = instructorUserIds.Count > 0
+            ? await _context.Users
+                .AsNoTracking()
+                .Where(u => instructorUserIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}", ct)
+            : new Dictionary<int, string>();
+
+        // Registration sayıları tek sorguda
+        var regStats = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(cr => sectionIds.Contains(cr.CourseSectionId)
+                && cr.Status != RegistrationStatus.Dropped
+                && cr.Status != RegistrationStatus.Draft)
+            .GroupBy(cr => cr.CourseSectionId)
+            .Select(g => new
+            {
+                SectionId = g.Key,
+                Total = g.Count(),
+                Entered = g.Count(cr => cr.Grade != null),
+                Missing = g.Count(cr => cr.Grade == null)
+            })
+            .ToListAsync(ct);
+
+        var regStatsDict = regStats.ToDictionary(r => r.SectionId);
+
+        var sectionDtos = sections
+            .Select(s =>
+            {
+                var stats = regStatsDict.GetValueOrDefault(s.Id);
+                var total = stats?.Total ?? 0;
+                var entered = stats?.Entered ?? 0;
+                var missing = stats?.Missing ?? 0;
+
+                return new SectionGradeDetailDto
+                {
+                    SectionId = s.Id,
+                    CourseCode = s.Course.Code,
+                    CourseName = s.Course.Name,
+                    SectionCode = $"{s.Course.Code}.{s.SectionNumber:D2}",
+                    InstructorName = s.Instructor != null
+                        ? userNames.GetValueOrDefault(s.Instructor.UserId, "—")
+                        : "Atanmamış",
+                    TotalRegistrations = total,
+                    EnteredGradeCount = entered,
+                    MissingGradeCount = missing,
+                    IsFinalized = s.IsFinalized,
+                    EntryPercentage = total > 0 ? Math.Round((decimal)entered / total * 100, 1) : 100m
+                };
+            })
+            .OrderByDescending(s => s.MissingGradeCount)
+            .ThenBy(s => s.CourseCode)
+            .ToList();
+
+        var totalActive = sectionDtos.Sum(s => s.TotalRegistrations);
+        var totalMissing = sectionDtos.Sum(s => s.MissingGradeCount);
+
+        return new GradeLockDetailResultDto
+        {
+            TotalSections = sections.Count,
+            TotalActiveRegistrations = totalActive,
+            MissingGradeCount = totalMissing,
+            AllGradesEntered = totalMissing == 0,
+            HasActiveRegistrations = totalActive > 0,
+            FinalizedSectionCount = sections.Count(s => s.IsFinalized),
+            OverallEntryPercentage = totalActive > 0 ? Math.Round((decimal)(totalActive - totalMissing) / totalActive * 100, 1) : 100m,
+            Sections = sectionDtos
+        };
+    }
+
+    // ===================================================================
+    //  NEW: GRADE DISTRIBUTION (after grade lock)
+    // ===================================================================
+
+    public async Task<GradeDistributionResultDto> GetGradeDistributionAsync(int departmentId, CancellationToken ct = default)
+    {
+        var term = await GetActiveTermAsync(ct);
+        if (term == null)
+            return new GradeDistributionResultDto();
+
+        var sectionIds = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.TermId == term.Id
+                && cs.IsActive
+                && cs.Course.DepartmentId == departmentId)
+            .Select(cs => cs.Id)
+            .ToListAsync(ct);
+
+        var grades = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(cr => sectionIds.Contains(cr.CourseSectionId)
+                && cr.Status != RegistrationStatus.Dropped
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Grade != null)
+            .Select(cr => cr.Grade!.Value)
+            .ToListAsync(ct);
+
+        if (grades.Count == 0)
+            return new GradeDistributionResultDto();
+
+        var passingGrades = new HashSet<GradeCode>
+        {
+            GradeCode.AA, GradeCode.BA, GradeCode.BB, GradeCode.CB,
+            GradeCode.CC, GradeCode.DC, GradeCode.DD, GradeCode.S
+        };
+
+        // Harf notu sıralama (AA'dan FF'e)
+        var orderedGrades = new[]
+        {
+            GradeCode.AA, GradeCode.BA, GradeCode.BB, GradeCode.CB,
+            GradeCode.CC, GradeCode.DC, GradeCode.DD, GradeCode.FF,
+            GradeCode.NA, GradeCode.W, GradeCode.I, GradeCode.NI,
+            GradeCode.S, GradeCode.U
+        };
+
+        var groupedGrades = grades.GroupBy(g => g).ToDictionary(g => g.Key, g => g.Count());
+        var total = grades.Count;
+
+        var distribution = orderedGrades
+            .Where(g => groupedGrades.ContainsKey(g))
+            .Select(g => new GradeDistributionItemDto
+            {
+                GradeCode = g.ToString(),
+                Count = groupedGrades[g],
+                Percentage = Math.Round((decimal)groupedGrades[g] / total * 100, 1)
+            })
+            .ToList();
+
+        var passCount = grades.Count(g => passingGrades.Contains(g));
+
+        // Ortalama puan hesapla (sadece GPA dahil notlar)
+        decimal totalPoints = 0;
+        int gpaIncludedCount = 0;
+        foreach (var grade in grades)
+        {
+            var points = Domain.ValueObjects.GradePointMap.GetPoint(grade);
+            if (points.HasValue)
+            {
+                totalPoints += points.Value;
+                gpaIncludedCount++;
+            }
+        }
+
+        return new GradeDistributionResultDto
+        {
+            TotalGraded = total,
+            AverageScore = gpaIncludedCount > 0 ? Math.Round(totalPoints / gpaIncludedCount, 2) : 0m,
+            PassRate = total > 0 ? Math.Round((decimal)passCount / total * 100, 1) : 0m,
+            Grades = distribution
+        };
+    }
+
+    // ===================================================================
+    //  NEW: DEPARTMENT OVERVIEW (dean/admin multi-dept view)
+    // ===================================================================
+
+    public async Task<List<DepartmentClosingOverviewDto>> GetDepartmentOverviewAsync(int? facultyId, CancellationToken ct = default)
+    {
+        var term = await GetActiveTermAsync(ct);
+        if (term == null)
+            return new List<DepartmentClosingOverviewDto>();
+
+        var departmentsQuery = _context.Departments.AsNoTracking().AsQueryable();
+        if (facultyId.HasValue)
+            departmentsQuery = departmentsQuery.Where(d => d.FacultyId == facultyId.Value);
+
+        var departments = await departmentsQuery
+            .Select(d => new { d.Id, d.Code, d.Name })
+            .ToListAsync(ct);
+
+        var deptIds = departments.Select(d => d.Id).ToList();
+
+        // Tüm progress kayıtları tek sorguda
+        var progresses = await _context.TermClosingProgresses
+            .AsNoTracking()
+            .Where(p => deptIds.Contains(p.DepartmentId) && p.TermId == term.Id && p.IsCompleted)
+            .ToListAsync(ct);
+
+        var completedByUser = progresses
+            .Where(p => p.CompletedByUserId.HasValue)
+            .Select(p => p.CompletedByUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        var userNames = completedByUser.Count > 0
+            ? await _context.Users.AsNoTracking()
+                .Where(u => completedByUser.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}", ct)
+            : new Dictionary<int, string>();
+
+        // Section + missing grade counts per dept (tek sorgu)
+        var sectionStats = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.TermId == term.Id && cs.IsActive && cs.Course.DepartmentId.HasValue && deptIds.Contains(cs.Course.DepartmentId.Value))
+            .GroupBy(cs => cs.Course.DepartmentId)
+            .Select(g => new { DeptId = g.Key, SectionCount = g.Count() })
+            .ToListAsync(ct);
+
+        var sectionStatsDict = sectionStats.ToDictionary(s => s.DeptId);
+
+        // Eksik not sayıları
+        var missingStats = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(cr => cr.CourseSection.TermId == term.Id
+                && cr.CourseSection.IsActive
+                && cr.CourseSection.Course.DepartmentId.HasValue && deptIds.Contains(cr.CourseSection.Course.DepartmentId.Value)
+                && cr.Status != RegistrationStatus.Dropped
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Grade == null)
+            .GroupBy(cr => cr.CourseSection.Course.DepartmentId)
+            .Select(g => new { DeptId = g.Key, MissingCount = g.Count() })
+            .ToListAsync(ct);
+
+        var missingStatsDict = missingStats.ToDictionary(m => m.DeptId);
+
+        var progressByDept = progresses.GroupBy(p => p.DepartmentId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var stepLabels = new Dictionary<int, string>
+        {
+            { 0, "Başlanmadı" }, { 1, "Not Kilitleme" }, { 2, "GPA Hesaplama" },
+            { 3, "Sınıf Atlatma" }, { 4, "Tamamlandı" }
+        };
+
+        return departments.Select(d =>
+        {
+            var deptProgress = progressByDept.GetValueOrDefault(d.Id) ?? new List<TermClosingProgress>();
+            var completedCount = deptProgress.Count;
+            var lastActivity = deptProgress.OrderByDescending(p => p.CompletedAt).FirstOrDefault();
+
+            return new DepartmentClosingOverviewDto
+            {
+                DepartmentId = d.Id,
+                DepartmentCode = d.Code,
+                DepartmentName = d.Name,
+                CompletedStepCount = completedCount,
+                CurrentStepLabel = stepLabels.GetValueOrDefault(completedCount, "—"),
+                TotalSections = sectionStatsDict.GetValueOrDefault(d.Id)?.SectionCount ?? 0,
+                MissingGradeCount = missingStatsDict.GetValueOrDefault(d.Id)?.MissingCount ?? 0,
+                LastActivityAt = lastActivity?.CompletedAt,
+                LastActivityByName = lastActivity?.CompletedByUserId != null
+                    ? userNames.GetValueOrDefault(lastActivity.CompletedByUserId.Value)
+                    : null
+            };
+        })
+        .OrderBy(d => d.CompletedStepCount)
+        .ThenBy(d => d.DepartmentCode)
+        .ToList();
+    }
+
+    // ===================================================================
+    //  NEW: EXPORT PROMOTION REPORT (Excel)
+    // ===================================================================
+
+    public async Task<byte[]> ExportPromotionReportAsync(int departmentId, CancellationToken ct = default)
+    {
+        var preview = await _progressionService.PromoteDepartmentStudentsAsync(departmentId, dryRun: true, ct);
+
+        using var workbook = new ClosedXML.Excel.XLWorkbook();
+        var ws = workbook.Worksheets.Add("Sınıf Atlatma");
+
+        // Header
+        var headers = new[] { "Öğrenci No", "Ad Soyad", "Eski Sınıf", "Yeni Sınıf", "AKTS", "ANO", "AGNO", "Durum", "Uyarılar" };
+        for (var i = 0; i < headers.Length; i++)
+        {
+            ws.Cell(1, i + 1).Value = headers[i];
+            ws.Cell(1, i + 1).Style.Font.Bold = true;
+            ws.Cell(1, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#E2E8F0");
+        }
+
+        var row = 2;
+        foreach (var student in preview.Results.OrderBy(s => s.StudentNumber))
+        {
+            ws.Cell(row, 1).Value = student.StudentNumber;
+            ws.Cell(row, 2).Value = student.FullName;
+            ws.Cell(row, 3).Value = student.OldLevelLabel;
+            ws.Cell(row, 4).Value = student.NewLevelLabel;
+            ws.Cell(row, 5).Value = student.CompletedEcts;
+            ws.Cell(row, 6).Value = (double)student.Sgpa;
+            ws.Cell(row, 7).Value = (double)student.Cgpa;
+            ws.Cell(row, 8).Value = student.WasPromoted ? "Terfi" : student.Status.StartsWith("Warning") ? "Uyarı" : "Sabit";
+            ws.Cell(row, 9).Value = string.Join("; ", student.Warnings);
+
+            if (student.Status.StartsWith("Warning"))
+            {
+                ws.Row(row).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#FEF3C7");
+            }
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        // Özet satırı
+        row += 1;
+        ws.Cell(row, 1).Value = "ÖZET";
+        ws.Cell(row, 1).Style.Font.Bold = true;
+        ws.Cell(row + 1, 1).Value = $"Toplam: {preview.TotalStudentsAnalyzed}";
+        ws.Cell(row + 2, 1).Value = $"Terfi: {preview.PromotedCount}";
+        ws.Cell(row + 3, 1).Value = $"Sabit: {preview.StayedCount}";
+        ws.Cell(row + 4, 1).Value = $"Uyarı: {preview.WarningCount}";
+
+        using var ms = new System.IO.MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
+    }
+
+    // ===================================================================
     //  HELPERS
     // ===================================================================
 

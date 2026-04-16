@@ -153,6 +153,57 @@ public class TermClosingController : ControllerBase
         }
     }
 
+    [HttpGet("{departmentId}/grade-readiness-detail")]
+    public async Task<IActionResult> GetGradeReadinessDetail(int departmentId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _service.GetGradeReadinessDetailAsync(departmentId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("{departmentId}/grade-distribution")]
+    public async Task<IActionResult> GetGradeDistribution(int departmentId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _service.GetGradeDistributionAsync(departmentId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("overview")]
+    public async Task<IActionResult> GetDepartmentOverview([FromQuery] int? facultyId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out _)) return Unauthorized();
+
+        // Sadece Dean ve SystemAdmin görebilir
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        if (!roles.Contains("Dean") && !roles.Contains("SystemAdministrator"))
+            return Forbid();
+
+        var result = await _service.GetDepartmentOverviewAsync(facultyId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("{departmentId}/export-promotion")]
+    public async Task<IActionResult> ExportPromotionReport(int departmentId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        try
+        {
+            var bytes = await _service.ExportPromotionReportAsync(departmentId, ct);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sinif-atlatma-raporu.xlsx");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
     private bool TryGetUserId(out int userId)
     {
         userId = 0;
