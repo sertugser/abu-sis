@@ -135,7 +135,7 @@ export default function StudentDirectoryPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Filters + Action */}
       <div className="flex flex-wrap gap-3 items-center bg-white border border-border rounded-xl p-4">
         <div className="relative flex-1 min-w-[200px]">

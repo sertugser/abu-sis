@@ -136,9 +136,6 @@ export function OpenedCoursesPanel({
       <div className="shrink-0 bg-white border-b px-4 py-3 space-y-2.5 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-emerald-50">
-              <Layers className="h-3.5 w-3.5 text-emerald-600" />
-            </div>
             <h2 className="font-semibold text-sm text-gray-800">Açılan Dersler</h2>
             <Badge variant="secondary" className="text-xs rounded-full">{filtered.length} ders</Badge>
             <Badge variant="outline" className="text-xs rounded-full">{totalSections} şube</Badge>

@@ -58,7 +58,7 @@ export default function FacultyPlanningPage() {
   const isTermEditable = termStatus === 'Planning' || termStatus === 'Scheduling';
 
   return (
-    <div className="px-4 pt-3 pb-4 flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden">
       {/* ── Toolbar ── */}
       <div className="flex items-center gap-3 mb-2 shrink-0 bg-white border border-slate-200 rounded-xl px-4 py-2">
         {/* Filtreler */}

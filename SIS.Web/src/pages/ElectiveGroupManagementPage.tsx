@@ -191,7 +191,7 @@ export default function ElectiveGroupManagementPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="space-y-5">
 
       {/* ── Error ── */}
       {error && (

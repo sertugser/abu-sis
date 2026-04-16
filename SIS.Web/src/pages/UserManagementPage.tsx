@@ -132,7 +132,7 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       {successMessage && (
         <div className="flex justify-end">

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { BookOpen, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import type { CurriculumCourseForOpeningDto } from '../../types/courseOpening';
 import type { CourseDemandForecastDto } from '../../types/forecast';
 import { CurriculumCourseRow } from './CurriculumCourseRow';
@@ -93,9 +93,6 @@ export function CurriculumPanel({
       <div className="shrink-0 bg-white border-b px-4 py-3 space-y-2.5 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-blue-50">
-              <BookOpen className="h-3.5 w-3.5 text-blue-600" />
-            </div>
             <h2 className="font-semibold text-sm text-gray-800">Müfredat Dersleri</h2>
             <Badge variant="secondary" className="text-xs rounded-full">{filteredCourses.length}</Badge>
           </div>

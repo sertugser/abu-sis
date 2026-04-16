@@ -153,14 +153,14 @@ export default function TermProgramTransferPage() {
 
   if (contextQuery.isLoading)
     return (
-      <div className="p-6 space-y-3">
+      <div className="space-y-3">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
     );
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4">
       {/* Term status warning */}
       {activeTerm && !isTermSuitable && (
         <Alert variant="destructive">
