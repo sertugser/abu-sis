@@ -4,7 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -73,6 +77,8 @@ function ParameterFormEditor({
         if (field.type === 'number') {
           const num = Number(v);
           if (!isNaN(num)) result[field.key] = num;
+        } else if (field.type === 'boolean') {
+          result[field.key] = v === 'true';
         } else {
           if (v) result[field.key] = v;
         }
@@ -169,6 +175,40 @@ function ParameterFieldInput({
   onChange: (v: string) => void;
   disabled: boolean;
 }) {
+  if (field.type === 'select' && field.options) {
+    return (
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground">{field.label}</Label>
+        <Select value={value} onValueChange={onChange} disabled={disabled}>
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue placeholder="Seçin..." />
+          </SelectTrigger>
+          <SelectContent>
+            {field.options.map(opt => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+
+  if (field.type === 'boolean') {
+    return (
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground">{field.label}</Label>
+        <div className="flex items-center gap-2 h-8">
+          <Switch
+            checked={value === 'true'}
+            onCheckedChange={checked => onChange(checked ? 'true' : 'false')}
+            disabled={disabled}
+          />
+          <span className="text-xs text-muted-foreground">{value === 'true' ? 'Evet' : 'Hayır'}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1">
       <Label className="text-[11px] text-muted-foreground">{field.label}</Label>
@@ -245,6 +285,7 @@ export default function ConstraintDetailPanel({
         {showForm && (
           <ConstraintExceptionForm
             constraintId={constraint.id}
+            constraintCode={constraint.code}
             onClose={() => setShowForm(false)}
           />
         )}

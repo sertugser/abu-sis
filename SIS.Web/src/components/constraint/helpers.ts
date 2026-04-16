@@ -51,19 +51,43 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
 ];
 
 // ─── Parameter Form Schemas ────────────────────────────────────
+export interface ParameterFieldOption {
+  value: string;
+  label: string;
+}
+
 export interface ParameterField {
   key: string;
   label: string;
-  type: 'number' | 'time';
+  type: 'number' | 'time' | 'boolean' | 'select';
   suffix?: string;
   min?: number;
   max?: number;
+  options?: ParameterFieldOption[];
 }
 
 export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
-  'H-DL': [
-    { key: 'MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
+  // ── Hard Constraints ──────────────────────────────────────────
+  'H1': [],
+  'H2': [],
+  'H3': [],
+  'H4': [
+    { key: 'AmphiThreshold', label: 'Amfi Eşik Kontenjanı', type: 'number', min: 50, max: 500 },
   ],
+  'H5': [
+    { key: 'CurriculumConflictMode', label: 'Çakışma Modu', type: 'select', options: [
+      { value: 'curriculum', label: 'Müfredat Bazlı' },
+      { value: 'enrollment', label: 'Kayıt Bazlı' },
+    ]},
+    { key: 'EnrollmentConflictHardThreshold', label: 'Kayıt Çakışma Eşiği', type: 'number', min: 1, max: 100 },
+  ],
+  'H6': [],
+  'H8': [
+    { key: 'AllowSameCourseSectionOverlap', label: 'Aynı Ders Şube Çakışmasına İzin Ver', type: 'boolean' },
+  ],
+  'H10': [],
+  'H11': [],
+  'H12': [],
   'H13': [
     { key: 'LunchBreakStart', label: 'Öğle Arası Başlangıç', type: 'time' },
     { key: 'LunchBreakEnd', label: 'Öğle Arası Bitiş', type: 'time' },
@@ -71,6 +95,16 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'H15': [
     { key: 'MaxConsecutiveHours', label: 'Maks. Ardışık Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 12 },
   ],
+  'H16': [
+    { key: 'TheoryLabSplitThreshold', label: 'Teori-Lab Ayrım Eşiği (saat)', type: 'number', min: 2, max: 10 },
+  ],
+  'H-DL': [
+    { key: 'MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
+  ],
+  'H-WL': [],
+  'H-DO': [],
+
+  // ── Soft Constraints ──────────────────────────────────────────
   'S1': [
     { key: 'MinOccupancy', label: 'Min. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
     { key: 'MaxOccupancy', label: 'Maks. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
@@ -102,6 +136,7 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
     { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
   ],
   'S12': [
+    { key: 'MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
     { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
   ],
 };
