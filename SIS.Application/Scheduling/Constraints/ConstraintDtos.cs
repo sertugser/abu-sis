@@ -65,3 +65,28 @@ public sealed record ConstraintScoreItemDto(
     double Percentage,
     int AffectedSectionCount,
     IReadOnlyList<string> SampleViolations);
+
+// ── Exception Request (Approval Workflow) ─────────────────────
+public sealed record ExceptionRequestDto(
+    int Id, int ConstraintDefinitionId, string ConstraintCode, string ConstraintName,
+    string RequestedByUserId, string? RequestedByName, DateTime RequestedAt, string Status,
+    int? InstructorId, string? InstructorName,
+    int? StudentId, string? StudentName,
+    int? DepartmentId, string? DepartmentName,
+    int? CourseSectionId, string? CourseSectionInfo,
+    int? TermId, string? TermName,
+    bool IsExempt, string? ParameterOverride, string Reason,
+    DateTime? ExpiresAt, IReadOnlyList<ApprovalStepDto> Steps);
+
+public sealed record ApprovalStepDto(
+    int Id, int StepOrder, string RequiredRole, string Status,
+    string? DecidedByUserId, string? DecidedByName, DateTime? DecidedAt, string? Comment);
+
+public sealed record CreateExceptionRequestDto(
+    int ConstraintDefinitionId,
+    int? InstructorId, int? StudentId, int? DepartmentId,
+    int? CourseSectionId, int? TermId,
+    bool IsExempt, string? ParameterOverride, string Reason,
+    DateTime? ExpiresAt);
+
+public sealed record ApprovalActionDto(string? Comment);

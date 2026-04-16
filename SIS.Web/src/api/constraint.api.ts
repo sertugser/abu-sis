@@ -5,6 +5,9 @@ import type {
   ConstraintExceptionDto,
   AddExceptionRequest,
   ScoreBreakdownDto,
+  ExceptionRequestDto,
+  CreateExceptionRequestDto,
+  ApprovalActionDto,
 } from '../types/constraint';
 
 export async function getConstraints(): Promise<ConstraintDefinitionDto[]> {
@@ -51,4 +54,33 @@ export async function getScoreBreakdown(termId: number): Promise<ScoreBreakdownD
 
 export async function updateConstraintWeight(id: number, weight: number): Promise<void> {
   await apiClient.put(`/constraints/${id}/weight`, { weight });
+}
+
+// ── Exception Requests (Approval Workflow) ──────────────────────
+export async function createExceptionRequest(dto: CreateExceptionRequestDto): Promise<{ id: number }> {
+  const { data } = await apiClient.post<{ id: number }>('/constraints/exception-requests', dto);
+  return data;
+}
+
+export async function getPendingExceptionRequests(): Promise<ExceptionRequestDto[]> {
+  const { data } = await apiClient.get<ExceptionRequestDto[]>('/constraints/exception-requests/pending');
+  return data;
+}
+
+export async function getMyExceptionRequests(): Promise<ExceptionRequestDto[]> {
+  const { data } = await apiClient.get<ExceptionRequestDto[]>('/constraints/exception-requests/my');
+  return data;
+}
+
+export async function getExceptionRequest(id: number): Promise<ExceptionRequestDto> {
+  const { data } = await apiClient.get<ExceptionRequestDto>(`/constraints/exception-requests/${id}`);
+  return data;
+}
+
+export async function approveExceptionRequest(id: number, dto: ApprovalActionDto): Promise<void> {
+  await apiClient.post(`/constraints/exception-requests/${id}/approve`, dto);
+}
+
+export async function rejectExceptionRequest(id: number, dto: ApprovalActionDto): Promise<void> {
+  await apiClient.post(`/constraints/exception-requests/${id}/reject`, dto);
 }

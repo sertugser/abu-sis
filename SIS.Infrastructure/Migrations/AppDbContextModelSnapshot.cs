@@ -271,6 +271,43 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("AcademicTerms");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ApprovalStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequiredRole")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId", "StepOrder");
+
+                    b.ToTable("ApprovalSteps");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<int>("Id")
@@ -405,6 +442,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("CriticalityLevel")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -500,6 +540,64 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("ConstraintDefinitionId", "InstructorId", "DepartmentId", "CourseSectionId", "TermId");
 
                     b.ToTable("ConstraintExceptions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintExceptionRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConstraintDefinitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("InstructorId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsExempt")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ParameterOverride")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConstraintDefinitionId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ConstraintExceptionRequests");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
@@ -2185,6 +2283,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Department");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ApprovalStep", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintExceptionRequest", "Request")
+                        .WithMany("ApprovalSteps")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ClassroomTermAssignment", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
@@ -2256,6 +2365,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
 
                     b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintExceptionRequest", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintDefinition", "ConstraintDefinition")
+                        .WithMany()
+                        .HasForeignKey("ConstraintDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConstraintDefinition");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfileItem", b =>
@@ -2945,6 +3065,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintDefinition", b =>
                 {
                     b.Navigation("Exceptions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintExceptionRequest", b =>
+                {
+                    b.Navigation("ApprovalSteps");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>

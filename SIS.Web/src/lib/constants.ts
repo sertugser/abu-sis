@@ -92,6 +92,10 @@ export const QUERY_KEYS = {
   gradeLockReadiness: (departmentId?: number, termId?: number) => ['gradeLockReadiness', departmentId, termId] as const,
   instructorPreferences: (instructorId?: number, termId?: number) => ['instructorPreferences', instructorId, termId] as const,
   distributionConstraints: (termId: number) => ['distributionConstraints', termId] as const,
+  exceptionRequests: ['exceptionRequests'] as const,
+  pendingExceptionRequests: ['exceptionRequests', 'pending'] as const,
+  myExceptionRequests: ['exceptionRequests', 'my'] as const,
+  exceptionRequestDetail: (id: number) => ['exceptionRequests', 'detail', id] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {

@@ -23,6 +23,7 @@ import {
   PARAMETER_SCHEMAS, type ParameterField,
 } from './helpers';
 import ConstraintExceptionForm from './ConstraintExceptionForm';
+import ExceptionRequestForm from './ExceptionRequestForm';
 import type { ConstraintDefinitionDto } from '../../types/constraint';
 
 // ─── Form-based Parameter Editor ────────────────────────────────
@@ -274,16 +275,23 @@ export default function ConstraintDetailPanel({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-xs font-medium">İstisnalar</Label>
-          {isAdmin && !showForm && (
+          {!showForm && (
             <Button size="sm" variant="outline" onClick={() => setShowForm(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              İstisna Ekle
+              {isAdmin ? 'İstisna Ekle' : 'İstisna Talep Et'}
             </Button>
           )}
         </div>
 
-        {showForm && (
+        {showForm && isAdmin && (
           <ConstraintExceptionForm
+            constraintId={constraint.id}
+            constraintCode={constraint.code}
+            onClose={() => setShowForm(false)}
+          />
+        )}
+        {showForm && !isAdmin && (
+          <ExceptionRequestForm
             constraintId={constraint.id}
             constraintCode={constraint.code}
             onClose={() => setShowForm(false)}

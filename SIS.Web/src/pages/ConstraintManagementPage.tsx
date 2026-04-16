@@ -38,6 +38,7 @@ import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPane
 import ProfileSelector from '../components/constraint/ProfileSelector';
 import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDashboard';
 import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
+import ApprovalPanel from '../components/constraint/ApprovalPanel';
 import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
@@ -493,6 +494,9 @@ export default function ConstraintManagementPage() {
           <ScoreBreakdownDashboard breakdown={breakdown} isLoading={breakdownLoading} />
         </div>
       )}
+
+      {/* Pending approval requests */}
+      <ApprovalPanel />
 
       <ConstraintInfoBanner />
 

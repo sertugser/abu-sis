@@ -53,6 +53,9 @@ public static class SchedulingServiceCollectionExtensions
         // Auto-schedule engine
         services.AddScoped<AutoScheduleEngine>();
 
+        // Approval workflow
+        services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
+
         return services;
     }
 }

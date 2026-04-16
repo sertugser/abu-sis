@@ -1,3 +1,5 @@
+using SIS.Domain.Enums;
+
 namespace SIS.Domain.Entities;
 
 public class ConstraintDefinition
@@ -14,6 +16,7 @@ public class ConstraintDefinition
     public int Weight { get; set; } = 5;                        // 1-10, soft constraint penalty multiplier
     public int Priority { get; set; }                           // UI ordering within groups (drag-drop)
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public CriticalityLevel CriticalityLevel { get; set; } = CriticalityLevel.Normal;
     public DateTime? UpdatedAt { get; set; }
 
     public ICollection<ConstraintException> Exceptions { get; set; } = new List<ConstraintException>();

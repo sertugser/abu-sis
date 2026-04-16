@@ -54,6 +54,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<InstructorPreference> InstructorPreferences => Set<InstructorPreference>();
     public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
     public DbSet<DistributionConstraintCourse> DistributionConstraintCourses => Set<DistributionConstraintCourse>();
+    public DbSet<ConstraintExceptionRequest> ConstraintExceptionRequests => Set<ConstraintExceptionRequest>();
+    public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -651,6 +653,20 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasOne(c => c.DistributionConstraint).WithMany(d => d.Courses).HasForeignKey(c => c.DistributionConstraintId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(c => c.Course).WithMany().HasForeignKey(c => c.CourseId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(c => c.CourseSection).WithMany().HasForeignKey(c => c.CourseSectionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── ConstraintExceptionRequest ──────────────────────────
+        builder.Entity<ConstraintExceptionRequest>(e =>
+        {
+            e.HasIndex(r => r.Status);
+            e.HasOne(r => r.ConstraintDefinition).WithMany().HasForeignKey(r => r.ConstraintDefinitionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ApprovalStep ────────────────────────────────────────
+        builder.Entity<ApprovalStep>(e =>
+        {
+            e.HasIndex(s => new { s.RequestId, s.StepOrder });
+            e.HasOne(s => s.Request).WithMany(r => r.ApprovalSteps).HasForeignKey(s => s.RequestId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Performance Indexes ──────────────────────────────────
