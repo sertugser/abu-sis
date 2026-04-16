@@ -29,7 +29,9 @@ public sealed class ConstraintState
     }
 
     /// <summary>
-    /// Returns true if there is an exemption for the given constraint/entity combination.
+    /// Checks if a constraint is exempt for the given entity combination.
+    /// Uses wildcard matching: null fields match ALL values (e.g., InstructorId=null means "all instructors").
+    /// This is intentional — an exception with only DepartmentId set applies to all instructors in that department.
     /// </summary>
     public bool IsExempt(string code, int? instructorId, int? departmentId, int? sectionId)
     {
