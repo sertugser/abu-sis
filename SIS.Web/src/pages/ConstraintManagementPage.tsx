@@ -436,7 +436,7 @@ export default function ConstraintManagementPage() {
   const softCount = items.filter(c => c.category === 'Soft').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Profile toast */}
       {profileToast && (
         <Alert variant="default" className="py-2">
@@ -504,7 +504,7 @@ export default function ConstraintManagementPage() {
         </TabsList>
 
         {(['all', 'hard', 'soft'] as const).map(tab => (
-          <TabsContent key={tab} value={tab} className="space-y-5 mt-4">
+          <TabsContent key={tab} value={tab} className="space-y-3 mt-3">
             {filterByCategory(tab === 'all' ? 'all' : tab === 'hard' ? 'Hard' : 'Soft').map(({ group, items: groupItems }) => (
               <GroupSection
                 key={group.key}
