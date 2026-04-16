@@ -26,11 +26,11 @@ const DISTRIBUTION_TYPES = [
 ] as const;
 
 const PREFERENCE_LEVELS = [
-  { value: 'Preferred', label: 'Tercih Edilir', color: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700' },
-  { value: 'StronglyPreferred', label: 'Kesinlikle Tercih Edilir', color: 'border-green-600 bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 dark:border-green-700' },
-  { value: 'Discouraged', label: 'Tercih Edilmez', color: 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700' },
-  { value: 'StronglyDiscouraged', label: 'Kesinlikle Tercih Edilmez', color: 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-700' },
-  { value: 'Unavailable', label: 'Kesin Yasak (Hard)', color: 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 dark:border-red-700' },
+  { value: 'Preferred', label: 'Tercih Edilir', color: 'border-green-400 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 dark:border-green-600' },
+  { value: 'StronglyPreferred', label: 'Kesinlikle Tercih Edilir', color: 'border-green-600 bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200 dark:border-green-500' },
+  { value: 'Discouraged', label: 'Tercih Edilmez', color: 'border-yellow-400 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-600' },
+  { value: 'StronglyDiscouraged', label: 'Kesinlikle Tercih Edilmez', color: 'border-yellow-500 bg-yellow-100 text-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-200 dark:border-yellow-500' },
+  { value: 'Unavailable', label: 'Kesin Yasak (Hard)', color: 'border-red-400 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-600' },
 ] as const;
 
 interface SelectedCourse {
