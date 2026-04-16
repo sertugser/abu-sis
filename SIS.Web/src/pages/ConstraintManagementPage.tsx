@@ -436,7 +436,7 @@ export default function ConstraintManagementPage() {
   const softCount = items.filter(c => c.category === 'Soft').length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {/* Profile toast */}
       {profileToast && (
         <Alert variant="default" className="py-2">
@@ -447,7 +447,7 @@ export default function ConstraintManagementPage() {
 
       {/* Term selector + Score breakdown */}
       {isAdmin && terms && terms.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
             <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Dönem</span>
             <select
