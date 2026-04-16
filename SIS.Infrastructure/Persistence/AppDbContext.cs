@@ -566,6 +566,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<SystemConfig>(e =>
         {
             e.HasIndex(sc => sc.Key).IsUnique();
+            e.Property(sc => sc.RowVersion)
+             .IsRowVersion();
         });
 
         // ── PromotionRule ────────────────────────────────────────

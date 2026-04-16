@@ -1683,66 +1683,6 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("Instructors");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Entities.InstructorPreference", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("BuildingName")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("ClassroomId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("DayOfWeek")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("InstructorId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsApproved")
-                        .HasColumnType("boolean");
-
-                    b.Property<int?>("MaxHours")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PreferenceLevel")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PreferenceType")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Reason")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("TermId")
-                        .HasColumnType("integer");
-
-                    b.Property<TimeOnly?>("TimeSlotEnd")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<TimeOnly?>("TimeSlotStart")
-                        .HasColumnType("time without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClassroomId");
-
-                    b.HasIndex("InstructorId");
-
-                    b.HasIndex("TermId");
-
-                    b.HasIndex("InstructorId", "TermId");
-
-                    b.ToTable("InstructorPreferences");
-                });
-
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
                 {
                     b.Property<int>("Id")
@@ -2090,6 +2030,12 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Value")
                         .IsRequired()
@@ -2931,31 +2877,6 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Department");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.InstructorPreference", b =>
-                {
-                    b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
-                        .WithMany()
-                        .HasForeignKey("ClassroomId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SIS.Domain.Entities.Instructor", "Instructor")
-                        .WithMany()
-                        .HasForeignKey("InstructorId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
-                        .WithMany()
-                        .HasForeignKey("TermId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Classroom");
-
-                    b.Navigation("Instructor");
-
-                    b.Navigation("Term");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>

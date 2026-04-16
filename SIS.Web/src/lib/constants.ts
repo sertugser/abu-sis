@@ -78,6 +78,7 @@ export const QUERY_KEYS = {
     ['admin', 'instructors', search, departmentId] as const,
   adminTerms: ['admin', 'terms'] as const,
   systemConfigs: ['admin', 'systemConfigs'] as const,
+  systemConfigLimits: ['admin', 'systemConfigLimits'] as const,
   auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,
   promotionRules: (programId?: number) => ['admin', 'promotionRules', programId] as const,
   constraints: ['constraints'] as const,
