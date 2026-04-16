@@ -7,7 +7,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -16,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
   AlertCircle, Building2, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
-  Clock, FlaskConical, GraduationCap, Info, Link2,
+  Clock, FlaskConical, GraduationCap, Link2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -27,7 +26,6 @@ import {
   useUpdateConstraintWeight,
 } from '../hooks/useConstraints';
 import { useAdminTerms } from '../hooks/useAdminTerms';
-import { useSystemConfigs, useUpdateSystemConfig } from '../hooks/useSystemConfig';
 import {
   CATEGORY_LABELS, SCOPE_LABELS, CONSTRAINT_GROUPS,
 } from '../components/constraint/helpers';
@@ -38,16 +36,10 @@ import DistributionConstraintPanel from '../components/constraint/DistributionCo
 import ApprovalPanel from '../components/constraint/ApprovalPanel';
 import SimulationDrawer from '../components/constraint/SimulationDrawer';
 import { useTrendData, useHeatmap, useBottlenecks, useTakeSnapshot } from '../hooks/useConstraintAnalytics';
-import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
 const GROUP_ICONS = { Building2, GraduationCap, BookOpen, Clock } as const;
 
-const ATTENDANCE_CONFIG_FIELDS = [
-  { key: 'Attendance.TermWeekCount', label: 'Dönem hafta sayısı', suffix: 'hafta', desc: 'Devamsızlık hesabında kullanılan aktif dönem hafta sayısı' },
-  { key: 'Attendance.TheoryAbsenceLimitPercent', label: 'Teorik devamsızlık eşiği', suffix: '%', desc: 'Teorik derslerde devamsızlıktan kalma eşiği (%)' },
-  { key: 'Attendance.LabAbsenceLimitPercent', label: 'Uygulama/lab devamsızlık eşiği', suffix: '%', desc: 'Uygulama/lab derslerinde devamsızlıktan kalma eşiği (%)' },
-] as const;
 
 // ─── Constraint Row ─────────────────────────────────────────────
 function ConstraintRow({
@@ -294,84 +286,6 @@ function GroupSection({
   );
 }
 
-// ─── Attendance Panel ───────────────────────────────────────────
-function AttendancePolicyPanel() {
-  const { data: configs, isLoading, isError } = useSystemConfigs();
-  const attendanceConfigs = configs?.filter(config => config.category === 'Attendance') ?? [];
-
-  if (isLoading) return <Skeleton className="h-36 rounded-xl" />;
-  if (isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>Devamsızlık ayarları yüklenemedi.</AlertDescription>
-      </Alert>
-    );
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-4 p-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Devamsızlık Eşikleri</h2>
-          <p className="text-xs text-muted-foreground">
-            Öğrenci devamsızlık hesaplamalarında kullanılan genel ayarlar.
-            Bu değerler ders programı kısıtlamalarından bağımsızdır.
-          </p>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {ATTENDANCE_CONFIG_FIELDS.map(field => {
-            const config = attendanceConfigs.find(item => item.key === field.key);
-            return config ? (
-              <AttendanceConfigEditor key={`${config.id}:${config.value}`} config={config} label={field.label} suffix={field.suffix} desc={field.desc} />
-            ) : (
-              <div key={field.key} className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-                {field.label} ayarı bulunamadı.
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function AttendanceConfigEditor({
-  config, label, suffix, desc,
-}: {
-  config: SystemConfigDto;
-  label: string;
-  suffix: string;
-  desc: string;
-}) {
-  const [value, setValue] = useState(config.value);
-  const updateMutation = useUpdateSystemConfig();
-  const isChanged = value.trim() !== config.value;
-
-  return (
-    <div className="rounded-md border border-border bg-card p-3">
-      <p className="text-sm font-semibold text-foreground">{label}</p>
-      <p className="mt-0.5 min-h-8 text-xs text-muted-foreground">{desc}</p>
-      <div className="mt-3 flex items-center gap-2">
-        <Input
-          value={value}
-          onChange={event => setValue(event.target.value)}
-          inputMode="decimal"
-          className="h-9"
-        />
-        <span className="w-10 text-sm font-semibold text-muted-foreground">{suffix}</span>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!isChanged || updateMutation.isPending}
-          onClick={() => updateMutation.mutate({ id: config.id, value: value.trim() })}
-        >
-          Kaydet
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main Page ──────────────────────────────────────────────────
 export default function ConstraintManagementPage() {
@@ -532,16 +446,6 @@ export default function ConstraintManagementPage() {
         </div>
       )}
 
-      {/* Attendance - separate section */}
-      {isAdmin && (
-        <div className="space-y-3 border-t pt-6">
-          <div className="flex items-center gap-2">
-            <Info className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-base font-semibold">Genel Ayarlar</h2>
-          </div>
-          <AttendancePolicyPanel />
-        </div>
-      )}
 
       {/* Simulation Drawer */}
       <SimulationDrawer
