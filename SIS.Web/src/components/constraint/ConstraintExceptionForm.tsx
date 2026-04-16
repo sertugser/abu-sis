@@ -8,14 +8,15 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Save, X, Search } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Save, X, Search, AlertTriangle } from 'lucide-react';
 import { useAddConstraintException } from '../../hooks/useConstraints';
 import { useAdminDepartments } from '../../hooks/useAdminLookup';
 import { useAdminTerms } from '../../hooks/useAdminTerms';
 import { useAdminInstructors } from '../../hooks/useAdminInstructors';
 import { useAdminStudents } from '../../hooks/useAdminStudents';
 import { useDebounce } from '../../hooks/useDebounce';
-import { getConstraintErrorMessage, ENTITY_TYPE_LABELS } from './helpers';
+import { getConstraintErrorMessage, ENTITY_TYPE_LABELS, PARAMETER_SCHEMAS } from './helpers';
 import type { AddExceptionRequest } from '../../types/constraint';
 
 type EntityType = 'instructor' | 'student' | 'department' | 'courseSection' | 'term';
@@ -192,12 +193,34 @@ function EntitySelector({
   );
 }
 
+// ─── JSON Validation ────────────────────────────────────────────
+function validateParameterOverrideJson(json: string, constraintCode: string): { valid: boolean; error?: string } {
+  if (!json.trim()) return { valid: true };
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== 'object' || Array.isArray(parsed))
+      return { valid: false, error: 'JSON bir obje olmalıdır (örn: {"key": value})' };
+    const schema = PARAMETER_SCHEMAS[constraintCode];
+    if (schema && schema.length > 0) {
+      const validKeys = new Set(schema.map((f: { key: string }) => f.key));
+      const unknownKeys = Object.keys(parsed).filter(k => !validKeys.has(k));
+      if (unknownKeys.length > 0)
+        return { valid: true, error: `Bilinmeyen alanlar: ${unknownKeys.join(', ')}. Typo olabilir mi?` };
+    }
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'Geçersiz JSON formatı' };
+  }
+}
+
 // ─── Main Form ──────────────────────────────────────────────────
 export default function ConstraintExceptionForm({
   constraintId,
+  constraintCode,
   onClose,
 }: {
   constraintId: number;
+  constraintCode: string;
   onClose: () => void;
 }) {
   const addMutation = useAddConstraintException();
@@ -208,6 +231,10 @@ export default function ConstraintExceptionForm({
   const [paramOverride, setParamOverride] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const jsonValidation = useMemo(
+    () => validateParameterOverrideJson(paramOverride, constraintCode),
+    [paramOverride, constraintCode],
+  );
 
   function handleEntityTypeChange(type: EntityType) {
     setEntityType(type);
@@ -278,6 +305,15 @@ export default function ConstraintExceptionForm({
           </div>
         </div>
 
+        {selectedId && (
+          <Alert variant="warning" className="py-2.5">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Bu istisna belirtilmeyen alanlar için tüm değerlere uygulanacaktır. Örneğin sadece bölüm seçerseniz, o bölümdeki tüm öğretim üyeleri için geçerli olur.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center gap-2">
           <Switch checked={isExempt} onCheckedChange={setIsExempt} />
           <Label className="text-xs">Muaf (bu kural bu varlık için uygulanmaz)</Label>
@@ -286,11 +322,16 @@ export default function ConstraintExceptionForm({
         <div className="space-y-1.5">
           <Label className="text-xs">Parametre Geçersiz Kılma (JSON, opsiyonel)</Label>
           <Textarea
-            className="text-xs font-mono h-16"
+            className={`text-xs font-mono h-16 ${!jsonValidation.valid ? 'border-red-500' : ''}`}
             value={paramOverride}
             onChange={e => setParamOverride(e.target.value)}
-            placeholder='{"maxHours": 10}'
+            placeholder='{"MaxDailyHours": 10}'
           />
+          {jsonValidation.error && (
+            <p className={`text-[11px] ${jsonValidation.valid ? 'text-amber-600' : 'text-red-600'}`}>
+              {jsonValidation.error}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -305,7 +346,7 @@ export default function ConstraintExceptionForm({
 
         {error && <p className="text-xs text-red-600">{error}</p>}
 
-        <Button size="sm" onClick={handleSubmit} disabled={addMutation.isPending}>
+        <Button size="sm" onClick={handleSubmit} disabled={addMutation.isPending || !jsonValidation.valid}>
           <Save className="mr-1.5 h-3.5 w-3.5" />
           {addMutation.isPending ? 'Kaydediliyor...' : 'Kaydet'}
         </Button>
