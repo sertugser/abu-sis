@@ -40,6 +40,7 @@ import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDash
 import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
 import ApprovalPanel from '../components/constraint/ApprovalPanel';
 import SimulationDrawer from '../components/constraint/SimulationDrawer';
+import { useTrendData, useHeatmap, useBottlenecks, useTakeSnapshot } from '../hooks/useConstraintAnalytics';
 import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
@@ -429,6 +430,10 @@ export default function ConstraintManagementPage() {
   }, [selectedTermId, terms]);
 
   const { data: breakdown, isLoading: breakdownLoading } = useScoreBreakdown(effectiveTermId);
+  const { data: trendData } = useTrendData(effectiveTermId);
+  const { data: heatmapData } = useHeatmap(effectiveTermId);
+  const { data: bottleneckData } = useBottlenecks(effectiveTermId);
+  const takeSnapshotMut = useTakeSnapshot(effectiveTermId);
 
   const items = constraints ?? [];
 
@@ -502,7 +507,15 @@ export default function ConstraintManagementPage() {
               Simulasyon
             </Button>
           </div>
-          <ScoreBreakdownDashboard breakdown={breakdown} isLoading={breakdownLoading} />
+          <ScoreBreakdownDashboard
+            breakdown={breakdown}
+            isLoading={breakdownLoading}
+            trendData={trendData}
+            heatmapData={heatmapData}
+            bottleneckData={bottleneckData}
+            onTakeSnapshot={() => takeSnapshotMut.mutate()}
+            snapshotPending={takeSnapshotMut.isPending}
+          />
         </div>
       )}
 

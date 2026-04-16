@@ -1,17 +1,31 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
+import { Camera } from 'lucide-react';
+import TrendChart from './TrendChart';
+import ViolationHeatmap from './ViolationHeatmap';
+import BottleneckPanel from './BottleneckPanel';
 import type { ScoreBreakdownDto } from '@/types/constraint';
+import type { TrendDataDto, HeatmapDto, BottleneckDto } from '@/types/constraintAnalytics';
 
 interface Props {
   breakdown: ScoreBreakdownDto | undefined;
   isLoading: boolean;
+  trendData?: TrendDataDto;
+  heatmapData?: HeatmapDto;
+  bottleneckData?: BottleneckDto;
+  onTakeSnapshot?: () => void;
+  snapshotPending?: boolean;
 }
 
-export default function ScoreBreakdownDashboard({ breakdown, isLoading }: Props) {
+export default function ScoreBreakdownDashboard({
+  breakdown, isLoading, trendData, heatmapData, bottleneckData,
+  onTakeSnapshot, snapshotPending,
+}: Props) {
   const chartData = useMemo(() => {
     if (!breakdown) return [];
     return breakdown.constraints
@@ -71,10 +85,34 @@ export default function ScoreBreakdownDashboard({ breakdown, isLoading }: Props)
         </Card>
       </div>
 
+      {/* Trend + Snapshot */}
+      {trendData && trendData.dataPoints.length > 1 && (
+        <div className="flex items-start gap-4">
+          <div className="flex-1">
+            <TrendChart data={trendData} />
+          </div>
+          {onTakeSnapshot && (
+            <Button variant="outline" size="sm" onClick={onTakeSnapshot} disabled={snapshotPending} className="mt-1 shrink-0">
+              <Camera className="h-4 w-4 mr-1" />
+              {snapshotPending ? 'Alınıyor...' : 'Snapshot Al'}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Heatmap + Bottleneck side by side */}
+      {(heatmapData || bottleneckData) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {heatmapData && <ViolationHeatmap data={heatmapData} />}
+          {bottleneckData && <BottleneckPanel data={bottleneckData} />}
+        </div>
+      )}
+
+      {/* Score Breakdown Chart */}
       {chartData.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Kisitlama Katkisi</CardTitle>
+            <CardTitle className="text-sm font-medium">Kısıtlama Katkısı</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 36)}>
