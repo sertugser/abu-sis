@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
   AlertCircle, Building2, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
-  Clock, FlaskConical, GraduationCap, Info, Link2, ShieldAlert, ShieldCheck,
+  Clock, FlaskConical, GraduationCap, Info, Link2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -373,34 +373,6 @@ function AttendanceConfigEditor({
   );
 }
 
-// ─── Info Banner ────────────────────────────────────────────────
-function ConstraintInfoBanner() {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div className="flex items-start gap-3 rounded-lg border border-red-300 bg-white p-3 dark:border-red-800 dark:bg-card">
-        <ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-foreground">Zorunlu Kısıtlamalar</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Kesinlikle ihlal edilemez. Bu kurallardan biri karşılanamazsa
-            ilgili ders o zaman dilimine atanamaz.
-          </p>
-        </div>
-      </div>
-      <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-white p-3 dark:border-amber-800 dark:bg-card">
-        <ShieldCheck className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-foreground">Tercihli Kısıtlamalar</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Mümkün olduğunca karşılanır. İhlal edilirse program kalitesi
-            düşer ancak atama engellenmez.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Page ──────────────────────────────────────────────────
 export default function ConstraintManagementPage() {
   const { data: constraints, isLoading, isError } = useConstraints();
@@ -519,8 +491,6 @@ export default function ConstraintManagementPage() {
 
       {/* Pending approval requests */}
       <ApprovalPanel />
-
-      <ConstraintInfoBanner />
 
       <Tabs defaultValue="all">
         <TabsList>
