@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Infrastructure.Persistence;
@@ -9,11 +10,16 @@ public sealed class ConstraintEvaluationService
 {
     private readonly IEnumerable<IConstraintEvaluator> _evaluators;
     private readonly AppDbContext _context;
+    private readonly ILogger<ConstraintEvaluationService> _logger;
 
-    public ConstraintEvaluationService(IEnumerable<IConstraintEvaluator> evaluators, AppDbContext context)
+    public ConstraintEvaluationService(
+        IEnumerable<IConstraintEvaluator> evaluators,
+        AppDbContext context,
+        ILogger<ConstraintEvaluationService> logger)
     {
         _evaluators = evaluators;
         _context = context;
+        _logger = logger;
     }
 
     /// <summary>
@@ -208,64 +214,78 @@ public sealed class ConstraintEvaluationService
     }
 
     /// <summary>
-    /// Merges a JSON parameter override into the existing config.
-    /// Only known keys are applied; unknown keys are silently ignored.
+    /// Merges a JSON parameter override into the existing config using reflection.
+    /// Unknown keys are logged as warnings. Conversion errors are logged, not silenced.
     /// </summary>
-    private static SchedulingConstraintConfig MergeParameterOverride(SchedulingConstraintConfig baseConfig, string parameterOverrideJson)
+    private SchedulingConstraintConfig MergeParameterOverride(SchedulingConstraintConfig baseConfig, string parameterOverrideJson)
     {
         try
         {
             var overrides = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(parameterOverrideJson);
-            if (overrides == null) return baseConfig;
+            if (overrides == null || overrides.Count == 0)
+                return baseConfig;
 
-            // Create a mutable copy by reconstructing from existing values
-            var merged = new SchedulingConstraintConfig
+            var props = typeof(SchedulingConstraintConfig)
+                .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                .Where(p => p.CanRead)
+                .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
+
+            var values = props.ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value.GetValue(baseConfig),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (key, jsonVal) in overrides)
             {
-                LunchBreakIsHard = overrides.TryGetValue("LunchBreakIsHard", out var v1) && (v1.ValueKind == System.Text.Json.JsonValueKind.True || v1.ValueKind == System.Text.Json.JsonValueKind.False)
-                    ? v1.GetBoolean() : baseConfig.LunchBreakIsHard,
-                LunchBreakStart = baseConfig.LunchBreakStart,
-                LunchBreakEnd = baseConfig.LunchBreakEnd,
-                MaxConsecutiveHours = overrides.TryGetValue("MaxConsecutiveHours", out var v2) && v2.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v2.GetInt32() : baseConfig.MaxConsecutiveHours,
-                BreakDurationMinutes = overrides.TryGetValue("BreakDurationMinutes", out var v3) && v3.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v3.GetInt32() : baseConfig.BreakDurationMinutes,
-                AmphiThreshold = overrides.TryGetValue("AmphiThreshold", out var v4) && v4.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v4.GetInt32() : baseConfig.AmphiThreshold,
-                TheoryLabSplitThreshold = overrides.TryGetValue("TheoryLabSplitThreshold", out var vTls) && vTls.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? vTls.GetInt32() : baseConfig.TheoryLabSplitThreshold,
-                S1Enabled = baseConfig.S1Enabled,
-                S1MinOccupancy = overrides.TryGetValue("S1MinOccupancy", out var v5) && v5.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v5.GetInt32() : baseConfig.S1MinOccupancy,
-                S1MaxOccupancy = overrides.TryGetValue("S1MaxOccupancy", out var v6) && v6.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v6.GetInt32() : baseConfig.S1MaxOccupancy,
-                S2Enabled = baseConfig.S2Enabled,
-                S2MaxDailyHours = overrides.TryGetValue("S2MaxDailyHours", out var v7) && v7.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v7.GetInt32() : baseConfig.S2MaxDailyHours,
-                S3Enabled = baseConfig.S3Enabled,
-                S3MaxSectionsPerSlot = overrides.TryGetValue("S3MaxSectionsPerSlot", out var v8) && v8.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v8.GetInt32() : baseConfig.S3MaxSectionsPerSlot,
-                S4Enabled = baseConfig.S4Enabled,
-                S4MinCoPairThreshold = overrides.TryGetValue("S4MinCoPairThreshold", out var v9) && v9.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v9.GetInt32() : baseConfig.S4MinCoPairThreshold,
-                S5Enabled = baseConfig.S5Enabled,
-                S7Enabled = baseConfig.S7Enabled,
-                S7MaxGapSlots = overrides.TryGetValue("S7MaxGapSlots", out var v10) && v10.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v10.GetInt32() : baseConfig.S7MaxGapSlots,
-                S8Enabled = baseConfig.S8Enabled,
-                S9Enabled = baseConfig.S9Enabled,
-                S9MorningStart = baseConfig.S9MorningStart,
-                S9EveningStart = baseConfig.S9EveningStart,
-                S12Enabled = baseConfig.S12Enabled,
-                S12MaxImbalancePercent = overrides.TryGetValue("S12MaxImbalancePercent", out var v11) && v11.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? v11.GetInt32() : baseConfig.S12MaxImbalancePercent,
-            };
+                if (!props.TryGetValue(key, out var prop))
+                {
+                    _logger.LogWarning("MergeParameterOverride: unknown key '{Key}' ignored", key);
+                    continue;
+                }
+
+                try
+                {
+                    var converted = ConvertJsonElement(jsonVal, prop.PropertyType);
+                    if (converted != null)
+                        values[prop.Name] = converted;
+                    else
+                        _logger.LogWarning("MergeParameterOverride: could not convert '{Key}' value to {Type}", key, prop.PropertyType.Name);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "MergeParameterOverride: error converting '{Key}'", key);
+                }
+            }
+
+            var merged = new SchedulingConstraintConfig();
+            foreach (var (name, prop) in props)
+            {
+                if (values.TryGetValue(name, out var val))
+                    prop.SetValue(merged, val);
+            }
 
             return merged;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "MergeParameterOverride: failed to parse JSON, returning base config");
             return baseConfig;
         }
+    }
+
+    private static object? ConvertJsonElement(System.Text.Json.JsonElement el, Type targetType)
+    {
+        if (targetType == typeof(int) && el.ValueKind == System.Text.Json.JsonValueKind.Number)
+            return el.GetInt32();
+        if (targetType == typeof(double) && el.ValueKind == System.Text.Json.JsonValueKind.Number)
+            return el.GetDouble();
+        if (targetType == typeof(bool) && (el.ValueKind == System.Text.Json.JsonValueKind.True || el.ValueKind == System.Text.Json.JsonValueKind.False))
+            return el.GetBoolean();
+        if (targetType == typeof(string) && el.ValueKind == System.Text.Json.JsonValueKind.String)
+            return el.GetString();
+        if (targetType == typeof(TimeOnly) && el.ValueKind == System.Text.Json.JsonValueKind.String)
+            return TimeOnly.TryParse(el.GetString(), out var t) ? t : null;
+        return null;
     }
 
     private static string BuildConflictKey(SchedulingConflictDto c)
