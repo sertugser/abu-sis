@@ -84,6 +84,9 @@ export default function App() {
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
                     <Route path="ders-programim" element={<InstructorSchedulingPage />} />
+                  </Route>
+
+                  <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, ...MANAGEMENT_ROLES]} />}>
                     <Route path="ogretim-uyesi-tercihleri" element={<InstructorPreferencePage />} />
                   </Route>
 
