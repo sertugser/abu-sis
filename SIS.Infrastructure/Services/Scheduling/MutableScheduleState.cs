@@ -290,7 +290,6 @@ public sealed class MutableScheduleState
             CoEnrollmentPairs = baseSnapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = baseSnapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = baseSnapshot.CourseAccessibleDepartments,
-            InstructorPreferences = baseSnapshot.InstructorPreferences,
         };
     }
 

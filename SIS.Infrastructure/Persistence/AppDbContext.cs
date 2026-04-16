@@ -51,7 +51,6 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
     public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
     public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
-    public DbSet<InstructorPreference> InstructorPreferences => Set<InstructorPreference>();
     public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
     public DbSet<DistributionConstraintCourse> DistributionConstraintCourses => Set<DistributionConstraintCourse>();
     public DbSet<ConstraintExceptionRequest> ConstraintExceptionRequests => Set<ConstraintExceptionRequest>();
@@ -723,14 +722,5 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             entity.HasIndex(sr => new { sr.FacultyId, sr.TermId, sr.CreatedAt });
         });
 
-        // ── InstructorPreference ────────────────────────────────
-        builder.Entity<InstructorPreference>(e =>
-        {
-            e.HasIndex(p => p.InstructorId);
-            e.HasIndex(p => new { p.InstructorId, p.TermId });
-            e.HasOne(p => p.Instructor).WithMany().HasForeignKey(p => p.InstructorId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(p => p.Classroom).WithMany().HasForeignKey(p => p.ClassroomId).OnDelete(DeleteBehavior.SetNull);
-            e.HasOne(p => p.Term).WithMany().HasForeignKey(p => p.TermId).OnDelete(DeleteBehavior.SetNull);
-        });
     }
 }

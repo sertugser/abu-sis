@@ -39,7 +39,6 @@ export const ROUTES = {
   ELECTIVE_GROUPS: '/secmeli-ders-gruplari',
   INSTRUCTOR_COURSES_REPORT: '/ders-veren-ogretim-uyeleri',
   TERM_PROGRAM_TRANSFER: '/donem-programi-aktarim',
-  INSTRUCTOR_PREFERENCES: '/ogretim-uyesi-tercihleri',
 } as const;
 
 export const QUERY_KEYS = {
@@ -90,7 +89,6 @@ export const QUERY_KEYS = {
   electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
   gradeLockReadiness: (departmentId?: number, termId?: number) => ['gradeLockReadiness', departmentId, termId] as const,
-  instructorPreferences: (instructorId?: number, termId?: number) => ['instructorPreferences', instructorId, termId] as const,
   distributionConstraints: (termId: number) => ['distributionConstraints', termId] as const,
   exceptionRequests: ['exceptionRequests'] as const,
   pendingExceptionRequests: ['exceptionRequests', 'pending'] as const,
@@ -157,7 +155,6 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/secmeli-ders-gruplari',
   '/ders-veren-ogretim-uyeleri',
   '/donem-programi-aktarim',
-  '/ogretim-uyesi-tercihleri',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

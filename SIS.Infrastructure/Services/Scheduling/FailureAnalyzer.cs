@@ -230,7 +230,6 @@ public sealed class FailureAnalyzer
             CoEnrollmentPairs = termSnapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = termSnapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = termSnapshot.CourseAccessibleDepartments,
-            InstructorPreferences = termSnapshot.InstructorPreferences,
         };
 
         var toTest = candidates.Take(MaxCandidatesToTest).ToList();

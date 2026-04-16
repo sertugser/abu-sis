@@ -34,7 +34,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'instructor',
     label: 'Öğretim Üyesi Kısıtlamaları',
     icon: 'GraduationCap',
-    codes: ['H2', 'H-WL', 'H-DL', 'H-DO', 'H15', 'S2', 'S8', 'IP1', 'IP2'],
+    codes: ['H2', 'H-WL', 'H-DL', 'H-DO', 'H15', 'S2', 'S8'],
   },
   {
     key: 'curriculum',
@@ -137,16 +137,6 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   ],
   'S12': [
     { key: 'MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
-  'IP1': [
-    { key: 'UnavailablePenalty', label: 'Müsait Değil Cezası', type: 'number', min: 100, max: 10000 },
-    { key: 'StrongPenalty', label: 'Güçlü Tercih Cezası', type: 'number', min: 1, max: 100 },
-    { key: 'MildPenalty', label: 'Hafif Tercih Cezası', type: 'number', min: 1, max: 50 },
-    { key: 'StrongBonus', label: 'Güçlü Tercih Bonusu', type: 'number', min: -100, max: 0 },
-    { key: 'MildBonus', label: 'Hafif Tercih Bonusu', type: 'number', min: -50, max: 0 },
-  ],
-  'IP2': [
     { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
   ],
   'DIST': [

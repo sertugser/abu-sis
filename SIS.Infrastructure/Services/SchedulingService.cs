@@ -1475,13 +1475,6 @@ public class SchedulingService : ISchedulingService
             ? await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, cancellationToken)
             : new List<CoEnrollmentPair>();
 
-        // Load instructor preferences for IP1/IP2 evaluators
-        var instructorPreferences = await _context.InstructorPreferences
-            .AsNoTracking()
-            .Where(p => p.TermId == null || p.TermId == termId)
-            .Where(p => p.IsApproved)
-            .ToListAsync(cancellationToken);
-
         // Load distribution constraints for DIST evaluator
         var distributionConstraints = await _context.DistributionConstraints
             .AsNoTracking()
@@ -1510,7 +1503,6 @@ public class SchedulingService : ISchedulingService
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
             CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
-            InstructorPreferences = instructorPreferences,
             DistributionConstraints = distributionConstraints,
         };
     }

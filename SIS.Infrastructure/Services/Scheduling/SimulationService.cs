@@ -204,7 +204,6 @@ public sealed class SimulationService : ISimulationService
             CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
-            InstructorPreferences = snapshot.InstructorPreferences,
             DistributionConstraints = snapshot.DistributionConstraints,
         };
     }
@@ -287,7 +286,6 @@ public sealed class SimulationService : ISimulationService
             EnrollmentConflicts = original.EnrollmentConflicts,
             CourseSuggestedSemestersByDepartment = original.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = original.CourseAccessibleDepartments,
-            InstructorPreferences = original.InstructorPreferences,
             DistributionConstraints = original.DistributionConstraints,
         };
     }

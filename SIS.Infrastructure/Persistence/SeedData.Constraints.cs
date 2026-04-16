@@ -276,28 +276,6 @@ public static partial class SeedData
             },
             new()
             {
-                Code = "IP1",
-                Name = "Öğretim Üyesi Zaman Tercihi",
-                Description = "Öğretim üyesinin tercih ettiği/etmediği zaman dilimlerini dikkate alır.",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"UnavailablePenalty": 1000, "StrongPenalty": 30, "MildPenalty": 10, "StrongBonus": -20, "MildBonus": -5}""",
-                SortOrder = 110
-            },
-            new()
-            {
-                Code = "IP2",
-                Name = "Öğretim Üyesi Derslik Tercihi",
-                Description = "Öğretim üyesinin tercih ettiği derslik veya binayı dikkate alır.",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"Weight": 2}""",
-                SortOrder = 111
-            },
-            new()
-            {
                 Code = "DIST",
                 Name = "İlişkisel Kısıtlamalar",
                 Description = "Dersler arası ilişkisel kuralları (aynı gün, ardışık, aynı derslik, sıralama) kontrol eder.",
