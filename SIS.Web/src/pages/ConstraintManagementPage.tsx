@@ -8,6 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -23,12 +26,16 @@ import {
   useConstraints,
   useToggleConstraint,
   useUpdateConstraintCategory,
+  useScoreBreakdown,
+  useUpdateConstraintWeight,
 } from '../hooks/useConstraints';
+import { useAdminTerms } from '../hooks/useAdminTerms';
 import { useSystemConfigs, useUpdateSystemConfig } from '../hooks/useSystemConfig';
 import {
   CATEGORY_LABELS, SCOPE_LABELS, CONSTRAINT_GROUPS,
 } from '../components/constraint/helpers';
 import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPanel';
+import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDashboard';
 import type { SystemConfigDto } from '../api/systemConfig.api';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
@@ -53,6 +60,7 @@ function ConstraintRow({
   const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
   const toggleMutation = useToggleConstraint();
   const categoryMutation = useUpdateConstraintCategory();
+  const weightMutation = useUpdateConstraintWeight();
 
   const nextCategory = constraint.category === 'Hard' ? 'Soft' : 'Hard';
   const nextCategoryLabel = CATEGORY_LABELS[nextCategory];
@@ -109,6 +117,31 @@ function ConstraintRow({
           <Badge variant="outline" className={`text-[10px] shrink-0 ${categoryBadgeClass}`}>
             {CATEGORY_LABELS[constraint.category]}
           </Badge>
+
+          {/* Weight slider (Soft only) */}
+          {constraint.category === 'Soft' ? (
+            <div className="flex items-center gap-2 min-w-[140px] shrink-0">
+              <span className="text-xs text-muted-foreground tabular-nums w-4">{constraint.weight}</span>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={constraint.weight}
+                onChange={(e) => weightMutation.mutate({ id: constraint.id, weight: Number(e.target.value) })}
+                className="w-20 accent-amber-500"
+                disabled={!isAdmin}
+              />
+            </div>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-xs text-muted-foreground shrink-0 cursor-help">—</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Zorunlu kisitlamalarda agirlik uygulanmaz</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           {/* Name + description */}
           <div className="flex-1 min-w-0">
@@ -369,8 +402,20 @@ function ConstraintInfoBanner() {
 // ─── Main Page ──────────────────────────────────────────────────
 export default function ConstraintManagementPage() {
   const { data: constraints, isLoading, isError } = useConstraints();
+  const { data: terms } = useAdminTerms();
   const { user } = useAuth();
   const isAdmin = user?.roles.includes('SystemAdministrator') ?? false;
+
+  // Default to the active term, fallback to latest
+  const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
+  const effectiveTermId = useMemo(() => {
+    if (selectedTermId !== null) return selectedTermId;
+    if (!terms || terms.length === 0) return null;
+    const active = terms.find(t => t.isActive);
+    return active ? active.id : terms[0].id;
+  }, [selectedTermId, terms]);
+
+  const { data: breakdown, isLoading: breakdownLoading } = useScoreBreakdown(effectiveTermId);
 
   const items = constraints ?? [];
 
@@ -405,6 +450,31 @@ export default function ConstraintManagementPage() {
 
   return (
     <div className="space-y-6">
+      {/* Term selector + Score breakdown */}
+      {isAdmin && terms && terms.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-muted-foreground">Donem:</label>
+            <Select
+              value={String(effectiveTermId ?? '')}
+              onValueChange={(v) => setSelectedTermId(Number(v))}
+            >
+              <SelectTrigger className="w-[280px] h-9">
+                <SelectValue placeholder="Donem secin" />
+              </SelectTrigger>
+              <SelectContent>
+                {terms.map(t => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.name} {t.isActive ? '(Aktif)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ScoreBreakdownDashboard breakdown={breakdown} isLoading={breakdownLoading} />
+        </div>
+      )}
+
       <ConstraintInfoBanner />
 
       <Tabs defaultValue="all">
