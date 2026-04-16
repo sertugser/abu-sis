@@ -58,15 +58,15 @@ public class AuditInterceptor : SaveChangesInterceptor
         _httpContextAccessor = httpContextAccessor;
     }
 
-    // We store pending audit entries here between SavingChanges and SavedChanges
-    private List<AuditEntry>? _pendingAuditEntries;
+    // AsyncLocal ensures thread-safety: each async flow gets its own list
+    private static readonly AsyncLocal<List<AuditEntry>?> _pendingAuditEntries = new();
 
     public override InterceptionResult<int> SavingChanges(
         DbContextEventData eventData,
         InterceptionResult<int> result)
     {
         if (eventData.Context is not null)
-            _pendingAuditEntries = CollectAuditEntries(eventData.Context);
+            _pendingAuditEntries.Value = CollectAuditEntries(eventData.Context);
 
         return base.SavingChanges(eventData, result);
     }
@@ -77,7 +77,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         CancellationToken cancellationToken = default)
     {
         if (eventData.Context is not null)
-            _pendingAuditEntries = CollectAuditEntries(eventData.Context);
+            _pendingAuditEntries.Value = CollectAuditEntries(eventData.Context);
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
@@ -86,7 +86,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         SaveChangesCompletedEventData eventData,
         int result)
     {
-        if (eventData.Context is not null && _pendingAuditEntries is { Count: > 0 })
+        if (eventData.Context is not null && _pendingAuditEntries.Value is { Count: > 0 })
         {
             WriteAuditLogs(eventData.Context);
         }
@@ -99,7 +99,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         int result,
         CancellationToken cancellationToken = default)
     {
-        if (eventData.Context is not null && _pendingAuditEntries is { Count: > 0 })
+        if (eventData.Context is not null && _pendingAuditEntries.Value is { Count: > 0 })
         {
             await WriteAuditLogsAsync(eventData.Context, cancellationToken);
         }
@@ -251,11 +251,11 @@ public class AuditInterceptor : SaveChangesInterceptor
 
     private void WriteAuditLogs(DbContext context)
     {
-        if (_pendingAuditEntries is null)
+        if (_pendingAuditEntries.Value is null)
             return;
 
-        var auditLogs = _pendingAuditEntries.Select(ToAuditLog).ToList();
-        _pendingAuditEntries = null;
+        var auditLogs = _pendingAuditEntries.Value.Select(ToAuditLog).ToList();
+        _pendingAuditEntries.Value = null;
 
         context.Set<AuditLog>().AddRange(auditLogs);
         // Use base SaveChanges to avoid re-triggering interceptor for audit entries
@@ -265,11 +265,11 @@ public class AuditInterceptor : SaveChangesInterceptor
 
     private async Task WriteAuditLogsAsync(DbContext context, CancellationToken ct)
     {
-        if (_pendingAuditEntries is null)
+        if (_pendingAuditEntries.Value is null)
             return;
 
-        var auditLogs = _pendingAuditEntries.Select(ToAuditLog).ToList();
-        _pendingAuditEntries = null;
+        var auditLogs = _pendingAuditEntries.Value.Select(ToAuditLog).ToList();
+        _pendingAuditEntries.Value = null;
 
         context.Set<AuditLog>().AddRange(auditLogs);
         await context.SaveChangesAsync(ct);
