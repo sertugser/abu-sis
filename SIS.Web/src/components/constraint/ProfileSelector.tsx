@@ -87,10 +87,13 @@ export default function ProfileSelector({ onApplied }: ProfileSelectorProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
-            <Layers className="h-4 w-4 mr-1" />
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <Layers className="h-3.5 w-3.5" />
             Profiller
-          </Button>
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72">
           {profiles?.map((p) => (

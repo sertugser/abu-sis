@@ -8,9 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -479,33 +476,34 @@ export default function ConstraintManagementPage() {
       {/* Term selector + Score breakdown */}
       {isAdmin && terms && terms.length > 0 && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-muted-foreground">Donem:</label>
-            <Select
-              value={String(effectiveTermId ?? '')}
-              onValueChange={(v) => setSelectedTermId(Number(v))}
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Dönem</span>
+            <select
+              className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none min-w-[200px]"
+              value={effectiveTermId ?? ''}
+              onChange={(e) => setSelectedTermId(Number(e.target.value))}
             >
-              <SelectTrigger className="w-[280px] h-9">
-                <SelectValue placeholder="Donem secin" />
-              </SelectTrigger>
-              <SelectContent>
-                {terms.map(t => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    {t.name} {t.isActive ? '(Aktif)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {terms.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.isActive ? '(Aktif)' : ''}
+                </option>
+              ))}
+            </select>
+
+            <div className="w-px self-stretch bg-gray-200 mx-1" />
+
             <ProfileSelector onApplied={setProfileToast} />
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
+
+            <div className="w-px self-stretch bg-gray-200 mx-1" />
+
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
               onClick={() => setSimulationOpen(true)}
             >
-              <FlaskConical className="h-4 w-4" />
-              Simulasyon
-            </Button>
+              <FlaskConical className="h-3.5 w-3.5" />
+              Simülasyon
+            </button>
           </div>
           <ScoreBreakdownDashboard
             breakdown={breakdown}
