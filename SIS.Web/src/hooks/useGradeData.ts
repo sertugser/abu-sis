@@ -1,17 +1,25 @@
 // SIS.Web/src/hooks/useGradeData.ts
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  getComponents,
   addComponent,
+  applyImport,
   deleteComponent,
-  getGrades,
-  submitGrades,
+  downloadTemplate,
   finalizeSection,
-  unfinalizeSection,
+  getComponents,
+  getGrades,
   getGradingCriteria,
+  previewImport,
+  submitGrades,
+  unfinalizeSection,
   updateGradingCriteria,
 } from '../api/grade.api';
-import type { GradeSubmitDto, GradingCriteria } from '../types/grade';
+import type {
+  GradeSubmitDto,
+  GradingCriteria,
+  ImportApplyResponse,
+  ImportPreviewResponse,
+} from '../types/grade';
 
 export function useComponents(sectionId: number) {
   return useQuery({
@@ -96,6 +104,30 @@ export function useUpdateGradingCriteria(sectionId: number) {
     mutationFn: (criteria: GradingCriteria) => updateGradingCriteria(sectionId, criteria),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gradingCriteria', sectionId] });
+    },
+  });
+}
+
+export function useDownloadTemplate(sectionId: number) {
+  return useMutation({
+    mutationFn: (componentId: number) => downloadTemplate(sectionId, componentId),
+  });
+}
+
+export function usePreviewImport(sectionId: number) {
+  return useMutation({
+    mutationFn: (file: File) => previewImport(sectionId, file),
+  });
+}
+
+export function useApplyImport(sectionId: number) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (file: File) => applyImport(sectionId, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
+      qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });
     },
   });
 }

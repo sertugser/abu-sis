@@ -22,7 +22,9 @@ export interface StudentGradeRow {
   studentNumber: string;
   firstName: string;
   lastName: string;
-  scores: Record<number, number | null>; // componentId -> score
+  letterGrade?: string | null;
+  weightedAverage?: number | null;
+  scores: Record<number, number | null>;
 }
 
 export interface GradesResponse {
@@ -53,4 +55,41 @@ export interface FinalizePreviewItem {
 export interface FinalizeResponse {
   message: string;
   results: FinalizePreviewItem[];
+}
+// ══════════════════════════════════════════════════════════
+// EXCEL IMPORT TYPES
+// ══════════════════════════════════════════════════════════
+
+export interface ImportPreviewRow {
+  rowNumber: number;
+  studentId: number | null;
+  studentNumber: string;
+  firstName: string;
+  lastName: string;
+  currentScore: number | null;
+  newScore: number | null;
+  rawNewScore: string;
+  status: 'Valid' | 'Update' | 'Warning' | 'Error' | 'Empty';
+  message: string;
+}
+
+export interface ImportPreviewResponse {
+  sectionId: number;
+  componentId: number;
+  componentName: string;
+  totalRows: number;
+  validCount: number;
+  warningCount: number;
+  errorCount: number;
+  emptyCount: number;
+  rows: ImportPreviewRow[];
+}
+
+export interface ImportApplyResponse {
+  message: string;
+  sectionId: number;
+  componentId: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
 }

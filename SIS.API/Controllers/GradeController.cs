@@ -6,6 +6,7 @@ using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
+using ClosedXML.Excel;
 
 namespace SIS.API.Controllers;
 
@@ -331,6 +332,455 @@ public class GradeController : ControllerBase
         });
     }
 
+    // ══════════════════════════════════════════════════════════
+//  EXCEL IMPORT (section bazında)
+// ══════════════════════════════════════════════════════════
+
+/// <summary>
+/// GET api/instructor/section/{sectionId}/grades/export-template
+/// Excel şablonunu indirir.
+/// </summary>
+[HttpGet("section/{sectionId}/grades/export-template")]
+public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int componentId)
+{
+    var section = await GetAuthorizedSectionAsync(sectionId);
+    if (section == null)
+        return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+    var termStatus = await GetTermStatusAsync(section.TermId);
+    if (termStatus != TermStatus.GradeEntry)
+        return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
+
+    if (section.IsFinalized)
+        return BadRequest(new { error = "Sonuclandirilmis ders icin Excel sablonu olusturulamaz." });
+
+    var component = await _context.GradeComponents
+        .FirstOrDefaultAsync(gc => gc.Id == componentId
+            && gc.CourseId == section.CourseId
+            && gc.AcademicTermId == section.TermId);
+
+    if (component == null)
+        return NotFound(new { error = "Bilesen bulunamadi." });
+
+    var registrations = await _context.CourseRegistrations
+        .Include(cr => cr.Student)
+        .Where(cr => cr.CourseSectionId == sectionId
+            && cr.Status != RegistrationStatus.Dropped
+            && cr.Status != RegistrationStatus.Draft)
+        .ToListAsync();
+
+    var studentUserIds = registrations.Select(r => r.Student.UserId).ToList();
+
+    var userMap = await _context.Users
+        .Where(u => studentUserIds.Contains(u.Id))
+        .ToDictionaryAsync(u => u.Id);
+
+    var registrationIds = registrations.Select(r => r.Id).ToList();
+
+    var existingGrades = await _context.StudentGrades
+        .Where(sg => sg.GradeComponentId == componentId
+            && registrationIds.Contains(sg.CourseRegistrationId))
+        .ToDictionaryAsync(sg => sg.CourseRegistrationId, sg => sg.Score);
+
+    using var workbook = new XLWorkbook();
+    var worksheet = workbook.Worksheets.Add("Grades");
+
+    worksheet.Cell(1, 1).Value = "SectionId";
+    worksheet.Cell(1, 2).Value = section.Id;
+
+    worksheet.Cell(2, 1).Value = "ComponentId";
+    worksheet.Cell(2, 2).Value = component.Id;
+
+    worksheet.Cell(3, 1).Value = "ComponentName";
+    worksheet.Cell(3, 2).Value = component.Name;
+
+    worksheet.Cell(5, 1).Value = "StudentId";
+    worksheet.Cell(5, 2).Value = "StudentNumber";
+    worksheet.Cell(5, 3).Value = "FirstName";
+    worksheet.Cell(5, 4).Value = "LastName";
+    worksheet.Cell(5, 5).Value = "CurrentScore";
+    worksheet.Cell(5, 6).Value = "NewScore";
+
+    var row = 6;
+
+    foreach (var reg in registrations
+        .OrderBy(r => userMap.GetValueOrDefault(r.Student.UserId)?.LastName)
+        .ThenBy(r => userMap.GetValueOrDefault(r.Student.UserId)?.FirstName))
+    {
+        var user = userMap.GetValueOrDefault(reg.Student.UserId);
+        existingGrades.TryGetValue(reg.Id, out var currentScore);
+
+        worksheet.Cell(row, 1).Value = reg.StudentId;
+        worksheet.Cell(row, 2).Value = reg.Student.StudentNumber;
+        worksheet.Cell(row, 3).Value = user?.FirstName ?? "";
+        worksheet.Cell(row, 4).Value = user?.LastName ?? "";
+        worksheet.Cell(row, 5).Value = currentScore;
+        worksheet.Cell(row, 6).Value = "";
+
+        row++;
+    }
+
+    worksheet.Columns().AdjustToContents();
+
+    using var stream = new MemoryStream();
+    workbook.SaveAs(stream);
+
+    var fileName = $"section_{sectionId}_component_{componentId}_grades.xlsx";
+
+    return File(
+        stream.ToArray(),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fileName);
+}
+
+/// <summary>
+/// POST api/instructor/section/{sectionId}/grades/import-preview
+/// Excel dosyasını parse edip önizleme döner.
+/// </summary>
+[HttpPost("section/{sectionId}/grades/import-preview")]
+[Consumes("multipart/form-data")]
+public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportFileDto request)
+{
+    var file = request.File;
+
+    var section = await GetAuthorizedSectionAsync(sectionId);
+    if (section == null)
+        return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+    if (file == null || file.Length == 0)
+        return BadRequest(new { error = "Dosya secilmedi." });
+
+    if (!file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        return BadRequest(new { error = "Sadece .xlsx dosyalari kabul edilir." });
+
+    if (file.Length > 5 * 1024 * 1024)
+        return BadRequest(new { error = "Dosya boyutu 5MB'i gecemez." });
+
+    var termStatus = await GetTermStatusAsync(section.TermId);
+    if (termStatus != TermStatus.GradeEntry)
+        return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
+
+    if (section.IsFinalized)
+        return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
+
+    using var stream = new MemoryStream();
+    await file.CopyToAsync(stream);
+    stream.Position = 0;
+
+    using var workbook = new XLWorkbook(stream);
+    var worksheet = workbook.Worksheet("Grades");
+
+    var templateSectionIdText = worksheet.Cell(1, 2).GetValue<string>();
+    var templateComponentIdText = worksheet.Cell(2, 2).GetValue<string>();
+    var templateComponentName = worksheet.Cell(3, 2).GetValue<string>();
+
+    if (!int.TryParse(templateSectionIdText, out var templateSectionId) || templateSectionId != sectionId)
+        return BadRequest(new { error = "Yanlis section sablonu yuklendi." });
+
+    if (!int.TryParse(templateComponentIdText, out var componentId))
+        return BadRequest(new { error = "Component bilgisi okunamadi." });
+
+    var component = await _context.GradeComponents
+        .FirstOrDefaultAsync(gc => gc.Id == componentId
+            && gc.CourseId == section.CourseId
+            && gc.AcademicTermId == section.TermId);
+
+    if (component == null)
+        return BadRequest(new { error = "Yuklenen sablondaki bilesen bu section icin gecersiz." });
+
+    var registrations = await _context.CourseRegistrations
+        .Include(cr => cr.Student)
+        .Where(cr => cr.CourseSectionId == sectionId
+            && cr.Status != RegistrationStatus.Dropped
+            && cr.Status != RegistrationStatus.Draft)
+        .ToListAsync();
+
+    var registrationMap = registrations.ToDictionary(r => r.StudentId, r => r);
+
+    var registrationIds = registrations.Select(r => r.Id).ToList();
+
+    var existingGrades = await _context.StudentGrades
+        .Where(sg => sg.GradeComponentId == componentId
+            && registrationIds.Contains(sg.CourseRegistrationId))
+        .ToDictionaryAsync(sg => sg.CourseRegistrationId, sg => sg.Score);
+
+    var previewRows = new List<object>();
+    int validCount = 0;
+    int warningCount = 0;
+    int errorCount = 0;
+    int emptyCount = 0;
+
+    var row = 6;
+
+    while (true)
+    {
+        var studentIdCell = worksheet.Cell(row, 1).GetValue<string>()?.Trim();
+        var studentNumber = worksheet.Cell(row, 2).GetValue<string>()?.Trim();
+        var firstName = worksheet.Cell(row, 3).GetValue<string>()?.Trim();
+        var lastName = worksheet.Cell(row, 4).GetValue<string>()?.Trim();
+        var currentScoreText = worksheet.Cell(row, 5).GetValue<string>()?.Trim();
+        var newScoreText = worksheet.Cell(row, 6).GetValue<string>()?.Trim();
+
+        if (string.IsNullOrWhiteSpace(studentIdCell)
+            && string.IsNullOrWhiteSpace(studentNumber)
+            && string.IsNullOrWhiteSpace(firstName)
+            && string.IsNullOrWhiteSpace(lastName)
+            && string.IsNullOrWhiteSpace(currentScoreText)
+            && string.IsNullOrWhiteSpace(newScoreText))
+        {
+            break;
+        }
+
+        string status;
+        string message;
+        decimal? parsedScore = null;
+        decimal? currentScore = null;
+        int? studentId = null;
+
+        if (decimal.TryParse(currentScoreText, out var currentParsed))
+            currentScore = currentParsed;
+
+        if (!int.TryParse(studentIdCell, out var parsedStudentId))
+        {
+            status = "Error";
+            message = "StudentId okunamadi.";
+            errorCount++;
+        }
+        else if (!registrationMap.TryGetValue(parsedStudentId, out var registration))
+        {
+            status = "Warning";
+            message = "Kayitsiz ogrenci, bu satir atlanacak.";
+            warningCount++;
+            studentId = parsedStudentId;
+        }
+        else if (string.IsNullOrWhiteSpace(newScoreText))
+        {
+            status = "Empty";
+            message = "Bos hucre, mevcut not korunacak.";
+            emptyCount++;
+            studentId = parsedStudentId;
+
+            existingGrades.TryGetValue(registration.Id, out var existingScore);
+            currentScore = existingScore;
+        }
+        else if (!decimal.TryParse(newScoreText, out var score))
+        {
+            status = "Error";
+            message = "Not sayisal degil.";
+            errorCount++;
+            studentId = parsedStudentId;
+        }
+        else if (score < 0 || score > 100)
+        {
+            status = "Error";
+            message = "Not 0-100 araliginda olmali.";
+            errorCount++;
+            studentId = parsedStudentId;
+        }
+        else
+        {
+            studentId = parsedStudentId;
+            parsedScore = score;
+
+            existingGrades.TryGetValue(registration.Id, out var existingScore);
+            currentScore = existingScore;
+
+            if (currentScore.HasValue && currentScore.Value != parsedScore.Value)
+            {
+                status = "Update";
+                message = $"Mevcut not guncellenecek ({currentScore.Value} -> {parsedScore.Value}).";
+                warningCount++;
+            }
+            else
+            {
+                status = "Valid";
+                message = "Gecerli satir, kaydedilebilir.";
+                validCount++;
+            }
+        }
+
+        previewRows.Add(new
+        {
+            RowNumber = row,
+            StudentId = studentId,
+            StudentNumber = studentNumber,
+            FirstName = firstName,
+            LastName = lastName,
+            CurrentScore = currentScore,
+            NewScore = parsedScore,
+            RawNewScore = newScoreText,
+            Status = status,
+            Message = message
+        });
+
+        row++;
+    }
+
+    return Ok(new
+    {
+        SectionId = section.Id,
+        ComponentId = component.Id,
+        ComponentName = templateComponentName,
+        TotalRows = previewRows.Count,
+        ValidCount = validCount,
+        WarningCount = warningCount,
+        ErrorCount = errorCount,
+        EmptyCount = emptyCount,
+        Rows = previewRows
+    });
+}
+/// <summary>
+/// POST api/instructor/section/{sectionId}/grades/import-apply
+/// Onaylanan Excel notlarını uygular.
+/// </summary>
+[HttpPost("section/{sectionId}/grades/import-apply")]
+[Consumes("multipart/form-data")]
+public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFileDto request)
+{
+    var file = request.File;
+    var section = await GetAuthorizedSectionAsync(sectionId);
+
+    if (section == null)
+        return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+    if (file == null || file.Length == 0)
+        return BadRequest(new { error = "Dosya secilmedi." });
+
+    if (!file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        return BadRequest(new { error = "Sadece .xlsx dosyalari kabul edilir." });
+
+    if (file.Length > 5 * 1024 * 1024)
+        return BadRequest(new { error = "Dosya boyutu 5MB'i gecemez." });
+
+    var termStatus = await GetTermStatusAsync(section.TermId);
+    if (termStatus != TermStatus.GradeEntry)
+        return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
+
+    if (section.IsFinalized)
+        return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
+
+    using var stream = new MemoryStream();
+    await file.CopyToAsync(stream);
+    stream.Position = 0;
+
+    using var workbook = new XLWorkbook(stream);
+    var worksheet = workbook.Worksheet("Grades");
+
+    var templateSectionIdText = worksheet.Cell(1, 2).GetValue<string>();
+    var templateComponentIdText = worksheet.Cell(2, 2).GetValue<string>();
+
+    if (!int.TryParse(templateSectionIdText, out var templateSectionId) || templateSectionId != sectionId)
+        return BadRequest(new { error = "Yanlis section sablonu yuklendi." });
+
+    if (!int.TryParse(templateComponentIdText, out var componentId))
+        return BadRequest(new { error = "Component bilgisi okunamadi." });
+
+    var component = await _context.GradeComponents
+        .FirstOrDefaultAsync(gc => gc.Id == componentId
+            && gc.CourseId == section.CourseId
+            && gc.AcademicTermId == section.TermId);
+
+    if (component == null)
+        return BadRequest(new { error = "Yuklenen sablondaki bilesen bu section icin gecersiz." });
+
+    var registrations = await _context.CourseRegistrations
+        .Where(cr => cr.CourseSectionId == sectionId
+            && cr.Status != RegistrationStatus.Dropped
+            && cr.Status != RegistrationStatus.Draft)
+        .ToListAsync();
+
+    var registrationMap = registrations.ToDictionary(r => r.StudentId, r => r);
+
+    var registrationIds = registrations.Select(r => r.Id).ToList();
+
+    var existingGrades = await _context.StudentGrades
+        .Where(sg => sg.GradeComponentId == componentId
+            && registrationIds.Contains(sg.CourseRegistrationId))
+        .ToDictionaryAsync(sg => sg.CourseRegistrationId);
+
+    int inserted = 0;
+    int updated = 0;
+    int skipped = 0;
+
+    var row = 6;
+
+    while (true)
+    {
+        var studentIdText = worksheet.Cell(row, 1).GetValue<string>()?.Trim();
+        var newScoreText = worksheet.Cell(row, 6).GetValue<string>()?.Trim();
+
+        var rowIsEmpty =
+            string.IsNullOrWhiteSpace(worksheet.Cell(row, 1).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(row, 2).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(row, 3).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(row, 4).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(row, 5).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(row, 6).GetValue<string>());
+
+        if (rowIsEmpty)
+            break;
+
+        if (!int.TryParse(studentIdText, out var studentId))
+        {
+            skipped++;
+            row++;
+            continue;
+        }
+
+        if (!registrationMap.TryGetValue(studentId, out var registration))
+        {
+            skipped++;
+            row++;
+            continue;
+        }
+
+        if (string.IsNullOrWhiteSpace(newScoreText))
+        {
+            skipped++;
+            row++;
+            continue;
+        }
+
+        if (!decimal.TryParse(newScoreText, out var newScore) || newScore < 0 || newScore > 100)
+        {
+            skipped++;
+            row++;
+            continue;
+        }
+
+        if (existingGrades.TryGetValue(registration.Id, out var existingGrade))
+        {
+            existingGrade.Score = newScore;
+            updated++;
+        }
+        else
+        {
+            var grade = new StudentGrade
+            {
+                CourseRegistrationId = registration.Id,
+                GradeComponentId = componentId,
+                Score = newScore
+            };
+
+            _context.StudentGrades.Add(grade);
+            inserted++;
+        }
+
+        row++;
+    }
+
+    await _context.SaveChangesAsync();
+
+    return Ok(new
+    {
+        message = "Import tamamlandi.",
+        SectionId = sectionId,
+        ComponentId = componentId,
+        Inserted = inserted,
+        Updated = updated,
+        Skipped = skipped
+    });
+}
     // ══════════════════════════════════════════════════════════
     //  SONUÇLANDIRMA
     // ══════════════════════════════════════════════════════════
@@ -661,4 +1111,8 @@ public class GradeController : ControllerBase
         public int DCMin { get; set; }
         public int DDMin { get; set; }
     }
+    public class ImportFileDto
+{
+    public IFormFile File { get; set; } = null!;
+}
 }

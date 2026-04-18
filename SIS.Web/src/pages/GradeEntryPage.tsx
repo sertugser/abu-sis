@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,9 @@ import {
   AlertTriangle,
   Users,
   Search,
+  Download,
+  Upload,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   useGrades,
@@ -36,8 +39,15 @@ import {
   useFinalize,
   useUnfinalize,
   useUpdateGradingCriteria,
+  useDownloadTemplate,
+  usePreviewImport,
+  useApplyImport,
 } from '../hooks/useGradeData';
-import type { GradingCriteria, FinalizePreviewItem } from '../types/grade';
+import type {
+  GradingCriteria,
+  FinalizePreviewItem,
+  ImportPreviewResponse,
+} from '../types/grade';
 
 /* ── Harf notu stilleri ── */
 const GRADE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -90,6 +100,9 @@ export default function GradeEntryPage() {
   const finalizeMut = useFinalize(id);
   const unfinalizeMut = useUnfinalize(id);
   const updateCriteriaMut = useUpdateGradingCriteria(id);
+  const downloadTemplateMut = useDownloadTemplate(id);
+const previewImportMut = usePreviewImport(id);
+const applyImportMut = useApplyImport(id);
 
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [scores, setScores] = useState<Record<number, string>>({});
@@ -100,6 +113,35 @@ export default function GradeEntryPage() {
   const [editCriteria, setEditCriteria] = useState<GradingCriteria | null>(null);
   const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
   const [finalizeResults, setFinalizeResults] = useState<FinalizePreviewItem[] | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+const [selectedFile, setSelectedFile] = useState<File | null>(null);
+const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>(null);
+
+  const isFinalized = gradesData?.isFinalized ?? false;
+  const currentCriteria = criteria ?? {
+    aaMin: 91,
+    baMin: 81,
+    bbMin: 71,
+    cbMin: 61,
+    ccMin: 55,
+    dcMin: 50,
+    ddMin: 45,
+  };
+  const activeComponentId = selectedComponentId ?? components?.[0]?.id ?? null;
+  const totalWeight = components?.reduce((sum, c) => sum + c.weight, 0) ?? 0;
+  const activeComponent = components?.find(c => c.id === activeComponentId);
+
+  useEffect(() => {
+    if (!gradesData || !activeComponentId) return;
+
+    const newScores: Record<number, string> = {};
+    gradesData.students.forEach((student) => {
+      const score = student.scores[activeComponentId];
+      newScores[student.studentId] = score != null ? String(score) : '';
+    });
+
+    setScores(newScores);
+  }, [gradesData, activeComponentId]);
 
   /* ── Loading ── */
   if (gradesLoading) {
@@ -118,19 +160,15 @@ export default function GradeEntryPage() {
       <div className="flex flex-col items-center justify-center py-24">
         <XCircle className="h-12 w-12 text-muted-foreground mb-4" />
         <p className="text-lg font-medium text-foreground">Erişim Sağlanamadı</p>
-        <p className="text-sm text-muted-foreground mt-1 mb-6">Bu ders bulunamadı veya erişim yetkiniz yok.</p>
+        <p className="text-sm text-muted-foreground mt-1 mb-6">
+          Bu ders bulunamadı veya erişim yetkiniz yok.
+        </p>
         <Button variant="outline" onClick={() => navigate('/derslerim')}>
           <ArrowLeft className="h-4 w-4 mr-1.5" /> Derslerime Dön
         </Button>
       </div>
     );
   }
-
-  const isFinalized = gradesData.isFinalized;
-  const currentCriteria = criteria ?? { aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45 };
-  const activeComponentId = selectedComponentId ?? components?.[0]?.id ?? null;
-  const totalWeight = components?.reduce((sum, c) => sum + c.weight, 0) ?? 0;
-  const activeComponent = components?.find(c => c.id === activeComponentId);
 
   /* ── Handlers ── */
   const selectComponent = (compId: number) => {
@@ -145,13 +183,34 @@ export default function GradeEntryPage() {
   };
 
   const handleSave = () => {
-    if (!activeComponentId) return;
-    const grades = Object.entries(scores).map(([studentId, score]) => ({
-      studentId: Number(studentId),
-      score: score === '' ? null : Number(score),
-    }));
-    submitGradesMut.mutate({ componentId: activeComponentId, grades });
-  };
+  if (!activeComponentId) return;
+
+  const invalidEntry = Object.entries(scores).find(([, score]) => {
+    if (score === '') return false;
+    const numericScore = Number(score);
+    return Number.isNaN(numericScore) || numericScore < 0 || numericScore > 100;
+  });
+
+  if (invalidEntry) {
+    alert('Notlar 0 ile 100 arasında olmalıdır.');
+    return;
+  }
+
+  const grades = Object.entries(scores).map(([studentId, score]) => ({
+    studentId: Number(studentId),
+    score: score === '' ? null : Number(score),
+  }));
+
+  submitGradesMut.mutate(
+    { componentId: activeComponentId, grades },
+    {
+      onError: (err: unknown) => {
+        const error = err as { response?: { data?: { error?: string } } };
+        alert(error.response?.data?.error ?? 'Notlar kaydedilemedi.');
+      },
+    }
+  );
+};
 
   const handleAddComponent = () => {
     if (!newComponent.name || !newComponent.weight) return;
@@ -191,6 +250,68 @@ export default function GradeEntryPage() {
       onSuccess: () => setShowCriteriaDialog(false),
     });
   };
+  const handleDownloadTemplate = () => {
+  if (!activeComponentId) return;
+
+  downloadTemplateMut.mutate(activeComponentId, {
+    onSuccess: (blob) => {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${gradesData.courseCode}-${activeComponent?.name ?? 'grades'}-template.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    },
+    onError: () => {
+      alert('Excel şablonu indirilemedi.');
+    },
+  });
+};
+
+const handlePreviewImport = () => {
+  if (!selectedFile) {
+    alert('Lütfen bir Excel dosyası seçin.');
+    return;
+  }
+
+  previewImportMut.mutate(selectedFile, {
+    onSuccess: (data) => {
+      setPreviewResult(data);
+    },
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } } };
+      alert(error.response?.data?.error ?? 'Önizleme alınamadı.');
+    },
+  });
+};
+
+const handleApplyImport = () => {
+  if (!selectedFile) {
+    alert('Lütfen bir Excel dosyası seçin.');
+    return;
+  }
+
+  applyImportMut.mutate(selectedFile, {
+    onSuccess: (data) => {
+      alert(
+        `İçe aktarma tamamlandı.\n` +
+        `Eklenen: ${data.inserted}\n` +
+        `Güncellenen: ${data.updated}\n` +
+        `Atlanan: ${data.skipped}`
+      );
+
+      setShowImportDialog(false);
+      setSelectedFile(null);
+      setPreviewResult(null);
+    },
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } } };
+      alert(error.response?.data?.error ?? 'İçe aktarma başarısız.');
+    },
+  });
+};
 
   /* ── Filter students ── */
   const filteredStudents = gradesData.students.filter(s => {
@@ -228,10 +349,10 @@ export default function GradeEntryPage() {
                 {gradesData.students.length} öğrenci
               </span>
               <span className="text-muted-foreground">·</span>
-              <Badge
-                variant={isFinalized ? 'success' : 'secondary'}
-                className="text-xs"
-              >
+             <Badge
+                  variant="secondary"
+                  className="text-xs"
+>
                 {isFinalized ? 'Kesinleştirilmiş' : 'Kesinleştirilmemiş'}
               </Badge>
             </div>
@@ -239,6 +360,31 @@ export default function GradeEntryPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {!isFinalized && activeComponentId && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadTemplate}
+                disabled={downloadTemplateMut.isPending}
+                className="gap-1.5 text-sm"
+              >
+                <Download className="h-4 w-4" />
+                {downloadTemplateMut.isPending ? 'İndiriliyor...' : 'Şablon'}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowImportDialog(true)}
+                className="gap-1.5 text-sm"
+              >
+                <Upload className="h-4 w-4" />
+                Excel Yükle
+              </Button>
+            </>
+          )}
+
           <Button
             variant="outline"
             size="sm"
@@ -249,6 +395,7 @@ export default function GradeEntryPage() {
             <Settings className="h-4 w-4" />
             Harf Aralığı
           </Button>
+
           {isFinalized ? (
             <Button
               variant="outline"
@@ -388,11 +535,22 @@ export default function GradeEntryPage() {
                   </thead>
                   <tbody>
                     {filteredStudents.map((student, index) => {
-                      const scoreStr = scores[student.studentId] ?? '';
-                      const scoreNum = scoreStr !== '' ? Number(scoreStr) : null;
-                      const letterGrade = scoreNum != null && !isNaN(scoreNum)
-                        ? resolveGrade(Math.round(scoreNum), currentCriteria)
-                        : null;
+                     const persistedScore = activeComponentId ? student.scores[activeComponentId] : null;
+                     const scoreStr = scores[student.studentId] ?? (persistedScore != null ? String(persistedScore) : '');
+                     const scoreNum = scoreStr !== '' ? Number(scoreStr) : null;
+                      const isValidScore =
+                        scoreNum != null &&
+                        !Number.isNaN(scoreNum) &&
+                         scoreNum >= 0 &&
+                         scoreNum <= 100;
+
+                      const previewLetterGrade = isValidScore
+                          ? resolveGrade(Math.round(scoreNum), currentCriteria)
+                          : null;
+
+                      const displayedLetterGrade = isFinalized
+                          ? student.letterGrade ?? null
+                          : previewLetterGrade;
 
                       return (
                         <tr key={student.studentId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
@@ -410,17 +568,23 @@ export default function GradeEntryPage() {
                               <span className="font-mono text-sm font-semibold">{scoreStr || '—'}</span>
                             ) : (
                               <Input
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={scoreStr}
-                                onChange={(e) => setScores(prev => ({ ...prev, [student.studentId]: e.target.value }))}
-                                className="w-24 mx-auto text-center h-9 font-mono text-[15px]"
-                              />
+                               type="number"
+                               min={0}
+                               max={100}
+                               value={scoreStr}
+                               onChange={(e) => setScores(prev => ({ ...prev, [student.studentId]: e.target.value }))}
+                               className={`w-24 mx-auto text-center h-9 font-mono text-[15px] ${
+                               scoreStr !== '' && !isValidScore ? 'border-red-500 focus-visible:ring-red-500' : ''
+                                }`}
+                             />
                             )}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            {letterGrade ? <GradeChip grade={letterGrade} /> : <span className="text-muted-foreground">—</span>}
+                            {displayedLetterGrade ? (
+                            <GradeChip grade={displayedLetterGrade} />
+                            ) : (
+                            <span className="text-muted-foreground">—</span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -540,7 +704,7 @@ export default function GradeEntryPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Kesinleştirme */}
+            {/* Kesinleştirme */}
       <Dialog open={showFinalizeDialog} onOpenChange={setShowFinalizeDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -611,6 +775,147 @@ export default function GradeEntryPage() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Excel Import Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+              Excel ile Not İçe Aktar
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Excel Dosyası (.xlsx)</Label>
+              <Input
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  setSelectedFile(file);
+                  setPreviewResult(null);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Önce aktif bileşen için şablonu indirip doldurun, sonra burada yükleyin.
+              </p>
+            </div>
+
+            {previewResult && (
+              <div className="rounded-lg border overflow-hidden">
+                <div className="flex flex-wrap gap-2 p-4 border-b bg-muted/20">
+                  <Badge variant="secondary">Toplam: {previewResult.totalRows}</Badge>
+                  <Badge variant="secondary">Geçerli: {previewResult.validCount}</Badge>
+                  <Badge variant="secondary">Uyarı: {previewResult.warningCount}</Badge>
+                  <Badge variant="secondary">Hata: {previewResult.errorCount}</Badge>
+                  <Badge variant="secondary">Boş: {previewResult.emptyCount}</Badge>
+                </div>
+                {previewResult.errorCount > 0 && (
+  <div className="px-4 py-3 border-b bg-red-50 text-red-700 text-sm">
+    Hatalı satırlar içe aktarma sırasında atlanacaktır. Yalnızca geçerli satırlar kaydedilir.
+  </div>
+)}
+
+                <div className="max-h-80 overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-background border-b">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Satır</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Öğrenci</th>
+                        <th className="text-center px-3 py-2 font-medium text-muted-foreground">Mevcut</th>
+                        <th className="text-center px-3 py-2 font-medium text-muted-foreground">Yeni</th>
+                        <th className="text-center px-3 py-2 font-medium text-muted-foreground">Durum</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Mesaj</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewResult.rows.map((row) => {
+                        const statusStyle =
+                          row.status === 'Valid'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : row.status === 'Update'
+                              ? 'bg-amber-50 text-amber-700'
+                              : row.status === 'Warning'
+                                ? 'bg-orange-50 text-orange-700'
+                                : row.status === 'Error'
+                                  ? 'bg-red-50 text-red-700'
+                                  : 'bg-muted text-muted-foreground';
+
+                        return (
+                          <tr key={row.rowNumber} className="border-b last:border-0">
+                            <td className="px-3 py-2 font-mono">{row.rowNumber}</td>
+                            <td className="px-3 py-2">
+                              <div className="font-medium">
+                                {row.firstName} {row.lastName}
+                              </div>
+                              <div className="text-xs text-muted-foreground font-mono">
+                                {row.studentNumber}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-center font-mono">
+                              {row.currentScore ?? '—'}
+                            </td>
+                            <td className="px-3 py-2 text-center font-mono">
+                              {(row.newScore ?? row.rawNewScore) || '—'}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`inline-flex px-2 py-1 rounded-md text-xs font-medium ${statusStyle}`}>
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-muted-foreground">
+                              {row.message}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowImportDialog(false);
+                setSelectedFile(null);
+                setPreviewResult(null);
+              }}
+            >
+              Kapat
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handlePreviewImport}
+              disabled={!selectedFile || previewImportMut.isPending}
+              className="gap-1.5"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              {previewImportMut.isPending ? 'Önizleniyor...' : 'Önizleme Al'}
+            </Button>
+
+            <Button
+              onClick={handleApplyImport}
+              disabled={
+  !selectedFile ||
+  !previewResult ||
+  previewResult.errorCount > 0 ||
+  applyImportMut.isPending
+}
+              className="gap-1.5"
+            >
+              <Upload className="h-4 w-4" />
+              {applyImportMut.isPending ? 'İçe Aktarılıyor...' : 'Onayla ve İçe Aktar'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
