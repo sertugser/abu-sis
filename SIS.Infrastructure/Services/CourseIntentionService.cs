@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.CourseIntention.DTOs;
+using SIS.Application.StudentEligibility.DTOs;
 using SIS.Application.CourseIntention.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Domain.Enums;
@@ -70,26 +71,40 @@ public class CourseIntentionService : ICourseIntentionService
 
         var availableCourses = await GetAvailableCourseOptionsAsync(studentId, survey.TermId, cancellationToken);
         var availableCourseIds = availableCourses.Select(c => c.CourseId).ToHashSet();
+        var lockedIntentions = availableCourses
+            .Where(c => c.IsLocked && c.LockedIntention.HasValue)
+            .ToDictionary(c => c.CourseId, c => c.LockedIntention!.Value);
 
         var requestCourseIds = request.Intentions.Select(i => i.CourseId).ToHashSet();
         if (requestCourseIds.Except(availableCourseIds).Any())
             throw new InvalidOperationException("Danisman kisiti veya uygunluk nedeniyle secilemeyen dersler ankete kaydedilemez.");
 
+        var effectiveIntentions = request.Intentions
+            .GroupBy(i => i.CourseId)
+            .Select(g => g.Last())
+            .Where(i => availableCourseIds.Contains(i.CourseId) && !lockedIntentions.ContainsKey(i.CourseId))
+            .ToDictionary(i => i.CourseId, i => i.Intention);
+
+        foreach (var lockedItem in lockedIntentions)
+        {
+            effectiveIntentions[lockedItem.Key] = lockedItem.Value;
+        }
+
         var existingIntentions = await _context.CourseIntentions
             .Where(ci => ci.SurveyId == survey.Id && ci.StudentId == studentId)
             .ToListAsync(cancellationToken);
 
-        foreach (var obsolete in existingIntentions.Where(ci => !requestCourseIds.Contains(ci.CourseId)).ToList())
+        foreach (var obsolete in existingIntentions.Where(ci => !effectiveIntentions.ContainsKey(ci.CourseId)).ToList())
         {
             _context.CourseIntentions.Remove(obsolete);
         }
 
         var existingByCourseId = existingIntentions.ToDictionary(ci => ci.CourseId, ci => ci);
-        foreach (var item in request.Intentions.GroupBy(i => i.CourseId).Select(g => g.Last()))
+        foreach (var item in effectiveIntentions)
         {
-            if (existingByCourseId.TryGetValue(item.CourseId, out var existing))
+            if (existingByCourseId.TryGetValue(item.Key, out var existing))
             {
-                existing.Intention = item.Intention;
+                existing.Intention = item.Value;
                 existing.UpdatedAt = DateTime.UtcNow;
             }
             else
@@ -98,8 +113,8 @@ public class CourseIntentionService : ICourseIntentionService
                 {
                     SurveyId = survey.Id,
                     StudentId = studentId,
-                    CourseId = item.CourseId,
-                    Intention = item.Intention,
+                    CourseId = item.Key,
+                    Intention = item.Value,
                     CreatedAt = DateTime.UtcNow
                 });
             }
@@ -289,6 +304,8 @@ public class CourseIntentionService : ICourseIntentionService
         SIS.Domain.Entities.CourseIntentionSurvey survey,
         CancellationToken cancellationToken)
     {
+        var availableCourses = await GetAvailableCourseOptionsAsync(studentId, survey.TermId, cancellationToken);
+        var availableCoursesById = availableCourses.ToDictionary(c => c.CourseId);
         var responses = await _context.CourseIntentions
             .AsNoTracking()
             .Include(i => i.Course)
@@ -303,14 +320,8 @@ public class CourseIntentionService : ICourseIntentionService
         return new CourseIntentionSurveyDetailDto
         {
             Survey = ToSurveyDto(survey),
-            AvailableCourses = await GetAvailableCourseOptionsAsync(studentId, survey.TermId, cancellationToken),
-            Responses = responses.Select(i => new CourseIntentionResponseDto
-            {
-                CourseId = i.CourseId,
-                CourseCode = i.Course.Code,
-                CourseName = i.Course.Name,
-                Intention = i.Intention
-            }).ToList(),
+            AvailableCourses = availableCourses,
+            Responses = MergeResponses(responses, availableCoursesById),
             Preference = new StudentSurveyPreferenceDto
             {
                 PreferredDays = preference?.PreferredDays ?? string.Empty,
@@ -328,7 +339,7 @@ public class CourseIntentionService : ICourseIntentionService
         var blockedCourseIds = await _advisorConstraintService.GetBlockedCourseIdsAsync(studentId, termId, cancellationToken);
 
         return eligibility
-            .Where(c => c.IsEligible && !blockedCourseIds.Contains(c.CourseId))
+            .Where(c => c.IsEligible && (!blockedCourseIds.Contains(c.CourseId) || IsLockedRetake(c)))
             .Select(c => new CourseIntentionOptionDto
             {
                 CourseId = c.CourseId,
@@ -339,9 +350,13 @@ public class CourseIntentionService : ICourseIntentionService
                 IsCompulsory = c.IsCompulsory,
                 TakeStatus = MapTakeStatus(c.TakeType),
                 PreviousGrade = c.PreviousGrade?.ToString(),
-                IsBlockedByAdvisor = false
+                IsBlockedByAdvisor = blockedCourseIds.Contains(c.CourseId),
+                IsLocked = IsLockedRetake(c),
+                LockedIntention = IsLockedRetake(c) ? CourseIntentionLevel.Certain : null,
+                LockReason = BuildLockReason(c.PreviousGrade)
             })
             .OrderBy(c => TakeStatusOrder(c.TakeStatus))
+            .ThenBy(c => c.IsLocked ? 0 : 1)
             .ThenBy(c => c.SuggestedSemester)
             .ThenBy(c => c.CourseCode)
             .ToList();
@@ -395,6 +410,58 @@ public class CourseIntentionService : ICourseIntentionService
         return value
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(token => !string.IsNullOrWhiteSpace(token));
+    }
+
+    private static List<CourseIntentionResponseDto> MergeResponses(
+        IEnumerable<SIS.Domain.Entities.CourseIntention> responses,
+        IReadOnlyDictionary<int, CourseIntentionOptionDto> availableCoursesById)
+    {
+        var merged = responses.ToDictionary(
+            response => response.CourseId,
+            response =>
+            {
+                var normalizedIntention = availableCoursesById.TryGetValue(response.CourseId, out var option)
+                    && option.IsLocked
+                    && option.LockedIntention.HasValue
+                    ? option.LockedIntention.Value
+                    : response.Intention;
+
+                return new CourseIntentionResponseDto
+                {
+                    CourseId = response.CourseId,
+                    CourseCode = response.Course.Code,
+                    CourseName = response.Course.Name,
+                    Intention = normalizedIntention
+                };
+            });
+
+        foreach (var option in availableCoursesById.Values.Where(option => option.IsLocked && option.LockedIntention.HasValue))
+        {
+            merged[option.CourseId] = new CourseIntentionResponseDto
+            {
+                CourseId = option.CourseId,
+                CourseCode = option.CourseCode,
+                CourseName = option.CourseName,
+                Intention = option.LockedIntention!.Value
+            };
+        }
+
+        return merged.Values
+            .OrderBy(response => response.CourseCode)
+            .ToList();
+    }
+
+    private static bool IsLockedRetake(StudentCourseEligibilityDto item)
+    {
+        return item.TakeType == "MustRetake"
+            && item.PreviousGrade is GradeCode.FF or GradeCode.NA or GradeCode.U;
+    }
+
+    private static string? BuildLockReason(GradeCode? previousGrade)
+    {
+        return previousGrade is GradeCode.FF or GradeCode.NA or GradeCode.U
+            ? $"Bu ders onceki notun {previousGrade} oldugu icin sistem tarafindan zorunlu olarak eklendi."
+            : null;
     }
 
     private static string MapTakeStatus(string takeType) => takeType switch

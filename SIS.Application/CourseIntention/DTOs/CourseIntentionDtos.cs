@@ -26,6 +26,9 @@ public class CourseIntentionOptionDto
     public string TakeStatus { get; set; } = string.Empty;
     public string? PreviousGrade { get; set; }
     public bool IsBlockedByAdvisor { get; set; }
+    public bool IsLocked { get; set; }
+    public CourseIntentionLevel? LockedIntention { get; set; }
+    public string? LockReason { get; set; }
 }
 
 public class CourseIntentionResponseDto

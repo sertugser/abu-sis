@@ -23,6 +23,9 @@ export interface CourseIntentionOptionDto {
   takeStatus: string;
   previousGrade?: string | null;
   isBlockedByAdvisor: boolean;
+  isLocked: boolean;
+  lockedIntention?: CourseIntentionLevel | null;
+  lockReason?: string | null;
 }
 
 export interface CourseIntentionResponseDto {
