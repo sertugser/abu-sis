@@ -9,6 +9,8 @@ import {
   Settings,
   Calendar,
   School,
+  Megaphone,
+  ClipboardCheck,
 } from 'lucide-react';
 import { ROUTES } from '../../lib/constants';
 
@@ -28,6 +30,7 @@ export const studentMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Duyurular' },
       { to: ROUTES.ALINAN_DERSLER, label: 'Alınan Dersler' },
     ],
   },
@@ -44,6 +47,14 @@ export const studentMenuGroups: MenuGroup[] = [
       { to: '/mufredat-durum', label: 'Müfredat Durum' },
       { to: ROUTES.TRANSCRIPT, label: 'Transkript', openInNewTab: true },
       { to: ROUTES.TRANSCRIPT_SCENARIO, label: 'Transkript Senaryosu' },
+    ],
+  },
+  {
+    id: 'degerlendirme',
+    label: 'Değerlendirme',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.COURSE_EVALUATION, label: 'Ders Değerlendirme' },
     ],
   },
   {
@@ -66,6 +77,7 @@ export const instructorMenuGroups: MenuGroup[] = [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Duyurular' },
     ],
   },
   {
@@ -76,6 +88,14 @@ export const instructorMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
+    ],
+  },
+  {
+    id: 'degerlendirme',
+    label: 'Değerlendirme',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],
   },
 ];
@@ -156,6 +176,16 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];
@@ -193,6 +223,15 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     icon: Users,
     children: [
       { to: ROUTES.STUDENT_DIRECTORY, label: 'Öğrenci Rehberi' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];
@@ -245,6 +284,16 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];
@@ -325,6 +374,24 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
       { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
+    ],
+  },
+  {
+    id: 'degerlendirme',
+    label: 'Değerlendirme',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.EVALUATION_PERIOD_ADMIN, label: 'Değerlendirme Dönemi Yönetimi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];

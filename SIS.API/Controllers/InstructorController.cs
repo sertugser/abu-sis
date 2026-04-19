@@ -53,24 +53,29 @@ public class InstructorController : ControllerBase
     }
 
     /// <summary>
-    /// GET api/instructor/my-sections — sections the instructor teaches in the active term.
+    /// GET api/instructor/my-sections — sections the instructor teaches.
+    /// Opsiyonel termId parametresi verilmezse aktif dönem kullanılır.
+    /// Geçmiş dönem section'larına erişim (değerlendirme sonuçları için salt-okunur).
     /// </summary>
     [HttpGet("my-sections")]
-    public async Task<IActionResult> GetMySections()
+    public async Task<IActionResult> GetMySections([FromQuery] int? termId = null)
     {
         var instructor = await GetInstructorAsync();
         if (instructor == null)
             return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
 
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
-        if (activeTerm == null)
-            return NotFound(new { error = "Aktif donem bulunamadi." });
+        var term = termId.HasValue
+            ? await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Id == termId.Value)
+            : await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+
+        if (term == null)
+            return NotFound(new { error = termId.HasValue ? "Donem bulunamadi." : "Aktif donem bulunamadi." });
 
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Include(cs => cs.Classroom)
             .Include(cs => cs.Registrations)
-            .Where(cs => cs.InstructorId == instructor.Id && cs.TermId == activeTerm.Id)
+            .Where(cs => cs.InstructorId == instructor.Id && cs.TermId == term.Id)
             .ToListAsync();
 
         // Load SectionSchedule records for schedule display
@@ -106,11 +111,42 @@ public class InstructorController : ControllerBase
 
         return Ok(new
         {
-            Term = activeTerm.Name,
+            Term = term.Name,
+            TermId = term.Id,
             TotalSections = result.Count,
             TotalStudents = result.Sum(s => s.ActiveStudents),
             Sections = result
         });
+    }
+
+    /// <summary>
+    /// GET api/instructor/my-terms — instructor'ın section'ı olan dönemlerin listesi.
+    /// Değerlendirme sonuçları sayfasında geçmiş dönem seçimi için kullanılır.
+    /// </summary>
+    [HttpGet("my-terms")]
+    public async Task<IActionResult> GetMyTerms()
+    {
+        var instructor = await GetInstructorAsync();
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        var terms = await _context.CourseSections
+            .Where(cs => cs.InstructorId == instructor.Id)
+            .Select(cs => cs.Term)
+            .Distinct()
+            .OrderByDescending(t => t.Year)
+            .ThenByDescending(t => t.Semester)
+            .Select(t => new
+            {
+                Id = t.Id,
+                Name = t.Name,
+                Year = t.Year,
+                Semester = t.Semester,
+                IsActive = t.IsActive
+            })
+            .ToListAsync();
+
+        return Ok(terms);
     }
 
     /// <summary>

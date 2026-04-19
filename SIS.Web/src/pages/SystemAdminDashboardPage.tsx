@@ -29,6 +29,7 @@ import { useAdminStudents } from '../hooks/useAdminStudents';
 import { useAdminInstructors } from '../hooks/useAdminInstructors';
 import { useAdminTerms } from '../hooks/useAdminTerms';
 import { ROUTES } from '../lib/constants';
+import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -523,6 +524,8 @@ export default function SystemAdminDashboardPage() {
 
       {/* ── Quick Access ─────────────────────────────────────── */}
       <QuickAccessSection />
+
+      <DashboardAnnouncementWidget max={5} />
 
     </div>
   );

@@ -175,6 +175,36 @@ public class AdminTermService : IAdminTermService
             await _timeSlotService.GenerateTimeSlotsForTermAsync(id);
         }
 
+        // Tasarım 1.2: GradeEntry'e manuel geçişte de değerlendirme anketi otomatik açılır.
+        if (targetStatus == TermStatus.GradeEntry)
+        {
+            var alreadyOpen = await _context.EvaluationPeriods
+                .AnyAsync(p => p.TermId == id && p.Status == EvaluationPeriodStatus.Open);
+            if (!alreadyOpen)
+            {
+                _context.EvaluationPeriods.Add(new EvaluationPeriod
+                {
+                    TermId = id,
+                    OpenedAt = DateTime.UtcNow,
+                    ClosesAt = term.TermEnd,
+                    Status = EvaluationPeriodStatus.Open,
+                    OpenedBy = null, // sistem tarafından açıldı
+                });
+            }
+        }
+
+        // Tasarım 1.2: Dönem Closed olduğunda değerlendirme anketi otomatik kapanır.
+        if (targetStatus == TermStatus.Closed)
+        {
+            var openPeriods = await _context.EvaluationPeriods
+                .Where(p => p.TermId == id && p.Status == EvaluationPeriodStatus.Open)
+                .ToListAsync();
+            foreach (var p in openPeriods)
+            {
+                p.Status = EvaluationPeriodStatus.Closed;
+            }
+        }
+
         await _context.SaveChangesAsync();
     }
 

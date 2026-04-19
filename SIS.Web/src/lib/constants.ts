@@ -39,6 +39,13 @@ export const ROUTES = {
   ELECTIVE_GROUPS: '/secmeli-ders-gruplari',
   INSTRUCTOR_COURSES_REPORT: '/ders-veren-ogretim-uyeleri',
   TERM_PROGRAM_TRANSFER: '/donem-programi-aktarim',
+  // Course Evaluation
+  COURSE_EVALUATION: '/ders-degerlendirme',
+  EVALUATION_RESULTS: '/degerlendirme-sonuclari',
+  EVALUATION_PERIOD_ADMIN: '/degerlendirme-donemi-yonetimi',
+  // Internal Announcements
+  ANNOUNCEMENTS: '/duyurular',
+  ANNOUNCEMENT_MANAGEMENT: '/duyuru-yonetimi',
 } as const;
 
 export const QUERY_KEYS = {
@@ -88,6 +95,19 @@ export const QUERY_KEYS = {
   electiveGroups: (subtype?: string, facultyId?: number) => ['electiveGroups', 'list', subtype, facultyId] as const,
   electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
+  // Course Evaluation
+  evaluationActivePeriod: ['courseEvaluation', 'activePeriod'] as const,
+  evaluationMyCourses: ['courseEvaluation', 'myCourses'] as const,
+  evaluationActiveQuestions: ['courseEvaluation', 'activeQuestions'] as const,
+  evaluationAllQuestions: ['courseEvaluation', 'allQuestions'] as const,
+  evaluationSectionResults: (sectionId: number) =>
+    ['courseEvaluation', 'section', sectionId] as const,
+  evaluationDepartmentSummary: (departmentId: number, termId?: number) =>
+    ['courseEvaluation', 'department', departmentId, termId] as const,
+  // Internal Announcements
+  activeAnnouncements: (max?: number) => ['announcements', 'active', max] as const,
+  announcementDetail: (id: number) => ['announcements', 'detail', id] as const,
+  allAnnouncements: ['announcements', 'all'] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -149,6 +169,11 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/secmeli-ders-gruplari',
   '/ders-veren-ogretim-uyeleri',
   '/donem-programi-aktarim',
+  '/ders-degerlendirme',
+  '/degerlendirme-sonuclari',
+  '/degerlendirme-donemi-yonetimi',
+  '/duyurular',
+  '/duyuru-yonetimi',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

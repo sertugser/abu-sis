@@ -30,9 +30,18 @@ export interface InstructorSection {
 
 export interface InstructorSectionsResponse {
   term: string;
+  termId: number;
   totalSections: number;
   totalStudents: number;
   sections: InstructorSection[];
+}
+
+export interface InstructorTerm {
+  id: number;
+  name: string;
+  year: number;
+  semester: string;
+  isActive: boolean;
 }
 
 export interface SectionStudent {
@@ -57,8 +66,15 @@ export async function getInstructorProfile(): Promise<InstructorProfile> {
   return data;
 }
 
-export async function getInstructorSections(): Promise<InstructorSectionsResponse> {
-  const { data } = await apiClient.get('/instructor/my-sections');
+export async function getInstructorSections(termId?: number): Promise<InstructorSectionsResponse> {
+  const { data } = await apiClient.get('/instructor/my-sections', {
+    params: termId != null ? { termId } : undefined,
+  });
+  return data;
+}
+
+export async function getInstructorTerms(): Promise<InstructorTerm[]> {
+  const { data } = await apiClient.get('/instructor/my-terms');
   return data;
 }
 

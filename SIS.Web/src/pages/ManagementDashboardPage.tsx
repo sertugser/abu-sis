@@ -29,6 +29,7 @@ import {
   deanMenuGroups,
   systemAdminMenuGroups,
 } from '../components/layout/SidebarMenuGroups';
+import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 import type { DepartmentForecastSummary } from '../types/academicOperations';
 import type { ScheduleValidationResult } from '../types/scheduling';
 import {
@@ -128,6 +129,8 @@ export default function ManagementDashboardPage() {
           </div>
         )}
       </div>
+
+      <DashboardAnnouncementWidget max={5} />
 
       {/* ── Context loading / error / no-department states ── */}
       {contextQuery.isLoading ? (
