@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.TermClosing.DTOs;
@@ -11,6 +12,7 @@ namespace SIS.API.Controllers;
 [ApiController]
 [Route("api/term-closing")]
 [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+[RequestTimeout(milliseconds: 300_000)] // 5 dakika — büyük bölümlerde not kilitleme + GPA uzun sürebilir
 public class TermClosingController : ControllerBase
 {
     private readonly ITermClosingService _service;
@@ -38,8 +40,15 @@ public class TermClosingController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _service.LockGradesAsync(departmentId, userId, ct);
-        return result.Success ? Ok(result) : BadRequest(result);
+        try
+        {
+            var result = await _service.LockGradesAsync(departmentId, userId, ct);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpPost("{departmentId}/unlock-grades")]
@@ -48,8 +57,15 @@ public class TermClosingController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _service.UnlockGradesAsync(departmentId, userId, ct);
-        return result.Success ? Ok(result) : BadRequest(result);
+        try
+        {
+            var result = await _service.UnlockGradesAsync(departmentId, userId, ct);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpPost("{departmentId}/calculate-gpa")]
@@ -58,8 +74,15 @@ public class TermClosingController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _service.CalculateGpaAsync(departmentId, userId, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _service.CalculateGpaAsync(departmentId, userId, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpGet("{departmentId}/preview-promote")]
@@ -68,8 +91,15 @@ public class TermClosingController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _service.PreviewPromotionAsync(departmentId, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _service.PreviewPromotionAsync(departmentId, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpPost("{departmentId}/promote")]
@@ -78,8 +108,15 @@ public class TermClosingController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _service.PromoteAsync(departmentId, userId, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _service.PromoteAsync(departmentId, userId, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpPost("{departmentId}/rollback-promote")]
@@ -88,8 +125,15 @@ public class TermClosingController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _service.RollbackPromotionAsync(departmentId, userId, ct);
-        return result.Success ? Ok(result) : BadRequest(result);
+        try
+        {
+            var result = await _service.RollbackPromotionAsync(departmentId, userId, ct);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpPost("{departmentId}/open-new-term")]
@@ -98,8 +142,66 @@ public class TermClosingController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _service.OpenNewTermAsync(departmentId, userId, request, ct);
-        return result.Success ? Ok(result) : BadRequest(result);
+        try
+        {
+            var result = await _service.OpenNewTermAsync(departmentId, userId, request, ct);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpGet("{departmentId}/grade-readiness-detail")]
+    public async Task<IActionResult> GetGradeReadinessDetail(int departmentId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _service.GetGradeReadinessDetailAsync(departmentId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("{departmentId}/grade-distribution")]
+    public async Task<IActionResult> GetGradeDistribution(int departmentId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _service.GetGradeDistributionAsync(departmentId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("overview")]
+    public async Task<IActionResult> GetDepartmentOverview([FromQuery] int? facultyId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out _)) return Unauthorized();
+
+        // Sadece Dean ve SystemAdmin görebilir
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        if (!roles.Contains("Dean") && !roles.Contains("SystemAdministrator"))
+            return Forbid();
+
+        var result = await _service.GetDepartmentOverviewAsync(facultyId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("{departmentId}/export-promotion")]
+    public async Task<IActionResult> ExportPromotionReport(int departmentId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        try
+        {
+            var bytes = await _service.ExportPromotionReportAsync(departmentId, ct);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sinif-atlatma-raporu.xlsx");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     private bool TryGetUserId(out int userId)

@@ -115,6 +115,31 @@ public class ScheduleApprovalController : ControllerBase
             resolvedTermId = activeTerm.Id;
         }
 
+        // Resolve faculty & term names
+        var faculty = await _context.Faculties
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == facultyId, cancellationToken);
+
+        var term = await _context.AcademicTerms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == resolvedTermId.Value, cancellationToken);
+
+        // Resolve section counts
+        var totalSections = await _context.CourseSections
+            .CountAsync(cs => cs.TermId == resolvedTermId.Value
+                && cs.IsActive
+                && cs.Course!.DepartmentId.HasValue
+                && _context.Departments.Any(d => d.Id == cs.Course!.DepartmentId && d.FacultyId == facultyId),
+                cancellationToken);
+
+        var scheduledSections = await _context.CourseSections
+            .CountAsync(cs => cs.TermId == resolvedTermId.Value
+                && cs.IsActive
+                && cs.Course!.DepartmentId.HasValue
+                && _context.Departments.Any(d => d.Id == cs.Course!.DepartmentId && d.FacultyId == facultyId)
+                && cs.SectionSchedules.Any(),
+                cancellationToken);
+
         var approval = await _context.FacultyScheduleApprovals
             .AsNoTracking()
             .FirstOrDefaultAsync(a => a.FacultyId == facultyId && a.TermId == resolvedTermId.Value, cancellationToken);
@@ -125,7 +150,11 @@ public class ScheduleApprovalController : ControllerBase
             {
                 IsApproved = false,
                 FacultyId = facultyId,
-                TermId = resolvedTermId.Value
+                FacultyName = faculty?.Name,
+                TermId = resolvedTermId.Value,
+                TermName = term?.Name,
+                TotalSections = totalSections,
+                ScheduledSections = scheduledSections
             });
         }
 
@@ -146,7 +175,11 @@ public class ScheduleApprovalController : ControllerBase
             ApprovedAt = approval.ApprovedAt,
             Note = approval.Note,
             FacultyId = facultyId,
-            TermId = resolvedTermId.Value
+            FacultyName = faculty?.Name,
+            TermId = resolvedTermId.Value,
+            TermName = term?.Name,
+            TotalSections = totalSections,
+            ScheduledSections = scheduledSections
         });
     }
 

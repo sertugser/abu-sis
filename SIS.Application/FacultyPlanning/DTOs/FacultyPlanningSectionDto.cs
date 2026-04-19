@@ -20,6 +20,7 @@ public class FacultyPlanningSectionDto
     public int LabHours { get; set; }
     public int SectionIndex { get; set; }
     public bool IsPinned { get; set; }
+    public int SuggestedSemester { get; set; }
 }
 
 

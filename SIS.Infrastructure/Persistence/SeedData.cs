@@ -23,5 +23,6 @@ public static partial class SeedData
         await SeedSystemConfigAsync(context);
         await SeedConstraintDefinitionsAsync(context);
         await SeedEvaluationQuestionsAsync(context);
+        await SeedConstraintProfilesAsync(context);
     }
 }

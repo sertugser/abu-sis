@@ -12,34 +12,34 @@ public sealed class SchedulingConstraintContext : IConstraintContext
 public sealed class SchedulingConstraintConfig
 {
     // Hard constraint params
-    public bool LunchBreakIsHard { get; init; }
-    public TimeOnly LunchBreakStart { get; init; }
-    public TimeOnly LunchBreakEnd { get; init; }
-    public int MaxConsecutiveHours { get; init; }
-    public int BreakDurationMinutes { get; init; }
-    public int AmphiThreshold { get; init; }
-    public int TheoryLabSplitThreshold { get; init; }
-    public bool AllowSameCourseSectionOverlap { get; init; }
+    public bool LunchBreakIsHard { get; set; }
+    public TimeOnly LunchBreakStart { get; set; }
+    public TimeOnly LunchBreakEnd { get; set; }
+    public int MaxConsecutiveHours { get; set; }
+    public int BreakDurationMinutes { get; set; }
+    public int AmphiThreshold { get; set; }
+    public int TheoryLabSplitThreshold { get; set; }
+    public bool AllowSameCourseSectionOverlap { get; set; }
 
     // Soft constraint params
-    public bool S1Enabled { get; init; }
-    public int S1MinOccupancy { get; init; }
-    public int S1MaxOccupancy { get; init; }
-    public bool S2Enabled { get; init; }
-    public int S2MaxDailyHours { get; init; }
-    public bool S3Enabled { get; init; }
-    public int S3MaxSectionsPerSlot { get; init; }
-    public bool S4Enabled { get; init; }
-    public int S4MinCoPairThreshold { get; init; }
-    public bool S5Enabled { get; init; }
-    public bool S7Enabled { get; init; }
-    public int S7MaxGapSlots { get; init; }
-    public bool S8Enabled { get; init; }
-    public bool S9Enabled { get; init; }
-    public TimeOnly S9MorningStart { get; init; }
-    public TimeOnly S9EveningStart { get; init; }
-    public bool S12Enabled { get; init; }
-    public int S12MaxImbalancePercent { get; init; }
-    public string CurriculumConflictMode { get; init; } = "curriculum";
-    public int EnrollmentConflictHardThreshold { get; init; } = 1;
+    public bool S1Enabled { get; set; }
+    public int S1MinOccupancy { get; set; }
+    public int S1MaxOccupancy { get; set; }
+    public bool S2Enabled { get; set; }
+    public int S2MaxDailyHours { get; set; }
+    public bool S3Enabled { get; set; }
+    public int S3MaxSectionsPerSlot { get; set; }
+    public bool S4Enabled { get; set; }
+    public int S4MinCoPairThreshold { get; set; }
+    public bool S5Enabled { get; set; }
+    public bool S7Enabled { get; set; }
+    public int S7MaxGapSlots { get; set; }
+    public bool S8Enabled { get; set; }
+    public bool S9Enabled { get; set; }
+    public TimeOnly S9MorningStart { get; set; }
+    public TimeOnly S9EveningStart { get; set; }
+    public bool S12Enabled { get; set; }
+    public int S12MaxImbalancePercent { get; set; }
+    public string CurriculumConflictMode { get; set; } = "curriculum";
+    public int EnrollmentConflictHardThreshold { get; set; } = 1;
 }

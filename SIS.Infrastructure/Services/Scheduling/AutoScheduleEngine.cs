@@ -195,7 +195,7 @@ public sealed class AutoScheduleEngine
             Corequisites = corequisites,
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments
+            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
         };
 
         // 8b. Build cohort assignments if cohort mode enabled

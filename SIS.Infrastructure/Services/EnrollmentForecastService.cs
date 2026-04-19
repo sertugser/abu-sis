@@ -44,6 +44,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
     public void InvalidateForecastContext()
     {
         _cache.Remove(ForecastContextCacheKey);
+        // Bölüm kapsamlı cache'leri de temizle
+        if (_cache is MemoryCache mc)
+            mc.Compact(1.0); // Tüm forecast cache'leri dahil tüm entry'leri temizler
     }
 
     public async Task<DepartmentForecastSummaryDto?> GetDepartmentSummaryAsync(int departmentId)
@@ -55,7 +58,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         if (department == null)
             return null;
 
-        var forecastContext = await GetOrBuildForecastContextAsync();
+        var forecastContext = await GetOrBuildForecastContextAsync(departmentId);
 
         var relevantCourseIds = new HashSet<int>(
             forecastContext.Courses.Values
@@ -187,21 +190,107 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         return calibrations.Count;
     }
 
+    public async Task<CourseDemandForecastDto?> SimulateCourseDemandAsync(int courseId, ForecastSimulationParams parameters)
+    {
+        var course = await _context.Courses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == courseId);
+
+        if (course == null)
+            return null;
+
+        var forecastContext = await GetOrBuildForecastContextAsync();
+        var forecast = BuildCourseDemandForecast(forecastContext, course);
+
+        // Override'ları uygula
+        if (parameters.OverrideExpectedEnrollment.HasValue)
+        {
+            forecast.TotalPredictedDemand = parameters.OverrideExpectedEnrollment.Value;
+            forecast.GrossPredictedDemand = parameters.OverrideExpectedEnrollment.Value;
+            forecast.Trace?.Steps.Add(new ForecastTraceStepDto
+            {
+                StepName = "SimulationOverride",
+                Description = $"Talep manuel olarak {parameters.OverrideExpectedEnrollment.Value} olarak ayarlandı",
+                OutputValue = parameters.OverrideExpectedEnrollment.Value
+            });
+        }
+
+        if (parameters.OverrideShowRate.HasValue)
+        {
+            var newShowRate = parameters.OverrideShowRate.Value;
+            var originalRuleBasedTotal = forecast.PredictedEligibleCount + forecast.PredictedRetakeCount + forecast.PredictedOverloadOrUpperClassCount;
+            var adjusted = (int)Math.Round(originalRuleBasedTotal * newShowRate);
+            forecast.ShowRate = newShowRate;
+            forecast.Trace?.Steps.Add(new ForecastTraceStepDto
+            {
+                StepName = "SimulationShowRate",
+                Description = $"Show rate %{newShowRate * 100:F0} olarak override edildi",
+                InputValue = originalRuleBasedTotal, OutputValue = adjusted,
+                Factor = newShowRate
+            });
+        }
+
+        if (parameters.OverrideAttritionRate.HasValue)
+        {
+            var gross = forecast.GrossPredictedDemand;
+            var newRate = parameters.OverrideAttritionRate.Value;
+            forecast.AttritionRate = newRate;
+            forecast.AttritionMethod = "Simülasyon override";
+            forecast.TotalPredictedDemand = (int)Math.Round(gross * (1 - newRate));
+            forecast.Trace?.Steps.Add(new ForecastTraceStepDto
+            {
+                StepName = "SimulationAttrition",
+                Description = $"Attrition %{newRate * 100:F1} olarak override edildi",
+                InputValue = gross, OutputValue = forecast.TotalPredictedDemand,
+                Factor = 1 - newRate
+            });
+        }
+
+        var effectiveCapacity = parameters.OverrideCapacityPerSection
+            ?? forecast.SectionDistribution.EffectiveCapacityPerSection;
+
+        if (parameters.OverrideSectionCount.HasValue)
+        {
+            forecast.RecommendedSectionCount = parameters.OverrideSectionCount.Value;
+        }
+        else if (parameters.OverrideCapacityPerSection.HasValue)
+        {
+            forecast.RecommendedSectionCount = effectiveCapacity > 0
+                ? (int)Math.Ceiling((decimal)forecast.TotalPredictedDemand / effectiveCapacity)
+                : 0;
+        }
+
+        // Section distribution'ı yeniden hesapla
+        forecast.SectionDistribution = BuildSectionDistribution(
+            forecast.TotalPredictedDemand,
+            forecast.RecommendedSectionCount,
+            effectiveCapacity);
+
+        forecast.IsSimulation = true;
+        forecast.SimulationParams = parameters;
+
+        return forecast;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  FORECAST CONTEXT BUILDER
     // ═══════════════════════════════════════════════════════════════
 
-    private async Task<ForecastContextData> GetOrBuildForecastContextAsync()
+    private async Task<ForecastContextData> GetOrBuildForecastContextAsync(int? departmentId = null)
     {
-        if (_cache.TryGetValue(ForecastContextCacheKey, out ForecastContextData? cached) && cached != null)
+        var cacheKey = departmentId.HasValue
+            ? $"{ForecastContextCacheKey}_Dept_{departmentId.Value}"
+            : ForecastContextCacheKey;
+
+        if (_cache.TryGetValue(cacheKey, out ForecastContextData? cached) && cached != null)
             return cached;
 
-        var data = await BuildForecastContextCoreAsync();
-        _cache.Set(ForecastContextCacheKey, data, CacheDuration);
+        var data = await BuildForecastContextCoreAsync(departmentId);
+        _cache.Set(cacheKey, data, CacheDuration);
         return data;
     }
 
-    private async Task<ForecastContextData> BuildForecastContextCoreAsync()
+    private async Task<ForecastContextData> BuildForecastContextCoreAsync(int? departmentId = null)
     {
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
@@ -212,13 +301,35 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             .OrderBy(t => t.Year).ThenBy(t => t.Semester)
             .ToListAsync();
 
-        var activeStudents = await _context.Students
+        var studentQuery = _context.Students
             .AsNoTracking()
             .Include(student => student.StudentPrograms)
                 .ThenInclude(program => program.Program)
                     .ThenInclude(program => program.Department)
-            .Where(student => student.Status == StudentStatus.Active && !student.HasFinancialBlock)
-            .ToListAsync();
+            .Where(student => student.Status == StudentStatus.Active && !student.HasFinancialBlock);
+
+        // Bölüm kapsamlı: sadece ilgili bölümün öğrencilerini yükle
+        if (departmentId.HasValue)
+        {
+            // Bölümün derslerini alan tüm öğrenciler (kendi bölümü + çapraz bölüm)
+            var deptCourseIds = await _context.CurriculumCourses
+                .AsNoTracking()
+                .Include(cc => cc.Curriculum).ThenInclude(c => c.Program)
+                .Where(cc => cc.Curriculum.Program.DepartmentId == departmentId.Value)
+                .Select(cc => cc.CourseId)
+                .Distinct()
+                .ToListAsync();
+
+            var deptCourseIdSet = deptCourseIds.ToHashSet();
+
+            // Bu bölümün müfredatındaki derslerden herhangi birini alan öğrenciler
+            studentQuery = studentQuery
+                .Where(s => s.StudentPrograms.Any(sp =>
+                    sp.Type == StudentProgramType.Main && sp.IsActive
+                    && sp.Program.DepartmentId == departmentId.Value));
+        }
+
+        var activeStudents = await studentQuery.ToListAsync();
 
         var activeMainPrograms = activeStudents
             .Select(student => new
@@ -421,6 +532,79 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             .AsNoTracking()
             .ToDictionaryAsync(d => d.Id, d => d.FacultyId);
 
+        // ── Seçmeli havuz verileri ──
+        var electivePoolsByCurriculum = new Dictionary<int, List<ElectivePoolContext>>();
+        var electivePopularityScores = new Dictionary<int, decimal>();
+
+        var allPools = await _context.CurriculumElectivePools
+            .AsNoTracking()
+            .Include(p => p.ElectiveGroup)
+                .ThenInclude(g => g.Courses)
+            .Where(p => activeCurriculumIds.Contains(p.CurriculumId))
+            .ToListAsync();
+
+        foreach (var pool in allPools)
+        {
+            var groupCourseIds = pool.ElectiveGroup.Courses.Select(c => c.CourseId).ToHashSet();
+            if (groupCourseIds.Count == 0) continue;
+
+            if (!electivePoolsByCurriculum.TryGetValue(pool.CurriculumId, out var pools))
+            {
+                pools = new List<ElectivePoolContext>();
+                electivePoolsByCurriculum[pool.CurriculumId] = pools;
+            }
+
+            pools.Add(new ElectivePoolContext
+            {
+                ElectiveGroupId = pool.ElectiveGroupId,
+                ElectiveGroupName = pool.ElectiveGroup.Name,
+                RequiredCourseCount = pool.RequiredCourseCount,
+                RequiredEcts = pool.RequiredEcts,
+                SuggestedSemesterStart = pool.SuggestedSemesterStart,
+                SuggestedSemesterEnd = pool.SuggestedSemesterEnd,
+                CourseIdsInGroup = groupCourseIds,
+            });
+        }
+
+        // Seçmeli ders popülariteleri: geçmiş dönemlerde her seçmeli gruptaki dersin kaç kez seçildiği
+        var allElectiveGroupCourseIds = allPools
+            .SelectMany(p => p.ElectiveGroup.Courses.Select(c => c.CourseId))
+            .Distinct()
+            .ToHashSet();
+
+        if (allElectiveGroupCourseIds.Count > 0)
+        {
+            var electiveRegistrationCounts = await _context.CourseRegistrations
+                .AsNoTracking()
+                .Where(r => allElectiveGroupCourseIds.Contains(r.CourseSection.CourseId)
+                    && (r.Status == RegistrationStatus.Active || r.Status == RegistrationStatus.Completed))
+                .GroupBy(r => r.CourseSection.CourseId)
+                .Select(g => new { CourseId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.CourseId, x => x.Count);
+
+            // Grup bazlı normalize et
+            var processedGroups = new HashSet<int>();
+            foreach (var poolList in electivePoolsByCurriculum.Values)
+            {
+                foreach (var pool in poolList)
+                {
+                    if (!processedGroups.Add(pool.ElectiveGroupId)) continue;
+
+                    var groupTotal = pool.CourseIdsInGroup
+                        .Sum(cid => electiveRegistrationCounts.GetValueOrDefault(cid, 0));
+
+                    foreach (var courseId in pool.CourseIdsInGroup)
+                    {
+                        if (electivePopularityScores.ContainsKey(courseId)) continue;
+
+                        electivePopularityScores[courseId] = groupTotal > 0
+                            ? (decimal)electiveRegistrationCounts.GetValueOrDefault(courseId, 0) / groupTotal
+                            : 1.0m / pool.CourseIdsInGroup.Count; // uniform fallback
+                    }
+                }
+            }
+        }
+
         var cgpaCache = new Dictionary<int, decimal>();
         var studentSnapshots = new List<StudentForecastSnapshot>();
 
@@ -441,9 +625,87 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
                 curriculumCoursesByCurriculumId,
                 prerequisitesByCourseId,
                 equivalentCourseIdsByCourseId,
-                cgpaCache);
+                cgpaCache,
+                electivePoolsByCurriculum,
+                electivePopularityScores);
 
             studentSnapshots.Add(snapshot);
+        }
+
+        // ── Attrition (drop/withdrawal) oranları ──
+        var attritionRateByCourse = new Dictionary<int, decimal>();
+        var attritionRateByDepartment = new Dictionary<int, decimal>();
+
+        // Ders bazlı: karşılaştırılabilir dönemlerde (Dropped + Withdrawn) / totalEnrolled
+        var attritionData = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(r => r.CourseSection).ThenInclude(s => s.Course)
+            .Where(r => r.Status == RegistrationStatus.Active
+                || r.Status == RegistrationStatus.Completed
+                || r.Status == RegistrationStatus.Dropped
+                || r.Status == RegistrationStatus.Withdrawn)
+            .GroupBy(r => new { r.CourseSection.CourseId, DeptId = r.CourseSection.Course.DepartmentId })
+            .Select(g => new
+            {
+                CourseId = g.Key.CourseId,
+                DepartmentId = g.Key.DeptId ?? 0,
+                Total = g.Count(),
+                DroppedOrWithdrawn = g.Count(r => r.Status == RegistrationStatus.Dropped || r.Status == RegistrationStatus.Withdrawn)
+            })
+            .ToListAsync();
+
+        foreach (var item in attritionData.Where(a => a.Total >= 10)) // minimum 10 kayıt güvenilirlik eşiği
+        {
+            attritionRateByCourse[item.CourseId] = Math.Min(0.50m, (decimal)item.DroppedOrWithdrawn / item.Total);
+        }
+
+        // Bölüm bazlı fallback
+        foreach (var deptGroup in attritionData.GroupBy(a => a.DepartmentId).Where(g => g.Key > 0))
+        {
+            var deptTotal = deptGroup.Sum(a => a.Total);
+            var deptDropped = deptGroup.Sum(a => a.DroppedOrWithdrawn);
+            if (deptTotal >= 20)
+                attritionRateByDepartment[deptGroup.Key] = Math.Min(0.50m, (decimal)deptDropped / deptTotal);
+        }
+
+        // ── Ardışık ders bağımlılığı: mevcut dönem kayıt sayıları ──
+        var currentTermEnrollmentByCourse = new Dictionary<int, int>();
+        if (activeTerm != null)
+        {
+            var currentEnrollments = await _context.CourseRegistrations
+                .AsNoTracking()
+                .Where(r => r.CourseSection.TermId == activeTerm.Id
+                    && (r.Status == RegistrationStatus.Active || r.Status == RegistrationStatus.Draft || r.Status == RegistrationStatus.PendingAdvisorApproval))
+                .GroupBy(r => r.CourseSection.CourseId)
+                .Select(g => new { CourseId = g.Key, Count = g.Select(r => r.StudentId).Distinct().Count() })
+                .ToListAsync();
+
+            foreach (var item in currentEnrollments)
+                currentTermEnrollmentByCourse[item.CourseId] = item.Count;
+        }
+
+        // ── Ders volatilite skoru (CV) ──
+        var volatilityScoreByCourse = new Dictionary<int, decimal>();
+        foreach (var (courseId, termEnrollments) in historicalByCourseThenTerm)
+        {
+            // Karşılaştırılabilir dönem verilerini filtrele
+            var comparableCounts = activeTerm != null
+                ? termEnrollments
+                    .Where(kv => termsById.TryGetValue(kv.Key, out var t) && t.Semester == activeTerm.Semester)
+                    .Select(kv => (double)kv.Value)
+                    .ToList()
+                : termEnrollments.Values.Select(v => (double)v).ToList();
+
+            if (comparableCounts.Count >= 2)
+            {
+                var mean = comparableCounts.Average();
+                if (mean > 0)
+                {
+                    var variance = comparableCounts.Sum(x => Math.Pow(x - mean, 2)) / comparableCounts.Count;
+                    var cv = (decimal)(Math.Sqrt(variance) / mean);
+                    volatilityScoreByCourse[courseId] = Math.Round(cv, 3);
+                }
+            }
         }
 
         return new ForecastContextData
@@ -469,7 +731,14 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             CohortGrowthByDepartment = cohortGrowthByDept,
             ClassroomCapacitiesByFaculty = classroomCapsByFaculty,
             DepartmentFacultyMap = departmentFacultyMap,
-            AdaptiveWeightsByCourse = adaptiveWeights
+            AdaptiveWeightsByCourse = adaptiveWeights,
+            ElectivePoolsByCurriculum = electivePoolsByCurriculum,
+            ElectivePopularityScores = electivePopularityScores,
+            AttritionRateByCourse = attritionRateByCourse,
+            AttritionRateByDepartment = attritionRateByDepartment,
+            CurrentTermEnrollmentByCourse = currentTermEnrollmentByCourse,
+            PrerequisitesByCourseId = prerequisitesByCourseId,
+            VolatilityScoreByCourse = volatilityScoreByCourse
         };
     }
 
@@ -486,7 +755,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         IReadOnlyDictionary<int, List<CurriculumCourse>> curriculumCoursesByCurriculumId,
         IReadOnlyDictionary<int, HashSet<int>> prerequisitesByCourseId,
         IReadOnlyDictionary<int, HashSet<int>> equivalentCourseIdsByCourseId,
-        IDictionary<int, decimal> cgpaCache)
+        IDictionary<int, decimal> cgpaCache,
+        IReadOnlyDictionary<int, List<ElectivePoolContext>> electivePoolsByCurriculum,
+        IReadOnlyDictionary<int, decimal> electivePopularityScores)
     {
         var cgpa = await GetEffectiveCgpaAsync(student, cgpaCache);
         var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
@@ -632,6 +903,49 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         upperCourseIds.ExceptWith(regularCourseIds);
         upperCourseIds.ExceptWith(behindScheduleCourseIds);
 
+        // ── Seçmeli dağılım ağırlıkları ──
+        var electiveDemandWeights = new Dictionary<int, decimal>();
+        var allSelectedCourseIds = regularCourseIds
+            .Concat(behindScheduleCourseIds)
+            .Concat(upperCourseIds)
+            .Concat(failedCourseIds)
+            .ToHashSet();
+
+        if (electivePoolsByCurriculum.TryGetValue(activeProgram.CurriculumId, out var studentPools))
+        {
+            foreach (var pool in studentPools)
+            {
+                // Bu havuzdaki eligible dersler (zaten seçilmiş + geçilmemiş olanlar)
+                var eligibleInPool = pool.CourseIdsInGroup
+                    .Where(cid => allSelectedCourseIds.Contains(cid) && !passedCourseIds.Contains(cid))
+                    .ToList();
+
+                if (eligibleInPool.Count == 0) continue;
+
+                // Geçilmiş dersler pool gereksinimini azaltır
+                var alreadyPassedInPool = pool.CourseIdsInGroup.Count(cid => passedCourseIds.Contains(cid));
+                var remainingRequired = Math.Max(0, pool.RequiredCourseCount - alreadyPassedInPool);
+                if (remainingRequired == 0) continue;
+
+                // Eligible dersler için popülarite skorlarını topla
+                var eligiblePopSum = eligibleInPool
+                    .Sum(cid => electivePopularityScores.GetValueOrDefault(cid, 1.0m / pool.CourseIdsInGroup.Count));
+
+                foreach (var courseId in eligibleInPool)
+                {
+                    var popularity = electivePopularityScores.GetValueOrDefault(courseId, 1.0m / pool.CourseIdsInGroup.Count);
+                    var normalizedPop = eligiblePopSum > 0 ? popularity / eligiblePopSum : 1.0m / eligibleInPool.Count;
+                    var weight = Math.Min(1.0m, (decimal)remainingRequired * normalizedPop);
+
+                    // Daha önce başka bir pool'dan ağırlık almışsa max al
+                    if (electiveDemandWeights.TryGetValue(courseId, out var existing))
+                        electiveDemandWeights[courseId] = Math.Max(existing, weight);
+                    else
+                        electiveDemandWeights[courseId] = weight;
+                }
+            }
+        }
+
         return new StudentForecastSnapshot
         {
             StudentId = student.Id,
@@ -645,7 +959,8 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             RegularCourseIds = regularCourseIds,
             BehindScheduleCourseIds = behindScheduleCourseIds,
             UpperCourseIds = upperCourseIds,
-            EctsLimitedCourseIds = ectsLimitedCourseIds
+            EctsLimitedCourseIds = ectsLimitedCourseIds,
+            ElectiveDemandWeights = electiveDemandWeights
         };
     }
 
@@ -704,26 +1019,68 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             .Where(s => s.EctsLimitedCourseIds.Contains(course.Id))
             .Select(s => s.StudentId).ToHashSet();
 
-        var ruleBasedTotal = retakeStudents.Count + regularStudents.Count
-            + behindScheduleStudents.Count + upperStudents.Count;
+        // Fraksiyonel talep hesabı: seçmeli dersler için ağırlıklı, zorunlu dersler 1.0
+        var snapshotByStudentId = context.StudentSnapshots.ToDictionary(s => s.StudentId);
+        decimal WeightOf(int studentId) =>
+            snapshotByStudentId.TryGetValue(studentId, out var snap)
+                ? snap.ElectiveDemandWeights.GetValueOrDefault(course.Id, 1.0m)
+                : 1.0m;
+
+        var retakeDemand = retakeStudents.Sum(WeightOf);
+        var regularDemand = regularStudents.Sum(WeightOf);
+        var behindDemand = behindScheduleStudents.Sum(WeightOf);
+        var upperDemand = upperStudents.Sum(WeightOf);
+
+        var ruleBasedTotal = (int)Math.Round(retakeDemand + regularDemand + behindDemand + upperDemand);
         var predictedStudentIds = retakeStudents
             .Concat(regularStudents)
             .Concat(behindScheduleStudents)
             .Concat(upperStudents)
             .ToHashSet();
 
+        // --- Trace builder ---
+        var trace = new ForecastTraceDto();
+        trace.Steps.Add(new ForecastTraceStepDto
+        {
+            StepName = "RuleBasedTotal",
+            Description = $"Kural tabanlı toplam: {(int)Math.Round(regularDemand)} regular + {(int)Math.Round(behindDemand)} behind + {(int)Math.Round(upperDemand)} upper + {(int)Math.Round(retakeDemand)} retake",
+            InputValue = 0, OutputValue = ruleBasedTotal
+        });
+
         // --- Show rate adjustment ---
         var showRate = context.ShowRateByCourse.GetValueOrDefault(course.Id, 0.90m);
         var adjustedRuleBasedTotal = (int)Math.Round(ruleBasedTotal * showRate);
+        trace.Steps.Add(new ForecastTraceStepDto
+        {
+            StepName = "ShowRate",
+            Description = $"Show rate düzeltmesi (%{showRate * 100:F0})",
+            InputValue = ruleBasedTotal, OutputValue = adjustedRuleBasedTotal,
+            Factor = showRate,
+            DataSource = context.ShowRateByCourse.ContainsKey(course.Id) ? "Kalibrasyon verisi" : "Varsayılan (%90)"
+        });
+
+        // --- Volatility score ---
+        var volatility = context.VolatilityScoreByCourse.GetValueOrDefault(course.Id, 0.15m);
+        var volatilityLevel = volatility switch { < 0.10m => "Stable", > 0.25m => "Volatile", _ => "Moderate" };
 
         // --- Cohort growth for courses ---
+        var preGrowthTotal = adjustedRuleBasedTotal;
         if (course.DepartmentId.HasValue)
         {
             var cohortGrowth = context.CohortGrowthByDepartment.GetValueOrDefault(course.DepartmentId.Value, 1.0m);
             if (cohortGrowth != 1.0m)
             {
-                var cohortAdj = 1.0m + (cohortGrowth - 1.0m) * 0.5m; // 50% dampening
+                // Volatiliteye göre adaptif dampening
+                var dampening = volatility switch { < 0.10m => 0.3m, > 0.25m => 0.7m, _ => 0.5m };
+                var cohortAdj = 1.0m + (cohortGrowth - 1.0m) * dampening;
                 adjustedRuleBasedTotal = (int)Math.Round(adjustedRuleBasedTotal * cohortAdj);
+                trace.Steps.Add(new ForecastTraceStepDto
+                {
+                    StepName = "CohortGrowth",
+                    Description = $"Kohort büyüme düzeltmesi (ham: {cohortGrowth:F2}, dampenli: {cohortAdj:F2})",
+                    InputValue = preGrowthTotal, OutputValue = adjustedRuleBasedTotal,
+                    Factor = cohortAdj
+                });
             }
         }
 
@@ -735,13 +1092,107 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
         // --- Hybrid blending ---
         var adaptiveRuleWeight = context.AdaptiveWeightsByCourse.TryGetValue(course.Id, out var aw) ? (decimal?)aw.RuleWeight : null;
+        var effectiveRuleWeight = adaptiveRuleWeight ?? (historicalCounts.Count >= 3 ? 0.55m : 0.75m);
         var blendedPrediction = BlendPrediction(adjustedRuleBasedTotal, historicalCounts, comparableHistoricalCounts, adaptiveRuleWeight);
+        trace.Steps.Add(new ForecastTraceStepDto
+        {
+            StepName = "HistoricalBlend",
+            Description = $"Kural (%{effectiveRuleWeight * 100:F0}) + Tarihsel (%{(1 - effectiveRuleWeight) * 100:F0}) harmanlama",
+            InputValue = adjustedRuleBasedTotal, OutputValue = blendedPrediction,
+            Factor = effectiveRuleWeight,
+            DataSource = $"{historicalCounts.Count} dönem ({comparableHistoricalCounts.Count} karşılaştırılabilir)"
+        });
+        trace.FinalRuleWeight = effectiveRuleWeight;
+        trace.FinalHistoricalWeight = 1 - effectiveRuleWeight;
 
         // --- Trend adjustment ---
-        var finalPrediction = ApplyTrendAdjustment(blendedPrediction, historicalCounts, comparableHistoricalCounts);
+        var grossPrediction = ApplyTrendAdjustment(blendedPrediction, historicalCounts, comparableHistoricalCounts, volatility);
+        if (grossPrediction != blendedPrediction)
+        {
+            trace.Steps.Add(new ForecastTraceStepDto
+            {
+                StepName = "TrendAdjustment",
+                Description = "Son dönemlerin ağırlıklı trend düzeltmesi",
+                InputValue = blendedPrediction, OutputValue = grossPrediction,
+                Factor = blendedPrediction > 0 ? Math.Round((decimal)grossPrediction / blendedPrediction, 3) : 1m
+            });
+        }
+
+        // --- Sequential dependency adjustment ---
+        var sequentialDeps = new List<SequentialDependencyDto>();
+        var preSeqPrediction = grossPrediction;
+        if (context.PrerequisitesByCourseId.TryGetValue(course.Id, out var prereqIds) && prereqIds.Count > 0)
+        {
+            var seqFactors = new List<decimal>();
+            foreach (var prereqId in prereqIds)
+            {
+                if (!context.CurrentTermEnrollmentByCourse.TryGetValue(prereqId, out var currentPrereqEnroll))
+                    continue;
+                if (!context.Courses.TryGetValue(prereqId, out var prereqCourse))
+                    continue;
+
+                // Karşılaştırılabilir dönemlerdeki önkoşul ortalaması
+                var prereqHistorical = context.HistoricalEnrollmentsByCourse.GetValueOrDefault(prereqId);
+                if (prereqHistorical == null || prereqHistorical.Count == 0) continue;
+
+                var comparablePrereqCounts = context.ActiveTerm != null
+                    ? prereqHistorical
+                        .Where(kv => context.TermsById.TryGetValue(kv.Key, out var t) && t.Semester == context.ActiveTerm.Semester)
+                        .Select(kv => kv.Value)
+                        .ToList()
+                    : prereqHistorical.Values.ToList();
+
+                if (comparablePrereqCounts.Count == 0) continue;
+                var historicalAvg = (int)Math.Round(comparablePrereqCounts.Average());
+                if (historicalAvg <= 0) continue;
+
+                var ratio = (decimal)currentPrereqEnroll / historicalAvg;
+                var rawDelta = ratio - 1.0m; // +0.20 = %20 artış
+                var dampenedDelta = rawDelta * 0.6m; // %60 dampening
+                var clampedFactor = 1.0m + Math.Clamp(dampenedDelta, -0.25m, 0.25m);
+
+                seqFactors.Add(clampedFactor);
+                sequentialDeps.Add(new SequentialDependencyDto
+                {
+                    PrerequisiteCourseId = prereqId,
+                    PrerequisiteCourseCode = prereqCourse.Code,
+                    CurrentPrereqEnrollment = currentPrereqEnroll,
+                    HistoricalPrereqAverage = historicalAvg,
+                    AdjustmentFactor = Math.Round(clampedFactor, 3)
+                });
+            }
+
+            if (seqFactors.Count > 0)
+            {
+                var avgFactor = seqFactors.Average();
+                grossPrediction = (int)Math.Round(grossPrediction * avgFactor);
+                trace.Steps.Add(new ForecastTraceStepDto
+                {
+                    StepName = "SequentialDependency",
+                    Description = $"{seqFactors.Count} önkoşul dersinin mevcut dönem kayıt etkisi",
+                    InputValue = preSeqPrediction, OutputValue = grossPrediction,
+                    Factor = Math.Round(avgFactor, 3),
+                    DataSource = string.Join(", ", sequentialDeps.Select(d => d.PrerequisiteCourseCode))
+                });
+            }
+        }
+
+        // --- Attrition adjustment (gross → net) ---
+        var (finalPrediction, attritionRate, attritionMethod) = ApplyAttritionAdjustment(context, course, grossPrediction);
+        if (attritionRate > 0)
+        {
+            trace.Steps.Add(new ForecastTraceStepDto
+            {
+                StepName = "AttritionAdjustment",
+                Description = $"Bırakma/çekilme düzeltmesi (%{attritionRate * 100:F1})",
+                InputValue = grossPrediction, OutputValue = finalPrediction,
+                Factor = 1 - attritionRate,
+                DataSource = attritionMethod
+            });
+        }
 
         // --- Confidence interval ---
-        var confidence = CalculateConfidence(finalPrediction, comparableHistoricalCounts);
+        var confidence = CalculateConfidence(finalPrediction, comparableHistoricalCounts, volatility);
 
         // --- Section distribution ---
         var capacityRecommendation = BuildCapacityRecommendation(context, course);
@@ -802,9 +1253,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             CourseId = course.Id,
             CourseCode = course.Code,
             CourseName = course.Name,
-            PredictedEligibleCount = regularStudents.Count + behindScheduleStudents.Count,
-            PredictedRetakeCount = retakeStudents.Count,
-            PredictedOverloadOrUpperClassCount = upperStudents.Count,
+            PredictedEligibleCount = (int)Math.Round(regularDemand + behindDemand),
+            PredictedRetakeCount = (int)Math.Round(retakeDemand),
+            PredictedOverloadOrUpperClassCount = (int)Math.Round(upperDemand),
             TotalPredictedDemand = finalPrediction,
             RecommendedSectionCount = recommendedSections,
             CapacityBasis = capacityRecommendation.CapacityBasis,
@@ -814,19 +1265,29 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             // Enhanced fields
             DemandBreakdown = new DemandBreakdownDto
             {
-                RetakeFF = retakeFFStudents.Count,
-                RetakeNA = retakeNAStudents.Count,
-                RetakeU = retakeUStudents.Count,
-                RegularOnSchedule = regularStudents.Count,
-                BehindSchedule = behindScheduleStudents.Count,
-                UpperCourse = upperStudents.Count,
+                RetakeFF = (int)Math.Round(retakeFFStudents.Sum(WeightOf)),
+                RetakeNA = (int)Math.Round(retakeNAStudents.Sum(WeightOf)),
+                RetakeU = (int)Math.Round(retakeUStudents.Sum(WeightOf)),
+                RegularOnSchedule = (int)Math.Round(regularDemand),
+                BehindSchedule = (int)Math.Round(behindDemand),
+                UpperCourse = (int)Math.Round(upperDemand),
                 EctsLimited = ectsLimitedStudents.Count
             },
             HistoricalEnrollments = historicalData,
             Confidence = confidence,
             SectionDistribution = sectionDistribution,
             CrossDepartmentDemand = crossDepartmentDemand,
-            ShowRate = showRate
+            ShowRate = showRate,
+            ElectiveDistribution = BuildElectiveDistribution(context, course, predictedStudentIds),
+
+            // Faz 2: Attrition + Trace
+            GrossPredictedDemand = grossPrediction,
+            AttritionRate = attritionRate,
+            AttritionMethod = attritionMethod,
+            Trace = trace,
+            SequentialDependencies = sequentialDeps,
+            VolatilityScore = volatility,
+            VolatilityLevel = volatilityLevel
         };
     }
 
@@ -891,7 +1352,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         return (int)Math.Round(blended);
     }
 
-    private static int ApplyTrendAdjustment(int prediction, List<int> historicalCounts, List<int> comparableHistoricalCounts)
+    private static int ApplyTrendAdjustment(int prediction, List<int> historicalCounts, List<int> comparableHistoricalCounts, decimal volatility = 0.15m)
     {
         var trendSource = comparableHistoricalCounts.Count >= 2
             ? comparableHistoricalCounts
@@ -913,11 +1374,19 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         if (simpleAvg <= 0)
             return prediction;
 
-        var trendFactor = Math.Clamp(weightedAvg / simpleAvg, 0.85, 1.20);
+        // Volatiliteye göre adaptif clamp aralığı
+        var (clampMin, clampMax) = volatility switch
+        {
+            < 0.10m => (0.92, 1.10),   // Stabil ders: dar aralık
+            > 0.25m => (0.75, 1.35),   // Volatil ders: geniş aralık
+            _ => (0.85, 1.20)           // Orta: mevcut davranış
+        };
+
+        var trendFactor = Math.Clamp(weightedAvg / simpleAvg, clampMin, clampMax);
         return (int)Math.Round(prediction * trendFactor);
     }
 
-    private static ConfidenceRangeDto CalculateConfidence(int prediction, List<int> comparableHistoricalCounts)
+    private static ConfidenceRangeDto CalculateConfidence(int prediction, List<int> comparableHistoricalCounts, decimal volatility = 0.15m)
     {
         var recent = comparableHistoricalCounts.TakeLast(4).ToList();
 
@@ -926,7 +1395,16 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             var mean = recent.Average();
             var variance = recent.Sum(x => Math.Pow(x - mean, 2)) / recent.Count;
             var stdDev = Math.Sqrt(variance);
-            var margin = (int)Math.Ceiling(stdDev * 1.96);
+
+            // Volatiliteye göre z-score ayarı
+            var zScore = volatility switch
+            {
+                < 0.10m => 1.65,    // Stabil: %90 güven
+                > 0.25m => 2.33,    // Volatil: %99 güven
+                _ => 1.96           // Orta: %95 güven
+            };
+
+            var margin = (int)Math.Ceiling(stdDev * zScore);
             margin = Math.Max(margin, (int)Math.Ceiling(prediction * 0.10));
 
             return new ConfidenceRangeDto
@@ -1344,6 +1822,21 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         public Dictionary<int, int> DepartmentFacultyMap { get; set; } = new();
         public Dictionary<int, (decimal RuleWeight, decimal HistoricalWeight)> AdaptiveWeightsByCourse { get; set; } = new();
 
+        // Seçmeli dağılım verileri
+        public Dictionary<int, List<ElectivePoolContext>> ElectivePoolsByCurriculum { get; set; } = new();
+        public Dictionary<int, decimal> ElectivePopularityScores { get; set; } = new();
+
+        // Attrition (drop/withdrawal) verileri
+        public Dictionary<int, decimal> AttritionRateByCourse { get; set; } = new();
+        public Dictionary<int, decimal> AttritionRateByDepartment { get; set; } = new();
+
+        // Ardışık ders bağımlılığı
+        public Dictionary<int, int> CurrentTermEnrollmentByCourse { get; set; } = new();
+        public Dictionary<int, HashSet<int>> PrerequisitesByCourseId { get; set; } = new();
+
+        // Ders volatilite skoru
+        public Dictionary<int, decimal> VolatilityScoreByCourse { get; set; } = new();
+
         public HashSet<int> PredictedDemandCourseIds =>
             StudentSnapshots
                 .SelectMany(snapshot => snapshot.RetakeCourseIds
@@ -1367,6 +1860,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         public HashSet<int> BehindScheduleCourseIds { get; init; } = new();
         public HashSet<int> UpperCourseIds { get; init; } = new();
         public HashSet<int> EctsLimitedCourseIds { get; init; } = new();
+
+        /// <summary>Seçmeli dersler için fraksiyonel talep ağırlığı (zorunlu dersler burada yer almaz, implicit 1.0)</summary>
+        public Dictionary<int, decimal> ElectiveDemandWeights { get; init; } = new();
     }
 
     private sealed record CourseCandidate(
@@ -1389,6 +1885,17 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         public int EffectiveCapacity { get; set; }
         public string CapacityBasis { get; set; } = string.Empty;
         public List<string> Notes { get; } = new();
+    }
+
+    private sealed class ElectivePoolContext
+    {
+        public int ElectiveGroupId { get; init; }
+        public string ElectiveGroupName { get; init; } = string.Empty;
+        public int RequiredCourseCount { get; init; }
+        public int RequiredEcts { get; init; }
+        public int SuggestedSemesterStart { get; init; }
+        public int SuggestedSemesterEnd { get; init; }
+        public HashSet<int> CourseIdsInGroup { get; init; } = new();
     }
 
     private sealed class HistoricalEnrollmentRecord
@@ -1428,6 +1935,66 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
                 context.TermsById.TryGetValue(item.TermId, out var term)
                 && term.Semester == context.ActiveTerm.Semester)
             .ToList();
+    }
+
+    private static (int NetPrediction, decimal AttritionRate, string Method) ApplyAttritionAdjustment(
+        ForecastContextData context, Course course, int grossPrediction)
+    {
+        const decimal systemDefault = 0.08m;
+
+        // 1. Ders bazlı attrition
+        if (context.AttritionRateByCourse.TryGetValue(course.Id, out var courseRate))
+        {
+            var net = (int)Math.Round(grossPrediction * (1 - courseRate));
+            return (Math.Max(0, net), courseRate, "Ders bazlı geçmiş veri");
+        }
+
+        // 2. Bölüm bazlı fallback
+        if (course.DepartmentId.HasValue &&
+            context.AttritionRateByDepartment.TryGetValue(course.DepartmentId.Value, out var deptRate))
+        {
+            var net = (int)Math.Round(grossPrediction * (1 - deptRate));
+            return (Math.Max(0, net), deptRate, "Bölüm ortalaması");
+        }
+
+        // 3. Sistem varsayılanı
+        var defaultNet = (int)Math.Round(grossPrediction * (1 - systemDefault));
+        return (Math.Max(0, defaultNet), systemDefault, "Sistem varsayılanı (%8)");
+    }
+
+    private static ElectiveDistributionDto? BuildElectiveDistribution(
+        ForecastContextData context,
+        Course course,
+        IReadOnlySet<int> predictedStudentIds)
+    {
+        // Ders herhangi bir seçmeli havuzda mı?
+        ElectivePoolContext? matchedPool = null;
+        foreach (var pools in context.ElectivePoolsByCurriculum.Values)
+        {
+            matchedPool = pools.FirstOrDefault(p => p.CourseIdsInGroup.Contains(course.Id));
+            if (matchedPool != null) break;
+        }
+
+        if (matchedPool == null) return null;
+
+        var eligibleInPool = predictedStudentIds.Count;
+        var popularity = context.ElectivePopularityScores.GetValueOrDefault(course.Id, 0m);
+
+        // Tüm havuzdaki toplam dağıtılmış talep
+        var totalDistributed = context.StudentSnapshots
+            .Where(s => predictedStudentIds.Contains(s.StudentId))
+            .Sum(s => s.ElectiveDemandWeights.GetValueOrDefault(course.Id, 0m));
+
+        return new ElectiveDistributionDto
+        {
+            ElectiveGroupId = matchedPool.ElectiveGroupId,
+            ElectiveGroupName = matchedPool.ElectiveGroupName,
+            TotalCoursesInPool = matchedPool.CourseIdsInGroup.Count,
+            RequiredSelections = matchedPool.RequiredCourseCount,
+            PopularityScore = Math.Round(popularity, 3),
+            EligibleStudentsInPool = eligibleInPool,
+            DistributedDemandShare = Math.Round(totalDistributed, 1)
+        };
     }
 
     private static List<CrossDepartmentDemandDto> BuildCrossDepartmentDemand(

@@ -7,9 +7,16 @@ import {
   updateConstraintParameters,
   addConstraintException,
   deleteConstraintException,
+  getScoreBreakdown,
+  updateConstraintWeight,
+  createExceptionRequest,
+  getPendingExceptionRequests,
+  getMyExceptionRequests,
+  approveExceptionRequest,
+  rejectExceptionRequest,
 } from '../api/constraint.api';
 import { QUERY_KEYS } from '../lib/constants';
-import type { AddExceptionRequest } from '../types/constraint';
+import type { AddExceptionRequest, CreateExceptionRequestDto, ApprovalActionDto } from '../types/constraint';
 
 export function useConstraints() {
   return useQuery({
@@ -81,6 +88,73 @@ export function useDeleteConstraintException() {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
       // Invalidate all constraint details
       qc.invalidateQueries({ queryKey: ['constraints', 'detail'] });
+    },
+  });
+}
+
+export function useScoreBreakdown(termId: number | null) {
+  return useQuery({
+    queryKey: [...QUERY_KEYS.constraints, 'score-breakdown', termId],
+    queryFn: () => getScoreBreakdown(termId!),
+    enabled: termId != null,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useUpdateConstraintWeight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, weight }: { id: number; weight: number }) => updateConstraintWeight(id, weight),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+    },
+  });
+}
+
+// ── Exception Requests (Approval Workflow) ──────────────────────
+export function usePendingExceptionRequests() {
+  return useQuery({
+    queryKey: QUERY_KEYS.pendingExceptionRequests,
+    queryFn: getPendingExceptionRequests,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useMyExceptionRequests() {
+  return useQuery({
+    queryKey: QUERY_KEYS.myExceptionRequests,
+    queryFn: getMyExceptionRequests,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useCreateExceptionRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: CreateExceptionRequestDto) => createExceptionRequest(dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptionRequests });
+    },
+  });
+}
+
+export function useApproveExceptionRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: number; dto: ApprovalActionDto }) => approveExceptionRequest(id, dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptionRequests });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+    },
+  });
+}
+
+export function useRejectExceptionRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: number; dto: ApprovalActionDto }) => rejectExceptionRequest(id, dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptionRequests });
     },
   });
 }

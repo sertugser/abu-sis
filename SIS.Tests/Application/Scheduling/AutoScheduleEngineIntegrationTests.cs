@@ -282,7 +282,7 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
             new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
         };
-        return new ConstraintEvaluationService(evaluators, ctx);
+        return new ConstraintEvaluationService(evaluators, ctx, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
     }
 
     [Fact]

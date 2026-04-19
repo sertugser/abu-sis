@@ -18,7 +18,7 @@ public class ClassroomExportController(AppDbContext context, ISchedulingService 
     [HttpGet("csv")]
     public async Task<IActionResult> ExportCsv([FromQuery] int? termId, CancellationToken ct)
     {
-        var dashboard = await _schedulingService.GetClassroomDashboardAsync(termId, ct);
+        var dashboard = await _schedulingService.GetClassroomDashboardAsync(termId, cancellationToken: ct);
         var classroomMetadata = await _context.Classrooms
             .AsNoTracking()
             .ToDictionaryAsync(

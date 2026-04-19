@@ -58,6 +58,14 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<EvaluationResponse> EvaluationResponses => Set<EvaluationResponse>();
     public DbSet<EvaluationAnswer> EvaluationAnswers => Set<EvaluationAnswer>();
     public DbSet<InternalAnnouncement> InternalAnnouncements => Set<InternalAnnouncement>();
+    public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
+    public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
+    public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
+    public DbSet<DistributionConstraintCourse> DistributionConstraintCourses => Set<DistributionConstraintCourse>();
+    public DbSet<ConstraintExceptionRequest> ConstraintExceptionRequests => Set<ConstraintExceptionRequest>();
+    public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
+    public DbSet<ConstraintViolationSnapshot> ConstraintViolationSnapshots => Set<ConstraintViolationSnapshot>();
+    public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -608,6 +616,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<SystemConfig>(e =>
         {
             e.HasIndex(sc => sc.Key).IsUnique();
+            e.Property(sc => sc.RowVersion)
+             .IsRowVersion();
         });
 
         // ── PromotionRule ────────────────────────────────────────
@@ -664,6 +674,65 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasOne(ce => ce.Department).WithMany().HasForeignKey(ce => ce.DepartmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(ce => ce.CourseSection).WithMany().HasForeignKey(ce => ce.CourseSectionId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(ce => ce.Term).WithMany().HasForeignKey(ce => ce.TermId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── ConstraintProfile ────────────────────────────────────
+        builder.Entity<ConstraintProfileItem>(e =>
+        {
+            e.HasIndex(i => new { i.ProfileId, i.ConstraintDefinitionId }).IsUnique();
+
+            e.HasOne(i => i.Profile)
+             .WithMany(p => p.Items)
+             .HasForeignKey(i => i.ProfileId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(i => i.ConstraintDefinition)
+             .WithMany()
+             .HasForeignKey(i => i.ConstraintDefinitionId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── DistributionConstraint ──────────────────────────────
+        builder.Entity<DistributionConstraint>(e =>
+        {
+            e.HasIndex(d => d.TermId);
+            e.HasOne(d => d.Term).WithMany().HasForeignKey(d => d.TermId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(d => d.Department).WithMany().HasForeignKey(d => d.DepartmentId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<DistributionConstraintCourse>(e =>
+        {
+            e.HasIndex(c => new { c.DistributionConstraintId, c.CourseId, c.CourseSectionId });
+            e.HasOne(c => c.DistributionConstraint).WithMany(d => d.Courses).HasForeignKey(c => c.DistributionConstraintId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.Course).WithMany().HasForeignKey(c => c.CourseId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.CourseSection).WithMany().HasForeignKey(c => c.CourseSectionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── ConstraintExceptionRequest ──────────────────────────
+        builder.Entity<ConstraintExceptionRequest>(e =>
+        {
+            e.HasIndex(r => r.Status);
+            e.HasOne(r => r.ConstraintDefinition).WithMany().HasForeignKey(r => r.ConstraintDefinitionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ApprovalStep ────────────────────────────────────────
+        builder.Entity<ApprovalStep>(e =>
+        {
+            e.HasIndex(s => new { s.RequestId, s.StepOrder });
+            e.HasOne(s => s.Request).WithMany(r => r.ApprovalSteps).HasForeignKey(s => s.RequestId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ConstraintViolationSnapshot ────────────────────────────
+        builder.Entity<ConstraintViolationSnapshot>(e =>
+        {
+            e.HasIndex(s => new { s.TermId, s.SnapshotAt });
+            e.HasOne(s => s.Term).WithMany().HasForeignKey(s => s.TermId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ConstraintViolationSnapshotDetail>(e =>
+        {
+            e.HasIndex(d => d.SnapshotId);
+            e.HasOne(d => d.Snapshot).WithMany(s => s.Details).HasForeignKey(d => d.SnapshotId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Performance Indexes ──────────────────────────────────

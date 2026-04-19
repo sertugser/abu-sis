@@ -11,6 +11,8 @@ public class TermClosingProgress
     public AcademicTerm Term { get; set; } = null!;
     public TermClosingStep Step { get; set; }
     public bool IsCompleted { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public int? StartedByUserId { get; set; }
     public DateTime? CompletedAt { get; set; }
     public int? CompletedByUserId { get; set; }
     public string? Notes { get; set; }

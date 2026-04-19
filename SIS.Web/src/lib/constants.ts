@@ -86,6 +86,7 @@ export const QUERY_KEYS = {
     ['admin', 'instructors', search, departmentId] as const,
   adminTerms: ['admin', 'terms'] as const,
   systemConfigs: ['admin', 'systemConfigs'] as const,
+  systemConfigLimits: ['admin', 'systemConfigLimits'] as const,
   auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,
   promotionRules: (programId?: number) => ['admin', 'promotionRules', programId] as const,
   constraints: ['constraints'] as const,
@@ -109,6 +110,13 @@ export const QUERY_KEYS = {
   activeAnnouncements: (max?: number) => ['announcements', 'active', max] as const,
   announcementDetail: (id: number) => ['announcements', 'detail', id] as const,
   allAnnouncements: ['announcements', 'all'] as const,
+  // Forecast / Constraints
+  gradeLockReadiness: (departmentId?: number, termId?: number) => ['gradeLockReadiness', departmentId, termId] as const,
+  distributionConstraints: (termId: number) => ['distributionConstraints', termId] as const,
+  exceptionRequests: ['exceptionRequests'] as const,
+  pendingExceptionRequests: ['exceptionRequests', 'pending'] as const,
+  myExceptionRequests: ['exceptionRequests', 'my'] as const,
+  exceptionRequestDetail: (id: number) => ['exceptionRequests', 'detail', id] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {

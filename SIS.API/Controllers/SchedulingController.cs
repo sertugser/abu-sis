@@ -39,13 +39,52 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpGet("dashboard")]
-    public async Task<IActionResult> GetDashboard([FromQuery] int? termId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetDashboard(
+        [FromQuery] int? termId,
+        [FromQuery] int? facultyId,
+        [FromQuery] string? buildingName,
+        [FromQuery] string? classroomType,
+        [FromQuery] int? minCapacity,
+        [FromQuery] int? maxCapacity,
+        CancellationToken cancellationToken)
     {
         if (termId.HasValue && termId <= 0)
             return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
 
-        var dashboard = await _schedulingService.GetClassroomDashboardAsync(termId, cancellationToken);
-        return Ok(dashboard);
+        return Ok(await _schedulingService.GetClassroomDashboardAsync(
+            termId, facultyId, buildingName, classroomType, minCapacity, maxCapacity, cancellationToken));
+    }
+
+    [HttpGet("available-classrooms")]
+    public async Task<IActionResult> SearchAvailableClassrooms(
+        [FromQuery] int termId,
+        [FromQuery] string days,
+        [FromQuery] int startHour,
+        [FromQuery] int endHour,
+        [FromQuery] int? minCapacity,
+        [FromQuery] string? classroomType,
+        [FromQuery] int? facultyId,
+        [FromQuery] string? buildingName,
+        CancellationToken cancellationToken)
+    {
+        if (termId <= 0) return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
+        if (string.IsNullOrWhiteSpace(days)) return BadRequest(new { error = "En az bir gun secilmelidir." });
+
+        var dayList = days.Split(',').Select(d => int.TryParse(d.Trim(), out var v) ? v : -1).Where(d => d >= 1 && d <= 5).ToList();
+        if (dayList.Count == 0) return BadRequest(new { error = "Gecerli gun degerleri gonderilmelidir (1-5)." });
+
+        if (startHour < 8 || startHour > 17 || endHour < 8 || endHour > 17 || startHour > endHour)
+            return BadRequest(new { error = "Saat araligi 8-17 arasi olmalidir." });
+
+        return Ok(await _schedulingService.SearchAvailableClassroomsAsync(
+            termId, dayList, startHour, endHour, minCapacity, classroomType, facultyId, buildingName, cancellationToken));
+    }
+
+    [HttpGet("classroom-filters")]
+    public async Task<IActionResult> GetClassroomFilters([FromQuery] int termId, CancellationToken cancellationToken)
+    {
+        if (termId <= 0) return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
+        return Ok(await _schedulingService.GetClassroomFilterOptionsAsync(termId, cancellationToken));
     }
 
     [HttpPost("validate")]
@@ -399,250 +438,6 @@ public class SchedulingController : ControllerBase
         }
 
         return Ok(entries.OrderBy(e => e.Day).ThenBy(e => e.StartTime));
-    }
-
-    [HttpGet("classroom/{classroomId}/timetable")]
-    [Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
-    public async Task<IActionResult> GetClassroomTimetable(int classroomId, [FromQuery] int? termId, CancellationToken cancellationToken)
-    {
-        if (classroomId <= 0)
-            return BadRequest(new { error = "Gecerli bir classroomId gonderilmelidir." });
-
-        var term = await ResolveTermAsync(termId, cancellationToken);
-        if (term == null)
-            return NotFound(new { error = "Aktif akademik donem bulunamadi." });
-
-        var classroom = await _context.Classrooms
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == classroomId, cancellationToken);
-
-        if (classroom == null)
-            return NotFound(new { error = "Derslik bulunamadi." });
-
-        var sections = await _context.CourseSections
-            .AsNoTracking()
-            .Include(cs => cs.Course)
-            .Include(cs => cs.Instructor)
-            .Where(cs => cs.TermId == term.Id && cs.ClassroomId == classroomId && cs.IsActive)
-            .ToListAsync(cancellationToken);
-
-        var instructorIds = sections.Where(s => s.InstructorId.HasValue).Select(s => s.InstructorId!.Value).Distinct().ToList();
-        var instructorNames = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
-
-        // Load SectionSchedule records for classroom timetable
-        var classroomSectionIds = sections.Select(s => s.Id).ToList();
-        var classroomSchedules = await _context.SectionSchedules
-            .AsNoTracking()
-            .Include(ss => ss.TimeSlot)
-            .Where(ss => classroomSectionIds.Contains(ss.CourseSectionId))
-            .ToListAsync(cancellationToken);
-        var classroomScheduleMap = classroomSchedules
-            .GroupBy(ss => ss.CourseSectionId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var entries = new List<TimetableEntryDto>();
-        foreach (var section in sections)
-        {
-            var scheds = classroomScheduleMap.GetValueOrDefault(section.Id) ?? new();
-            foreach (var ss in scheds)
-            {
-                entries.Add(new TimetableEntryDto
-                {
-                    Day = ss.TimeSlot.DayOfWeek,
-                    StartTime = ss.TimeSlot.StartTime,
-                    EndTime = ss.TimeSlot.EndTime,
-                    CourseCode = section.Course.Code,
-                    CourseName = section.Course.Name,
-                    SectionId = section.Id,
-                    SectionNumber = section.SectionNumber,
-                    ClassroomName = classroom.Name,
-                    InstructorName = section.InstructorId.HasValue && instructorNames.TryGetValue(section.InstructorId.Value, out var name)
-                        ? name : null
-                });
-            }
-        }
-
-        return Ok(entries.OrderBy(e => e.Day).ThenBy(e => e.StartTime));
-    }
-
-    [HttpGet("department/{departmentId}/timetable")]
-    [Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
-    public async Task<IActionResult> GetDepartmentTimetable(int departmentId, [FromQuery] int? termId, CancellationToken cancellationToken)
-    {
-        if (departmentId <= 0)
-            return BadRequest(new { error = "Gecerli bir departmentId gonderilmelidir." });
-
-        var term = await ResolveTermAsync(termId, cancellationToken);
-        if (term == null)
-            return NotFound(new { error = "Aktif akademik donem bulunamadi." });
-
-        var department = await _context.Departments
-            .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == departmentId, cancellationToken);
-
-        if (department == null)
-            return NotFound(new { error = "Bolum bulunamadi." });
-
-        var sections = await _context.CourseSections
-            .AsNoTracking()
-            .Include(cs => cs.Course)
-            .Include(cs => cs.Instructor)
-            .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == term.Id && cs.Course.DepartmentId == departmentId && cs.IsActive)
-            .ToListAsync(cancellationToken);
-
-        var instructorIds = sections.Where(s => s.InstructorId.HasValue).Select(s => s.InstructorId!.Value).Distinct().ToList();
-        var instructorNames = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
-
-        // Get curriculum course year mappings for this department
-        var courseIds = sections.Select(s => s.CourseId).Distinct().ToList();
-        var curriculumCourses = await _context.CurriculumCourses
-            .AsNoTracking()
-            .Include(cc => cc.Curriculum)
-                .ThenInclude(c => c.Program)
-            .Where(cc => courseIds.Contains(cc.CourseId) && cc.Curriculum.Program.DepartmentId == departmentId)
-            .ToListAsync(cancellationToken);
-
-        // Map courseId to year level (SuggestedSemester / 2 + 1, rounded up)
-        var courseYearMap = curriculumCourses
-            .GroupBy(cc => cc.CourseId)
-            .ToDictionary(
-                g => g.Key,
-                g => (int)Math.Ceiling(g.Min(cc => cc.SuggestedSemester) / 2.0)
-            );
-
-        // Load SectionSchedule records for department timetable
-        var deptSectionIds = sections.Select(s => s.Id).ToList();
-        var deptSchedules = await _context.SectionSchedules
-            .AsNoTracking()
-            .Include(ss => ss.TimeSlot)
-            .Where(ss => deptSectionIds.Contains(ss.CourseSectionId))
-            .ToListAsync(cancellationToken);
-        var deptScheduleMap = deptSchedules
-            .GroupBy(ss => ss.CourseSectionId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var yearGroups = new Dictionary<int, List<TimetableEntryDto>>();
-
-        foreach (var section in sections)
-        {
-            var year = courseYearMap.TryGetValue(section.CourseId, out var y) ? y : 0;
-            var scheds = deptScheduleMap.GetValueOrDefault(section.Id) ?? new();
-
-            if (!yearGroups.ContainsKey(year))
-                yearGroups[year] = new List<TimetableEntryDto>();
-
-            foreach (var ss in scheds)
-            {
-                yearGroups[year].Add(new TimetableEntryDto
-                {
-                    Day = ss.TimeSlot.DayOfWeek,
-                    StartTime = ss.TimeSlot.StartTime,
-                    EndTime = ss.TimeSlot.EndTime,
-                    CourseCode = section.Course.Code,
-                    CourseName = section.Course.Name,
-                    SectionId = section.Id,
-                    SectionNumber = section.SectionNumber,
-                    ClassroomName = section.Classroom?.Name,
-                    InstructorName = section.InstructorId.HasValue && instructorNames.TryGetValue(section.InstructorId.Value, out var name)
-                        ? name : null
-                });
-            }
-        }
-
-        var result = yearGroups
-            .OrderBy(kvp => kvp.Key)
-            .Select(kvp => new DepartmentTimetableYearGroupDto
-            {
-                Year = kvp.Key,
-                Courses = kvp.Value.OrderBy(e => e.Day).ThenBy(e => e.StartTime).ToList()
-            })
-            .ToList();
-
-        return Ok(result);
-    }
-
-    // ── Auto-Resolve Endpoint ────────────────────────────────────────────
-
-    [HttpPost("auto-resolve")]
-    [Authorize(Roles = "SystemAdministrator")]
-    public async Task<IActionResult> AutoResolve([FromQuery] int? termId, CancellationToken cancellationToken)
-    {
-        if (termId.HasValue && termId <= 0)
-            return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
-
-        // Step 1: Get existing conflicts
-        var validation = await _schedulingService.ValidateExistingAsync(termId, cancellationToken);
-
-        if (validation.IsValid)
-        {
-            return Ok(new AutoResolveResultDto
-            {
-                ResolvedCount = 0,
-                RemainingConflictCount = 0,
-                Notes = { "Mevcut programda cakisma bulunmamaktadir." }
-            });
-        }
-
-        // Get distinct conflicting section IDs
-        var conflictingSectionIds = validation.Conflicts
-            .SelectMany(c => new[] { c.SectionId, c.RelatedSectionId ?? 0 })
-            .Where(id => id > 0)
-            .Distinct()
-            .ToList();
-
-        var result = new AutoResolveResultDto();
-
-        // Step 2: For each conflicting section, try to find and apply an alternative
-        foreach (var sectionId in conflictingSectionIds)
-        {
-            // Check if section is locked
-            var section = await _context.CourseSections
-                .AsNoTracking()
-                .FirstOrDefaultAsync(cs => cs.Id == sectionId, cancellationToken);
-
-            if (section == null || section.IsScheduleLocked)
-                continue;
-
-            var suggestion = await _schedulingService.SuggestAsync(new ScheduleSuggestionRequestDto
-            {
-                SectionId = sectionId
-            }, cancellationToken);
-
-            if (!suggestion.IsFeasible || suggestion.SuggestedSlots.Count == 0)
-                continue;
-
-            var applyResult = await _schedulingService.ApplyAsync(new ApplyScheduleRequestDto
-            {
-                SectionId = sectionId,
-                ClassroomId = suggestion.SuggestedClassroomId,
-                ScheduleSlots = suggestion.SuggestedSlots
-            }, cancellationToken);
-
-            if (applyResult.IsValid)
-            {
-                result.ResolvedCount++;
-                result.ResolvedSections.Add(new AutoResolveItemDto
-                {
-                    SectionId = sectionId,
-                    CourseCode = suggestion.Notes.FirstOrDefault(n => n.Contains("Ders:"))?.Replace("Ders: ", "") ?? "",
-                    CourseName = "",
-                    NewClassroomName = suggestion.SuggestedClassroomName,
-                    NewSlots = suggestion.SuggestedSlots
-                });
-            }
-        }
-
-        // Step 3: Re-validate to find remaining conflicts
-        var finalValidation = await _schedulingService.ValidateExistingAsync(termId, cancellationToken);
-        result.RemainingConflicts = finalValidation.Conflicts;
-        result.RemainingConflictCount = finalValidation.Conflicts.Count;
-        result.Notes.Add($"{result.ResolvedCount} section basariyla yeniden programlandi.");
-
-        if (result.RemainingConflictCount > 0)
-            result.Notes.Add($"{result.RemainingConflictCount} cakisma hala cozulemedi, manuel mudahale gereklidir.");
-
-        return Ok(result);
     }
 
     // ── Private Helpers ──────────────────────────────────────────────────

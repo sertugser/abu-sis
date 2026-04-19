@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -1002,7 +1003,14 @@ public class SchedulingService : ISchedulingService
         public List<ScheduleSlotDto>? AssignedSlots { get; init; }
     }
 
-    public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(int? termId = null, CancellationToken cancellationToken = default)
+    public async Task<ClassroomDashboardDto> GetClassroomDashboardAsync(
+        int? termId = null,
+        int? facultyId = null,
+        string? buildingName = null,
+        string? classroomType = null,
+        int? minCapacity = null,
+        int? maxCapacity = null,
+        CancellationToken cancellationToken = default)
     {
         var result = new ClassroomDashboardDto();
         var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
@@ -1015,7 +1023,39 @@ public class SchedulingService : ISchedulingService
         var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
         result.ConflictsCount = evaluation.Conflicts?.Count ?? 0;
 
-        var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(cancellationToken);
+        // Fakulte filtresi: ClassroomTermAssignment uzerinden
+        var classroomIdsForTerm = await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Where(a => a.TermId == resolvedTerm.Id)
+            .Where(a => !facultyId.HasValue || a.FacultyId == facultyId.Value)
+            .Select(a => new { a.ClassroomId, a.FacultyId, FacultyName = a.Faculty.Name })
+            .ToListAsync(cancellationToken);
+
+        var facultyLookup = classroomIdsForTerm
+            .GroupBy(x => x.ClassroomId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var classroomQuery = _context.Classrooms.AsNoTracking().AsQueryable();
+
+        if (facultyId.HasValue)
+        {
+            var assignedIds = classroomIdsForTerm.Select(x => x.ClassroomId).ToHashSet();
+            classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(buildingName))
+            classroomQuery = classroomQuery.Where(c => c.BuildingName == buildingName);
+
+        if (!string.IsNullOrWhiteSpace(classroomType) && Enum.TryParse<ClassroomType>(classroomType, out var parsedType))
+            classroomQuery = classroomQuery.Where(c => c.Type == parsedType);
+
+        if (minCapacity.HasValue)
+            classroomQuery = classroomQuery.Where(c => c.Capacity >= minCapacity.Value);
+
+        if (maxCapacity.HasValue)
+            classroomQuery = classroomQuery.Where(c => c.Capacity <= maxCapacity.Value);
+
+        var classrooms = await classroomQuery.ToListAsync(cancellationToken);
         result.TotalClassrooms = classrooms.Count;
 
         // Her derslik için o donemdeki dersleri haritala
@@ -1035,54 +1075,129 @@ public class SchedulingService : ISchedulingService
                 })).ToList()
             );
 
-        result.Classrooms = classrooms.Select(c => new ClassroomInfoDto
+        result.Classrooms = classrooms.Select(c =>
         {
-            Id = c.Id,
-            Name = c.Name,
-            Capacity = c.Capacity,
-            Type = c.Type.ToString(),
-            Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
+            var fac = facultyLookup.TryGetValue(c.Id, out var f) ? f : null;
+            return new ClassroomInfoDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Capacity = c.Capacity,
+                Type = c.Type.ToString(),
+                BuildingName = c.BuildingName,
+                Floor = c.Floor,
+                FacultyId = fac?.FacultyId ?? 0,
+                FacultyName = fac?.FacultyName ?? string.Empty,
+                Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
+            };
         }).OrderBy(c => c.Name).ToList();
 
-        var heatmapMap = new Dictionary<(int day, int hour), int>();
-        for (int day = 0; day < 5; day++)
+        var filteredClassroomIds = classrooms.Select(c => c.Id).ToHashSet();
+
+        // TimeSlot'lardan heatmap grid'i oluştur
+        var timeSlots = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == resolvedTerm.Id)
+            .OrderBy(ts => ts.DayOfWeek).ThenBy(ts => ts.SlotOrder)
+            .ToListAsync(cancellationToken);
+
+        var distinctSlots = timeSlots
+            .GroupBy(ts => ts.SlotOrder)
+            .Select(g => g.First())
+            .OrderBy(ts => ts.SlotOrder)
+            .ToList();
+
+        var workDayIndices = timeSlots
+            .Select(ts => (int)ts.DayOfWeek - 1)
+            .Distinct()
+            .Where(d => d >= 0 && d <= 4)
+            .OrderBy(d => d)
+            .ToList();
+
+        // TimeSlot yoksa fallback: 8-17
+        if (distinctSlots.Count == 0)
         {
-            for (int hour = 8; hour <= 17; hour++)
+            for (int d = 0; d < 5; d++) workDayIndices.Add(d);
+            workDayIndices = workDayIndices.Distinct().OrderBy(d => d).ToList();
+            for (int h = 8; h <= 17; h++)
             {
-                heatmapMap[(day, hour)] = 0;
+                distinctSlots.Add(new Domain.Entities.TimeSlot
+                {
+                    SlotOrder = h - 7,
+                    StartTime = new TimeOnly(h, 0),
+                    EndTime = new TimeOnly(h, 50),
+                });
             }
         }
 
-        var occupationMap = new Dictionary<(int day, int hour), List<ClassroomOccupationDto>>();
+        var heatmapMap = new Dictionary<(int day, int slotOrder), int>();
+        foreach (var dayIdx in workDayIndices)
+        {
+            foreach (var slot in distinctSlots)
+            {
+                heatmapMap[(dayIdx, slot.SlotOrder)] = 0;
+            }
+        }
+
+        var timeSlotsPerDay = timeSlots
+            .GroupBy(ts => (int)ts.DayOfWeek - 1)
+            .ToDictionary(g => g.Key, g => g.OrderBy(ts => ts.SlotOrder).ToList());
+
+        var occupationMap = new Dictionary<(int day, int slotOrder), List<ClassroomOccupationDto>>();
         foreach (var section in snapshot.Sections)
         {
-            if (section.ClassroomId.HasValue)
+            if (section.ClassroomId.HasValue && filteredClassroomIds.Contains(section.ClassroomId.Value))
             {
-                foreach (var slot in section.TimeBlocks)
+                foreach (var block in section.TimeBlocks)
                 {
-                    int dayIndex = (int)slot.Day - 1;
+                    int dayIndex = (int)block.Day - 1;
                     if (dayIndex >= 0 && dayIndex <= 4)
                     {
-                        int startHour = slot.StartTime.Hour;
-                        int endHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1;
-
-                        for (int h = startHour; h <= endHour && h <= 17; h++)
+                        if (timeSlotsPerDay.TryGetValue(dayIndex, out var daySlots))
                         {
-                            if (h >= 8)
+                            foreach (var ts in daySlots)
                             {
-                                var key = (dayIndex, h);
-                                if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
-                                heatmapMap[key]++;
-
-                                if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
-                                occupationMap[key].Add(new ClassroomOccupationDto
+                                if (block.StartTime < ts.EndTime && ts.StartTime < block.EndTime)
                                 {
-                                    ClassroomName = section.ClassroomName,
-                                    CourseCode = section.CourseCode,
-                                    CourseName = section.CourseName,
-                                    EnrolledCount = section.EnrolledCount,
-                                    Capacity = section.ClassroomCapacity
-                                });
+                                    var key = (dayIndex, ts.SlotOrder);
+                                    if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
+                                    heatmapMap[key]++;
+
+                                    if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
+                                    occupationMap[key].Add(new ClassroomOccupationDto
+                                    {
+                                        ClassroomName = section.ClassroomName,
+                                        CourseCode = section.CourseCode,
+                                        CourseName = section.CourseName,
+                                        EnrolledCount = section.EnrolledCount,
+                                        Capacity = section.ClassroomCapacity
+                                    });
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Fallback: TimeSlot yoksa saat bazlı eşleştir
+                            int startHour = block.StartTime.Hour;
+                            int endHour = block.EndTime.Minute > 0 ? block.EndTime.Hour : block.EndTime.Hour - 1;
+                            foreach (var s in distinctSlots)
+                            {
+                                if (startHour < s.EndTime.Hour + 1 && s.StartTime.Hour <= endHour)
+                                {
+                                    var key = (dayIndex, s.SlotOrder);
+                                    if (!heatmapMap.ContainsKey(key)) heatmapMap[key] = 0;
+                                    heatmapMap[key]++;
+
+                                    if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
+                                    occupationMap[key].Add(new ClassroomOccupationDto
+                                    {
+                                        ClassroomName = section.ClassroomName,
+                                        CourseCode = section.CourseCode,
+                                        CourseName = section.CourseName,
+                                        EnrolledCount = section.EnrolledCount,
+                                        Capacity = section.ClassroomCapacity
+                                    });
+                                }
                             }
                         }
                     }
@@ -1090,35 +1205,207 @@ public class SchedulingService : ISchedulingService
             }
         }
 
-        int totalSlots = result.TotalClassrooms * 5 * 10;
+        int slotsPerDay = distinctSlots.Count;
+        int totalDays = workDayIndices.Count;
+        int totalSlots = result.TotalClassrooms * totalDays * slotsPerDay;
         int usedSlots = heatmapMap.Values.Sum();
         result.EmptySlots = Math.Max(0, totalSlots - usedSlots);
         result.OccupancyRate = totalSlots > 0 ? Math.Round((double)usedSlots / totalSlots * 100) : 0;
+        result.SlotsPerDay = slotsPerDay;
 
+        var slotLookup = distinctSlots.ToDictionary(s => s.SlotOrder);
         foreach (var kvp in heatmapMap)
         {
             var day = kvp.Key.day;
-            var hour = kvp.Key.hour;
+            var slotOrder = kvp.Key.slotOrder;
             var used = kvp.Value;
             var total = result.TotalClassrooms;
+            var slotDef = slotLookup[slotOrder];
 
             result.Heatmap.Add(new ClassroomHeatmapCellDto
             {
                 Day = day,
-                Hour = hour,
+                Hour = slotDef.StartTime.Hour,
+                SlotOrder = slotOrder,
+                StartTime = slotDef.StartTime.ToString("HH:mm"),
+                EndTime = slotDef.EndTime.ToString("HH:mm"),
+                Label = $"{slotDef.StartTime:HH:mm}-{slotDef.EndTime:HH:mm}",
                 UsedClassrooms = used,
                 Occupancy = total > 0 ? Math.Min(1, (double)used / total) : 0,
-                Details = $"{GetDayName(day)} {hour:D2}:00 — {used}/{total} derslik dolu",
-                Occupations = occupationMap.TryGetValue((day, hour), out var occList) ? occList : new()
+                Details = $"{GetDayName(day)} {slotDef.StartTime:HH:mm}-{slotDef.EndTime:HH:mm} — {used}/{total} derslik dolu",
+                Occupations = occupationMap.TryGetValue((day, slotOrder), out var occList) ? occList : new()
             });
         }
 
         return result;
     }
 
+    public async Task<ClassroomFilterOptionsDto> GetClassroomFilterOptionsAsync(int termId, CancellationToken cancellationToken = default)
+    {
+        var assignments = await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Include(a => a.Faculty)
+            .Include(a => a.Classroom)
+            .Where(a => a.TermId == termId)
+            .ToListAsync(cancellationToken);
+
+        var faculties = assignments
+            .Select(a => new ClassroomFacultyOption { Id = a.FacultyId, Name = a.Faculty.Name })
+            .DistinctBy(f => f.Id)
+            .OrderBy(f => f.Name)
+            .ToList();
+
+        var buildings = assignments
+            .Select(a => a.Classroom.BuildingName)
+            .Where(b => !string.IsNullOrWhiteSpace(b))
+            .Distinct()
+            .OrderBy(b => b)
+            .ToList();
+
+        // Client-side evaluation: EF Core cannot translate enum .ToString() to SQL
+        var classroomTypes = (await _context.Classrooms
+            .AsNoTracking()
+            .Select(c => c.Type)
+            .Distinct()
+            .ToListAsync(cancellationToken))
+            .Select(t => t.ToString())
+            .OrderBy(t => t)
+            .ToList();
+
+        return new ClassroomFilterOptionsDto
+        {
+            Faculties = faculties,
+            Buildings = buildings,
+            ClassroomTypes = classroomTypes
+        };
+    }
+
+    public async Task<List<AvailableClassroomResultDto>> SearchAvailableClassroomsAsync(
+        int termId,
+        List<int> days,
+        int startHour,
+        int endHour,
+        int? minCapacity = null,
+        string? classroomType = null,
+        int? facultyId = null,
+        string? buildingName = null,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await BuildTermSnapshotAsync(termId, null, null, cancellationToken);
+
+        var classroomQuery = _context.Classrooms.AsNoTracking().AsQueryable();
+
+        if (facultyId.HasValue)
+        {
+            var assignedIds = await _context.ClassroomTermAssignments
+                .AsNoTracking()
+                .Where(a => a.TermId == termId && a.FacultyId == facultyId.Value)
+                .Select(a => a.ClassroomId)
+                .ToListAsync(cancellationToken);
+            classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(buildingName))
+            classroomQuery = classroomQuery.Where(c => c.BuildingName == buildingName);
+
+        if (!string.IsNullOrWhiteSpace(classroomType) && Enum.TryParse<ClassroomType>(classroomType, out var parsedType))
+            classroomQuery = classroomQuery.Where(c => c.Type == parsedType);
+
+        if (minCapacity.HasValue)
+            classroomQuery = classroomQuery.Where(c => c.Capacity >= minCapacity.Value);
+
+        var classrooms = await classroomQuery.ToListAsync(cancellationToken);
+
+        var occupiedSlots = snapshot.Sections
+            .Where(s => s.ClassroomId.HasValue)
+            .SelectMany(s => s.TimeBlocks.Select(tb => new
+            {
+                ClassroomId = s.ClassroomId!.Value,
+                Day = (int)tb.Day,
+                StartHour = tb.StartTime.Hour,
+                EndHour = tb.EndTime.Minute > 0 ? tb.EndTime.Hour : tb.EndTime.Hour - 1
+            }))
+            .GroupBy(x => x.ClassroomId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var weeklyUsage = occupiedSlots.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Sum(s => s.EndHour - s.StartHour + 1));
+
+        var results = new List<AvailableClassroomResultDto>();
+
+        foreach (var classroom in classrooms)
+        {
+            var slots = occupiedSlots.TryGetValue(classroom.Id, out var s) ? s : new();
+
+            bool isAvailable = true;
+            foreach (var day in days)
+            {
+                for (int h = startHour; h <= endHour && isAvailable; h++)
+                {
+                    if (slots.Any(sl => sl.Day == day && h >= sl.StartHour && h <= sl.EndHour))
+                    {
+                        isAvailable = false;
+                    }
+                }
+            }
+
+            if (!isAvailable) continue;
+
+            int totalWeeklySlots = 5 * 10;
+            int used = weeklyUsage.TryGetValue(classroom.Id, out var u) ? u : 0;
+
+            var classroomSchedules = snapshot.Sections
+                .Where(sec => sec.ClassroomId == classroom.Id)
+                .SelectMany(sec => sec.TimeBlocks.Select(tb => new ClassroomScheduleSlotDto
+                {
+                    Day = (int)tb.Day,
+                    StartHour = tb.StartTime.Hour,
+                    EndHour = tb.EndTime.Minute > 0 ? tb.EndTime.Hour : tb.EndTime.Hour - 1,
+                    CourseCode = sec.CourseCode,
+                    CourseName = sec.CourseName,
+                    InstructorName = sec.InstructorName
+                }))
+                .OrderBy(sl => sl.Day).ThenBy(sl => sl.StartHour)
+                .ToList();
+
+            results.Add(new AvailableClassroomResultDto
+            {
+                Id = classroom.Id,
+                Name = classroom.Name,
+                Capacity = classroom.Capacity,
+                Type = classroom.Type.ToString(),
+                BuildingName = classroom.BuildingName,
+                Floor = classroom.Floor,
+                WeeklyOccupancyRate = totalWeeklySlots > 0 ? Math.Round((double)used / totalWeeklySlots * 100) : 0,
+                Schedules = classroomSchedules
+            });
+        }
+
+        return results.OrderBy(r => r.Name).ToList();
+    }
+
+    // ── Score Breakdown ────────────────────────────────────────────────
+
+    public async Task<ScoreBreakdownDto> GetScoreBreakdownAsync(int termId, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await BuildTermSnapshotAsync(termId, null, null, cancellationToken);
+        var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+
+        if (softConfig.S4Enabled)
+            snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, cancellationToken);
+
+        var config = BuildConstraintConfig(softConfig, hardConfig);
+        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
+        var weightMap = state.Definitions.ToDictionary(d => d.Key, d => d.Value.Weight);
+
+        return _constraintEvaluation.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────
 
-    private async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
+    internal async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
     {
         var sectionsQuery = _context.CourseSections
             .AsNoTracking()
@@ -1188,6 +1475,13 @@ public class SchedulingService : ISchedulingService
             ? await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, cancellationToken)
             : new List<CoEnrollmentPair>();
 
+        // Load distribution constraints for DIST evaluator
+        var distributionConstraints = await _context.DistributionConstraints
+            .AsNoTracking()
+            .Include(d => d.Courses)
+            .Where(d => d.TermId == termId)
+            .ToListAsync(cancellationToken);
+
         var snapshots = sections
             .Select(section => BuildExistingSectionSnapshot(
                 section,
@@ -1208,7 +1502,8 @@ public class SchedulingService : ISchedulingService
             Corequisites = corequisites,
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments
+            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
+            DistributionConstraints = distributionConstraints,
         };
     }
 
@@ -1426,7 +1721,7 @@ public class SchedulingService : ISchedulingService
         return (conflicts, notes);
     }
 
-    private SchedulingConstraintConfig BuildConstraintConfig(SoftConstraintConfig soft, HardConstraintConfig? hard)
+    internal SchedulingConstraintConfig BuildConstraintConfig(SoftConstraintConfig soft, HardConstraintConfig? hard)
     {
         return new SchedulingConstraintConfig
         {
@@ -2058,13 +2353,13 @@ public class SchedulingService : ISchedulingService
 
     // ── Soft constraint config helpers ────────────────────────────────────
 
-    private async Task<Dictionary<string, string>> LoadSystemConfigAsync(CancellationToken ct)
+    internal async Task<Dictionary<string, string>> LoadSystemConfigAsync(CancellationToken ct)
     {
         return await _context.SystemConfigs.AsNoTracking()
             .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
     }
 
-    private async Task<SoftConstraintConfig> LoadSoftConstraintConfigAsync(CancellationToken ct)
+    internal async Task<SoftConstraintConfig> LoadSoftConstraintConfigAsync(CancellationToken ct)
     {
         var config = await LoadSystemConfigAsync(ct);
 
@@ -2098,7 +2393,7 @@ public class SchedulingService : ISchedulingService
     /// Loads co-enrollment pairs from the last 3 terms (before the given term).
     /// Finds course pairs frequently taken by the same student in the same term.
     /// </summary>
-    private async Task<List<CoEnrollmentPair>> LoadCoEnrollmentPairsAsync(int currentTermId, int minThreshold, CancellationToken ct)
+    internal async Task<List<CoEnrollmentPair>> LoadCoEnrollmentPairsAsync(int currentTermId, int minThreshold, CancellationToken ct)
     {
         // Get last 3 term IDs before the current term
         var recentTermIds = await _context.AcademicTerms.AsNoTracking()
@@ -2151,7 +2446,7 @@ public class SchedulingService : ISchedulingService
             .ToList();
     }
 
-    private async Task<HardConstraintConfig> LoadHardConstraintConfigAsync(CancellationToken ct)
+    internal async Task<HardConstraintConfig> LoadHardConstraintConfigAsync(CancellationToken ct)
     {
         var config = await LoadSystemConfigAsync(ct);
 
@@ -2188,7 +2483,7 @@ public class SchedulingService : ISchedulingService
 
     // ── Constants & inner types ──────────────────────────────────────────
 
-    private record SoftConstraintConfig(
+    internal record SoftConstraintConfig(
         bool S1Enabled, int S1MinOccupancy, int S1MaxOccupancy,
         bool S2Enabled, int S2MaxDailyHours,
         bool S3Enabled, int S3MaxSectionsPerSlot,
@@ -2199,7 +2494,7 @@ public class SchedulingService : ISchedulingService
         bool S9Enabled, TimeOnly S9MorningStart, TimeOnly S9EveningStart,
         bool S12Enabled, int S12MaxImbalancePercent);
 
-    private record HardConstraintConfig(
+    internal record HardConstraintConfig(
         bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
         int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold,
         int TheoryLabSplitThreshold = 4,

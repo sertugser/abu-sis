@@ -278,11 +278,27 @@ public class AdminTermService : IAdminTermService
                 if (!validation.IsValid && validation.Conflicts.Count > 0)
                     errors.Add($"{validation.Conflicts.Count} hard constraint çakışması var. Programda çakışma olmadan yayınlanamaz.");
 
-                // Guard: Dekan onayı
-                var hasApproval = await _context.FacultyScheduleApprovals
-                    .AnyAsync(fsa => fsa.TermId == term.Id);
-                if (!hasApproval)
-                    errors.Add("Ders programı dekan tarafından onaylanmadan yayınlanamaz.");
+                // Guard: Dekan onayı — aktif şubesi olan her fakülte onaylamış olmalı
+                var facultiesWithSections = await _context.CourseSections
+                    .Where(cs => cs.TermId == term.Id && cs.IsActive && cs.Course!.DepartmentId.HasValue)
+                    .Select(cs => cs.Course!.Department!.FacultyId)
+                    .Distinct()
+                    .ToListAsync();
+
+                var approvedFacultyIds = await _context.FacultyScheduleApprovals
+                    .Where(fsa => fsa.TermId == term.Id)
+                    .Select(fsa => fsa.FacultyId)
+                    .ToListAsync();
+
+                var unapprovedFaculties = facultiesWithSections.Except(approvedFacultyIds).ToList();
+                if (unapprovedFaculties.Count > 0)
+                {
+                    var names = await _context.Faculties
+                        .Where(f => unapprovedFaculties.Contains(f.Id))
+                        .Select(f => f.Name)
+                        .ToListAsync();
+                    errors.Add($"Şu fakültelerin dekan onayı eksik: {string.Join(", ", names)}");
+                }
                 break;
 
             case TermStatus.Closed:

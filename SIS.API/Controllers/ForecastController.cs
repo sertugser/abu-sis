@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.EnrollmentForecast.DTOs;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -22,7 +23,7 @@ public class ForecastController : ControllerBase
     }
 
     [HttpGet("course-demand")]
-    public async Task<IActionResult> GetCourseDemand([FromQuery] int courseId)
+    public async Task<IActionResult> GetCourseDemand([FromQuery] int courseId, [FromQuery] bool includeTrace = false)
     {
         if (courseId <= 0)
             return BadRequest(new { error = "Gecerli bir courseId gonderilmelidir." });
@@ -39,6 +40,10 @@ public class ForecastController : ControllerBase
         if (forecast == null)
             return NotFound(new { error = "Ders bulunamadi." });
 
+        // Trace varsayılan kapalı — sadece istendiğinde döner
+        if (!includeTrace)
+            forecast.Trace = null;
+
         return Ok(forecast);
     }
 
@@ -54,6 +59,30 @@ public class ForecastController : ControllerBase
         var forecast = await _forecastService.GetDepartmentSummaryAsync(departmentId);
         if (forecast == null)
             return NotFound(new { error = "Bolum bulunamadi." });
+
+        // Toplu sorgularda trace strip — performans
+        foreach (var summary in forecast.CourseSummaries)
+            summary.Trace = null;
+
+        return Ok(forecast);
+    }
+
+    [HttpPost("simulate")]
+    public async Task<IActionResult> SimulateCourseDemand([FromQuery] int courseId, [FromBody] ForecastSimulationParams parameters)
+    {
+        if (courseId <= 0)
+            return BadRequest(new { error = "Gecerli bir courseId gonderilmelidir." });
+
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == courseId);
+        if (course == null)
+            return NotFound(new { error = "Ders bulunamadi." });
+        if (course.DepartmentId.HasValue && !await HasDepartmentAccessAsync(userId, course.DepartmentId.Value))
+            return Forbid();
+
+        var forecast = await _forecastService.SimulateCourseDemandAsync(courseId, parameters);
+        if (forecast == null)
+            return NotFound(new { error = "Ders bulunamadi." });
 
         return Ok(forecast);
     }

@@ -1,12 +1,19 @@
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { batchAutoSchedule, getClassroomDashboard, getSchedulingConflicts } from '../api/scheduling.api';
-import type { BatchAutoScheduleRequest, ClassroomDashboard, SchedulingConflict } from '../types/scheduling';
+import {
+  batchAutoSchedule, getClassroomDashboard, getSchedulingConflicts,
+  getClassroomFilterOptions, searchAvailableClassrooms,
+  type ClassroomDashboardParams,
+} from '../api/scheduling.api';
+import type {
+  BatchAutoScheduleRequest, ClassroomDashboard, SchedulingConflict,
+  ClassroomFilterOptions, AvailableClassroomResult, AvailableClassroomSearchParams,
+} from '../types/scheduling';
 
-export function useClassroomDashboard(termId?: number) {
+export function useClassroomDashboard(params: ClassroomDashboardParams) {
   return useQuery<ClassroomDashboard>({
-    queryKey: ['classroomDashboard', termId],
-    queryFn: () => getClassroomDashboard(termId),
-    enabled: !!termId,
+    queryKey: ['classroomDashboard', params],
+    queryFn: () => getClassroomDashboard(params),
+    enabled: !!params.termId,
   });
 }
 
@@ -29,5 +36,21 @@ export function useBatchAutoSchedule() {
         queryClient.invalidateQueries({ queryKey: ['academicPlanningSummary'] }),
       ]);
     },
+  });
+}
+
+export function useClassroomFilterOptions(termId?: number) {
+  return useQuery<ClassroomFilterOptions>({
+    queryKey: ['classroomFilterOptions', termId],
+    queryFn: () => getClassroomFilterOptions(termId!),
+    enabled: !!termId,
+  });
+}
+
+export function useAvailableClassrooms(params: AvailableClassroomSearchParams | null) {
+  return useQuery<AvailableClassroomResult[]>({
+    queryKey: ['availableClassrooms', params],
+    queryFn: () => searchAvailableClassrooms(params!),
+    enabled: !!params && params.days.length > 0,
   });
 }

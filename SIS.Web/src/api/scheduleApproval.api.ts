@@ -19,10 +19,11 @@ export async function getScheduleApprovalStatus(facultyId: number, termId?: numb
   return data;
 }
 
-export async function approveSchedule(facultyId: number, note?: string): Promise<void> {
-  await apiClient.post(`/schedule-approval/faculty/${facultyId}/approve`, { note });
+export async function approveSchedule(facultyId: number, termId: number, note?: string): Promise<void> {
+  await apiClient.post(`/schedule-approval/faculty/${facultyId}/approve`, { termId, note });
 }
 
-export async function revokeScheduleApproval(facultyId: number): Promise<void> {
-  await apiClient.delete(`/schedule-approval/faculty/${facultyId}/revoke`);
+export async function revokeScheduleApproval(facultyId: number, termId?: number): Promise<void> {
+  const params = termId ? { termId } : undefined;
+  await apiClient.delete(`/schedule-approval/faculty/${facultyId}/revoke`, { params });
 }

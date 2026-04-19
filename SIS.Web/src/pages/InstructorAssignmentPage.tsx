@@ -162,7 +162,7 @@ export default function InstructorAssignmentPage() {
 
   if (contextQuery.isLoading) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="space-y-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-[500px] w-full" />
       </div>

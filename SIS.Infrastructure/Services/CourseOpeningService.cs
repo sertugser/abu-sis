@@ -95,6 +95,8 @@ public class CourseOpeningService(
                 Ects = s.Course.Ects,
                 SuggestedSemester = sugSem,
                 Capacity = s.Capacity,
+                InternalQuota = s.InternalQuota,
+                ExternalQuota = s.ExternalQuota,
                 EnrolledCount = s.EnrolledCount,
                 RegisteredCount = regCount,
                 DraftOrPendingCount = draftOrPendingCount,
@@ -143,6 +145,13 @@ public class CourseOpeningService(
             .Where(summary => courseIds.Contains(summary.CourseId))
             .ToDictionary(summary => summary.CourseId);
 
+        var isTermInPlanning = term?.Status == TermStatus.Planning;
+
+        // Dersin sahibi olmayan bölümler açamaz — dersin DepartmentId'sini kontrol et
+        var courseDeptMap = curriculumCourses
+            .GroupBy(cc => cc.CourseId)
+            .ToDictionary(g => g.Key, g => g.First().Course.DepartmentId);
+
         return curriculumCourses
             .GroupBy(cc => cc.CourseId)
             .Select(g =>
@@ -150,6 +159,7 @@ public class CourseOpeningService(
                 var first = g.First();
                 existingSectionCounts.TryGetValue(first.CourseId, out var sectionCount);
                 forecastMap.TryGetValue(first.CourseId, out var forecast);
+                var isOwner = !first.Course.DepartmentId.HasValue || first.Course.DepartmentId == departmentId;
 
                 return new CurriculumCourseForOpeningDto
                 {
@@ -177,7 +187,7 @@ public class CourseOpeningService(
                         })
                         .ToList(),
                     PreviousTermEnrollment = forecast?.ComparableTermEnrollment,
-                    CanOpen = true,
+                    CanOpen = isTermInPlanning && isOwner,
                 };
             })
             .OrderBy(c => c.SuggestedSemester).ThenBy(c => c.CourseCode)
@@ -291,6 +301,8 @@ public class CourseOpeningService(
                 TermId = termId,
                 SectionNumber = maxSectionNumber + i + 1,
                 Capacity = request.CapacityPerSection,
+                InternalQuota = request.InternalQuota,
+                ExternalQuota = request.ExternalQuota,
                 InstructorId = request.InstructorId,
                 EnrolledCount = 0,
                 IsActive = true,
@@ -384,6 +396,8 @@ public class CourseOpeningService(
                 Ects = course.Ects,
                 SuggestedSemester = sugSem,
                 Capacity = s.Capacity,
+                InternalQuota = s.InternalQuota,
+                ExternalQuota = s.ExternalQuota,
                 EnrolledCount = 0,
                 RegisteredCount = 0,
                 DraftOrPendingCount = 0,
@@ -474,6 +488,12 @@ public class CourseOpeningService(
             section.Capacity = request.Capacity.Value;
         }
 
+        if (request.InternalQuota.HasValue)
+            section.InternalQuota = request.InternalQuota.Value == 0 ? null : request.InternalQuota.Value;
+
+        if (request.ExternalQuota.HasValue)
+            section.ExternalQuota = request.ExternalQuota.Value == 0 ? null : request.ExternalQuota.Value;
+
         await _context.SaveChangesAsync(ct);
         _forecastCacheInvalidator.InvalidateForecastContext();
 
@@ -508,6 +528,8 @@ public class CourseOpeningService(
             Ects = section.Course.Ects,
             SuggestedSemester = sugSem,
             Capacity = section.Capacity,
+            InternalQuota = section.InternalQuota,
+            ExternalQuota = section.ExternalQuota,
             EnrolledCount = section.EnrolledCount,
             RegisteredCount = registeredCount,
             DraftOrPendingCount = draftOrPendingCount,
@@ -568,6 +590,113 @@ public class CourseOpeningService(
         _forecastCacheInvalidator.InvalidateForecastContext();
     }
 
+    public async Task<CloseAllSectionsResultDto> CloseAllSectionsAsync(int courseId, int termId, CancellationToken ct)
+    {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new InvalidOperationException("Dönem bulunamadı.");
+        if (term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Ders kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
+        var sections = await _context.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.IsActive)
+            .ToListAsync(ct);
+
+        if (sections.Count == 0)
+            throw new InvalidOperationException("Bu ders için kapatılacak aktif şube bulunamadı.");
+
+        // Aktif kayıtlı öğrenci kontrolü (tüm section'lar için toplu)
+        var sectionIds = sections.Select(s => s.Id).ToList();
+        var activeCount = await _context.CourseRegistrations
+            .CountAsync(cr => sectionIds.Contains(cr.CourseSectionId) && cr.Status == RegistrationStatus.Active, ct);
+        if (activeCount > 0)
+            throw new InvalidOperationException($"Toplam {activeCount} aktif kayıtlı öğrenci bulunan ders kapatılamaz. Önce öğrencileri başka şubelere aktarın veya kayıtlarını düşürün.");
+
+        // Draft/Pending kayıtları temizle
+        var pendingRegistrations = await _context.CourseRegistrations
+            .Where(cr => sectionIds.Contains(cr.CourseSectionId)
+                && (cr.Status == RegistrationStatus.Draft || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+            .ToListAsync(ct);
+
+        foreach (var reg in pendingRegistrations)
+        {
+            reg.Status = RegistrationStatus.Dropped;
+            reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Tüm section'ları kapat
+        foreach (var section in sections)
+        {
+            section.IsActive = false;
+            section.EnrolledCount = 0;
+        }
+
+        // Access policy temizliği
+        var accessPolicies = await _context.CourseAccessPolicies
+            .Where(cap => cap.CourseId == courseId && cap.TermId == termId)
+            .ToListAsync(ct);
+        _context.CourseAccessPolicies.RemoveRange(accessPolicies);
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+
+        return new CloseAllSectionsResultDto(
+            ClosedSectionCount: sections.Count,
+            DroppedRegistrationCount: pendingRegistrations.Count
+        );
+    }
+
+    public async Task ReactivateSectionAsync(int sectionId, CancellationToken ct)
+    {
+        var section = await _context.CourseSections
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == sectionId, ct)
+            ?? throw new InvalidOperationException("Şube bulunamadı.");
+
+        if (section.IsActive)
+            throw new InvalidOperationException("Şube zaten aktif.");
+
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+            throw new InvalidOperationException(
+                $"Şube yeniden açmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+
+        section.IsActive = true;
+        // EnrolledCount 0 kalır — kapatılırken sıfırlanmıştı
+
+        // Bu ders için CourseAccessPolicy yoksa yeniden oluştur
+        var hasAccessPolicy = await _context.CourseAccessPolicies
+            .AnyAsync(cap => cap.CourseId == section.CourseId && cap.TermId == section.TermId, ct);
+
+        if (!hasAccessPolicy && section.Course.DepartmentId.HasValue)
+        {
+            // Müfredatında bu ders olan bölümleri bul
+            var deptIds = await _context.CurriculumCourses
+                .Include(cc => cc.Curriculum)
+                .ThenInclude(c => c.Program)
+                .Where(cc => cc.CourseId == section.CourseId)
+                .Select(cc => cc.Curriculum.Program.DepartmentId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (deptIds.Count == 0)
+                deptIds.Add(section.Course.DepartmentId.Value);
+
+            foreach (var deptId in deptIds)
+            {
+                _context.CourseAccessPolicies.Add(new Domain.Entities.CourseAccessPolicy
+                {
+                    CourseId = section.CourseId,
+                    TermId = section.TermId,
+                    DepartmentId = deptId,
+                });
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+    }
+
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
         TermStatus.Draft            => "Taslak",
@@ -609,13 +738,23 @@ public class CourseOpeningService(
     {
         var instructor = await _context.Instructors
             .AsNoTracking()
+            .Include(i => i.Department)
             .FirstOrDefaultAsync(i => i.Id == instructorId, ct);
 
         if (instructor == null)
             throw new InvalidOperationException("Atanan öğretim üyesi bulunamadı.");
 
-        if (owningDepartmentId.HasValue && instructor.DepartmentId != owningDepartmentId.Value)
-            throw new InvalidOperationException("Öğretim üyesi bu bölüme ait değil.");
+        if (owningDepartmentId.HasValue)
+        {
+            var courseFacultyId = await _context.Departments
+                .AsNoTracking()
+                .Where(d => d.Id == owningDepartmentId.Value)
+                .Select(d => d.FacultyId)
+                .FirstOrDefaultAsync(ct);
+
+            if (instructor.Department?.FacultyId != courseFacultyId)
+                throw new InvalidOperationException("Öğretim üyesi bu fakülteye ait değil.");
+        }
     }
 
     private Task<int> GetRegisteredCountAsync(int sectionId, CancellationToken ct)
@@ -807,6 +946,59 @@ public class CourseOpeningService(
         }
 
         return result;
+    }
+
+    public async Task<List<ExternalCourseDto>> GetExternalCoursesAsync(int departmentId, int termId, CancellationToken ct = default)
+    {
+        // Find courses in our curriculum that are owned by OTHER departments
+        var externalCourseIds = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Course)
+            .Where(cc => cc.Curriculum.IsActive
+                && cc.Curriculum.Program.DepartmentId == departmentId
+                && cc.Course.DepartmentId.HasValue
+                && cc.Course.DepartmentId != departmentId)
+            .Select(cc => cc.CourseId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (externalCourseIds.Count == 0)
+            return [];
+
+        // Get active sections for these courses in the given term
+        var sections = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course).ThenInclude(c => c.Department)
+            .Where(cs => cs.TermId == termId && cs.IsActive && externalCourseIds.Contains(cs.CourseId))
+            .ToListAsync(ct);
+
+        // Load forecast data for demand
+        var forecastSummary = await _forecastService.GetDepartmentSummaryAsync(departmentId);
+        var forecastMap = (forecastSummary?.CourseSummaries ?? [])
+            .Where(s => externalCourseIds.Contains(s.CourseId))
+            .ToDictionary(s => s.CourseId);
+
+        return sections
+            .GroupBy(cs => cs.CourseId)
+            .Select(g =>
+            {
+                var first = g.First();
+                forecastMap.TryGetValue(first.CourseId, out var forecast);
+                return new ExternalCourseDto
+                {
+                    CourseId = first.CourseId,
+                    CourseCode = first.Course.Code,
+                    CourseName = first.Course.Name,
+                    Ects = first.Course.Ects,
+                    OwnerDepartmentName = first.Course.Department?.Name ?? "",
+                    SectionCount = g.Count(),
+                    TotalCapacity = g.Sum(s => s.Capacity),
+                    TotalEnrolled = g.Sum(s => s.EnrolledCount),
+                    PredictedDemand = forecast?.TotalPredictedDemand ?? 0,
+                };
+            })
+            .OrderBy(d => d.CourseCode)
+            .ToList();
     }
 
 }

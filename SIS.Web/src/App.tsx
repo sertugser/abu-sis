@@ -25,7 +25,7 @@ import ClassListsPage from './pages/ClassListsPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
-import TermClosingWizard from './pages/TermClosingWizard';
+import TermClosingPage from './pages/term-closing/TermClosingPage';
 
 import CourseOpeningPage from './pages/CourseOpeningPage';
 import InstructorAssignmentPage from './pages/InstructorAssignmentPage';
@@ -102,7 +102,7 @@ export default function App() {
                     <Route path="ders-programi-olusturma" element={<FacultyPlanningPage />} />
                     <Route path="derslik-doluluk-tablosu" element={<ClassroomManagementPage />} />
                     <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
-                    <Route path="donem-kapatma" element={<TermClosingWizard />} />
+                    <Route path="donem-kapatma" element={<TermClosingPage />} />
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
                     <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
                     <Route path="kullanici-yonetimi" element={<UserManagementPage />} />

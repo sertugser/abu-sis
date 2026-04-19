@@ -271,6 +271,43 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("AcademicTerms");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ApprovalStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequiredRole")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId", "StepOrder");
+
+                    b.ToTable("ApprovalSteps");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<int>("Id")
@@ -490,6 +527,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("CriticalityLevel")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -504,6 +544,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("Parameters")
                         .HasColumnType("text");
 
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -514,6 +557,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Weight")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -579,6 +625,207 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("ConstraintDefinitionId", "InstructorId", "DepartmentId", "CourseSectionId", "TermId");
 
                     b.ToTable("ConstraintExceptions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintExceptionRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConstraintDefinitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("InstructorId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsExempt")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ParameterOverride")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConstraintDefinitionId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ConstraintExceptionRequests");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ConstraintProfiles");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfileItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ConstraintDefinitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Parameters")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Weight")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConstraintDefinitionId");
+
+                    b.HasIndex("ProfileId", "ConstraintDefinitionId")
+                        .IsUnique();
+
+                    b.ToTable("ConstraintProfileItems");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsFeasible")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("SnapshotAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SnapshotType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalHardViolations")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("TotalSoftPenalty")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId", "SnapshotAt");
+
+                    b.ToTable("ConstraintViolationSnapshots");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshotDetail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AffectedSectionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ConstraintCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("Penalty")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("SnapshotId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ViolationCount")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("WeightedPenalty")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotId");
+
+                    b.ToTable("ConstraintViolationSnapshotDetails");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -1143,6 +1390,78 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("FacultyId");
 
                     b.ToTable("Departments");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DistributionType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PreferenceLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("TermId");
+
+                    b.ToTable("DistributionConstraints");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraintCourse", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DistributionConstraintId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.HasIndex("CourseSectionId");
+
+                    b.HasIndex("DistributionConstraintId", "CourseId", "CourseSectionId");
+
+                    b.ToTable("DistributionConstraintCourses");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>
@@ -2115,6 +2434,12 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2203,6 +2528,12 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StartedByUserId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Step")
                         .HasColumnType("integer");
@@ -2392,6 +2723,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Department");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ApprovalStep", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintExceptionRequest", "Request")
+                        .WithMany("ApprovalSteps")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ClassroomTermAssignment", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
@@ -2463,6 +2805,58 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
 
                     b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintExceptionRequest", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintDefinition", "ConstraintDefinition")
+                        .WithMany()
+                        .HasForeignKey("ConstraintDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConstraintDefinition");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfileItem", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintDefinition", "ConstraintDefinition")
+                        .WithMany()
+                        .HasForeignKey("ConstraintDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.ConstraintProfile", "Profile")
+                        .WithMany("Items")
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConstraintDefinition");
+
+                    b.Navigation("Profile");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshotDetail", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.ConstraintViolationSnapshot", "Snapshot")
+                        .WithMany("Details")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -2729,6 +3123,50 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Faculty");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraint", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraintCourse", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
+                        .WithMany()
+                        .HasForeignKey("CourseSectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIS.Domain.Entities.DistributionConstraint", "DistributionConstraint")
+                        .WithMany("Courses")
+                        .HasForeignKey("DistributionConstraintId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("CourseSection");
+
+                    b.Navigation("DistributionConstraint");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>
@@ -3133,6 +3571,21 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Exceptions");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintExceptionRequest", b =>
+                {
+                    b.Navigation("ApprovalSteps");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
+                {
+                    b.Navigation("Details");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
                 {
                     b.Navigation("Equivalencies");
@@ -3157,6 +3610,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.Department", b =>
                 {
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.DistributionConstraint", b =>
+                {
+                    b.Navigation("Courses");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>

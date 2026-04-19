@@ -783,7 +783,7 @@ public class SchedulingServiceTests : IDisposable
             new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
         };
-        return new ConstraintEvaluationService(evaluators, _context);
+        return new ConstraintEvaluationService(evaluators, _context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
     }
 
     public void Dispose()

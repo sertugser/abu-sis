@@ -15,7 +15,4 @@ public interface IAdminCourseCatalogService
 
     Task AddEquivalencyAsync(int courseId, AddEquivalencyDto dto);
     Task RemoveEquivalencyAsync(int courseId, int equivalentCourseId);
-
-    Task AssignToCurriculumAsync(int courseId, AssignToCurriculumDto dto);
-    Task RemoveFromCurriculumAsync(int courseId, int curriculumId);
 }

@@ -55,9 +55,35 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         ["Schedule.SlotDurationMinutes"] = (30, 180),
         ["Schedule.BreakBetweenSlotsMinutes"] = (0, 60),
         ["Schedule.EveningSlotCount"] = (0, 10),
+        ["Schedule.TheoryLabSplitThreshold"] = (1, 20),
+        ["Schedule.SA.MaxIterations"] = (1, 1_000_000),
+        ["Schedule.SA.InitialTemperature"] = (1, 10_000),
+        ["Schedule.SA.TimeoutSeconds"] = (5, 3600),
+        ["Schedule.SA.StagnationLimit"] = (1, 100_000),
+        ["Schedule.SA.BacktrackLimit"] = (1, 10_000),
+        ["Schedule.SA.RelocateWeight"] = (0, 100),
+        ["Schedule.SA.SwapWeight"] = (0, 100),
+        ["Schedule.SA.ChainWeight"] = (0, 100),
+        ["Schedule.MRV.ClassroomWeight"] = (0, 100),
+        ["Schedule.MRV.SlotWeight"] = (0, 100),
+        ["Schedule.MRV.LabWeight"] = (0, 100),
+        ["Schedule.MRV.CapacityWeight"] = (0, 100),
         ["Attendance.TermWeekCount"] = (1, 52),
         ["Attendance.TheoryAbsenceLimitPercent"] = (0, 100),
         ["Attendance.LabAbsenceLimitPercent"] = (0, 100),
+    };
+
+    private static readonly HashSet<string> TimeKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Schedule.MorningStartTime",
+        "Schedule.LunchBreakStart",
+        "Schedule.LunchBreakEnd",
+        "Schedule.EveningStartTime",
+    };
+
+    private static readonly HashSet<string> DayNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
     };
 
     private static readonly JsonSerializerOptions ExportJsonOptions = new()
@@ -101,6 +127,17 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         return Ok(config);
     }
 
+    [HttpGet("limits")]
+    public IActionResult GetLimits()
+    {
+        var limits = NumericLimits.ToDictionary(
+            kvp => kvp.Key,
+            kvp => new { min = kvp.Value.Min, max = kvp.Value.Max },
+            StringComparer.OrdinalIgnoreCase);
+
+        return Ok(limits);
+    }
+
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSystemConfigDto dto, CancellationToken ct)
     {
@@ -113,7 +150,16 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
             return BadRequest(new { error });
 
         config.Value = normalizedValue;
-        await _context.SaveChangesAsync(ct);
+
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { error = "Bu ayar başka bir kullanıcı tarafından değiştirildi. Sayfayı yenileyip tekrar deneyin." });
+        }
+
         _configProvider.InvalidateCache(config.Key);
 
         return Ok(new SystemConfigDto(config.Id, config.Key, config.Value, config.Description, config.Category, config.DataType));
@@ -193,7 +239,14 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
             updatedKeys.Add(update.Config.Key);
         }
 
-        await _context.SaveChangesAsync(ct);
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { error = "Bir veya daha fazla ayar başka bir kullanıcı tarafından değiştirildi. Sayfayı yenileyip tekrar deneyin." });
+        }
 
         foreach (var key in updatedKeys)
             _configProvider.InvalidateCache(key);
@@ -264,6 +317,38 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
                 {
                     error = "Metin değerleri en fazla 500 karakter olabilir.";
                     return false;
+                }
+
+                if (TimeKeys.Contains(key))
+                {
+                    if (!TimeOnly.TryParseExact(rawValue.Trim(), "HH:mm", CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _))
+                    {
+                        error = "Saat değeri HH:mm formatında girilmelidir (ör. 09:00, 13:30).";
+                        return false;
+                    }
+
+                    normalizedValue = rawValue.Trim();
+                    return true;
+                }
+
+                if (string.Equals(key, "Schedule.WorkDays", StringComparison.OrdinalIgnoreCase))
+                {
+                    var days = rawValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (days.Length == 0)
+                    {
+                        error = "En az bir çalışma günü belirtilmelidir.";
+                        return false;
+                    }
+
+                    var invalidDays = days.Where(d => !DayNames.Contains(d)).ToList();
+                    if (invalidDays.Count > 0)
+                    {
+                        error = $"Geçersiz gün adları: {string.Join(", ", invalidDays)}. Geçerli değerler: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday";
+                        return false;
+                    }
+
+                    normalizedValue = string.Join(",", days);
+                    return true;
                 }
 
                 normalizedValue = rawValue;

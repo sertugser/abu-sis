@@ -111,9 +111,9 @@ export interface DepartmentSectionClassList {
   courseId: number;
   courseCode: string;
   courseName: string;
-  instructorName: string;
-  classroomName: string;
-  scheduleSummary: string;
+  instructorName: string | null;
+  classroomName: string | null;
+  scheduleSummary: string | null;
   capacity: number;
   enrolledCount: number;
   activeStudentCount: number;

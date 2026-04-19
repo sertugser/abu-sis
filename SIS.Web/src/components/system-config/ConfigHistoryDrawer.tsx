@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
@@ -8,24 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { History, RotateCcw } from 'lucide-react';
 import { useAuditLogs } from '../../hooks/useAuditLog';
 import { useUpdateSystemConfig } from '../../hooks/useSystemConfig';
+import { getErrorMessage } from '../../lib/errorMessage';
 import type { AuditLogDto } from '../../api/auditLog.api';
-
-function getErrorMessage(error: unknown, fallbackMessage: string) {
-  if (
-    typeof error === 'object'
-    && error !== null
-    && 'response' in error
-    && typeof (error as { response?: { data?: { error?: unknown } } }).response?.data?.error === 'string'
-  ) {
-    return (error as { response: { data: { error: string } } }).response.data.error;
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallbackMessage;
-}
 
 function formatHistoryDate(timestamp: string) {
   return new Date(timestamp).toLocaleString('tr-TR', {
@@ -101,24 +89,34 @@ export default function ConfigHistoryDrawer({
     pageSize: 5,
   }, { enabled: open });
   const updateMutation = useUpdateSystemConfig();
+  const [rollbackTarget, setRollbackTarget] = useState<AuditLogDto | null>(null);
 
   const historyItems = historyQuery.data?.items ?? [];
 
-  function handleRollback(log: AuditLogDto) {
+  function confirmRollback(log: AuditLogDto) {
     const previousValue = extractConfigValue(log.oldValue);
     if (previousValue == null) {
       setRollbackError('Bu kayıt için geri alınabilecek bir önceki değer bulunamadı.');
       return;
     }
+    setRollbackTarget(log);
+  }
+
+  function executeRollback() {
+    if (!rollbackTarget) return;
+    const previousValue = extractConfigValue(rollbackTarget.oldValue);
+    if (previousValue == null) return;
 
     setRollbackError(null);
     updateMutation.mutate(
       { id: configId, value: previousValue },
       {
         onSuccess: () => {
+          setRollbackTarget(null);
           historyQuery.refetch();
         },
         onError: (error) => {
+          setRollbackTarget(null);
           setRollbackError(getErrorMessage(error, 'Ayar geri alınamadı.'));
         },
       },
@@ -183,7 +181,7 @@ export default function ConfigHistoryDrawer({
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleRollback(log)}
+                          onClick={() => confirmRollback(log)}
                           disabled={updateMutation.isPending || oldValue == null}
                         >
                           <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
@@ -209,6 +207,26 @@ export default function ConfigHistoryDrawer({
           </div>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={rollbackTarget != null} onOpenChange={() => setRollbackTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Geri almayı onayla</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <span className="font-mono text-xs">{configKey}</span> değerini{' '}
+                <span className="font-semibold">{currentValue}</span> &rarr;{' '}
+                <span className="font-semibold">{rollbackTarget ? extractConfigValue(rollbackTarget.oldValue) ?? '—' : '—'}</span>{' '}
+                olarak geri almak istediğinize emin misiniz?
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction onClick={executeRollback}>Geri Al</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

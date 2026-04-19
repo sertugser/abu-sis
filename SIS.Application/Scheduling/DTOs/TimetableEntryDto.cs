@@ -12,9 +12,3 @@ public class TimetableEntryDto
     public string? ClassroomName { get; set; }
     public string? InstructorName { get; set; }
 }
-
-public class DepartmentTimetableYearGroupDto
-{
-    public int Year { get; set; }
-    public List<TimetableEntryDto> Courses { get; set; } = new();
-}

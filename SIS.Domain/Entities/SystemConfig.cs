@@ -12,4 +12,5 @@ public class SystemConfig
     public string? Description { get; set; }
     public string Category { get; set; } = string.Empty;    // e.g., "Registration", "GPA", "Scheduling"
     public string DataType { get; set; } = "string";        // string, int, decimal, bool, json
+    public uint RowVersion { get; set; }
 }

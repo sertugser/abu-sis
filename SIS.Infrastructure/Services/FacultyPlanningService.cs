@@ -242,6 +242,15 @@ public class FacultyPlanningService : IFacultyPlanningService
             .ToDictionary(g => g.Key, g => g.ToList());
         var sectionPageHasSchedule = sectionPageScheduleMap.Keys.ToHashSet();
 
+        // Load SuggestedSemester from CurriculumCourse for year-level coloring
+        var courseIds = allSections.Select(s => s.CourseId).Distinct().ToList();
+        var semesterMap = await _context.Set<CurriculumCourse>()
+            .AsNoTracking()
+            .Where(cc => courseIds.Contains(cc.CourseId))
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new { CourseId = g.Key, Semester = g.Min(cc => cc.SuggestedSemester) })
+            .ToDictionaryAsync(x => x.CourseId, x => x.Semester, ct);
+
         foreach (var group in grouped)
         {
             var index = 0;
@@ -286,7 +295,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                     TheoryHours = s.Course.TheoryHours,
                     LabHours = s.Course.LabHours,
                     SectionIndex = index,
-                    IsPinned = s.IsPinned
+                    IsPinned = s.IsPinned,
+                    SuggestedSemester = semesterMap.GetValueOrDefault(s.CourseId, 0)
                 });
             }
         }

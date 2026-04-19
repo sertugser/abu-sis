@@ -8,6 +8,8 @@ export interface ConstraintDefinitionDto {
   isEnabled: boolean;
   parameters: string | null;
   sortOrder: number;
+  weight: number;
+  priority: number;
   exceptionCount: number;
 }
 
@@ -35,6 +37,26 @@ export interface ConstraintDefinitionDetailDto extends Omit<ConstraintDefinition
   exceptions: ConstraintExceptionDto[];
 }
 
+export interface ScoreBreakdownDto {
+  totalHardViolations: number;
+  totalSoftPenalty: number;
+  feasible: boolean;
+  constraints: ConstraintScoreItemDto[];
+}
+
+export interface ConstraintScoreItemDto {
+  code: string;
+  name: string;
+  category: 'Hard' | 'Soft';
+  weight: number;
+  violationCount: number;
+  rawPenalty: number;
+  weightedPenalty: number;
+  percentage: number;
+  affectedSectionCount: number;
+  sampleViolations: string[];
+}
+
 export interface AddExceptionRequest {
   instructorId?: number | null;
   studentId?: number | null;
@@ -44,4 +66,59 @@ export interface AddExceptionRequest {
   isExempt: boolean;
   parameterOverride?: string | null;
   reason?: string | null;
+}
+
+// ── Exception Request (Approval Workflow) ─────────────────────
+export interface ExceptionRequestDto {
+  id: number;
+  constraintDefinitionId: number;
+  constraintCode: string;
+  constraintName: string;
+  requestedByUserId: string;
+  requestedByName: string | null;
+  requestedAt: string;
+  status: string;
+  instructorId: number | null;
+  instructorName: string | null;
+  studentId: number | null;
+  studentName: string | null;
+  departmentId: number | null;
+  departmentName: string | null;
+  courseSectionId: number | null;
+  courseSectionInfo: string | null;
+  termId: number | null;
+  termName: string | null;
+  isExempt: boolean;
+  parameterOverride: string | null;
+  reason: string;
+  expiresAt: string | null;
+  steps: ApprovalStepDto[];
+}
+
+export interface ApprovalStepDto {
+  id: number;
+  stepOrder: number;
+  requiredRole: string;
+  status: string;
+  decidedByUserId: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  comment: string | null;
+}
+
+export interface CreateExceptionRequestDto {
+  constraintDefinitionId: number;
+  instructorId?: number | null;
+  studentId?: number | null;
+  departmentId?: number | null;
+  courseSectionId?: number | null;
+  termId?: number | null;
+  isExempt: boolean;
+  parameterOverride?: string | null;
+  reason: string;
+  expiresAt?: string | null;
+}
+
+export interface ApprovalActionDto {
+  comment?: string | null;
 }

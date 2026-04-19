@@ -8,7 +8,11 @@ public class FacultyScheduleApprovalStatusDto
     public DateTime? ApprovedAt { get; set; }
     public string? Note { get; set; }
     public int FacultyId { get; set; }
+    public string? FacultyName { get; set; }
     public int TermId { get; set; }
+    public string? TermName { get; set; }
+    public int TotalSections { get; set; }
+    public int ScheduledSections { get; set; }
 }
 
 public class ApproveFacultyScheduleRequestDto
