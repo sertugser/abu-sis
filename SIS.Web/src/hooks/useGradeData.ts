@@ -17,8 +17,6 @@ import {
 import type {
   GradeSubmitDto,
   GradingCriteria,
-  ImportApplyResponse,
-  ImportPreviewResponse,
 } from '../types/grade';
 
 export function useComponents(sectionId: number) {

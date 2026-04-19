@@ -140,6 +140,7 @@ const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>
       newScores[student.studentId] = score != null ? String(score) : '';
     });
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing editable form state from fetched data; intentional sync
     setScores(newScores);
   }, [gradesData, activeComponentId]);
 
