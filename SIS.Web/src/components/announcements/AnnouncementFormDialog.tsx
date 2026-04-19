@@ -75,6 +75,7 @@ export default function AnnouncementFormDialog({
   useEffect(() => {
     if (!open) return;
     if (editing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing dialog form from props on open; intentional sync
       setForm({
         title: editing.title,
         content: editing.content,

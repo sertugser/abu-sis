@@ -99,8 +99,9 @@ export default function EvaluationPeriodAdminPage() {
       });
       setSelectedTermId('');
       setClosesAt('');
-    } catch (err: any) {
-      setFormError(err?.response?.data?.message ?? 'Dönem açılamadı.');
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setFormError(message ?? 'Dönem açılamadı.');
     }
   }
 
@@ -445,8 +446,9 @@ function QuestionFormDialog({
         });
       }
       onOpenChange(false);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'İşlem başarısız.');
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(message ?? 'İşlem başarısız.');
     }
   }
 
