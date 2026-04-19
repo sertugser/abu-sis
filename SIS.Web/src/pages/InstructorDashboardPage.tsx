@@ -8,6 +8,7 @@ import { useInstructorSections } from '../hooks/useInstructorSections';
 import type { InstructorSection } from '../api/instructor.api';
 import { ROUTES } from '../lib/constants';
 import { Clock, AlertCircle, BookOpen, ChevronRight } from 'lucide-react';
+import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
 const TURKISH_DAYS: Record<string, number> = {
   'pazartesi': 1, 'sali': 2, 'salı': 2, 'carsamba': 3, 'çarşamba': 3,
@@ -147,6 +148,8 @@ export default function InstructorDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <DashboardAnnouncementWidget max={5} />
 
       {/* Course list */}
       {sections.length > 0 && (

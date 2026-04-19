@@ -21,5 +21,6 @@ public static partial class SeedData
         await SeedTimeSlotsAsync(context);
         await SeedSystemConfigAsync(context);
         await SeedConstraintDefinitionsAsync(context);
+        await SeedEvaluationQuestionsAsync(context);
     }
 }

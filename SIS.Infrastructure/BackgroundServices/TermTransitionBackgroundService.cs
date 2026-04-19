@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -115,6 +116,9 @@ public class TermTransitionBackgroundService : BackgroundService
                 term.Status = TermStatus.GradeEntry;
                 transitioned = true;
                 _logger.LogInformation("Dönem '{Term}' otomatik olarak GradeEntry'e geçirildi.", term.Name);
+
+                // Tasarım 1.2: GradeEntry'e geçişte değerlendirme anketi otomatik açılır.
+                await AutoOpenEvaluationPeriodAsync(context, term, ct);
             }
 
             if (transitioned)
@@ -123,5 +127,29 @@ public class TermTransitionBackgroundService : BackgroundService
                 await context.SaveChangesAsync(ct);
             }
         }
+    }
+
+    /// <summary>
+    /// Tasarım 1.2 — GradeEntry'e geçince o dönem için açık değerlendirme anketi
+    /// yoksa sistem tarafından açılır. ClosesAt, dönemin TermEnd tarihidir.
+    /// </summary>
+    private async Task AutoOpenEvaluationPeriodAsync(AppDbContext context, AcademicTerm term, CancellationToken ct)
+    {
+        var alreadyOpen = await context.EvaluationPeriods
+            .AnyAsync(p => p.TermId == term.Id && p.Status == EvaluationPeriodStatus.Open, ct);
+        if (alreadyOpen)
+            return;
+
+        context.EvaluationPeriods.Add(new EvaluationPeriod
+        {
+            TermId = term.Id,
+            OpenedAt = DateTime.UtcNow,
+            ClosesAt = term.TermEnd,
+            Status = EvaluationPeriodStatus.Open,
+            OpenedBy = null, // sistem tarafından açıldı
+        });
+
+        _logger.LogInformation("Dönem '{Term}' için değerlendirme anketi otomatik açıldı (ClosesAt={ClosesAt:O}).",
+            term.Name, term.TermEnd);
     }
 }

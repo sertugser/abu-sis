@@ -44,6 +44,11 @@ import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import ElectiveGroupManagementPage from './pages/ElectiveGroupManagementPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
 import TermProgramTransferPage from './pages/TermProgramTransferPage';
+import CourseEvaluationPage from './pages/CourseEvaluationPage';
+import EvaluationResultsPage from './pages/EvaluationResultsPage';
+import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
+import AnnouncementsPage from './pages/AnnouncementsPage';
+import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
@@ -66,6 +71,7 @@ export default function App() {
 
                   {/* Herkesin erişebildiği sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
+                  <Route path="duyurular" element={<AnnouncementsPage />} />
 
                   <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
@@ -76,6 +82,7 @@ export default function App() {
                     <Route path="donem-ortalamalari" element={<TermGpaPage />} />
                     <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
                     <Route path="transkript-senaryosu" element={<TranscriptScenarioPage />} />
+                    <Route path="ders-degerlendirme" element={<CourseEvaluationPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager']} />}>
@@ -83,6 +90,10 @@ export default function App() {
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
                     <Route path="ders-programim" element={<InstructorSchedulingPage />} />
+                  </Route>
+
+                  <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager', 'SystemAdministrator']} />}>
+                    <Route path="degerlendirme-sonuclari" element={<EvaluationResultsPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>
@@ -106,11 +117,13 @@ export default function App() {
                     <Route path="secmeli-ders-gruplari" element={<ElectiveGroupManagementPage />} />
                     <Route path="ders-veren-ogretim-uyeleri" element={<InstructorCoursesReportPage />} />
                     <Route path="donem-programi-aktarim" element={<TermProgramTransferPage />} />
+                    <Route path="duyuru-yonetimi" element={<AnnouncementManagementPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator']} />}>
                     <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
                     <Route path="denetim-kayitlari" element={<AuditLogPage />} />
+                    <Route path="degerlendirme-donemi-yonetimi" element={<EvaluationPeriodAdminPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>

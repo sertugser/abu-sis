@@ -18,9 +18,13 @@ using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.TermClosing.Services;
 using SIS.Application.FacultyPlanning.Services;
+using SIS.Application.CourseEvaluation.Services;
+using SIS.Application.Announcement.Services;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.CourseEvaluation;
+using SIS.Infrastructure.Services.Announcement;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -123,6 +127,10 @@ builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
+
+// Course Evaluation + Internal Announcements
+builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();
+builder.Services.AddScoped<IInternalAnnouncementService, InternalAnnouncementService>();
 
 var app = builder.Build();
 

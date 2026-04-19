@@ -49,6 +49,11 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
     public DbSet<ForecastCalibration> ForecastCalibrations => Set<ForecastCalibration>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
+    public DbSet<EvaluationPeriod> EvaluationPeriods => Set<EvaluationPeriod>();
+    public DbSet<EvaluationQuestion> EvaluationQuestions => Set<EvaluationQuestion>();
+    public DbSet<EvaluationResponse> EvaluationResponses => Set<EvaluationResponse>();
+    public DbSet<EvaluationAnswer> EvaluationAnswers => Set<EvaluationAnswer>();
+    public DbSet<InternalAnnouncement> InternalAnnouncements => Set<InternalAnnouncement>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -653,6 +658,80 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             entity.HasOne(sr => sr.Faculty).WithMany().HasForeignKey(sr => sr.FacultyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(sr => sr.Term).WithMany().HasForeignKey(sr => sr.TermId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(sr => new { sr.FacultyId, sr.TermId, sr.CreatedAt });
+        });
+
+        // ── EvaluationPeriod ─────────────────────────────────────
+        builder.Entity<EvaluationPeriod>(e =>
+        {
+            e.HasIndex(ep => ep.TermId).IsUnique();
+
+            e.HasOne(ep => ep.Term)
+             .WithMany()
+             .HasForeignKey(ep => ep.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── EvaluationQuestion ───────────────────────────────────
+        builder.Entity<EvaluationQuestion>(e =>
+        {
+            e.Property(q => q.Text).HasMaxLength(500);
+            e.HasIndex(q => new { q.Category, q.SortOrder });
+        });
+
+        // ── EvaluationResponse ───────────────────────────────────
+        builder.Entity<EvaluationResponse>(e =>
+        {
+            // One evaluation per (period, section, student)
+            e.HasIndex(r => new { r.EvaluationPeriodId, r.CourseSectionId, r.StudentId }).IsUnique();
+            e.HasIndex(r => r.CourseSectionId);
+
+            e.HasOne(r => r.EvaluationPeriod)
+             .WithMany()
+             .HasForeignKey(r => r.EvaluationPeriodId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(r => r.CourseSection)
+             .WithMany()
+             .HasForeignKey(r => r.CourseSectionId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(r => r.Student)
+             .WithMany()
+             .HasForeignKey(r => r.StudentId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── EvaluationAnswer ─────────────────────────────────────
+        builder.Entity<EvaluationAnswer>(e =>
+        {
+            e.Property(a => a.TextValue).HasMaxLength(2000);
+
+            e.HasOne(a => a.Response)
+             .WithMany(r => r.Answers)
+             .HasForeignKey(a => a.ResponseId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(a => a.Question)
+             .WithMany()
+             .HasForeignKey(a => a.QuestionId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── InternalAnnouncement ─────────────────────────────────
+        builder.Entity<InternalAnnouncement>(e =>
+        {
+            e.Property(a => a.Title).HasMaxLength(200);
+            e.Property(a => a.Content).HasMaxLength(5000);
+            e.Property(a => a.CreatedBy).HasMaxLength(100);
+            e.Property(a => a.CreatedByName).HasMaxLength(200);
+
+            e.HasIndex(a => new { a.IsActive, a.StartsAt, a.ExpiresAt });
+            e.HasIndex(a => a.TargetAudience);
+
+            e.HasOne(a => a.TargetDepartment)
+             .WithMany()
+             .HasForeignKey(a => a.TargetDepartmentId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }
