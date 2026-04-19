@@ -42,7 +42,7 @@ export function useUpdateDistributionConstraint() {
 export function useDeleteDistributionConstraint() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, termId }: { id: number; termId: number }) =>
+    mutationFn: ({ id }: { id: number; termId: number }) =>
       deleteDistributionConstraint(id),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.distributionConstraints(variables.termId) });

@@ -9,6 +9,7 @@ export interface ClassroomFilterState {
   maxCapacity: number | null;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- co-located filter default; HMR impact acceptable
 export const EMPTY_FILTERS: ClassroomFilterState = {
   facultyId: null,
   buildingName: null,

@@ -3,12 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlotAssignSheet } from './SlotAssignSheet';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CheckCircle2, XCircle, ChevronDown,
-  RotateCcw, Trash2, Wand2,
+  RotateCcw, Trash2,
 } from 'lucide-react';
 import {
   useApplySchedule, useAutoSchedulePreview,
@@ -101,6 +100,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
   }, [isPending, onRunStateChange]);
 
   // Parent triggered run
+  /* eslint-disable react-hooks/set-state-in-effect -- resetting local state when parent triggers a new run; intentional sync */
   useEffect(() => {
     if (triggerRun && triggerRun !== lastTrigger && termId && !previewMutation.isPending) {
       setLastTrigger(triggerRun);
@@ -113,6 +113,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
       });
     }
   }, [triggerRun, lastTrigger, termId, facultyId, previewMutation, applyMutation]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Handlers
   const handleRunSelect = useCallback((id: number) => {

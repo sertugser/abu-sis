@@ -19,7 +19,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
 import { useAcademicOperationsContext, useGradeLockReadiness } from '@/hooks/useAcademicOperations';
 import { useAdminFaculties, useAdminDepartmentsByStructure } from '@/hooks/useAdminAcademicStructure';
 import type { AccessibleDepartment } from '@/types/academicOperations';
@@ -37,7 +36,6 @@ import type { StudentProgressionDto } from '@/api/termClosing.api';
 import {
   Loader2,
   Lock,
-  Unlock,
   Calculator,
   GraduationCap,
   CalendarPlus,
@@ -45,8 +43,6 @@ import {
   AlertTriangle,
   Info,
   ChevronRight,
-  Clock,
-  User,
   FileText,
   Users,
   BookOpen,

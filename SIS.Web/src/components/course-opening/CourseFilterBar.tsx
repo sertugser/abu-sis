@@ -57,7 +57,7 @@ export function CourseFilterBar({
   onSemesterChange,
   typeFilter,
   onTypeChange,
-  onExportCsv,
+  onExportCsv: _onExportCsv,
 }: FilterBarProps) {
   const accessibleDeptIds = useMemo(() => new Set(departments.map(d => d.departmentId)), [departments]);
 

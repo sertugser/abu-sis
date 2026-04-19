@@ -8,7 +8,7 @@ import {
 import { AlertCircle, RotateCcw, History } from 'lucide-react';
 import { useAuditLogDetail } from '../../hooks/useAuditLog';
 import { ACTION_CONFIG, ENTITY_TYPE_LABELS } from './audit-log.constants';
-import { buildSummary, formatFullDate, formatJson, getUserInitials } from './audit-log.utils';
+import { buildSummary, formatFullDate, formatJson } from './audit-log.utils';
 import type { AuditLogSummaryDto } from '../../api/auditLog.api';
 
 interface AuditLogDetailPanelProps {

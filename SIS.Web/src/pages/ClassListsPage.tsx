@@ -18,7 +18,6 @@ import type { DepartmentSectionClassList } from '../types/academicOperations';
 import { STATUS_LABELS, STATUS_VARIANT } from '../lib/constants';
 import {
   AlertCircle,
-  AlertTriangle,
   BookOpen,
   ChevronDown,
   ChevronLeft,

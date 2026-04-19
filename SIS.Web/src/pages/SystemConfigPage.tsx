@@ -222,6 +222,7 @@ function ConfigRow({
 
   useEffect(() => {
     if (!editing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resyncing input with props when exiting edit mode; intentional
       setValue(config.value);
     }
   }, [config.value, editing]);

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
   AlertCircle, Building2, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
-  Clock, FlaskConical, GraduationCap, Link2,
+  Clock, FlaskConical, GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -27,7 +27,7 @@ import {
 } from '../hooks/useConstraints';
 import { useAdminTerms } from '../hooks/useAdminTerms';
 import {
-  CATEGORY_LABELS, SCOPE_LABELS, CONSTRAINT_GROUPS,
+  CATEGORY_LABELS, CONSTRAINT_GROUPS,
 } from '../components/constraint/helpers';
 import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPanel';
 import ProfileSelector from '../components/constraint/ProfileSelector';

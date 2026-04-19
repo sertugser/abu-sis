@@ -4,7 +4,7 @@ import { useDebounce } from './useDebounce';
 import { DEFAULT_PAGE_SIZE } from '../components/audit-log/audit-log.constants';
 
 const FILTER_KEYS = ['entityType', 'entityId', 'userId', 'action', 'search', 'from', 'to'] as const;
-type FilterKey = typeof FILTER_KEYS[number];
+export type FilterKey = typeof FILTER_KEYS[number];
 
 export function useAuditLogFilters() {
   const [searchParams, setSearchParams] = useSearchParams();

@@ -16,7 +16,7 @@ import { useAdminTerms } from '../../hooks/useAdminTerms';
 import { useAdminInstructors } from '../../hooks/useAdminInstructors';
 import { useAdminStudents } from '../../hooks/useAdminStudents';
 import { useDebounce } from '../../hooks/useDebounce';
-import { getConstraintErrorMessage, ENTITY_TYPE_LABELS, PARAMETER_SCHEMAS } from './helpers';
+import { getConstraintErrorMessage, ENTITY_TYPE_LABELS } from './helpers';
 import type { CreateExceptionRequestDto } from '../../types/constraint';
 
 type EntityType = 'instructor' | 'student' | 'department' | 'courseSection' | 'term';
@@ -66,6 +66,25 @@ function EntitySelector({
       ? { search: debouncedSearch, pageSize: 15 }
       : { search: '__DISABLED__', pageSize: 0 },
   );
+
+  const results: { id: number; label: string; sub?: string }[] = useMemo(() => {
+    if (entityType === 'instructor' && instructors) {
+      return instructors.map(i => ({
+        id: i.id,
+        label: `${i.firstName} ${i.lastName}`,
+        sub: `${i.title} - ${i.departmentName}`,
+      }));
+    }
+    if (entityType === 'student' && students && 'items' in students) {
+      return (students as { items: Array<{ id: number; firstName: string; lastName: string; studentNumber: string; departmentName: string }> }).items.map(s => ({
+        id: s.id,
+        label: `${s.firstName} ${s.lastName}`,
+        sub: `${s.studentNumber} - ${s.departmentName}`,
+      }));
+    }
+    return [];
+  }, [entityType, instructors, students]);
+
 
   if (entityType === 'department') {
     return (
@@ -128,24 +147,6 @@ function EntitySelector({
     );
   }
 
-  const results: { id: number; label: string; sub?: string }[] = useMemo(() => {
-    if (entityType === 'instructor' && instructors) {
-      return instructors.map(i => ({
-        id: i.id,
-        label: `${i.firstName} ${i.lastName}`,
-        sub: `${i.title} - ${i.departmentName}`,
-      }));
-    }
-    if (entityType === 'student' && students && 'items' in students) {
-      return (students as { items: Array<{ id: number; firstName: string; lastName: string; studentNumber: string; departmentName: string }> }).items.map(s => ({
-        id: s.id,
-        label: `${s.firstName} ${s.lastName}`,
-        sub: `${s.studentNumber} - ${s.departmentName}`,
-      }));
-    }
-    return [];
-  }, [entityType, instructors, students]);
-
   return (
     <div className="relative" ref={wrapperRef}>
       <div className="relative">
@@ -192,7 +193,7 @@ function EntitySelector({
 // ─── Main Form ──────────────────────────────────────────────────
 export default function ExceptionRequestForm({
   constraintId,
-  constraintCode,
+  constraintCode: _constraintCode,
   onClose,
 }: {
   constraintId: number;

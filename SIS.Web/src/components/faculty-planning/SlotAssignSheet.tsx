@@ -39,7 +39,7 @@ interface SectionWithReason {
 
 function classifySection(
   section: FacultyPlanningSection,
-  day: number,
+  _day: number,
 ): SectionWithReason {
   if (section.isPinned) {
     return { section, available: false, reason: 'Sabitlenmiş' };
@@ -104,7 +104,7 @@ export function SlotAssignSheet({
   open,
   onOpenChange,
   day,
-  slotOrder,
+  slotOrder: _slotOrder,
   startTime,
   endTime,
   termId,

@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { cn } from '@/lib/utils';
 import { useAcademicOperationsContext } from '@/hooks/useAcademicOperations';
 import { useAdminFaculties, useAdminDepartmentsByStructure } from '@/hooks/useAdminAcademicStructure';
 import { useTermClosingStatus } from '@/hooks/useTermClosing';

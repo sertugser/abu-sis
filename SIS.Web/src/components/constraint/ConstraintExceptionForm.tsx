@@ -67,6 +67,25 @@ function EntitySelector({
       : { search: '__DISABLED__', pageSize: 0 },
   );
 
+  // Instructor / Student → search input with dropdown
+  const results: { id: number; label: string; sub?: string }[] = useMemo(() => {
+    if (entityType === 'instructor' && instructors) {
+      return instructors.map(i => ({
+        id: i.id,
+        label: `${i.firstName} ${i.lastName}`,
+        sub: `${i.title} - ${i.departmentName}`,
+      }));
+    }
+    if (entityType === 'student' && students && 'items' in students) {
+      return (students as { items: Array<{ id: number; firstName: string; lastName: string; studentNumber: string; departmentName: string }> }).items.map(s => ({
+        id: s.id,
+        label: `${s.firstName} ${s.lastName}`,
+        sub: `${s.studentNumber} - ${s.departmentName}`,
+      }));
+    }
+    return [];
+  }, [entityType, instructors, students]);
+
   // Department → simple Select
   if (entityType === 'department') {
     return (
@@ -130,25 +149,6 @@ function EntitySelector({
       />
     );
   }
-
-  // Instructor / Student → search input with dropdown
-  const results: { id: number; label: string; sub?: string }[] = useMemo(() => {
-    if (entityType === 'instructor' && instructors) {
-      return instructors.map(i => ({
-        id: i.id,
-        label: `${i.firstName} ${i.lastName}`,
-        sub: `${i.title} - ${i.departmentName}`,
-      }));
-    }
-    if (entityType === 'student' && students && 'items' in students) {
-      return (students as { items: Array<{ id: number; firstName: string; lastName: string; studentNumber: string; departmentName: string }> }).items.map(s => ({
-        id: s.id,
-        label: `${s.firstName} ${s.lastName}`,
-        sub: `${s.studentNumber} - ${s.departmentName}`,
-      }));
-    }
-    return [];
-  }, [entityType, instructors, students]);
 
   return (
     <div className="relative" ref={wrapperRef}>
@@ -226,7 +226,7 @@ export default function ConstraintExceptionForm({
   const addMutation = useAddConstraintException();
   const [entityType, setEntityType] = useState<EntityType>('department');
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [selectedLabel, setSelectedLabel] = useState('');
+  const [, setSelectedLabel] = useState('');
   const [isExempt, setIsExempt] = useState(true);
   const [paramOverride, setParamOverride] = useState('');
   const [reason, setReason] = useState('');

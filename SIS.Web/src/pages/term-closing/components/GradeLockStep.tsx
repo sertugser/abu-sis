@@ -41,6 +41,7 @@ export function GradeLockStep({
     } catch { /* feedback below */ }
   };
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- compiler cannot preserve this; memoization is intentional for expensive filter chain
   const filteredSections = useMemo(() => {
     if (!detail?.sections) return [];
     let result = detail.sections;

@@ -14,19 +14,22 @@ namespace SIS.Tests.Application;
 public class CourseOpeningServiceTests
 {
     private const int FacultyId = 1;
+    private const int OtherFacultyId = 2;
     private const int DepartmentId = 1;
     private const int OtherDepartmentId = 2;
+    private const int OtherFacultyDepartmentId = 3;
     private const int TermId = 1;
 
     [Fact]
-    public async Task UpdateSectionAsync_WhenInstructorBelongsToDifferentDepartment_Throws()
+    public async Task UpdateSectionAsync_WhenInstructorBelongsToDifferentFaculty_Throws()
     {
         using var context = CreateContext();
         SeedBaseData(context);
 
         var course = AddCourse(context, 1, "CENG101");
         var section = AddSection(context, 1, course.Id);
-        var foreignInstructor = AddInstructor(context, 2, 1002, OtherDepartmentId);
+        // Instructor belongs to a department in a DIFFERENT faculty — cross-faculty assignment is rejected
+        var foreignInstructor = AddInstructor(context, 2, 1002, OtherFacultyDepartmentId);
         var service = CreateService(context);
 
         var act = () => service.UpdateSectionAsync(new UpdateOpenedSectionRequest
@@ -37,7 +40,7 @@ public class CourseOpeningServiceTests
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*bu bölüme ait değil*");
+            .WithMessage("*bu fakülteye ait değil*");
     }
 
     [Fact]
@@ -228,12 +231,19 @@ public class CourseOpeningServiceTests
 
     private static void SeedBaseData(AppDbContext context)
     {
-        context.Faculties.Add(new Faculty
-        {
-            Id = FacultyId,
-            Name = "Engineering",
-            Code = "ENG"
-        });
+        context.Faculties.AddRange(
+            new Faculty
+            {
+                Id = FacultyId,
+                Name = "Engineering",
+                Code = "ENG"
+            },
+            new Faculty
+            {
+                Id = OtherFacultyId,
+                Name = "Science",
+                Code = "SCI"
+            });
 
         context.Departments.AddRange(
             new Department
@@ -249,6 +259,13 @@ public class CourseOpeningServiceTests
                 FacultyId = FacultyId,
                 Name = "Electrical Engineering",
                 Code = "EEE"
+            },
+            new Department
+            {
+                Id = OtherFacultyDepartmentId,
+                FacultyId = OtherFacultyId,
+                Name = "Mathematics",
+                Code = "MATH"
             });
 
         context.AcademicTerms.Add(new AcademicTerm

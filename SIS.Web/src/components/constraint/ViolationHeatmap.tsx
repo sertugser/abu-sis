@@ -28,7 +28,7 @@ function buildSlotLabels(): string[] {
 
 export default function ViolationHeatmap({ heatmap, isLoading }: Props) {
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
-  const slotLabels = useMemo(buildSlotLabels, []);
+  const slotLabels = useMemo(() => buildSlotLabels(), []);
 
   const aggregated = useMemo(() => {
     if (!heatmap) return null;
