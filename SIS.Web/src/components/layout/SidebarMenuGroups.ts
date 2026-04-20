@@ -1,6 +1,7 @@
 import {
   LayoutGrid,
   BookOpen,
+  FileText,
   User,
   GraduationCap,
   Users,
@@ -19,6 +20,17 @@ export interface MenuGroup {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   children: { to: string; label: string; openInNewTab?: boolean }[];
+}
+
+function createFormManagementGroup(): MenuGroup {
+  return {
+    id: 'form-islemleri',
+    label: 'Form İşlemleri',
+    icon: FileText,
+    children: [
+      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
+    ],
+  };
 }
 
 // ─── STUDENT MENU ───────────────────────────────────────────────
@@ -58,6 +70,14 @@ export const studentMenuGroups: MenuGroup[] = [
     ],
   },
   {
+    id: 'form-islemleri-ogrenci',
+    label: 'Form İşlemleri',
+    icon: FileText,
+    children: [
+      { to: ROUTES.SMART_PLANNING, label: 'Niyet Anketi' },
+    ],
+  },
+  {
     id: 'kullanici',
     label: 'Kullanıcı İşlemleri',
     icon: User,
@@ -88,6 +108,7 @@ export const instructorMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
+      { to: ROUTES.ADVISOR_COURSE_CONSTRAINTS, label: 'Ders Kısıtları' },
     ],
   },
   {
@@ -117,6 +138,7 @@ export const advisorMenuGroups: MenuGroup[] = [
     icon: Users,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Onay Bekleyenler' },
+      { to: ROUTES.ADVISOR_COURSE_CONSTRAINTS, label: 'Ders Kısıtları' },
     ],
   },
   {
@@ -147,7 +169,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     label: 'Ders İşlemleri',
     icon: BookOpen,
     children: [
-      // İş akışı sırasına göre: katalog → müfredat → seçmeli grup → aç → onayla → hoca ata → kopyala → programla → kontrol → rapor → kapat
+      // İş akışı sırasına göre: katalog → müfredat → seçmeli grup → aç → hoca ata → kopyala → programla → kontrol → rapor → kapat
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
@@ -160,6 +182,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -217,6 +240,7 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -268,6 +292,7 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -331,6 +356,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'donem-yonetimi',
     label: 'Dönem Yönetimi',

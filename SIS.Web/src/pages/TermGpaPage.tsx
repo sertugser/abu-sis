@@ -22,16 +22,28 @@ const CHART_PADDING = { top: 20, right: 20, bottom: 80, left: 48 };
 const GRID_VALUES = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
 const REPORT_COLORS = {
   sgpa: {
-    base: '#27457f',
-    latest: '#1b315d',
+    base: '#4f6ea7',
+    latest: '#1d3669',
     surface: 'rgba(39,69,127,0.05)',
     border: 'rgba(39,69,127,0.10)',
+    chip: '#edf4ff',
+    chipText: '#294b86',
+    accent: '#8eb7ff',
+    areaTop: 'rgba(79,110,167,0.07)',
+    areaMid: 'rgba(79,110,167,0.03)',
+    axis: 'rgba(148,163,184,0.24)',
   },
   cgpa: {
-    base: '#1a9b84',
-    latest: '#137564',
+    base: '#63ac9d',
+    latest: '#2c7a6d',
     surface: 'rgba(26,155,132,0.05)',
     border: 'rgba(26,155,132,0.10)',
+    chip: '#ecfbf7',
+    chipText: '#1f7467',
+    accent: '#8be5c4',
+    areaTop: 'rgba(99,172,157,0.07)',
+    areaMid: 'rgba(99,172,157,0.03)',
+    axis: 'rgba(148,163,184,0.24)',
   },
 };
 
@@ -191,16 +203,31 @@ function ReportChartSection({
   metric: 'sgpa' | 'cgpa';
 }) {
   const latestValue = history[history.length - 1]?.[metric] ?? 0;
+  const peakValue = Math.max(...history.map(item => item[metric]));
+  const palette = REPORT_COLORS[legendTone];
 
   return (
-    <Card className="overflow-hidden border border-[#003366]/20 shadow-md">
-      <div className="border-b border-white/10 bg-[#003366] px-5 py-3">
+    <Card className="overflow-hidden border border-slate-200/90 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+      <div
+        className="border-b border-white/10 px-5 py-3.5"
+        style={{
+          backgroundImage: `linear-gradient(135deg, ${palette.latest} 0%, ${palette.base} 100%)`,
+        }}
+      >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <h3 className="font-heading text-sm font-extrabold uppercase tracking-tight text-white">
-            {title}
-          </h3>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+              4.00 üzerinden akademik görünüm
+            </p>
+            <h3 className="font-heading text-sm font-extrabold uppercase tracking-tight text-white">
+              {title}
+            </h3>
+          </div>
           <div className="flex flex-wrap gap-2">
             <LegendBadge label={legendLabel} tone={legendTone} />
+            <Badge variant="secondary" className="gap-1.5 border-white/20 bg-white/10 text-white hover:bg-white/20">
+              Zirve: {peakValue.toFixed(2)}
+            </Badge>
             <Badge variant="secondary" className="gap-1.5 border-white/20 bg-white/10 text-white hover:bg-white/20">
               <TrendingUp className="h-3.5 w-3.5" />
               Son değer: {latestValue.toFixed(2)}
@@ -210,10 +237,10 @@ function ReportChartSection({
       </div>
       <CardContent className="p-5">
         <div
-          className="rounded-xl border px-4 py-4 md:px-6 md:py-5"
+          className="rounded-[22px] border px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] md:px-6 md:py-5"
           style={{
-            backgroundColor: REPORT_COLORS[legendTone].surface,
-            borderColor: REPORT_COLORS[legendTone].border,
+            backgroundImage: `radial-gradient(circle at top right, ${palette.areaTop}, transparent 28%), linear-gradient(180deg, #ffffff 0%, ${palette.areaMid} 100%)`,
+            borderColor: palette.border,
           }}
         >
           <TermGpaBarChart history={history} metric={metric} ariaLabel={`${title} sütun grafiği`} />
@@ -224,7 +251,7 @@ function ReportChartSection({
 }
 
 function LegendBadge({ label, tone }: { label: string; tone: 'sgpa' | 'cgpa' }) {
-  const dotColor = tone === 'sgpa' ? '#60a5fa' : '#34d399';
+  const dotColor = tone === 'sgpa' ? '#8eb7ff' : '#8be5c4';
 
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold text-white shadow-sm">
@@ -253,20 +280,75 @@ function TermGpaBarChart({
   const barWidth = Math.min(64, Math.max(32, columnWidth * 0.55));
   const palette = REPORT_COLORS[metric];
   const labelY = CHART_HEIGHT - CHART_PADDING.bottom + 16;
+  const thresholdY = CHART_PADDING.top + ((4 - 2) / 4) * innerHeight;
 
   const getY = (val: number) => CHART_PADDING.top + ((4 - val) / 4) * innerHeight;
 
   return (
     <svg viewBox={`0 0 900 ${CHART_HEIGHT}`} width="900" height={CHART_HEIGHT} className="w-full h-auto" role="img" aria-label={ariaLabel}>
+      <defs>
+        <linearGradient id={`${metric}-bar-gradient`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={palette.base} />
+          <stop offset="100%" stopColor={palette.latest} />
+        </linearGradient>
+        <filter id={`${metric}-bar-shadow`} x="-30%" y="-30%" width="160%" height="180%">
+          <feDropShadow dx="0" dy="8" stdDeviation="10" floodColor={palette.latest} floodOpacity="0.18" />
+        </filter>
+      </defs>
+
+      <rect
+        x={CHART_PADDING.left}
+        y={CHART_PADDING.top}
+        width={innerWidth}
+        height={getY(3) - CHART_PADDING.top}
+        rx={18}
+        fill={palette.areaTop}
+      />
+      <rect
+        x={CHART_PADDING.left}
+        y={getY(3)}
+        width={innerWidth}
+        height={getY(2) - getY(3)}
+        fill={palette.areaMid}
+      />
+      <rect
+        x={CHART_PADDING.left}
+        y={getY(2)}
+        width={innerWidth}
+        height={CHART_PADDING.top + innerHeight - getY(2)}
+        rx={18}
+        fill="rgba(255,255,255,0.55)"
+      />
+
       {GRID_VALUES.map(value => {
         const y = getY(value);
         return (
           <g key={value}>
-            <line x1={CHART_PADDING.left} x2={900 - CHART_PADDING.right} y1={y} y2={y} stroke="rgba(148,163,184,0.18)" />
+            <line x1={CHART_PADDING.left} x2={900 - CHART_PADDING.right} y1={y} y2={y} stroke={palette.axis} strokeDasharray="4 6" />
             <text x={CHART_PADDING.left - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#94a3b8">{value.toFixed(1)}</text>
           </g>
         );
       })}
+
+      <line
+        x1={CHART_PADDING.left}
+        x2={900 - CHART_PADDING.right}
+        y1={thresholdY}
+        y2={thresholdY}
+        stroke="rgba(245,158,11,0.75)"
+        strokeWidth="1.5"
+        strokeDasharray="7 7"
+      />
+      <text
+        x={900 - CHART_PADDING.right}
+        y={thresholdY - 8}
+        textAnchor="end"
+        fontSize="10"
+        fontWeight="700"
+        fill="#b45309"
+      >
+        2.00 eşik
+      </text>
 
       {history.map((term, index) => {
         const value = metric === 'sgpa' ? term.sgpa : term.cgpa;
@@ -275,34 +357,69 @@ function TermGpaBarChart({
         const y = getY(value);
         const barHeight = innerHeight - ((4 - value) / 4) * innerHeight;
         const isLast = index === history.length - 1;
+        const valueLabel = value > 0 ? formatDecimal(value) : '0,00';
+        const hasBar = value > 0;
+        const pillWidth = 46;
+        const pillHeight = 22;
+        const pillY = Math.max(CHART_PADDING.top + 6, y - 30);
 
         return (
           <g key={term.termId}>
-            <rect
-              x={x}
-              y={y}
-              width={barWidth}
-              height={Math.max(barHeight, 0)}
-              rx={5}
-              fill={isLast ? palette.latest : palette.base}
-              fillOpacity={isLast ? 0.96 : 0.78}
-            />
-            {barHeight > 28 && (
-              <text x={cx} y={y + barHeight / 2 + 5} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">
-                {value.toFixed(2)}
-              </text>
+            {hasBar ? (
+              <>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={Math.max(barHeight, 0)}
+                  rx={8}
+                  fill={isLast ? palette.latest : `url(#${metric}-bar-gradient)`}
+                  fillOpacity={isLast ? 0.98 : 0.9}
+                  filter={`url(#${metric}-bar-shadow)`}
+                />
+                <rect
+                  x={x + 4}
+                  y={y + 5}
+                  width={Math.max(barWidth - 8, 0)}
+                  height={6}
+                  rx={3}
+                  fill="rgba(255,255,255,0.18)"
+                />
+                <rect
+                  x={cx - pillWidth / 2}
+                  y={pillY}
+                  width={pillWidth}
+                  height={pillHeight}
+                  rx={11}
+                  fill={palette.chip}
+                  stroke={palette.border}
+                />
+                <text x={cx} y={pillY + 14} textAnchor="middle" fontSize="11" fontWeight="700" fill={palette.chipText}>
+                  {valueLabel}
+                </text>
+              </>
+            ) : (
+              <circle cx={cx} cy={CHART_PADDING.top + innerHeight} r={5} fill="rgba(148,163,184,0.18)" />
+            )}
+
+            {isLast && hasBar && (
+              <circle cx={cx} cy={y} r={6} fill={palette.accent} stroke="#fff" strokeWidth="2" />
             )}
             <text x={cx} y={labelY} textAnchor="middle" fontSize="11" fontWeight="600" fill="#475569">
               {String(term.year).slice(-2)}-{String(term.year + 1).slice(-2)}
             </text>
             <text x={cx} y={labelY + 14} textAnchor="middle" fontSize="10" fill="#94a3b8">
-              {term.semester === 'Fall' ? 'Güz' : term.semester === 'Spring' ? 'Bahar' : 'Yaz'}
+              {formatSemester(term.semester)}
             </text>
           </g>
         );
       })}
     </svg>
   );
+}
+
+function formatSemester(semester: string) {
+  return semester === 'Fall' ? 'Güz' : semester === 'Spring' ? 'Bahar' : 'Yaz';
 }
 
 function formatTermName(termName: string) {

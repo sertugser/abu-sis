@@ -15,6 +15,7 @@ export interface ValidationError {
 export interface ValidationResultDto {
   isValid: boolean;
   errors: ValidationError[];
+  warnings: ValidationError[];
 }
 
 export interface RegistrationItemDto {

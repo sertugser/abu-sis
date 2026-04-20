@@ -14,14 +14,14 @@ export default function AppLayout() {
       />
 
       <div
-        className="flex flex-1 flex-col"
+        className="flex min-w-0 flex-1 flex-col"
         style={{
           paddingLeft: isSidebarCollapsed ? '72px' : '260px',
           transition: 'padding-left 200ms cubic-bezier(0.25, 0.1, 0.25, 1)',
         }}
       >
         <TopBar />
-        <main className="flex-1 flex flex-col px-6 py-5 lg:px-8">
+        <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden px-6 py-5 lg:px-8">
           <Outlet />
         </main>
       </div>

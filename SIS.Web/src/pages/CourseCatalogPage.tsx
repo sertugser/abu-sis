@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +20,7 @@ import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { formatDate } from '../lib/utils';
+import { ROUTES } from '../lib/constants';
 import type { ValidationError } from '../types/registration';
 import {
   AlertCircle, AlertTriangle, BookX, Trash2, Send, CheckCircle2,
@@ -49,6 +51,7 @@ export default function CourseCatalogPage() {
   const dropCourse = useDropCourse();
   const submitRegistration = useSubmitRegistration();
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [validationWarnings, setValidationWarnings] = useState<ValidationError[]>([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all');
   const classYear = student ? Math.min(Math.floor(student.completedSemesters / 2) + 1, 4) : 1;
@@ -112,19 +115,23 @@ export default function CourseCatalogPage() {
 
   const handleSubmit = () => {
     setValidationErrors([]);
+    setValidationWarnings([]);
     setSubmitSuccess(false);
     const sectionIds = planItems.map(r => r.courseSectionId);
     submitRegistration.mutate(sectionIds, {
       onSuccess: (data) => {
         if (data.validationResult && !data.validationResult.isValid) {
           setValidationErrors(data.validationResult.errors);
+          setValidationWarnings(data.validationResult.warnings ?? []);
         } else if (data.success) {
           setSubmitSuccess(true);
           setValidationErrors([]);
+          setValidationWarnings(data.validationResult?.warnings ?? []);
         }
       },
-      onError: () => {
-        setValidationErrors([{ rule: 'System', message: 'Kayıt sırasında bir hata oluştu.' }]);
+      onError: (error) => {
+        setValidationWarnings([]);
+        setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Kayit sirasinda bir hata olustu.' }]);
       },
     });
   };
@@ -278,6 +285,27 @@ export default function CourseCatalogPage() {
         </Card>
       )}
 
+      <Card className="border-dashed border-primary/30 bg-gradient-to-r from-primary/5 via-background to-accent/10">
+        <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <GraduationCap className="h-3.5 w-3.5" />
+              Yeni
+            </div>
+            <p className="text-base font-semibold text-foreground">Akilli ders onerileri ve niyet anketi acildi</p>
+            <p className="text-sm text-muted-foreground">
+              Bu donem icin sistemin onerilerini gorup almayi dusundugun dersleri anketten isaretleyebilirsin.
+            </p>
+          </div>
+          <Button asChild className="gap-2 rounded-xl bg-[#003366] hover:bg-[#002244]">
+            <Link to={ROUTES.SMART_PLANNING}>
+              <GraduationCap className="h-4 w-4" />
+              Akilli Planlama Sayfasina Git
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* ── Uyarılar ── */}
       {submitSuccess && (
         <Alert variant="success">
@@ -285,7 +313,9 @@ export default function CourseCatalogPage() {
           <AlertDescription>Kayıt başarıyla kesinleştirildi!</AlertDescription>
         </Alert>
       )}
-      {validationErrors.length > 0 && <ValidationErrors errors={validationErrors} />}
+      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+        <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
+      )}
       {!term?.isRegistrationOpen && !term?.isAddDropOpen && (
         <Alert variant="warning">
           <AlertTriangle className="h-4 w-4" />
@@ -295,7 +325,7 @@ export default function CourseCatalogPage() {
       {addToPlan.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Plana eklenirken hata oluştu. Lütfen tekrar deneyin.</AlertDescription>
+          <AlertDescription>{addToPlan.error instanceof Error ? addToPlan.error.message : 'Plana eklenirken hata oluştu. Lütfen tekrar deneyin.'}</AlertDescription>
         </Alert>
       )}
       {rejectedItems.length > 0 && (

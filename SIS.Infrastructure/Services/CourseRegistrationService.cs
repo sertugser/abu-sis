@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Common.Services;
@@ -12,12 +13,18 @@ public class CourseRegistrationService : ICourseRegistrationService
     private readonly AppDbContext _context;
     private readonly IRegistrationValidationService _validationService;
     private readonly ISystemConfigProvider _config;
+    private readonly IAdvisorConstraintService? _advisorConstraintService;
 
-    public CourseRegistrationService(AppDbContext context, IRegistrationValidationService validationService, ISystemConfigProvider? config = null)
+    public CourseRegistrationService(
+        AppDbContext context,
+        IRegistrationValidationService validationService,
+        ISystemConfigProvider? config = null,
+        IAdvisorConstraintService? advisorConstraintService = null)
     {
         _context = context;
         _validationService = validationService;
         _config = config ?? new NullSystemConfigProvider();
+        _advisorConstraintService = advisorConstraintService;
     }
 
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
@@ -70,6 +77,25 @@ public class CourseRegistrationService : ICourseRegistrationService
                     new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı dolu ({section.EnrolledCount}/{section.Capacity})." }
                 }
             };
+            return response;
+        }
+
+        var advisorConstraintResult = await EvaluateAdvisorConstraintsAsync(studentId, new[]
+        {
+            new AdvisorConstraintSectionInfo
+            {
+                CourseSectionId = section.Id,
+                CourseId = section.CourseId,
+                TermId = section.TermId,
+                CourseCode = section.Course.Code,
+                CourseName = section.Course.Name
+            }
+        });
+
+        if (!advisorConstraintResult.IsValid)
+        {
+            response.Success = false;
+            response.ValidationResult = advisorConstraintResult;
             return response;
         }
 
@@ -249,6 +275,14 @@ public class CourseRegistrationService : ICourseRegistrationService
                 Status = registration.Status.ToString()
             }
         };
+        if (advisorConstraintResult.Warnings.Any())
+        {
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = true,
+                Warnings = advisorConstraintResult.Warnings
+            };
+        }
 
         return response;
     }
@@ -266,6 +300,31 @@ public class CourseRegistrationService : ICourseRegistrationService
             response.ValidationResult = validationResult;
             return response;
         }
+
+        var submittedSections = await _context.CourseSections
+            .Include(cs => cs.Course)
+            .Where(cs => dto.CourseSectionIds.Contains(cs.Id))
+            .ToListAsync();
+
+        var advisorConstraintResult = await EvaluateAdvisorConstraintsAsync(
+            studentId,
+            submittedSections.Select(section => new AdvisorConstraintSectionInfo
+            {
+                CourseSectionId = section.Id,
+                CourseId = section.CourseId,
+                TermId = section.TermId,
+                CourseCode = section.Course.Code,
+                CourseName = section.Course.Name
+            }));
+
+        if (!advisorConstraintResult.IsValid)
+        {
+            response.Success = false;
+            response.ValidationResult = advisorConstraintResult;
+            return response;
+        }
+
+        validationResult.Warnings.AddRange(advisorConstraintResult.Warnings);
 
         // Check if student is scholarship (FR-52: skip payment confirmation)
         var student = await _context.Students.FindAsync(studentId);
@@ -476,6 +535,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                         : string.Empty,
                 Schedule = schedulesBySectionId.GetValueOrDefault(r.CourseSectionId, string.Empty),
                 Status = r.Status.ToString(),
+                AdvisorNote = r.AdvisorNote,
                 IsCompulsory = isCompulsory,
                 SuggestedSemester = semester,
                 IsRepeated = r.IsRepeated,
@@ -1374,6 +1434,63 @@ public class CourseRegistrationService : ICourseRegistrationService
             return 0;
 
         return (int)Math.Ceiling(totalHours * limitPercent / 100m);
+    }
+
+    private async Task<ValidationResultDto> EvaluateAdvisorConstraintsAsync(
+        int studentId,
+        IEnumerable<AdvisorConstraintSectionInfo> sections)
+    {
+        var result = new ValidationResultDto { IsValid = true };
+
+        if (_advisorConstraintService == null)
+            return result;
+
+        foreach (var section in sections
+            .GroupBy(s => new { s.CourseSectionId, s.CourseId, s.TermId })
+            .Select(g => g.First()))
+        {
+            var effectiveConstraint = await _advisorConstraintService.GetEffectiveConstraintAsync(
+                studentId,
+                section.CourseId,
+                section.TermId);
+
+            if (effectiveConstraint == null)
+                continue;
+
+            if (effectiveConstraint.ConstraintType == SIS.Domain.Enums.AdvisorConstraintType.Block)
+            {
+                result.IsValid = false;
+                result.Errors.Add(new ValidationError
+                {
+                    Rule = "AdvisorConstraintBlock",
+                    Message = string.IsNullOrWhiteSpace(effectiveConstraint.Note)
+                        ? $"Danisman kisiti nedeniyle '{section.CourseCode} {section.CourseName}' dersi secilemez."
+                        : $"Danisman kisiti nedeniyle '{section.CourseCode} {section.CourseName}' dersi secilemez: {effectiveConstraint.Note}",
+                    CourseSectionId = section.CourseSectionId
+                });
+                continue;
+            }
+
+            result.Warnings.Add(new ValidationError
+            {
+                Rule = "AdvisorConstraintWarning",
+                Message = string.IsNullOrWhiteSpace(effectiveConstraint.Note)
+                    ? $"Danismaniniz '{section.CourseCode} {section.CourseName}' dersini almanizi onermemektedir."
+                    : $"Danismaniniz '{section.CourseCode} {section.CourseName}' dersi icin uyari koydu: {effectiveConstraint.Note}",
+                CourseSectionId = section.CourseSectionId
+            });
+        }
+
+        return result;
+    }
+
+    private sealed class AdvisorConstraintSectionInfo
+    {
+        public int CourseSectionId { get; init; }
+        public int CourseId { get; init; }
+        public int TermId { get; init; }
+        public string CourseCode { get; init; } = string.Empty;
+        public string CourseName { get; init; } = string.Empty;
     }
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
