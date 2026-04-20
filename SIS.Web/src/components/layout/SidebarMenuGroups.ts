@@ -1,7 +1,6 @@
 import {
   LayoutGrid,
   BookOpen,
-  FileText,
   User,
   GraduationCap,
   Users,
@@ -20,17 +19,6 @@ export interface MenuGroup {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   children: { to: string; label: string; openInNewTab?: boolean }[];
-}
-
-function createFormManagementGroup(): MenuGroup {
-  return {
-    id: 'form-islemleri',
-    label: 'Form İşlemleri',
-    icon: FileText,
-    children: [
-      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
-    ],
-  };
 }
 
 // ─── STUDENT MENU ───────────────────────────────────────────────
@@ -62,19 +50,12 @@ export const studentMenuGroups: MenuGroup[] = [
     ],
   },
   {
-    id: 'degerlendirme',
-    label: 'Değerlendirme',
+    id: 'anketler',
+    label: 'Anketler',
     icon: ClipboardCheck,
     children: [
-      { to: ROUTES.COURSE_EVALUATION, label: 'Ders Değerlendirme' },
-    ],
-  },
-  {
-    id: 'form-islemleri-ogrenci',
-    label: 'Form İşlemleri',
-    icon: FileText,
-    children: [
       { to: ROUTES.SMART_PLANNING, label: 'Niyet Anketi' },
+      { to: ROUTES.COURSE_EVALUATION, label: 'Ders Değerlendirme' },
     ],
   },
   {
@@ -112,8 +93,8 @@ export const instructorMenuGroups: MenuGroup[] = [
     ],
   },
   {
-    id: 'degerlendirme',
-    label: 'Değerlendirme',
+    id: 'anketler',
+    label: 'Anketler',
     icon: ClipboardCheck,
     children: [
       { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
@@ -168,21 +149,33 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     id: 'ders-islemleri',
     label: 'Ders İşlemleri',
     icon: BookOpen,
+    // Workflow sıralı: Katalog → Açma → Programlama → Dönem İçi + Sonu
     children: [
-      // İş akışı sırasına göre: katalog → müfredat → seçmeli grup → aç → hoca ata → kopyala → programla → kontrol → rapor → kapat
+      // Katalog
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
+      // Açma
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
+      // Programlama
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
+      // Dönem içi + kapanış
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
-  createFormManagementGroup(),
+  {
+    id: 'anketler',
+    label: 'Anketler',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -199,7 +192,6 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
-      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],
   },
   {
@@ -227,20 +219,32 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     id: 'ders-islemleri',
     label: 'Ders İşlemleri',
     icon: BookOpen,
+    // Workflow sıralı: Katalog → Açma → Programlama → Dönem İçi
     children: [
+      // Katalog
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
+      // Açma
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
+      // Programlama
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
+      // Dönem içi
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
     ],
   },
-  createFormManagementGroup(),
+  {
+    id: 'anketler',
+    label: 'Anketler',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
+    ],
+  },
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -276,23 +280,36 @@ export const deanMenuGroups: MenuGroup[] = [
     id: 'ders-islemleri',
     label: 'Ders İşlemleri',
     icon: BookOpen,
+    // Workflow sıralı: Katalog → Açma → Programlama → Dönem İçi + Sonu
     children: [
+      // Katalog
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
+      // Açma
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
       { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
       { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
+      // Programlama (önce kısıt, sonra oluşturma, sonra onay)
+      { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
-      { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
       { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
+      // Dönem içi + kapanış
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
-  createFormManagementGroup(),
+  {
+    id: 'anketler',
+    label: 'Anketler',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -309,7 +326,6 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
-      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],
   },
   {
@@ -324,6 +340,8 @@ export const deanMenuGroups: MenuGroup[] = [
 ];
 
 // ─── SYSTEM ADMINISTRATOR MENU ──────────────────────────────────
+// Gruplar workflow sıralı: Sık Kullanılanlar → Dönem → Ders İşlemleri → Anketler →
+//                         Kaynaklar → Kullanıcılar → Akademik Yapı → Duyuru → Sistem
 export const systemAdminMenuGroups: MenuGroup[] = [
   {
     id: 'sik-kullanilanlar',
@@ -333,30 +351,9 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
-      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Olusturucu' },
+      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
     ],
   },
-  {
-    id: 'ders-islemleri',
-    label: 'Ders İşlemleri',
-    icon: BookOpen,
-    children: [
-      { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
-      { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
-      { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
-      { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
-      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
-      { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
-      { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
-      { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
-      { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
-      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
-      { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
-      { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
-    ],
-  },
-  createFormManagementGroup(),
   {
     id: 'donem-yonetimi',
     label: 'Dönem Yönetimi',
@@ -364,7 +361,42 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
-      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Olusturucu' },
+      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
+    ],
+  },
+  {
+    id: 'ders-islemleri',
+    label: 'Ders İşlemleri',
+    icon: BookOpen,
+    // İçerik iş akışı sırasına göre: Katalog → Açma → Programlama → Dönem İçi + Sonu
+    children: [
+      // Katalog (altyapı, nadiren değişir)
+      { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
+      { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
+      { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
+      // Ders açma (dönem başı)
+      { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
+      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
+      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
+      // Programlama (ders açıldıktan sonra — önce kısıt, sonra oluşturma, sonra onay)
+      { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
+      { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
+      { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
+      { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
+      // Dönem içi + kapanış
+      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
+      { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
+      { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
+    ],
+  },
+  {
+    id: 'anketler',
+    label: 'Anketler',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
+      { to: ROUTES.EVALUATION_PERIOD_ADMIN, label: 'Değerlendirme Dönemi Yönetimi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],
   },
   {
@@ -396,30 +428,21 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     ],
   },
   {
-    id: 'sistem',
-    label: 'Sistem',
-    icon: Shield,
-    children: [
-      { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
-      { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
-    ],
-  },
-  {
-    id: 'degerlendirme',
-    label: 'Değerlendirme',
-    icon: ClipboardCheck,
-    children: [
-      { to: ROUTES.EVALUATION_PERIOD_ADMIN, label: 'Değerlendirme Dönemi Yönetimi' },
-      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
-    ],
-  },
-  {
     id: 'duyuru-yonetimi',
     label: 'Duyuru Yönetimi',
     icon: Megaphone,
     children: [
       { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
       { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
+    ],
+  },
+  {
+    id: 'sistem',
+    label: 'Sistem',
+    icon: Shield,
+    children: [
+      { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
+      { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
     ],
   },
 ];
