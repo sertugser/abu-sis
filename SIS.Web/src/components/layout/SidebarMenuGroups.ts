@@ -76,9 +76,6 @@ export const instructorMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
-      { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
-      { to: ROUTES.ANNOUNCEMENTS, label: 'Duyurular' },
     ],
   },
   {
@@ -110,7 +107,6 @@ export const advisorMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
     ],
   },
   {
@@ -142,7 +138,6 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
     ],
   },
   {
@@ -272,8 +267,6 @@ export const deanMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
-      { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
     ],
   },
   {
@@ -349,9 +342,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     icon: LayoutGrid,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
-      { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
-      { to: '/akademik-takvim', label: 'Akademik Takvim' },
-      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
     ],
   },
   {

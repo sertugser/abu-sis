@@ -2,6 +2,7 @@ import { useActiveTerm } from '../../hooks/useActiveTerm';
 import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CircleDot } from 'lucide-react';
+import RoleSwitcher from './RoleSwitcher';
 
 import {
   studentMenuGroups,
@@ -60,6 +61,8 @@ export default function TopBar() {
       </div>
 
       <div className="flex-1" />
+
+      <RoleSwitcher />
 
       {term && (
         <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white/80 px-3 py-2 shadow-sm">

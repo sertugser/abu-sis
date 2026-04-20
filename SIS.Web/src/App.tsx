@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
+import { ActiveRoleProvider } from './context/ActiveRoleContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
@@ -61,8 +62,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider delayDuration={300}>
-          <BrowserRouter>
+        <ActiveRoleProvider>
+          <TooltipProvider delayDuration={300}>
+            <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route element={<ProtectedRoute />}>
@@ -145,8 +147,9 @@ export default function App() {
                 </Route>
               </Route>
             </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ActiveRoleProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useActiveRole } from '../../context/ActiveRoleContext';
+import { getRoleDisplayLabel } from '../../lib/roles';
 import {
   ChevronRight,
   LogOut,
@@ -32,12 +34,30 @@ function openInNewTab(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-function findActiveGroup(pathname: string, menuGroups: MenuGroup[]): string | null {
-  for (const group of menuGroups) {
-    if (group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)))) {
-      return group.id;
-    }
+function resolveActiveGroup(
+  pathname: string,
+  menuGroups: MenuGroup[],
+  currentGroupId: string | null,
+): string | null {
+  const matches = (group: MenuGroup) =>
+    group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)));
+
+  // 1) Kullanici niyetine saygı: su an acik olan grup yeni yolu da iceriyorsa,
+  //    sidebar'da o grup acik kalsin. ("Sik Kullanilanlar"dan Derslerim'e tiklarsan
+  //    favoriler acik kalir; "Ders Islemleri"nden tiklarsan orasi acik kalir.)
+  if (currentGroupId) {
+    const current = menuGroups.find(g => g.id === currentGroupId);
+    if (current && matches(current)) return currentGroupId;
   }
+
+  // 2) Canonical (favori olmayan) ev grubu — URL bar'dan gelindiyse varsayilan.
+  const canonical = menuGroups.find(g => g.id !== 'sik-kullanilanlar' && matches(g));
+  if (canonical) return canonical.id;
+
+  // 3) Son care: sadece favorilerde olan yollar (ör. Ana Sayfa).
+  const favorites = menuGroups.find(g => g.id === 'sik-kullanilanlar' && matches(g));
+  if (favorites) return favorites.id;
+
   return menuGroups[0]?.id ?? null;
 }
 
@@ -84,18 +104,9 @@ function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
   return allGroups.length > 0 ? allGroups : studentMenuGroups;
 }
 
-function getRoleLabel(roles: string[]): string {
-  const labels: string[] = [];
-  if (roles.includes('SystemAdministrator')) labels.push('Yönetici');
-  if (roles.includes('Dean')) labels.push('Dekan');
-  if (roles.includes('DepartmentManager')) labels.push('Bölüm Başkanı');
-  if (roles.includes('AdministrativeStaff')) labels.push('İdari Personel');
-  if (roles.includes('AcademicAdvisor')) labels.push('Danışman');
-  if (roles.includes('Instructor')) labels.push('Öğretim Üyesi');
-  if (roles.includes('Student')) labels.push('Öğrenci');
-
-  if (labels.length === 0) return 'Öğrenci Bilgi Sistemi';
-  return labels.join(' / ') + ' Paneli';
+function getActiveRoleLabel(activeRole: string | null): string {
+  if (!activeRole) return 'Öğrenci Bilgi Sistemi';
+  return `${getRoleDisplayLabel(activeRole)} Paneli`;
 }
 
 const EXPANDED_W = 260;
@@ -109,10 +120,16 @@ interface SidebarProps {
 
 export default function Sidebar({ isCollapsed = false, onToggleSidebar }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { activeRole } = useActiveRole();
   const location = useLocation();
 
-  const roles = user?.roles ?? [];
-  const rawMenuGroups = useMemo(() => getMenuGroupsForRole(roles), [roles]);
+  // Sidebar artık sadece aktif rolün menüsünü gösterir (multi-rol için switcher TopBar'da).
+  // Active rol henüz resolve edilmediyse user.roles ilk elemanını kullan — hydration flash önler.
+  const effectiveRole = activeRole ?? user?.roles?.[0] ?? null;
+  const rawMenuGroups = useMemo(
+    () => getMenuGroupsForRole(effectiveRole ? [effectiveRole] : []),
+    [effectiveRole],
+  );
   const { favorites, hasCustomized, save: saveFavorites, MAX } = useFavorites();
   const [favoritesOpen, setFavoritesOpen] = useState(false);
 
@@ -136,19 +153,23 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   }, [rawMenuGroups, favorites, hasCustomized]);
 
   const [prevPathname, setPrevPathname] = useState(location.pathname);
-  const [openGroup, setOpenGroup] = useState<string | null>(() => findActiveGroup(location.pathname, menuGroups));
+  const [prevRole, setPrevRole] = useState<string | null>(effectiveRole);
+  const [openGroup, setOpenGroup] = useState<string | null>(() => resolveActiveGroup(location.pathname, menuGroups, null));
   const [search, setSearch] = useState('');
-
-  // Sync openGroup when location changes (setState during render — React-approved derived state pattern)
-  if (prevPathname !== location.pathname) {
-    setPrevPathname(location.pathname);
-    const active = findActiveGroup(location.pathname, menuGroups);
-    if (active) setOpenGroup(active);
-  }
-
   const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
   const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const groupBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // Sync openGroup when location OR active role changes (setState during render — React-approved derived state pattern).
+  // Rol değişirken mevcut grup geçerli olmayabilir — o yüzden currentGroupId'yi sifirla.
+  if (prevPathname !== location.pathname || prevRole !== effectiveRole) {
+    const roleChanged = prevRole !== effectiveRole;
+    setPrevPathname(location.pathname);
+    setPrevRole(effectiveRole);
+    const active = resolveActiveGroup(location.pathname, menuGroups, roleChanged ? null : openGroup);
+    setOpenGroup(active);
+    setFlyoutGroup(null);
+  }
 
   const toggleGroup = (id: string) => {
     if (isCollapsed) {
@@ -244,7 +265,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-10 px-5 pt-3 pb-1 opacity-100'
         )}>
           <p className="text-[11px] font-semibold text-primary tracking-[0.08em] whitespace-nowrap">
-            {getRoleLabel(roles).toLocaleUpperCase('tr-TR')}
+            {getActiveRoleLabel(effectiveRole).toLocaleUpperCase('tr-TR')}
           </p>
         </div>
 
