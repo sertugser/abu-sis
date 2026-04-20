@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -8,9 +8,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IMPLEMENTED_ROUTES } from '../../lib/constants';
+import { useFavorites } from '../../hooks/useFavorites';
+import { FavoritesDialog } from './FavoritesDialog';
 import logo from '/logo.png';
 import {
   studentMenuGroups,
@@ -22,6 +25,8 @@ import {
   systemAdminMenuGroups,
 } from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
+
+const HOME_ROUTE = '/';
 
 function openInNewTab(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
@@ -48,41 +53,34 @@ function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
     ['Student', studentMenuGroups],
   ];
 
-  const allGroups: MenuGroup[] = [];
-  const seenGroupIds = new Set<string>();
-  const seenRoutes = new Set<string>();
+  // Multi-rol kullanıcılar için: aynı id'li grupları birleştir.
+  // Aynı route farklı gruplarda görünebilir (ör. Sık Kullanılanlar + kendi kategorisi)
+  // — dedup yalnızca TEK bir grup içinde yapılır.
+  const groupsById = new Map<string, MenuGroup>();
+  const orderedIds: string[] = [];
 
   for (const [role, menus] of roleMenuMap) {
     if (!roles.includes(role)) continue;
 
     for (const group of menus) {
-      if (seenGroupIds.has(group.id)) {
-        // Aynı id'li grup zaten var — children'ları birleştir
-        const existing = allGroups.find(g => g.id === group.id);
-        if (existing) {
-          for (const child of group.children) {
-            if (!seenRoutes.has(child.to)) {
-              existing.children.push(child);
-              seenRoutes.add(child.to);
-            }
-          }
-        }
-      } else {
-        // Yeni grup — duplikat route'ları filtrele
-        const filteredChildren = group.children.filter(child => {
-          if (seenRoutes.has(child.to)) return false;
-          seenRoutes.add(child.to);
-          return true;
+      const existing = groupsById.get(group.id);
+      if (existing) {
+        // Grup merge — sadece bu grup içinde route dedup
+        const existingRoutes = new Set(existing.children.map(c => c.to));
+        const additions = group.children.filter(c => !existingRoutes.has(c.to));
+        groupsById.set(group.id, {
+          ...existing,
+          children: [...existing.children, ...additions],
         });
-
-        if (filteredChildren.length > 0) {
-          allGroups.push({ ...group, children: [...filteredChildren] });
-          seenGroupIds.add(group.id);
-        }
+      } else {
+        // Yeni grup — children zaten rolün kendi tanımında; mutation'a karşı shallow copy
+        groupsById.set(group.id, { ...group, children: [...group.children] });
+        orderedIds.push(group.id);
       }
     }
   }
 
+  const allGroups = orderedIds.map(id => groupsById.get(id)!);
   return allGroups.length > 0 ? allGroups : studentMenuGroups;
 }
 
@@ -114,7 +112,28 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   const location = useLocation();
 
   const roles = user?.roles ?? [];
-  const menuGroups = getMenuGroupsForRole(roles);
+  const rawMenuGroups = useMemo(() => getMenuGroupsForRole(roles), [roles]);
+  const { favorites, hasCustomized, save: saveFavorites, MAX } = useFavorites();
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+
+  // Apply user's favorite pins to the Sık Kullanılanlar group (if customized)
+  const menuGroups = useMemo<MenuGroup[]>(() => {
+    if (!hasCustomized) return rawMenuGroups;
+    const lookup = new Map<string, MenuGroup['children'][number]>();
+    for (const group of rawMenuGroups) {
+      if (group.id === 'sik-kullanilanlar') continue;
+      for (const child of group.children) lookup.set(child.to, child);
+    }
+    return rawMenuGroups.map(group => {
+      if (group.id !== 'sik-kullanilanlar') return group;
+      const anaSayfa = group.children.find(c => c.to === HOME_ROUTE);
+      const pins = (favorites ?? [])
+        .map(route => lookup.get(route))
+        .filter((c): c is MenuGroup['children'][number] => c !== undefined);
+      const children = anaSayfa ? [anaSayfa, ...pins] : pins;
+      return { ...group, children };
+    });
+  }, [rawMenuGroups, favorites, hasCustomized]);
 
   const [prevPathname, setPrevPathname] = useState(location.pathname);
   const [openGroup, setOpenGroup] = useState<string | null>(() => findActiveGroup(location.pathname, menuGroups));
@@ -386,6 +405,16 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                             </NavLink>
                           );
                         })}
+                        {group.id === 'sik-kullanilanlar' && (
+                          <button
+                            type="button"
+                            onClick={() => setFavoritesOpen(true)}
+                            className="w-full flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] text-muted-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                            Sık Kullanılanları Düzenle
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -474,11 +503,33 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                   </NavLink>
                 );
               })}
+              {group.id === 'sik-kullanilanlar' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFlyoutGroup(null);
+                    setFavoritesOpen(true);
+                  }}
+                  className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-muted-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Sık Kullanılanları Düzenle
+                </button>
+              )}
             </div>
           </div>,
           document.body,
         );
       })()}
+
+      <FavoritesDialog
+        open={favoritesOpen}
+        onOpenChange={setFavoritesOpen}
+        menuGroups={rawMenuGroups}
+        currentFavorites={favorites ?? []}
+        maxFavorites={MAX}
+        onSave={saveFavorites}
+      />
     </>
   );
 }
