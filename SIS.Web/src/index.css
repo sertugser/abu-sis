@@ -125,6 +125,66 @@
   50%      { opacity: 0.6; }
 }
 
+@keyframes magic-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes magic-glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px oklch(0.55 0.12 250 / 0.3), 0 0 24px oklch(0.55 0.12 250 / 0.1); }
+  50%      { box-shadow: 0 0 18px oklch(0.55 0.12 250 / 0.5), 0 0 36px oklch(0.55 0.12 250 / 0.2); }
+}
+
+/* ── Auto-Schedule Magic Button ── */
+.btn-magic-schedule {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #003366 0%, #1a4d8c 50%, #003366 100%) !important;
+  box-shadow: 0 0 12px oklch(0.55 0.12 250 / 0.3), 0 2px 8px oklch(0.2 0.05 260 / 0.3);
+  animation: magic-glow-pulse 3s ease-in-out infinite;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-magic-schedule::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(0.9 0.02 250 / 0.15) 40%,
+    oklch(0.95 0.01 250 / 0.3) 50%,
+    oklch(0.9 0.02 250 / 0.15) 60%,
+    transparent 100%
+  );
+  animation: magic-shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.btn-magic-schedule:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.03);
+  box-shadow: 0 0 20px oklch(0.55 0.12 250 / 0.5), 0 4px 16px oklch(0.2 0.05 260 / 0.4);
+  background: linear-gradient(135deg, #004080 0%, #2060a8 50%, #004080 100%) !important;
+}
+
+.btn-magic-schedule:hover:not(:disabled)::before {
+  animation-duration: 1.5s;
+}
+
+.btn-magic-schedule:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-magic-schedule:disabled {
+  animation: none;
+  box-shadow: none;
+}
+
+.btn-magic-schedule:disabled::before {
+  animation: none;
+  opacity: 0;
+}
+
 @keyframes slide-down {
   from { opacity: 0; height: 0; }
   to   { opacity: 1; height: var(--radix-collapsible-content-height); }

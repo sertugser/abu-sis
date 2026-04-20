@@ -5,6 +5,7 @@ import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { formatDate } from '../lib/utils';
 import { STUDENT_STATUS_LABELS } from '../lib/constants';
+import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
 export default function DashboardPage() {
   const { data: student, isLoading: studentLoading } = useStudentInfo();
@@ -87,6 +88,8 @@ export default function DashboardPage() {
 
         <StatCard label="Program / Fakülte" value={student.programName} sub={`${student.departmentName} — ${student.facultyName}`} accentColor="border-l-violet-400" valueSize="text-base" />
       </div>
+
+      <DashboardAnnouncementWidget max={5} />
 
       {/* Active term */}
       {term && (

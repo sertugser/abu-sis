@@ -56,9 +56,11 @@ export default function TermProgramTransferPage() {
   const coursesQuery = usePreviousTermCourses(deptId, sourceTermId, targetTermId);
   const transferMutation = useTransferFromTerm(deptId ?? 0, targetTermId ?? 0);
   const instructorsQuery = useDepartmentInstructors(deptId, targetTermId);
-  const instructors = instructorsQuery.data ?? [];
-  const courses = coursesQuery.data ?? [];
-  const transferable = courses.filter((c) => !c.alreadyOpened);
+  const instructorItems = instructorsQuery.data;
+  const instructors = useMemo(() => instructorItems ?? [], [instructorItems]);
+  const courseItems = coursesQuery.data;
+  const courses = useMemo(() => courseItems ?? [], [courseItems]);
+  const transferable = useMemo(() => courses.filter((c) => !c.alreadyOpened), [courses]);
 
   const filteredCourses = useMemo(() => {
     let result = courses;
@@ -153,14 +155,14 @@ export default function TermProgramTransferPage() {
 
   if (contextQuery.isLoading)
     return (
-      <div className="p-6 space-y-3">
+      <div className="space-y-3">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
     );
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4">
       {/* Term status warning */}
       {activeTerm && !isTermSuitable && (
         <Alert variant="destructive">

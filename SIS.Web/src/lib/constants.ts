@@ -3,6 +3,7 @@ export const ROUTES = {
   DASHBOARD: '/',
   AKADEMIK_TAKVIM: '/akademik-takvim',
   DERS_KAYIT: '/ders-kayit',
+  SMART_PLANNING: '/akilli-planlama',
   PLAN: '/plan',
   ALINAN_DERSLER: '/alinan-dersler',
   NOT_LISTESI: '/not-listesi',
@@ -21,12 +22,15 @@ export const ROUTES = {
   SCHEDULE_CREATION: '/ders-programi-olusturma',
   CLASSROOM_ASSIGNMENT: '/derslik-fakulte-atamasi',
   COURSE_OPENING: '/ders-acma-islemleri',
+  COURSE_INTENTION_MANAGEMENT: '/niyet-anketi-yonetimi',
   INSTRUCTOR_ASSIGNMENT: '/ogretim-elemani-atama',
+  ADVISOR_COURSE_CONSTRAINTS: '/danisman-ders-kisitlari',
   // Admin routes
   USER_MANAGEMENT: '/kullanici-yonetimi',
   STUDENT_DIRECTORY: '/ogrenci-rehberi',
   INSTRUCTOR_DIRECTORY: '/personel-listesi',
   TERM_MANAGEMENT: '/donem-yonetimi',
+  ACADEMIC_CALENDAR_GENERATOR: '/akademik-takvim-olusturma',
   ACADEMIC_STRUCTURE: '/akademik-yapi',
   COURSE_CATALOG_ADMIN: '/ders-katalogu',
   SYSTEM_CONFIG: '/sistem-ayarlari',
@@ -39,13 +43,28 @@ export const ROUTES = {
   ELECTIVE_GROUPS: '/secmeli-ders-gruplari',
   INSTRUCTOR_COURSES_REPORT: '/ders-veren-ogretim-uyeleri',
   TERM_PROGRAM_TRANSFER: '/donem-programi-aktarim',
+  // Course Evaluation
+  COURSE_EVALUATION: '/ders-degerlendirme',
+  EVALUATION_RESULTS: '/degerlendirme-sonuclari',
+  EVALUATION_PERIOD_ADMIN: '/degerlendirme-donemi-yonetimi',
+  // Internal Announcements
+  ANNOUNCEMENTS: '/duyurular',
+  ANNOUNCEMENT_MANAGEMENT: '/duyuru-yonetimi',
 } as const;
 
 export const QUERY_KEYS = {
   activeTerm: ['activeTerm'] as const,
   courses: (programId?: number) => ['courses', programId] as const,
   studentCatalog: ['studentCatalog'] as const,
+  recommendations: (pacePreference?: number) => ['recommendation', 'my', pacePreference] as const,
   myRegistrations: ['myRegistrations'] as const,
+  courseIntentionActive: ['courseIntention', 'active'] as const,
+  courseIntentionSurvey: (surveyId: number) => ['courseIntention', 'survey', surveyId] as const,
+  courseIntentionSurveys: (termId?: number) => ['courseIntention', 'surveys', termId] as const,
+  courseIntentionSummary: (surveyId?: number, departmentId?: number) => ['courseIntention', 'summary', surveyId, departmentId] as const,
+  advisorStudents: ['advisor', 'students'] as const,
+  advisorConstraints: (studentId?: number, termId?: number) => ['advisor', 'constraints', studentId, termId] as const,
+  studentEligibility: (studentId?: number) => ['eligibility', 'student', studentId] as const,
   studentAttendanceStatus: (termId?: number | null) => ['studentAttendanceStatus', termId] as const,
   studentInfo: ['studentInfo'] as const,
   studentGradeStatistics: (registrationId?: number | null, commonEvaluation = false) => ['studentGradeStatistics', registrationId, commonEvaluation] as const,
@@ -78,6 +97,7 @@ export const QUERY_KEYS = {
     ['admin', 'instructors', search, departmentId] as const,
   adminTerms: ['admin', 'terms'] as const,
   systemConfigs: ['admin', 'systemConfigs'] as const,
+  systemConfigLimits: ['admin', 'systemConfigLimits'] as const,
   auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,
   promotionRules: (programId?: number) => ['admin', 'promotionRules', programId] as const,
   constraints: ['constraints'] as const,
@@ -88,6 +108,26 @@ export const QUERY_KEYS = {
   electiveGroups: (subtype?: string, facultyId?: number) => ['electiveGroups', 'list', subtype, facultyId] as const,
   electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
+  // Course Evaluation
+  evaluationActivePeriod: ['courseEvaluation', 'activePeriod'] as const,
+  evaluationMyCourses: ['courseEvaluation', 'myCourses'] as const,
+  evaluationActiveQuestions: ['courseEvaluation', 'activeQuestions'] as const,
+  evaluationAllQuestions: ['courseEvaluation', 'allQuestions'] as const,
+  evaluationSectionResults: (sectionId: number) =>
+    ['courseEvaluation', 'section', sectionId] as const,
+  evaluationDepartmentSummary: (departmentId: number, termId?: number) =>
+    ['courseEvaluation', 'department', departmentId, termId] as const,
+  // Internal Announcements
+  activeAnnouncements: (max?: number) => ['announcements', 'active', max] as const,
+  announcementDetail: (id: number) => ['announcements', 'detail', id] as const,
+  allAnnouncements: ['announcements', 'all'] as const,
+  // Forecast / Constraints
+  gradeLockReadiness: (departmentId?: number, termId?: number) => ['gradeLockReadiness', departmentId, termId] as const,
+  distributionConstraints: (termId: number) => ['distributionConstraints', termId] as const,
+  exceptionRequests: ['exceptionRequests'] as const,
+  pendingExceptionRequests: ['exceptionRequests', 'pending'] as const,
+  myExceptionRequests: ['exceptionRequests', 'my'] as const,
+  exceptionRequestDetail: (id: number) => ['exceptionRequests', 'detail', id] as const,
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -115,6 +155,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/',
   '/akademik-takvim',
   '/ders-kayit',
+  '/akilli-planlama',
   '/plan',
   '/alinan-dersler',
   '/not-listesi',
@@ -132,11 +173,14 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/derslik-fakulte-atamasi',
   '/donem-kapatma',
   '/ders-acma-islemleri',
+  '/niyet-anketi-yonetimi',
   '/ogretim-elemani-atama',
+  '/danisman-ders-kisitlari',
   '/kullanici-yonetimi',
   '/ogrenci-rehberi',
   '/personel-listesi',
   '/donem-yonetimi',
+  '/akademik-takvim-olusturma',
   '/akademik-yapi',
   '/ders-katalogu',
   '/sistem-ayarlari',
@@ -149,6 +193,11 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/secmeli-ders-gruplari',
   '/ders-veren-ogretim-uyeleri',
   '/donem-programi-aktarim',
+  '/ders-degerlendirme',
+  '/degerlendirme-sonuclari',
+  '/degerlendirme-donemi-yonetimi',
+  '/duyurular',
+  '/duyuru-yonetimi',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

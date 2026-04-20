@@ -60,6 +60,15 @@ export async function closeSection(sectionId: number): Promise<void> {
   await apiClient.delete(`/course-opening/section/${sectionId}`);
 }
 
+export async function closeAllSections(courseId: number, termId: number): Promise<{ closedSectionCount: number; droppedRegistrationCount: number }> {
+  const { data } = await apiClient.delete(`/course-opening/course/${courseId}`, { params: { termId } });
+  return data;
+}
+
+export async function reactivateSection(sectionId: number): Promise<void> {
+  await apiClient.put(`/course-opening/section/${sectionId}/reactivate`);
+}
+
 export async function bulkAssignInstructor(
   departmentId: number,
   termId: number,
@@ -86,6 +95,25 @@ export async function getPreviousTermCourses(
 
 export async function transferFromTerm(request: TransferFromTermRequest): Promise<TransferFromTermResultDto> {
   const { data } = await apiClient.post<TransferFromTermResultDto>('/course-opening/transfer-from-term', request);
+  return data;
+}
+
+export interface ExternalCourseDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  ects: number;
+  ownerDepartmentName: string;
+  sectionCount: number;
+  totalCapacity: number;
+  totalEnrolled: number;
+  predictedDemand: number;
+}
+
+export async function getExternalCourses(departmentId: number, termId: number): Promise<ExternalCourseDto[]> {
+  const { data } = await apiClient.get<ExternalCourseDto[]>('/course-opening/external-courses', {
+    params: { departmentId, termId },
+  });
   return data;
 }
 

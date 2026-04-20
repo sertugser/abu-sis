@@ -4,10 +4,13 @@ import {
   getCurriculumCoursesForOpening,
   getDepartmentInstructors,
   getInstructorWorkload,
+  getExternalCourses,
   openCourse,
   bulkOpenCourses,
   updateOpenedSection,
   closeSection,
+  closeAllSections,
+  reactivateSection,
   bulkAssignInstructor,
   getPreviousTermCourses,
   transferFromTerm,
@@ -48,6 +51,15 @@ export function useInstructorWorkload(instructorId: number | null, termId: numbe
     queryFn: () => getInstructorWorkload(instructorId!, termId!),
     enabled: instructorId !== null && instructorId > 0 && termId !== null,
     staleTime: 30 * 1000,
+  });
+}
+
+export function useExternalCourses(departmentId: number | null, termId: number | null) {
+  return useQuery({
+    queryKey: ['courseOpening', 'externalCourses', departmentId, termId],
+    queryFn: () => getExternalCourses(departmentId!, termId!),
+    enabled: departmentId !== null && termId !== null,
+    staleTime: 60 * 1000,
   });
 }
 
@@ -133,6 +145,32 @@ export function useCloseSection(departmentId: number, termId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (sectionId: number) => closeSection(sectionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+    },
+  });
+}
+
+export function useCloseAllSections(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (courseId: number) => closeAllSections(courseId, termId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+    },
+  });
+}
+
+export function useReactivateSection(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sectionId: number) => reactivateSection(sectionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });

@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { displayTurkishText } from '@/lib/turkishText';
 import { useAcademicCalendar, type PublicCalendarEventDto } from '../hooks/useAcademicCalendar';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
@@ -22,13 +23,20 @@ const CAT_MAP: Record<string, Cat> = {
   MidtermExam: 'exam', FinalExam: 'exam', MakeupExam: 'exam',
   CourseRegistration: 'registration', NewStudentRegistration: 'registration',
   AddDrop: 'registration', AdvisorApproval: 'registration', AddDropApproval: 'registration',
-  NationalHoliday: 'holiday', ReligiousHoliday: 'holiday',
-  CourseWithdrawal: 'deadline', AdvisorWithdrawal: 'deadline',
+  TransferRegistration: 'registration', GraduateRegistration: 'registration', SummerSchoolRegistration: 'registration',
+  NationalHoliday: 'holiday', ReligiousHoliday: 'holiday', ImportantDay: 'holiday',
+  CourseWithdrawal: 'deadline', AdvisorWithdrawal: 'deadline', RegistrationFreezeDeadline: 'deadline', ExcuseExamApplication: 'deadline',
   MidtermGradeEntry: 'result', MidtermGradePublication: 'result',
   FinalGradeEntry: 'result', FinalGradePublication: 'result',
-  MakeupGradeEntry: 'result', MakeupGradePublication: 'result',
+  MakeupGradeEntry: 'result', MakeupGradePublication: 'result', SummerSchoolGradePublication: 'result',
+  ExcuseExamResult: 'result', CourseExemptionResult: 'result', ScholarshipResult: 'result',
+  SimurgResult: 'result', TransferResult: 'result', GraduateResult: 'result',
   GraduateApplication: 'application', HorizontalTransfer: 'application', DoubleMajor: 'application',
+  CourseExemptionApplication: 'application', ScholarshipApplication: 'application', SimurgApplication: 'application',
+  InternationalStudentApplication: 'application', TransferEvaluation: 'application',
   ClassesStart: 'academic', ClassesEnd: 'academic', TuitionPayment: 'academic',
+  Orientation: 'academic', SemesterBreak: 'academic', ScholarshipRefund: 'academic',
+  PrepSchoolExam: 'exam', ExcuseExam: 'exam', SummerSchoolExam: 'exam',
   Other: 'academic',
 };
 
@@ -165,7 +173,7 @@ function normalizeEvents(events: PublicCalendarEventDto[]): NormalizedEvent[] {
   return events.map(e => ({
     id: e.id,
     eventType: e.eventType,
-    title: e.title,
+    title: displayTurkishText(e.title),
     startDate: isoToDateStr(e.startDate),
     endDate: e.endDate ? isoToDateStr(e.endDate) : isoToDateStr(e.startDate),
     note: e.note,
@@ -234,7 +242,7 @@ export default function AcademicCalendarPage() {
         </div>
       ) : !calendarData ? (
         <div className="border border-gray-200 rounded-xl bg-white shadow-sm p-10 text-center text-gray-400">
-          Aktif dönem takvimi bulunamadı.
+          Henüz akademik takvim oluşturucudan onaylanmış bir takvim yok.
         </div>
       ) : (
         <>

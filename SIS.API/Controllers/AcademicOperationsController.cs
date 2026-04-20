@@ -12,6 +12,7 @@ namespace SIS.API.Controllers;
 public class AcademicOperationsController : ControllerBase
 {
     private readonly IAcademicOperationsService _academicOperationsService;
+    private AcademicOperationsContextDto? _cachedContext;
 
     public AcademicOperationsController(IAcademicOperationsService academicOperationsService)
     {
@@ -59,6 +60,9 @@ public class AcademicOperationsController : ControllerBase
         if (termId.HasValue && termId.Value <= 0)
             return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
 
+        if (!string.IsNullOrEmpty(search) && search.Length > 200)
+            return BadRequest(new { error = "Arama metni en fazla 200 karakter olabilir." });
+
         if (!TryGetAuthenticatedUser(out var userId, out var roles))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
 
@@ -93,8 +97,8 @@ public class AcademicOperationsController : ControllerBase
 
     private async Task<bool> HasDepartmentAccessAsync(int userId, IReadOnlyCollection<string> roles, int departmentId, CancellationToken cancellationToken)
     {
-        var context = await _academicOperationsService.GetContextAsync(userId, roles, cancellationToken);
-        return context.AccessibleDepartments.Any(department => department.DepartmentId == departmentId);
+        _cachedContext ??= await _academicOperationsService.GetContextAsync(userId, roles, cancellationToken);
+        return _cachedContext.AccessibleDepartments.Any(department => department.DepartmentId == departmentId);
     }
 
     private bool TryGetAuthenticatedUser(out int userId, out IReadOnlyCollection<string> roles)

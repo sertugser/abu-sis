@@ -24,6 +24,10 @@ export interface AdminTermDto {
   withdrawalDeadline: string;
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
+  calendarEventCount: number;
+  generatedCalendarEventCount: number;
+  generatedCalendarDraftId: number | null;
+  hasGeneratedCalendar: boolean;
   status: string;
   statusLabel: string;
   allowedTransitions: string[];
@@ -59,35 +63,6 @@ export interface UpdateTermDto {
   withdrawalDeadline: string;
 }
 
-export interface TermCalendarEventDto {
-  id: number;
-  termId: number;
-  eventType: string;
-  eventTypeLabel: string;
-  title: string;
-  startDate: string;
-  endDate: string | null;
-  isPublic: boolean;
-  note: string | null;
-}
-
-export interface CreateCalendarEventDto {
-  eventType: string;
-  title: string;
-  startDate: string;
-  endDate: string | null;
-  isPublic: boolean;
-  note: string | null;
-}
-
-export interface UpdateCalendarEventDto {
-  eventType: string;
-  title: string;
-  startDate: string;
-  endDate: string | null;
-  isPublic: boolean;
-  note: string | null;
-}
 
 // ── Term CRUD ────────────────────────────────────────────────────────────────
 
@@ -100,7 +75,6 @@ export function useAdminTerms() {
     },
   });
 }
-
 export function useCreateTerm() {
   const qc = useQueryClient();
   return useMutation({
@@ -153,60 +127,6 @@ export function useTransitionTermStatus() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
-  });
-}
-
-// ── Calendar Events ──────────────────────────────────────────────────────────
-
-export function useTermCalendarEvents(termId: number | null) {
-  return useQuery({
-    queryKey: ['admin', 'terms', termId, 'calendar-events'],
-    queryFn: async () => {
-      const { data } = await apiClient.get<TermCalendarEventDto[]>(`${API}/${termId}/calendar-events`);
-      return data;
-    },
-    enabled: termId !== null,
-  });
-}
-
-export function useCreateCalendarEvent() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ termId, dto }: { termId: number; dto: CreateCalendarEventDto }) => {
-      const { data } = await apiClient.post<TermCalendarEventDto>(`${API}/${termId}/calendar-events`, dto);
-      return data;
-    },
-    onSuccess: (_, { termId }) => {
-      qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
-      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
-    },
-  });
-}
-
-export function useUpdateCalendarEvent() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ termId, eventId, dto }: { termId: number; eventId: number; dto: UpdateCalendarEventDto }) => {
-      const { data } = await apiClient.put<TermCalendarEventDto>(`${API}/${termId}/calendar-events/${eventId}`, dto);
-      return data;
-    },
-    onSuccess: (_, { termId }) => {
-      qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
-      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
-    },
-  });
-}
-
-export function useDeleteCalendarEvent() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ termId, eventId }: { termId: number; eventId: number }) => {
-      await apiClient.delete(`${API}/${termId}/calendar-events/${eventId}`);
-    },
-    onSuccess: (_, { termId }) => {
-      qc.invalidateQueries({ queryKey: ['admin', 'terms', termId, 'calendar-events'] });
-      qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] });
     },
   });
 }

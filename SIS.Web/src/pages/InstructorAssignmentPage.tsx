@@ -19,7 +19,8 @@ export default function InstructorAssignmentPage() {
   const { data: activeTerm } = useActiveTerm();
   const { data: faculties } = useAdminFaculties();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
-  const departments = contextQuery.data?.accessibleDepartments ?? [];
+  const accessibleDepartments = contextQuery.data?.accessibleDepartments;
+  const departments = useMemo(() => accessibleDepartments ?? [], [accessibleDepartments]);
 
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
@@ -161,7 +162,7 @@ export default function InstructorAssignmentPage() {
 
   if (contextQuery.isLoading) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="space-y-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-[500px] w-full" />
       </div>

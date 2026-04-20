@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.Common.DTOs;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
@@ -18,11 +19,13 @@ public class StudentController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
+    private readonly IAcademicCalendarRuleService _calendarRuleService;
 
-    public StudentController(AppDbContext context, IGpaCalculationService gpaCalculationService)
+    public StudentController(AppDbContext context, IGpaCalculationService gpaCalculationService, IAcademicCalendarRuleService calendarRuleService)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
+        _calendarRuleService = calendarRuleService;
     }
 
     /// <summary>
@@ -153,6 +156,10 @@ public class StudentController : ControllerBase
                 && cr.Status != RegistrationStatus.Dropped)
             .ToListAsync();
 
+        var gradeVisibilityByTerm = await BuildGradeVisibilityMapAsync(allRegistrations.Select(r => r.CourseSection.TermId));
+        bool HasVisibleLetterGrade(CourseRegistration registration) =>
+            registration.Grade != null && gradeVisibilityByTerm.GetValueOrDefault(registration.CourseSection.TermId, true);
+
         // 3. Build per-course best registration map
         // For each course: prefer passed > current (no grade) > failed
         var courseRegMap = new Dictionary<int, (SIS.Domain.Entities.CourseRegistration reg, string gradeStatus)>();
@@ -163,7 +170,7 @@ public class StudentController : ControllerBase
 
             // Find the best registration to display
             var passed = group
-                .Where(r => r.Grade != null && r.Grade != GradeCode.FF && r.Grade != GradeCode.NA
+                .Where(r => HasVisibleLetterGrade(r) && r.Grade != GradeCode.FF && r.Grade != GradeCode.NA
                     && r.Grade != GradeCode.U && r.Grade != GradeCode.W && r.Grade != GradeCode.I)
                 .OrderByDescending(r => r.Id)
                 .FirstOrDefault();
@@ -176,8 +183,9 @@ public class StudentController : ControllerBase
 
             // Current semester (active, no grade)
             var current = group
-                .Where(r => r.Grade == null && (r.Status == RegistrationStatus.Active
-                    || r.Status == RegistrationStatus.PendingAdvisorApproval))
+                .Where(r => !HasVisibleLetterGrade(r) && (r.Status == RegistrationStatus.Active
+                    || r.Status == RegistrationStatus.PendingAdvisorApproval
+                    || r.Grade != null))
                 .OrderByDescending(r => r.Id)
                 .FirstOrDefault();
 
@@ -189,7 +197,7 @@ public class StudentController : ControllerBase
 
             // Failed (latest)
             var failed = group
-                .Where(r => r.Grade != null)
+                .Where(HasVisibleLetterGrade)
                 .OrderByDescending(r => r.Id)
                 .FirstOrDefault();
 
@@ -528,10 +536,15 @@ public class StudentController : ControllerBase
         var hasAllComponentScores = components.Count > 0
             && components.All(component => ownGrades.Any(grade =>
                 grade.GradeComponentId == component.Id && grade.Score != null));
-        var isResultFinalized = section.IsFinalized
+        var hasFinalizedGrade = section.IsFinalized
             && hasGradingCriteria
             && registration.Grade != null
             && hasAllComponentScores;
+        var isResultFinalized = await _calendarRuleService.CanStudentSeeLetterGradeAsync(
+            section.TermId,
+            hasFinalizedGrade,
+            registration.Grade != null,
+            DateTime.UtcNow);
         var studentWeightedAverage = CalculateWeightedAverage(registration.Id);
 
         var componentStatistics = components
@@ -651,6 +664,11 @@ public class StudentController : ControllerBase
                 && cr.Status != RegistrationStatus.Draft
                 && cr.Status != RegistrationStatus.Dropped)
             .ToListAsync();
+
+        var transcriptGradeVisibility = await BuildGradeVisibilityMapAsync(registrations.Select(r => r.CourseSection.TermId));
+        registrations = registrations
+            .Where(registration => transcriptGradeVisibility.GetValueOrDefault(registration.CourseSection.TermId, true))
+            .ToList();
 
         var registrationIds = registrations.Select(registration => registration.Id).ToList();
         var courseIds = registrations
@@ -864,6 +882,21 @@ public class StudentController : ControllerBase
         };
 
         return Ok(transcript);
+    }
+
+    private async Task<Dictionary<int, bool>> BuildGradeVisibilityMapAsync(IEnumerable<int> termIds)
+    {
+        var result = new Dictionary<int, bool>();
+        foreach (var termId in termIds.Distinct())
+        {
+            result[termId] = await _calendarRuleService.CanStudentSeeLetterGradeAsync(
+                termId,
+                isFinalized: true,
+                hasGrade: true,
+                nowUtc: DateTime.UtcNow);
+        }
+
+        return result;
     }
 
     private static bool IsPassedGrade(GradeCode grade) =>

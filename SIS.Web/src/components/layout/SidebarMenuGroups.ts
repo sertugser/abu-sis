@@ -1,6 +1,7 @@
 import {
   LayoutGrid,
   BookOpen,
+  FileText,
   User,
   GraduationCap,
   Users,
@@ -9,6 +10,8 @@ import {
   Settings,
   Calendar,
   School,
+  Megaphone,
+  ClipboardCheck,
 } from 'lucide-react';
 import { ROUTES } from '../../lib/constants';
 
@@ -17,6 +20,17 @@ export interface MenuGroup {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   children: { to: string; label: string; openInNewTab?: boolean }[];
+}
+
+function createFormManagementGroup(): MenuGroup {
+  return {
+    id: 'form-islemleri',
+    label: 'Form İşlemleri',
+    icon: FileText,
+    children: [
+      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
+    ],
+  };
 }
 
 // ─── STUDENT MENU ───────────────────────────────────────────────
@@ -28,6 +42,7 @@ export const studentMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Duyurular' },
       { to: ROUTES.ALINAN_DERSLER, label: 'Alınan Dersler' },
     ],
   },
@@ -44,6 +59,22 @@ export const studentMenuGroups: MenuGroup[] = [
       { to: '/mufredat-durum', label: 'Müfredat Durum' },
       { to: ROUTES.TRANSCRIPT, label: 'Transkript', openInNewTab: true },
       { to: ROUTES.TRANSCRIPT_SCENARIO, label: 'Transkript Senaryosu' },
+    ],
+  },
+  {
+    id: 'degerlendirme',
+    label: 'Değerlendirme',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.COURSE_EVALUATION, label: 'Ders Değerlendirme' },
+    ],
+  },
+  {
+    id: 'form-islemleri-ogrenci',
+    label: 'Form İşlemleri',
+    icon: FileText,
+    children: [
+      { to: ROUTES.SMART_PLANNING, label: 'Niyet Anketi' },
     ],
   },
   {
@@ -66,6 +97,7 @@ export const instructorMenuGroups: MenuGroup[] = [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Duyurular' },
     ],
   },
   {
@@ -76,6 +108,15 @@ export const instructorMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
+      { to: ROUTES.ADVISOR_COURSE_CONSTRAINTS, label: 'Ders Kısıtları' },
+    ],
+  },
+  {
+    id: 'degerlendirme',
+    label: 'Değerlendirme',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],
   },
 ];
@@ -97,6 +138,7 @@ export const advisorMenuGroups: MenuGroup[] = [
     icon: Users,
     children: [
       { to: ROUTES.DASHBOARD, label: 'Onay Bekleyenler' },
+      { to: ROUTES.ADVISOR_COURSE_CONSTRAINTS, label: 'Ders Kısıtları' },
     ],
   },
   {
@@ -127,7 +169,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     label: 'Ders İşlemleri',
     icon: BookOpen,
     children: [
-      // İş akışı sırasına göre: katalog → müfredat → seçmeli grup → aç → onayla → hoca ata → kopyala → programla → kontrol → rapor → kapat
+      // İş akışı sırasına göre: katalog → müfredat → seçmeli grup → aç → hoca ata → kopyala → programla → kontrol → rapor → kapat
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
@@ -140,6 +182,7 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -156,6 +199,16 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];
@@ -187,12 +240,22 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
     icon: Users,
     children: [
       { to: ROUTES.STUDENT_DIRECTORY, label: 'Öğrenci Rehberi' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];
@@ -229,6 +292,7 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
@@ -245,6 +309,16 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.INSTRUCTOR_SECTIONS, label: 'Derslerim' },
       { to: ROUTES.INSTRUCTOR_SCHEDULING, label: 'Ders Programım' },
       { to: '/not-girisi', label: 'Not Girişi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];
@@ -259,6 +333,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.DASHBOARD, label: 'Ana Sayfa' },
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
+      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Olusturucu' },
     ],
   },
   {
@@ -281,6 +356,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
+  createFormManagementGroup(),
   {
     id: 'donem-yonetimi',
     label: 'Dönem Yönetimi',
@@ -288,6 +364,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
+      { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Olusturucu' },
     ],
   },
   {
@@ -325,6 +402,24 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
       { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
+    ],
+  },
+  {
+    id: 'degerlendirme',
+    label: 'Değerlendirme',
+    icon: ClipboardCheck,
+    children: [
+      { to: ROUTES.EVALUATION_PERIOD_ADMIN, label: 'Değerlendirme Dönemi Yönetimi' },
+      { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
+    ],
+  },
+  {
+    id: 'duyuru-yonetimi',
+    label: 'Duyuru Yönetimi',
+    icon: Megaphone,
+    children: [
+      { to: ROUTES.ANNOUNCEMENT_MANAGEMENT, label: 'Duyuru Yönetimi' },
+      { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
 ];

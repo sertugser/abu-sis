@@ -121,7 +121,7 @@ export default function GradeListPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <Card className="overflow-hidden border border-[#003366]/20 shadow-sm">
         <CardContent className="p-0">
           <div className="bg-[#003366] px-5 py-4 text-white">
@@ -166,10 +166,10 @@ export default function GradeListPage() {
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden border border-[#003366]/20 shadow-md">
+      <Card className="min-w-0 overflow-hidden border border-[#003366]/20 shadow-md">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+          <div className="w-full max-w-full overflow-x-auto">
+            <Table className="min-w-[1240px]">
               <TableHeader>
                 <TableRow className="border-b-0 bg-[#003366] hover:bg-[#003366]">
                   <TableHead className="w-16 pl-5 text-center text-white">Şb</TableHead>

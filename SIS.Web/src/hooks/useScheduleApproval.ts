@@ -15,20 +15,20 @@ export function useScheduleApprovalStatus(facultyId: number | null, termId?: num
   });
 }
 
-export function useApproveSchedule(facultyId: number) {
+export function useApproveSchedule(facultyId: number, termId?: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (note?: string) => approveSchedule(facultyId, note),
+    mutationFn: (note?: string) => approveSchedule(facultyId, termId!, note),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scheduleApproval'] });
     },
   });
 }
 
-export function useRevokeScheduleApproval(facultyId: number) {
+export function useRevokeScheduleApproval(facultyId: number, termId?: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => revokeScheduleApproval(facultyId),
+    mutationFn: () => revokeScheduleApproval(facultyId, termId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scheduleApproval'] });
     },

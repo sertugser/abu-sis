@@ -82,6 +82,10 @@ export interface ClassroomOccupation {
 export interface ClassroomHeatmapCell {
   day: number;
   hour: number;
+  slotOrder: number;
+  startTime: string;
+  endTime: string;
+  label: string;
   occupancy: number;
   usedClassrooms: number;
   details: string;
@@ -102,6 +106,10 @@ export interface ClassroomInfo {
   name: string;
   capacity: number;
   type: string;
+  buildingName: string;
+  floor: number;
+  facultyId: number;
+  facultyName: string;
   schedules: ClassroomScheduleSlot[];
 }
 
@@ -110,6 +118,40 @@ export interface ClassroomDashboard {
   occupancyRate: number;
   conflictsCount: number;
   emptySlots: number;
+  slotsPerDay: number;
   heatmap: ClassroomHeatmapCell[];
   classrooms: ClassroomInfo[];
+}
+
+export interface ClassroomFacultyOption {
+  id: number;
+  name: string;
+}
+
+export interface ClassroomFilterOptions {
+  faculties: ClassroomFacultyOption[];
+  buildings: string[];
+  classroomTypes: string[];
+}
+
+export interface AvailableClassroomResult {
+  id: number;
+  name: string;
+  capacity: number;
+  type: string;
+  buildingName: string;
+  floor: number;
+  weeklyOccupancyRate: number;
+  schedules: ClassroomScheduleSlot[];
+}
+
+export interface AvailableClassroomSearchParams {
+  termId: number;
+  days: number[];
+  startHour: number;
+  endHour: number;
+  minCapacity?: number;
+  classroomType?: string;
+  facultyId?: number;
+  buildingName?: string;
 }

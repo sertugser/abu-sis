@@ -1,11 +1,13 @@
 // SIS.Web/src/api/grade.api.ts
 import apiClient from './axios';
 import type {
+  FinalizeResponse,
   GradeComponent,
   GradeSubmitDto,
   GradesResponse,
   GradingCriteria,
-  FinalizeResponse,
+  ImportApplyResponse,
+  ImportPreviewResponse,
 } from '../types/grade';
 
 // Bileşen CRUD
@@ -56,4 +58,59 @@ export async function updateGradingCriteria(
   criteria: GradingCriteria
 ): Promise<void> {
   await apiClient.put(`/instructor/section/${sectionId}/grading-criteria`, criteria);
+}
+
+// Excel template indir
+export async function downloadTemplate(sectionId: number, componentId: number): Promise<Blob> {
+  const { data } = await apiClient.get(
+    `/instructor/section/${sectionId}/grades/export-template`,
+    {
+      params: { componentId },
+      responseType: 'blob',
+    }
+  );
+
+  return data;
+}
+
+// Excel preview
+export async function previewImport(
+  sectionId: number,
+  file: File
+): Promise<ImportPreviewResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const { data } = await apiClient.post(
+    `/instructor/section/${sectionId}/grades/import-preview`,
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }
+  );
+
+  return data;
+}
+
+// Excel apply
+export async function applyImport(
+  sectionId: number,
+  file: File
+): Promise<ImportApplyResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const { data } = await apiClient.post(
+    `/instructor/section/${sectionId}/grades/import-apply`,
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }
+  );
+
+  return data;
 }

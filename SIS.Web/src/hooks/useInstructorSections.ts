@@ -1,11 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import { getInstructorSections, getSectionStudents } from '../api/instructor.api';
+import { getInstructorSections, getInstructorTerms, getSectionStudents } from '../api/instructor.api';
 
-export function useInstructorSections() {
+export function useInstructorSections(termId?: number | null) {
   return useQuery({
-    queryKey: ['instructorSections'],
-    queryFn: getInstructorSections,
+    queryKey: ['instructorSections', termId ?? 'active'],
+    queryFn: () => getInstructorSections(termId ?? undefined),
     staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useInstructorTerms() {
+  return useQuery({
+    queryKey: ['instructorTerms'],
+    queryFn: getInstructorTerms,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

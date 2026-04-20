@@ -40,3 +40,12 @@ export async function importSystemConfigs(payload: unknown): Promise<SystemConfi
   const { data } = await apiClient.post<SystemConfigImportResult>('/admin/system-config/import', payload);
   return data;
 }
+
+export interface ConfigLimits {
+  [key: string]: { min: number | null; max: number | null };
+}
+
+export async function getConfigLimits(): Promise<ConfigLimits> {
+  const { data } = await apiClient.get<ConfigLimits>('/admin/system-config/limits');
+  return data;
+}

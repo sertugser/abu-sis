@@ -60,11 +60,11 @@ export function getAcademicOperationsErrorMessage(error: unknown, fallback: stri
   const status = axiosError.response?.status;
 
   if (status === 403) {
-    return 'Bu ekran icin yetkiniz bulunmuyor.';
+    return 'Bu ekran için yetkiniz bulunmuyor.';
   }
 
   if (status === 404) {
-    return axiosError.response?.data?.error ?? 'Istenen akademik operasyon verisi bulunamadi.';
+    return axiosError.response?.data?.error ?? 'İstenen akademik operasyon verisi bulunamadı.';
   }
 
   if (status === 400) {

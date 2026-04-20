@@ -21,7 +21,7 @@ public class AcademicCalendarController : ControllerBase
     {
         var result = await _service.GetActiveTermCalendarAsync();
         if (result is null)
-            return NotFound(new { message = "Aktif dönem bulunamadı." });
+            return NotFound(new { message = "Henüz akademik takvim oluşturucudan onaylanmış bir takvim yok." });
         return Ok(result);
     }
 }

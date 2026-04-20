@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSystemConfigs, importSystemConfigs, updateSystemConfig } from '../api/systemConfig.api';
+import { getConfigLimits, getSystemConfigs, importSystemConfigs, updateSystemConfig } from '../api/systemConfig.api';
 import { QUERY_KEYS } from '../lib/constants';
 
 export function useSystemConfigs() {
@@ -7,6 +7,14 @@ export function useSystemConfigs() {
     queryKey: QUERY_KEYS.systemConfigs,
     queryFn: getSystemConfigs,
     staleTime: 60 * 1000,
+  });
+}
+
+export function useConfigLimits() {
+  return useQuery({
+    queryKey: QUERY_KEYS.systemConfigLimits,
+    queryFn: getConfigLimits,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

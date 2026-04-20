@@ -21,33 +21,6 @@ public class AcademicProgressionController : ControllerBase
         _context = context;
     }
 
-    [HttpPost("promote/{departmentId}")]
-    public async Task<IActionResult> PromoteDepartmentStudents(
-        int departmentId,
-        [FromQuery] bool dryRun = true,
-        CancellationToken cancellationToken = default)
-    {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        if (!await HasDepartmentAccessAsync(userId, departmentId, cancellationToken)) return Forbid();
-
-        var result = await _progressionService.PromoteDepartmentStudentsAsync(
-            departmentId, dryRun, cancellationToken);
-        return Ok(result);
-    }
-
-    [HttpPost("recalculate-gpa/{departmentId}")]
-    public async Task<IActionResult> RecalculateGpa(
-        int departmentId,
-        CancellationToken cancellationToken = default)
-    {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        if (!await HasDepartmentAccessAsync(userId, departmentId, cancellationToken)) return Forbid();
-
-        var result = await _progressionService.RecalculateDepartmentGpaAsync(
-            departmentId, cancellationToken);
-        return Ok(result);
-    }
-
     [HttpGet("grade-lock-readiness/{departmentId}")]
     public async Task<IActionResult> CheckGradeLockReadiness(
         int departmentId,

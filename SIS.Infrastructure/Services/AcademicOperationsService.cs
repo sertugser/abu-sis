@@ -165,62 +165,7 @@ public class AcademicOperationsService : IAcademicOperationsService
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var sectionDtos = sections
-            .Select(section =>
-            {
-                var activeRegistrations = section.Registrations
-                    .Where(registration =>
-                        registration.Status != RegistrationStatus.Dropped
-                        && registration.Status != RegistrationStatus.Draft)
-                    .ToList();
-
-                var studentDtos = activeRegistrations
-                    .Select(registration =>
-                    {
-                        var user = userMap.GetValueOrDefault(registration.Student.UserId);
-                        return new DepartmentSectionStudentDto
-                        {
-                            StudentId = registration.StudentId,
-                            StudentNumber = registration.Student.StudentNumber,
-                            StudentName = user == null
-                                ? registration.Student.StudentNumber
-                                : $"{user.FirstName} {user.LastName}".Trim(),
-                            Email = user?.Email ?? string.Empty,
-                            Status = registration.Status.ToString(),
-                            Grade = registration.Grade?.ToString()
-                        };
-                    })
-                    .OrderBy(student => student.StudentName)
-                    .ThenBy(student => student.StudentNumber)
-                    .ToList();
-
-                var instructorName = string.Empty;
-                if (section.Instructor != null)
-                {
-                    var instructorUser = userMap.GetValueOrDefault(section.Instructor.UserId);
-                    instructorName = instructorUser == null
-                        ? section.Instructor.Title
-                        : $"{section.Instructor.Title} {instructorUser.FirstName} {instructorUser.LastName}".Trim();
-                }
-
-                var sectionScheds = scheduleMap.GetValueOrDefault(section.Id) ?? new List<SectionSchedule>();
-
-                return new DepartmentSectionClassListDto
-                {
-                    SectionId = section.Id,
-                    CourseId = section.CourseId,
-                    CourseCode = section.Course.Code,
-                    CourseName = section.Course.Name,
-                    InstructorName = instructorName,
-                    ClassroomName = section.Classroom?.Name ?? string.Empty,
-                    ScheduleSummary = ScheduleHelper.FormatSchedule(sectionScheds),
-                    Capacity = section.Capacity,
-                    // C12: EnrolledCount aligned with ActiveStudentCount
-                    EnrolledCount = activeRegistrations.Count,
-                    ActiveStudentCount = activeRegistrations.Count,
-                    IsActive = section.IsActive,
-                    Students = studentDtos
-                };
-            })
+            .Select(section => MapSectionToDto(section, userMap, scheduleMap))
             .ToList();
 
         var notes = new List<string>(scope.Notes);
@@ -430,6 +375,63 @@ public class AcademicOperationsService : IAcademicOperationsService
         var classYear = (semesterNumber - 1) / 2 + 1;
         var termLabel = semesterNumber % 2 == 1 ? "Güz" : "Bahar";
         return $"{classYear}. Sınıf {termLabel}";
+    }
+
+    private static DepartmentSectionClassListDto MapSectionToDto(
+        CourseSection section,
+        Dictionary<int, ApplicationUser> userMap,
+        Dictionary<int, List<SectionSchedule>> scheduleMap)
+    {
+        var activeRegistrations = section.Registrations
+            .Where(r => r.Status != RegistrationStatus.Dropped && r.Status != RegistrationStatus.Draft)
+            .ToList();
+
+        var studentDtos = activeRegistrations
+            .Select(r =>
+            {
+                var user = userMap.GetValueOrDefault(r.Student.UserId);
+                return new DepartmentSectionStudentDto
+                {
+                    StudentId = r.StudentId,
+                    StudentNumber = r.Student.StudentNumber,
+                    StudentName = user == null
+                        ? r.Student.StudentNumber
+                        : $"{user.FirstName} {user.LastName}".Trim(),
+                    Email = user?.Email ?? string.Empty,
+                    Status = r.Status.ToString(),
+                    Grade = r.Grade?.ToString()
+                };
+            })
+            .OrderBy(s => s.StudentName)
+            .ThenBy(s => s.StudentNumber)
+            .ToList();
+
+        var instructorName = string.Empty;
+        if (section.Instructor != null)
+        {
+            var instructorUser = userMap.GetValueOrDefault(section.Instructor.UserId);
+            instructorName = instructorUser == null
+                ? section.Instructor.Title
+                : $"{section.Instructor.Title} {instructorUser.FirstName} {instructorUser.LastName}".Trim();
+        }
+
+        var sectionScheds = scheduleMap.GetValueOrDefault(section.Id) ?? new List<SectionSchedule>();
+
+        return new DepartmentSectionClassListDto
+        {
+            SectionId = section.Id,
+            CourseId = section.CourseId,
+            CourseCode = section.Course.Code,
+            CourseName = section.Course.Name,
+            InstructorName = instructorName,
+            ClassroomName = section.Classroom?.Name ?? string.Empty,
+            ScheduleSummary = ScheduleHelper.FormatSchedule(sectionScheds),
+            Capacity = section.Capacity,
+            EnrolledCount = section.Registrations.Count,
+            ActiveStudentCount = activeRegistrations.Count,
+            IsActive = section.IsActive,
+            Students = studentDtos
+        };
     }
 
     private sealed class DepartmentScopeResolution

@@ -62,6 +62,7 @@ export interface FacultyPlanningSection {
   labHours: number;
   sectionIndex: number;
   isPinned: boolean;
+  suggestedSemester: number;
 }
 
 export interface FacultyPlanningSectionPage {

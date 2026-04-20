@@ -32,6 +32,42 @@ public class CourseDemandForecastDto
     public List<CrossDepartmentDemandDto> CrossDepartmentDemand { get; set; } = new();
 
     public decimal ShowRate { get; set; }
+
+    /// <summary>Seçmeli ders havuz dağılım bilgisi (zorunlu dersler için null)</summary>
+    public ElectiveDistributionDto? ElectiveDistribution { get; set; }
+
+    // --- Faz 2: Attrition + Trace ---
+
+    /// <summary>Brüt talep tahmini (drop/withdrawal düşülmeden önce)</summary>
+    public int GrossPredictedDemand { get; set; }
+
+    /// <summary>Geçmiş verilere dayalı bırakma/çekilme oranı</summary>
+    public decimal AttritionRate { get; set; }
+
+    /// <summary>Attrition hesaplama yöntemi: "Course", "Department", "System default"</summary>
+    public string AttritionMethod { get; set; } = string.Empty;
+
+    /// <summary>Tahmin adımlarının izlenebilirlik kaydı (includeTrace=true ile döner)</summary>
+    public ForecastTraceDto? Trace { get; set; }
+
+    // --- Faz 3: Sequential Dependency + Volatility ---
+
+    /// <summary>Ardışık ders bağımlılık bilgileri (önkoşul derslerin mevcut dönem kayıt etkisi)</summary>
+    public List<SequentialDependencyDto> SequentialDependencies { get; set; } = new();
+
+    // --- Faz 4: Simulation ---
+
+    /// <summary>Simülasyon sonucu mu (true ise gerçek tahmin değil, override'lı)</summary>
+    public bool IsSimulation { get; set; }
+
+    /// <summary>Uygulanan simülasyon parametreleri (IsSimulation=true ise dolu)</summary>
+    public ForecastSimulationParams? SimulationParams { get; set; }
+
+    /// <summary>Ders kayıt volatilite skoru (CV — coefficient of variation)</summary>
+    public decimal VolatilityScore { get; set; }
+
+    /// <summary>Volatilite seviyesi: Stable, Moderate, Volatile</summary>
+    public string VolatilityLevel { get; set; } = string.Empty;
 }
 
 public class DemandBreakdownDto
@@ -82,4 +118,62 @@ public class CrossDepartmentDemandDto
     public string DepartmentName { get; set; } = string.Empty;
     public string ProgramName { get; set; } = string.Empty;
     public int EstimatedStudentCount { get; set; }
+}
+
+/// <summary>
+/// Seçmeli ders havuz dağılım bilgisi.
+/// Popülariteye dayalı fraksiyonel talep dağıtımı sonucunu gösterir.
+/// </summary>
+public class ElectiveDistributionDto
+{
+    public int ElectiveGroupId { get; set; }
+    public string ElectiveGroupName { get; set; } = string.Empty;
+    public int TotalCoursesInPool { get; set; }
+    public int RequiredSelections { get; set; }
+    public decimal PopularityScore { get; set; }
+    public int EligibleStudentsInPool { get; set; }
+    public decimal DistributedDemandShare { get; set; }
+}
+
+/// <summary>
+/// Tahmin adımlarının izlenebilirlik kaydı.
+/// Her adım giriş→çıkış değerlerini, uygulanan faktörü ve veri kaynağını gösterir.
+/// </summary>
+public class SequentialDependencyDto
+{
+    public int PrerequisiteCourseId { get; set; }
+    public string PrerequisiteCourseCode { get; set; } = string.Empty;
+    public int CurrentPrereqEnrollment { get; set; }
+    public int HistoricalPrereqAverage { get; set; }
+    public decimal AdjustmentFactor { get; set; }
+}
+
+public class ForecastTraceDto
+{
+    public List<ForecastTraceStepDto> Steps { get; set; } = new();
+    public decimal FinalRuleWeight { get; set; }
+    public decimal FinalHistoricalWeight { get; set; }
+}
+
+public class ForecastTraceStepDto
+{
+    public string StepName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int InputValue { get; set; }
+    public int OutputValue { get; set; }
+    public decimal? Factor { get; set; }
+    public string? DataSource { get; set; }
+}
+
+/// <summary>
+/// What-If simülasyon parametreleri.
+/// Admin farklı kapasite/section/show rate senaryolarını test edebilir.
+/// </summary>
+public class ForecastSimulationParams
+{
+    public int? OverrideCapacityPerSection { get; set; }
+    public int? OverrideSectionCount { get; set; }
+    public decimal? OverrideShowRate { get; set; }
+    public decimal? OverrideAttritionRate { get; set; }
+    public int? OverrideExpectedEnrollment { get; set; }
 }

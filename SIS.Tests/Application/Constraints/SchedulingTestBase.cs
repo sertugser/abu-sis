@@ -473,7 +473,7 @@ public abstract class SchedulingTestBase : IDisposable
             new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
         };
-        return new ConstraintEvaluationService(evaluators, Context);
+        return new ConstraintEvaluationService(evaluators, Context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
     }
 
     public void Dispose()

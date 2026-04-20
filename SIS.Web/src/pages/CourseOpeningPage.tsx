@@ -12,8 +12,11 @@ import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useA
 import {
   useBulkOpenCourses,
   useCloseSection,
+  useCloseAllSections,
+  useReactivateSection,
   useCurriculumCoursesForOpening,
   useDepartmentInstructors,
+  useExternalCourses,
   useInstructorWorkload,
   useOpenCourse,
   useOpenedCourses,
@@ -45,11 +48,14 @@ export default function CourseOpeningPage() {
   const { data: forecastData } = useDepartmentForecast(deptId);
   const instructorsQuery = useDepartmentInstructors(deptId);
   const workloadQuery = useInstructorWorkload(selectedInstructorId, termId);
+  const externalCoursesQuery = useExternalCourses(deptId, termId);
 
   const openMutation = useOpenCourse(deptId ?? 0, termId ?? 0);
   const bulkMutation = useBulkOpenCourses(deptId ?? 0, termId ?? 0);
   const updateMutation = useUpdateOpenedSection(deptId ?? 0, termId ?? 0);
   const closeMutation = useCloseSection(deptId ?? 0, termId ?? 0);
+  const closeAllMutation = useCloseAllSections(deptId ?? 0, termId ?? 0);
+  const reactivateMutation = useReactivateSection(deptId ?? 0, termId ?? 0);
 
   const forecastMap = useMemo(() => {
     const map = new Map<number, CourseDemandForecastDto>();
@@ -109,6 +115,12 @@ export default function CourseOpeningPage() {
   const handleCloseSection = useCallback(
     (sectionId: number) => closeMutation.mutate(sectionId), [closeMutation]);
 
+  const handleCloseAllSections = useCallback(
+    (courseId: number) => closeAllMutation.mutateAsync(courseId), [closeAllMutation]);
+
+  const handleReactivateSection = useCallback(
+    (sectionId: number) => reactivateMutation.mutateAsync(sectionId), [reactivateMutation]);
+
   const handleAddSection = useCallback(
     (courseId: number, capacity: number, instructorId: number | undefined, internalQuota?: number, externalQuota?: number) => {
       if (deptId && termId) openMutation.mutate({ courseId, sectionCount: 1, capacityPerSection: capacity, instructorId, internalQuota, externalQuota });
@@ -146,8 +158,8 @@ export default function CourseOpeningPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
-      <div className="shrink-0 px-4 pt-4 pb-2">
+    <div className="flex flex-col h-[calc(100vh-120px)]">
+      <div className="shrink-0 pb-3">
         <CourseFilterBar
           departments={departments}
           faculties={faculties ?? []}
@@ -161,10 +173,9 @@ export default function CourseOpeningPage() {
           typeFilter={typeFilter}
           onTypeChange={setTypeFilter}
           stats={stats}
-          onExportCsv={exportCsv}
         />
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] rounded-xl border border-gray-200 shadow-sm bg-white" style={{ overflow: 'hidden' }}>
         <CurriculumPanel
           courses={curriculumQuery.data}
           isLoading={curriculumQuery.isLoading}
@@ -185,6 +196,8 @@ export default function CourseOpeningPage() {
           instructors={instructorsQuery.data ?? []}
           onUpdateSection={handleUpdateSection}
           onCloseSection={handleCloseSection}
+          onCloseAllSections={handleCloseAllSections}
+          onReactivateSection={handleReactivateSection}
           onAddSection={handleAddSection}
           updatePending={updateMutation.isPending}
           closePending={closeMutation.isPending}
@@ -192,6 +205,7 @@ export default function CourseOpeningPage() {
           workloadData={workloadQuery.data}
           onInstructorSelect={setSelectedInstructorId}
           onExportCsv={exportCsv}
+          externalCourses={externalCoursesQuery.data}
         />
       </div>
       {detailCourse && (

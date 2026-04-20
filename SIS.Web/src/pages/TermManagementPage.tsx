@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, CheckCircle, ChevronDown, ChevronUp, Trash2, CalendarDays } from 'lucide-react';
+import { Plus, Edit2, CheckCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,30 +11,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   useAdminTerms,
   useCreateTerm,
   useUpdateTerm,
   useActivateTerm,
   useTransitionTermStatus,
-  useTermCalendarEvents,
-  useCreateCalendarEvent,
-  useUpdateCalendarEvent,
-  useDeleteCalendarEvent,
   type AdminTermDto,
   type CreateTermDto,
   type UpdateTermDto,
-  type TermCalendarEventDto,
-  type CreateCalendarEventDto,
 } from '../hooks/useAdminTerms';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -51,62 +35,6 @@ const TERM_TYPE_OPTIONS = [
   { value: 'Intensive', label: 'Tekders' },
   { value: 'Exemption', label: 'Muafiyet' },
 ];
-
-const EVENT_TYPE_OPTIONS = [
-  { value: 'CourseRegistration',      label: 'Ders Kayıt' },
-  { value: 'NewStudentRegistration',  label: 'Yeni Öğrenci Ders Kayıt' },
-  { value: 'AdvisorApproval',         label: 'Danışman Onayı' },
-  { value: 'AddDrop',                 label: 'Ders Ekle/Bırak' },
-  { value: 'AddDropApproval',         label: 'Ders Ekle/Bırak Onayı' },
-  { value: 'CourseWithdrawal',        label: 'Ders Çekilme' },
-  { value: 'AdvisorWithdrawal',       label: 'Danışman Dersten Çekme' },
-  { value: 'MidtermExam',             label: 'Ara Sınav' },
-  { value: 'MidtermGradeEntry',       label: 'Ara Sınav Not Girişi' },
-  { value: 'MidtermGradePublication', label: 'Ara Sınav Not Yayımlama' },
-  { value: 'FinalExam',               label: 'Dönem Sonu Sınavı' },
-  { value: 'FinalGradeEntry',         label: 'Final Not Girişi' },
-  { value: 'FinalGradePublication',   label: 'Final Not Yayımlama' },
-  { value: 'MakeupExam',              label: 'Bütünleme Sınavı' },
-  { value: 'MakeupGradeEntry',        label: 'Bütünleme Not Girişi' },
-  { value: 'MakeupGradePublication',  label: 'Bütünleme Not Yayımlama' },
-  { value: 'NationalHoliday',         label: 'Milli Tatil' },
-  { value: 'ReligiousHoliday',        label: 'Dini Tatil' },
-  { value: 'ClassesStart',            label: 'Derslerin Başlangıcı' },
-  { value: 'ClassesEnd',              label: 'Derslerin Bitişi' },
-  { value: 'TuitionPayment',          label: 'Harç Ödeme' },
-  { value: 'GraduateApplication',     label: 'Lisansüstü Başvuru' },
-  { value: 'HorizontalTransfer',      label: 'Yatay Geçiş' },
-  { value: 'DoubleMajor',             label: 'Çift Anadal/Yan Dal' },
-  { value: 'Other',                   label: 'Diğer' },
-];
-
-const EVENT_TYPE_DEFAULTS: Record<string, string> = {
-  CourseRegistration: 'Ders Kayıt',
-  NewStudentRegistration: 'Yeni Öğrenci Ders Kayıt',
-  AdvisorApproval: 'Danışman Onayı',
-  AddDrop: 'Ders Ekle / Bırak',
-  AddDropApproval: 'Ders Ekle/Bırak Onayı',
-  CourseWithdrawal: 'Ders Çekilme Son Günü',
-  AdvisorWithdrawal: 'Danışman Dersten Çekme',
-  MidtermExam: 'Ara Sınavlar',
-  MidtermGradeEntry: 'Ara Sınav Not Girişi',
-  MidtermGradePublication: 'Ara Sınav Notlarının Yayımlanması',
-  FinalExam: 'Final Sınavları',
-  FinalGradeEntry: 'Final Not Girişi',
-  FinalGradePublication: 'Final Notlarının Yayımlanması',
-  MakeupExam: 'Bütünleme Sınavları',
-  MakeupGradeEntry: 'Bütünleme Not Girişi',
-  MakeupGradePublication: 'Bütünleme Notlarının Yayımlanması',
-  NationalHoliday: 'Ulusal Bayram',
-  ReligiousHoliday: 'Dini Tatil',
-  ClassesStart: 'Derslerin Başlangıcı',
-  ClassesEnd: 'Derslerin Sonu',
-  TuitionPayment: 'Harç Ödeme',
-  GraduateApplication: 'Lisansüstü Program Başvuruları',
-  HorizontalTransfer: 'Yatay Geçiş Başvuruları',
-  DoubleMajor: 'Çift Anadal / Yan Dal Başvuruları',
-  Other: '',
-};
 
 const TRANSITION_LABELS: Record<string, string> = {
   Planning: 'Planlamaya Gec',
@@ -166,19 +94,6 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function fmtShort(iso: string) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-}
-
-function eventBadgeVariant(eventType: string): 'destructive' | 'default' | 'success' | 'warning' | 'secondary' | 'outline' | 'info' {
-  if (['MidtermExam', 'FinalExam', 'MakeupExam'].includes(eventType)) return 'destructive';
-  if (['CourseRegistration', 'NewStudentRegistration', 'AddDrop', 'AdvisorApproval', 'AddDropApproval'].includes(eventType)) return 'info';
-  if (['NationalHoliday', 'ReligiousHoliday'].includes(eventType)) return 'success';
-  if (['CourseWithdrawal', 'AdvisorWithdrawal'].includes(eventType)) return 'warning';
-  if (['MidtermGradeEntry', 'MidtermGradePublication', 'FinalGradeEntry', 'FinalGradePublication', 'MakeupGradeEntry', 'MakeupGradePublication'].includes(eventType)) return 'secondary';
-  return 'outline';
-}
 
 // ── Form State ───────────────────────────────────────────────────────────────
 
@@ -234,36 +149,6 @@ function termFromDto(term: AdminTermDto): TermFormState {
   };
 }
 
-interface EventFormState {
-  eventType: string;
-  title: string;
-  startDate: string;
-  endDate: string;
-  isPublic: boolean;
-  note: string;
-}
-
-function emptyEventForm(): EventFormState {
-  return {
-    eventType: 'CourseRegistration',
-    title: EVENT_TYPE_DEFAULTS['CourseRegistration'],
-    startDate: '',
-    endDate: '',
-    isPublic: true,
-    note: '',
-  };
-}
-
-function eventFromDto(ev: TermCalendarEventDto): EventFormState {
-  return {
-    eventType: ev.eventType,
-    title: ev.title,
-    startDate: toDateInput(ev.startDate),
-    endDate: ev.endDate ? toDateInput(ev.endDate) : '',
-    isPublic: ev.isPublic,
-    note: ev.note ?? '',
-  };
-}
 
 // ── DateCell ─────────────────────────────────────────────────────────────────
 
@@ -278,251 +163,11 @@ function DateCell({ start, end, active }: { start: string; end: string; active?:
   );
 }
 
-// ── TermCalendarSection ───────────────────────────────────────────────────────
-
-function TermCalendarSection({ termId }: { termId: number }) {
-  const { data: events = [], isLoading } = useTermCalendarEvents(termId);
-  const [showForm, setShowForm] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<TermCalendarEventDto | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<TermCalendarEventDto | null>(null);
-  const [eventForm, setEventForm] = useState<EventFormState>(emptyEventForm());
-  const [eventFormError, setEventFormError] = useState('');
-
-  const createEvent = useCreateCalendarEvent();
-  const updateEvent = useUpdateCalendarEvent();
-  const deleteEvent = useDeleteCalendarEvent();
-
-  function openAdd() {
-    setEventForm(emptyEventForm());
-    setEventFormError('');
-    setEditingEvent(null);
-    setShowForm(true);
-  }
-
-  function openEdit(ev: TermCalendarEventDto) {
-    setEventForm(eventFromDto(ev));
-    setEventFormError('');
-    setEditingEvent(ev);
-    setShowForm(true);
-  }
-
-  function closeForm() {
-    setShowForm(false);
-    setEditingEvent(null);
-    setEventFormError('');
-  }
-
-  function handleEventTypeChange(newType: string) {
-    const defaultTitle = EVENT_TYPE_DEFAULTS[newType] ?? '';
-    setEventForm(f => ({
-      ...f,
-      eventType: newType,
-      title: f.title === '' || Object.values(EVENT_TYPE_DEFAULTS).includes(f.title) ? defaultTitle : f.title,
-    }));
-  }
-
-  async function handleSave() {
-    if (!eventForm.startDate) { setEventFormError('Başlangıç tarihi zorunludur.'); return; }
-    const dto: CreateCalendarEventDto = {
-      eventType: eventForm.eventType,
-      title: eventForm.title.trim() || EVENT_TYPE_DEFAULTS[eventForm.eventType] || eventForm.eventType,
-      startDate: toIsoString(eventForm.startDate),
-      endDate: eventForm.endDate ? toIsoString(eventForm.endDate) : null,
-      isPublic: eventForm.isPublic,
-      note: eventForm.note.trim() || null,
-    };
-    try {
-      if (editingEvent) {
-        await updateEvent.mutateAsync({ termId, eventId: editingEvent.id, dto });
-      } else {
-        await createEvent.mutateAsync({ termId, dto });
-      }
-      closeForm();
-    } catch (err: unknown) {
-      setEventFormError(err instanceof Error ? err.message : 'Kayıt başarısız.');
-    }
-  }
-
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    await deleteEvent.mutateAsync({ termId, eventId: deleteTarget.id });
-    setDeleteTarget(null);
-  }
-
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
-  );
-
-  return (
-    <div className="px-4 py-3 bg-muted/5 border-t border-border/50">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Akademik Takvim Etkinlikleri
-          {!isLoading && ` — ${sortedEvents.length} etkinlik`}
-        </p>
-        <Button size="sm" variant="outline" className="text-xs h-7" onClick={openAdd}>
-          <Plus className="h-3 w-3 mr-1" />
-          Etkinlik Ekle
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground py-2">Yükleniyor...</p>
-      ) : sortedEvents.length === 0 && !showForm ? (
-        <p className="text-sm text-muted-foreground py-2">Bu dönem için henüz etkinlik eklenmemiş.</p>
-      ) : (
-        <div className="space-y-1 mb-3">
-          {sortedEvents.map(ev => (
-            <div
-              key={ev.id}
-              className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/20 group"
-            >
-              <Badge variant={eventBadgeVariant(ev.eventType)} className="shrink-0 text-[10px] px-1.5 py-0">
-                {ev.eventTypeLabel}
-              </Badge>
-              <span className="text-sm font-medium text-foreground flex-1 truncate">{ev.title}</span>
-              <span className="text-xs text-muted-foreground shrink-0">
-                {fmtShort(ev.startDate)}
-                {ev.endDate ? ` — ${fmtShort(ev.endDate)}` : ''}
-              </span>
-              {!ev.isPublic && (
-                <span className="text-[10px] text-muted-foreground shrink-0">(gizli)</span>
-              )}
-              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <Button
-                  variant="ghost" size="sm" className="h-6 w-6 p-0"
-                  onClick={() => openEdit(ev)}
-                >
-                  <Edit2 className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                  onClick={() => setDeleteTarget(ev)}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Event form dialog */}
-      <Dialog open={showForm} onOpenChange={open => !open && closeForm()}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editingEvent ? 'Etkinliği Düzenle' : 'Yeni Etkinlik Ekle'}</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Etkinlik Tipi *</label>
-                <select
-                  value={eventForm.eventType}
-                  onChange={e => handleEventTypeChange(e.target.value)}
-                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background text-foreground"
-                >
-                  {EVENT_TYPE_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Başlık</label>
-                <Input
-                  className="h-8 text-sm"
-                  value={eventForm.title}
-                  onChange={e => setEventForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder={EVENT_TYPE_DEFAULTS[eventForm.eventType] || 'Etkinlik başlığı'}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Başlangıç Tarihi *</label>
-                <Input
-                  type="date" className="h-8 text-sm"
-                  value={eventForm.startDate}
-                  onChange={e => setEventForm(f => ({ ...f, startDate: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Bitiş Tarihi (opsiyonel)</label>
-                <Input
-                  type="date" className="h-8 text-sm"
-                  value={eventForm.endDate}
-                  onChange={e => setEventForm(f => ({ ...f, endDate: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Not (opsiyonel)</label>
-                <Input
-                  className="h-8 text-sm"
-                  value={eventForm.note}
-                  onChange={e => setEventForm(f => ({ ...f, note: e.target.value }))}
-                  placeholder="Ek açıklama..."
-                />
-              </div>
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={eventForm.isPublic}
-                    onChange={e => setEventForm(f => ({ ...f, isPublic: e.target.checked }))}
-                    className="rounded"
-                  />
-                  <span className="text-sm">Herkese açık</span>
-                </label>
-              </div>
-            </div>
-
-            {eventFormError && (
-              <p className="text-xs text-destructive">{eventFormError}</p>
-            )}
-          </div>
-
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={closeForm}>İptal</Button>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={createEvent.isPending || updateEvent.isPending}
-            >
-              {createEvent.isPending || updateEvent.isPending ? 'Kaydediliyor...' : editingEvent ? 'Güncelle' : 'Ekle'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Etkinliği Sil</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{deleteTarget?.title}</strong> etkinliği silinecek. Bu işlem geri alınamaz.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>İptal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Sil
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
+function academicCalendarSourceText(term: AdminTermDto) {
+  if (!term.hasGeneratedCalendar) return null;
+  const draftText = term.generatedCalendarDraftId ? `Taslak #${term.generatedCalendarDraftId}` : 'Taslak';
+  return `${draftText} · ${term.generatedCalendarEventCount} takvim kaydı`;
 }
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TermManagementPage() {
@@ -532,8 +177,6 @@ export default function TermManagementPage() {
   const [form, setForm] = useState<TermFormState>(emptyForm());
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [expandedTermId, setExpandedTermId] = useState<number | null>(null);
-
   const [transitionError, setTransitionError] = useState('');
   const [transitioningTermId, setTransitioningTermId] = useState<number | null>(null);
 
@@ -565,9 +208,6 @@ export default function TermManagementPage() {
 
   function openCreate() { setForm(emptyForm()); setFormError(''); setCreateModalOpen(true); }
   function openEdit(term: AdminTermDto) { setForm(termFromDto(term)); setFormError(''); setEditingTerm(term); }
-  function toggleCalendar(termId: number) {
-    setExpandedTermId(prev => prev === termId ? null : termId);
-  }
 
   function validateForm(): string | null {
     if (!form.name.trim()) return 'Dönem adı zorunludur.';
@@ -697,13 +337,11 @@ export default function TermManagementPage() {
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
               </tr>
-            ) : sortedTerms.flatMap(term => {
-              const isExpanded = expandedTermId === term.id;
-              return [
-                <tr
-                  key={term.id}
-                  className={`transition-colors hover:bg-muted/20 ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
-                >
+            ) : sortedTerms.map(term => (
+              <tr
+                key={term.id}
+                className={`transition-colors hover:bg-muted/20 ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
+              >
                   {/* Ad */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -712,9 +350,17 @@ export default function TermManagementPage() {
                         <p className="text-xs text-muted-foreground">
                           {term.shortName} · {term.termTypeLabel}
                         </p>
+                        {term.hasGeneratedCalendar && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Akademik takvim: {academicCalendarSourceText(term)}
+                          </p>
+                        )}
                       </div>
                       {term.isActive && (
                         <Badge variant="success" className="text-xs shrink-0">Aktif</Badge>
+                      )}
+                      {term.hasGeneratedCalendar && (
+                        <Badge variant="outline" className="text-xs shrink-0">Aktarıldı</Badge>
                       )}
                     </div>
                   </td>
@@ -773,16 +419,6 @@ export default function TermManagementPage() {
                   {/* İşlemler */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleCalendar(term.id)}
-                        className="text-muted-foreground hover:text-foreground text-xs gap-1"
-                        title="Akademik takvim"
-                      >
-                        <CalendarDays className="h-3.5 w-3.5" />
-                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      </Button>
                       {!term.isActive && (
                         <Button
                           variant="ghost"
@@ -799,16 +435,8 @@ export default function TermManagementPage() {
                       </Button>
                     </div>
                   </td>
-                </tr>,
-                isExpanded && (
-                  <tr key={`${term.id}-calendar`} className="border-l-4 border-l-transparent">
-                    <td colSpan={8} className="p-0 bg-muted/5">
-                      <TermCalendarSection termId={term.id} />
-                    </td>
-                  </tr>
-                ),
-              ].filter(Boolean);
-            })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

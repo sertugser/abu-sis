@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -8,19 +9,28 @@ using SIS.Application.Admin.Services;
 using SIS.Application.Common.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.AdvisorConstraints.Services;
+using SIS.Application.CourseIntention.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.Recommendation.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
+using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.AcademicLevel.Services;
 using SIS.Infrastructure.Services.Scheduling;
 using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.TermClosing.Services;
 using SIS.Application.FacultyPlanning.Services;
+using SIS.Application.CourseEvaluation.Services;
+using SIS.Application.Announcement.Services;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.CourseEvaluation;
+using SIS.Infrastructure.Services.Announcement;
+using SIS.Infrastructure.Services.CalendarGenerator;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +41,31 @@ builder.Services.AddControllers()
         o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddScoped<SIS.API.Filters.SensitiveDataAccessFilter>();
+
+// Rate limiting for audit log endpoints
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("AuditLogRead", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User?.Identity?.Name ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromSeconds(10),
+                PermitLimit = 30,
+                QueueLimit = 0,
+            }));
+    options.AddPolicy("AuditLogExport", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User?.Identity?.Name ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 3,
+                QueueLimit = 0,
+            }));
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
@@ -92,9 +127,11 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
+builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
+builder.Services.AddHostedService<SurveyAutoOpenService>();
 builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
@@ -103,16 +140,22 @@ builder.Services.AddScoped<EnrollmentForecastService>();
 builder.Services.AddScoped<IEnrollmentForecastService>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
 builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
 builder.Services.AddSchedulingConstraints();
-builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<SchedulingService>();
+builder.Services.AddScoped<ISchedulingService>(sp => sp.GetRequiredService<SchedulingService>());
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
+builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
+builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<ICourseIntentionService, CourseIntentionService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
 builder.Services.AddScoped<ITermClosingService, TermClosingService>();
+builder.Services.AddScoped<IExcelScheduleService, ExcelScheduleService>();
 
 // Admin services
 builder.Services.AddScoped<IAdminUserService, AdminUserService>();
@@ -120,9 +163,17 @@ builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
 builder.Services.AddScoped<IAdminTermService, AdminTermService>();
 builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
+builder.Services.AddScoped<ICalendarTemplateService, CalendarTemplateService>();
+builder.Services.AddScoped<IHolidayCalculatorService, HolidayCalculatorService>();
+builder.Services.AddScoped<IAcademicCalendarRuleService, AcademicCalendarRuleService>();
+builder.Services.AddScoped<ICalendarGeneratorService, CalendarGeneratorService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
+
+// Course Evaluation + Internal Announcements
+builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();
+builder.Services.AddScoped<IInternalAnnouncementService, InternalAnnouncementService>();
 
 var app = builder.Build();
 
@@ -138,6 +189,7 @@ app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 // Seed database

@@ -138,6 +138,10 @@ public class StudentEligibilityService : IStudentEligibilityService
             StudentId = snapshot.StudentId,
             StudentNumber = snapshot.StudentNumber,
             FullName = user != null ? $"{user.FirstName} {user.LastName}" : snapshot.StudentNumber,
+            CourseId = course.Id,
+            CourseCode = course.Code,
+            CourseName = course.Name,
+            Ects = course.Ects,
             CurrentSemester = snapshot.CurrentSemester,
             Cgpa = snapshot.Cgpa,
             CurrentTermEcts = snapshot.CurrentTermEcts,
@@ -145,6 +149,9 @@ public class StudentEligibilityService : IStudentEligibilityService
             PreviousGrade = snapshot.LastGradeByCourse.GetValueOrDefault(course.Id),
             IsEligible = true
         };
+        var curriculumCourse = GetCurriculumCourse(course.Id, snapshot.CurriculumId, context);
+        result.IsCompulsory = curriculumCourse?.IsCompulsory ?? false;
+        result.SuggestedSemester = curriculumCourse?.SuggestedSemester ?? 0;
 
         // 1. Already passed?
         if (snapshot.PassedCourseIds.Contains(course.Id))
@@ -275,10 +282,18 @@ public class StudentEligibilityService : IStudentEligibilityService
         int curriculumId,
         EligibilityContextData context)
     {
+        return GetCurriculumCourse(courseId, curriculumId, context)?.SuggestedSemester;
+    }
+
+    private static CurriculumCourse? GetCurriculumCourse(
+        int courseId,
+        int curriculumId,
+        EligibilityContextData context)
+    {
         if (!context.CurriculumCoursesByCurriculumId.TryGetValue(curriculumId, out var courses))
             return null;
 
-        return courses.FirstOrDefault(cc => cc.CourseId == courseId)?.SuggestedSemester;
+        return courses.FirstOrDefault(cc => cc.CourseId == courseId);
     }
 
     private async Task<EligibilityContextData> BuildEligibilityContextAsync(CancellationToken cancellationToken)

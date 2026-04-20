@@ -243,7 +243,7 @@ public class TermClosingServiceTests : IDisposable
 
         var progress = await _context.TermClosingProgresses
             .FirstOrDefaultAsync(p => p.DepartmentId == DepartmentId && p.Step == TermClosingStep.GradeLock);
-        progress!.IsCompleted.Should().BeFalse();
+        progress.Should().BeNull("ClearProgressAsync now removes the record");
     }
 
     [Fact]
@@ -271,9 +271,10 @@ public class TermClosingServiceTests : IDisposable
         progress.Should().NotBeNull();
         progress!.IsCompleted.Should().BeTrue();
 
-        var snapshot = JsonSerializer.Deserialize<Dictionary<int, int>>(progress.Notes!);
-        snapshot.Should().NotBeNull();
-        snapshot.Should().ContainKey(StudentId);
+        var snapshotDoc = JsonDocument.Parse(progress.Notes!);
+        snapshotDoc.RootElement.ValueKind.Should().Be(JsonValueKind.Object);
+        snapshotDoc.RootElement.TryGetProperty(StudentId.ToString(), out var studentSnap).Should().BeTrue();
+        studentSnap.TryGetProperty("CompletedSemesters", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -292,7 +293,7 @@ public class TermClosingServiceTests : IDisposable
 
         var progress = await _context.TermClosingProgresses
             .FirstOrDefaultAsync(p => p.DepartmentId == DepartmentId && p.Step == TermClosingStep.Promotion);
-        progress!.IsCompleted.Should().BeFalse();
+        progress.Should().BeNull("ClearProgressAsync now removes the record");
     }
 
     [Fact]

@@ -289,7 +289,7 @@ const ResizableDialogContent = React.forwardRef<
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
             'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
             // Default centering (only when no custom dimensions)
-            !dimensions && !isFullscreen && 'left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] max-w-2xl',
+            !dimensions && !isFullscreen && 'left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%]',
             className,
           )}
           style={computedStyle}

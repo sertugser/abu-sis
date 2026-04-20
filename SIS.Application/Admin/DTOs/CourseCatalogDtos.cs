@@ -92,12 +92,6 @@ public record PrerequisiteChainNodeDto(
 public record AddPrerequisiteDto(int RequiredCourseId);
 public record AddEquivalencyDto(int EquivalentCourseId);
 
-public record AssignToCurriculumDto(
-    int CurriculumId,
-    int SuggestedSemester,
-    bool IsCompulsory
-);
-
 public record CourseFilterDto
 {
     public string? Search { get; set; }
