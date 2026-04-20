@@ -43,6 +43,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<RegistrationPlan> RegistrationPlans => Set<RegistrationPlan>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
     public DbSet<ConstraintDefinition> ConstraintDefinitions => Set<ConstraintDefinition>();
@@ -706,6 +707,18 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(sc => sc.Key).IsUnique();
             e.Property(sc => sc.RowVersion)
              .IsRowVersion();
+        });
+
+        // ── UserPreference ───────────────────────────────────────
+        builder.Entity<UserPreference>(e =>
+        {
+            e.HasIndex(up => up.UserId).IsUnique();
+            e.Property(up => up.FavoritesJson).HasColumnType("jsonb");
+
+            e.HasOne<ApplicationUser>()
+             .WithOne()
+             .HasForeignKey<UserPreference>(up => up.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── PromotionRule ────────────────────────────────────────

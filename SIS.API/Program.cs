@@ -10,6 +10,7 @@ using SIS.Application.Common.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.AdvisorConstraints.Services;
+using SIS.Application.UserPreferences.Services;
 using SIS.Application.CourseIntention.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
@@ -128,6 +129,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
+builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri

@@ -2764,6 +2764,32 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("TimeSlots");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.UserPreference", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FavoritesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserPreferences");
+                });
+
             modelBuilder.Entity("SIS.Infrastructure.Persistence.ApplicationUser", b =>
                 {
                     b.Property<int>("Id")
@@ -3824,6 +3850,15 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.UserPreference", b =>
+                {
+                    b.HasOne("SIS.Infrastructure.Persistence.ApplicationUser", null)
+                        .WithOne()
+                        .HasForeignKey("SIS.Domain.Entities.UserPreference", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
