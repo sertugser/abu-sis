@@ -316,7 +316,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
           {/* Geri al */}
           {lastAppliedIds.length > 0 && (() => {
             const unpinnedIds = lastAppliedIds.filter(id => {
-              const section = sections.find(s => s.id === id);
+              const section = sections.find(s => s.sectionId === id);
               return !section?.isPinned;
             });
             if (unpinnedIds.length === 0) return null;

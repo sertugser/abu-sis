@@ -61,7 +61,7 @@ export default function ScoreBreakdownDashboard({
       {trendData && trendData.dataPoints.length > 1 && (
         <div className="flex items-start gap-4">
           <div className="flex-1">
-            <TrendChart data={trendData} />
+            <TrendChart trend={trendData} isLoading={false} />
           </div>
           {onTakeSnapshot && (
             <Button variant="outline" size="sm" onClick={onTakeSnapshot} disabled={snapshotPending} className="mt-1 shrink-0">
@@ -75,8 +75,8 @@ export default function ScoreBreakdownDashboard({
       {/* Heatmap + Bottleneck side by side */}
       {(heatmapData || bottleneckData) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {heatmapData && <ViolationHeatmap data={heatmapData} />}
-          {bottleneckData && <BottleneckPanel data={bottleneckData} />}
+          {heatmapData && <ViolationHeatmap heatmap={heatmapData} isLoading={false} />}
+          {bottleneckData && <BottleneckPanel bottleneck={bottleneckData} isLoading={false} />}
         </div>
       )}
 
@@ -92,10 +92,11 @@ export default function ScoreBreakdownDashboard({
                 <XAxis type="number" />
                 <YAxis type="category" dataKey="name" width={50} tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value: number) => [value.toFixed(1), '']}
-                  labelFormatter={(label: string) => {
-                    const item = chartData.find(d => d.name === label);
-                    return item ? `${item.fullName} (%${item.percentage})` : label;
+                  formatter={(value) => [typeof value === 'number' ? value.toFixed(1) : String(value), '']}
+                  labelFormatter={(label) => {
+                    const name = String(label ?? '');
+                    const item = chartData.find(d => d.name === name);
+                    return item ? `${item.fullName} (%${item.percentage})` : name;
                   }}
                 />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>

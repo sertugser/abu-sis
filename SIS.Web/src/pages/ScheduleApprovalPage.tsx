@@ -43,7 +43,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
-import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import {
   useScheduleApprovalStatus,
   useApproveSchedule,
@@ -100,9 +99,6 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue', badge }: {
 export default function ScheduleApprovalPage() {
   const { data: activeTerm } = useActiveTerm();
   const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
-  const contextQuery = useAcademicOperationsContext();
-  const departments = contextQuery.data?.accessibleDepartments ?? [];
-
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const facultyId = selectedFacultyId ?? faculties?.[0]?.id ?? null;
   const termId = activeTerm?.id;
@@ -544,7 +540,8 @@ export default function ScheduleApprovalPage() {
                     <SectionListTab
                       facultyId={facultyId}
                       termId={termId ?? null}
-                      departments={departments}
+                      searchText=""
+                      pageSize={25}
                       readOnly
                     />
                   )}

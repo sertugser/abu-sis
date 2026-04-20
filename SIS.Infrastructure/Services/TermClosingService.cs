@@ -809,10 +809,11 @@ public class TermClosingService : ITermClosingService
             : new Dictionary<int, string>();
 
         // Section + missing grade counts per dept (tek sorgu)
+        // Where filters DepartmentId.HasValue, so .Value is safe; groups by non-nullable int key
         var sectionStats = await _context.CourseSections
             .AsNoTracking()
             .Where(cs => cs.TermId == term.Id && cs.IsActive && cs.Course.DepartmentId.HasValue && deptIds.Contains(cs.Course.DepartmentId.Value))
-            .GroupBy(cs => cs.Course.DepartmentId)
+            .GroupBy(cs => cs.Course.DepartmentId!.Value)
             .Select(g => new { DeptId = g.Key, SectionCount = g.Count() })
             .ToListAsync(ct);
 
@@ -827,7 +828,7 @@ public class TermClosingService : ITermClosingService
                 && cr.Status != RegistrationStatus.Dropped
                 && cr.Status != RegistrationStatus.Draft
                 && cr.Grade == null)
-            .GroupBy(cr => cr.CourseSection.Course.DepartmentId)
+            .GroupBy(cr => cr.CourseSection.Course.DepartmentId!.Value)
             .Select(g => new { DeptId = g.Key, MissingCount = g.Count() })
             .ToListAsync(ct);
 

@@ -1,7 +1,7 @@
 import apiClient from './axios';
 import { getFilenameFromContentDisposition, type DownloadableFile } from '../lib/download';
 
-/* ── Summary DTO (list endpoint — no oldValue/newValue) ── */
+/* ── Summary DTO (list endpoint) ── */
 export interface AuditLogSummaryDto {
   id: number;
   userId: number | null;
@@ -9,6 +9,8 @@ export interface AuditLogSummaryDto {
   action: string;
   entityType: string;
   entityId?: string | null;
+  oldValue?: string | null;
+  newValue?: string | null;
   timestamp: string;
   ipAddress?: string;
 }

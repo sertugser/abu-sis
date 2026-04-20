@@ -297,9 +297,9 @@ function StudentRow({ student: s, isExpanded, onToggle }: {
               {s.warnings.map((w, i) => (
                 <p key={i} className="text-[11px] text-amber-700">• {w}</p>
               ))}
-              {s.promotionRuleDetails?.length > 0 && (
+              {s.promotionRuleDetails && s.promotionRuleDetails.length > 0 && (
                 <div className="pt-1 border-t border-border/30 mt-1">
-                  {s.promotionRuleDetails.map((d, i) => (
+                  {s.promotionRuleDetails.map((d: string, i: number) => (
                     <p key={i} className="text-[10px] text-muted-foreground">📋 {d}</p>
                   ))}
                 </div>

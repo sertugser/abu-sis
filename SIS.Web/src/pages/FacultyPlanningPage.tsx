@@ -153,7 +153,7 @@ export default function FacultyPlanningPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={exportExcel.isPending}
-                  onClick={() => exportExcel.mutate({ termId: termId!, facultyId: facultyId!, departmentId: undefined })}>
+                  onClick={() => exportExcel.mutate({ termId: termId!, facultyId: facultyId! })}>
                   <Download className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -245,7 +245,7 @@ export default function FacultyPlanningPage() {
 
       <ExcelImportModal
         open={importOpen}
-        onOpenChange={setImportOpen}
+        onClose={() => setImportOpen(false)}
         termId={termId!}
         facultyId={facultyId!}
       />

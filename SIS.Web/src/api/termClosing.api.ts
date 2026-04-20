@@ -42,6 +42,7 @@ export interface StudentProgressionDto {
   wasPromoted: boolean;
   status: string;
   warnings: string[];
+  promotionRuleDetails?: string[];
 }
 
 export interface BatchProgressionResultDto {

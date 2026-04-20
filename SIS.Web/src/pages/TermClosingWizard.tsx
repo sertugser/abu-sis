@@ -33,6 +33,7 @@ import {
   useOpenNewTerm,
 } from '@/hooks/useTermClosing';
 import type { StudentProgressionDto } from '@/api/termClosing.api';
+import { cn } from '@/lib/utils';
 import {
   Loader2,
   Lock,

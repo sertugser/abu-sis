@@ -37,7 +37,7 @@ function displayValue(value: unknown) {
   return JSON.stringify(value);
 }
 
-function extractConfigValue(serialized?: string) {
+function extractConfigValue(serialized?: string | null) {
   if (!serialized) {
     return null;
   }
