@@ -1,11 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Plus } from 'lucide-react';
 import { CourseFilterBar } from '../components/course-opening/CourseFilterBar';
 import { CurriculumPanel } from '../components/course-opening/CurriculumPanel';
 import { CourseDetailModal } from '../components/course-opening/CourseDetailModal';
 import { OpenedCoursesPanel } from '../components/course-opening/OpenedCoursesPanel';
+import { FreeCourseOpenDialog } from '../components/course-opening/FreeCourseOpenDialog';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
@@ -39,6 +41,7 @@ export default function CourseOpeningPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedInstructorId, setSelectedInstructorId] = useState<number | null>(null);
   const [detailCourse, setDetailCourse] = useState<CurriculumCourseForOpeningDto | null>(null);
+  const [freeCourseDialogOpen, setFreeCourseDialogOpen] = useState(false);
 
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const termId = activeTerm?.id ?? null;
@@ -93,9 +96,42 @@ export default function CourseOpeningPage() {
     });
   }, []);
 
-  const handleOpenSelected = useCallback(() => {
+  const handleOpenSelected = useCallback(async () => {
     if (!deptId || !termId || selectedIds.size === 0) return;
     const courses = curriculumQuery.data ?? [];
+
+    // Madde 14: Seçilen derslerin herhangi biri cross-list'liyse onay sor
+    let includeCrossLists = false;
+    try {
+      const { default: apiClient } = await import('../api/axios');
+      const crossListChecks = await Promise.all(
+        [...selectedIds].map(async cid => {
+          try {
+            const res = await apiClient.get<Array<{ code: string }>>(`/admin/courses/${cid}/cross-lists`);
+            return { courseId: cid, links: res.data };
+          } catch {
+            return { courseId: cid, links: [] };
+          }
+        })
+      );
+      const withLinks = crossListChecks.filter(x => x.links.length > 0);
+      if (withLinks.length > 0) {
+        const details = withLinks
+          .map(x => {
+            const code = courses.find(c => c.courseId === x.courseId)?.courseCode ?? `#${x.courseId}`;
+            const linked = x.links.map(l => l.code).join(', ');
+            return `${code} ↔ ${linked}`;
+          })
+          .join('\n');
+        includeCrossLists = window.confirm(
+          `Seçilen derslerin bazıları cross-list eşlemeli:\n\n${details}\n\n` +
+          `Cross-list'li dersler için paralel şubeler de otomatik açılsın mı?\n\n` +
+          `Evet: Aynı hoca/kapasite ile her iki kod için de şube açılır (ortak grup).\n` +
+          `Hayır: Sadece seçtiğiniz dersler açılır.`
+        );
+      }
+    } catch { /* network/permission errors → default false */ }
+
     bulkMutation.mutate({
       courses: [...selectedIds].map(courseId => {
         const c = courses.find(x => x.courseId === courseId);
@@ -103,6 +139,7 @@ export default function CourseOpeningPage() {
           courseId,
           sectionCount: c?.recommendedSectionCount ?? 1,
           capacityPerSection: c?.recommendedCapacity ?? 40,
+          includeCrossLists,
         };
       }),
     }, { onSuccess: () => setSelectedIds(new Set()) });
@@ -157,23 +194,51 @@ export default function CourseOpeningPage() {
     );
   }
 
+  const termNotInPlanning = !!activeTerm && activeTerm.status !== 'Planning';
+
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
-      <div className="shrink-0 pb-3">
-        <CourseFilterBar
-          departments={departments}
-          faculties={faculties ?? []}
-          structureDepartments={structureDepartments ?? []}
-          selectedFacultyId={selectedFacultyId}
-          onFacultyChange={handleFacultyChange}
-          selectedDeptId={deptId}
-          onDeptChange={setSelectedDeptId}
-          semesterFilter={semesterFilter}
-          onSemesterChange={setSemesterFilter}
-          typeFilter={typeFilter}
-          onTypeChange={setTypeFilter}
-          stats={stats}
-        />
+      {termNotInPlanning && (
+        <Alert variant="warning" className="mb-3 shrink-0">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>
+            {activeTerm?.name} dönemi planlama fazında değil (durum: {activeTerm?.status})
+          </AlertTitle>
+          <AlertDescription>
+            Yeni ders/şube açma işlemi yalnızca <b>Planning</b> statüsündeki dönemlerde yapılabilir.
+            Ders açmak için Dönem Yönetimi sayfasından yeni bir dönem oluşturup <b>Planning</b> durumuna alın,
+            ya da mevcut dönemi geri alın. Bu sayfadaki müfredat dersleri şu an salt okunur moddadır.
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className="shrink-0 pb-3 flex items-stretch gap-2">
+        <div className="flex-1 min-w-0">
+          <CourseFilterBar
+            departments={departments}
+            faculties={faculties ?? []}
+            structureDepartments={structureDepartments ?? []}
+            selectedFacultyId={selectedFacultyId}
+            onFacultyChange={handleFacultyChange}
+            selectedDeptId={deptId}
+            onDeptChange={setSelectedDeptId}
+            semesterFilter={semesterFilter}
+            onSemesterChange={setSemesterFilter}
+            typeFilter={typeFilter}
+            onTypeChange={setTypeFilter}
+            stats={stats}
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 h-auto gap-1.5"
+          onClick={() => setFreeCourseDialogOpen(true)}
+          disabled={!deptId || termNotInPlanning}
+          title={termNotInPlanning ? 'Dönem planlama fazında değil' : 'Müfredatta olmayan bir dersi serbest aç'}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Serbest Ders Aç
+        </Button>
       </div>
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] rounded-xl border border-gray-200 shadow-sm bg-white" style={{ overflow: 'hidden' }}>
         <CurriculumPanel
@@ -221,6 +286,13 @@ export default function CourseOpeningPage() {
             });
           }}
           isOpening={openMutation.isPending}
+        />
+      )}
+      {freeCourseDialogOpen && deptId && termId && (
+        <FreeCourseOpenDialog
+          departmentId={deptId}
+          termId={termId}
+          onClose={() => setFreeCourseDialogOpen(false)}
         />
       )}
     </div>

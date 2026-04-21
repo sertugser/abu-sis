@@ -20,6 +20,13 @@ public class CourseSection
     public bool IsFinalized { get; set; }
     public bool IsScheduleLocked { get; set; } // true = otomatik scheduling değiştiremez
     public bool IsPinned { get; set; } // true = dışarıdan gelen hoca, saati sabit, optimizasyon değiştiremez
+
+    /// <summary>
+    /// Cross-list grup kimliği. Aynı gruptaki section'lar aynı hoca/sınıf/saat paylaşır,
+    /// kapasite birleşik hesaplanır. Null = tek başına section.
+    /// </summary>
+    public int? CrossListGroupId { get; set; }
+
     public uint RowVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

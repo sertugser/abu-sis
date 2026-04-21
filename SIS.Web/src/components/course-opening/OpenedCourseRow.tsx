@@ -3,6 +3,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -29,11 +30,22 @@ interface Props {
 }
 
 function InstructorSelect({ instructors, value, onChange }: { instructors: InstructorOptionDto[]; value: string; onChange: (v: string) => void }) {
+  // D1: Native <select> yerine projenin standart Select bileşeni.
+  // "Hoca Seçiniz" durumu için __none__ sentinel kullanıyoruz (Radix Select boş string kabul etmiyor).
   return (
-    <select className="h-7 w-full rounded-lg border border-gray-200 bg-white px-2 text-xs" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">Hoca Seçiniz</option>
-      {instructors.map(i => <option key={i.instructorId} value={i.instructorId}>{i.fullName}</option>)}
-    </select>
+    <Select value={value === '' ? '__none__' : value} onValueChange={(v) => onChange(v === '__none__' ? '' : v)}>
+      <SelectTrigger className="h-7 text-xs rounded-lg">
+        <SelectValue placeholder="Hoca Seçiniz" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none__">Hoca Seçiniz</SelectItem>
+        {instructors.map(i => (
+          <SelectItem key={i.instructorId} value={String(i.instructorId)}>
+            {i.fullName}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

@@ -69,6 +69,11 @@ export default function TopBar() {
           <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="h-4 w-4" />
             <span className="font-medium">{term.name}</span>
+            {term.status && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80 rounded-sm bg-muted px-1.5 py-0.5">
+                {term.status}
+              </span>
+            )}
           </div>
 
           <div className="flex gap-2">

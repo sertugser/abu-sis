@@ -26,6 +26,12 @@ public class DepartmentSectionClassListDto
     public int ActiveStudentCount { get; set; }
     public bool IsActive { get; set; }
     public List<DepartmentSectionStudentDto> Students { get; set; } = new();
+
+    // Madde 14: Cross-list grup bilgileri
+    /// <summary>Cross-list grubu (null = tek başına).</summary>
+    public int? CrossListGroupId { get; set; }
+    /// <summary>Gruptaki diğer kodların kısa listesi (ör. ["BIL301", "ME301"]).</summary>
+    public List<string> CrossListPeerCodes { get; set; } = new();
 }
 
 public class DepartmentSectionStudentDto
@@ -36,4 +42,6 @@ public class DepartmentSectionStudentDto
     public string Email { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string? Grade { get; set; }
+    /// <summary>Cross-list grubunda öğrenci hangi kod altına kayıtlı (tek section ise section'ın kodu).</summary>
+    public string EnrolledCourseCode { get; set; } = string.Empty;
 }

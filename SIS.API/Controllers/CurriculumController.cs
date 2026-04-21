@@ -23,6 +23,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         DateTime? StartDate, DateTime? EndDate,
         string? DecisionDate, string? DecisionNo, string? DecisionNote,
         string? GradingSystem, int? InternshipDuration, string? Description,
+        // Müfredat-özel dönem AKTS tavanı override'ları (null = global varsayılan kullanılıyor)
+        int? EctsLimitBelow200, int? EctsLimit200To249, int? EctsLimitAbove250,
         List<CurriculumCourseItemDto> Courses);
 
     public record CurriculumCourseItemDto(
@@ -44,7 +46,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         string? Name = null, string? ShortName = null, string? EnglishName = null,
         DateTime? StartDate = null, DateTime? EndDate = null,
         string? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
-        string? GradingSystem = null, int? InternshipDuration = null, string? Description = null);
+        string? GradingSystem = null, int? InternshipDuration = null, string? Description = null,
+        // Dönem AKTS tavanı override'ları; uygulanması için EctsLimitsProvided=true gönderilmelidir.
+        // EctsLimitsProvided=true iken üçü de null geçilirse override'lar temizlenir (global fallback aktif olur).
+        int? EctsLimitBelow200 = null, int? EctsLimit200To249 = null, int? EctsLimitAbove250 = null,
+        bool EctsLimitsProvided = false);
 
     public record AddCourseRequest(
         int CourseId, int SuggestedSemester, bool IsCompulsory,
@@ -137,6 +143,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             curriculum.GradingSystem,
             curriculum.InternshipDuration,
             curriculum.Description,
+            curriculum.EctsLimitBelow200,
+            curriculum.EctsLimit200To249,
+            curriculum.EctsLimitAbove250,
             curriculum.CurriculumCourses
                 .OrderBy(cc => cc.SuggestedSemester)
                 .ThenBy(cc => cc.Course.Code)
@@ -227,6 +236,15 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         if (req.InternshipDuration.HasValue) curriculum.InternshipDuration = req.InternshipDuration;
         if (req.Description is not null) curriculum.Description = req.Description;
 
+        // Dönem AKTS tavanı override'ları: sadece istemci açıkça "uygulamak istiyorum" derse işle.
+        // Üçü birlikte yönetilir; biri verilip diğerleri verilmezse de gönderilenler yazılır.
+        if (req.EctsLimitsProvided)
+        {
+            curriculum.EctsLimitBelow200 = req.EctsLimitBelow200;
+            curriculum.EctsLimit200To249 = req.EctsLimit200To249;
+            curriculum.EctsLimitAbove250 = req.EctsLimitAbove250;
+        }
+
         curriculum.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(ct);
 
@@ -282,9 +300,14 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [HttpPost("{id:int}/courses")]
     public async Task<IActionResult> AddCourse(int id, [FromBody] AddCourseRequest req, CancellationToken ct)
     {
-        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
-        if (!exists)
+        // Madde 8: Published müfredat kilit — ders eklenip çıkarılamaz
+        var curriculum = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is null)
             return NotFound(new { message = "Müfredat bulunamadı." });
+        if (curriculum.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Yayındaki müfredata ders eklenemez. Yeni sürüm oluşturun." });
+        if (curriculum.Status == Domain.Enums.CurriculumStatus.Archived)
+            return BadRequest(new { message = "Arşiv durumundaki müfredat değiştirilemez." });
 
         var course = await context.Set<Domain.Entities.Course>()
             .FirstOrDefaultAsync(c => c.Id == req.CourseId, ct);
@@ -323,6 +346,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [HttpPut("{id:int}/courses/{courseId:int}")]
     public async Task<IActionResult> UpdateCourse(int id, int courseId, [FromBody] UpdateCourseRequest req, CancellationToken ct)
     {
+        // Madde 8: Published guard
+        var curriculum = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is not null && curriculum.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Yayındaki müfredatın dersi düzenlenemez. Yeni sürüm oluşturun." });
+
         var cc = await context.CurriculumCourses
             .FindAsync([id, courseId], ct);
         if (cc is null)
@@ -350,6 +378,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [HttpDelete("{id:int}/courses/{courseId:int}")]
     public async Task<IActionResult> RemoveCourse(int id, int courseId, CancellationToken ct)
     {
+        // Madde 8: Published guard
+        var curriculum = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is not null && curriculum.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Yayındaki müfredattan ders silinemez. Yeni sürüm oluşturun." });
+
         var cc = await context.CurriculumCourses
             .FindAsync([id, courseId], ct);
         if (cc is null)
@@ -443,6 +476,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             detail.GradingSystem,
             detail.InternshipDuration,
             detail.Description,
+            detail.EctsLimitBelow200,
+            detail.EctsLimit200To249,
+            detail.EctsLimitAbove250,
             detail.CurriculumCourses
                 .OrderBy(cc => cc.SuggestedSemester)
                 .ThenBy(cc => cc.Course.Code)
@@ -510,9 +546,14 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [HttpPost("{id:int}/elective-pools")]
     public async Task<IActionResult> CreatePool(int id, [FromBody] CreatePoolRequest req, CancellationToken ct)
     {
-        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
-        if (!exists)
+        // Madde 8: Published müfredat kilit
+        var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curr is null)
             return NotFound(new { message = "Müfredat bulunamadı." });
+        if (curr.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Yayındaki müfredata havuz eklenemez. Yeni sürüm oluşturun." });
+        if (curr.Status == Domain.Enums.CurriculumStatus.Archived)
+            return BadRequest(new { message = "Arşiv durumundaki müfredat değiştirilemez." });
 
         var group = await context.ElectiveGroups
             .Include(eg => eg.Courses)
@@ -554,6 +595,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [HttpPut("{id:int}/elective-pools/{poolId:int}")]
     public async Task<IActionResult> UpdatePool(int id, int poolId, [FromBody] UpdatePoolRequest req, CancellationToken ct)
     {
+        // Madde 8: Published müfredat kilit
+        var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curr is not null && curr.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Yayındaki müfredatın havuzu düzenlenemez. Yeni sürüm oluşturun." });
+
         var pool = await context.CurriculumElectivePools
             .FirstOrDefaultAsync(p => p.Id == poolId && p.CurriculumId == id, ct);
         if (pool is null)
@@ -574,6 +620,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [HttpDelete("{id:int}/elective-pools/{poolId:int}")]
     public async Task<IActionResult> DeletePool(int id, int poolId, CancellationToken ct)
     {
+        // Madde 8: Published müfredat kilit
+        var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curr is not null && curr.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Yayındaki müfredattan havuz silinemez. Yeni sürüm oluşturun." });
+
         var pool = await context.CurriculumElectivePools
             .FirstOrDefaultAsync(p => p.Id == poolId && p.CurriculumId == id, ct);
         if (pool is null)
@@ -583,5 +634,105 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         await context.SaveChangesAsync(ct);
 
         return NoContent();
+    }
+
+    // ── Madde 8: Müfredat yayınlama akışı ─────────────────────────
+
+    /// <summary>Draft → Published geçişi. Yayınlandıktan sonra ders/havuz değişikliği engellenir.</summary>
+    [HttpPost("{id:int}/publish")]
+    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    public async Task<IActionResult> PublishCurriculum(int id, CancellationToken ct)
+    {
+        var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curr is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+        if (curr.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Müfredat zaten yayında." });
+        if (curr.Status == Domain.Enums.CurriculumStatus.Archived)
+            return BadRequest(new { message = "Arşiv müfredat yeniden yayınlanamaz. Yeni sürüm oluşturun." });
+
+        curr.Status = Domain.Enums.CurriculumStatus.Published;
+        curr.PublishedAt = DateTime.UtcNow;
+        curr.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+        return Ok(new { message = "Müfredat yayınlandı.", publishedAt = curr.PublishedAt });
+    }
+
+    /// <summary>Published → Archived geçişi. Eski müfredat kapatılır; yeni öğrenci bağlanamaz.</summary>
+    [HttpPost("{id:int}/archive")]
+    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    public async Task<IActionResult> ArchiveCurriculum(int id, CancellationToken ct)
+    {
+        var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curr is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+        if (curr.Status != Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Sadece yayında olan müfredatlar arşive alınabilir." });
+
+        curr.Status = Domain.Enums.CurriculumStatus.Archived;
+        curr.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+        return Ok(new { message = "Müfredat arşive alındı." });
+    }
+
+    // ── Madde 17: Öğrencinin havuz tamamlama durumu ──────────────
+    public record PoolProgressDto(
+        int PoolId, string PoolCode, string PoolName, string Subtype,
+        int RequiredCourseCount, int CompletedCourseCount,
+        int RequiredEcts, int EarnedEcts,
+        int? EctsPerCourse,
+        bool IsFulfilled);
+
+    [HttpGet("student/{studentId:int}/pool-status")]
+    [Authorize(Roles = "Student,AcademicAdvisor,DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+    public async Task<IActionResult> GetPoolStatus(int studentId, CancellationToken ct)
+    {
+        // Öğrencinin aktif ana müfredatı
+        var studentProgram = await context.StudentPrograms
+            .AsNoTracking()
+            .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)
+            .FirstOrDefaultAsync(ct);
+        if (studentProgram is null)
+            return NotFound(new { message = "Öğrencinin aktif müfredatı bulunamadı." });
+
+        var pools = await context.CurriculumElectivePools
+            .AsNoTracking()
+            .Include(p => p.ElectiveGroup)
+            .Where(p => p.CurriculumId == studentProgram.CurriculumId)
+            .ToListAsync(ct);
+
+        // Öğrencinin AppliedElectivePoolId üzerinden havuzlara sayılan kayıtları
+        var poolRegs = await context.CourseRegistrations
+            .AsNoTracking()
+            .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Course)
+            .Where(cr => cr.StudentId == studentId
+                && cr.AppliedElectivePoolId != null
+                && (cr.Status == RegistrationStatus.Active
+                    || cr.Status == RegistrationStatus.PendingAdvisorApproval
+                    || cr.Status == RegistrationStatus.Draft
+                    || cr.Grade != null))
+            .ToListAsync(ct);
+
+        var result = pools.Select(p =>
+        {
+            var regs = poolRegs.Where(r => r.AppliedElectivePoolId == p.Id).ToList();
+            var completedCount = regs.Count;
+            var earnedEcts = regs.Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
+            var isFulfilled = (p.RequiredCourseCount == 0 || completedCount >= p.RequiredCourseCount)
+                           && (p.RequiredEcts == 0 || earnedEcts >= p.RequiredEcts);
+            return new PoolProgressDto(
+                p.Id,
+                p.ElectiveGroup.Code,
+                p.ElectiveGroup.Name,
+                p.ElectiveGroup.ElectiveSubtype.ToString(),
+                p.RequiredCourseCount,
+                completedCount,
+                p.RequiredEcts,
+                earnedEcts,
+                p.EctsPerCourse,
+                isFulfilled);
+        }).ToList();
+
+        return Ok(result);
     }
 }

@@ -405,7 +405,10 @@ export default function ScheduleApprovalPage() {
         ) : null}
 
         {/* ── Schedule View Dialog ── */}
-        <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+        <Dialog open={viewOpen} onOpenChange={(o) => {
+          setViewOpen(o);
+          if (!o) setViewFilterDept(undefined); // dialog kapanırken filtre sıfırlansın
+        }}>
           <ResizableDialogContent
             defaultWidth={Math.min(1800, window.innerWidth - 40)}
             defaultHeight={Math.min(1000, window.innerHeight - 40)}

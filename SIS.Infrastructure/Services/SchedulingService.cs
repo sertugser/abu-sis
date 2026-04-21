@@ -1980,6 +1980,7 @@ public class SchedulingService : ISchedulingService
     /// Writes SectionSchedule records.
     /// Deletes existing records for this section first, then creates new ones
     /// by matching each TimeBlock to TimeSlots in the term.
+    /// BlockType heuristic: course.TheoryHours kadar ilk slot Theory, kalanı Lab.
     /// </summary>
     private async Task WriteSectionScheduleRecordsAsync(
         int sectionId,
@@ -2009,6 +2010,16 @@ public class SchedulingService : ISchedulingService
             .Where(ts => ts.TermId == termId)
             .ToListAsync(cancellationToken);
 
+        // Dersin teorik/uygulama saat dağılımını yükle — BlockType heuristic'i için
+        var courseHours = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.Id == sectionId)
+            .Select(cs => new { cs.Course.TheoryHours, cs.Course.LabHours })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var theoryHours = courseHours?.TheoryHours ?? 0;
+        var slotIndex = 0;
+
         foreach (var slot in slots)
         {
             // Find all TimeSlots that overlap with this TimeBlock on the same day
@@ -2021,12 +2032,21 @@ public class SchedulingService : ISchedulingService
 
             foreach (var ts in matchingTimeSlots)
             {
+                // İlk theoryHours kadar slot Theory, sonrası Lab.
+                // Scheduler CandidateGenerator'ı Theory bloklarını Lab bloklarından önce üretir,
+                // dolayısıyla slot sırası teorik→uygulama düzenindedir.
+                var blockType = slotIndex < theoryHours
+                    ? ScheduleBlockType.Theory
+                    : ScheduleBlockType.Lab;
+
                 _context.SectionSchedules.Add(new SectionSchedule
                 {
                     CourseSectionId = sectionId,
                     TimeSlotId = ts.Id,
-                    ClassroomId = classroomId.Value
+                    ClassroomId = classroomId.Value,
+                    BlockType = blockType,
                 });
+                slotIndex++;
             }
         }
     }

@@ -1,3 +1,5 @@
+using SIS.Domain.Enums;
+
 namespace SIS.Domain.Entities;
 
 /// <summary>
@@ -14,4 +16,11 @@ public class SectionSchedule
     public TimeSlot TimeSlot { get; set; } = null!;
     public int ClassroomId { get; set; }
     public Classroom Classroom { get; set; } = null!;
+
+    /// <summary>
+    /// Bu slot teorik mi uygulama mı? Default: Theory.
+    /// Scheduler, dersin Course.TheoryHours/LabHours değerlerine göre doldurur.
+    /// Devamsızlık eşikleri ve e-yoklama entegrasyonu için kullanılır.
+    /// </summary>
+    public ScheduleBlockType BlockType { get; set; } = ScheduleBlockType.Theory;
 }

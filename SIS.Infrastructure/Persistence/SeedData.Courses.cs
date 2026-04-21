@@ -7,6 +7,18 @@ public static partial class SeedData
 {
     private static async Task SeedCoursesAsync(AppDbContext context)
     {
+        // Madde 10: Null DepartmentId olan dersleri Temel Bilimler Koordinatörlüğü'ne ata
+        // (Ortak dersler artık sahipsiz kalmıyor — NOT NULL guard'ı öncesi tek seferlik temizlik)
+        var tbk = await context.Departments.FirstOrDefaultAsync(d => d.Code == "TBK");
+        if (tbk != null)
+        {
+            var orphanCourses = await context.Courses.Where(c => c.DepartmentId == null).ToListAsync();
+            foreach (var c in orphanCourses)
+                c.DepartmentId = tbk.Id;
+            if (orphanCourses.Count > 0)
+                await context.SaveChangesAsync();
+        }
+
         // ============================================================
         // 1. COURSES (213 total)
         // ============================================================

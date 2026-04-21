@@ -56,7 +56,7 @@ export default function ConflictDrillDown({ constraints }: Props) {
               {isOpen && (
                 <div className="px-3 pb-2 pt-1 border-t space-y-1">
                   <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
-                    <div>Agirlik: <span className="font-medium text-foreground">{c.weight}</span></div>
+                    <div>Ağırlık: <span className="font-medium text-foreground">{c.weight}</span></div>
                     <div>Ham Ceza: <span className="font-medium text-foreground">{c.rawPenalty.toFixed(1)}</span></div>
                     <div>Etkilenen: <span className="font-medium text-foreground">{c.affectedSectionCount} seksyon</span></div>
                   </div>

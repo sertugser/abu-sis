@@ -279,8 +279,8 @@ function ConstraintChangeTab({
   return (
     <>
       <p className="text-xs text-muted-foreground">
-        Kisitlamalari acip/kapatarak veya agirliklarini degistirerek
-        program uzerindeki etkisini simule edin.
+        Kısıtlamaları açıp/kapatarak veya ağırlıklarını değiştirerek
+        program üzerindeki etkisini simüle edin.
       </p>
 
       <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto">

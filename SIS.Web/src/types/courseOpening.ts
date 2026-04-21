@@ -58,6 +58,19 @@ export interface CurriculumCourseForOpeningDto {
   crossDepartmentDemand?: CrossDepartmentDemandDto[];
   previousTermEnrollment?: number;
   canOpen?: boolean;
+  /** CanOpen false olduğunda sebep — null = açılabilir. */
+  blockReason?: 'TermNotInPlanning' | 'NotOwner' | 'CourseUnassigned' | null;
+  // ── Seçmeli havuz bilgileri (null = havuz üyesi değil) ──
+  /** Kaynak: "Compulsory" (zorunlu), "Elective" (tekil seçmeli), "Pool" (havuz üyesi). */
+  source?: 'Compulsory' | 'Elective' | 'Pool';
+  /** Havuzun Id'si (CurriculumElectivePool). */
+  electivePoolId?: number | null;
+  /** Havuz kısaltması — "NDE", "TE", "OC". */
+  electiveGroupCode?: string | null;
+  /** Havuz adı — "Bölüm Dışı Seçmeli". */
+  electiveGroupName?: string | null;
+  /** Havuz alt türü — "NDE" / "TechnicalElective" / "UniversityElective" / "DepartmentalElective". */
+  electiveSubtype?: string | null;
 }
 
 export interface InstructorOptionDto {
@@ -77,6 +90,8 @@ export interface OpenCourseRequest {
   externalQuota?: number;
   instructorId?: number;
   accessibleDepartmentIds?: number[];
+  /** Madde 14: Cross-list'li dersler için paralel section da açılsın mı? */
+  includeCrossLists?: boolean;
 }
 
 export interface BulkOpenCoursesRequest {

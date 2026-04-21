@@ -50,6 +50,8 @@ public class RegistrationValidationService : IRegistrationValidationService
         var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
 
         // Load student's existing active registrations for this term
+        // Madde 9: Draft kayıtlar da AKTS sınır hesabına dahil edilir.
+        // Aksi takdirde öğrenci limit üstü dersleri sepete atar, gönderide sürpriz hata yaşar.
         var existingRegistrations = activeTerm == null
             ? new List<Domain.Entities.CourseRegistration>()
             : await _context.CourseRegistrations
@@ -57,7 +59,9 @@ public class RegistrationValidationService : IRegistrationValidationService
                     .ThenInclude(cs => cs.Course)
                 .Where(cr => cr.StudentId == studentId
                     && cr.CourseSection.TermId == activeTerm.Id
-                    && (cr.Status == RegistrationStatus.Active || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+                    && (cr.Status == RegistrationStatus.Active
+                        || cr.Status == RegistrationStatus.PendingAdvisorApproval
+                        || cr.Status == RegistrationStatus.Draft))
                 .ToListAsync();
 
         // Load student's all past registrations (for prerequisite and grade checks)
@@ -234,13 +238,29 @@ public class RegistrationValidationService : IRegistrationValidationService
         }
 
         // === CHECK 6: ECTS Cap (FR-56 + FR-56A) ===
+        // Madde 7: Mevcut kayıtların AKTS'si snapshot'tan okunur (havuz kuralı uygulanmışsa).
+        // Talep edilen dersler için henüz kayıt yok, katalog değeri kullanılır (kayıt anında snapshot'a dönüşür).
         var requestedEcts = sections.Sum(s => s.Course.Ects);
-        var existingEcts = existingRegistrations.Sum(r => r.CourseSection.Course.Ects);
+        var existingEcts = existingRegistrations.Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
         var totalEcts = requestedEcts + existingEcts;
 
-        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
-        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
-        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
+        // Müfredat-özel override'ları önce dene, null ise global SystemConfig default'una düş.
+        // Öğrencinin aktif ana müfredatı override sağlıyorsa onu kullanır (Proliz "Müfredat Sınıf Dönem Tanımları" muadili).
+        var mainProgramForEcts = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+        Curriculum? curriculumForEcts = null;
+        if (mainProgramForEcts != null)
+        {
+            curriculumForEcts = await _context.Curricula
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == mainProgramForEcts.CurriculumId);
+        }
+
+        var ectsLimitBelow200 = curriculumForEcts?.EctsLimitBelow200
+            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
+        var ectsLimit200To249 = curriculumForEcts?.EctsLimit200To249
+            ?? await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
+        var ectsLimitAbove250 = curriculumForEcts?.EctsLimitAbove250
+            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
         var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
 
         if (totalEcts > ectsLimit)
@@ -250,6 +270,40 @@ public class RegistrationValidationService : IRegistrationValidationService
                 Rule = "ECTSCap",
                 Message = $"ECTS limiti asiliyor. Mevcut: {existingEcts}, Istenen: {requestedEcts}, Toplam: {totalEcts}, Limit: {ectsLimit} (CGPA: {student.Cgpa:F2})"
             });
+        }
+
+        // === CHECK 6B (Madde 16): Müfredat Dışı Ders Uyarısı ===
+        // Öğrencinin aktif müfredatında (direkt veya havuzda) bulunmayan dersler warning olarak işaretlenir.
+        // Engelleme değil — yaz okulu/özel konu dersleri için esneklik bırakıldı; danışman onayı zincirinde gözden geçirilir.
+        var mainProgramForCurr = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+        if (mainProgramForCurr != null)
+        {
+            var curriculumCourseIds = await _context.CurriculumCourses
+                .Where(cc => cc.CurriculumId == mainProgramForCurr.CurriculumId)
+                .Select(cc => cc.CourseId)
+                .ToListAsync();
+            var curriculumCourseSet = curriculumCourseIds.ToHashSet();
+
+            // Havuz üyesi dersler de müfredatta sayılır
+            var poolCourseIds = await _context.CurriculumElectivePools
+                .Where(p => p.CurriculumId == mainProgramForCurr.CurriculumId)
+                .SelectMany(p => p.ElectiveGroup.Courses.Select(egc => egc.CourseId))
+                .Distinct()
+                .ToListAsync();
+            foreach (var pid in poolCourseIds) curriculumCourseSet.Add(pid);
+
+            foreach (var section in sections)
+            {
+                if (!curriculumCourseSet.Contains(section.CourseId))
+                {
+                    result.Warnings.Add(new ValidationError
+                    {
+                        Rule = "NonCurriculumCourse",
+                        Message = $"'{section.Course.Code} {section.Course.Name}' dersi mevcut müfredatınızda bulunmuyor. Danışman onayı gerektirir.",
+                        CourseSectionId = section.Id
+                    });
+                }
+            }
         }
 
         // === CHECK 7: CGPA Restriction (FR-56B) ===

@@ -71,6 +71,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<CourseIntention> CourseIntentions => Set<CourseIntention>();
     public DbSet<StudentSurveyPreference> StudentSurveyPreferences => Set<StudentSurveyPreference>();
     public DbSet<AdvisorCourseConstraint> AdvisorCourseConstraints => Set<AdvisorCourseConstraint>();
+    public DbSet<CourseCrossList> CourseCrossLists => Set<CourseCrossList>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -158,6 +159,12 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(c => c.DepartmentId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── CourseSection.CrossListGroupId — index for group lookup ──
+        builder.Entity<CourseSection>(e =>
+        {
+            e.HasIndex(cs => cs.CrossListGroupId);
         });
 
         // ── CurriculumCourse (composite PK) ─────────────────────
@@ -691,6 +698,29 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
               .WithMany(rp => rp.Registrations)
               .HasForeignKey(cr => cr.RegistrationPlanId)
               .OnDelete(DeleteBehavior.SetNull);
+
+            // Havuz snapshot FK (null = zorunlu veya tekil seçmeli)
+            e2.HasOne(cr => cr.AppliedElectivePool)
+              .WithMany()
+              .HasForeignKey(cr => cr.AppliedElectivePoolId)
+              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── CourseCrossList (M:N Course ↔ Course) ───────────────
+        builder.Entity<CourseCrossList>(e =>
+        {
+            e.HasKey(x => new { x.CourseId, x.LinkedCourseId });
+            e.HasIndex(x => x.LinkedCourseId);
+
+            e.HasOne(x => x.Course)
+             .WithMany()
+             .HasForeignKey(x => x.CourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.LinkedCourse)
+             .WithMany()
+             .HasForeignKey(x => x.LinkedCourseId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── AuditLog ─────────────────────────────────────────────

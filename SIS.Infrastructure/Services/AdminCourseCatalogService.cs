@@ -263,7 +263,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
     {
         if (await db.Courses.AnyAsync(c => c.Code == dto.Code))
             throw new InvalidOperationException($"'{dto.Code}' kodlu ders zaten mevcut.");
-        if (dto.DepartmentId.HasValue && !await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
+        // Madde 10: Yeni derslerde sahip birim zorunlu — ortak dersler Koordinatörlük'e atanır
+        if (!dto.DepartmentId.HasValue)
+            throw new InvalidOperationException("Ders sahipliği zorunludur. Bölüm veya koordinatörlük seçin.");
+        if (!await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
             throw new KeyNotFoundException("Bölüm bulunamadı.");
 
         var course = new Course
@@ -295,7 +298,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             ?? throw new KeyNotFoundException("Ders bulunamadı.");
         if (await db.Courses.AnyAsync(c => c.Code == dto.Code && c.Id != id))
             throw new InvalidOperationException($"'{dto.Code}' kodu başka bir ders tarafından kullanılıyor.");
-        if (dto.DepartmentId.HasValue && !await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
+        // Madde 10: Güncelleme sırasında da sahiplik korunur
+        if (!dto.DepartmentId.HasValue)
+            throw new InvalidOperationException("Ders sahipliği zorunludur. Bölüm veya koordinatörlük seçin.");
+        if (!await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
             throw new KeyNotFoundException("Bölüm bulunamadı.");
 
         course.Code = dto.Code;
