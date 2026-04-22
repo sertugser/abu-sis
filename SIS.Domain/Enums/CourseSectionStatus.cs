@@ -1,23 +1,18 @@
 namespace SIS.Domain.Enums;
 
 /// <summary>
-/// CourseSection lifecycle durumu. Her section ayrı durum yönetir.
-/// Draft → PendingApproval → Active [→ StopEnrollment] [→ Cancelled]
+/// CourseSection lifecycle durumu. Otomatik hesaplanır — manuel geçiş yok.
+/// Draft (eksik) ↔ Active (tam) — atama değişikliklerinde otomatik.
+/// Cancelled — admin'in tek manuel aksiyonu, runtime kontroller kilitlenir.
 /// </summary>
 public enum CourseSectionStatus
 {
-    /// <summary>Hazırlık: hoca/derslik/slot atanmamış</summary>
+    /// <summary>Eksik: hoca, derslik veya program dilimi atanmamış. Otomatik.</summary>
     Draft = 0,
 
-    /// <summary>Atama tamam, fakülte dekan onayı bekliyor</summary>
-    PendingApproval = 1,
+    /// <summary>Tam: hoca + derslik + slot atanmış, kayıt açık. Otomatik.</summary>
+    Active = 1,
 
-    /// <summary>Onaylandı — öğrenciler kayıt olabilir</summary>
-    Active = 2,
-
-    /// <summary>Yeni kayıt alınmıyor (kapasite dolu vb.), mevcutlar geçerli</summary>
-    StopEnrollment = 3,
-
-    /// <summary>İptal edildi — tüm kayıtlar iptal, ders işlenmez</summary>
-    Cancelled = 4
+    /// <summary>İptal edildi — admin'in manuel aksiyonu. Kayıtlar Dropped, yazma kilitli.</summary>
+    Cancelled = 2
 }
