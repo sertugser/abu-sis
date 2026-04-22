@@ -30,7 +30,7 @@ public class CourseController : ControllerBase
     {
         // Find active term
         var activeTerm = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.IsActive);
+            .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
 
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
@@ -147,12 +147,12 @@ public class CourseController : ControllerBase
             return NotFound(new { error = "Aktif program bulunamadi." });
 
         // 2. Active term
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
 
-        // Guard: katalog ancak Published veya sonraki aşamalarda görülebilir
-        if (activeTerm.Status < TermStatus.Published)
+        // Guard: katalog ancak Ready (Published+) aşamasında görülebilir
+        if (activeTerm.Status < TermStatus.Ready)
             return BadRequest(new { error = $"Ders kataloğu henüz yayınlanmadı. Dönem durumu: {activeTerm.Status}" });
 
         // 3. Curriculum data — which courses are in the student's program
@@ -422,7 +422,7 @@ public class CourseController : ControllerBase
     public async Task<IActionResult> GetActiveTerm()
     {
         var term = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.IsActive);
+            .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
 
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
