@@ -4,7 +4,9 @@ using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Application.Common.Services;
+using SIS.Application.Common.Time;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services.Time;
 
 namespace SIS.Infrastructure.Services;
 
@@ -12,11 +14,13 @@ public class RegistrationValidationService : IRegistrationValidationService
 {
     private readonly AppDbContext _context;
     private readonly ISystemConfigProvider _config;
+    private readonly IDateTimeProvider _clock;
 
-    public RegistrationValidationService(AppDbContext context, ISystemConfigProvider? config = null)
+    public RegistrationValidationService(AppDbContext context, ISystemConfigProvider? config = null, IDateTimeProvider? clock = null)
     {
         _context = context;
         _config = config ?? new NullSystemConfigProvider();
+        _clock = clock ?? new SystemDateTimeProvider();
     }
 
     public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
@@ -47,7 +51,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             .ToListAsync();
 
         // Load active term
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
 
         // Load student's existing active registrations for this term
         // Madde 9: Draft kayıtlar da AKTS sınır hesabına dahil edilir.
@@ -100,7 +104,7 @@ public class RegistrationValidationService : IRegistrationValidationService
                 Message = "Aktif akademik donem bulunamadi."
             });
         }
-        else if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
+        else if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
         {
             errors.Add(new ValidationError
             {
