@@ -13,18 +13,15 @@ public class AdminTermService : IAdminTermService
 {
     private readonly AppDbContext _context;
     private readonly ITimeSlotService _timeSlotService;
-    private readonly ISchedulingService _schedulingService;
     private readonly IDateTimeProvider _clock;
 
     public AdminTermService(
         AppDbContext context,
         ITimeSlotService timeSlotService,
-        ISchedulingService schedulingService,
         IDateTimeProvider clock)
     {
         _context = context;
         _timeSlotService = timeSlotService;
-        _schedulingService = schedulingService;
         _clock = clock;
     }
 
@@ -33,7 +30,7 @@ public class AdminTermService : IAdminTermService
         var terms = await _context.AcademicTerms
             .Include(t => t.CalendarEvents)
             .OrderByDescending(t => t.Year)
-            .ThenByDescending(t => t.Semester)
+            .ThenByDescending(t => t.TermType)
             .ToListAsync();
         return terms.Select(ToDto).ToList();
     }
@@ -49,13 +46,13 @@ public class AdminTermService : IAdminTermService
 
     public async Task<AdminTermDto> CreateTermAsync(CreateTermDto dto)
     {
-        var semester = ParseSemester(dto.Semester);
         var termType = ParseTermType(dto.TermType);
 
         var exists = await _context.AcademicTerms
-            .AnyAsync(t => t.Year == dto.Year && t.Semester == semester);
+            .AnyAsync(t => t.Year == dto.Year && t.TermType == termType);
         if (exists)
-            throw new InvalidOperationException($"{dto.Year} yılı {dto.Semester} dönemi zaten mevcut.");
+            throw new InvalidOperationException(
+                $"{dto.Year} yılı için {GetTermTypeLabel(termType)} dönemi zaten mevcut.");
 
         ValidateTermDates(dto.RegistrationStart, dto.RegistrationEnd, dto.AddDropStart,
             dto.AddDropEnd, dto.TermStart, dto.TermEnd, dto.WithdrawalDeadline,
@@ -66,8 +63,9 @@ public class AdminTermService : IAdminTermService
             Name = dto.Name,
             ShortName = dto.ShortName,
             EnglishName = dto.EnglishName,
+            ShortEnglishName = dto.ShortEnglishName,
+            OtherName = string.IsNullOrWhiteSpace(dto.OtherName) ? null : dto.OtherName,
             Year = dto.Year,
-            Semester = semester,
             TermType = termType,
             RegistrationStart = DateTime.SpecifyKind(dto.RegistrationStart, DateTimeKind.Utc),
             RegistrationEnd = DateTime.SpecifyKind(dto.RegistrationEnd, DateTimeKind.Utc),
@@ -78,12 +76,17 @@ public class AdminTermService : IAdminTermService
             WithdrawalDeadline = DateTime.SpecifyKind(dto.WithdrawalDeadline, DateTimeKind.Utc),
             GradeEntryStart = DateTime.SpecifyKind(dto.GradeEntryStart, DateTimeKind.Utc),
             GradeEntryEnd = DateTime.SpecifyKind(dto.GradeEntryEnd, DateTimeKind.Utc),
-            Status = TermStatus.Draft,
+            IsCancelled = false,
+            YoksisStatus = ParseYoksisStatus(dto.YoksisStatus),
             CreatedAt = _clock.UtcNow
         };
 
         _context.AcademicTerms.Add(term);
         await _context.SaveChangesAsync();
+
+        // TimeSlot grid'i oluşturuluyor — admin yeni term yarattıktan sonra hemen section atama yapabilsin
+        await _timeSlotService.GenerateTimeSlotsForTermAsync(term.Id);
+
         return ToDto(term);
     }
 
@@ -92,8 +95,8 @@ public class AdminTermService : IAdminTermService
         var term = await _context.AcademicTerms.FindAsync(id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
 
-        if (term.Status >= TermStatus.Closed)
-            throw new InvalidOperationException("Kapalı veya arşivlenmiş dönemler düzenlenemez.");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("İptal edilmiş dönem düzenlenemez. Önce iptali geri alın.");
 
         ValidateTermDates(dto.RegistrationStart, dto.RegistrationEnd, dto.AddDropStart,
             dto.AddDropEnd, dto.TermStart, dto.TermEnd, dto.WithdrawalDeadline,
@@ -102,6 +105,8 @@ public class AdminTermService : IAdminTermService
         term.Name = dto.Name;
         term.ShortName = dto.ShortName;
         term.EnglishName = dto.EnglishName;
+        term.ShortEnglishName = dto.ShortEnglishName;
+        term.OtherName = string.IsNullOrWhiteSpace(dto.OtherName) ? null : dto.OtherName;
         term.TermType = ParseTermType(dto.TermType);
         term.RegistrationStart = DateTime.SpecifyKind(dto.RegistrationStart, DateTimeKind.Utc);
         term.RegistrationEnd = DateTime.SpecifyKind(dto.RegistrationEnd, DateTimeKind.Utc);
@@ -112,32 +117,44 @@ public class AdminTermService : IAdminTermService
         term.WithdrawalDeadline = DateTime.SpecifyKind(dto.WithdrawalDeadline, DateTimeKind.Utc);
         term.GradeEntryStart = DateTime.SpecifyKind(dto.GradeEntryStart, DateTimeKind.Utc);
         term.GradeEntryEnd = DateTime.SpecifyKind(dto.GradeEntryEnd, DateTimeKind.Utc);
+        term.YoksisStatus = ParseYoksisStatus(dto.YoksisStatus);
         term.UpdatedAt = _clock.UtcNow;
 
         await _context.SaveChangesAsync();
         return ToDto(term);
     }
 
-    public async Task TransitionStatusAsync(int id, string targetStatusStr)
+    public async Task CancelTermAsync(int id)
     {
         var term = await _context.AcademicTerms.FindAsync(id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
 
-        var targetStatus = ParseTermStatus(targetStatusStr);
-        ValidateTransition(term.Status, targetStatus);
-        await RunTransitionGuardsAsync(term, targetStatus);
+        if (term.IsCancelled) return; // idempotent
 
-        var oldStatus = term.Status;
-        term.Status = targetStatus;
+        term.IsCancelled = true;
         term.UpdatedAt = _clock.UtcNow;
 
-        // Draft → Preparing: TimeSlot grid'i oluştur
-        if (targetStatus == TermStatus.Preparing && oldStatus == TermStatus.Draft)
-        {
-            await _timeSlotService.GenerateTimeSlotsForTermAsync(id);
-        }
+        // Cascade: bu döneme ait tüm section'ları Cancelled yap
+        var sections = await _context.CourseSections
+            .Where(cs => cs.TermId == id && cs.Status != CourseSectionStatus.Cancelled)
+            .ToListAsync();
+        foreach (var s in sections)
+            s.Status = CourseSectionStatus.Cancelled;
 
-        // Audit interceptor otomatik olarak Term Modified'ı AuditLog'a yazacak
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UncancelTermAsync(int id)
+    {
+        var term = await _context.AcademicTerms.FindAsync(id)
+            ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
+
+        if (!term.IsCancelled) return; // idempotent
+
+        term.IsCancelled = false;
+        term.UpdatedAt = _clock.UtcNow;
+
+        // Section'lar otomatik geri alınmaz — admin gerekirse tek tek restore etsin
         await _context.SaveChangesAsync();
     }
 
@@ -146,8 +163,8 @@ public class AdminTermService : IAdminTermService
         var term = await _context.AcademicTerms.FindAsync(id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
 
-        if (term.Status != TermStatus.Ready)
-            throw new InvalidOperationException("Override sadece Ready durumundaki dönemler için ayarlanabilir.");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("İptal edilmiş dönemin fazları değiştirilemez.");
 
         switch (dto.Phase)
         {
@@ -159,142 +176,89 @@ public class AdminTermService : IAdminTermService
         }
 
         term.UpdatedAt = _clock.UtcNow;
-        // Audit interceptor otomatik olarak override değişikliğini AuditLog'a yazacak
         await _context.SaveChangesAsync();
     }
 
-    private async Task RunTransitionGuardsAsync(AcademicTerm term, TermStatus target)
+    // ── Helpers ───────────────────────────────────────────────────────
+
+    private AdminTermDto ToDto(AcademicTerm t)
     {
-        var errors = new List<string>();
+        var now = _clock.UtcNow;
+        var status = t.GetStatus(now);
+        var generatedEvents = t.CalendarEvents.Where(e => e.IsGenerated).ToList();
+        var generatedDraftId = generatedEvents
+            .Select(e => e.GeneratedDraftId)
+            .Where(id => id.HasValue)
+            .Max();
 
-        switch (target)
-        {
-            case TermStatus.Preparing when term.Status == TermStatus.Draft:
-                // Guard 0: Temel tarih + derslik kontrolleri
-                if (term.TermStart == default || term.TermEnd == default)
-                    errors.Add("Dönem başlangıç ve bitiş tarihleri girilmelidir.");
-                if (term.RegistrationStart == default || term.RegistrationEnd == default)
-                    errors.Add("Kayıt başlangıç ve bitiş tarihleri girilmelidir.");
-                if (term.GradeEntryStart == default || term.GradeEntryEnd == default)
-                    errors.Add("Not girişi başlangıç ve bitiş tarihleri girilmelidir.");
-
-                var hasClassroomAssignment = await _context.ClassroomTermAssignments
-                    .AnyAsync(cta => cta.TermId == term.Id);
-                if (!hasClassroomAssignment)
-                    errors.Add("Derslik-fakülte ataması yapılmadan hazırlığa geçilemez.");
-                break;
-
-            case TermStatus.Ready:
-                // Guard: Tek Ready invariant
-                var otherReady = await _context.AcademicTerms
-                    .AnyAsync(t => t.Id != term.Id && t.Status == TermStatus.Ready);
-                if (otherReady)
-                    errors.Add("Başka bir dönem zaten Ready (aktif) durumda. Önce onu Closed/Preparing'e alın.");
-
-                var activeSections = await _context.CourseSections
-                    .Where(cs => cs.TermId == term.Id && cs.IsActive)
-                    .ToListAsync();
-
-                if (activeSections.Count == 0)
-                    errors.Add("Yayınlamak için en az bir aktif ders şubesi olmalıdır.");
-
-                var activeSectionIds = activeSections.Select(s => s.Id).ToList();
-                var scheduledIds = await _context.SectionSchedules
-                    .AsNoTracking()
-                    .Where(ss => activeSectionIds.Contains(ss.CourseSectionId))
-                    .Select(ss => ss.CourseSectionId)
-                    .Distinct()
-                    .ToListAsync();
-                var unscheduled = activeSections.Where(s => !scheduledIds.Contains(s.Id)).ToList();
-                if (unscheduled.Count > 0)
-                    errors.Add($"{unscheduled.Count} şubede zaman ataması yapılmamış.");
-
-                var noClassroom = activeSections.Where(s => !s.ClassroomId.HasValue).ToList();
-                if (noClassroom.Count > 0)
-                    errors.Add($"{noClassroom.Count} şubede derslik atanmamış.");
-
-                var noInst = activeSections.Where(s => !s.InstructorId.HasValue).ToList();
-                if (noInst.Count > 0)
-                    errors.Add($"{noInst.Count} şubede öğretim üyesi atanmamış.");
-
-                var validation = await _schedulingService.ValidateExistingAsync(term.Id);
-                if (!validation.IsValid && validation.Conflicts.Count > 0)
-                    errors.Add($"{validation.Conflicts.Count} hard constraint çakışması var.");
-
-                var facultiesWithSections = await _context.CourseSections
-                    .Where(cs => cs.TermId == term.Id && cs.IsActive && cs.Course!.DepartmentId.HasValue)
-                    .Select(cs => cs.Course!.Department!.FacultyId)
-                    .Distinct()
-                    .ToListAsync();
-
-                var approvedFacultyIds = await _context.FacultyScheduleApprovals
-                    .Where(fsa => fsa.TermId == term.Id)
-                    .Select(fsa => fsa.FacultyId)
-                    .ToListAsync();
-
-                var unapproved = facultiesWithSections.Except(approvedFacultyIds).ToList();
-                if (unapproved.Count > 0)
-                {
-                    var names = await _context.Faculties
-                        .Where(f => unapproved.Contains(f.Id))
-                        .Select(f => f.Name)
-                        .ToListAsync();
-                    errors.Add($"Şu fakültelerin dekan onayı eksik: {string.Join(", ", names)}");
-                }
-                break;
-
-            case TermStatus.Closed:
-                var unfinalized = await _context.CourseSections
-                    .Where(cs => cs.TermId == term.Id && cs.IsActive && !cs.IsFinalized)
-                    .CountAsync();
-                if (unfinalized > 0)
-                    errors.Add($"{unfinalized} şubede not girişi tamamlanmamış (finalize edilmemiş).");
-                break;
-        }
-
-        if (errors.Count > 0)
-            throw new InvalidOperationException(
-                $"Geçiş engellendi ({GetStatusLabel(term.Status)} → {GetStatusLabel(target)}):\n• " +
-                string.Join("\n• ", errors));
+        return new AdminTermDto(
+            t.Id, t.Name, t.ShortName, t.EnglishName, t.ShortEnglishName, t.OtherName,
+            t.Year,
+            t.TermType.ToString(),
+            GetTermTypeLabel(t.TermType),
+            status.ToString(),
+            GetStatusLabel(status),
+            t.IsCancelled,
+            t.YoksisStatus.ToString(),
+            t.RegistrationStart, t.RegistrationEnd,
+            t.AddDropStart, t.AddDropEnd,
+            t.TermStart, t.TermEnd,
+            t.WithdrawalDeadline,
+            t.GradeEntryStart, t.GradeEntryEnd,
+            t.RegistrationOverride, t.AddDropOverride, t.WithdrawalOverride, t.GradeEntryOverride,
+            t.IsRegistrationOpen(now),
+            t.IsAddDropOpen(now),
+            t.IsWithdrawalOpen(now),
+            t.IsGradeEntryOpen(now),
+            t.IsActive(now),
+            t.CalendarEvents.Count,
+            generatedEvents.Count,
+            generatedDraftId,
+            generatedEvents.Count > 0
+        );
     }
-
-    private static void ValidateTransition(TermStatus current, TermStatus target)
-    {
-        var allowed = GetAllowedTransitions(current);
-        if (!allowed.Contains(target))
-            throw new InvalidOperationException(
-                $"'{GetStatusLabel(current)}' aşamasından '{GetStatusLabel(target)}' aşamasına geçiş yapılamaz. " +
-                $"İzin verilen geçişler: {string.Join(", ", allowed.Select(GetStatusLabel))}");
-    }
-
-    private static TermStatus[] GetAllowedTransitions(TermStatus current) => current switch
-    {
-        TermStatus.Draft     => [TermStatus.Preparing],
-        TermStatus.Preparing => [TermStatus.Ready, TermStatus.Draft],
-        TermStatus.Ready     => [TermStatus.Preparing, TermStatus.Closed],
-        TermStatus.Closed    => [TermStatus.Archived],
-        TermStatus.Archived  => [],
-        _                    => []
-    };
-
-    private static TermStatus ParseTermStatus(string s) => s switch
-    {
-        "Draft"     => TermStatus.Draft,
-        "Preparing" => TermStatus.Preparing,
-        "Ready"     => TermStatus.Ready,
-        "Closed"    => TermStatus.Closed,
-        "Archived"  => TermStatus.Archived,
-        _ => throw new ArgumentException($"Geçersiz dönem durumu: {s}")
-    };
 
     public static string GetStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft     => "Taslak",
-        TermStatus.Preparing => "Hazırlık",
-        TermStatus.Ready     => "Yayında",
-        TermStatus.Closed    => "Kapalı",
-        TermStatus.Archived  => "Arşivlendi",
+        TermStatus.Inactive  => "Pasif",
+        TermStatus.Active    => "Aktif",
+        TermStatus.Cancelled => "İptal",
         _                    => s.ToString()
+    };
+
+    public static string GetTermTypeLabel(TermType t) => t switch
+    {
+        TermType.Fall         => "Güz",
+        TermType.Spring       => "Bahar",
+        TermType.Summer       => "Yaz",
+        TermType.FallResit    => "Güz Tekders",
+        TermType.SpringResit  => "Bahar Tekders",
+        TermType.SummerResit  => "Yaz Tekders",
+        TermType.SpringOther  => "Bahar Diğer",
+        TermType.SummerOther  => "Yaz Diğer",
+        TermType.Exemption    => "Muafiyet",
+        _                     => t.ToString()
+    };
+
+    private static TermType ParseTermType(string s) => s switch
+    {
+        "Fall"         => TermType.Fall,
+        "Spring"       => TermType.Spring,
+        "Summer"       => TermType.Summer,
+        "FallResit"    => TermType.FallResit,
+        "SpringResit"  => TermType.SpringResit,
+        "SummerResit"  => TermType.SummerResit,
+        "SpringOther"  => TermType.SpringOther,
+        "SummerOther"  => TermType.SummerOther,
+        "Exemption"    => TermType.Exemption,
+        _ => throw new ArgumentException($"Geçersiz dönem tipi: {s}")
+    };
+
+    private static YoksisStatus ParseYoksisStatus(string s) => s switch
+    {
+        "Inactive" => YoksisStatus.Inactive,
+        "Active"   => YoksisStatus.Active,
+        _ => throw new ArgumentException($"Geçersiz YÖKSİS durumu: {s}")
     };
 
     private static void ValidateTermDates(DateTime regStart, DateTime regEnd,
@@ -319,70 +283,4 @@ public class AdminTermService : IAdminTermService
         if (withdrawalDeadline < termStart)
             throw new InvalidOperationException("Çekilme tarihi dönem başlangıç tarihinden önce olamaz.");
     }
-
-    private AdminTermDto ToDto(AcademicTerm t)
-    {
-        var now = _clock.UtcNow;
-        var generatedEvents = t.CalendarEvents.Where(e => e.IsGenerated).ToList();
-        var generatedDraftId = generatedEvents
-            .Select(e => e.GeneratedDraftId)
-            .Where(id => id.HasValue)
-            .Max();
-
-        return new AdminTermDto(
-            t.Id, t.Name, t.ShortName, t.EnglishName, t.Year,
-            t.Semester.ToString(),
-            t.Semester switch
-            {
-                SemesterType.Fall => "Güz",
-                SemesterType.Spring => "Bahar",
-                SemesterType.Summer => "Yaz",
-                _ => t.Semester.ToString()
-            },
-            t.TermType.ToString(),
-            t.TermType switch
-            {
-                TermType.Regular => "Normal",
-                TermType.Summer => "Yaz",
-                TermType.Intensive => "Tekders",
-                TermType.Exemption => "Muafiyet",
-                _ => t.TermType.ToString()
-            },
-            t.Status.ToString(),
-            GetStatusLabel(t.Status),
-            GetAllowedTransitions(t.Status).Select(s => s.ToString()).ToArray(),
-            t.RegistrationStart, t.RegistrationEnd,
-            t.AddDropStart, t.AddDropEnd,
-            t.TermStart, t.TermEnd,
-            t.WithdrawalDeadline,
-            t.GradeEntryStart, t.GradeEntryEnd,
-            t.RegistrationOverride, t.AddDropOverride, t.WithdrawalOverride, t.GradeEntryOverride,
-            t.IsRegistrationOpen(now),
-            t.IsAddDropOpen(now),
-            t.IsWithdrawalOpen(now),
-            t.IsGradeEntryOpen(now),
-            t.IsActive,
-            t.CalendarEvents.Count,
-            generatedEvents.Count,
-            generatedDraftId,
-            generatedEvents.Count > 0
-        );
-    }
-
-    private static SemesterType ParseSemester(string s) => s switch
-    {
-        "Fall" => SemesterType.Fall,
-        "Spring" => SemesterType.Spring,
-        "Summer" => SemesterType.Summer,
-        _ => throw new ArgumentException($"Geçersiz dönem tipi: {s}")
-    };
-
-    private static TermType ParseTermType(string s) => s switch
-    {
-        "Regular" => TermType.Regular,
-        "Summer" => TermType.Summer,
-        "Intensive" => TermType.Intensive,
-        "Exemption" => TermType.Exemption,
-        _ => throw new ArgumentException($"Geçersiz dönem türü: {s}")
-    };
 }

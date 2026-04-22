@@ -5,84 +5,67 @@ public record AdminTermDto(
     string Name,
     string ShortName,
     string EnglishName,
+    string ShortEnglishName,
+    string? OtherName,
     int Year,
-    string Semester,
-    string SemesterLabel,
-    string TermType,
-    string TermTypeLabel,
-
-    string Status,          // "Draft" | "Preparing" | "Ready" | "Closed" | "Archived"
-    string StatusLabel,
-    string[] AllowedTransitions,
-
-    // Tarih alanları
-    DateTime RegistrationStart,
-    DateTime RegistrationEnd,
-    DateTime AddDropStart,
-    DateTime AddDropEnd,
-    DateTime TermStart,
-    DateTime TermEnd,
+    string TermType,              // "Fall" | "Spring" | ... 9 değer
+    string TermTypeLabel,         // "Güz" | "Bahar" | ...
+    string Status,                // "Inactive" | "Active" | "Cancelled" — computed
+    string StatusLabel,           // "Pasif" | "Aktif" | "İptal"
+    bool IsCancelled,             // stored — admin'in tek manuel aksiyonu
+    string YoksisStatus,          // "Inactive" | "Active"
+    DateTime RegistrationStart, DateTime RegistrationEnd,
+    DateTime AddDropStart, DateTime AddDropEnd,
+    DateTime TermStart, DateTime TermEnd,
     DateTime WithdrawalDeadline,
-    DateTime GradeEntryStart,
-    DateTime GradeEntryEnd,
-
-    // Override alanları
+    DateTime GradeEntryStart, DateTime GradeEntryEnd,
     bool? RegistrationOverride,
     bool? AddDropOverride,
     bool? WithdrawalOverride,
     bool? GradeEntryOverride,
-
-    // Computed phase flags (server-side, now'a göre)
     bool IsRegistrationOpen,
     bool IsAddDropOpen,
     bool IsWithdrawalOpen,
     bool IsGradeEntryOpen,
-    bool IsActive,
-
-    // Takvim event bilgileri
+    bool IsActive,                // computed: GetStatus(now) == Active
     int CalendarEventCount,
     int GeneratedCalendarEventCount,
     int? GeneratedCalendarDraftId,
     bool HasGeneratedCalendar
 );
 
-public record TransitionTermStatusDto(string TargetStatus);
-
 public record CreateTermDto(
     string Name,
     string ShortName,
     string EnglishName,
+    string ShortEnglishName,
+    string? OtherName,
     int Year,
-    string Semester,
     string TermType,
-    DateTime RegistrationStart,
-    DateTime RegistrationEnd,
-    DateTime AddDropStart,
-    DateTime AddDropEnd,
-    DateTime TermStart,
-    DateTime TermEnd,
+    string YoksisStatus,
+    DateTime RegistrationStart, DateTime RegistrationEnd,
+    DateTime AddDropStart, DateTime AddDropEnd,
+    DateTime TermStart, DateTime TermEnd,
     DateTime WithdrawalDeadline,
-    DateTime GradeEntryStart,
-    DateTime GradeEntryEnd
+    DateTime GradeEntryStart, DateTime GradeEntryEnd
 );
 
 public record UpdateTermDto(
     string Name,
     string ShortName,
     string EnglishName,
+    string ShortEnglishName,
+    string? OtherName,
     string TermType,
-    DateTime RegistrationStart,
-    DateTime RegistrationEnd,
-    DateTime AddDropStart,
-    DateTime AddDropEnd,
-    DateTime TermStart,
-    DateTime TermEnd,
+    string YoksisStatus,
+    DateTime RegistrationStart, DateTime RegistrationEnd,
+    DateTime AddDropStart, DateTime AddDropEnd,
+    DateTime TermStart, DateTime TermEnd,
     DateTime WithdrawalDeadline,
-    DateTime GradeEntryStart,
-    DateTime GradeEntryEnd
+    DateTime GradeEntryStart, DateTime GradeEntryEnd
 );
 
 public record UpdateTermPhaseOverrideDto(
-    string Phase,   // "Registration" | "AddDrop" | "Withdrawal" | "GradeEntry"
-    bool? Value     // null | true | false
+    string Phase,      // "Registration" | "AddDrop" | "Withdrawal" | "GradeEntry"
+    bool? Value         // null = takvim konuşsun; true/false = admin override
 );

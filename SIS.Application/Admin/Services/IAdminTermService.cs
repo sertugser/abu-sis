@@ -8,6 +8,10 @@ public interface IAdminTermService
     Task<AdminTermDto> GetTermByIdAsync(int id);
     Task<AdminTermDto> CreateTermAsync(CreateTermDto dto);
     Task<AdminTermDto> UpdateTermAsync(int id, UpdateTermDto dto);
-    Task TransitionStatusAsync(int id, string targetStatus);
+
+    // Tek manuel aksiyon: Cancel ve tersini alma. Active/Inactive otomatik hesaplanır.
+    Task CancelTermAsync(int id);
+    Task UncancelTermAsync(int id);
+
     Task UpdatePhaseOverrideAsync(int id, UpdateTermPhaseOverrideDto dto, int? userId);
 }
