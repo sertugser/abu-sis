@@ -57,8 +57,8 @@ public class ScheduleApprovalController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Akademik donem bulunamadi." });
 
-        if (term.Status != TermStatus.Scheduling)
-            return BadRequest(new { error = "Program onaylama islemi sadece Scheduling durumundaki donemler icin yapilabilir." });
+        if (term.Status != TermStatus.Preparing)
+            return BadRequest(new { error = "Program onaylama islemi sadece Hazırlık durumundaki donemler icin yapilabilir." });
 
         // Check for existing approval
         var existingApproval = await _context.FacultyScheduleApprovals
@@ -107,7 +107,7 @@ public class ScheduleApprovalController : ControllerBase
         {
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.IsActive, cancellationToken);
+                .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready, cancellationToken);
 
             if (activeTerm == null)
                 return NotFound(new { error = "Aktif akademik donem bulunamadi." });
@@ -205,7 +205,7 @@ public class ScheduleApprovalController : ControllerBase
         {
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.IsActive, cancellationToken);
+                .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready, cancellationToken);
 
             if (activeTerm == null)
                 return NotFound(new { error = "Aktif akademik donem bulunamadi." });
@@ -221,7 +221,7 @@ public class ScheduleApprovalController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Akademik donem bulunamadi." });
 
-        if (term.Status >= TermStatus.Published)
+        if (term.Status >= TermStatus.Ready)
             return BadRequest(new { error = "Yayimlanmis veya ileri durumdaki donemlerin onaylari geri alinamaz." });
 
         var approval = await _context.FacultyScheduleApprovals
