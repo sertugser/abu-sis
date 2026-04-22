@@ -19,13 +19,14 @@ public static partial class SeedData
             .ToList();
         var allPrereqs = context.CoursePrerequisites.ToList();
         var terms = context.AcademicTerms
-            .OrderBy(t => t.Year).ThenBy(t => t.Semester)
+            .OrderBy(t => t.Year).ThenBy(t => t.TermType)
             .ToList();
         var instructors = context.Instructors.ToList();
         var curricula = context.Curricula.Include(c => c.Program).ToList();
 
-        var pastTerms = terms.Where(t => t.Status != TermStatus.Ready)
-            .OrderBy(t => t.Year).ThenBy(t => t.Semester).ToList();
+        var now = DateTime.UtcNow;
+        var pastTerms = terms.Where(t => !t.IsCancelled && !(t.TermStart <= now && t.TermEnd >= now))
+            .OrderBy(t => t.Year).ThenBy(t => t.TermType).ToList();
 
         var rng = new Random(42);
         var sectionCache = new Dictionary<(int courseId, int termId), List<CourseSection>>();
@@ -58,7 +59,7 @@ public static partial class SeedData
 
             var entryYear = sp.EnrollmentDate.Year;
             var studentTerms = pastTerms
-                .Where(t => t.Year >= entryYear || (t.Year == entryYear - 1 && t.Semester == SemesterType.Spring))
+                .Where(t => t.Year >= entryYear || (t.Year == entryYear - 1 && t.TermType == TermType.Spring))
                 .Take(student.CompletedSemesters)
                 .ToList();
 
@@ -294,7 +295,7 @@ public static partial class SeedData
             InstructorId = instructor.Id,
             Capacity = 40,
             EnrolledCount = 1,
-            IsActive = false,
+            Status = CourseSectionStatus.Draft,
             IsFinalized = false
         };
         context.CourseSections.Add(section);

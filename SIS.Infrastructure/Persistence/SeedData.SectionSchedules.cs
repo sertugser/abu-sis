@@ -8,8 +8,9 @@ public static partial class SeedData
 {
     private static async Task SeedSectionSchedulesAsync(AppDbContext context)
     {
+        var now = DateTime.UtcNow;
         var activeTerm = await context.AcademicTerms
-            .FirstOrDefaultAsync(term => term.Status == TermStatus.Ready);
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now);
 
         if (activeTerm == null)
             return;

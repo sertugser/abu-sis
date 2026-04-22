@@ -511,30 +511,28 @@ public class SchedulingServiceTests : IDisposable
                 Id = ActiveTermId,
                 Name = "2025-2026 Bahar",
                 Year = 2025,
-                Semester = SemesterType.Spring,
+                TermType = TermType.Spring,
                 RegistrationStart = DateTime.UtcNow.AddDays(-5),
                 RegistrationEnd = DateTime.UtcNow.AddDays(5),
                 AddDropStart = DateTime.UtcNow.AddDays(6),
                 AddDropEnd = DateTime.UtcNow.AddDays(12),
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-10),
-                TermEnd = DateTime.UtcNow.AddDays(90),
-                Status = TermStatus.Ready
+                TermEnd = DateTime.UtcNow.AddDays(90)
             },
             new AcademicTerm
             {
                 Id = SecondaryTermId,
                 Name = "2024-2025 Guz",
                 Year = 2024,
-                Semester = SemesterType.Fall,
+                TermType = TermType.Fall,
                 RegistrationStart = DateTime.UtcNow.AddDays(-100),
                 RegistrationEnd = DateTime.UtcNow.AddDays(-90),
                 AddDropStart = DateTime.UtcNow.AddDays(-89),
                 AddDropEnd = DateTime.UtcNow.AddDays(-85),
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-120),
-                TermEnd = DateTime.UtcNow.AddDays(-30),
-                Status = TermStatus.Draft
+                TermEnd = DateTime.UtcNow.AddDays(-30)
             });
 
         _context.SaveChanges();

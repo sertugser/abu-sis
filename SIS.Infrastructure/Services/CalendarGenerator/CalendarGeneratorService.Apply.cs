@@ -33,9 +33,15 @@ public partial class CalendarGeneratorService
         {
             foreach (var group in events.GroupBy(e => e.Semester))
             {
+                var termType = group.Key switch
+                {
+                    SemesterType.Summer => TermType.Summer,
+                    SemesterType.Spring => TermType.Spring,
+                    _ => TermType.Fall
+                };
                 var term = await _context.AcademicTerms
                     .Include(t => t.CalendarEvents)
-                    .FirstOrDefaultAsync(t => t.Year == startYear && t.Semester == group.Key, ct);
+                    .FirstOrDefaultAsync(t => t.Year == startYear && t.TermType == termType, ct);
 
                 if (term == null)
                 {
@@ -45,10 +51,10 @@ public partial class CalendarGeneratorService
                     await _context.Entry(term).Collection(t => t.CalendarEvents).LoadAsync(ct);
                 }
 
-                if (term.Status >= TermStatus.Closed)
-                    throw new InvalidOperationException("Kapalı veya arşivlenmiş döneme takvim uygulanamaz.");
-                if (term.Status >= TermStatus.Ready && !request.ForceOverwrite)
-                    throw new InvalidOperationException("Hazır veya daha ileri durumdaki dönem için forceOverwrite gerekir.");
+                if (term.IsCancelled)
+                    throw new InvalidOperationException("İptal edilmiş döneme takvim uygulanamaz.");
+                if (term.CalendarEvents.Count > 0 && !request.ForceOverwrite)
+                    throw new InvalidOperationException("Takvim zaten uygulanmış dönem için forceOverwrite gerekir.");
 
                 snapshot.Add(TermSnapshot.From(term));
                 ApplyTermDates(term, group.ToList());
@@ -114,7 +120,7 @@ public partial class CalendarGeneratorService
             var term = await _context.AcademicTerms
                 .Include(t => t.CalendarEvents)
                 .FirstOrDefaultAsync(t => t.Id == snapshot.TermId, ct);
-            if (term == null || term.Status >= TermStatus.Closed)
+            if (term == null || term.IsCancelled)
                 continue;
 
             term.RegistrationStart = snapshot.RegistrationStart;

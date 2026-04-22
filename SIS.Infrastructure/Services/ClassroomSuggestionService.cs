@@ -72,9 +72,9 @@ public class ClassroomSuggestionService
             .FirstOrDefaultAsync(ct);
 
         // Dönemin yarıyıl paritesi (Güz→tek, Bahar→çift, Yaz→tümü)
-        var termSemester = term.Semester;
-        var semesterParity = termSemester == SemesterType.Spring ? 0 : 1;
-        var isSummer = termSemester == SemesterType.Summer;
+        var termType = term.TermType;
+        var semesterParity = termType == TermType.Spring ? 0 : 1;
+        var isSummer = termType == TermType.Summer;
 
         // ── 2. Her fakülte için talep analizi ─────────────────────────────
         var facultyDemands = new List<FacultyDemandAnalysis>();

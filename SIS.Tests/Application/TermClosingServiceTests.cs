@@ -46,19 +46,20 @@ public class TermClosingServiceTests : IDisposable
         _context.Faculties.Add(new Faculty { Id = FacultyId, Name = "Muhendislik", Code = "MUH" });
         _context.Departments.Add(new Department { Id = DepartmentId, Name = "Bilgisayar", Code = "BM", FacultyId = FacultyId });
 
-        var termEnd = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        // Set term dates to cover "now" so it's considered active
+        var termStart = DateTime.UtcNow.AddDays(-30);
+        var termEnd = DateTime.UtcNow.AddDays(150);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
             Name = "2025-2026 Guz",
             Year = 2025,
-            Semester = SemesterType.Fall,
-            Status = TermStatus.Ready,
-            RegistrationStart = new DateTime(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-            RegistrationEnd = new DateTime(2025, 9, 15, 0, 0, 0, DateTimeKind.Utc),
-            AddDropStart = new DateTime(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-            AddDropEnd = new DateTime(2025, 9, 15, 0, 0, 0, DateTimeKind.Utc),
-            TermStart = new DateTime(2025, 9, 15, 0, 0, 0, DateTimeKind.Utc),
+            TermType = TermType.Fall,
+            RegistrationStart = termStart,
+            RegistrationEnd = termStart.AddDays(14),
+            AddDropStart = termStart.AddDays(14),
+            AddDropEnd = termStart.AddDays(21),
+            TermStart = termStart,
             TermEnd = termEnd,
             GradeEntryStart = termEnd.AddDays(-14),
             GradeEntryEnd = termEnd.AddDays(14)
@@ -133,7 +134,7 @@ public class TermClosingServiceTests : IDisposable
             TermId = TermId,
             Capacity = 40,
             EnrolledCount = 1,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false
         });
 
@@ -328,10 +329,10 @@ public class TermClosingServiceTests : IDisposable
         result.NewTermId.Should().NotBeNull();
 
         var oldTerm = await _context.AcademicTerms.FindAsync(TermId);
-        oldTerm!.IsActive.Should().BeTrue(); // current term is no longer deactivated per-department
+        oldTerm!.IsCancelled.Should().BeFalse(); // current term is no longer deactivated per-department
 
         var newTerm = await _context.AcademicTerms.FindAsync(result.NewTermId);
-        newTerm!.IsActive.Should().BeTrue();
+        newTerm!.IsCancelled.Should().BeFalse();
         newTerm.Name.Should().Be("2025-2026 Bahar");
     }
 
@@ -342,8 +343,7 @@ public class TermClosingServiceTests : IDisposable
         var termEnd99 = new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc);
         _context.AcademicTerms.Add(new AcademicTerm
         {
-            Id = 99, Name = "2025-2026 Bahar", Year = 2025, Semester = SemesterType.Spring,
-            Status = TermStatus.Draft,
+            Id = 99, Name = "2025-2026 Bahar", Year = 2025, TermType = TermType.Spring,
             RegistrationStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
             RegistrationEnd = new DateTime(2026, 2, 15, 0, 0, 0, DateTimeKind.Utc),
             AddDropStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -377,7 +377,7 @@ public class TermClosingServiceTests : IDisposable
     public async Task LockGrades_FailsWhenNoActiveTerm()
     {
         var term = await _context.AcademicTerms.FindAsync(TermId);
-        term!.Status = TermStatus.Closed;
+        term!.TermEnd = DateTime.UtcNow.AddDays(-1); // make term inactive (past its end date)
         await _context.SaveChangesAsync();
 
         var result = await _service.LockGradesAsync(DepartmentId, UserId);

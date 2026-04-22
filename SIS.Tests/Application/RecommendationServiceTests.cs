@@ -132,7 +132,7 @@ public class RecommendationServiceTests
             Id = ActiveTermId,
             Name = "2025-2026 Spring",
             Year = 2026,
-            Semester = SemesterType.Spring,
+            TermType = TermType.Spring,
             RegistrationStart = DateTime.UtcNow.AddDays(-5),
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
@@ -140,7 +140,6 @@ public class RecommendationServiceTests
             WithdrawalDeadline = DateTime.UtcNow.AddDays(40),
             TermStart = DateTime.UtcNow,
             TermEnd = activeTermEnd,
-            Status = TermStatus.Ready,
             GradeEntryStart = activeTermEnd.AddDays(-14),
             GradeEntryEnd = activeTermEnd.AddDays(14)
         });
@@ -149,7 +148,7 @@ public class RecommendationServiceTests
             Id = PastTermId,
             Name = "2025-2026 Fall",
             Year = 2025,
-            Semester = SemesterType.Fall,
+            TermType = TermType.Fall,
             RegistrationStart = DateTime.UtcNow.AddMonths(-5),
             RegistrationEnd = DateTime.UtcNow.AddMonths(-5).AddDays(7),
             AddDropStart = DateTime.UtcNow.AddMonths(-5).AddDays(8),
@@ -157,7 +156,6 @@ public class RecommendationServiceTests
             WithdrawalDeadline = DateTime.UtcNow.AddMonths(-4),
             TermStart = DateTime.UtcNow.AddMonths(-5),
             TermEnd = DateTime.UtcNow.AddMonths(-1),
-            Status = TermStatus.Closed,
             GradeEntryStart = DateTime.UtcNow.AddMonths(-1).AddDays(-14),
             GradeEntryEnd = DateTime.UtcNow.AddMonths(-1).AddDays(14)
         });
@@ -213,7 +211,7 @@ public class RecommendationServiceTests
             SectionNumber = 1,
             Capacity = 40,
             EnrolledCount = 0,
-            IsActive = true
+            Status = CourseSectionStatus.Active
         };
         context.CourseSections.Add(section);
         context.SaveChanges();

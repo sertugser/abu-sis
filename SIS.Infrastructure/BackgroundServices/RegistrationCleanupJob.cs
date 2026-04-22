@@ -49,7 +49,7 @@ public class RegistrationCleanupJob : BackgroundService
         var now = _clock.UtcNow;
 
         var terms = await ctx.AcademicTerms
-            .Where(t => t.Status == TermStatus.Ready && t.AddDropStart <= now)
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now && t.AddDropStart <= now)
             .Select(t => t.Id)
             .ToListAsync(ct);
 

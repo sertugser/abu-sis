@@ -8,7 +8,7 @@ namespace SIS.Tests.Domain;
 public class AcademicTermPhaseTests
 {
     private static AcademicTerm BuildTerm(
-        TermStatus status = TermStatus.Ready,
+        bool isCancelled = false,
         DateTime? regStart = null,
         DateTime? regEnd = null,
         DateTime? addDropStart = null,
@@ -26,7 +26,7 @@ public class AcademicTermPhaseTests
         var d = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
         return new AcademicTerm
         {
-            Status = status,
+            IsCancelled = isCancelled,
             RegistrationStart = regStart ?? d,
             RegistrationEnd = regEnd ?? d.AddDays(14),
             AddDropStart = addDropStart ?? d.AddDays(14),
@@ -44,18 +44,20 @@ public class AcademicTermPhaseTests
     }
 
     [Fact]
-    public void IsRegistrationOpen_ReturnsFalse_WhenStatusNotReady()
+    public void IsRegistrationOpen_ReturnsFalse_WhenCancelled()
     {
-        var term = BuildTerm(status: TermStatus.Preparing);
-        var now = term.RegistrationStart.AddDays(1);
+        var term = BuildTerm(isCancelled: true);
+        // Use a time that's within the term dates — still blocked because cancelled
+        var now = term.TermStart.AddDays(1);
         term.IsRegistrationOpen(now).Should().BeFalse();
     }
 
     [Fact]
-    public void IsRegistrationOpen_ReturnsTrue_WhenInDateRange_AndReady()
+    public void IsRegistrationOpen_ReturnsTrue_WhenInDateRange_AndActive()
     {
+        // Term is active: now is within [TermStart, TermEnd]
         var term = BuildTerm();
-        var now = term.RegistrationStart.AddDays(1);
+        var now = term.TermStart.AddDays(1); // within term dates
         term.IsRegistrationOpen(now).Should().BeTrue();
     }
 
@@ -79,7 +81,8 @@ public class AcademicTermPhaseTests
     public void IsRegistrationOpen_OverrideTrue_IgnoresDate()
     {
         var term = BuildTerm(regOverride: true);
-        var now = term.RegistrationEnd.AddDays(30);
+        // now is within term dates (active) but past registration window
+        var now = term.TermStart.AddDays(30);
         term.IsRegistrationOpen(now).Should().BeTrue();
     }
 
@@ -100,9 +103,15 @@ public class AcademicTermPhaseTests
     }
 
     [Fact]
-    public void IsRegistrationOpen_OverrideTrue_StillRequiresReady()
+    public void IsRegistrationOpen_OverrideTrue_StillRequiresActive()
     {
-        var term = BuildTerm(status: TermStatus.Draft, regOverride: true);
+        // Term is not yet started (termStart is in the future from 'now')
+        var futureStart = DateTime.UtcNow.AddDays(30);
+        var term = BuildTerm(
+            termStart: futureStart,
+            termEnd: futureStart.AddDays(120),
+            regOverride: true);
+        // now = today, term hasn't started → IsActive returns false → IsRegistrationOpen false
         term.IsRegistrationOpen(DateTime.UtcNow).Should().BeFalse();
     }
 
@@ -132,11 +141,52 @@ public class AcademicTermPhaseTests
     }
 
     [Fact]
-    public void IsActive_EqualsReadyStatus()
+    public void IsActive_TrueWhenNowWithinTermDatesAndNotCancelled()
     {
-        BuildTerm(status: TermStatus.Ready).IsActive.Should().BeTrue();
-        BuildTerm(status: TermStatus.Preparing).IsActive.Should().BeFalse();
-        BuildTerm(status: TermStatus.Draft).IsActive.Should().BeFalse();
-        BuildTerm(status: TermStatus.Closed).IsActive.Should().BeFalse();
+        var term = BuildTerm();
+        // now is within [TermStart, TermEnd]
+        term.IsActive(term.TermStart.AddDays(1)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsActive_FalseWhenCancelled()
+    {
+        var term = BuildTerm(isCancelled: true);
+        term.IsActive(term.TermStart.AddDays(1)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsActive_FalseWhenBeforeTermStart()
+    {
+        var term = BuildTerm();
+        term.IsActive(term.TermStart.AddDays(-1)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsActive_FalseWhenAfterTermEnd()
+    {
+        var term = BuildTerm();
+        term.IsActive(term.TermEnd.AddDays(1)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void GetStatus_ReturnsActive_WhenWithinDatesAndNotCancelled()
+    {
+        var term = BuildTerm();
+        term.GetStatus(term.TermStart.AddDays(1)).Should().Be(TermStatus.Active);
+    }
+
+    [Fact]
+    public void GetStatus_ReturnsCancelled_WhenCancelled()
+    {
+        var term = BuildTerm(isCancelled: true);
+        term.GetStatus(term.TermStart.AddDays(1)).Should().Be(TermStatus.Cancelled);
+    }
+
+    [Fact]
+    public void GetStatus_ReturnsInactive_WhenBeforeTerm()
+    {
+        var term = BuildTerm();
+        term.GetStatus(term.TermStart.AddDays(-1)).Should().Be(TermStatus.Inactive);
     }
 }

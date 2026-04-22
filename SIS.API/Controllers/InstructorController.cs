@@ -64,9 +64,10 @@ public class InstructorController : ControllerBase
         if (instructor == null)
             return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
 
+        var nowInstr = DateTime.UtcNow;
         var term = termId.HasValue
             ? await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Id == termId.Value)
-            : await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+            : await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowInstr && t.TermEnd >= nowInstr);
 
         if (term == null)
             return NotFound(new { error = termId.HasValue ? "Donem bulunamadi." : "Aktif donem bulunamadi." });
@@ -135,14 +136,14 @@ public class InstructorController : ControllerBase
             .Select(cs => cs.Term)
             .Distinct()
             .OrderByDescending(t => t.Year)
-            .ThenByDescending(t => t.Semester)
+            .ThenByDescending(t => t.TermType)
             .Select(t => new
             {
                 Id = t.Id,
                 Name = t.Name,
                 Year = t.Year,
-                Semester = t.Semester,
-                IsActive = t.IsActive
+                Semester = t.TermType,
+                IsActive = !t.IsCancelled && t.TermStart <= DateTime.UtcNow && t.TermEnd >= DateTime.UtcNow
             })
             .ToListAsync();
 

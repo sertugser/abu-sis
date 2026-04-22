@@ -415,30 +415,28 @@ public class EnrollmentForecastServiceTests
                 Id = ActiveTermId,
                 Name = "2025-2026 Fall",
                 Year = 2025,
-                Semester = SemesterType.Fall,
+                TermType = TermType.Fall,
                 RegistrationStart = DateTime.UtcNow.AddDays(-7),
                 RegistrationEnd = DateTime.UtcNow.AddDays(7),
                 AddDropStart = DateTime.UtcNow.AddDays(8),
                 AddDropEnd = DateTime.UtcNow.AddDays(14),
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-14),
-                TermEnd = DateTime.UtcNow.AddDays(90),
-                Status = TermStatus.Ready
+                TermEnd = DateTime.UtcNow.AddDays(90)
             },
             new AcademicTerm
             {
                 Id = PastTermId,
                 Name = "2024-2025 Spring",
                 Year = 2024,
-                Semester = SemesterType.Spring,
+                TermType = TermType.Spring,
                 RegistrationStart = DateTime.UtcNow.AddDays(-200),
                 RegistrationEnd = DateTime.UtcNow.AddDays(-190),
                 AddDropStart = DateTime.UtcNow.AddDays(-189),
                 AddDropEnd = DateTime.UtcNow.AddDays(-180),
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-210),
-                TermEnd = DateTime.UtcNow.AddDays(-120),
-                Status = TermStatus.Draft
+                TermEnd = DateTime.UtcNow.AddDays(-120)
             });
 
         context.Classrooms.AddRange(
@@ -581,20 +579,26 @@ public class EnrollmentForecastServiceTests
 
     private static void AddTerm(AppDbContext context, int termId, int year, SemesterType semester, bool isActive)
     {
+        var termType = semester switch
+        {
+            SemesterType.Summer => TermType.Summer,
+            SemesterType.Spring => TermType.Spring,
+            _ => TermType.Fall
+        };
+        var termEnd = isActive ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(-10);
         context.AcademicTerms.Add(new AcademicTerm
         {
             Id = termId,
             Name = $"{year}-{year + 1} {semester}",
             Year = year,
-            Semester = semester,
+            TermType = termType,
             RegistrationStart = DateTime.UtcNow.AddDays(-60),
             RegistrationEnd = DateTime.UtcNow.AddDays(-50),
             AddDropStart = DateTime.UtcNow.AddDays(-49),
             AddDropEnd = DateTime.UtcNow.AddDays(-40),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(-20),
             TermStart = DateTime.UtcNow.AddDays(-70),
-            TermEnd = DateTime.UtcNow.AddDays(-10),
-            Status = isActive ? TermStatus.Ready : TermStatus.Draft
+            TermEnd = termEnd
         });
 
         context.SaveChanges();
@@ -640,7 +644,7 @@ public class EnrollmentForecastServiceTests
             Capacity = capacity,
             EnrolledCount = enrolledCount,
             ClassroomId = classroomId,
-            IsActive = isActive,
+            Status = isActive ? CourseSectionStatus.Active : CourseSectionStatus.Draft,
         };
 
         context.CourseSections.Add(section);

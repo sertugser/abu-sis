@@ -129,14 +129,14 @@ public class CourseOpeningService(
     public async Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, CancellationToken ct = default)
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct);
-        var semesterParity = term?.Semester == SemesterType.Spring ? 0 : 1; // Spring→even(2,4,6,8), Fall→odd(1,3,5,7)
+        var semesterParity = term?.TermType == TermType.Spring ? 0 : 1; // Spring→even(2,4,6,8), Fall→odd(1,3,5,7)
 
         // 1) Müfredatta tek tek atanmış dersler (zorunlu + tekil seçmeli)
         var curriculumCourses = await _context.CurriculumCourses
             .AsNoTracking()
             .Include(cc => cc.Course)
             .Where(cc => cc.Curriculum.IsActive && cc.Curriculum.Program.DepartmentId == departmentId)
-            .Where(cc => showAll || term == null || term.Semester == SemesterType.Summer || cc.SuggestedSemester % 2 == semesterParity)
+            .Where(cc => showAll || term == null || term.TermType == TermType.Summer || cc.SuggestedSemester % 2 == semesterParity)
             .OrderBy(cc => cc.SuggestedSemester).ThenBy(cc => cc.Course.Code)
             .ToListAsync(ct);
 
@@ -151,7 +151,7 @@ public class CourseOpeningService(
             .Where(p => p.Curriculum.IsActive && p.Curriculum.Program.DepartmentId == departmentId)
             .Where(p => showAll
                      || term == null
-                     || term.Semester == SemesterType.Summer
+                     || term.TermType == TermType.Summer
                      || (p.SuggestedSemesterEnd - p.SuggestedSemesterStart) >= 1
                      || p.SuggestedSemesterStart % 2 == semesterParity)
             .ToListAsync(ct);
@@ -186,7 +186,7 @@ public class CourseOpeningService(
             .Where(summary => allCourseIds.Contains(summary.CourseId))
             .ToDictionary(summary => summary.CourseId);
 
-        var isTermInPlanning = term?.Status == TermStatus.Preparing;
+        var isTermInPlanning = term != null && !term.IsCancelled;
 
         // 4) DTO üretimi — direkt atanmış dersler önce, sonra direkt'te olmayan havuz üyeleri
         var resultMap = new Dictionary<int, CurriculumCourseForOpeningDto>();
@@ -366,9 +366,8 @@ public class CourseOpeningService(
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
-        if (term.Status != TermStatus.Preparing)
-            throw new InvalidOperationException(
-                $"Ders açmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Ders açmak için dönem iptal edilmemiş olmalıdır.");
 
         var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.CourseId, ct)
             ?? throw new InvalidOperationException($"Ders bulunamadı (ID: {request.CourseId}).");
@@ -437,7 +436,7 @@ public class CourseOpeningService(
                 ExternalQuota = request.ExternalQuota,
                 InstructorId = request.InstructorId,
                 EnrolledCount = 0,
-                IsActive = true,
+                Status = CourseSectionStatus.Active,
                 IsFinalized = false,
                 CrossListGroupId = crossListGroupId,
             };
@@ -465,7 +464,7 @@ public class CourseOpeningService(
                     ExternalQuota = request.ExternalQuota,
                     InstructorId = request.InstructorId,
                     EnrolledCount = 0,
-                    IsActive = true,
+                    Status = CourseSectionStatus.Active,
                     IsFinalized = false,
                     CrossListGroupId = crossListGroupId,
                 };
@@ -661,9 +660,8 @@ public class CourseOpeningService(
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Preparing)
-            throw new InvalidOperationException(
-                $"Şube güncellemek için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term != null && term.IsCancelled)
+            throw new InvalidOperationException("Şube güncellemek için dönem iptal edilmemiş olmalıdır.");
 
         if (!section.IsActive)
             throw new InvalidOperationException("Pasif şube güncellenemez.");
@@ -747,9 +745,8 @@ public class CourseOpeningService(
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Preparing)
-            throw new InvalidOperationException(
-                $"Şube kapatmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term != null && term.IsCancelled)
+            throw new InvalidOperationException("Şube kapatmak için dönem iptal edilmemiş olmalıdır.");
 
         // Draft/PendingAdvisorApproval kayıtlarını temizle
         var pendingRegistrations = await _context.CourseRegistrations
@@ -777,7 +774,7 @@ public class CourseOpeningService(
                 && cs.IsActive
                 && cs.Id != section.Id, ct);
 
-        section.IsActive = false;
+        section.Status = CourseSectionStatus.Cancelled;
         section.EnrolledCount = 0;
 
         if (!hasOtherActiveSections)
@@ -796,9 +793,8 @@ public class CourseOpeningService(
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
-        if (term.Status != TermStatus.Preparing)
-            throw new InvalidOperationException(
-                $"Ders kapatmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Ders kapatmak için dönem iptal edilmemiş olmalıdır.");
 
         var sections = await _context.CourseSections
             .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.IsActive)
@@ -829,7 +825,7 @@ public class CourseOpeningService(
         // Tüm section'ları kapat
         foreach (var section in sections)
         {
-            section.IsActive = false;
+            section.Status = CourseSectionStatus.Cancelled;
             section.EnrolledCount = 0;
         }
 
@@ -859,11 +855,10 @@ public class CourseOpeningService(
             throw new InvalidOperationException("Şube zaten aktif.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Preparing)
-            throw new InvalidOperationException(
-                $"Şube yeniden açmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term != null && term.IsCancelled)
+            throw new InvalidOperationException("Şube yeniden açmak için dönem iptal edilmemiş olmalıdır.");
 
-        section.IsActive = true;
+        section.Status = CourseSectionStatus.Active;
         // EnrolledCount 0 kalır — kapatılırken sıfırlanmıştı
 
         // Bu ders için CourseAccessPolicy yoksa yeniden oluştur
@@ -901,11 +896,9 @@ public class CourseOpeningService(
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft     => "Taslak",
-        TermStatus.Preparing => "Hazırlık",
-        TermStatus.Ready     => "Yayında",
-        TermStatus.Closed    => "Kapalı",
-        TermStatus.Archived  => "Arşivlendi",
+        TermStatus.Inactive  => "Pasif",
+        TermStatus.Active    => "Aktif",
+        TermStatus.Cancelled => "İptal",
         _                    => s.ToString()
     };
 

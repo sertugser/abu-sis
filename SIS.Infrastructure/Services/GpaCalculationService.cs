@@ -90,7 +90,7 @@ public class GpaCalculationService : IGpaCalculationService
                 TermId = termGroup.Term.Id,
                 TermName = termGroup.Term.Name,
                 Year = termGroup.Term.Year,
-                Semester = termGroup.Term.Semester.ToString(),
+                Semester = termGroup.Term.TermType.ToString(),
                 CourseCount = termGroup.Registrations.Count,
                 TotalCredits = termGroup.Registrations.Sum(registration =>
                     registration.CourseSection.Course.TheoryHours + registration.CourseSection.Course.LabHours),

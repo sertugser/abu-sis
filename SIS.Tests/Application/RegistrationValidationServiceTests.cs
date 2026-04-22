@@ -66,7 +66,7 @@ public class RegistrationValidationServiceTests : IDisposable
             Id = TermId,
             Name = "2025-2026 Spring",
             Year = 2025,
-            Semester = SemesterType.Spring,
+            TermType = TermType.Spring,
             RegistrationStart = DateTime.UtcNow.AddDays(-5),
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
@@ -74,7 +74,6 @@ public class RegistrationValidationServiceTests : IDisposable
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
-            Status = TermStatus.Ready,
             GradeEntryStart = termEnd.AddDays(-14),
             GradeEntryEnd = termEnd.AddDays(14)
         });
@@ -145,7 +144,7 @@ public class RegistrationValidationServiceTests : IDisposable
             TermId = termId,
             Capacity = capacity,
             EnrolledCount = enrolledCount,
-            IsActive = isActive
+            Status = isActive ? CourseSectionStatus.Active : CourseSectionStatus.Draft
         };
         _context.CourseSections.Add(section);
         _context.SaveChanges();
@@ -327,9 +326,8 @@ public class RegistrationValidationServiceTests : IDisposable
     [Fact]
     public async Task Validate_OutsideRegistrationPeriod_ReturnsPeriodError()
     {
-        // Set term status to Ready but adjust dates so registration period is closed
+        // Adjust dates so registration period is closed
         var term = _context.AcademicTerms.Find(TermId)!;
-        term.Status = TermStatus.Ready;
         term.RegistrationEnd = DateTime.UtcNow.AddDays(-1);
         _context.SaveChanges();
 
@@ -345,9 +343,9 @@ public class RegistrationValidationServiceTests : IDisposable
     [Fact]
     public async Task Validate_NoActiveTerm_ReturnsPeriodError()
     {
-        // Set term to Closed status
+        // Set term end to past so it's no longer active
         var term = _context.AcademicTerms.Find(TermId)!;
-        term.Status = TermStatus.Closed;
+        term.TermEnd = DateTime.UtcNow.AddDays(-1);
         _context.SaveChanges();
 
         var course = AddCourse(301, "CS301", "Networks", 5);
@@ -890,7 +888,7 @@ public class RegistrationValidationServiceTests : IDisposable
             Id = pastTermId,
             Name = "2024-2025 Fall",
             Year = 2024,
-            Semester = SemesterType.Fall,
+            TermType = TermType.Fall,
             RegistrationStart = DateTime.UtcNow.AddDays(-200),
             RegistrationEnd = DateTime.UtcNow.AddDays(-190),
             AddDropStart = DateTime.UtcNow.AddDays(-189),
@@ -898,7 +896,6 @@ public class RegistrationValidationServiceTests : IDisposable
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-210),
             TermEnd = pastTermEnd,
-            Status = TermStatus.Closed,
             GradeEntryStart = pastTermEnd.AddDays(-14),
             GradeEntryEnd = pastTermEnd.AddDays(14)
         });

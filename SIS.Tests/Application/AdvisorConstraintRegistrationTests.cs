@@ -94,7 +94,7 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             Id = ActiveTermId,
             Name = "2025-2026 Fall",
             Year = 2025,
-            Semester = SemesterType.Fall,
+            TermType = TermType.Fall,
             RegistrationStart = DateTime.UtcNow.AddDays(-2),
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
@@ -102,7 +102,6 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             WithdrawalDeadline = DateTime.UtcNow.AddDays(50),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
-            Status = TermStatus.Ready,
             GradeEntryStart = termEnd.AddDays(-14),
             GradeEntryEnd = termEnd.AddDays(14)
         });
@@ -211,7 +210,7 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             SectionNumber = 1,
             Capacity = 40,
             EnrolledCount = 0,
-            IsActive = true
+            Status = CourseSectionStatus.Active
         };
         _context.CourseSections.Add(section);
         _context.SaveChanges();

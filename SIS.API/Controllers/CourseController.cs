@@ -32,8 +32,9 @@ public class CourseController : ControllerBase
     public async Task<IActionResult> GetCourses([FromQuery] int? programId)
     {
         // Find active term
+        var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
 
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
@@ -150,13 +151,10 @@ public class CourseController : ControllerBase
             return NotFound(new { error = "Aktif program bulunamadi." });
 
         // 2. Active term
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+        var nowCatalog = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowCatalog && t.TermEnd >= nowCatalog);
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
-
-        // Guard: katalog ancak Ready (Published+) aşamasında görülebilir
-        if (activeTerm.Status < TermStatus.Ready)
-            return BadRequest(new { error = $"Ders kataloğu henüz yayınlanmadı. Dönem durumu: {activeTerm.Status}" });
 
         // 3. Curriculum data — which courses are in the student's program
         var curriculumCourses = await _context.CurriculumCourses
@@ -424,27 +422,26 @@ public class CourseController : ControllerBase
     [HttpGet("terms/active")]
     public async Task<IActionResult> GetActiveTerm()
     {
+        var now = _clock.UtcNow;
         var term = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
 
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
-
-        var now = DateTime.UtcNow;
 
         var dto = new ActiveTermDto
         {
             Id = term.Id,
             Name = term.Name,
             Year = term.Year,
-            Semester = term.Semester.ToString(),
+            Semester = term.TermType.ToString(),
             RegistrationStart = term.RegistrationStart,
             RegistrationEnd = term.RegistrationEnd,
             AddDropStart = term.AddDropStart,
             AddDropEnd = term.AddDropEnd,
             IsRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow),
             IsAddDropOpen = term.IsAddDropOpen(_clock.UtcNow),
-            Status = term.Status.ToString()
+            Status = term.GetStatus(_clock.UtcNow).ToString()
         };
 
         return Ok(dto);

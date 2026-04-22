@@ -451,9 +451,10 @@ public class SchedulingController : ControllerBase
                 .FirstOrDefaultAsync(t => t.Id == termId.Value, ct);
         }
 
+        var nowSched = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.IsActive, ct);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowSched && t.TermEnd >= nowSched, ct);
     }
 
     private async Task<string> GetInstructorDisplayNameAsync(Domain.Entities.Instructor instructor, CancellationToken ct)

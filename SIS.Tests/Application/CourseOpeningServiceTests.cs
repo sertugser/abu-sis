@@ -276,7 +276,7 @@ public class CourseOpeningServiceTests
             ShortName = "25-26 Güz",
             EnglishName = "Fall 2025-2026",
             Year = 2025,
-            Semester = SemesterType.Fall,
+            TermType = TermType.Fall,
             RegistrationStart = DateTime.UtcNow.AddDays(-7),
             RegistrationEnd = DateTime.UtcNow.AddDays(7),
             AddDropStart = DateTime.UtcNow.AddDays(8),
@@ -284,7 +284,6 @@ public class CourseOpeningServiceTests
             WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
             TermStart = DateTime.UtcNow.AddDays(-14),
             TermEnd = termEnd,
-            Status = TermStatus.Preparing,
             GradeEntryStart = termEnd.AddDays(-14),
             GradeEntryEnd = termEnd.AddDays(14)
         });
@@ -442,7 +441,7 @@ public class CourseOpeningServiceTests
             Capacity = capacity,
             EnrolledCount = enrolledCount,
             SectionNumber = sectionNumber,
-            IsActive = isActive,
+            Status = isActive ? CourseSectionStatus.Active : CourseSectionStatus.Draft,
             IsFinalized = false
         };
 

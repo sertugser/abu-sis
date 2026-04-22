@@ -20,8 +20,8 @@ public class AcademicCalendarRuleService : IAcademicCalendarRuleService
 
     public async Task ValidateCalendarEventAsync(AcademicTerm term, CalendarEventType eventType, DateTime startDate, DateTime? endDate, CancellationToken ct = default)
     {
-        if (term.Status >= TermStatus.Closed)
-            throw new InvalidOperationException("Kapalı veya arşivlenmiş dönemde takvim etkinliği değiştirilemez.");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("İptal edilmiş dönemde takvim etkinliği değiştirilemez.");
 
         var start = EnsureUtcDate(startDate);
         var end = EnsureUtcDate(endDate ?? startDate);

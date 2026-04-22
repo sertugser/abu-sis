@@ -79,10 +79,10 @@ public class GradeController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
-        // Guard: bileşen ekleme/düzenleme GradeEntry veya öncesi (Planning/Scheduling) olmalı
-        var termStatus = await GetTermStatusAsync(section.TermId);
-        if (termStatus >= TermStatus.Closed)
-            return BadRequest(new { error = "Kapalı veya arşivlenmiş dönemde bileşen değiştirilemez." });
+        // Guard: bileşen ekleme/düzenleme iptal edilmiş dönemde yapılamaz
+        var termIsCancelled = await GetTermIsCancelledAsync(section.TermId);
+        if (termIsCancelled == true)
+            return BadRequest(new { error = "İptal edilmiş dönemde bileşen değiştirilemez." });
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin bilesen degistirilemez. Once sonuclandirmayi iptal edin." });
@@ -138,9 +138,9 @@ public class GradeController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
-        var termStatus2 = await GetTermStatusAsync(section.TermId);
-        if (termStatus2 >= TermStatus.Closed)
-            return BadRequest(new { error = "Kapalı veya arşivlenmiş dönemde bileşen silinemez." });
+        var termIsCancelled2 = await GetTermIsCancelledAsync(section.TermId);
+        if (termIsCancelled2 == true)
+            return BadRequest(new { error = "İptal edilmiş dönemde bileşen silinemez." });
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Sonuclandirilmis ders icin bilesen silinemez. Once sonuclandirmayi iptal edin." });
@@ -1097,11 +1097,11 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         return section;
     }
 
-    private async Task<TermStatus?> GetTermStatusAsync(int termId)
+    private async Task<bool?> GetTermIsCancelledAsync(int termId)
     {
         var term = await _context.AcademicTerms.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == termId);
-        return term?.Status;
+        return term?.IsCancelled;
     }
 
 

@@ -311,9 +311,10 @@ public class AdvisorConstraintService : IAdvisorConstraintService
 
     private async Task<int?> GetActiveTermIdAsync(CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => t.Status == TermStatus.Ready)
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
             .Select(t => (int?)t.Id)
             .FirstOrDefaultAsync(cancellationToken);
     }

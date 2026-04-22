@@ -305,9 +305,10 @@ public class StudentEligibilityService : IStudentEligibilityService
 
     private async Task<EligibilityContextData> BuildEligibilityContextAsync(CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready, cancellationToken);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, cancellationToken);
 
         var students = await _context.Students
             .AsNoTracking()

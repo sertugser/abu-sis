@@ -81,15 +81,14 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
             ShortName = "25-26 Fall",
             EnglishName = "Fall 2025-2026",
             Year = 2025,
-            Semester = SemesterType.Fall,
+            TermType = TermType.Fall,
             RegistrationStart = DateTime.UtcNow.AddDays(-5),
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
             AddDropEnd = DateTime.UtcNow.AddDays(12),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            Status = TermStatus.Ready
+            TermEnd = DateTime.UtcNow.AddDays(90)
         });
 
         // Classrooms: 2 Lecture (60 cap), 1 PhysicsLab (30 cap)
@@ -154,7 +153,7 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
                 Capacity = 40,
                 EnrolledCount = 0,
                 SectionNumber = 1,
-                IsActive = true,
+                Status = CourseSectionStatus.Active,
                 IsFinalized = false,
                 ClassroomId = Classroom1Id,
                 IsPinned = true
@@ -167,7 +166,7 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
                 Capacity = 40,
                 EnrolledCount = 0,
                 SectionNumber = 1,
-                IsActive = true,
+                Status = CourseSectionStatus.Active,
                 IsFinalized = false,
                 ClassroomId = Classroom2Id,
                 IsPinned = true
@@ -180,7 +179,7 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
                 Capacity = 25,
                 EnrolledCount = 0,
                 SectionNumber = 1,
-                IsActive = true,
+                Status = CourseSectionStatus.Active,
                 IsFinalized = false
             }
         );

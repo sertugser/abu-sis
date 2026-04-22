@@ -50,7 +50,8 @@ public class RegistrationValidationService : IRegistrationValidationService
             .ToListAsync();
 
         // Load active term
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+        var now = DateTime.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
 
         // Load student's existing active registrations for this term
         // Madde 9: Draft kayıtlar da AKTS sınır hesabına dahil edilir.
@@ -108,7 +109,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             errors.Add(new ValidationError
             {
                 Rule = "RegistrationPeriod",
-                Message = $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.Status}"
+                Message = $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}"
             });
         }
 

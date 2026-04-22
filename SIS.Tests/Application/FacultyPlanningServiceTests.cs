@@ -195,7 +195,7 @@ public class FacultyPlanningServiceTests : IDisposable
     [Fact]
     public async Task AssignSectionAsync_AllowsPlanningStage()
     {
-        SetTermStatus(TermStatus.Preparing);
+        SetTermStatus(TermStatus.Active);
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(10, 0), 1);
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(11, 0), 2);
 
@@ -246,7 +246,7 @@ public class FacultyPlanningServiceTests : IDisposable
             ShortName = "25-26 Bahar",
             EnglishName = "Spring 2025-2026",
             Year = 2025,
-            Semester = SemesterType.Spring,
+            TermType = TermType.Spring,
             RegistrationStart = DateTime.UtcNow.AddDays(-5),
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
@@ -254,7 +254,6 @@ public class FacultyPlanningServiceTests : IDisposable
             WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
-            Status = TermStatus.Preparing,
             GradeEntryStart = termEnd.AddDays(-14),
             GradeEntryEnd = termEnd.AddDays(14)
         });
@@ -344,7 +343,7 @@ public class FacultyPlanningServiceTests : IDisposable
             Capacity = capacity,
             EnrolledCount = 0,
             SectionNumber = id,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false,
             IsPinned = false
         };
@@ -372,7 +371,7 @@ public class FacultyPlanningServiceTests : IDisposable
             Capacity = capacity,
             EnrolledCount = 0,
             SectionNumber = id,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false,
             IsPinned = false
         };
@@ -475,8 +474,9 @@ public class FacultyPlanningServiceTests : IDisposable
 
     private void SetTermStatus(TermStatus status)
     {
+        // TermStatus.Cancelled → IsCancelled=true; others → IsCancelled=false (active by dates)
         var term = _context.AcademicTerms.Single(t => t.Id == TermId);
-        term.Status = status;
+        term.IsCancelled = status == TermStatus.Cancelled;
         _context.SaveChanges();
     }
 

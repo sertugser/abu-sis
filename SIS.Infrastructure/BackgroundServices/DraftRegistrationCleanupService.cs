@@ -45,8 +45,9 @@ public class DraftRegistrationCleanupService : BackgroundService
 
         try
         {
+            var now = DateTime.UtcNow;
             var activeTerm = await context.AcademicTerms
-                .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready, cancellationToken);
+                .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, cancellationToken);
 
             if (activeTerm == null)
                 return;

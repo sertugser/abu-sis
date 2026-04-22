@@ -12,21 +12,21 @@ public static partial class SeedData
         // Academic Terms
         if (!context.AcademicTerms.Any())
         {
-            var terms = new (string Name, string ShortName, string EnglishName, int Year, SemesterType Sem, TermType TermType, string RegStart, string RegEnd, string AddStart, string AddEnd, string TermStart, string TermEnd, string WithdrawalDeadline, bool Active, TermStatus Status)[]
+            var terms = new (string Name, string ShortName, string EnglishName, int Year, TermType TermType, string RegStart, string RegEnd, string AddStart, string AddEnd, string TermStart, string TermEnd, string WithdrawalDeadline, bool IsCancelled)[]
             {
-                ("2020-2021 Güz",   "20-21 Güz",   "Fall 2020-2021",   2020, SemesterType.Fall,   TermType.Regular, "2020-09-14", "2020-09-28", "2020-09-29", "2020-10-12", "2020-09-28", "2021-01-15", "2020-11-16", false, TermStatus.Archived),
-                ("2020-2021 Bahar", "20-21 Bahar", "Spring 2020-2021", 2020, SemesterType.Spring, TermType.Regular, "2021-02-01", "2021-02-15", "2021-02-16", "2021-02-28", "2021-02-15", "2021-06-15", "2021-04-05", false, TermStatus.Archived),
-                ("2021-2022 Güz",   "21-22 Güz",   "Fall 2021-2022",   2021, SemesterType.Fall,   TermType.Regular, "2021-09-13", "2021-09-27", "2021-09-28", "2021-10-11", "2021-09-27", "2022-01-14", "2021-11-15", false, TermStatus.Archived),
-                ("2021-2022 Bahar", "21-22 Bahar", "Spring 2021-2022", 2021, SemesterType.Spring, TermType.Regular, "2022-02-07", "2022-02-21", "2022-02-22", "2022-03-07", "2022-02-21", "2022-06-17", "2022-04-11", false, TermStatus.Archived),
-                ("2022-2023 Güz",   "22-23 Güz",   "Fall 2022-2023",   2022, SemesterType.Fall,   TermType.Regular, "2022-09-12", "2022-09-26", "2022-09-27", "2022-10-10", "2022-09-26", "2023-01-13", "2022-11-14", false, TermStatus.Archived),
-                ("2022-2023 Bahar", "22-23 Bahar", "Spring 2022-2023", 2022, SemesterType.Spring, TermType.Regular, "2023-02-06", "2023-02-20", "2023-02-21", "2023-03-06", "2023-02-20", "2023-06-16", "2023-04-10", false, TermStatus.Archived),
-                ("2023-2024 Güz",   "23-24 Güz",   "Fall 2023-2024",   2023, SemesterType.Fall,   TermType.Regular, "2023-09-01", "2023-09-15", "2023-09-16", "2023-09-30", "2023-09-16", "2024-01-10", "2023-11-04", false, TermStatus.Archived),
-                ("2023-2024 Bahar", "23-24 Bahar", "Spring 2023-2024", 2023, SemesterType.Spring, TermType.Regular, "2024-02-01", "2024-02-15", "2024-02-16", "2024-02-28", "2024-02-16", "2024-06-15", "2024-04-05", false, TermStatus.Archived),
-                ("2024-2025 Güz",   "24-25 Güz",   "Fall 2024-2025",   2024, SemesterType.Fall,   TermType.Regular, "2024-09-01", "2024-09-15", "2024-09-16", "2024-09-30", "2024-09-16", "2025-01-10", "2024-11-04", false, TermStatus.Archived),
-                ("2024-2025 Bahar", "24-25 Bahar", "Spring 2024-2025", 2024, SemesterType.Spring, TermType.Regular, "2025-02-01", "2025-02-15", "2025-02-16", "2025-02-28", "2025-02-16", "2025-06-15", "2025-04-07", false, TermStatus.Archived),
-                ("2025-2026 Güz",   "25-26 Güz",   "Fall 2025-2026",   2025, SemesterType.Fall,   TermType.Regular, "2025-09-15", "2025-09-19", "2025-09-29", "2025-10-03", "2025-09-22", "2026-01-02", "2025-11-07", false, TermStatus.Draft),
-                ("2025-2026 Bahar", "25-26 Bahar", "Spring 2025-2026", 2025, SemesterType.Spring, TermType.Regular, "2026-02-16", "2026-02-20", "2026-03-02", "2026-03-06", "2026-02-23", "2026-06-05", "2026-04-03", true, TermStatus.Draft),
-                ("2025-2026 Yaz",   "25-26 Yaz",   "Summer 2025-2026", 2025, SemesterType.Summer, TermType.Summer, "2026-06-30", "2026-07-03", "2026-06-30", "2026-07-03", "2026-07-13", "2026-08-28", "2026-08-28", false, TermStatus.Draft),
+                ("2020-2021 Güz",   "20-21 Güz",   "Fall 2020-2021",   2020, TermType.Fall,   "2020-09-14", "2020-09-28", "2020-09-29", "2020-10-12", "2020-09-28", "2021-01-15", "2020-11-16", false),
+                ("2020-2021 Bahar", "20-21 Bahar", "Spring 2020-2021", 2020, TermType.Spring, "2021-02-01", "2021-02-15", "2021-02-16", "2021-02-28", "2021-02-15", "2021-06-15", "2021-04-05", false),
+                ("2021-2022 Güz",   "21-22 Güz",   "Fall 2021-2022",   2021, TermType.Fall,   "2021-09-13", "2021-09-27", "2021-09-28", "2021-10-11", "2021-09-27", "2022-01-14", "2021-11-15", false),
+                ("2021-2022 Bahar", "21-22 Bahar", "Spring 2021-2022", 2021, TermType.Spring, "2022-02-07", "2022-02-21", "2022-02-22", "2022-03-07", "2022-02-21", "2022-06-17", "2022-04-11", false),
+                ("2022-2023 Güz",   "22-23 Güz",   "Fall 2022-2023",   2022, TermType.Fall,   "2022-09-12", "2022-09-26", "2022-09-27", "2022-10-10", "2022-09-26", "2023-01-13", "2022-11-14", false),
+                ("2022-2023 Bahar", "22-23 Bahar", "Spring 2022-2023", 2022, TermType.Spring, "2023-02-06", "2023-02-20", "2023-02-21", "2023-03-06", "2023-02-20", "2023-06-16", "2023-04-10", false),
+                ("2023-2024 Güz",   "23-24 Güz",   "Fall 2023-2024",   2023, TermType.Fall,   "2023-09-01", "2023-09-15", "2023-09-16", "2023-09-30", "2023-09-16", "2024-01-10", "2023-11-04", false),
+                ("2023-2024 Bahar", "23-24 Bahar", "Spring 2023-2024", 2023, TermType.Spring, "2024-02-01", "2024-02-15", "2024-02-16", "2024-02-28", "2024-02-16", "2024-06-15", "2024-04-05", false),
+                ("2024-2025 Güz",   "24-25 Güz",   "Fall 2024-2025",   2024, TermType.Fall,   "2024-09-01", "2024-09-15", "2024-09-16", "2024-09-30", "2024-09-16", "2025-01-10", "2024-11-04", false),
+                ("2024-2025 Bahar", "24-25 Bahar", "Spring 2024-2025", 2024, TermType.Spring, "2025-02-01", "2025-02-15", "2025-02-16", "2025-02-28", "2025-02-16", "2025-06-15", "2025-04-07", false),
+                ("2025-2026 Güz",   "25-26 Güz",   "Fall 2025-2026",   2025, TermType.Fall,   "2025-09-15", "2025-09-19", "2025-09-29", "2025-10-03", "2025-09-22", "2026-01-02", "2025-11-07", false),
+                ("2025-2026 Bahar", "25-26 Bahar", "Spring 2025-2026", 2025, TermType.Spring, "2026-02-16", "2026-02-20", "2026-03-02", "2026-03-06", "2026-02-23", "2026-06-05", "2026-04-03", false),
+                ("2025-2026 Yaz",   "25-26 Yaz",   "Summer 2025-2026", 2025, TermType.Summer, "2026-06-30", "2026-07-03", "2026-06-30", "2026-07-03", "2026-07-13", "2026-08-28", "2026-08-28", false),
             };
 
             foreach (var t in terms)
@@ -38,7 +38,6 @@ public static partial class SeedData
                     ShortName = t.ShortName,
                     EnglishName = t.EnglishName,
                     Year = t.Year,
-                    Semester = t.Sem,
                     TermType = t.TermType,
                     RegistrationStart = ParseUtcDate(t.RegStart),
                     RegistrationEnd = ParseUtcDate(t.RegEnd),
@@ -49,7 +48,8 @@ public static partial class SeedData
                     TermEnd = termEnd,
                     GradeEntryStart = termEnd.AddDays(-14),
                     GradeEntryEnd = termEnd.AddDays(14),
-                    Status = t.Status
+                    IsCancelled = t.IsCancelled,
+                    YoksisStatus = YoksisStatus.Inactive,
                 });
             }
             await context.SaveChangesAsync();
@@ -90,11 +90,11 @@ public static partial class SeedData
             return;
 
         var springTerm = await context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.Year == 2025 && t.Semester == SemesterType.Spring);
+            .FirstOrDefaultAsync(t => t.Year == 2025 && t.TermType == TermType.Spring);
         var fallTerm = await context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.Year == 2025 && t.Semester == SemesterType.Fall);
+            .FirstOrDefaultAsync(t => t.Year == 2025 && t.TermType == TermType.Fall);
         var summerTerm = await context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.Year == 2025 && t.Semester == SemesterType.Summer);
+            .FirstOrDefaultAsync(t => t.Year == 2025 && t.TermType == TermType.Summer);
 
         if (springTerm is null)
             return;

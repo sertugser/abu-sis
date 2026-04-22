@@ -119,7 +119,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
 
-        if (term.Status != TermStatus.Ready || !term.IsAddDropOpen(_clock.UtcNow))
+        if (!term.IsActive(_clock.UtcNow) || !term.IsAddDropOpen(_clock.UtcNow))
             throw new InvalidOperationException("Kalibrasyon için dönem en az ek/bırak aşamasını geçmiş olmalı.");
 
         // Already calibrated?
@@ -295,13 +295,14 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
     private async Task<ForecastContextData> BuildForecastContextCoreAsync(int? departmentId = null)
     {
+        var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.Status == TermStatus.Ready);
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now);
 
         var allTerms = await _context.AcademicTerms
             .AsNoTracking()
-            .OrderBy(t => t.Year).ThenBy(t => t.Semester)
+            .OrderBy(t => t.Year).ThenBy(t => t.TermType)
             .ToListAsync();
 
         var studentQuery = _context.Students
@@ -694,7 +695,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             // Karşılaştırılabilir dönem verilerini filtrele
             var comparableCounts = activeTerm != null
                 ? termEnrollments
-                    .Where(kv => termsById.TryGetValue(kv.Key, out var t) && t.Semester == activeTerm.Semester)
+                    .Where(kv => termsById.TryGetValue(kv.Key, out var t) && t.TermType == activeTerm.TermType)
                     .Select(kv => (double)kv.Value)
                     .ToList()
                 : termEnrollments.Values.Select(v => (double)v).ToList();
@@ -1140,7 +1141,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
                 var comparablePrereqCounts = context.ActiveTerm != null
                     ? prereqHistorical
-                        .Where(kv => context.TermsById.TryGetValue(kv.Key, out var t) && t.Semester == context.ActiveTerm.Semester)
+                        .Where(kv => context.TermsById.TryGetValue(kv.Key, out var t) && t.TermType == context.ActiveTerm.TermType)
                         .Select(kv => kv.Value)
                         .ToList()
                     : prereqHistorical.Values.ToList();
@@ -1306,7 +1307,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         var results = new List<HistoricalEnrollmentDto>();
 
         foreach (var (termId, count) in termEnrollments.OrderBy(kv =>
-            context.TermsById.TryGetValue(kv.Key, out var t) ? t.Year * 10 + (int)t.Semester : kv.Key))
+            context.TermsById.TryGetValue(kv.Key, out var t) ? t.Year * 10 + (int)t.TermType : kv.Key))
         {
             var term = context.TermsById.GetValueOrDefault(termId);
             var sectionCount = context.SectionCountByCourseTerm.GetValueOrDefault((courseId, termId));
@@ -1936,7 +1937,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         return historicalData
             .Where(item =>
                 context.TermsById.TryGetValue(item.TermId, out var term)
-                && term.Semester == context.ActiveTerm.Semester)
+                && term.TermType == context.ActiveTerm.TermType)
             .ToList();
     }
 
@@ -2066,7 +2067,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             var weight = 1.0;
             if (context.ActiveTerm != null)
             {
-                if (term.Semester == context.ActiveTerm.Semester)
+                if (term.TermType == context.ActiveTerm.TermType)
                     weight *= 1.6;
 
                 var yearGap = Math.Max(0, context.ActiveTerm.Year - term.Year);

@@ -37,7 +37,7 @@ public class EvaluationPeriodOpenerJobTests
 
     private static AcademicTerm TermReady(DateTime now) => new()
     {
-        Id = 1, Name = "T", Status = TermStatus.Ready,
+        Id = 1, Name = "T",
         RegistrationStart = now.AddDays(-30), RegistrationEnd = now.AddDays(-20),
         AddDropStart = now.AddDays(-20), AddDropEnd = now.AddDays(-15),
         TermStart = now.AddDays(-60), TermEnd = now.AddDays(30),

@@ -50,7 +50,7 @@ public class EvaluationPeriodOpenerJob : BackgroundService
         var now = _clock.UtcNow;
 
         var terms = await ctx.AcademicTerms
-            .Where(t => t.Status == TermStatus.Ready && t.GradeEntryStart <= now)
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now && t.GradeEntryStart <= now)
             .ToListAsync(ct);
 
         foreach (var term in terms)

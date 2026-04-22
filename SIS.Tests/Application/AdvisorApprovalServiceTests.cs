@@ -60,7 +60,7 @@ public class AdvisorApprovalServiceTests : IDisposable
             Id = TermId,
             Name = "2025-2026 Spring",
             Year = 2025,
-            Semester = SemesterType.Spring,
+            TermType = TermType.Spring,
             RegistrationStart = DateTime.UtcNow.AddDays(-5),
             RegistrationEnd = DateTime.UtcNow.AddDays(5),
             AddDropStart = DateTime.UtcNow.AddDays(6),
@@ -68,7 +68,6 @@ public class AdvisorApprovalServiceTests : IDisposable
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
-            Status = TermStatus.Ready,
             GradeEntryStart = termEnd.AddDays(-14),
             GradeEntryEnd = termEnd.AddDays(14)
         });
@@ -184,7 +183,7 @@ public class AdvisorApprovalServiceTests : IDisposable
             TermId = TermId,
             Capacity = capacity,
             EnrolledCount = enrolledCount,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             InstructorId = AdvisorInstructorId
         };
         _context.CourseSections.Add(section);

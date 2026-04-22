@@ -35,7 +35,7 @@ public class AcademicCalendarService : IAcademicCalendarService
                 && e.GeneratedDraftId == draft.Id))
             .Where(t => t.Year == targetYear.Value)
             .OrderBy(t => t.TermStart)
-            .ThenBy(t => t.Semester)
+            .ThenBy(t => t.TermType)
             .ToListAsync();
 
         if (terms.Count == 0)
@@ -58,7 +58,8 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (events.Count == 0)
             return null;
 
-        var term = terms.FirstOrDefault(t => t.Status == TermStatus.Ready) ?? terms.First();
+        var now = DateTime.UtcNow;
+        var term = terms.FirstOrDefault(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now) ?? terms.First();
         var academicYear = draft.AcademicYear;
 
         return new ActiveTermCalendarDto(

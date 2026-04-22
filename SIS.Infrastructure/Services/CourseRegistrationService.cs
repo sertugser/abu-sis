@@ -583,7 +583,8 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
     {
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+        var now = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
         if (activeTerm == null)
             return new List<StudentRegistrationDto>();
 
@@ -709,8 +710,10 @@ public class CourseRegistrationService : ICourseRegistrationService
                 TermId = cr.CourseSection.Term.Id,
                 TermName = cr.CourseSection.Term.Name,
                 cr.CourseSection.Term.Year,
-                cr.CourseSection.Term.Semester,
-                IsActive = cr.CourseSection.Term.Status == TermStatus.Ready
+                cr.CourseSection.Term.TermType,
+                IsActive = !cr.CourseSection.Term.IsCancelled
+                    && cr.CourseSection.Term.TermStart <= DateTime.UtcNow
+                    && cr.CourseSection.Term.TermEnd >= DateTime.UtcNow
             })
             .Distinct()
             .ToListAsync();
@@ -725,7 +728,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                     TermId = term.TermId,
                     TermName = term.TermName,
                     Year = term.Year,
-                    Semester = term.Semester.ToString(),
+                    Semester = term.TermType.ToString(),
                     IsActive = term.IsActive
                 };
             })
@@ -743,9 +746,10 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         if (selectedTerm == null)
         {
+            var nowAttendance = _clock.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+                .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowAttendance && t.TermEnd >= nowAttendance);
 
             if (activeTerm == null)
                 return null;
@@ -755,8 +759,8 @@ public class CourseRegistrationService : ICourseRegistrationService
                 TermId = activeTerm.Id,
                 TermName = activeTerm.Name,
                 Year = activeTerm.Year,
-                Semester = activeTerm.Semester.ToString(),
-                IsActive = activeTerm.IsActive
+                Semester = activeTerm.TermType.ToString(),
+                IsActive = activeTerm.IsActive(nowAttendance)
             };
             availableTerms.Add(selectedTerm);
         }
@@ -891,7 +895,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                     TermId = term.Id,
                     TermName = term.Name,
                     Year = term.Year,
-                    Semester = term.Semester.ToString(),
+                    Semester = term.TermType.ToString(),
                     Courses = g.Select(r => new CourseHistoryItemDto
                     {
                         RegistrationId = r.Id,
@@ -1251,7 +1255,8 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId)
     {
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+        var nowPending = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowPending && t.TermEnd >= nowPending);
         if (activeTerm == null)
             return new List<PendingApprovalDto>();
 
@@ -1458,7 +1463,8 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+        var nowApprove = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -1527,7 +1533,8 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
+        var nowReject = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowReject && t.TermEnd >= nowReject);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -1648,12 +1655,10 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft     => "Taslak",
-        TermStatus.Preparing => "Hazırlık",
-        TermStatus.Ready     => "Yayında",
-        TermStatus.Closed    => "Kapalı",
-        TermStatus.Archived  => "Arşivlendi",
-        _                    => s.ToString()
+        TermStatus.Inactive   => "Pasif",
+        TermStatus.Active     => "Aktif",
+        TermStatus.Cancelled  => "İptal",
+        _                     => s.ToString()
     };
 
     /// <summary>

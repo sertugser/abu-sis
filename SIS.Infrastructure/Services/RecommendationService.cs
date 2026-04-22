@@ -37,9 +37,10 @@ public class RecommendationService : IRecommendationService
     {
         pacePreference = Math.Clamp(pacePreference, 0, 100);
 
+        var now = DateTime.UtcNow;
         var activeTermId = await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => t.Status == TermStatus.Ready)
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
             .Select(t => (int?)t.Id)
             .FirstOrDefaultAsync(cancellationToken);
 

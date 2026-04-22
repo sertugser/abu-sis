@@ -2331,9 +2331,10 @@ public class SchedulingService : ISchedulingService
                 .FirstOrDefaultAsync(term => term.Id == termId.Value, cancellationToken);
         }
 
+        var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.Status == TermStatus.Ready, cancellationToken);
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now, cancellationToken);
     }
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(List<int> instructorIds, CancellationToken cancellationToken)

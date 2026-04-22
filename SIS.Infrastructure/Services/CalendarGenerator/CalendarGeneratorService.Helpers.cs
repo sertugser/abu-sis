@@ -242,15 +242,22 @@ public partial class CalendarGeneratorService
         var english = semester switch { SemesterType.Fall => "Fall", SemesterType.Spring => "Spring", SemesterType.Summer => "Summer", _ => semester.ToString() };
         var now = DateTime.UtcNow;
         var termEnd = now.AddMonths(6);
+        var termType = semester switch
+        {
+            SemesterType.Summer => TermType.Summer,
+            SemesterType.Spring => TermType.Spring,
+            _ => TermType.Fall
+        };
         return new AcademicTerm
         {
             Name = $"{academicYear} {label}",
             ShortName = $"{startYear % 100:00}-{(startYear + 1) % 100:00} {label}",
             EnglishName = $"{english} {academicYear}",
+            ShortEnglishName = $"{english} {startYear % 100:00}-{(startYear + 1) % 100:00}",
             Year = startYear,
-            Semester = semester,
-            TermType = semester == SemesterType.Summer ? TermType.Summer : TermType.Regular,
-            Status = TermStatus.Draft,
+            TermType = termType,
+            IsCancelled = false,
+            YoksisStatus = YoksisStatus.Inactive,
             CreatedAt = DateTime.UtcNow,
             GradeEntryStart = termEnd.AddDays(-14),
             GradeEntryEnd = termEnd.AddDays(14)

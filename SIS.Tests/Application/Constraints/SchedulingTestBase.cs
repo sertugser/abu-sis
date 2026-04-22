@@ -152,7 +152,7 @@ public abstract class SchedulingTestBase : IDisposable
             Capacity = capacity,
             EnrolledCount = 0,
             SectionNumber = id,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false
         };
 
@@ -340,15 +340,14 @@ public abstract class SchedulingTestBase : IDisposable
                 ShortName = "25-26 Spring",
                 EnglishName = "Spring 2025-2026",
                 Year = 2025,
-                Semester = SemesterType.Spring,
+                TermType = TermType.Spring,
                 RegistrationStart = DateTime.UtcNow.AddDays(-5),
                 RegistrationEnd = DateTime.UtcNow.AddDays(5),
                 AddDropStart = DateTime.UtcNow.AddDays(6),
                 AddDropEnd = DateTime.UtcNow.AddDays(12),
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-10),
-                TermEnd = DateTime.UtcNow.AddDays(90),
-                Status = TermStatus.Ready
+                TermEnd = DateTime.UtcNow.AddDays(90)
             },
             new AcademicTerm
             {
@@ -357,15 +356,14 @@ public abstract class SchedulingTestBase : IDisposable
                 ShortName = "24-25 Fall",
                 EnglishName = "Fall 2024-2025",
                 Year = 2024,
-                Semester = SemesterType.Fall,
+                TermType = TermType.Fall,
                 RegistrationStart = DateTime.UtcNow.AddDays(-180),
                 RegistrationEnd = DateTime.UtcNow.AddDays(-170),
                 AddDropStart = DateTime.UtcNow.AddDays(-169),
                 AddDropEnd = DateTime.UtcNow.AddDays(-164),
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(-120),
                 TermStart = DateTime.UtcNow.AddDays(-190),
-                TermEnd = DateTime.UtcNow.AddDays(-100),
-                Status = TermStatus.Draft
+                TermEnd = DateTime.UtcNow.AddDays(-100)
             });
 
         Context.SaveChanges();

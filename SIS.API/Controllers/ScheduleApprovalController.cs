@@ -57,8 +57,8 @@ public class ScheduleApprovalController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Akademik donem bulunamadi." });
 
-        if (term.Status != TermStatus.Preparing)
-            return BadRequest(new { error = "Program onaylama islemi sadece Hazırlık durumundaki donemler icin yapilabilir." });
+        if (term.IsCancelled)
+            return BadRequest(new { error = "Program onaylama islemi iptal edilmiş dönemler için yapılamaz." });
 
         // Check for existing approval
         var existingApproval = await _context.FacultyScheduleApprovals
@@ -105,9 +105,10 @@ public class ScheduleApprovalController : ControllerBase
         var resolvedTermId = termId;
         if (!resolvedTermId.HasValue)
         {
+            var nowStatus = DateTime.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready, cancellationToken);
+                .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowStatus && t.TermEnd >= nowStatus, cancellationToken);
 
             if (activeTerm == null)
                 return NotFound(new { error = "Aktif akademik donem bulunamadi." });
@@ -203,9 +204,10 @@ public class ScheduleApprovalController : ControllerBase
         var resolvedTermId = termId;
         if (!resolvedTermId.HasValue)
         {
+            var nowRevoke = DateTime.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready, cancellationToken);
+                .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowRevoke && t.TermEnd >= nowRevoke, cancellationToken);
 
             if (activeTerm == null)
                 return NotFound(new { error = "Aktif akademik donem bulunamadi." });
@@ -213,7 +215,7 @@ public class ScheduleApprovalController : ControllerBase
             resolvedTermId = activeTerm.Id;
         }
 
-        // Guard: Term must not be Published or later
+        // Guard: Term must not be cancelled
         var term = await _context.AcademicTerms
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == resolvedTermId.Value, cancellationToken);
@@ -221,8 +223,8 @@ public class ScheduleApprovalController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Akademik donem bulunamadi." });
 
-        if (term.Status >= TermStatus.Ready)
-            return BadRequest(new { error = "Yayimlanmis veya ileri durumdaki donemlerin onaylari geri alinamaz." });
+        if (term.IsCancelled)
+            return BadRequest(new { error = "İptal edilmiş dönemin onayı geri alınamaz." });
 
         var approval = await _context.FacultyScheduleApprovals
             .FirstOrDefaultAsync(a => a.FacultyId == facultyId && a.TermId == resolvedTermId.Value, cancellationToken);

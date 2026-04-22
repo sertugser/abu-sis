@@ -9,6 +9,7 @@ using SIS.API.Controllers;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Tests.API;
@@ -87,7 +88,7 @@ public class SchedulingControllerTests
         });
         context.CourseSections.Add(new SIS.Domain.Entities.CourseSection
         {
-            Id = 5, CourseId = 50, TermId = 1, Capacity = 40, EnrolledCount = 0, IsActive = true
+            Id = 5, CourseId = 50, TermId = 1, Capacity = 40, EnrolledCount = 0, Status = CourseSectionStatus.Active
         });
         await context.SaveChangesAsync();
 
@@ -124,7 +125,7 @@ public class SchedulingControllerTests
         });
         context.CourseSections.Add(new SIS.Domain.Entities.CourseSection
         {
-            Id = 7, CourseId = 70, TermId = 1, Capacity = 40, EnrolledCount = 0, IsActive = true
+            Id = 7, CourseId = 70, TermId = 1, Capacity = 40, EnrolledCount = 0, Status = CourseSectionStatus.Active
         });
         await context.SaveChangesAsync();
 
