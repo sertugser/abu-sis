@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -17,11 +18,13 @@ public class GradeController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaService;
+    private readonly IDateTimeProvider _clock;
 
-    public GradeController(AppDbContext context, IGpaCalculationService gpaService)
+    public GradeController(AppDbContext context, IGpaCalculationService gpaService, IDateTimeProvider clock)
     {
         _context = context;
         _gpaService = gpaService;
+        _clock = clock;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -263,8 +266,12 @@ public class GradeController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
-        var gradeTermStatus = await GetTermStatusAsync(section.TermId);
-        if (gradeTermStatus != TermStatus.GradeEntry)
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == section.TermId);
+        if (term == null)
+            return NotFound(new { error = "Dönem bulunamadi." });
+
+        if (!term.IsGradeEntryOpen(_clock.UtcNow))
             return BadRequest(new { error = "Not girişi sadece 'Not Girişi' döneminde yapılabilir." });
 
         if (section.IsFinalized)
@@ -347,8 +354,12 @@ public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int c
     if (section == null)
         return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
-    var termStatus = await GetTermStatusAsync(section.TermId);
-    if (termStatus != TermStatus.GradeEntry)
+    var term = await _context.AcademicTerms.AsNoTracking()
+        .FirstOrDefaultAsync(t => t.Id == section.TermId);
+    if (term == null)
+        return NotFound(new { error = "Dönem bulunamadi." });
+
+    if (!term.IsGradeEntryOpen(_clock.UtcNow))
         return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
 
     if (section.IsFinalized)
@@ -456,8 +467,12 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
     if (file.Length > 5 * 1024 * 1024)
         return BadRequest(new { error = "Dosya boyutu 5MB'i gecemez." });
 
-    var termStatus = await GetTermStatusAsync(section.TermId);
-    if (termStatus != TermStatus.GradeEntry)
+    var term = await _context.AcademicTerms.AsNoTracking()
+        .FirstOrDefaultAsync(t => t.Id == section.TermId);
+    if (term == null)
+        return NotFound(new { error = "Dönem bulunamadi." });
+
+    if (!term.IsGradeEntryOpen(_clock.UtcNow))
         return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
 
     if (section.IsFinalized)
@@ -652,8 +667,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     if (file.Length > 5 * 1024 * 1024)
         return BadRequest(new { error = "Dosya boyutu 5MB'i gecemez." });
 
-    var termStatus = await GetTermStatusAsync(section.TermId);
-    if (termStatus != TermStatus.GradeEntry)
+    var term = await _context.AcademicTerms.AsNoTracking()
+        .FirstOrDefaultAsync(t => t.Id == section.TermId);
+    if (term == null)
+        return NotFound(new { error = "Dönem bulunamadi." });
+
+    if (!term.IsGradeEntryOpen(_clock.UtcNow))
         return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
 
     if (section.IsFinalized)
@@ -801,8 +820,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
-        var finTermStatus = await GetTermStatusAsync(section.TermId);
-        if (finTermStatus != TermStatus.GradeEntry)
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == section.TermId);
+        if (term == null)
+            return NotFound(new { error = "Dönem bulunamadi." });
+
+        if (!term.IsGradeEntryOpen(_clock.UtcNow))
             return BadRequest(new { error = "Sonuçlandırma sadece 'Not Girişi' döneminde yapılabilir." });
 
         if (section.IsFinalized)
@@ -924,8 +947,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
-        var unfTermStatus = await GetTermStatusAsync(section.TermId);
-        if (unfTermStatus != TermStatus.GradeEntry)
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == section.TermId);
+        if (term == null)
+            return NotFound(new { error = "Dönem bulunamadi." });
+
+        if (!term.IsGradeEntryOpen(_clock.UtcNow))
             return BadRequest(new { error = "Sonuçlandırma iptali sadece 'Not Girişi' döneminde yapılabilir." });
 
         if (!section.IsFinalized)
@@ -1076,6 +1103,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             .FirstOrDefaultAsync(t => t.Id == termId);
         return term?.Status;
     }
+
 
     // ══════════════════════════════════════════════════════════
     //  DTO'lar
