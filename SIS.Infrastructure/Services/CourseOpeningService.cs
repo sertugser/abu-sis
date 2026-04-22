@@ -186,7 +186,7 @@ public class CourseOpeningService(
             .Where(summary => allCourseIds.Contains(summary.CourseId))
             .ToDictionary(summary => summary.CourseId);
 
-        var isTermInPlanning = term?.Status == TermStatus.Planning;
+        var isTermInPlanning = term?.Status == TermStatus.Preparing;
 
         // 4) DTO üretimi — direkt atanmış dersler önce, sonra direkt'te olmayan havuz üyeleri
         var resultMap = new Dictionary<int, CurriculumCourseForOpeningDto>();
@@ -289,7 +289,7 @@ public class CourseOpeningService(
 
     /// <summary>
     /// Ders açma engelinin sebebini belirler. Null dönerse ders açılabilir.
-    /// Öncelik sırası: TermNotInPlanning > CourseUnassigned > NotOwner.
+    /// Öncelik sırası: TermNotInPreparing > CourseUnassigned > NotOwner.
     /// </summary>
     private static string? ResolveBlockReason(bool isTermInPlanning, bool hasOwner, bool isOwner)
     {
@@ -366,9 +366,9 @@ public class CourseOpeningService(
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
-        if (term.Status != TermStatus.Planning)
+        if (term.Status != TermStatus.Preparing)
             throw new InvalidOperationException(
-                $"Ders açmak için dönem 'Planlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+                $"Ders açmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
         var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.CourseId, ct)
             ?? throw new InvalidOperationException($"Ders bulunamadı (ID: {request.CourseId}).");
@@ -661,9 +661,9 @@ public class CourseOpeningService(
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+        if (term != null && term.Status != TermStatus.Preparing)
             throw new InvalidOperationException(
-                $"Şube güncellemek için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+                $"Şube güncellemek için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
         if (!section.IsActive)
             throw new InvalidOperationException("Pasif şube güncellenemez.");
@@ -747,9 +747,9 @@ public class CourseOpeningService(
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+        if (term != null && term.Status != TermStatus.Preparing)
             throw new InvalidOperationException(
-                $"Şube kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+                $"Şube kapatmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
         // Draft/PendingAdvisorApproval kayıtlarını temizle
         var pendingRegistrations = await _context.CourseRegistrations
@@ -796,9 +796,9 @@ public class CourseOpeningService(
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
-        if (term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+        if (term.Status != TermStatus.Preparing)
             throw new InvalidOperationException(
-                $"Ders kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+                $"Ders kapatmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
         var sections = await _context.CourseSections
             .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.IsActive)
@@ -859,9 +859,9 @@ public class CourseOpeningService(
             throw new InvalidOperationException("Şube zaten aktif.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+        if (term != null && term.Status != TermStatus.Preparing)
             throw new InvalidOperationException(
-                $"Şube yeniden açmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+                $"Şube yeniden açmak için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
         section.IsActive = true;
         // EnrolledCount 0 kalır — kapatılırken sıfırlanmıştı
@@ -901,17 +901,12 @@ public class CourseOpeningService(
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft            => "Taslak",
-        TermStatus.Planning         => "Planlama",
-        TermStatus.Scheduling       => "Programlama",
-        TermStatus.Published        => "Yayınlandı",
-        TermStatus.RegistrationOpen => "Kayıt Açık",
-        TermStatus.AddDrop          => "Ders Ekle/Bırak",
-        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
-        TermStatus.GradeEntry       => "Not Girişi",
-        TermStatus.Closed           => "Kapalı",
-        TermStatus.Archived         => "Arşivlendi",
-        _                           => s.ToString()
+        TermStatus.Draft     => "Taslak",
+        TermStatus.Preparing => "Hazırlık",
+        TermStatus.Ready     => "Yayında",
+        TermStatus.Closed    => "Kapalı",
+        TermStatus.Archived  => "Arşivlendi",
+        _                    => s.ToString()
     };
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(IEnumerable<int> instructorIds, CancellationToken ct)
