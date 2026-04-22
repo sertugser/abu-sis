@@ -14,7 +14,13 @@ export interface AdminTermDto {
   semesterLabel: string;
   termType: string;
   termTypeLabel: string;
-  isActive: boolean;
+
+  // Status union narrowed to 5 values
+  status: 'Draft' | 'Preparing' | 'Ready' | 'Closed' | 'Archived';
+  statusLabel: string;
+  allowedTransitions: string[];
+
+  // Date fields
   registrationStart: string;
   registrationEnd: string;
   addDropStart: string;
@@ -22,15 +28,27 @@ export interface AdminTermDto {
   termStart: string;
   termEnd: string;
   withdrawalDeadline: string;
+  gradeEntryStart: string;
+  gradeEntryEnd: string;
+
+  // Override fields
+  registrationOverride: boolean | null;
+  addDropOverride: boolean | null;
+  withdrawalOverride: boolean | null;
+  gradeEntryOverride: boolean | null;
+
+  // Computed phase flags
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
+  isWithdrawalOpen: boolean;
+  isGradeEntryOpen: boolean;
+  isActive: boolean;
+
+  // Calendar fields
   calendarEventCount: number;
   generatedCalendarEventCount: number;
   generatedCalendarDraftId: number | null;
   hasGeneratedCalendar: boolean;
-  status: string;
-  statusLabel: string;
-  allowedTransitions: string[];
 }
 
 export interface CreateTermDto {
@@ -47,6 +65,8 @@ export interface CreateTermDto {
   termStart: string;
   termEnd: string;
   withdrawalDeadline: string;
+  gradeEntryStart: string;
+  gradeEntryEnd: string;
 }
 
 export interface UpdateTermDto {
@@ -61,6 +81,13 @@ export interface UpdateTermDto {
   termStart: string;
   termEnd: string;
   withdrawalDeadline: string;
+  gradeEntryStart: string;
+  gradeEntryEnd: string;
+}
+
+export interface UpdateTermPhaseOverrideDto {
+  phase: 'Registration' | 'AddDrop' | 'Withdrawal' | 'GradeEntry';
+  value: boolean | null;
 }
 
 
@@ -103,18 +130,6 @@ export function useUpdateTerm() {
   });
 }
 
-export function useActivateTerm() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: number) => {
-      await apiClient.post(`${API}/${id}/activate`);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
-  });
-}
 
 // ── Term Status Transition ───────────────────────────────────────────────────
 
@@ -123,6 +138,31 @@ export function useTransitionTermStatus() {
   return useMutation({
     mutationFn: async ({ termId, targetStatus }: { termId: number; targetStatus: string }) => {
       await apiClient.post(`${API}/${termId}/transition`, { targetStatus });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+    },
+  });
+}
+
+export function useUpdateTermPhaseOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      termId,
+      phase,
+      value,
+    }: {
+      termId: number;
+      phase: UpdateTermPhaseOverrideDto['phase'];
+      value: boolean | null;
+    }) => {
+      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/override`, {
+        phase,
+        value,
+      });
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });

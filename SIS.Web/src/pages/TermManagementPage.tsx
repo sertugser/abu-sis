@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, CheckCircle } from 'lucide-react';
+import { Plus, Edit2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,6 @@ import {
   useAdminTerms,
   useCreateTerm,
   useUpdateTerm,
-  useActivateTerm,
   useTransitionTermStatus,
   type AdminTermDto,
   type CreateTermDto,
@@ -111,6 +110,8 @@ interface TermFormState {
   termStart: string;
   termEnd: string;
   withdrawalDeadline: string;
+  gradeEntryStart: string;
+  gradeEntryEnd: string;
 }
 
 function emptyForm(): TermFormState {
@@ -128,6 +129,8 @@ function emptyForm(): TermFormState {
     termStart: '',
     termEnd: '',
     withdrawalDeadline: '',
+    gradeEntryStart: '',
+    gradeEntryEnd: '',
   };
 }
 
@@ -146,6 +149,8 @@ function termFromDto(term: AdminTermDto): TermFormState {
     termStart: toDateInput(term.termStart),
     termEnd: toDateInput(term.termEnd),
     withdrawalDeadline: toDateInput(term.withdrawalDeadline),
+    gradeEntryStart: toDateInput(term.gradeEntryStart),
+    gradeEntryEnd: toDateInput(term.gradeEntryEnd),
   };
 }
 
@@ -173,7 +178,6 @@ function academicCalendarSourceText(term: AdminTermDto) {
 export default function TermManagementPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<AdminTermDto | null>(null);
-  const [activateTarget, setActivateTarget] = useState<AdminTermDto | null>(null);
   const [form, setForm] = useState<TermFormState>(emptyForm());
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -183,7 +187,6 @@ export default function TermManagementPage() {
   const { data: terms = [], isLoading } = useAdminTerms();
   const createTerm = useCreateTerm();
   const updateTerm = useUpdateTerm();
-  const activateTerm = useActivateTerm();
   const transitionTerm = useTransitionTermStatus();
 
   async function handleTransition(termId: number, targetStatus: string) {
@@ -235,6 +238,8 @@ export default function TermManagementPage() {
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
       withdrawalDeadline: toIsoString(form.withdrawalDeadline),
+      gradeEntryStart: toIsoString(form.gradeEntryStart),
+      gradeEntryEnd: toIsoString(form.gradeEntryEnd),
     };
     try {
       await createTerm.mutateAsync(dto);
@@ -261,6 +266,8 @@ export default function TermManagementPage() {
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
       withdrawalDeadline: toIsoString(form.withdrawalDeadline),
+      gradeEntryStart: toIsoString(form.gradeEntryStart),
+      gradeEntryEnd: toIsoString(form.gradeEntryEnd),
     };
     try {
       await updateTerm.mutateAsync({ id: editingTerm.id, dto });
@@ -271,16 +278,6 @@ export default function TermManagementPage() {
     }
   }
 
-  async function handleActivate() {
-    if (!activateTarget) return;
-    try {
-      await activateTerm.mutateAsync(activateTarget.id);
-      setActivateTarget(null);
-      showSuccess(`"${activateTarget.name}" aktif dönem olarak ayarlandı.`);
-    } catch {
-      setActivateTarget(null);
-    }
-  }
 
   function showSuccess(msg: string) {
     setSuccessMessage(msg);
@@ -419,17 +416,6 @@ export default function TermManagementPage() {
                   {/* İşlemler */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
-                      {!term.isActive && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setActivateTarget(term)}
-                          className="text-primary hover:text-primary hover:bg-primary/8 text-xs gap-1"
-                        >
-                          <CheckCircle className="h-3.5 w-3.5" />
-                          Aktif Yap
-                        </Button>
-                      )}
                       <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
                         <Edit2 className="h-3.5 w-3.5" />
                       </Button>
@@ -440,23 +426,6 @@ export default function TermManagementPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Activate Confirmation */}
-      <Dialog open={!!activateTarget} onOpenChange={open => !open && setActivateTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Dönemi Aktif Yap</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground py-2">
-            <strong className="text-foreground">{activateTarget?.name}</strong> aktif dönem olarak ayarlanacak.
-            Mevcut aktif dönem otomatik olarak pasife alınacak.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setActivateTarget(null)}>İptal</Button>
-            <Button onClick={handleActivate} disabled={activateTerm.isPending}>
-              {activateTerm.isPending ? 'Ayarlanıyor...' : 'Aktif Yap'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Create Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
