@@ -15,6 +15,7 @@ import {
   useCreateTerm,
   useUpdateTerm,
   useTransitionTermStatus,
+  useUpdateTermPhaseOverride,
   type AdminTermDto,
   type CreateTermDto,
   type UpdateTermDto,
@@ -158,6 +159,50 @@ function academicCalendarSourceText(term: AdminTermDto) {
   const draftText = term.generatedCalendarDraftId ? `Taslak #${term.generatedCalendarDraftId}` : 'Taslak';
   return `${draftText} · ${term.generatedCalendarEventCount} takvim kaydı`;
 }
+
+// ── OverrideCell ──────────────────────────────────────────────────────────────
+
+function OverrideCell({
+  term,
+  phase,
+  label,
+  isOpen,
+  onChange,
+  disabled,
+}: {
+  term: AdminTermDto;
+  phase: 'Registration' | 'AddDrop' | 'Withdrawal' | 'GradeEntry';
+  label: string;
+  isOpen: boolean;
+  onChange: (value: boolean | null) => void;
+  disabled: boolean;
+}) {
+  const fieldKey = (phase.charAt(0).toLowerCase() + phase.slice(1) + 'Override') as keyof AdminTermDto;
+  const override = term[fieldKey] as boolean | null | undefined;
+  const displayText =
+    override === null || override === undefined ? 'Takvim' : override ? 'Zorla Açık' : 'Zorla Kapalı';
+
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className={isOpen ? 'font-medium text-success' : 'text-muted-foreground'}>{label}:</span>
+      <select
+        value={override === null || override === undefined ? 'null' : String(override)}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v === 'null' ? null : v === 'true');
+        }}
+        disabled={disabled}
+        className="border border-border rounded px-1.5 py-0.5 bg-background text-xs"
+      >
+        <option value="null">Takvim</option>
+        <option value="true">Zorla Aç</option>
+        <option value="false">Zorla Kapat</option>
+      </select>
+      <span className="text-muted-foreground text-[11px]">({displayText})</span>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TermManagementPage() {
@@ -173,6 +218,7 @@ export default function TermManagementPage() {
   const createTerm = useCreateTerm();
   const updateTerm = useUpdateTerm();
   const transitionTerm = useTransitionTermStatus();
+  const updateOverride = useUpdateTermPhaseOverride();
 
   async function handleTransition(termId: number, targetStatus: string) {
     setTransitionError('');
@@ -321,93 +367,146 @@ export default function TermManagementPage() {
                 <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
               </tr>
             ) : sortedTerms.map(term => (
-              <tr
-                key={term.id}
-                className={`transition-colors hover:bg-muted/20 ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
-              >
-                  {/* Ad */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <p className="font-semibold text-foreground">{term.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {term.shortName} · {term.termTypeLabel}
-                        </p>
-                        {term.hasGeneratedCalendar && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Akademik takvim: {academicCalendarSourceText(term)}
+              <>
+                <tr
+                  key={term.id}
+                  className={`transition-colors hover:bg-muted/20 ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
+                >
+                    {/* Ad */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-semibold text-foreground">{term.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {term.shortName} · {term.termTypeLabel}
                           </p>
+                          {term.hasGeneratedCalendar && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Akademik takvim: {academicCalendarSourceText(term)}
+                            </p>
+                          )}
+                        </div>
+                        {term.isActive && (
+                          <Badge variant="success" className="text-xs shrink-0">Aktif</Badge>
+                        )}
+                        {term.hasGeneratedCalendar && (
+                          <Badge variant="outline" className="text-xs shrink-0">Aktarıldı</Badge>
                         )}
                       </div>
-                      {term.isActive && (
-                        <Badge variant="success" className="text-xs shrink-0">Aktif</Badge>
-                      )}
-                      {term.hasGeneratedCalendar && (
-                        <Badge variant="outline" className="text-xs shrink-0">Aktarıldı</Badge>
-                      )}
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* Durum */}
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${TERM_STATUS_COLORS[term.status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`}>
-                      {term.statusLabel || TERM_STATUS_LABELS[term.status] || term.status}
-                    </span>
-                  </td>
+                    {/* Durum */}
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${TERM_STATUS_COLORS[term.status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`}>
+                        {term.statusLabel || TERM_STATUS_LABELS[term.status] || term.status}
+                      </span>
+                    </td>
 
-                  {/* Kayıt */}
-                  <td className="px-4 py-3">
-                    <DateCell start={term.registrationStart} end={term.registrationEnd} active={term.isRegistrationOpen} />
-                  </td>
+                    {/* Kayıt */}
+                    <td className="px-4 py-3">
+                      <DateCell start={term.registrationStart} end={term.registrationEnd} active={term.isRegistrationOpen} />
+                    </td>
 
-                  {/* Ekle/Bırak */}
-                  <td className="px-4 py-3">
-                    <DateCell start={term.addDropStart} end={term.addDropEnd} active={term.isAddDropOpen} />
-                  </td>
+                    {/* Ekle/Bırak */}
+                    <td className="px-4 py-3">
+                      <DateCell start={term.addDropStart} end={term.addDropEnd} active={term.isAddDropOpen} />
+                    </td>
 
-                  {/* Dönem Tarihi */}
-                  <td className="px-4 py-3">
-                    <DateCell start={term.termStart} end={term.termEnd} />
-                  </td>
+                    {/* Dönem Tarihi */}
+                    <td className="px-4 py-3">
+                      <DateCell start={term.termStart} end={term.termEnd} />
+                    </td>
 
-                  {/* Çekilme Son Tarihi */}
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">
-                      {fmt(term.withdrawalDeadline)}
-                    </p>
-                  </td>
+                    {/* Çekilme Son Tarihi */}
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-foreground">
+                        {fmt(term.withdrawalDeadline)}
+                      </p>
+                    </td>
 
-                  {/* Geçiş */}
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {(term.allowedTransitions ?? []).length === 0 ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        term.allowedTransitions.map(target => (
-                          <Button
-                            key={target}
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 px-2"
-                            disabled={transitioningTermId === term.id}
-                            onClick={() => handleTransition(term.id, target)}
-                          >
-                            {transitioningTermId === term.id ? '...' : (TRANSITION_LABELS[target] ?? target)}
-                          </Button>
-                        ))
-                      )}
-                    </div>
-                  </td>
+                    {/* Geçiş */}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(term.allowedTransitions ?? []).length === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          term.allowedTransitions.map(target => (
+                            <Button
+                              key={target}
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7 px-2"
+                              disabled={transitioningTermId === term.id}
+                              onClick={() => handleTransition(term.id, target)}
+                            >
+                              {transitioningTermId === term.id ? '...' : (TRANSITION_LABELS[target] ?? target)}
+                            </Button>
+                          ))
+                        )}
+                      </div>
+                    </td>
 
-                  {/* İşlemler */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-              </tr>
+                    {/* İşlemler */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                </tr>
+                {term.status === 'Ready' && (
+                  <tr key={`${term.id}-overrides`} className="bg-muted/5">
+                    <td colSpan={8} className="px-4 py-2 border-b border-border">
+                      <div className="flex flex-wrap gap-4 items-center">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Faz Kontrolleri:
+                        </span>
+                        <OverrideCell
+                          term={term}
+                          phase="Registration"
+                          label="Kayıt"
+                          isOpen={term.isRegistrationOpen}
+                          disabled={updateOverride.isPending}
+                          onChange={(v) =>
+                            updateOverride.mutate({ termId: term.id, phase: 'Registration', value: v })
+                          }
+                        />
+                        <OverrideCell
+                          term={term}
+                          phase="AddDrop"
+                          label="Ekle/Bırak"
+                          isOpen={term.isAddDropOpen}
+                          disabled={updateOverride.isPending}
+                          onChange={(v) =>
+                            updateOverride.mutate({ termId: term.id, phase: 'AddDrop', value: v })
+                          }
+                        />
+                        <OverrideCell
+                          term={term}
+                          phase="Withdrawal"
+                          label="Çekilme"
+                          isOpen={term.isWithdrawalOpen}
+                          disabled={updateOverride.isPending}
+                          onChange={(v) =>
+                            updateOverride.mutate({ termId: term.id, phase: 'Withdrawal', value: v })
+                          }
+                        />
+                        <OverrideCell
+                          term={term}
+                          phase="GradeEntry"
+                          label="Not Girişi"
+                          isOpen={term.isGradeEntryOpen}
+                          disabled={updateOverride.isPending}
+                          onChange={(v) =>
+                            updateOverride.mutate({ termId: term.id, phase: 'GradeEntry', value: v })
+                          }
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             ))}
           </tbody>
         </table>
