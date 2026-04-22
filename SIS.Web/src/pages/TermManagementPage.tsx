@@ -36,40 +36,25 @@ const TERM_TYPE_OPTIONS = [
 ];
 
 const TRANSITION_LABELS: Record<string, string> = {
-  Planning: 'Planlamaya Gec',
-  Scheduling: 'Programlamaya Gec',
-  Published: 'Yayinla',
-  RegistrationOpen: 'Kayitlari Ac',
-  AddDrop: 'Ders Ekle/Birak',
-  WithdrawalPeriod: 'Cekilme Donemi',
-  GradeEntry: 'Not Girisi',
-  Closed: 'Donemi Kapat',
-  Archived: 'Arsivle',
-  Draft: 'Taslaga Don',
+  Preparing: 'Hazırlığa Geç',
+  Ready: 'Yayına Al',
+  Closed: 'Dönemi Kapat',
+  Archived: 'Arşivle',
+  Draft: 'Taslağa Dön',
 };
 
 const TERM_STATUS_LABELS: Record<string, string> = {
   Draft: 'Taslak',
-  Planning: 'Planlama',
-  Scheduling: 'Programlama',
-  Published: 'Yayinlandi',
-  RegistrationOpen: 'Kayit Acik',
-  AddDrop: 'Ekle/Birak',
-  WithdrawalPeriod: 'Cekilme Donemi',
-  GradeEntry: 'Not Girisi',
-  Closed: 'Kapali',
-  Archived: 'Arsiv',
+  Preparing: 'Hazırlık',
+  Ready: 'Yayında',
+  Closed: 'Kapalı',
+  Archived: 'Arşiv',
 };
 
 const TERM_STATUS_COLORS: Record<string, string> = {
   Draft: 'bg-gray-100 text-gray-700 border-gray-300',
-  Planning: 'bg-blue-100 text-blue-700 border-blue-300',
-  Scheduling: 'bg-indigo-100 text-indigo-700 border-indigo-300',
-  Published: 'bg-green-100 text-green-700 border-green-300',
-  RegistrationOpen: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-  AddDrop: 'bg-yellow-100 text-yellow-700 border-yellow-300',
-  WithdrawalPeriod: 'bg-orange-100 text-orange-700 border-orange-300',
-  GradeEntry: 'bg-purple-100 text-purple-700 border-purple-300',
+  Preparing: 'bg-blue-100 text-blue-700 border-blue-300',
+  Ready: 'bg-emerald-100 text-emerald-700 border-emerald-300',
   Closed: 'bg-red-100 text-red-700 border-red-300',
   Archived: 'bg-slate-100 text-slate-700 border-slate-300',
 };
@@ -218,6 +203,7 @@ export default function TermManagementPage() {
     if (!form.addDropStart || !form.addDropEnd) return 'Ders ekleme/bırakma tarihleri zorunludur.';
     if (!form.termStart || !form.termEnd) return 'Dönem başlangıç/bitiş tarihleri zorunludur.';
     if (!form.withdrawalDeadline) return 'Ders çekilme son tarihi zorunludur.';
+    if (!form.gradeEntryStart || !form.gradeEntryEnd) return 'Not girişi tarihleri zorunludur.';
     return null;
   }
 
@@ -550,6 +536,20 @@ function TermForm({
           <div className="space-y-1">
             <label className="text-sm font-medium">Bitiş *</label>
             <Input type="date" value={form.addDropEnd} onChange={e => setForm(f => ({ ...f, addDropEnd: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-3 space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Not Girişi Tarihleri</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Başlangıç *</label>
+            <Input type="date" value={form.gradeEntryStart} onChange={e => setForm(f => ({ ...f, gradeEntryStart: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Bitiş *</label>
+            <Input type="date" value={form.gradeEntryEnd} onChange={e => setForm(f => ({ ...f, gradeEntryEnd: e.target.value }))} />
           </div>
         </div>
       </div>
