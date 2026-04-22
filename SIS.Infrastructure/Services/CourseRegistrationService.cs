@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AdvisorConstraints.Services;
+using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Common.Services;
@@ -14,15 +15,18 @@ public class CourseRegistrationService : ICourseRegistrationService
     private readonly IRegistrationValidationService _validationService;
     private readonly ISystemConfigProvider _config;
     private readonly IAdvisorConstraintService? _advisorConstraintService;
+    private readonly IDateTimeProvider _clock;
 
     public CourseRegistrationService(
         AppDbContext context,
         IRegistrationValidationService validationService,
+        IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
         IAdvisorConstraintService? advisorConstraintService = null)
     {
         _context = context;
         _validationService = validationService;
+        _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
         _advisorConstraintService = advisorConstraintService;
     }
@@ -51,7 +55,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         // Guard: kayıt dönemi kontrolü
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId);
-        if (term != null && term.Status != TermStatus.RegistrationOpen && term.Status != TermStatus.AddDrop)
+        if (term != null && !term.IsRegistrationOpen(_clock.UtcNow) && !term.IsAddDropOpen(_clock.UtcNow))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -59,7 +63,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "RegistrationClosed", Message = $"Ders kayıt dönemi açık değil. Dönem durumu: {GetTermStatusLabel(term.Status)}" }
+                    new() { Rule = "RegistrationClosed", Message = $"Ders kayıt dönemi açık değil." }
                 }
             };
             return response;
@@ -579,7 +583,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
     {
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
         if (activeTerm == null)
             return new List<StudentRegistrationDto>();
 
@@ -706,7 +710,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 TermName = cr.CourseSection.Term.Name,
                 cr.CourseSection.Term.Year,
                 cr.CourseSection.Term.Semester,
-                cr.CourseSection.Term.IsActive
+                IsActive = cr.CourseSection.Term.Status == TermStatus.Ready
             })
             .Distinct()
             .ToListAsync();
@@ -940,7 +944,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         // Guard: dönem AddDrop aşamasında olmalı
         var dropTerm = registration.CourseSection.Term;
-        if (dropTerm.Status != TermStatus.AddDrop && dropTerm.Status != TermStatus.RegistrationOpen)
+        if (!dropTerm.IsAddDropOpen(_clock.UtcNow) && !dropTerm.IsRegistrationOpen(_clock.UtcNow))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -948,7 +952,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(dropTerm.Status)}" }
+                    new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir." }
                 }
             };
             return response;
@@ -1052,7 +1056,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         // Guard: dönem WithdrawalPeriod aşamasında olmalı
         var withdrawTerm = registration.CourseSection.Term;
-        if (withdrawTerm.Status != TermStatus.WithdrawalPeriod)
+        if (!withdrawTerm.IsWithdrawalOpen(_clock.UtcNow))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -1060,7 +1064,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "TermStatus", Message = $"Ders çekilme sadece çekilme döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(withdrawTerm.Status)}" }
+                    new() { Rule = "TermStatus", Message = $"Ders çekilme sadece çekilme döneminde yapılabilir." }
                 }
             };
             return response;
@@ -1247,7 +1251,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId)
     {
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
         if (activeTerm == null)
             return new List<PendingApprovalDto>();
 
@@ -1454,7 +1458,7 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -1466,12 +1470,12 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // Guard: dönem RegistrationOpen veya AddDrop olmalı
-        if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
+        if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
         {
             return new ApprovalResponseDto
             {
                 Success = false,
-                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(activeTerm.Status)}",
+                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir.",
                 AffectedRegistrations = 0
             };
         }
@@ -1523,7 +1527,7 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -1644,17 +1648,12 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft            => "Taslak",
-        TermStatus.Planning         => "Planlama",
-        TermStatus.Scheduling       => "Programlama",
-        TermStatus.Published        => "Yayınlandı",
-        TermStatus.RegistrationOpen => "Kayıt Açık",
-        TermStatus.AddDrop          => "Ders Ekle/Bırak",
-        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
-        TermStatus.GradeEntry       => "Not Girişi",
-        TermStatus.Closed           => "Kapalı",
-        TermStatus.Archived         => "Arşivlendi",
-        _                           => s.ToString()
+        TermStatus.Draft     => "Taslak",
+        TermStatus.Preparing => "Hazırlık",
+        TermStatus.Ready     => "Yayında",
+        TermStatus.Closed    => "Kapalı",
+        TermStatus.Archived  => "Arşivlendi",
+        _                    => s.ToString()
     };
 
     /// <summary>
