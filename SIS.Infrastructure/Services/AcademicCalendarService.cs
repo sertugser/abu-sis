@@ -58,7 +58,7 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (events.Count == 0)
             return null;
 
-        var term = terms.FirstOrDefault(t => t.IsActive) ?? terms.First();
+        var term = terms.FirstOrDefault(t => t.Status == TermStatus.Ready) ?? terms.First();
         var academicYear = draft.AcademicYear;
 
         return new ActiveTermCalendarDto(

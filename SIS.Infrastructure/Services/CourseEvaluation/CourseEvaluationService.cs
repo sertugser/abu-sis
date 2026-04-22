@@ -321,7 +321,7 @@ public class CourseEvaluationService : ICourseEvaluationService
 
         var term = termId.HasValue
             ? await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId.Value, ct)
-            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.IsActive, ct);
+            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Status == TermStatus.Ready, ct);
 
         if (term == null)
             return null;

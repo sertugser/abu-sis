@@ -745,7 +745,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         {
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.IsActive);
+                .FirstOrDefaultAsync(t => t.Status == TermStatus.Ready);
 
             if (activeTerm == null)
                 return null;

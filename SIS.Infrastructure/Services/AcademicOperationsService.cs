@@ -355,7 +355,7 @@ public class AcademicOperationsService : IAcademicOperationsService
 
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(term => term.Status == TermStatus.Ready, cancellationToken);
     }
 
     private async Task<DepartmentScopeResolution> ResolveAccessibleDepartmentsAsync(

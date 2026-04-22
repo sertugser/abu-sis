@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Domain.Entities;
+using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Persistence;
 
@@ -8,7 +9,7 @@ public static partial class SeedData
     private static async Task SeedSectionSchedulesAsync(AppDbContext context)
     {
         var activeTerm = await context.AcademicTerms
-            .FirstOrDefaultAsync(term => term.IsActive);
+            .FirstOrDefaultAsync(term => term.Status == TermStatus.Ready);
 
         if (activeTerm == null)
             return;

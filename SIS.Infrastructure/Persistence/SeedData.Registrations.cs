@@ -24,7 +24,7 @@ public static partial class SeedData
         var instructors = context.Instructors.ToList();
         var curricula = context.Curricula.Include(c => c.Program).ToList();
 
-        var pastTerms = terms.Where(t => !t.IsActive)
+        var pastTerms = terms.Where(t => t.Status != TermStatus.Ready)
             .OrderBy(t => t.Year).ThenBy(t => t.Semester).ToList();
 
         var rng = new Random(42);

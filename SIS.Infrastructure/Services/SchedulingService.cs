@@ -2333,7 +2333,7 @@ public class SchedulingService : ISchedulingService
 
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(term => term.Status == TermStatus.Ready, cancellationToken);
     }
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(List<int> instructorIds, CancellationToken cancellationToken)
