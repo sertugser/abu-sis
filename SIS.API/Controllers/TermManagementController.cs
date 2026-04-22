@@ -64,28 +64,12 @@ public class TermManagementController : ControllerBase
         {
             return NotFound(new { message = ex.Message });
         }
-    }
-
-    [HttpPost("{id:int}/activate")]
-    [Authorize(Roles = "SystemAdministrator")]
-    public async Task<IActionResult> ActivateTerm(int id)
-    {
-        try
+        catch (InvalidOperationException ex)
         {
-            await _service.ActivateTermAsync(id);
-            return NoContent();
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
+            return BadRequest(new { message = ex.Message });
         }
     }
 
-    /// <summary>
-    /// Dönem durumunu bir sonraki aşamaya geçirir.
-    /// Draft → Planning → Scheduling → Published → RegistrationOpen →
-    /// AddDrop → WithdrawalPeriod → GradeEntry → Closed → Archived
-    /// </summary>
     [HttpPost("{id:int}/transition")]
     [Authorize(Roles = "SystemAdministrator")]
     public async Task<IActionResult> TransitionStatus(int id, [FromBody] TransitionTermStatusDto dto)
@@ -93,6 +77,33 @@ public class TermManagementController : ControllerBase
         try
         {
             await _service.TransitionStatusAsync(id, dto.TargetStatus);
+            var updated = await _service.GetTermByIdAsync(id);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:int}/override")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> UpdatePhaseOverride(int id, [FromBody] UpdateTermPhaseOverrideDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("sub")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int? userId = int.TryParse(userIdClaim, out var uid) ? uid : null;
+
+            await _service.UpdatePhaseOverrideAsync(id, dto, userId);
             var updated = await _service.GetTermByIdAsync(id);
             return Ok(updated);
         }
