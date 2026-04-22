@@ -6,6 +6,7 @@ using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Application.Common.Services;
+using SIS.Application.Common.Time;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -19,12 +20,14 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly IMemoryCache _cache;
     private readonly ISystemConfigProvider _config;
+    private readonly IDateTimeProvider _clock;
 
-    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, ISystemConfigProvider? config = null)
+    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, IDateTimeProvider clock, ISystemConfigProvider? config = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _cache = cache;
+        _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
     }
 
@@ -116,7 +119,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
 
-        if (term.Status < TermStatus.AddDrop)
+        if (term.Status != TermStatus.Ready || !term.IsAddDropOpen(_clock.UtcNow))
             throw new InvalidOperationException("Kalibrasyon için dönem en az ek/bırak aşamasını geçmiş olmalı.");
 
         // Already calibrated?
@@ -294,7 +297,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
     {
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.IsActive);
+            .FirstOrDefaultAsync(term => term.Status == TermStatus.Ready);
 
         var allTerms = await _context.AcademicTerms
             .AsNoTracking()
