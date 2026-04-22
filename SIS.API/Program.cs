@@ -133,7 +133,6 @@ builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>(
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
-builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
 builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
