@@ -442,7 +442,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── AcademicTerm ───────────────────────────────────────
         builder.Entity<AcademicTerm>(e =>
         {
-            e.HasIndex(t => new { t.Year, t.Semester }).IsUnique();
+            e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
         });
 
         // ── TermCalendarEvent ──────────────────────────────────
