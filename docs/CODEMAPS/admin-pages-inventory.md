@@ -1,6 +1,6 @@
 # Admin / Kullanıcı Sayfa Envanteri
 
-**Üretim tarihi:** 2026-04-21 18:19
+**Üretim tarihi:** 2026-04-22 20:46
 **Üreten:** `SIS.Web/scripts/generate-codemap.mjs`
 
 > ⚠️ **OTOMATIK ÜRETILIR — elle düzenleme.** Script yeniden çalışınca üzerine yazılır.
@@ -8,19 +8,19 @@
 
 ## Özet
 
-- **Toplam sayfa:** 42
+- **Toplam sayfa:** 41
 - **Sidebar grubu:** 12
 
 ## İçindekiler
 
 - [Dönem Yönetimi](#donem-yonetimi) (2 sayfa)
 - [Ders İşlemleri](#ders-i̇slemleri) (15 sayfa)
-- [Anketler](#anketler) (5 sayfa)
+- [Anketler](#anketler) (3 sayfa)
 - [Kaynak Yönetimi](#kaynak-yonetimi) (2 sayfa)
 - [Kullanıcı Yönetimi](#kullanici-yonetimi) (2 sayfa)
 - [Akademik Yapı](#akademik-yapi) (2 sayfa)
 - [Danışmanlık İşlemleri](#danismanlik-i̇slemleri) (1 sayfa)
-- [Ders ve Dönem İşlemleri](#ders-ve-donem-i̇slemleri) (6 sayfa)
+- [Ders ve Dönem İşlemleri](#ders-ve-donem-i̇slemleri) (7 sayfa)
 - [Duyuru Yönetimi](#duyuru-yonetimi) (1 sayfa)
 - [Genel İşlemler](#genel-i̇slemler) (3 sayfa)
 - [Öğrenci İşlemleri](#ogrenci-i̇slemleri) (1 sayfa)
@@ -37,17 +37,17 @@
 | **Route** | `/donem-yonetimi` |
 | **Dosya** | `SIS.Web/src/pages/TermManagementPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 3 (Dialog: 3, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
 
 **Veri kancaları (5):**
 - `useAdminTerms()`
 - `useCreateTerm()`
 - `useUpdateTerm()`
-- `useActivateTerm()`
 - `useTransitionTermStatus()`
+- `useUpdateTermPhaseOverride()`
 
 **API endpoint'leri (3):**
-- `POST ${API}/${id}/activate`
+- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/transition`
 - `PUT ${API}/${id}`
 
@@ -336,7 +336,7 @@
 - `useDepartmentInstructors()`
 
 **API endpoint'leri (3):**
-- `POST ${API}/${id}/activate`
+- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/transition`
 - `PUT ${API}/${id}`
 
@@ -438,7 +438,7 @@
 - `useTakeSnapshot()`
 
 **API endpoint'leri (3):**
-- `POST ${API}/${id}/activate`
+- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/transition`
 - `PUT ${API}/${id}`
 
@@ -570,7 +570,7 @@
 - `useAdminTerms()`
 
 **API endpoint'leri (3):**
-- `POST ${API}/${id}/activate`
+- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/transition`
 - `PUT ${API}/${id}`
 
@@ -606,7 +606,7 @@
 - `GET ${BASE}/departments`
 - `GET ${BASE}/faculties`
 - `GET ${BASE}/programs`
-- `POST ${API}/${id}/activate`
+- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/transition`
 - `POST ${BASE}/departments`
 - `POST ${BASE}/faculties`
@@ -630,49 +630,6 @@
 **Veri kancaları (2):**
 - `useActiveEvaluationPeriod()`
 - `useMyEvaluableCourses()`
-
----
-
-### Niyet Anketi
-
-| | |
-|---|---|
-| **Route** | `/akilli-planlama` |
-| **Dosya** | `SIS.Web/src/pages/SmartPlanningPage.tsx` |
-| **Roller** | student |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Sekmeler (2):**
-- `recommendations`
-- `survey`
-
-**Veri kancaları (3):**
-- `useActiveCourseIntentionSurvey()`
-- `useSaveCourseIntentions()`
-- `useRecommendations()`
-
----
-
-### Niyet Anketi Yönetimi
-
-| | |
-|---|---|
-| **Route** | `/niyet-anketi-yonetimi` |
-| **Dosya** | `SIS.Web/src/pages/CourseIntentionManagementPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Sekmeler (2):**
-- `manage`
-- `summary`
-
-**Veri kancaları (6):**
-- `useAcademicOperationsContext()`
-- `useActiveTerm()`
-- `useCourseIntentionSummary()`
-- `useCourseIntentionSurveys()`
-- `useSetCourseIntentionSurveyState()`
-- `useUpsertCourseIntentionSurvey()`
 
 ---
 
@@ -722,7 +679,7 @@
 - `GET ${BASE}/departments`
 - `GET ${BASE}/faculties`
 - `GET ${BASE}/programs`
-- `POST ${API}/${id}/activate`
+- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/transition`
 - `POST ${BASE}/departments`
 - `POST ${BASE}/faculties`
@@ -871,6 +828,20 @@
 
 
 ## Ders ve Dönem İşlemleri
+
+### Akıllı Ders Önerileri
+
+| | |
+|---|---|
+| **Route** | `/akilli-planlama` |
+| **Dosya** | `SIS.Web/src/pages/SmartPlanningPage.tsx` |
+| **Roller** | student |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (1):**
+- `useRecommendations()`
+
+---
 
 ### Ders Kayıt
 
