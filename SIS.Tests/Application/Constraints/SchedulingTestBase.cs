@@ -348,7 +348,7 @@ public abstract class SchedulingTestBase : IDisposable
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-10),
                 TermEnd = DateTime.UtcNow.AddDays(90),
-                IsActive = true
+                Status = TermStatus.Ready
             },
             new AcademicTerm
             {
@@ -365,7 +365,7 @@ public abstract class SchedulingTestBase : IDisposable
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(-120),
                 TermStart = DateTime.UtcNow.AddDays(-190),
                 TermEnd = DateTime.UtcNow.AddDays(-100),
-                IsActive = false
+                Status = TermStatus.Draft
             });
 
         Context.SaveChanges();

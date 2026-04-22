@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Time;
 using SIS.Application.TermClosing.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -32,9 +33,10 @@ public class TermClosingServiceTests : IDisposable
             .Options;
         _context = new AppDbContext(options);
 
+        var clock = new FakeClock();
         var gpaService = new GpaCalculationService(_context);
         var progressionService = new AcademicProgressionService(_context, gpaService);
-        _service = new TermClosingService(_context, progressionService, gpaService);
+        _service = new TermClosingService(_context, clock, progressionService, gpaService);
 
         SeedBaseData();
     }

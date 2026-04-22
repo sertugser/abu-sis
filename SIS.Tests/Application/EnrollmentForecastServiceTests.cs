@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
+using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -405,7 +406,7 @@ public class EnrollmentForecastServiceTests
             Id = CurriculumId,
             ProgramId = ProgramId,
             Version = "2025",
-            IsActive = true
+            Status = CurriculumStatus.Published
         });
 
         context.AcademicTerms.AddRange(
@@ -422,7 +423,7 @@ public class EnrollmentForecastServiceTests
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-14),
                 TermEnd = DateTime.UtcNow.AddDays(90),
-                IsActive = true
+                Status = TermStatus.Ready
             },
             new AcademicTerm
             {
@@ -437,7 +438,7 @@ public class EnrollmentForecastServiceTests
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-210),
                 TermEnd = DateTime.UtcNow.AddDays(-120),
-                IsActive = false
+                Status = TermStatus.Draft
             });
 
         context.Classrooms.AddRange(
@@ -491,8 +492,7 @@ public class EnrollmentForecastServiceTests
             ProgramId = programId,
             CurriculumId = curriculumId,
             Type = StudentProgramType.Main,
-            EnrollmentDate = DateTime.UtcNow.AddYears(-2),
-            IsActive = true
+            EnrollmentDate = DateTime.UtcNow.AddYears(-2)
         });
 
         context.SaveChanges();
@@ -573,7 +573,7 @@ public class EnrollmentForecastServiceTests
             Id = curriculumId,
             ProgramId = programId,
             Version = "2025",
-            IsActive = true
+            Status = CurriculumStatus.Published
         });
 
         context.SaveChanges();
@@ -594,7 +594,7 @@ public class EnrollmentForecastServiceTests
             WithdrawalDeadline = DateTime.UtcNow.AddDays(-20),
             TermStart = DateTime.UtcNow.AddDays(-70),
             TermEnd = DateTime.UtcNow.AddDays(-10),
-            IsActive = isActive
+            Status = isActive ? TermStatus.Ready : TermStatus.Draft
         });
 
         context.SaveChanges();
@@ -686,6 +686,6 @@ public class EnrollmentForecastServiceTests
             .Setup(service => service.CalculateCgpaAsync(It.IsAny<int>()))
             .ReturnsAsync((int studentId) => cgpasByStudentId.TryGetValue(studentId, out var cgpa) ? cgpa : 0m);
 
-        return new EnrollmentForecastService(context, gpaServiceMock.Object, new MemoryCache(new MemoryCacheOptions()));
+        return new EnrollmentForecastService(context, gpaServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), new FakeClock());
     }
 }

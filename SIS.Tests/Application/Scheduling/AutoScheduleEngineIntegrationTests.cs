@@ -89,7 +89,7 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true
+            Status = TermStatus.Ready
         });
 
         // Classrooms: 2 Lecture (60 cap), 1 PhysicsLab (30 cap)

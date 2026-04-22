@@ -312,7 +312,7 @@ public class GpaCalculationServiceTests : IDisposable
                 WithdrawalDeadline = new DateTime(2024, 7, 1),
                 TermStart = new DateTime(2024, 6, 15),
                 TermEnd = new DateTime(2024, 8, 1),
-                IsActive = false
+                Status = TermStatus.Draft
             },
             new AcademicTerm
             {
@@ -327,7 +327,7 @@ public class GpaCalculationServiceTests : IDisposable
                 WithdrawalDeadline = new DateTime(2025, 3, 1),
                 TermStart = new DateTime(2025, 2, 10),
                 TermEnd = new DateTime(2025, 6, 1),
-                IsActive = false
+                Status = TermStatus.Draft
             });
 
         _context.Students.Add(new Student
@@ -374,16 +374,16 @@ public class GpaCalculationServiceTests : IDisposable
         _context.AcademicTerms.AddRange(
             new AcademicTerm { Id = Term1Id, Name = "2024-2025 Güz", Year = 2024, Semester = SemesterType.Fall,
                 RegistrationStart = term1Start.AddDays(-14), RegistrationEnd = term1Start.AddDays(-7), AddDropStart = term1Start,
-                AddDropEnd = term1Start.AddDays(7), WithdrawalDeadline = term1Start.AddDays(49), TermStart = term1Start, TermEnd = term1Start.AddMonths(4), IsActive = false },
+                AddDropEnd = term1Start.AddDays(7), WithdrawalDeadline = term1Start.AddDays(49), TermStart = term1Start, TermEnd = term1Start.AddMonths(4), Status = TermStatus.Draft },
             new AcademicTerm { Id = Term2Id, Name = "2024-2025 Bahar", Year = 2024, Semester = SemesterType.Spring,
                 RegistrationStart = term2Start.AddDays(-14), RegistrationEnd = term2Start.AddDays(-7), AddDropStart = term2Start,
-                AddDropEnd = term2Start.AddDays(7), WithdrawalDeadline = term2Start.AddDays(49), TermStart = term2Start, TermEnd = term2Start.AddMonths(4), IsActive = true },
+                AddDropEnd = term2Start.AddDays(7), WithdrawalDeadline = term2Start.AddDays(49), TermStart = term2Start, TermEnd = term2Start.AddMonths(4), Status = TermStatus.Ready },
             new AcademicTerm { Id = Term3Id, Name = "2023-2024 Güz", Year = 2023, Semester = SemesterType.Fall,
                 RegistrationStart = term3Start.AddDays(-14), RegistrationEnd = term3Start.AddDays(-7), AddDropStart = term3Start,
-                AddDropEnd = term3Start.AddDays(7), WithdrawalDeadline = term3Start.AddDays(49), TermStart = term3Start, TermEnd = term3Start.AddMonths(4), IsActive = false },
+                AddDropEnd = term3Start.AddDays(7), WithdrawalDeadline = term3Start.AddDays(49), TermStart = term3Start, TermEnd = term3Start.AddMonths(4), Status = TermStatus.Draft },
             new AcademicTerm { Id = Term4Id, Name = "2023-2024 Bahar", Year = 2023, Semester = SemesterType.Spring,
                 RegistrationStart = term4Start.AddDays(-14), RegistrationEnd = term4Start.AddDays(-7), AddDropStart = term4Start,
-                AddDropEnd = term4Start.AddDays(7), WithdrawalDeadline = term4Start.AddDays(49), TermStart = term4Start, TermEnd = term4Start.AddMonths(4), IsActive = false }
+                AddDropEnd = term4Start.AddDays(7), WithdrawalDeadline = term4Start.AddDays(49), TermStart = term4Start, TermEnd = term4Start.AddMonths(4), Status = TermStatus.Draft }
         );
 
         // Öğrenciler

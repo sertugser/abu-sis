@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -32,9 +33,10 @@ public class AdvisorConstraintRegistrationTests : IDisposable
         _context = new AppDbContext(options);
         SeedBaseData();
 
-        var validationService = new RegistrationValidationService(_context);
+        var clock = new FakeClock();
+        var validationService = new RegistrationValidationService(_context, clock);
         var constraintService = new AdvisorConstraintService(_context);
-        _service = new CourseRegistrationService(_context, validationService, advisorConstraintService: constraintService);
+        _service = new CourseRegistrationService(_context, validationService, clock, advisorConstraintService: constraintService);
     }
 
     [Fact]

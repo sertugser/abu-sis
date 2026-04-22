@@ -519,7 +519,7 @@ public class SchedulingServiceTests : IDisposable
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-10),
                 TermEnd = DateTime.UtcNow.AddDays(90),
-                IsActive = true
+                Status = TermStatus.Ready
             },
             new AcademicTerm
             {
@@ -534,7 +534,7 @@ public class SchedulingServiceTests : IDisposable
                 WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-120),
                 TermEnd = DateTime.UtcNow.AddDays(-30),
-                IsActive = false
+                Status = TermStatus.Draft
             });
 
         _context.SaveChanges();
@@ -581,7 +581,7 @@ public class SchedulingServiceTests : IDisposable
             Id = id,
             ProgramId = programId,
             Version = "2025",
-            IsActive = true
+            Status = CurriculumStatus.Published
         };
 
         _context.Curricula.Add(curriculum);
@@ -691,7 +691,6 @@ public class SchedulingServiceTests : IDisposable
             TermId = termId,
             Capacity = capacity,
             EnrolledCount = 0,
-            IsActive = true,
             IsFinalized = false
         };
 

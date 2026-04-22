@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -31,8 +32,9 @@ public class AdvisorApprovalServiceTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new AppDbContext(options);
-        var validationService = new RegistrationValidationService(_context);
-        _service = new CourseRegistrationService(_context, validationService);
+        var clock = new FakeClock();
+        var validationService = new RegistrationValidationService(_context, clock);
+        _service = new CourseRegistrationService(_context, validationService, clock);
 
         SeedBaseData();
     }

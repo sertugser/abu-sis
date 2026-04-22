@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
+using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -40,7 +41,7 @@ public class RecommendationServiceTests
         var gpaServiceMock = new Mock<IGpaCalculationService>();
         gpaServiceMock.Setup(service => service.CalculateCgpaAsync(StudentId)).ReturnsAsync(2.40m);
 
-        var eligibilityService = new StudentEligibilityService(context, gpaServiceMock.Object);
+        var eligibilityService = new StudentEligibilityService(context, gpaServiceMock.Object, new FakeClock());
         var recommendationService = new RecommendationService(
             context,
             eligibilityService,

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -28,7 +29,7 @@ public class RegistrationValidationServiceTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new AppDbContext(options);
-        _service = new RegistrationValidationService(_context);
+        _service = new RegistrationValidationService(_context, new FakeClock());
 
         SeedBaseData();
     }
@@ -79,7 +80,7 @@ public class RegistrationValidationServiceTests : IDisposable
         });
 
         // Classroom (needed for SectionSchedule records)
-        _context.Classrooms.Add(new Classroom { Id = 1, Name = "A-101", Capacity = 100, Type = Domain.Enums.ClassroomType.Lecture, BuildingName = "A", Floor = 1 });
+        _context.Classrooms.Add(new Classroom { Id = 1, Name = "A-101", Capacity = 100, Type = ClassroomType.Lecture, BuildingName = "A", Floor = 1 });
 
         // Student (active, good CGPA, no financial block)
         _context.Students.Add(new Student
