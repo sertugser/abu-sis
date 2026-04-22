@@ -86,6 +86,7 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             Code = "CENG",
             FacultyId = FacultyId
         });
+        var termEnd = DateTime.UtcNow.AddDays(90);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = ActiveTermId,
@@ -98,9 +99,10 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             AddDropEnd = DateTime.UtcNow.AddDays(12),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(50),
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.RegistrationOpen
+            TermEnd = termEnd,
+            Status = TermStatus.Ready,
+            GradeEntryStart = termEnd.AddDays(-14),
+            GradeEntryEnd = termEnd.AddDays(14)
         });
         _context.AcademicPrograms.Add(new AcademicProgram
         {

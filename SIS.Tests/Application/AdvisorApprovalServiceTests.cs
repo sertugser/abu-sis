@@ -52,6 +52,7 @@ public class AdvisorApprovalServiceTests : IDisposable
         });
 
         // Active academic term
+        var termEnd = DateTime.UtcNow.AddDays(90);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
@@ -64,9 +65,10 @@ public class AdvisorApprovalServiceTests : IDisposable
             AddDropEnd = DateTime.UtcNow.AddDays(12),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.RegistrationOpen
+            TermEnd = termEnd,
+            Status = TermStatus.Ready,
+            GradeEntryStart = termEnd.AddDays(-14),
+            GradeEntryEnd = termEnd.AddDays(14)
         });
 
         // Academic program
@@ -188,10 +190,10 @@ public class AdvisorApprovalServiceTests : IDisposable
         return section;
     }
 
-    private Domain.Entities.CourseRegistration AddRegistration(
+    private CourseRegistration AddRegistration(
         int id, int studentId, int sectionId, RegistrationStatus status)
     {
-        var reg = new Domain.Entities.CourseRegistration
+        var reg = new CourseRegistration
         {
             Id = id,
             StudentId = studentId,

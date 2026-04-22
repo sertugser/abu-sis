@@ -59,6 +59,7 @@ public class RegistrationValidationServiceTests : IDisposable
         _context.Curricula.Add(new Curriculum { Id = CurriculumId, ProgramId = ProgramId, Version = "2022", IsActive = true });
 
         // Active term with registration period covering "now"
+        var termEnd = DateTime.UtcNow.AddDays(90);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
@@ -71,9 +72,10 @@ public class RegistrationValidationServiceTests : IDisposable
             AddDropEnd = DateTime.UtcNow.AddDays(12),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.RegistrationOpen
+            TermEnd = termEnd,
+            Status = TermStatus.Ready,
+            GradeEntryStart = termEnd.AddDays(-14),
+            GradeEntryEnd = termEnd.AddDays(14)
         });
 
         // Classroom (needed for SectionSchedule records)
@@ -201,10 +203,10 @@ public class RegistrationValidationServiceTests : IDisposable
         public int? ClassroomId { get; set; }
     }
 
-    private Domain.Entities.CourseRegistration AddRegistration(int id, int studentId, int sectionId,
+    private CourseRegistration AddRegistration(int id, int studentId, int sectionId,
         RegistrationStatus status, GradeCode? grade = null)
     {
-        var reg = new Domain.Entities.CourseRegistration
+        var reg = new CourseRegistration
         {
             Id = id,
             StudentId = studentId,
@@ -324,9 +326,10 @@ public class RegistrationValidationServiceTests : IDisposable
     [Fact]
     public async Task Validate_OutsideRegistrationPeriod_ReturnsPeriodError()
     {
-        // Set term status to Published (not RegistrationOpen/AddDrop)
+        // Set term status to Ready but adjust dates so registration period is closed
         var term = _context.AcademicTerms.Find(TermId)!;
-        term.Status = TermStatus.Published;
+        term.Status = TermStatus.Ready;
+        term.RegistrationEnd = DateTime.UtcNow.AddDays(-1);
         _context.SaveChanges();
 
         var course = AddCourse(300, "CS300", "Operating Systems", 5);
@@ -341,9 +344,9 @@ public class RegistrationValidationServiceTests : IDisposable
     [Fact]
     public async Task Validate_NoActiveTerm_ReturnsPeriodError()
     {
-        // Deactivate the existing term
+        // Set term to Closed status
         var term = _context.AcademicTerms.Find(TermId)!;
-        term.IsActive = false;
+        term.Status = TermStatus.Closed;
         _context.SaveChanges();
 
         var course = AddCourse(301, "CS301", "Networks", 5);
@@ -880,6 +883,7 @@ public class RegistrationValidationServiceTests : IDisposable
 
         // Create a past term for the failed registration
         var pastTermId = 50;
+        var pastTermEnd = DateTime.UtcNow.AddDays(-120);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = pastTermId,
@@ -892,8 +896,10 @@ public class RegistrationValidationServiceTests : IDisposable
             AddDropEnd = DateTime.UtcNow.AddDays(-183),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-210),
-            TermEnd = DateTime.UtcNow.AddDays(-120),
-            IsActive = false
+            TermEnd = pastTermEnd,
+            Status = TermStatus.Closed,
+            GradeEntryStart = pastTermEnd.AddDays(-14),
+            GradeEntryEnd = pastTermEnd.AddDays(14)
         });
         _context.SaveChanges();
 

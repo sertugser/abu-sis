@@ -125,6 +125,7 @@ public class RecommendationServiceTests
             EnrollmentDate = DateTime.UtcNow.AddYears(-1),
             IsActive = true
         });
+        var activeTermEnd = DateTime.UtcNow.AddMonths(4);
         context.AcademicTerms.Add(new AcademicTerm
         {
             Id = ActiveTermId,
@@ -137,9 +138,10 @@ public class RecommendationServiceTests
             AddDropEnd = DateTime.UtcNow.AddDays(12),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(40),
             TermStart = DateTime.UtcNow,
-            TermEnd = DateTime.UtcNow.AddMonths(4),
-            IsActive = true,
-            Status = TermStatus.RegistrationOpen
+            TermEnd = activeTermEnd,
+            Status = TermStatus.Ready,
+            GradeEntryStart = activeTermEnd.AddDays(-14),
+            GradeEntryEnd = activeTermEnd.AddDays(14)
         });
         context.AcademicTerms.Add(new AcademicTerm
         {
@@ -154,8 +156,9 @@ public class RecommendationServiceTests
             WithdrawalDeadline = DateTime.UtcNow.AddMonths(-4),
             TermStart = DateTime.UtcNow.AddMonths(-5),
             TermEnd = DateTime.UtcNow.AddMonths(-1),
-            IsActive = false,
-            Status = TermStatus.Closed
+            Status = TermStatus.Closed,
+            GradeEntryStart = DateTime.UtcNow.AddMonths(-1).AddDays(-14),
+            GradeEntryEnd = DateTime.UtcNow.AddMonths(-1).AddDays(14)
         });
         context.SaveChanges();
     }

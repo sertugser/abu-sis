@@ -268,6 +268,7 @@ public class CourseOpeningServiceTests
                 Code = "MATH"
             });
 
+        var termEnd = DateTime.UtcNow.AddDays(90);
         context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
@@ -282,9 +283,10 @@ public class CourseOpeningServiceTests
             AddDropEnd = DateTime.UtcNow.AddDays(14),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
             TermStart = DateTime.UtcNow.AddDays(-14),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.Planning
+            TermEnd = termEnd,
+            Status = TermStatus.Preparing,
+            GradeEntryStart = termEnd.AddDays(-14),
+            GradeEntryEnd = termEnd.AddDays(14)
         });
 
         context.SaveChanges();

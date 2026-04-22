@@ -195,7 +195,7 @@ public class FacultyPlanningServiceTests : IDisposable
     [Fact]
     public async Task AssignSectionAsync_AllowsPlanningStage()
     {
-        SetTermStatus(TermStatus.Planning);
+        SetTermStatus(TermStatus.Preparing);
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(10, 0), 1);
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(11, 0), 2);
 
@@ -238,6 +238,7 @@ public class FacultyPlanningServiceTests : IDisposable
             Code = "CENG"
         });
 
+        var termEnd = DateTime.UtcNow.AddDays(90);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
@@ -252,9 +253,10 @@ public class FacultyPlanningServiceTests : IDisposable
             AddDropEnd = DateTime.UtcNow.AddDays(12),
             WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.Scheduling
+            TermEnd = termEnd,
+            Status = TermStatus.Preparing,
+            GradeEntryStart = termEnd.AddDays(-14),
+            GradeEntryEnd = termEnd.AddDays(14)
         });
 
         _context.SaveChanges();
