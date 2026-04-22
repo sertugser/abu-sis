@@ -292,9 +292,9 @@ export default function CourseCatalogPage() {
               <GraduationCap className="h-3.5 w-3.5" />
               Yeni
             </div>
-            <p className="text-base font-semibold text-foreground">Akilli ders onerileri ve niyet anketi acildi</p>
+            <p className="text-base font-semibold text-foreground">Akilli ders onerileri hazir</p>
             <p className="text-sm text-muted-foreground">
-              Bu donem icin sistemin onerilerini gorup almayi dusundugun dersleri anketten isaretleyebilirsin.
+              Bu donem icin sistemin onerilerini skor, zorluk ve kritik yol etkisiyle birlikte inceleyebilirsin.
             </p>
           </div>
           <Button asChild className="gap-2 rounded-xl bg-[#003366] hover:bg-[#002244]">

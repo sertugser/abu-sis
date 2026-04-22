@@ -40,6 +40,7 @@ export const studentMenuGroups: MenuGroup[] = [
     icon: BookOpen,
     children: [
       { to: ROUTES.DERS_KAYIT, label: 'Ders Kayıt' },
+      { to: ROUTES.SMART_PLANNING, label: 'Akıllı Ders Önerileri' },
       { to: ROUTES.PLAN, label: 'Kayıt Planım' },
       { to: ROUTES.NOT_LISTESI, label: 'Not Listesi' },
       { to: ROUTES.DEVAMSIZLIK_DURUMU, label: 'Devamsızlık Durumu' },
@@ -54,7 +55,6 @@ export const studentMenuGroups: MenuGroup[] = [
     label: 'Anketler',
     icon: ClipboardCheck,
     children: [
-      { to: ROUTES.SMART_PLANNING, label: 'Niyet Anketi' },
       { to: ROUTES.COURSE_EVALUATION, label: 'Ders Değerlendirme' },
     ],
   },
@@ -167,7 +167,6 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
     label: 'Anketler',
     icon: ClipboardCheck,
     children: [
-      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
       { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],
   },
@@ -233,14 +232,6 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
     ],
   },
   {
-    id: 'anketler',
-    label: 'Anketler',
-    icon: ClipboardCheck,
-    children: [
-      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
-    ],
-  },
-  {
     id: 'ogrenci-islemleri',
     label: 'Öğrenci İşlemleri',
     icon: Users,
@@ -299,7 +290,6 @@ export const deanMenuGroups: MenuGroup[] = [
     label: 'Anketler',
     icon: ClipboardCheck,
     children: [
-      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
       { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],
   },
@@ -384,7 +374,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     label: 'Anketler',
     icon: ClipboardCheck,
     children: [
-      { to: ROUTES.COURSE_INTENTION_MANAGEMENT, label: 'Niyet Anketi Yönetimi' },
       { to: ROUTES.EVALUATION_PERIOD_ADMIN, label: 'Değerlendirme Dönemi Yönetimi' },
       { to: ROUTES.EVALUATION_RESULTS, label: 'Değerlendirme Sonuçları' },
     ],

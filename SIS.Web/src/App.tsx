@@ -32,7 +32,6 @@ import TermClosingPage from './pages/term-closing/TermClosingPage';
 import CourseOpeningPage from './pages/CourseOpeningPage';
 import InstructorAssignmentPage from './pages/InstructorAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
-import CourseIntentionManagementPage from './pages/CourseIntentionManagementPage';
 import StudentDirectoryPage from './pages/StudentDirectoryPage';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
@@ -114,7 +113,6 @@ export default function App() {
                     <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
                     <Route path="donem-kapatma" element={<TermClosingPage />} />
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
-                    <Route path="niyet-anketi-yonetimi" element={<CourseIntentionManagementPage />} />
                     <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
                     <Route path="kullanici-yonetimi" element={<UserManagementPage />} />
                     <Route path="ogrenci-rehberi" element={<StudentDirectoryPage />} />

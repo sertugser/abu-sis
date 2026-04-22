@@ -67,9 +67,6 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
     public DbSet<ConstraintViolationSnapshot> ConstraintViolationSnapshots => Set<ConstraintViolationSnapshot>();
     public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
-    public DbSet<CourseIntentionSurvey> CourseIntentionSurveys => Set<CourseIntentionSurvey>();
-    public DbSet<CourseIntention> CourseIntentions => Set<CourseIntention>();
-    public DbSet<StudentSurveyPreference> StudentSurveyPreferences => Set<StudentSurveyPreference>();
     public DbSet<AdvisorCourseConstraint> AdvisorCourseConstraints => Set<AdvisorCourseConstraint>();
     public DbSet<CourseCrossList> CourseCrossLists => Set<CourseCrossList>();
 
@@ -604,61 +601,6 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasOne(rp => rp.Term)
              .WithMany()
              .HasForeignKey(rp => rp.TermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // ── CourseIntentionSurvey ────────────────────────────────
-        builder.Entity<CourseIntentionSurvey>(e =>
-        {
-            e.HasIndex(s => s.TermId).IsUnique();
-
-            e.Property(s => s.Title)
-             .HasMaxLength(200);
-
-            e.HasOne(s => s.Term)
-             .WithMany()
-             .HasForeignKey(s => s.TermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // ── CourseIntention ──────────────────────────────────────
-        builder.Entity<CourseIntention>(e =>
-        {
-            e.HasIndex(ci => new { ci.SurveyId, ci.StudentId, ci.CourseId }).IsUnique();
-            e.HasIndex(ci => new { ci.StudentId, ci.SurveyId });
-
-            e.HasOne(ci => ci.Survey)
-             .WithMany(s => s.Intentions)
-             .HasForeignKey(ci => ci.SurveyId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne(ci => ci.Student)
-             .WithMany()
-             .HasForeignKey(ci => ci.StudentId)
-             .OnDelete(DeleteBehavior.Restrict);
-
-            e.HasOne(ci => ci.Course)
-             .WithMany()
-             .HasForeignKey(ci => ci.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // ── StudentSurveyPreference ─────────────────────────────
-        builder.Entity<StudentSurveyPreference>(e =>
-        {
-            e.HasIndex(sp => new { sp.SurveyId, sp.StudentId }).IsUnique();
-
-            e.Property(sp => sp.PreferredDays).HasMaxLength(200);
-            e.Property(sp => sp.PreferredTimeRanges).HasMaxLength(200);
-
-            e.HasOne(sp => sp.Survey)
-             .WithMany(s => s.Preferences)
-             .HasForeignKey(sp => sp.SurveyId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne(sp => sp.Student)
-             .WithMany()
-             .HasForeignKey(sp => sp.StudentId)
              .OnDelete(DeleteBehavior.Restrict);
         });
 

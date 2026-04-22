@@ -11,7 +11,6 @@ using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.UserPreferences.Services;
-using SIS.Application.CourseIntention.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Recommendation.Services;
@@ -133,7 +132,6 @@ builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
-builder.Services.AddHostedService<SurveyAutoOpenService>();
 builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
@@ -152,7 +150,6 @@ builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService
 builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
 builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
-builder.Services.AddScoped<ICourseIntentionService, CourseIntentionService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
