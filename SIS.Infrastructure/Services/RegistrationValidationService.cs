@@ -6,7 +6,6 @@ using SIS.Domain.Enums;
 using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
 using SIS.Infrastructure.Persistence;
-using SIS.Infrastructure.Services.Time;
 
 namespace SIS.Infrastructure.Services;
 
@@ -16,11 +15,11 @@ public class RegistrationValidationService : IRegistrationValidationService
     private readonly ISystemConfigProvider _config;
     private readonly IDateTimeProvider _clock;
 
-    public RegistrationValidationService(AppDbContext context, ISystemConfigProvider? config = null, IDateTimeProvider? clock = null)
+    public RegistrationValidationService(AppDbContext context, IDateTimeProvider clock, ISystemConfigProvider? config = null)
     {
         _context = context;
+        _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
-        _clock = clock ?? new SystemDateTimeProvider();
     }
 
     public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
