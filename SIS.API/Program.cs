@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Admin.Services;
 using SIS.Application.Common.Services;
+using SIS.Application.Common.Time;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.AdvisorConstraints.Services;
@@ -28,6 +29,7 @@ using SIS.Application.Announcement.Services;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.Time;
 using SIS.Infrastructure.Services.CourseEvaluation;
 using SIS.Infrastructure.Services.Announcement;
 using SIS.Infrastructure.Services.CalendarGenerator;
@@ -173,6 +175,9 @@ builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 // Course Evaluation + Internal Announcements
 builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();
 builder.Services.AddScoped<IInternalAnnouncementService, InternalAnnouncementService>();
+
+// Time Provider
+builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 
 var app = builder.Build();
 
