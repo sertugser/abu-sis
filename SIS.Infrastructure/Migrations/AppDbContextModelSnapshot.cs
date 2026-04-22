@@ -212,6 +212,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("AddDropEnd")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool?>("AddDropOverride")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("AddDropStart")
                         .HasColumnType("timestamp with time zone");
 
@@ -222,8 +225,14 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsActive")
+                    b.Property<DateTime>("GradeEntryEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("GradeEntryOverride")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTime>("GradeEntryStart")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -231,6 +240,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<DateTime>("RegistrationEnd")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("RegistrationOverride")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("RegistrationStart")
                         .HasColumnType("timestamp with time zone");
@@ -259,6 +271,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<DateTime>("WithdrawalDeadline")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("WithdrawalOverride")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
