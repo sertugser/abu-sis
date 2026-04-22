@@ -47,8 +47,8 @@ public partial class CalendarGeneratorService
 
                 if (term.Status >= TermStatus.Closed)
                     throw new InvalidOperationException("Kapalı veya arşivlenmiş döneme takvim uygulanamaz.");
-                if (term.Status >= TermStatus.Published && !request.ForceOverwrite)
-                    throw new InvalidOperationException("Yayınlanmış veya daha ileri durumdaki dönem için forceOverwrite gerekir.");
+                if (term.Status >= TermStatus.Ready && !request.ForceOverwrite)
+                    throw new InvalidOperationException("Hazır veya daha ileri durumdaki dönem için forceOverwrite gerekir.");
 
                 snapshot.Add(TermSnapshot.From(term));
                 ApplyTermDates(term, group.ToList());
@@ -124,6 +124,8 @@ public partial class CalendarGeneratorService
             term.WithdrawalDeadline = snapshot.WithdrawalDeadline;
             term.TermStart = snapshot.TermStart;
             term.TermEnd = snapshot.TermEnd;
+            term.GradeEntryStart = snapshot.GradeEntryStart;
+            term.GradeEntryEnd = snapshot.GradeEntryEnd;
             term.UpdatedAt = DateTime.UtcNow;
 
             _context.TermCalendarEvents.RemoveRange(term.CalendarEvents);
@@ -166,6 +168,8 @@ public partial class CalendarGeneratorService
         DateTime WithdrawalDeadline,
         DateTime TermStart,
         DateTime TermEnd,
+        DateTime GradeEntryStart,
+        DateTime GradeEntryEnd,
         IReadOnlyList<TermCalendarEventSnapshot> GeneratedEvents)
     {
         public static TermSnapshot From(AcademicTerm term) =>
@@ -178,6 +182,8 @@ public partial class CalendarGeneratorService
                 term.WithdrawalDeadline,
                 term.TermStart,
                 term.TermEnd,
+                term.GradeEntryStart,
+                term.GradeEntryEnd,
                 term.CalendarEvents.Select(TermCalendarEventSnapshot.From).ToList());
     }
 

@@ -212,6 +212,10 @@ public partial class CalendarGeneratorService
         var withdrawal = First(events, CalendarEventType.CourseWithdrawal) ?? First(events, CalendarEventType.RegistrationFreezeDeadline) ?? First(events, CalendarEventType.ClassesEnd);
         var classesStart = First(events, CalendarEventType.ClassesStart) ?? events.OrderBy(e => e.StartDate).First();
         var classesEnd = First(events, CalendarEventType.ClassesEnd) ?? events.OrderBy(e => e.StartDate).Last();
+        var gradeEntry = First(events, CalendarEventType.MidtermGradePublication)
+            ?? First(events, CalendarEventType.FinalGradePublication)
+            ?? First(events, CalendarEventType.MakeupGradePublication)
+            ?? First(events, CalendarEventType.SummerSchoolGradePublication);
 
         term.RegistrationStart = registration?.StartDate ?? classesStart.StartDate;
         term.RegistrationEnd = registration?.EndDate ?? registration?.StartDate ?? classesStart.StartDate;
@@ -220,6 +224,8 @@ public partial class CalendarGeneratorService
         term.WithdrawalDeadline = withdrawal?.StartDate ?? classesEnd.StartDate;
         term.TermStart = classesStart.StartDate;
         term.TermEnd = classesEnd.StartDate;
+        term.GradeEntryStart = gradeEntry?.StartDate ?? classesEnd.StartDate;
+        term.GradeEntryEnd = gradeEntry?.EndDate ?? gradeEntry?.StartDate ?? classesEnd.StartDate.AddDays(14);
     }
 
     private static GeneratedCalendarEventDto? First(IReadOnlyList<GeneratedCalendarEventDto> events, CalendarEventType eventType) =>
@@ -234,6 +240,8 @@ public partial class CalendarGeneratorService
     {
         var label = SemesterLabel(semester);
         var english = semester switch { SemesterType.Fall => "Fall", SemesterType.Spring => "Spring", SemesterType.Summer => "Summer", _ => semester.ToString() };
+        var now = DateTime.UtcNow;
+        var termEnd = now.AddMonths(6);
         return new AcademicTerm
         {
             Name = $"{academicYear} {label}",
@@ -243,8 +251,9 @@ public partial class CalendarGeneratorService
             Semester = semester,
             TermType = semester == SemesterType.Summer ? TermType.Summer : TermType.Regular,
             Status = TermStatus.Draft,
-            IsActive = false,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            GradeEntryStart = termEnd.AddDays(-14),
+            GradeEntryEnd = termEnd.AddDays(14)
         };
     }
 
