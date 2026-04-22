@@ -32,11 +32,18 @@ All thresholds below are configurable via SystemConfig (admin panel), values sho
 - Registration plan: soft hold on capacity, cleared at midnight if unconfirmed
 
 ## Term Lifecycle
-Draft → Planning → Scheduling → Published → RegistrationOpen → AddDrop → WithdrawalPeriod → GradeEntry → Closed → Archived
+Draft → Preparing → Ready → Closed → Archived
 
-- Tüm geçişler admin tarafından manuel yapılabilir (guard koşulları dahilinde)
-- Published → GradeEntry arası geçişler ayrıca takvim tarihlerine göre otomatik tetiklenir
-- Geri dönüş izinleri: Planning→Draft, Scheduling→Planning, Published→Scheduling
+- 5 state, sadece onay akışı — öğrenci/hoca fazları state değildir
+- Öğrenci/hoca fazları (kayıt, ekle/bırak, çekilme, not girişi) takvim tarihleriyle hesaplanır
+- Admin her faz için override toggle kullanabilir (null = takvim konuşur)
+- Geri dönüş izinleri: Preparing↔Draft, Ready↔Preparing (Closed'tan geri dönüş yok)
+
+## Term Phases (computed, state değil)
+- IsRegistrationOpen: Ready + (override ?? now ∈ [RegStart, RegEnd])
+- IsAddDropOpen: Ready + (override ?? now ∈ [AddDropStart, AddDropEnd])
+- IsWithdrawalOpen: Ready + (override ?? TermStart ≤ now ≤ WithdrawalDeadline)
+- IsGradeEntryOpen: Ready + (override ?? now ∈ [GradeEntryStart, GradeEntryEnd])
 
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports
