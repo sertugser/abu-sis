@@ -31,6 +31,7 @@ public static partial class SeedData
 
             foreach (var t in terms)
             {
+                var termEnd = ParseUtcDate(t.TermEnd);
                 context.AcademicTerms.Add(new AcademicTerm
                 {
                     Name = t.Name,
@@ -45,8 +46,9 @@ public static partial class SeedData
                     AddDropEnd = ParseUtcDate(t.AddEnd),
                     WithdrawalDeadline = ParseUtcDate(t.WithdrawalDeadline),
                     TermStart = ParseUtcDate(t.TermStart),
-                    TermEnd = ParseUtcDate(t.TermEnd),
-                    IsActive = t.Active,
+                    TermEnd = termEnd,
+                    GradeEntryStart = termEnd.AddDays(-14),
+                    GradeEntryEnd = termEnd.AddDays(14),
                     Status = t.Status
                 });
             }
