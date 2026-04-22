@@ -49,7 +49,7 @@ export default function TermProgramTransferPage() {
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const targetTermId = activeTerm?.id ?? null;
   const termStatus = activeTerm?.status;
-  const isTermSuitable = termStatus === 'Planning' || termStatus === 'Draft';
+  const isTermSuitable = termStatus === 'Draft' || termStatus === 'Preparing';
   const sourceTerms = useMemo(() => (allTerms ?? []).filter((t) => t.id !== targetTermId), [allTerms, targetTermId]);
   const selectedSourceTerm = sourceTerms.find((t) => t.id === sourceTermId);
 

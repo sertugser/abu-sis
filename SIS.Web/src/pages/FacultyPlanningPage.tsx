@@ -61,7 +61,7 @@ export default function FacultyPlanningPage() {
   }
 
   const termStatus = activeTerm?.status;
-  const isTermEditable = termStatus === 'Planning' || termStatus === 'Scheduling';
+  const isTermEditable = termStatus === 'Preparing';
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden">
