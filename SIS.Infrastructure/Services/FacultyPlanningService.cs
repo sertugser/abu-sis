@@ -330,9 +330,9 @@ public class FacultyPlanningService : IFacultyPlanningService
                 ?? throw new KeyNotFoundException("Sube bulunamadi.");
 
             var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-            if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
+            if (term != null && term.Status != TermStatus.Preparing)
                 throw new InvalidOperationException(
-                    $"Hoca/derslik/zaman ataması için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+                    $"Hoca/derslik/zaman ataması için dönem 'Hazırlık' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
 
             if (section.IsFinalized)
                 throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
@@ -490,9 +490,9 @@ public class FacultyPlanningService : IFacultyPlanningService
             ?? throw new KeyNotFoundException("Sube bulunamadi.");
 
         var unassignTerm = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (unassignTerm != null && unassignTerm.Status != TermStatus.Planning && unassignTerm.Status != TermStatus.Scheduling)
+        if (unassignTerm != null && unassignTerm.Status != TermStatus.Preparing)
             throw new InvalidOperationException(
-                $"Atama kaldırma sadece 'Planlama' veya 'Programlama' aşamasında yapılabilir. Mevcut durum: {GetTermStatusLabel(unassignTerm.Status)}");
+                $"Atama kaldırma sadece 'Hazırlık' aşamasında yapılabilir. Mevcut durum: {GetTermStatusLabel(unassignTerm.Status)}");
 
         if (section.IsFinalized)
             throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
@@ -913,17 +913,12 @@ public class FacultyPlanningService : IFacultyPlanningService
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft            => "Taslak",
-        TermStatus.Planning         => "Planlama",
-        TermStatus.Scheduling       => "Programlama",
-        TermStatus.Published        => "Yayınlandı",
-        TermStatus.RegistrationOpen => "Kayıt Açık",
-        TermStatus.AddDrop          => "Ders Ekle/Bırak",
-        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
-        TermStatus.GradeEntry       => "Not Girişi",
-        TermStatus.Closed           => "Kapalı",
-        TermStatus.Archived         => "Arşivlendi",
-        _                           => s.ToString()
+        TermStatus.Draft     => "Taslak",
+        TermStatus.Preparing => "Hazırlık",
+        TermStatus.Ready     => "Yayında",
+        TermStatus.Closed    => "Kapalı",
+        TermStatus.Archived  => "Arşivlendi",
+        _                    => s.ToString()
     };
 
     public async Task<List<FacultyPlanningTimeSlotDto>> GetTimeSlotsAsync(int termId, CancellationToken ct = default)
