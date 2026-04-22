@@ -19,23 +19,13 @@ public class TermManagementController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAllTerms()
-    {
-        var result = await _service.GetAllTermsAsync();
-        return Ok(result);
-    }
+        => Ok(await _service.GetAllTermsAsync());
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetTerm(int id)
     {
-        try
-        {
-            var result = await _service.GetTermByIdAsync(id);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        try { return Ok(await _service.GetTermByIdAsync(id)); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
     }
 
     [HttpPost]
@@ -46,52 +36,43 @@ public class TermManagementController : ControllerBase
             var result = await _service.CreateTermAsync(dto);
             return CreatedAtAction(nameof(GetTerm), new { id = result.Id }, result);
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateTerm(int id, [FromBody] UpdateTermDto dto)
     {
-        try
-        {
-            var result = await _service.UpdateTermAsync(id, dto);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        try { return Ok(await _service.UpdateTermAsync(id, dto)); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
-    [HttpPost("{id:int}/transition")]
+    [HttpPost("{id:int}/cancel")]
     [Authorize(Roles = "SystemAdministrator")]
-    public async Task<IActionResult> TransitionStatus(int id, [FromBody] TransitionTermStatusDto dto)
+    public async Task<IActionResult> Cancel(int id)
     {
         try
         {
-            await _service.TransitionStatusAsync(id, dto.TargetStatus);
-            var updated = await _service.GetTermByIdAsync(id);
-            return Ok(updated);
+            await _service.CancelTermAsync(id);
+            return Ok(await _service.GetTermByIdAsync(id));
         }
-        catch (KeyNotFoundException ex)
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPost("{id:int}/uncancel")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> Uncancel(int id)
+    {
+        try
         {
-            return NotFound(new { message = ex.Message });
+            await _service.UncancelTermAsync(id);
+            return Ok(await _service.GetTermByIdAsync(id));
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpPost("{id:int}/override")]
@@ -100,24 +81,15 @@ public class TermManagementController : ControllerBase
     {
         try
         {
-            var userIdClaim = User.FindFirst("sub")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var userIdClaim = User.FindFirst("sub")?.Value
+                ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             int? userId = int.TryParse(userIdClaim, out var uid) ? uid : null;
 
             await _service.UpdatePhaseOverrideAsync(id, dto, userId);
-            var updated = await _service.GetTermByIdAsync(id);
-            return Ok(updated);
+            return Ok(await _service.GetTermByIdAsync(id));
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 }
