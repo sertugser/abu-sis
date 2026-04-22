@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Common.DTOs;
+using SIS.Application.Common.Time;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
@@ -15,10 +16,12 @@ namespace SIS.API.Controllers;
 public class CourseController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IDateTimeProvider _clock;
 
-    public CourseController(AppDbContext context)
+    public CourseController(AppDbContext context, IDateTimeProvider clock)
     {
         _context = context;
+        _clock = clock;
     }
 
     /// <summary>
@@ -439,8 +442,8 @@ public class CourseController : ControllerBase
             RegistrationEnd = term.RegistrationEnd,
             AddDropStart = term.AddDropStart,
             AddDropEnd = term.AddDropEnd,
-            IsRegistrationOpen = term.Status == TermStatus.RegistrationOpen,
-            IsAddDropOpen = term.Status == TermStatus.AddDrop,
+            IsRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow),
+            IsAddDropOpen = term.IsAddDropOpen(_clock.UtcNow),
             Status = term.Status.ToString()
         };
 
