@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -43,7 +43,10 @@ export function CurriculumEctsRulesDialog({ curriculum, onClose }: Props) {
 
   const updateMut = useUpdateCurriculum();
 
-  useEffect(() => {
+  // curriculum prop değiştiğinde form alanlarını senkronize et (adjust state during render)
+  const [lastSyncedCurriculumId, setLastSyncedCurriculumId] = useState<number | null>(curriculum.id);
+  if (curriculum.id !== lastSyncedCurriculumId) {
+    setLastSyncedCurriculumId(curriculum.id);
     setUseOverride(
       curriculum.ectsLimitBelow200 != null
         || curriculum.ectsLimit200To249 != null
@@ -52,7 +55,7 @@ export function CurriculumEctsRulesDialog({ curriculum, onClose }: Props) {
     setBelow200(curriculum.ectsLimitBelow200?.toString() ?? '30');
     setMid(curriculum.ectsLimit200To249?.toString() ?? '42');
     setAbove250(curriculum.ectsLimitAbove250?.toString() ?? '48');
-  }, [curriculum]);
+  }
 
   const parsePositive = (s: string): number | null => {
     const n = Number(s);

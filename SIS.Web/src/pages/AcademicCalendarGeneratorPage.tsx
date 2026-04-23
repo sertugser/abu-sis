@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1034,28 +1034,31 @@ export default function AcademicCalendarGeneratorPage() {
     return oldStart !== editForm.startDate || oldEnd !== (editForm.endDate || editForm.startDate);
   }
 
-  useEffect(() => {
-    if (pinDate && !isDateValueWithinRange(pinDate, pinSelectionRange))
-      setPinDate('');
-  }, [pinDate, pinSelectionRange]);
+  // PinDate range dışındaysa temizle (adjust state during render)
+  if (pinDate && !isDateValueWithinRange(pinDate, pinSelectionRange)) {
+    setPinDate('');
+  }
 
-  useEffect(() => {
-    if (!pinEndDate)
-      return;
-
+  // PinEndDate range dışındaysa temizle; PinDate'den önceyse PinDate'e eşitle
+  if (pinEndDate) {
     if (!isDateValueWithinRange(pinEndDate, pinSelectionRange)) {
       setPinEndDate('');
-      return;
-    }
-
-    if (pinDate && pinEndDate < pinDate)
+    } else if (pinDate && pinEndDate < pinDate) {
       setPinEndDate(pinDate);
-  }, [pinDate, pinEndDate, pinSelectionRange]);
+    }
+  }
 
-  useEffect(() => {
-    const available = new Set(eventTypeFilterOptions.map(option => option.value));
-    setSelectedEventTypeFilters(current => current.filter(value => available.has(value)));
-  }, [eventTypeFilterOptions]);
+  // Filtre seçeneklerinden çıkarılan event türlerini filtrelenmiş listeden temizle
+  const availableEventTypeFilterValues = useMemo(
+    () => new Set(eventTypeFilterOptions.map(option => option.value)),
+    [eventTypeFilterOptions],
+  );
+  const filteredSelectedEventTypeFilters = selectedEventTypeFilters.filter(value =>
+    availableEventTypeFilterValues.has(value),
+  );
+  if (filteredSelectedEventTypeFilters.length !== selectedEventTypeFilters.length) {
+    setSelectedEventTypeFilters(filteredSelectedEventTypeFilters);
+  }
 
   function askConfirm(options: ConfirmOptions) {
     return new Promise<boolean>(resolve => {

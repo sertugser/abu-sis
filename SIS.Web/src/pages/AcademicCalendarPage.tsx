@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, CalendarDays, UserPlus, Repeat2, LogOut, Grid3x3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
@@ -68,18 +68,22 @@ export default function AcademicCalendarPage() {
 
   const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<'year' | 'month'>('year');
+  const [syncedTermStart, setSyncedTermStart] = useState<string | null | undefined>(null);
 
-  // Seçilen dönemin yılına otomatik navigasyon
-  useEffect(() => {
-    if (!data?.termStart) return;
-    const termStart = new Date(data.termStart);
-    setCursorDate(new Date(termStart.getFullYear(), termStart.getMonth(), 1));
-  }, [data?.termStart]);
+  // Dönem değiştiğinde cursor'u TermStart'ın yılına/ayına taşı (adjust state during render)
+  if (data?.termStart !== syncedTermStart) {
+    setSyncedTermStart(data?.termStart ?? null);
+    if (data?.termStart) {
+      const termStart = new Date(data.termStart);
+      setCursorDate(new Date(termStart.getFullYear(), termStart.getMonth(), 1));
+    }
+  }
 
+  const events = data?.events;
   const eventsByDay = useMemo(() => {
     const map = new Map<string, TermCalendarEventDto[]>();
-    if (!data?.events) return map;
-    for (const ev of data.events) {
+    if (!events) return map;
+    for (const ev of events) {
       const start = new Date(ev.startDate);
       const end = ev.endDate ? new Date(ev.endDate) : start;
       const iter = new Date(start);
@@ -91,7 +95,7 @@ export default function AcademicCalendarPage() {
       }
     }
     return map;
-  }, [data?.events]);
+  }, [events]);
 
   const prevMonth = useCallback(() => setCursorDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1)), []);
   const nextMonth = useCallback(() => setCursorDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1)), []);
