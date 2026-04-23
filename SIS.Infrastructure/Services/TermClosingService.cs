@@ -108,7 +108,7 @@ public class TermClosingService : ITermClosingService
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId)
             .ToListAsync(ct);
 
@@ -285,7 +285,7 @@ public class TermClosingService : ITermClosingService
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId
                 && cs.IsFinalized)
             .ToListAsync(ct);
@@ -617,7 +617,7 @@ public class TermClosingService : ITermClosingService
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId)
             .ToListAsync(ct);
 
@@ -712,7 +712,7 @@ public class TermClosingService : ITermClosingService
         var sectionIds = await _context.CourseSections
             .AsNoTracking()
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId)
             .Select(cs => cs.Id)
             .ToListAsync(ct);
@@ -823,7 +823,7 @@ public class TermClosingService : ITermClosingService
         // Where filters DepartmentId.HasValue, so .Value is safe; groups by non-nullable int key
         var sectionStats = await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == term.Id && cs.IsActive && cs.Course.DepartmentId.HasValue && deptIds.Contains(cs.Course.DepartmentId.Value))
+            .Where(cs => cs.TermId == term.Id && cs.Status == CourseSectionStatus.Active && cs.Course.DepartmentId.HasValue && deptIds.Contains(cs.Course.DepartmentId.Value))
             .GroupBy(cs => cs.Course.DepartmentId!.Value)
             .Select(g => new { DeptId = g.Key, SectionCount = g.Count() })
             .ToListAsync(ct);

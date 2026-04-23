@@ -176,7 +176,7 @@ public class CourseOpeningService(
 
         var existingSectionCounts = await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == termId && cs.IsActive && allCourseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && allCourseIds.Contains(cs.CourseId))
             .GroupBy(cs => cs.CourseId)
             .Select(g => new { CourseId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
@@ -335,7 +335,7 @@ public class CourseOpeningService(
             var instructorIds = instructors.Select(i => i.Id).ToList();
             workloadMap = await _context.CourseSections
                 .AsNoTracking()
-                .Where(cs => instructorIds.Contains(cs.InstructorId!.Value) && cs.TermId == termId.Value && cs.IsActive)
+                .Where(cs => instructorIds.Contains(cs.InstructorId!.Value) && cs.TermId == termId.Value && cs.Status == CourseSectionStatus.Active)
                 .GroupBy(cs => cs.InstructorId!.Value)
                 .Select(g => new { InstructorId = g.Key, TotalHours = g.Sum(cs => cs.Course.TheoryHours + cs.Course.LabHours) })
                 .ToDictionaryAsync(x => x.InstructorId, x => x.TotalHours, ct);
@@ -771,7 +771,7 @@ public class CourseOpeningService(
             .AnyAsync(cs =>
                 cs.CourseId == section.CourseId
                 && cs.TermId == section.TermId
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Id != section.Id, ct);
 
         section.Status = CourseSectionStatus.Cancelled;
@@ -797,7 +797,7 @@ public class CourseOpeningService(
             throw new InvalidOperationException("Ders kapatmak için dönem iptal edilmemiş olmalıdır.");
 
         var sections = await _context.CourseSections
-            .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.IsActive)
+            .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
             .ToListAsync(ct);
 
         if (sections.Count == 0)
@@ -997,7 +997,7 @@ public class CourseOpeningService(
         var sourceSections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
-            .Where(cs => cs.TermId == sourceTermId && cs.IsActive && cs.Course.DepartmentId == departmentId)
+            .Where(cs => cs.TermId == sourceTermId && cs.Status == CourseSectionStatus.Active && cs.Course.DepartmentId == departmentId)
             .OrderBy(cs => cs.Course.Code).ThenBy(cs => cs.Id)
             .ToListAsync(ct);
 
@@ -1008,7 +1008,7 @@ public class CourseOpeningService(
         var courseIds = sourceSections.Select(cs => cs.CourseId).Distinct().ToList();
         var alreadyOpenedCourseIds = await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == targetTermId && cs.IsActive && courseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == targetTermId && cs.Status == CourseSectionStatus.Active && courseIds.Contains(cs.CourseId))
             .Select(cs => cs.CourseId)
             .Distinct()
             .ToListAsync(ct);
@@ -1071,7 +1071,7 @@ public class CourseOpeningService(
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == request.SourceTermId
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == request.DepartmentId
                 && courseIds.Contains(cs.CourseId))
             .ToListAsync(ct);
@@ -1159,7 +1159,7 @@ public class CourseOpeningService(
         var sections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course).ThenInclude(c => c.Department)
-            .Where(cs => cs.TermId == termId && cs.IsActive && externalCourseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && externalCourseIds.Contains(cs.CourseId))
             .ToListAsync(ct);
 
         // Load forecast data for demand

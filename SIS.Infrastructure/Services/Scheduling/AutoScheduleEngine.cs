@@ -105,7 +105,7 @@ public sealed class AutoScheduleEngine
             .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
             .Where(cs => cs.TermId == request.TermId
                          && !cs.IsFinalized
-                         && cs.IsActive
+                         && cs.Status == CourseSectionStatus.Active
                          && cs.Course.DepartmentId.HasValue
                          && departmentIdSet.Contains(cs.Course.DepartmentId.Value)
                          && cs.Course.TeachingMethod != TeachingMethod.Online);

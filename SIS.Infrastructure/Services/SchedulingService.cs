@@ -355,7 +355,7 @@ public class SchedulingService : ISchedulingService
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == resolvedTerm.Id && cs.IsActive && cs.InstructorId != null);
+            .Where(cs => cs.TermId == resolvedTerm.Id && cs.Status == CourseSectionStatus.Active && cs.InstructorId != null);
 
         // Scope: faculty-based, department-based, or term-wide
         int? scopeFacultyId = request.FacultyId;
@@ -1413,7 +1413,7 @@ public class SchedulingService : ISchedulingService
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
             .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
-            .Where(cs => cs.TermId == termId && cs.IsActive)
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
             .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value);
 
         if (departmentId.HasValue)

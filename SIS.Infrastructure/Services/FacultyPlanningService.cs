@@ -80,7 +80,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == termId && cs.IsActive && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
             .ToListAsync(ct);
 
         // Determine which sections have SectionSchedule records
@@ -205,7 +205,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .Include(cs => cs.Course).ThenInclude(c => c.Department)
             .Include(cs => cs.Classroom)
             .Include(cs => cs.Instructor)
-            .Where(cs => cs.TermId == termId && cs.IsActive)
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
             .Where(cs => departmentIds.Contains(cs.Course.DepartmentId ?? 0));
 
         if (departmentId.HasValue)
@@ -551,7 +551,7 @@ public class FacultyPlanningService : IFacultyPlanningService
         var sectionIds = await _context.CourseSections
             .AsNoTracking()
             .Where(cs => cs.TermId == termId
-                && cs.IsActive && !cs.IsFinalized && !cs.IsPinned && !cs.IsScheduleLocked
+                && cs.Status == CourseSectionStatus.Active && !cs.IsFinalized && !cs.IsPinned && !cs.IsScheduleLocked
                 && cs.Course.DepartmentId.HasValue
                 && departmentIds.Contains(cs.Course.DepartmentId.Value))
             .Select(cs => cs.Id)
@@ -736,7 +736,7 @@ public class FacultyPlanningService : IFacultyPlanningService
 
         var facultySectionIds = (await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == termId && cs.IsActive && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
             .Select(cs => cs.Id)
             .ToListAsync(ct)).ToHashSet();
 

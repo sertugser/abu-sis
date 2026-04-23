@@ -219,7 +219,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             if (unregisteredFailedCourses.Any())
             {
                 var availableSections = await _context.CourseSections
-                    .Where(cs => cs.TermId == activeTerm!.Id && cs.IsActive && unregisteredFailedCourses.Contains(cs.CourseId))
+                    .Where(cs => cs.TermId == activeTerm!.Id && cs.Status == CourseSectionStatus.Active && unregisteredFailedCourses.Contains(cs.CourseId))
                     .Select(cs => cs.CourseId)
                     .Distinct()
                     .ToListAsync();

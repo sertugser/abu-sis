@@ -19,7 +19,7 @@ public static partial class SeedData
             .Include(section => section.Course)
             .Include(section => section.Classroom)
             .Include(section => section.Instructor)
-            .Where(section => section.TermId == activeTerm.Id && section.IsActive)
+            .Where(section => section.TermId == activeTerm.Id && section.Status == CourseSectionStatus.Active)
             .OrderBy(section => section.Course.Code)
             .ThenBy(section => section.Id)
             .ToListAsync();

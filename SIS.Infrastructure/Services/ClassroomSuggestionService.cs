@@ -236,7 +236,7 @@ public class ClassroomSuggestionService
                 var prevSections = await _context.CourseSections
                     .AsNoTracking()
                     .Include(cs => cs.Course)
-                    .Where(cs => cs.TermId == previousTermId && cs.IsActive
+                    .Where(cs => cs.TermId == previousTermId && cs.Status == CourseSectionStatus.Active
                         && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
                     .ToListAsync(ct);
 

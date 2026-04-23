@@ -724,7 +724,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             ActiveTermSectionCourseIds = activeTerm == null
                 ? new HashSet<int>()
                 : allSections
-                    .Where(section => section.TermId == activeTerm.Id && section.IsActive)
+                    .Where(section => section.TermId == activeTerm.Id && section.Status == CourseSectionStatus.Active)
                     .Select(section => section.CourseId)
                     .ToHashSet(),
             HistoricalEnrollmentsByCourse = historicalByCourseThenTerm,
@@ -1492,7 +1492,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             var activeSections = context.AllSections
                 .Where(section => section.CourseId == course.Id
                     && section.TermId == context.ActiveTerm.Id
-                    && section.IsActive)
+                    && section.Status == CourseSectionStatus.Active)
                 .ToList();
 
             if (TryBuildCapacity(activeSections, "Aktif donem course section ortalamasi", out var activeCapacity))
@@ -1518,7 +1518,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         {
             var activeDepartmentSections = context.AllSections
                 .Where(section => section.TermId == context.ActiveTerm.Id
-                    && section.IsActive
+                    && section.Status == CourseSectionStatus.Active
                     && section.Course.DepartmentId == course.DepartmentId)
                 .ToList();
 
