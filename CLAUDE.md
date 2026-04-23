@@ -55,35 +55,57 @@ Draft ↔ Active ↔ Cancelled
 - Cancelled: admin'in manuel aksiyonu (CloseSection / ReactivateSection endpoint'leri).
 - Geriye uyumluluk: `IsActive` computed property `=> Status == Active`. LINQ sorgularında `cs.Status == CourseSectionStatus.Active` kullanılır (EF translate için).
 
+## Akademik Takvim (Faz 2 — entity split)
+7 tarih + 4 override alanı `AcademicTerm`'den ayrılıp yeni `TermAcademicCalendar` entity'sine taşındı (1-1 ilişki, cascade delete, unique FK).
+
+- **Stored `AcademicTerm` alanları**: kimlik + `TermStart`/`TermEnd` + `IsCancelled` + `YoksisStatus`
+- **Stored `TermAcademicCalendar` alanları**: 7 tarih (RegistrationStart/End, AddDropStart/End, WithdrawalDeadline, GradeEntryStart/End) + 4 override (RegistrationOverride, AddDropOverride, WithdrawalOverride, GradeEntryOverride) + CreatedAt/UpdatedAt
+- **Navigation**: `AcademicTerm.AcademicCalendar?` (nullable — takvim opsiyonel; term oluşunca yok, admin sonradan ekler)
+- **Include zorunlu**: `term.IsRegistrationOpen(now)` vb. çağıran her query `.Include(t => t.AcademicCalendar)` içermeli. AcademicCalendar null ise phase method'ları `false` döner (silent close — veri tutarsızlığı kullanıcıya "faz kapalı" olarak yansır).
+
 ## Term Phases (computed, state değil)
-- IsRegistrationOpen: IsActive(now) + (override ?? now ∈ [RegStart, RegEnd])
-- IsAddDropOpen: IsActive(now) + (override ?? now ∈ [AddDropStart, AddDropEnd])
-- IsWithdrawalOpen: IsActive(now) + (override ?? TermStart ≤ now ≤ WithdrawalDeadline)
-- IsGradeEntryOpen: IsActive(now) + (override ?? now ∈ [GradeEntryStart, GradeEntryEnd])
+- IsRegistrationOpen: IsActive(now) + AcademicCalendar != null + (override ?? now ∈ [RegStart, RegEnd])
+- IsAddDropOpen: IsActive(now) + AcademicCalendar != null + (override ?? now ∈ [AddDropStart, AddDropEnd])
+- IsWithdrawalOpen: IsActive(now) + AcademicCalendar != null + (override ?? TermStart ≤ now ≤ WithdrawalDeadline)
+- IsGradeEntryOpen: IsActive(now) + AcademicCalendar != null + (override ?? now ∈ [GradeEntryStart, GradeEntryEnd])
 - Override null → takvim konuşur; true/false → admin override
 - Cancelled dönemde override değiştirilemez.
 
-## Admin Term API (Faz 1 revize)
+## Admin Term API (Faz 1 revize + Faz 2)
 - `GET /api/admin/terms` — tüm dönemler
 - `GET /api/admin/terms/{id}` — tek dönem
-- `POST /api/admin/terms` — yeni dönem (TimeSlot grid'i otomatik oluşturulur)
+- `POST /api/admin/terms` — yeni dönem (TimeSlot grid'i otomatik oluşturulur, AcademicCalendar null kalır)
 - `PUT /api/admin/terms/{id}` — düzenleme (Cancelled dönem düzenlenemez)
 - `POST /api/admin/terms/{id}/cancel` — iptal + section cascade
 - `POST /api/admin/terms/{id}/uncancel` — iptali geri al
-- `POST /api/admin/terms/{id}/override` — faz override
-- Silinmiş endpoint'ler: `/activate`, `/deactivate`, `/transition` (manuel state machine yok)
+- Silinmiş endpoint'ler: `/activate`, `/deactivate`, `/transition`, `/override` (override Akademik Takvim API'ye taşındı)
+
+## Academic Calendar API (Faz 2 — yeni)
+Admin endpoints:
+- `GET /api/admin/academic-calendar` — tüm dönemlerin takvim özet listesi (Auth: SystemAdministrator, AdministrativeStaff)
+- `GET /api/admin/academic-calendar/{termId}` — belirli dönemin takvimi (404 if no calendar)
+- `PUT /api/admin/academic-calendar/{termId}` — upsert (Auth: SystemAdministrator)
+- `POST /api/admin/academic-calendar/{termId}/override` — faz override (Auth: SystemAdministrator)
+
+Public endpoints (any authenticated):
+- `GET /api/academic-calendar/active` — aktif dönemin öğrenci görünümü
+- `GET /api/academic-calendar/{termId}` — belirli dönem öğrenci görünümü
+- `GET /api/academic-calendar/terms` — dönem listesi (hasCalendar flag'iyle)
+
+Cancelled dönem: upsert ve override `InvalidOperationException` fırlatır (400).
 
 ## AcademicTerm Yeni Alanlar (Faz 1)
 - `ShortEnglishName: string` — kısa İngilizce ad (zorunlu, default empty)
 - `OtherName: string?` — diğer adı (opsiyonel)
 - `YoksisStatus: YoksisStatus` — YÖKSİS raporlama durumu (Inactive/Active)
 
-## Sidebar "Akademik İşlemler" grubu
-- Akademik Dönem Tanımları (TermManagementPage)
-- Fakülte / Bölüm / Program (AcademicStructurePage)
-- Akademik Takvim (TermCalendarPage — öğrenci/hoca)
-- Takvim Oluşturucu (AcademicCalendarGeneratorPage)
-- Sınıf Atlatma Kuralları (PromotionRulesPage)
+## Sidebar "Akademik İşlemler" grubu (Faz 2 güncel)
+- Akademik Dönem Tanımları (`/donem-yonetimi` — TermManagementPage, form 11 alan: kimlik + TermStart/TermEnd)
+- Fakülte / Bölüm / Program (`/akademik-yapi` — AcademicStructurePage)
+- Akademik Takvim Yönetimi (`/akademik-takvim-yonetimi` — AcademicCalendarAdminPage, faz tarihleri + override) **YENİ Faz 2**
+- Akademik Takvim (Görünüm) (`/akademik-takvim` — AcademicCalendarPage, öğrenci/hoca view, tabs: Liste + Takvim)
+- Takvim Oluşturucu (`/akademik-takvim-olusturma` — AcademicCalendarGeneratorPage)
+- Sınıf Atlatma Kuralları (`/sinif-atlatma-kurallari` — PromotionRulesPage)
 
 Eski gruplar ("Dönem Yönetimi", "Akademik Yapı") silindi.
 
@@ -99,6 +121,10 @@ Eski gruplar ("Dönem Yönetimi", "Akademik Yapı") silindi.
 - PostgreSQL, Host: localhost, Port: 5432, Database: StudentInfoSystem
 - appsettings.json: placeholder değerler (CHANGE_ME) — GitHub'a gider
 - appsettings.Development.json: gerçek şifreler — .gitignore'da, GitHub'a gitmez
+
+## Git Rules
+- **NEVER add Co-Authored-By lines to commits.** No co-author trailers of any kind.
+- Do not include `Co-Authored-By: Claude`, `Co-Authored-By: claude`, or any similar trailer in commit messages.
 
 ## Commands
 ```bash

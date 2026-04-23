@@ -1,6 +1,6 @@
 # Admin / Kullanıcı Sayfa Envanteri
 
-**Üretim tarihi:** 2026-04-23 01:31
+**Üretim tarihi:** 2026-04-23 10:31
 **Üreten:** `SIS.Web/scripts/generate-codemap.mjs`
 
 > ⚠️ **OTOMATIK ÜRETILIR — elle düzenleme.** Script yeniden çalışınca üzerine yazılır.
@@ -8,7 +8,7 @@
 
 ## Özet
 
-- **Toplam sayfa:** 41
+- **Toplam sayfa:** 43
 - **Sidebar grubu:** 11
 
 ## İçindekiler
@@ -17,7 +17,7 @@
 - [Anketler](#anketler) (3 sayfa)
 - [Kaynak Yönetimi](#kaynak-yonetimi) (2 sayfa)
 - [Kullanıcı Yönetimi](#kullanici-yonetimi) (2 sayfa)
-- [Akademik İşlemler](#akademik-i̇slemler) (4 sayfa)
+- [Akademik İşlemler](#akademik-i̇slemler) (6 sayfa)
 - [Danışmanlık İşlemleri](#danismanlik-i̇slemleri) (1 sayfa)
 - [Ders ve Dönem İşlemleri](#ders-ve-donem-i̇slemleri) (7 sayfa)
 - [Duyuru Yönetimi](#duyuru-yonetimi) (1 sayfa)
@@ -267,9 +267,8 @@
 - `useTransferFromTerm()`
 - `useDepartmentInstructors()`
 
-**API endpoint'leri (4):**
+**API endpoint'leri (3):**
 - `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
 
@@ -370,9 +369,8 @@
 - `useBottlenecks()`
 - `useTakeSnapshot()`
 
-**API endpoint'leri (4):**
+**API endpoint'leri (3):**
 - `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
 
@@ -503,9 +501,8 @@
 - `useUpdateEvaluationQuestion()`
 - `useAdminTerms()`
 
-**API endpoint'leri (4):**
+**API endpoint'leri (3):**
 - `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
 
@@ -534,7 +531,7 @@
 - `useAdminDepartmentsByStructure()`
 - `useAdminTerms()`
 
-**API endpoint'leri (16):**
+**API endpoint'leri (15):**
 - `DELETE ${BASE}/departments/${id}`
 - `DELETE ${BASE}/faculties/${id}`
 - `DELETE ${BASE}/programs/${id}`
@@ -542,7 +539,6 @@
 - `GET ${BASE}/faculties`
 - `GET ${BASE}/programs`
 - `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/uncancel`
 - `POST ${BASE}/departments`
 - `POST ${BASE}/faculties`
@@ -608,7 +604,7 @@
 - `useBulkAssignClassrooms()`
 - `useSuggestClassroomAssignments()`
 
-**API endpoint'leri (16):**
+**API endpoint'leri (15):**
 - `DELETE ${BASE}/departments/${id}`
 - `DELETE ${BASE}/faculties/${id}`
 - `DELETE ${BASE}/programs/${id}`
@@ -616,7 +612,6 @@
 - `GET ${BASE}/faculties`
 - `GET ${BASE}/programs`
 - `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/uncancel`
 - `POST ${BASE}/departments`
 - `POST ${BASE}/faculties`
@@ -687,19 +682,43 @@
 | **Roller** | systemAdmin |
 | **Modal sayısı** | 3 (Dialog: 2, Sheet: 0, AlertDialog: 1) |
 
-**Veri kancaları (6):**
+**Veri kancaları (5):**
 - `useAdminTerms()`
 - `useCreateTerm()`
 - `useUpdateTerm()`
 - `useCancelTerm()`
 - `useUncancelTerm()`
-- `useUpdateTermPhaseOverride()`
 
-**API endpoint'leri (4):**
+**API endpoint'leri (3):**
 - `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/override`
 - `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
+
+---
+
+### Akademik Takvim (Görünüm)
+
+| | |
+|---|---|
+| **Route** | `/akademik-takvim` |
+| **Dosya** | `SIS.Web/src/pages/AcademicCalendarPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Sekmeler (2):**
+- `list`
+- `grid`
+
+---
+
+### Akademik Takvim Yönetimi
+
+| | |
+|---|---|
+| **Route** | `/akademik-takvim-yonetimi` |
+| **Dosya** | `SIS.Web/src/pages/AcademicCalendarAdminPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
 
 ---
 
