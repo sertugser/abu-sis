@@ -63,12 +63,37 @@ public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStru
         var query = db.Departments.Include(d => d.Faculty).AsQueryable();
         if (facultyId.HasValue) query = query.Where(d => d.FacultyId == facultyId.Value);
 
-        return await query
+        // Aggregate counts in single queries (avoid N+1)
+        var instructorCounts = await db.Instructors
+            .GroupBy(i => i.DepartmentId)
+            .Select(g => new { DepartmentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.DepartmentId, x => x.Count);
+
+        var studentCounts = await db.StudentPrograms
+            .GroupBy(sp => sp.Program.DepartmentId)
+            .Select(g => new { DepartmentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.DepartmentId, x => x.Count);
+
+        var rows = await query
             .OrderBy(d => d.Faculty.Name).ThenBy(d => d.Name)
-            .Select(d => new DepartmentDto(
-                d.Id, d.Name, d.Code, d.FacultyId, d.Faculty.Name,
-                d.Programs.Count))
+            .Select(d => new
+            {
+                d.Id,
+                d.Name,
+                d.Code,
+                d.FacultyId,
+                FacultyName = d.Faculty.Name,
+                ProgramCount = d.Programs.Count,
+                d.IsServiceUnit
+            })
             .ToListAsync();
+
+        return rows.Select(d => new DepartmentDto(
+            d.Id, d.Name, d.Code, d.FacultyId, d.FacultyName,
+            d.ProgramCount,
+            studentCounts.TryGetValue(d.Id, out var sc) ? sc : 0,
+            instructorCounts.TryGetValue(d.Id, out var ic) ? ic : 0,
+            d.IsServiceUnit)).ToList();
     }
 
     public async Task<DepartmentDto> CreateDepartmentAsync(CreateDepartmentDto dto)
@@ -83,7 +108,12 @@ public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStru
         await db.SaveChangesAsync();
 
         var facultyName = (await db.Faculties.FindAsync(dto.FacultyId))!.Name;
-        return new DepartmentDto(dept.Id, dept.Name, dept.Code, dept.FacultyId, facultyName, 0);
+        return new DepartmentDto(
+            dept.Id, dept.Name, dept.Code, dept.FacultyId, facultyName,
+            ProgramCount: 0,
+            StudentCount: 0,
+            InstructorCount: 0,
+            IsServiceUnit: dept.IsServiceUnit);
     }
 
     public async Task<DepartmentDto> UpdateDepartmentAsync(int id, UpdateDepartmentDto dto)
@@ -101,7 +131,11 @@ public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStru
         await db.SaveChangesAsync();
 
         var progCount = await db.AcademicPrograms.CountAsync(p => p.DepartmentId == id);
-        return new DepartmentDto(dept.Id, dept.Name, dept.Code, dept.FacultyId, dept.Faculty.Name, progCount);
+        var instructorCount = await db.Instructors.CountAsync(i => i.DepartmentId == id);
+        var studentCount = await db.StudentPrograms.CountAsync(sp => sp.Program.DepartmentId == id);
+        return new DepartmentDto(
+            dept.Id, dept.Name, dept.Code, dept.FacultyId, dept.Faculty.Name,
+            progCount, studentCount, instructorCount, dept.IsServiceUnit);
     }
 
     public async Task DeleteDepartmentAsync(int id)

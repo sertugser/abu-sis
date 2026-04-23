@@ -2,7 +2,16 @@ namespace SIS.Application.Admin.DTOs;
 
 public record FacultyDto(int Id, string Name, string Code, int DepartmentCount);
 
-public record DepartmentDto(int Id, string Name, string Code, int FacultyId, string FacultyName, int ProgramCount);
+public record DepartmentDto(
+    int Id,
+    string Name,
+    string Code,
+    int FacultyId,
+    string FacultyName,
+    int ProgramCount,
+    int StudentCount,
+    int InstructorCount,
+    bool IsServiceUnit);
 
 public record ProgramDto(
     int Id, string Name, string Code,
