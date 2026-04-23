@@ -152,7 +152,7 @@ public class CourseOpeningServiceTests
         result.Should().HaveCount(2);
         result.Select(section => section.SectionNumber).Should().Equal(2, 3);
         context.CourseAccessPolicies.Should().ContainSingle(policy => policy.CourseId == course.Id && policy.DepartmentId == DepartmentId);
-        context.CourseSections.Count(section => section.CourseId == course.Id && section.IsActive).Should().Be(3);
+        context.CourseSections.Count(section => section.CourseId == course.Id && section.Status == CourseSectionStatus.Active).Should().Be(3);
     }
 
     [Fact]
