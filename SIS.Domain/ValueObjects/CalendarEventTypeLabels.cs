@@ -20,6 +20,7 @@ public static class CalendarEventTypeLabels
         CalendarEventType.FinalGradeEntry => "Final Not Girişi",
         CalendarEventType.FinalGradePublication => "Final Not İlanı",
         CalendarEventType.MakeupExam => "Bütünleme Sınavı",
+        CalendarEventType.MakeupExamApplication => "Bütünleme Sınav Başvurusu",
         CalendarEventType.MakeupGradeEntry => "Bütünleme Not Girişi",
         CalendarEventType.MakeupGradePublication => "Bütünleme Not İlanı",
         CalendarEventType.NationalHoliday => "Milli Tatil",
