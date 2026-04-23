@@ -10,9 +10,9 @@ public partial class CalendarGeneratorService
     private static IReadOnlyDictionary<SemesterType, DateTime> BuildTermStarts(int startYear, GenerateCalendarRequestDto request) =>
         new Dictionary<SemesterType, DateTime>
         {
-            [SemesterType.Fall] = EnsureUtcDate(request.FallStartDate ?? MondayOnOrAfter(new DateTime(startYear, 9, 22))),
-            [SemesterType.Spring] = EnsureUtcDate(request.SpringStartDate ?? MondayOnOrAfter(new DateTime(startYear + 1, 2, 23))),
-            [SemesterType.Summer] = EnsureUtcDate(MondayOnOrAfter(new DateTime(startYear + 1, 7, 13)))
+            [SemesterType.Fall] = EnsureUtcDate(NearestMonday(request.FallStartDate ?? new DateTime(startYear, 9, 22))),
+            [SemesterType.Spring] = EnsureUtcDate(NearestMonday(request.SpringStartDate ?? new DateTime(startYear + 1, 2, 23))),
+            [SemesterType.Summer] = EnsureUtcDate(NearestMonday(new DateTime(startYear + 1, 7, 13)))
         };
 
     private static GeneratedCalendarEventDto PlaceTemplateItem(
@@ -36,12 +36,27 @@ public partial class CalendarGeneratorService
             end = pin.Value.End ?? start.AddDays(duration - 1);
         }
 
+        if (MustStartOnMonday(item.EventType) && start.DayOfWeek != DayOfWeek.Monday)
+        {
+            var alignedStart = MondayOnOrAfter(start);
+            var alignmentDelta = (alignedStart.Date - start.Date).Days;
+            start = alignedStart;
+            end = end.AddDays(alignmentDelta);
+        }
+
         var prohibited = FindProhibitionOverlap(start, end, constraints);
         if (prohibited != null)
         {
             var delta = (prohibited.Value.End.Date - start.Date).Days + 1;
             start = start.AddDays(delta);
             end = end.AddDays(delta);
+            if (MustStartOnMonday(item.EventType) && start.DayOfWeek != DayOfWeek.Monday)
+            {
+                var alignedStart = MondayOnOrAfter(start);
+                var alignmentDelta = (alignedStart.Date - start.Date).Days;
+                start = alignedStart;
+                end = end.AddDays(alignmentDelta);
+            }
             var prohibitionText = string.IsNullOrWhiteSpace(prohibited.Value.Description)
                 ? "yasak aralık"
                 : prohibited.Value.Description.Trim();
@@ -52,6 +67,7 @@ public partial class CalendarGeneratorService
         {
             var attempts = 0;
             var shiftReasons = new List<string>();
+            var shiftBackwardForWeekend = ShouldShiftBackwardForWeekend(item.EventType, start, holidays);
             while (attempts < 14)
             {
                 var conflicts = FindBlockingConflictDescriptions(start, end, item.EventType, holidays);
@@ -64,9 +80,10 @@ public partial class CalendarGeneratorService
                         shiftReasons.Add(conflict);
                 }
 
-                start = start.AddDays(1);
-                end = end.AddDays(1);
-                attempts++;
+                var shiftDays = ResolveConflictShiftDays(item.EventType, shiftBackwardForWeekend);
+                start = shiftBackwardForWeekend ? start.AddDays(-shiftDays) : start.AddDays(shiftDays);
+                end = shiftBackwardForWeekend ? end.AddDays(-shiftDays) : end.AddDays(shiftDays);
+                attempts += shiftDays;
             }
 
             if (attempts > 0)
@@ -74,7 +91,8 @@ public partial class CalendarGeneratorService
                 var reasonText = shiftReasons.Count > 0
                     ? string.Join(", ", shiftReasons)
                     : "takvim çakışması";
-                warnings.Add(new("HOLIDAY_SHIFT", "Warning", $"{item.Title} {reasonText} nedeniyle {attempts} gün kaydırıldı. Yeni tarih: {FormatDateRange(start, end)}.", EventId(academicYear, semester, item.Key)));
+                var directionText = shiftBackwardForWeekend ? "geriye" : "ileri";
+                warnings.Add(new("HOLIDAY_SHIFT", "Warning", $"{item.Title} {reasonText} nedeniyle {attempts} gün {directionText} kaydırıldı. Yeni tarih: {FormatDateRange(start, end)}.", EventId(academicYear, semester, item.Key)));
             }
 
             if (attempts >= 14)

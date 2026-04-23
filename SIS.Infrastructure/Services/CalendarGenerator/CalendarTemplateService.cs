@@ -142,13 +142,39 @@ public class CalendarTemplateService : ICalendarTemplateService
 
     private async Task EnsureRegulationAlignedDefaultsAsync(DateTime now, CancellationToken ct)
     {
+        var mainTemplate = await _context.CalendarTemplates.FirstOrDefaultAsync(t => t.ChainCode == "MAIN", ct);
+        if (mainTemplate != null)
+        {
+            var items = DeserializeItems(mainTemplate.ItemsJson);
+            var midterm = items.FirstOrDefault(i => i.Key == "midterm_exam");
+            var final = items.FirstOrDefault(i => i.Key == "final_exam");
+            var addDrop = items.FirstOrDefault(i => i.Key == "add_drop");
+
+            var requiresMainAlignment =
+                midterm == null
+                || midterm.DefaultDurationDays != 7
+                || midterm.OffsetDays != 49
+                || final == null
+                || final.DefaultDurationDays != 14
+                || final.OffsetDays != 105
+                || addDrop == null
+                || addDrop.DefaultDurationDays != 7;
+
+            if (requiresMainAlignment)
+            {
+                mainTemplate.ItemsJson = SerializeItems(DefaultMainItems());
+                mainTemplate.UpdatedAt = now;
+                await _context.SaveChangesAsync(ct);
+            }
+        }
+
         var summerTemplate = await _context.CalendarTemplates.FirstOrDefaultAsync(t => t.ChainCode == "SUMMER", ct);
         if (summerTemplate == null)
             return;
 
-        var items = DeserializeItems(summerTemplate.ItemsJson);
-        var classesEnd = items.FirstOrDefault(i => i.Key == "summer_classes_end");
-        var exam = items.FirstOrDefault(i => i.Key == "summer_exam");
+        var summerItems = DeserializeItems(summerTemplate.ItemsJson);
+        var classesEnd = summerItems.FirstOrDefault(i => i.Key == "summer_classes_end");
+        var exam = summerItems.FirstOrDefault(i => i.Key == "summer_exam");
 
         if (classesEnd != null && exam != null && exam.OffsetDays <= classesEnd.OffsetDays)
         {
@@ -222,6 +248,21 @@ public class CalendarTemplateService : ICalendarTemplateService
         };
 
         var holidays = await _context.HolidayDefinitions.ToListAsync(ct);
+        var removed = holidays
+            .Where(holiday =>
+                holiday.Type == HolidayType.ImportantDay
+                && (
+                    holiday.EnglishName.Equals("Ataturk Memorial Day", StringComparison.OrdinalIgnoreCase)
+                    || holiday.Name.Equals("Atatürk'ü Anma Günü", StringComparison.OrdinalIgnoreCase)
+                ))
+            .ToList();
+
+        if (removed.Count > 0)
+        {
+            _context.HolidayDefinitions.RemoveRange(removed);
+            holidays = holidays.Except(removed).ToList();
+        }
+
         var changed = false;
         foreach (var holiday in holidays)
         {
@@ -233,7 +274,7 @@ public class CalendarTemplateService : ICalendarTemplateService
             changed = true;
         }
 
-        if (changed)
+        if (removed.Count > 0 || changed)
             await _context.SaveChangesAsync(ct);
     }
 
@@ -328,18 +369,18 @@ public class CalendarTemplateService : ICalendarTemplateService
         return
         [
             Item("classes_start", CalendarEventType.ClassesStart, "Derslerin Başlaması", 1, 0, null, SemesterType.Fall, SemesterType.Spring),
-            Item("add_drop", CalendarEventType.AddDrop, "Ders Ekleme - Bırakma, Geç Kayıtlar ve Danışman Onayları", 5, 7, null, SemesterType.Fall, SemesterType.Spring),
+            Item("add_drop", CalendarEventType.AddDrop, "Ders Ekleme - Bırakma, Geç Kayıtlar ve Danışman Onayları", 7, 7, null, SemesterType.Fall, SemesterType.Spring),
             Item("withdrawal_deadline", CalendarEventType.CourseWithdrawal, "Dersten Çekilme Başvurularının Son Günü", 1, 40, null, SemesterType.Fall, SemesterType.Spring),
             Item("freeze_deadline", CalendarEventType.RegistrationFreezeDeadline, "Kayıt Dondurma Başvurularının Son Günü", 1, 40, null, SemesterType.Fall, SemesterType.Spring),
-            Item("midterm_exam", CalendarEventType.MidtermExam, "Ara Sınavlar", 6, 43, null, SemesterType.Fall, SemesterType.Spring),
+            Item("midterm_exam", CalendarEventType.MidtermExam, "Ara Sınavlar", 7, 49, null, SemesterType.Fall, SemesterType.Spring),
             Item("midterm_excuse_application", CalendarEventType.ExcuseExamApplication, "Mazeret Sınav Başvurularının Son Günü (Ara Sınav)", 1, 50, null, SemesterType.Fall, SemesterType.Spring),
             Item("midterm_excuse_exam", CalendarEventType.ExcuseExam, "Mazeret Sınavları (Ara Sınav)", 3, 52, null, SemesterType.Fall, SemesterType.Spring),
             Item("midterm_publication", CalendarEventType.MidtermGradePublication, "Ara Sınavların İlanının Son Günü", 1, 60, null, SemesterType.Fall, SemesterType.Spring),
             Item("classes_end", CalendarEventType.ClassesEnd, "Derslerin Sona Ermesi", 1, 102, null, SemesterType.Fall, SemesterType.Spring),
-            Item("final_exam", CalendarEventType.FinalExam, "Dönem Sonu Sınavları", 12, 105, null, SemesterType.Fall, SemesterType.Spring),
+            Item("final_exam", CalendarEventType.FinalExam, "Dönem Sonu Sınavları", 14, 105, null, SemesterType.Fall, SemesterType.Spring),
             Item("prep_final_exam", CalendarEventType.PrepSchoolExam, "Hazırlık (İngilizce) Muafiyet Sınavları", 4, 112, null, SemesterType.Fall, SemesterType.Spring),
             Item("final_publication", CalendarEventType.FinalGradePublication, "Dönem Sonu Sınav Sonuçlarının İlanı", 1, 121, null, SemesterType.Fall, SemesterType.Spring),
-            Item("makeup_application", CalendarEventType.MakeupExam, "Bütünleme Sınavlarının Başvurularının Son Günü (Dönem Sonu)", 1, 123, null, SemesterType.Fall, SemesterType.Spring),
+            Item("makeup_application", CalendarEventType.MakeupExamApplication, "Bütünleme Sınavlarının Başvurularının Son Günü (Dönem Sonu)", 1, 123, null, SemesterType.Fall, SemesterType.Spring),
             Item("makeup_exam", CalendarEventType.MakeupExam, "Bütünleme Sınavları", 6, 126, null, SemesterType.Fall, SemesterType.Spring),
             Item("makeup_publication", CalendarEventType.MakeupGradePublication, "Bütünleme Sınav Sonuçlarının İlanı İçin Son Gün", 1, 136, null, SemesterType.Fall, SemesterType.Spring),
             Item("fall_semester_break", CalendarEventType.SemesterBreak, "Yarıyıl Tatili", 22, 130, null, SemesterType.Fall)
@@ -364,7 +405,7 @@ public class CalendarTemplateService : ICalendarTemplateService
             Item("fall_exemption_result", CalendarEventType.CourseExemptionResult, "Ders Muafiyet Sonuçlarının İlan Edilmesi", 1, -10, null, SemesterType.Fall),
             Item("fall_graduate_result", CalendarEventType.GraduateResult, "Lisansüstü Program Başvuru Sonuçlarının İlanı", 1, -10, null, SemesterType.Fall),
             Item("fall_orientation", CalendarEventType.Orientation, "Yeni Kayıt Olan Öğrenciler için Oryantasyon Eğitimi", 1, -7, null, SemesterType.Fall),
-            Item("fall_course_registration", CalendarEventType.CourseRegistration, "Ders Kayıt ve Danışman Onayları", 5, -7, null, SemesterType.Fall),
+            Item("fall_course_registration", CalendarEventType.CourseRegistration, "Ders Kayıt ve Danışman Onayları", 7, -7, null, SemesterType.Fall),
             Item("fall_graduate_registration", CalendarEventType.GraduateRegistration, "Lisansüstü Programları Ücret Ödeme, Ders Kayıtları ve Danışman Onayları", 5, -7, null, SemesterType.Fall),
             Item("fall_scholarship_app", CalendarEventType.ScholarshipApplication, "Burs Başvurularının Alınması", 12, 7, null, SemesterType.Fall),
             Item("fall_scholarship_result", CalendarEventType.ScholarshipResult, "Burs Başvuru Sonuçlarının Açıklanması", 1, 46, null, SemesterType.Fall),
@@ -377,7 +418,7 @@ public class CalendarTemplateService : ICalendarTemplateService
             Item("spring_transfer_result", CalendarEventType.TransferResult, "Yatay Geçiş, Çift Anadal ve Yandal Sonuçlarının İlan Edilmesi", 1, -17, null, SemesterType.Spring),
             Item("spring_transfer_registration", CalendarEventType.TransferRegistration, "Yatay Geçiş Kabul Edilen Öğrencilerin Kayıtları (Asil-Yedek)", 5, -14, null, SemesterType.Spring),
             Item("spring_graduate_result", CalendarEventType.GraduateResult, "Lisansüstü Program Başvuru Sonuçlarının İlanı", 1, -10, null, SemesterType.Spring),
-            Item("spring_course_registration", CalendarEventType.CourseRegistration, "Ders Kayıt ve Danışman Onayları", 5, -7, null, SemesterType.Spring),
+            Item("spring_course_registration", CalendarEventType.CourseRegistration, "Ders Kayıt ve Danışman Onayları", 7, -7, null, SemesterType.Spring),
             Item("spring_graduate_registration", CalendarEventType.GraduateRegistration, "Lisansüstü Programları Ücret Ödeme, Ders Kayıtları ve Danışman Onayları", 5, -7, null, SemesterType.Spring)
         ];
     }
@@ -436,7 +477,6 @@ public class CalendarTemplateService : ICalendarTemplateService
             Fixed("Demokrasi ve Milli Birlik Günü", "Democracy and National Unity Day", 7, 15, 1m, now),
             Fixed("Zafer Bayramı", "Victory Day", 8, 30, 1m, now),
             Fixed("Cumhuriyet Bayramı", "Republic Day", 10, 28, 1.5m, now, isHalfDayStart: true, endDay: 29),
-            Important("Atatürk'ü Anma Günü", "Ataturk Memorial Day", 11, 10, now),
             Hijri(
                 "Ramazan Bayramı",
                 "Eid al-Fitr",

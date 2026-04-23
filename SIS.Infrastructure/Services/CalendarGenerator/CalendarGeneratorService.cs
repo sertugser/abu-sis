@@ -1,4 +1,3 @@
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -21,10 +20,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() },
-        // Keep Turkish characters (ş, ğ, ü, ç, ı, ö) as-is instead of \uXXXX;
-        // PostgreSQL's json type rejects some \u escape sequences (error 22P05).
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public CalendarGeneratorService(
@@ -66,6 +62,11 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
             }
         }
 
+        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = ApplyRegularSemesterSequenceRules(events, holidays);
+        events = ApplyDependentExamScheduling(events, holidays);
+        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = AlignClassesEndToWeekday(events);
         events.AddRange(BuildHolidayEvents(request.AcademicYear, holidays, termStarts, request.IncludeSummer));
         events = events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList();
 
@@ -139,6 +140,8 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         var events = Deserialize<List<GeneratedCalendarEventDto>>(draft.EventsJson);
         var target = events.FirstOrDefault(e => e.DraftEventId == draftEventId)
             ?? throw new KeyNotFoundException($"Draft event not found: {draftEventId}");
+        if (target.IsHoliday)
+            throw new InvalidOperationException("Resmi tatil ve bloklayici ozel gunler taslakta tarih duzenleme ile degistirilemez.");
         var oldStart = target.StartDate;
         var oldEnd = target.EndDate ?? target.StartDate;
         var newStart = EnsureUtcDate(dto.StartDate);
@@ -159,6 +162,11 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, draftEventId, oldStart, oldEnd, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
+        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = ApplyRegularSemesterSequenceRules(events, holidays);
+        events = ApplyDependentExamScheduling(events, holidays);
+        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
         {
             new(
@@ -187,6 +195,8 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         var events = Deserialize<List<GeneratedCalendarEventDto>>(draft.EventsJson);
         var target = events.FirstOrDefault(e => e.DraftEventId == request.DraftEventId)
             ?? throw new KeyNotFoundException($"Draft event not found: {request.DraftEventId}");
+        if (target.IsHoliday)
+            throw new InvalidOperationException("Resmi tatil ve bloklayici ozel gunler icin what-if tarih degisikligi yapilamaz.");
         var newStart = EnsureUtcDate(request.StartDate);
         var newEnd = EnsureUtcDate(request.EndDate ?? request.StartDate);
 
@@ -199,13 +209,18 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, request.DraftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
+        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = ApplyRegularSemesterSequenceRules(events, holidays);
+        events = ApplyDependentExamScheduling(events, holidays);
+        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
         {
             new(
                 "WHAT_IF",
                 "Info",
                 propagateChanges
-                    ? "Bu sonuc taslak kaydedilmeden, domino etkisi dahil hesaplandi."
+                    ? "Bu sonuc taslak kaydedilmeden, zincirleme kaydirma dahil hesaplandi."
                     : "Bu sonuç taslak kaydedilmeden, sadece seçili etkinlik değiştirilerek hesaplandı.",
                 request.DraftEventId)
         };
