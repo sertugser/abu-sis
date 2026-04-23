@@ -57,18 +57,34 @@ public class CourseRegistrationService : ICourseRegistrationService
         var term = await _context.AcademicTerms.AsNoTracking()
             .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => t.Id == section.TermId);
-        if (term != null && !term.IsRegistrationOpen(_clock.UtcNow) && !term.IsAddDropOpen(_clock.UtcNow))
+        if (term != null)
         {
-            response.Success = false;
-            response.ValidationResult = new ValidationResultDto
+            if (term.AcademicCalendar == null)
             {
-                IsValid = false,
-                Errors = new List<ValidationError>
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
                 {
-                    new() { Rule = "RegistrationClosed", Message = $"Ders kayıt dönemi açık değil." }
-                }
-            };
-            return response;
+                    IsValid = false,
+                    Errors = new List<ValidationError>
+                    {
+                        new() { Rule = "CalendarMissing", Message = "Bu dönemin akademik takvimi henüz tanımlanmamış. Kayıt alamazsınız — lütfen öğrenci işleri ile iletişime geçin." }
+                    }
+                };
+                return response;
+            }
+            if (!term.IsRegistrationOpen(_clock.UtcNow) && !term.IsAddDropOpen(_clock.UtcNow))
+            {
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
+                {
+                    IsValid = false,
+                    Errors = new List<ValidationError>
+                    {
+                        new() { Rule = "RegistrationClosed", Message = "Ders kayıt dönemi açık değil." }
+                    }
+                };
+                return response;
+            }
         }
 
         // Kapasite kontrolü: kontenjan dolu mu?

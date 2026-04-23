@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Save } from 'lucide-react';
+import { Info, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -147,6 +147,18 @@ export default function AcademicCalendarAdminPage() {
           <Badge className="bg-red-100 text-red-700 border-red-300">Bu dönem iptal edilmiş</Badge>
         )}
       </div>
+
+      {selectedTerm && !selectedTerm.hasCalendar && !selectedTerm.isCancelled && (
+        <div className="rounded-lg border-2 border-blue-300 bg-blue-50 p-4 flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-blue-900">Bu dönemin akademik takvimi henüz oluşturulmamış</h3>
+            <p className="text-sm text-blue-800 mt-1">
+              Aşağıdaki formu doldurup kaydederek bu dönem için faz tarihlerini tanımlayın.
+            </p>
+          </div>
+        </div>
+      )}
 
       {form && termId && (
         <>

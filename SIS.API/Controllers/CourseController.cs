@@ -442,7 +442,8 @@ public class CourseController : ControllerBase
             AddDropEnd = term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
             IsRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow),
             IsAddDropOpen = term.IsAddDropOpen(_clock.UtcNow),
-            Status = term.GetStatus(_clock.UtcNow).ToString()
+            Status = term.GetStatus(_clock.UtcNow).ToString(),
+            HasAcademicCalendar = term.AcademicCalendar != null
         };
 
         return Ok(dto);

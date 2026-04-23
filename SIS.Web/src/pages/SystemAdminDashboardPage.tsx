@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
@@ -28,7 +29,7 @@ import { useAdminUsers } from '../hooks/useAdminUsers';
 import { useAdminStudents } from '../hooks/useAdminStudents';
 import { useAdminInstructors } from '../hooks/useAdminInstructors';
 import { useAdminTerms } from '../hooks/useAdminTerms';
-import { useActiveStudentCalendar } from '../hooks/useAcademicCalendar';
+import { useActiveStudentCalendar, useAdminCalendarTerms } from '../hooks/useAcademicCalendar';
 import { ROUTES } from '../lib/constants';
 import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
@@ -463,8 +464,10 @@ export default function SystemAdminDashboardPage() {
   const { data: instructors, isLoading: instructorsLoading } = useAdminInstructors({});
   const { data: terms = [], isLoading: termsLoading } = useAdminTerms();
   const { data: activeCalendar, isLoading: calendarLoading } = useActiveStudentCalendar();
+  const { data: calendarTerms } = useAdminCalendarTerms();
 
   const activeTerm = terms.find(t => t.isActive);
+  const activeTermNoCalendar = calendarTerms?.find(t => t.isActive && !t.isCancelled && !t.hasCalendar);
   const termLoading = termsLoading;
 
   const totalUsers = usersData?.totalCount;
@@ -488,6 +491,22 @@ export default function SystemAdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Missing Calendar Warning ─────────────────────── */}
+      {activeTermNoCalendar && (
+        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-amber-900">Aktif dönemin akademik takvimi tanımlı değil</h3>
+            <p className="text-sm text-amber-800 mt-1">
+              <strong>{activeTermNoCalendar.termName}</strong> dönemi aktif ama kayıt/ekle-bırak/not girişi tarihleri tanımlanmamış. Öğrenciler kayıt yapamaz, notlar girilemez.
+            </p>
+            <Link to={ROUTES.ACADEMIC_CALENDAR_ADMIN} className="text-sm text-amber-900 underline mt-2 inline-block">
+              Akademik Takvim Yönetimi'ne git →
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ── Status Cards ────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
