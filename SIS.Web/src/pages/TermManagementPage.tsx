@@ -11,10 +11,21 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   useAdminTerms,
   useCreateTerm,
   useUpdateTerm,
-  useTransitionTermStatus,
+  useCancelTerm,
+  useUncancelTerm,
   useUpdateTermPhaseOverride,
   type AdminTermDto,
   type CreateTermDto,
@@ -23,41 +34,33 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const SEMESTER_OPTIONS = [
+const TERM_TYPE_OPTIONS = [
   { value: 'Fall', label: 'Güz' },
   { value: 'Spring', label: 'Bahar' },
   { value: 'Summer', label: 'Yaz' },
-];
-
-const TERM_TYPE_OPTIONS = [
-  { value: 'Regular', label: 'Normal' },
-  { value: 'Summer', label: 'Yaz' },
-  { value: 'Intensive', label: 'Tekders' },
+  { value: 'FallResit', label: 'Güz Tekders' },
+  { value: 'SpringResit', label: 'Bahar Tekders' },
+  { value: 'SummerResit', label: 'Yaz Tekders' },
+  { value: 'SpringOther', label: 'Bahar Diğer' },
+  { value: 'SummerOther', label: 'Yaz Diğer' },
   { value: 'Exemption', label: 'Muafiyet' },
-];
+] as const;
 
-const TRANSITION_LABELS: Record<string, string> = {
-  Preparing: 'Hazırlığa Geç',
-  Ready: 'Yayına Al',
-  Closed: 'Dönemi Kapat',
-  Archived: 'Arşivle',
-  Draft: 'Taslağa Dön',
-};
+const YOKSIS_STATUS_OPTIONS = [
+  { value: 'Inactive', label: 'Pasif' },
+  { value: 'Active', label: 'Aktif' },
+] as const;
 
 const TERM_STATUS_LABELS: Record<string, string> = {
-  Draft: 'Taslak',
-  Preparing: 'Hazırlık',
-  Ready: 'Yayında',
-  Closed: 'Kapalı',
-  Archived: 'Arşiv',
+  Inactive:  'Pasif',
+  Active:    'Aktif',
+  Cancelled: 'İptal',
 };
 
 const TERM_STATUS_COLORS: Record<string, string> = {
-  Draft: 'bg-gray-100 text-gray-700 border-gray-300',
-  Preparing: 'bg-blue-100 text-blue-700 border-blue-300',
-  Ready: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-  Closed: 'bg-red-100 text-red-700 border-red-300',
-  Archived: 'bg-slate-100 text-slate-700 border-slate-300',
+  Inactive:  'bg-slate-100 text-slate-700 border-slate-300',
+  Active:    'bg-emerald-100 text-emerald-700 border-emerald-300',
+  Cancelled: 'bg-red-100 text-red-700 border-red-300',
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -86,9 +89,11 @@ interface TermFormState {
   name: string;
   shortName: string;
   englishName: string;
+  shortEnglishName: string;
+  otherName: string;
   year: number;
-  semester: string;
   termType: string;
+  yoksisStatus: 'Inactive' | 'Active';
   registrationStart: string;
   registrationEnd: string;
   addDropStart: string;
@@ -105,9 +110,11 @@ function emptyForm(): TermFormState {
     name: '',
     shortName: '',
     englishName: '',
+    shortEnglishName: '',
+    otherName: '',
     year: CURRENT_YEAR,
-    semester: 'Fall',
-    termType: 'Regular',
+    termType: 'Fall',
+    yoksisStatus: 'Inactive',
     registrationStart: '',
     registrationEnd: '',
     addDropStart: '',
@@ -125,9 +132,11 @@ function termFromDto(term: AdminTermDto): TermFormState {
     name: term.name,
     shortName: term.shortName,
     englishName: term.englishName,
+    shortEnglishName: term.shortEnglishName,
+    otherName: term.otherName ?? '',
     year: term.year,
-    semester: term.semester,
     termType: term.termType,
+    yoksisStatus: term.yoksisStatus,
     registrationStart: toDateInput(term.registrationStart),
     registrationEnd: toDateInput(term.registrationEnd),
     addDropStart: toDateInput(term.addDropStart),
@@ -211,40 +220,24 @@ export default function TermManagementPage() {
   const [form, setForm] = useState<TermFormState>(emptyForm());
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [transitionError, setTransitionError] = useState('');
-  const [transitioningTermId, setTransitioningTermId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
+  const [confirmCancelTarget, setConfirmCancelTarget] = useState<AdminTermDto | null>(null);
 
   const { data: terms = [], isLoading } = useAdminTerms();
   const createTerm = useCreateTerm();
   const updateTerm = useUpdateTerm();
-  const transitionTerm = useTransitionTermStatus();
+  const cancelTerm = useCancelTerm();
+  const uncancelTerm = useUncancelTerm();
   const updateOverride = useUpdateTermPhaseOverride();
 
-  async function handleTransition(termId: number, targetStatus: string) {
-    setTransitionError('');
-    setTransitioningTermId(termId);
-    try {
-      await transitionTerm.mutateAsync({ termId, targetStatus });
-      showSuccess(`Donem durumu "${TERM_STATUS_LABELS[targetStatus] ?? targetStatus}" olarak guncellendi.`);
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
-      const msg = axiosErr?.response?.data?.error
-        ?? axiosErr?.response?.data?.message
-        ?? axiosErr?.response?.data?.title
-        ?? (err instanceof Error ? err.message : 'Gecis basarisiz.');
-      setTransitionError(msg);
-    } finally {
-      setTransitioningTermId(null);
-    }
-  }
-
-  const sortedTerms = [...terms].sort((a, b) => b.year - a.year || b.semester.localeCompare(a.semester));
+  const sortedTerms = [...terms].sort((a, b) => b.year - a.year || a.termType.localeCompare(b.termType));
 
   function openCreate() { setForm(emptyForm()); setFormError(''); setCreateModalOpen(true); }
   function openEdit(term: AdminTermDto) { setForm(termFromDto(term)); setFormError(''); setEditingTerm(term); }
 
   function validateForm(): string | null {
     if (!form.name.trim()) return 'Dönem adı zorunludur.';
+    if (!form.shortEnglishName.trim()) return 'Kısa İngilizce ad zorunludur.';
     if (!form.registrationStart || !form.registrationEnd) return 'Kayıt tarihleri zorunludur.';
     if (!form.addDropStart || !form.addDropEnd) return 'Ders ekleme/bırakma tarihleri zorunludur.';
     if (!form.termStart || !form.termEnd) return 'Dönem başlangıç/bitiş tarihleri zorunludur.';
@@ -260,9 +253,11 @@ export default function TermManagementPage() {
       name: form.name.trim(),
       shortName: form.shortName.trim(),
       englishName: form.englishName.trim(),
+      shortEnglishName: form.shortEnglishName.trim(),
+      otherName: form.otherName.trim() || null,
       year: form.year,
-      semester: form.semester,
-      termType: form.termType,
+      termType: form.termType as CreateTermDto['termType'],
+      yoksisStatus: form.yoksisStatus,
       registrationStart: toIsoString(form.registrationStart),
       registrationEnd: toIsoString(form.registrationEnd),
       addDropStart: toIsoString(form.addDropStart),
@@ -290,7 +285,10 @@ export default function TermManagementPage() {
       name: form.name.trim(),
       shortName: form.shortName.trim(),
       englishName: form.englishName.trim(),
-      termType: form.termType,
+      shortEnglishName: form.shortEnglishName.trim(),
+      otherName: form.otherName.trim() || null,
+      termType: form.termType as UpdateTermDto['termType'],
+      yoksisStatus: form.yoksisStatus,
       registrationStart: toIsoString(form.registrationStart),
       registrationEnd: toIsoString(form.registrationEnd),
       addDropStart: toIsoString(form.addDropStart),
@@ -310,6 +308,36 @@ export default function TermManagementPage() {
     }
   }
 
+  async function handleConfirmCancel() {
+    if (!confirmCancelTarget) return;
+    const termId = confirmCancelTarget.id;
+    setConfirmCancelTarget(null);
+    try {
+      await cancelTerm.mutateAsync(termId);
+      showSuccess('Dönem iptal edildi.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
+      const msg = axiosErr?.response?.data?.error
+        ?? axiosErr?.response?.data?.message
+        ?? axiosErr?.response?.data?.title
+        ?? (err instanceof Error ? err.message : 'İptal işlemi başarısız.');
+      setActionError(msg);
+    }
+  }
+
+  async function handleUncancel(termId: number) {
+    try {
+      await uncancelTerm.mutateAsync(termId);
+      showSuccess('Dönem iptali geri alındı.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
+      const msg = axiosErr?.response?.data?.error
+        ?? axiosErr?.response?.data?.message
+        ?? axiosErr?.response?.data?.title
+        ?? (err instanceof Error ? err.message : 'İptal geri alma başarısız.');
+      setActionError(msg);
+    }
+  }
 
   function showSuccess(msg: string) {
     setSuccessMessage(msg);
@@ -322,9 +350,12 @@ export default function TermManagementPage() {
       <div className="bg-background border border-border rounded-xl overflow-hidden">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40">
-          <p className="text-sm text-muted-foreground">
-            {isLoading ? '' : `${sortedTerms.length} dönem`}
-          </p>
+          <div>
+            <h1 className="text-base font-semibold">Akademik Dönem Tanımları</h1>
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? '' : `${sortedTerms.length} dönem`}
+            </p>
+          </div>
           <div className="flex items-center gap-3">
             {successMessage && (
               <span className="text-sm font-medium text-success">{successMessage}</span>
@@ -336,11 +367,11 @@ export default function TermManagementPage() {
           </div>
         </div>
 
-        {transitionError && (
+        {actionError && (
           <div className="mx-4 mt-3 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive flex items-start gap-2">
             <span className="shrink-0 font-semibold">Hata:</span>
-            <span>{transitionError}</span>
-            <button onClick={() => setTransitionError('')} className="ml-auto shrink-0 text-destructive hover:text-destructive/80 font-bold">&times;</button>
+            <span>{actionError}</span>
+            <button onClick={() => setActionError('')} className="ml-auto shrink-0 text-destructive hover:text-destructive/80 font-bold">&times;</button>
           </div>
         )}
 
@@ -349,11 +380,11 @@ export default function TermManagementPage() {
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Durum</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">YÖKSİS</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ders Kaydı</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ekle / Bırak</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem Tarihi</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Çekilme Son</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Geçiş</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -402,6 +433,13 @@ export default function TermManagementPage() {
                       </span>
                     </td>
 
+                    {/* YÖKSİS */}
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${term.yoksisStatus === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                        {term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'}
+                      </span>
+                    </td>
+
                     {/* Kayıt */}
                     <td className="px-4 py-3">
                       <DateCell start={term.registrationStart} end={term.registrationEnd} active={term.isRegistrationOpen} />
@@ -424,38 +462,35 @@ export default function TermManagementPage() {
                       </p>
                     </td>
 
-                    {/* Geçiş */}
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {(term.allowedTransitions ?? []).length === 0 ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          term.allowedTransitions.map(target => (
-                            <Button
-                              key={target}
-                              variant="outline"
-                              size="sm"
-                              className="text-xs h-7 px-2"
-                              disabled={transitioningTermId === term.id}
-                              onClick={() => handleTransition(term.id, target)}
-                            >
-                              {transitioningTermId === term.id ? '...' : (TRANSITION_LABELS[target] ?? target)}
-                            </Button>
-                          ))
-                        )}
-                      </div>
-                    </td>
-
                     {/* İşlemler */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
                         <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
+                        {term.status === 'Cancelled' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={uncancelTerm.isPending}
+                            onClick={() => handleUncancel(term.id)}
+                          >
+                            İptali Geri Al
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={cancelTerm.isPending}
+                            onClick={() => setConfirmCancelTarget(term)}
+                          >
+                            İptal Et
+                          </Button>
+                        )}
                       </div>
                     </td>
                 </tr>
-                {term.status === 'Ready' && (
+                {term.status === 'Active' && (
                   <tr key={`${term.id}-overrides`} className="bg-muted/5">
                     <td colSpan={8} className="px-4 py-2 border-b border-border">
                       <div className="flex flex-wrap gap-4 items-center">
@@ -467,7 +502,7 @@ export default function TermManagementPage() {
                           phase="Registration"
                           label="Kayıt"
                           isOpen={term.isRegistrationOpen}
-                          disabled={updateOverride.isPending}
+                          disabled={updateOverride.isPending || term.isCancelled}
                           onChange={(v) =>
                             updateOverride.mutate({ termId: term.id, phase: 'Registration', value: v })
                           }
@@ -477,7 +512,7 @@ export default function TermManagementPage() {
                           phase="AddDrop"
                           label="Ekle/Bırak"
                           isOpen={term.isAddDropOpen}
-                          disabled={updateOverride.isPending}
+                          disabled={updateOverride.isPending || term.isCancelled}
                           onChange={(v) =>
                             updateOverride.mutate({ termId: term.id, phase: 'AddDrop', value: v })
                           }
@@ -487,7 +522,7 @@ export default function TermManagementPage() {
                           phase="Withdrawal"
                           label="Çekilme"
                           isOpen={term.isWithdrawalOpen}
-                          disabled={updateOverride.isPending}
+                          disabled={updateOverride.isPending || term.isCancelled}
                           onChange={(v) =>
                             updateOverride.mutate({ termId: term.id, phase: 'Withdrawal', value: v })
                           }
@@ -497,7 +532,7 @@ export default function TermManagementPage() {
                           phase="GradeEntry"
                           label="Not Girişi"
                           isOpen={term.isGradeEntryOpen}
-                          disabled={updateOverride.isPending}
+                          disabled={updateOverride.isPending || term.isCancelled}
                           onChange={(v) =>
                             updateOverride.mutate({ termId: term.id, phase: 'GradeEntry', value: v })
                           }
@@ -512,11 +547,33 @@ export default function TermManagementPage() {
         </table>
       </div>
 
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={!!confirmCancelTarget} onOpenChange={(open) => !open && setConfirmCancelTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dönemi İptal Et</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{confirmCancelTarget?.name}</strong> dönemini iptal etmek istediğinize emin misiniz?
+              Bu işlem geri alınabilir, ancak aktif kayıtları etkileyebilir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancel}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              İptal Et
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Create Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Yeni Dönem Oluştur</DialogTitle></DialogHeader>
-          <TermForm form={form} setForm={setForm} showYearSemester formError={formError} />
+          <TermForm form={form} setForm={setForm} showYearTermType formError={formError} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateModalOpen(false)}>İptal</Button>
             <Button onClick={handleCreate} disabled={createTerm.isPending}>
@@ -530,7 +587,7 @@ export default function TermManagementPage() {
       <Dialog open={!!editingTerm} onOpenChange={open => !open && setEditingTerm(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Düzenle — {editingTerm?.name}</DialogTitle></DialogHeader>
-          <TermForm form={form} setForm={setForm} showYearSemester={false} formError={formError} />
+          <TermForm form={form} setForm={setForm} showYearTermType={false} formError={formError} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingTerm(null)}>İptal</Button>
             <Button onClick={handleUpdate} disabled={updateTerm.isPending}>
@@ -546,11 +603,11 @@ export default function TermManagementPage() {
 // ── Term Form ─────────────────────────────────────────────────────────────────
 
 function TermForm({
-  form, setForm, showYearSemester, formError,
+  form, setForm, showYearTermType, formError,
 }: {
   form: TermFormState;
   setForm: React.Dispatch<React.SetStateAction<TermFormState>>;
-  showYearSemester: boolean;
+  showYearTermType: boolean;
   formError: string;
 }) {
   return (
@@ -571,24 +628,25 @@ function TermForm({
         </div>
       </div>
 
-      {showYearSemester ? (
-        <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Kısa İngilizce Ad *</label>
+          <Input value={form.shortEnglishName} onChange={e => setForm(f => ({ ...f, shortEnglishName: e.target.value }))} placeholder="örn. Fall 24-25" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Diğer Ad</label>
+          <Input value={form.otherName} onChange={e => setForm(f => ({ ...f, otherName: e.target.value }))} placeholder="Opsiyonel" />
+        </div>
+      </div>
+
+      {showYearTermType ? (
+        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-sm font-medium">Yıl *</label>
             <Input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: Number(e.target.value) }))} min={2000} max={2100} />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Dönem *</label>
-            <select
-              value={form.semester}
-              onChange={e => setForm(f => ({ ...f, semester: e.target.value }))}
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
-            >
-              {SEMESTER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Tür</label>
+            <label className="text-sm font-medium">Tür *</label>
             <select
               value={form.termType}
               onChange={e => setForm(f => ({ ...f, termType: e.target.value }))}
@@ -610,6 +668,17 @@ function TermForm({
           </select>
         </div>
       )}
+
+      <div className="space-y-1">
+        <label className="text-sm font-medium">YÖKSİS Durumu</label>
+        <select
+          value={form.yoksisStatus}
+          onChange={e => setForm(f => ({ ...f, yoksisStatus: e.target.value as 'Inactive' | 'Active' }))}
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
+        >
+          {YOKSIS_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
 
       <div className="border-t border-border pt-3 space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kayıt Tarihleri</p>
