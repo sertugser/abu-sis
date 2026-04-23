@@ -249,7 +249,11 @@ public static partial class SeedData
             var depts = context.Departments.ToDictionary(d => d.Code, d => d.Id);
             foreach (var c in courseData)
             {
-                int? deptId = c.Dept != null ? depts[c.Dept] : null;
+                var deptCode = c.Dept ?? ResolveServiceUnitCode(c.Code);
+                if (!depts.TryGetValue(deptCode, out var deptId))
+                    throw new InvalidOperationException(
+                        $"Seed: course '{c.Code}' expects department '{deptCode}' but it is not seeded. " +
+                        "Add the service unit to SeedData.Academics or adjust ResolveServiceUnitCode.");
                 context.Courses.Add(new Course
                 {
                     Code = c.Code, Name = c.Name, DepartmentId = deptId,
@@ -474,5 +478,24 @@ foreach (var (p, c, comp, sem) in ccData)
             }
             await context.SaveChangesAsync();
         }
+    }
+
+    // Ortak dersler (Dept = null) için course prefix'ine göre ilgili service unit
+    // koordinatörlüğünü çözümler. SeedData.Academics.cs'te TBK/AIIT/TRD/YDL
+    // zaten tanımlı. Yeni bir ortak ders prefix'i eklendiğinde burası da güncellenmeli.
+    private static string ResolveServiceUnitCode(string courseCode)
+    {
+        var prefix = new string(courseCode.TakeWhile(char.IsLetter).ToArray());
+        return prefix switch
+        {
+            "MAT" or "MATH" or "FIZ" or "PHY" or "BIY" or "BIO"
+                or "ISG" or "OHS" or "EYG" or "CCE" => "TBK",
+            "ING" or "ENG" or "AEE" => "YDL",
+            "HIS" or "AIIT" => "AIIT",
+            "TUR" or "TRD" => "TRD",
+            _ => throw new InvalidOperationException(
+                $"Seed: no service unit mapping for course prefix '{prefix}' (course '{courseCode}'). " +
+                "Set an explicit Dept in courseData or add a mapping in ResolveServiceUnitCode."),
+        };
     }
 }
