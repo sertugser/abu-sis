@@ -260,6 +260,14 @@ export const deanMenuGroups: MenuGroup[] = [
     ],
   },
   {
+    id: 'akademik-islemler',
+    label: 'Akademik İşlemler',
+    icon: Calendar,
+    children: [
+      { to: ROUTES.PROGRAM_QUOTA, label: 'Program Kontenjan Bilgileri' },
+    ],
+  },
+  {
     id: 'ders-islemleri',
     label: 'Ders İşlemleri',
     icon: BookOpen,
@@ -345,6 +353,8 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.ACADEMIC_CALENDAR_ADMIN, label: 'Akademik Takvim Yönetimi' },
       { to: ROUTES.AKADEMIK_TAKVIM, label: 'Akademik Takvim (Görünüm)' },
       { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
+      { to: ROUTES.OSYM_REGISTRATION_CALENDAR, label: 'ÖSYM Kayıt Takvimi' },
+      { to: ROUTES.PROGRAM_QUOTA, label: 'Program Kontenjan Bilgileri' },
       { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
     ],
   },
