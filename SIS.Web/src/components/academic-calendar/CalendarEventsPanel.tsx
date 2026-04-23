@@ -12,7 +12,11 @@ function fmtDate(iso: string | null) {
 
 export function CalendarEventsPanel({ events }: Props) {
   if (events.length === 0) {
-    return <p className="text-sm text-slate-500 italic">Bu dönem için takvim etkinliği tanımlı değil.</p>;
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        Bu dönem için takvim etkinliği tanımlı değil.
+      </p>
+    );
   }
   return (
     <Table>
@@ -32,7 +36,7 @@ export function CalendarEventsPanel({ events }: Props) {
             <TableCell className="font-medium">{e.title}</TableCell>
             <TableCell>{fmtDate(e.startDate)}</TableCell>
             <TableCell>{fmtDate(e.endDate)}</TableCell>
-            <TableCell className="text-slate-600 text-sm">{e.note ?? '—'}</TableCell>
+            <TableCell className="text-muted-foreground text-sm">{e.note ?? '—'}</TableCell>
           </TableRow>
         ))}
       </TableBody>
