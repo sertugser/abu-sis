@@ -1,6 +1,6 @@
 # Admin / Kullanıcı Sayfa Envanteri
 
-**Üretim tarihi:** 2026-04-23 10:31
+**Üretim tarihi:** 2026-04-23 13:54
 **Üreten:** `SIS.Web/scripts/generate-codemap.mjs`
 
 > ⚠️ **OTOMATIK ÜRETILIR — elle düzenleme.** Script yeniden çalışınca üzerine yazılır.
@@ -8,7 +8,7 @@
 
 ## Özet
 
-- **Toplam sayfa:** 43
+- **Toplam sayfa:** 47
 - **Sidebar grubu:** 11
 
 ## İçindekiler
@@ -17,7 +17,7 @@
 - [Anketler](#anketler) (3 sayfa)
 - [Kaynak Yönetimi](#kaynak-yonetimi) (2 sayfa)
 - [Kullanıcı Yönetimi](#kullanici-yonetimi) (2 sayfa)
-- [Akademik İşlemler](#akademik-i̇slemler) (6 sayfa)
+- [Akademik İşlemler](#akademik-i̇slemler) (10 sayfa)
 - [Danışmanlık İşlemleri](#danismanlik-i̇slemleri) (1 sayfa)
 - [Ders ve Dönem İşlemleri](#ders-ve-donem-i̇slemleri) (7 sayfa)
 - [Duyuru Yönetimi](#duyuru-yonetimi) (1 sayfa)
@@ -722,25 +722,139 @@
 
 ---
 
-### Fakülte / Bölüm / Program
+### Bölüm Tanımları
 
 | | |
 |---|---|
-| **Route** | `/akademik-yapi` |
-| **Dosya** | `SIS.Web/src/pages/AcademicStructurePage.tsx` |
+| **Route** | `/bolum-tanimlari` |
+| **Dosya** | `SIS.Web/src/pages/DepartmentDefinitionsPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 7 (Dialog: 7, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (12):**
+**Veri kancaları (5):**
 - `useAdminFaculties()`
 - `useAdminDepartmentsByStructure()`
-- `useAdminProgramsByStructure()`
-- `useCreateFaculty()`
-- `useUpdateFaculty()`
-- `useDeleteFaculty()`
 - `useCreateDepartment()`
 - `useUpdateDepartment()`
 - `useDeleteDepartment()`
+
+**API endpoint'leri (12):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/programs`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### Fakülte Tanımları
+
+| | |
+|---|---|
+| **Route** | `/fakulte-tanimlari` |
+| **Dosya** | `SIS.Web/src/pages/FacultyDefinitionsPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (4):**
+- `useAdminFaculties()`
+- `useCreateFaculty()`
+- `useUpdateFaculty()`
+- `useDeleteFaculty()`
+
+**API endpoint'leri (12):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/programs`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### ÖSYM Kayıt Takvimi
+
+| | |
+|---|---|
+| **Route** | `/osym-kayit-takvimi` |
+| **Dosya** | `SIS.Web/src/pages/OsymRegistrationCalendarPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (4):**
+- `useOsymRegistrationCalendars()`
+- `useCreateOsymRegistrationCalendar()`
+- `useUpdateOsymRegistrationCalendar()`
+- `useDeleteOsymRegistrationCalendar()`
+
+**API endpoint'leri (2):**
+- `DELETE ${BASE}/${id}`
+- `PUT ${BASE}/${id}`
+
+---
+
+### Program Kontenjan Bilgileri
+
+| | |
+|---|---|
+| **Route** | `/program-kontenjan` |
+| **Dosya** | `SIS.Web/src/pages/ProgramQuotaPage.tsx` |
+| **Roller** | dean, systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (7):**
+- `useAdminFaculties()`
+- `useAdminDepartmentsByStructure()`
+- `useAdminProgramsByStructure()`
+- `useProgramQuotas()`
+- `useCreateProgramQuota()`
+- `useUpdateProgramQuota()`
+- `useDeleteProgramQuota()`
+
+**API endpoint'leri (14):**
+- `DELETE ${BASE}/${id}`
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/programs`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/${id}`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### Program Tanımları
+
+| | |
+|---|---|
+| **Route** | `/program-tanimlari` |
+| **Dosya** | `SIS.Web/src/pages/ProgramDefinitionsPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (6):**
+- `useAdminFaculties()`
+- `useAdminDepartmentsByStructure()`
+- `useAdminProgramsByStructure()`
 - `useCreateProgram()`
 - `useUpdateProgram()`
 - `useDeleteProgram()`

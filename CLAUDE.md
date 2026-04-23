@@ -94,20 +94,44 @@ Public endpoints (any authenticated):
 
 Cancelled dönem: upsert ve override `InvalidOperationException` fırlatır (400).
 
+## ÖSYM + Kontenjan API (Faz 4 — stub CRUD)
+
+`/api/admin/osym-registration-calendars` — systemAdmin only
+- `GET` (query: year?)
+- `POST` (CreateOsymRegistrationCalendarDto)
+- `PUT /{id}` (UpdateOsymRegistrationCalendarDto)
+- `DELETE /{id}`
+
+`/api/admin/program-quotas` — systemAdmin + dean
+- `GET` (query: programId?, year?)
+- `POST` (CreateProgramQuotaDto — ProgramId dahil)
+- `PUT /{id}` (UpdateProgramQuotaDto — ProgramId değiştirilemez)
+- `DELETE /{id}`
+
+Unique constraint: `ProgramQuota (ProgramId, Year, Type)` — aynı program×yıl×tip kombinasyonu tek kayıt.
+
+**Operasyonel entegrasyon YOK.** Bu iki özellik sadece veri tabanı — öğrenci kayıt akışı, `CourseSection.Capacity`, veya başka bir kısıt mantığı ile bağlı değil. İleride entegrasyon eklenebilir.
+
 ## AcademicTerm Yeni Alanlar (Faz 1)
 - `ShortEnglishName: string` — kısa İngilizce ad (zorunlu, default empty)
 - `OtherName: string?` — diğer adı (opsiyonel)
 - `YoksisStatus: YoksisStatus` — YÖKSİS raporlama durumu (Inactive/Active)
 
-## Sidebar "Akademik İşlemler" grubu (Faz 2 güncel)
+## Sidebar "Akademik İşlemler" grubu (Faz 4 güncel)
 - Akademik Dönem Tanımları (`/donem-yonetimi` — TermManagementPage, form 11 alan: kimlik + TermStart/TermEnd)
-- Fakülte / Bölüm / Program (`/akademik-yapi` — AcademicStructurePage)
-- Akademik Takvim Yönetimi (`/akademik-takvim-yonetimi` — AcademicCalendarAdminPage, faz tarihleri + override) **YENİ Faz 2**
-- Akademik Takvim (Görünüm) (`/akademik-takvim` — AcademicCalendarPage, öğrenci/hoca view, tabs: Liste + Takvim)
+- Fakülte Tanımları (`/fakulte-tanimlari` — FacultyDefinitionsPage) **Faz 3**
+- Bölüm Tanımları (`/bolum-tanimlari` — DepartmentDefinitionsPage) **Faz 3**
+- Program Tanımları (`/program-tanimlari` — ProgramDefinitionsPage) **Faz 3**
+- Akademik Takvim Yönetimi (`/akademik-takvim-yonetimi` — AcademicCalendarAdminPage) **Faz 2**
+- Akademik Takvim (Görünüm) (`/akademik-takvim` — AcademicCalendarPage, tabs: Liste + Takvim) **Faz 2**
 - Takvim Oluşturucu (`/akademik-takvim-olusturma` — AcademicCalendarGeneratorPage)
+- ÖSYM Kayıt Takvimi (`/osym-kayit-takvimi` — OsymRegistrationCalendarPage) **Faz 4 YENİ**
+- Program Kontenjan Bilgileri (`/program-kontenjan` — ProgramQuotaPage) **Faz 4 YENİ**
 - Sınıf Atlatma Kuralları (`/sinif-atlatma-kurallari` — PromotionRulesPage)
 
-Eski gruplar ("Dönem Yönetimi", "Akademik Yapı") silindi.
+Dean grubunda akademik-islemler: sadece Program Kontenjan Bilgileri (dean endpoint'e erişiyor).
+
+Eski gruplar ("Dönem Yönetimi", "Akademik Yapı", "Fakülte / Bölüm / Program" tek sayfa) silindi.
 
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports
