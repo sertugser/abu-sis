@@ -12,7 +12,7 @@ namespace SIS.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // 1. Yeni TermAcademicCalendars tablosunu oluştur
+            // 1) Yeni TermAcademicCalendars tablosunu oluştur
             migrationBuilder.CreateTable(
                 name: "TermAcademicCalendars",
                 columns: table => new
@@ -45,14 +45,13 @@ namespace SIS.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            // 2. Unique index oluştur (1-1 ilişki)
             migrationBuilder.CreateIndex(
                 name: "IX_TermAcademicCalendars_TermId",
                 table: "TermAcademicCalendars",
                 column: "TermId",
                 unique: true);
 
-            // 3. Mevcut AcademicTerms verilerini yeni tabloya kopyala
+            // 2) Mevcut AcademicTerms verilerini yeni tabloya kopyala (veri kaybını önler)
             migrationBuilder.Sql(@"
                 INSERT INTO ""TermAcademicCalendars""
                     (""TermId"", ""RegistrationStart"", ""RegistrationEnd"",
@@ -71,62 +70,30 @@ namespace SIS.Infrastructure.Migrations
                 FROM ""AcademicTerms"";
             ");
 
-            // 4. AcademicTerms'ten 11 takvim sütununu düşür
-            migrationBuilder.DropColumn(
-                name: "AddDropEnd",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "AddDropOverride",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "AddDropStart",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "GradeEntryEnd",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "GradeEntryOverride",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "GradeEntryStart",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "RegistrationEnd",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "RegistrationOverride",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "RegistrationStart",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "WithdrawalDeadline",
-                table: "AcademicTerms");
-
-            migrationBuilder.DropColumn(
-                name: "WithdrawalOverride",
-                table: "AcademicTerms");
+            // 3) Eski kolonları AcademicTerms'tan çıkar
+            migrationBuilder.DropColumn(name: "AddDropEnd",           table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "AddDropOverride",      table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "AddDropStart",         table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "GradeEntryEnd",        table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "GradeEntryOverride",   table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "GradeEntryStart",      table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "RegistrationEnd",      table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "RegistrationOverride", table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "RegistrationStart",    table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "WithdrawalDeadline",   table: "AcademicTerms");
+            migrationBuilder.DropColumn(name: "WithdrawalOverride",   table: "AcademicTerms");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // 1. AcademicTerms'e 11 takvim sütununu geri ekle
+            // 1) 11 kolonu AcademicTerms'a geri ekle
             migrationBuilder.AddColumn<DateTime>(
                 name: "AddDropEnd",
                 table: "AcademicTerms",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
             migrationBuilder.AddColumn<bool>(
                 name: "AddDropOverride",
@@ -139,14 +106,14 @@ namespace SIS.Infrastructure.Migrations
                 table: "AcademicTerms",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "GradeEntryEnd",
                 table: "AcademicTerms",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
             migrationBuilder.AddColumn<bool>(
                 name: "GradeEntryOverride",
@@ -159,14 +126,14 @@ namespace SIS.Infrastructure.Migrations
                 table: "AcademicTerms",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "RegistrationEnd",
                 table: "AcademicTerms",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
             migrationBuilder.AddColumn<bool>(
                 name: "RegistrationOverride",
@@ -179,14 +146,14 @@ namespace SIS.Infrastructure.Migrations
                 table: "AcademicTerms",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "WithdrawalDeadline",
                 table: "AcademicTerms",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
 
             migrationBuilder.AddColumn<bool>(
                 name: "WithdrawalOverride",
@@ -194,7 +161,7 @@ namespace SIS.Infrastructure.Migrations
                 type: "boolean",
                 nullable: true);
 
-            // 2. Veriyi TermAcademicCalendars'tan geri kopyala
+            // 2) Veriyi TermAcademicCalendars'tan geri kopyala
             migrationBuilder.Sql(@"
                 UPDATE ""AcademicTerms"" t SET
                     ""RegistrationStart""    = c.""RegistrationStart"",
@@ -212,9 +179,8 @@ namespace SIS.Infrastructure.Migrations
                 WHERE c.""TermId"" = t.""Id"";
             ");
 
-            // 3. TermAcademicCalendars tablosunu düşür
-            migrationBuilder.DropTable(
-                name: "TermAcademicCalendars");
+            // 3) Yeni tabloyu düşür
+            migrationBuilder.DropTable(name: "TermAcademicCalendars");
         }
     }
 }
