@@ -234,8 +234,14 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("GradeEntryStart")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OtherName")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("RegistrationEnd")
@@ -247,15 +253,13 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("RegistrationStart")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("Semester")
-                        .HasColumnType("integer");
+                    b.Property<string>("ShortEnglishName")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("ShortName")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
 
                     b.Property<DateTime>("TermEnd")
                         .HasColumnType("timestamp with time zone");
@@ -278,9 +282,12 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("Year")
                         .HasColumnType("integer");
 
+                    b.Property<int>("YoksisStatus")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Year", "Semester")
+                    b.HasIndex("Year", "TermType")
                         .IsUnique();
 
                     b.ToTable("AcademicTerms");
@@ -1212,9 +1219,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("InternalQuota")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
 
@@ -1231,6 +1235,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnName("xmin");
 
                     b.Property<int>("SectionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
                         .HasColumnType("integer");
 
                     b.Property<int>("TermId")
