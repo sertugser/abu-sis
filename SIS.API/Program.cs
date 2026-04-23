@@ -171,6 +171,8 @@ builder.Services.AddScoped<IHolidayCalculatorService, HolidayCalculatorService>(
 builder.Services.AddScoped<IAcademicCalendarRuleService, AcademicCalendarRuleService>();
 builder.Services.AddScoped<ICalendarGeneratorService, CalendarGeneratorService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
+builder.Services.AddScoped<IOsymRegistrationCalendarService, OsymRegistrationCalendarService>();
+builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 

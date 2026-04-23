@@ -25,6 +25,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
+    public DbSet<OsymRegistrationCalendar> OsymRegistrationCalendars => Set<OsymRegistrationCalendar>();
+    public DbSet<ProgramQuota> ProgramQuotas => Set<ProgramQuota>();
     public DbSet<Classroom> Classrooms => Set<Classroom>();
 public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
@@ -931,6 +933,25 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(a => a.TargetDepartmentId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── OsymRegistrationCalendar ───────────────────────────
+        builder.Entity<OsymRegistrationCalendar>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.HasIndex(x => new { x.Year, x.Type });
+        });
+
+        // ── ProgramQuota ────────────────────────────────────────
+        builder.Entity<ProgramQuota>(e =>
+        {
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.HasOne(q => q.Program)
+             .WithMany()
+             .HasForeignKey(q => q.ProgramId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(q => new { q.ProgramId, q.Year, q.Type }).IsUnique();
         });
     }
 }
