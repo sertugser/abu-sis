@@ -4,23 +4,38 @@ import apiClient from '../api/axios';
 
 const API = '/admin/terms';
 
+export type TermTypeValue =
+  | 'Fall'
+  | 'Spring'
+  | 'Summer'
+  | 'FallResit'
+  | 'SpringResit'
+  | 'SummerResit'
+  | 'SpringOther'
+  | 'SummerOther'
+  | 'Exemption';
+
+export type TermStatusValue = 'Inactive' | 'Active' | 'Cancelled';
+export type YoksisStatusValue = 'Inactive' | 'Active';
+
 export interface AdminTermDto {
   id: number;
   name: string;
   shortName: string;
   englishName: string;
+  shortEnglishName: string;
+  otherName: string | null;
   year: number;
-  semester: string;
-  semesterLabel: string;
-  termType: string;
+
+  termType: TermTypeValue;
   termTypeLabel: string;
 
-  // Status union narrowed to 5 values
-  status: 'Draft' | 'Preparing' | 'Ready' | 'Closed' | 'Archived';
+  status: TermStatusValue;
   statusLabel: string;
-  allowedTransitions: string[];
+  isCancelled: boolean;
 
-  // Date fields
+  yoksisStatus: YoksisStatusValue;
+
   registrationStart: string;
   registrationEnd: string;
   addDropStart: string;
@@ -31,20 +46,17 @@ export interface AdminTermDto {
   gradeEntryStart: string;
   gradeEntryEnd: string;
 
-  // Override fields
   registrationOverride: boolean | null;
   addDropOverride: boolean | null;
   withdrawalOverride: boolean | null;
   gradeEntryOverride: boolean | null;
 
-  // Computed phase flags
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
   isWithdrawalOpen: boolean;
   isGradeEntryOpen: boolean;
   isActive: boolean;
 
-  // Calendar fields
   calendarEventCount: number;
   generatedCalendarEventCount: number;
   generatedCalendarDraftId: number | null;
@@ -55,9 +67,11 @@ export interface CreateTermDto {
   name: string;
   shortName: string;
   englishName: string;
+  shortEnglishName: string;
+  otherName: string | null;
   year: number;
-  semester: string;
-  termType: string;
+  termType: TermTypeValue;
+  yoksisStatus: YoksisStatusValue;
   registrationStart: string;
   registrationEnd: string;
   addDropStart: string;
@@ -73,7 +87,10 @@ export interface UpdateTermDto {
   name: string;
   shortName: string;
   englishName: string;
-  termType: string;
+  shortEnglishName: string;
+  otherName: string | null;
+  termType: TermTypeValue;
+  yoksisStatus: YoksisStatusValue;
   registrationStart: string;
   registrationEnd: string;
   addDropStart: string;
@@ -90,6 +107,10 @@ export interface UpdateTermPhaseOverrideDto {
   value: boolean | null;
 }
 
+function invalidateTerms(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+}
 
 // ── Term CRUD ────────────────────────────────────────────────────────────────
 
@@ -102,6 +123,7 @@ export function useAdminTerms() {
     },
   });
 }
+
 export function useCreateTerm() {
   const qc = useQueryClient();
   return useMutation({
@@ -109,10 +131,7 @@ export function useCreateTerm() {
       const { data } = await apiClient.post<AdminTermDto>(API, dto);
       return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
+    onSuccess: () => invalidateTerms(qc),
   });
 }
 
@@ -123,26 +142,31 @@ export function useUpdateTerm() {
       const { data } = await apiClient.put<AdminTermDto>(`${API}/${id}`, dto);
       return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
+    onSuccess: () => invalidateTerms(qc),
   });
 }
 
+// ── Term Cancel / Uncancel ───────────────────────────────────────────────────
 
-// ── Term Status Transition ───────────────────────────────────────────────────
-
-export function useTransitionTermStatus() {
+export function useCancelTerm() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ termId, targetStatus }: { termId: number; targetStatus: string }) => {
-      await apiClient.post(`${API}/${termId}/transition`, { targetStatus });
+    mutationFn: async (termId: number) => {
+      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/cancel`);
+      return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+    onSuccess: () => invalidateTerms(qc),
+  });
+}
+
+export function useUncancelTerm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (termId: number) => {
+      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/uncancel`);
+      return data;
     },
+    onSuccess: () => invalidateTerms(qc),
   });
 }
 
@@ -164,9 +188,6 @@ export function useUpdateTermPhaseOverride() {
       });
       return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
+    onSuccess: () => invalidateTerms(qc),
   });
 }

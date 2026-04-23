@@ -1,6 +1,6 @@
 # Admin / Kullanıcı Sayfa Envanteri
 
-**Üretim tarihi:** 2026-04-22 20:46
+**Üretim tarihi:** 2026-04-23 01:31
 **Üreten:** `SIS.Web/scripts/generate-codemap.mjs`
 
 > ⚠️ **OTOMATIK ÜRETILIR — elle düzenleme.** Script yeniden çalışınca üzerine yazılır.
@@ -9,16 +9,15 @@
 ## Özet
 
 - **Toplam sayfa:** 41
-- **Sidebar grubu:** 12
+- **Sidebar grubu:** 11
 
 ## İçindekiler
 
-- [Dönem Yönetimi](#donem-yonetimi) (2 sayfa)
 - [Ders İşlemleri](#ders-i̇slemleri) (15 sayfa)
 - [Anketler](#anketler) (3 sayfa)
 - [Kaynak Yönetimi](#kaynak-yonetimi) (2 sayfa)
 - [Kullanıcı Yönetimi](#kullanici-yonetimi) (2 sayfa)
-- [Akademik Yapı](#akademik-yapi) (2 sayfa)
+- [Akademik İşlemler](#akademik-i̇slemler) (4 sayfa)
 - [Danışmanlık İşlemleri](#danismanlik-i̇slemleri) (1 sayfa)
 - [Ders ve Dönem İşlemleri](#ders-ve-donem-i̇slemleri) (7 sayfa)
 - [Duyuru Yönetimi](#duyuru-yonetimi) (1 sayfa)
@@ -27,73 +26,6 @@
 - [Sistem](#sistem) (2 sayfa)
 
 ---
-
-## Dönem Yönetimi
-
-### Dönem İşlemleri
-
-| | |
-|---|---|
-| **Route** | `/donem-yonetimi` |
-| **Dosya** | `SIS.Web/src/pages/TermManagementPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (5):**
-- `useAdminTerms()`
-- `useCreateTerm()`
-- `useUpdateTerm()`
-- `useTransitionTermStatus()`
-- `useUpdateTermPhaseOverride()`
-
-**API endpoint'leri (3):**
-- `POST ${API}/${termId}/override`
-- `POST ${API}/${termId}/transition`
-- `PUT ${API}/${id}`
-
----
-
-### Takvim Oluşturucu
-
-| | |
-|---|---|
-| **Route** | `/akademik-takvim-olusturma` |
-| **Dosya** | `SIS.Web/src/pages/AcademicCalendarGeneratorPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Sekmeler (3):**
-- `generator`
-- `draft`
-- `holidays`
-
-**Veri kancaları (10):**
-- `useApplyDraft()`
-- `useCalendarDraft()`
-- `useCalendarDrafts()`
-- `useCalendarTemplates()`
-- `useDeleteCalendarDraft()`
-- `useGenerateCalendar()`
-- `useHolidayDefinitions()`
-- `useRollbackDraft()`
-- `useUpdateDraftEvent()`
-- `useWhatIfCalendar()`
-
-**API endpoint'leri (11):**
-- `DELETE ${API}/drafts/${draftId}`
-- `GET ${API}/drafts`
-- `GET ${API}/drafts/${draftId}`
-- `GET ${API}/holidays/definitions`
-- `GET ${API}/templates`
-- `POST ${API}/drafts/${draftId}/apply`
-- `POST ${API}/drafts/${draftId}/rollback`
-- `POST ${API}/drafts/${draftId}/what-if`
-- `POST ${API}/generate`
-- `PUT ${API}/drafts/${draftId}/events/${encodeURIComponent(eventId)}`
-- `PUT ${API}/templates`
-
----
-
 
 ## Ders İşlemleri
 
@@ -335,9 +267,10 @@
 - `useTransferFromTerm()`
 - `useDepartmentInstructors()`
 
-**API endpoint'leri (3):**
+**API endpoint'leri (4):**
+- `POST ${API}/${termId}/cancel`
 - `POST ${API}/${termId}/override`
-- `POST ${API}/${termId}/transition`
+- `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
 
 ---
@@ -437,9 +370,10 @@
 - `useBottlenecks()`
 - `useTakeSnapshot()`
 
-**API endpoint'leri (3):**
+**API endpoint'leri (4):**
+- `POST ${API}/${termId}/cancel`
 - `POST ${API}/${termId}/override`
-- `POST ${API}/${termId}/transition`
+- `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
 
 ---
@@ -569,9 +503,10 @@
 - `useUpdateEvaluationQuestion()`
 - `useAdminTerms()`
 
-**API endpoint'leri (3):**
+**API endpoint'leri (4):**
+- `POST ${API}/${termId}/cancel`
 - `POST ${API}/${termId}/override`
-- `POST ${API}/${termId}/transition`
+- `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
 
 ---
@@ -599,15 +534,16 @@
 - `useAdminDepartmentsByStructure()`
 - `useAdminTerms()`
 
-**API endpoint'leri (15):**
+**API endpoint'leri (16):**
 - `DELETE ${BASE}/departments/${id}`
 - `DELETE ${BASE}/faculties/${id}`
 - `DELETE ${BASE}/programs/${id}`
 - `GET ${BASE}/departments`
 - `GET ${BASE}/faculties`
 - `GET ${BASE}/programs`
+- `POST ${API}/${termId}/cancel`
 - `POST ${API}/${termId}/override`
-- `POST ${API}/${termId}/transition`
+- `POST ${API}/${termId}/uncancel`
 - `POST ${BASE}/departments`
 - `POST ${BASE}/faculties`
 - `POST ${BASE}/programs`
@@ -672,15 +608,16 @@
 - `useBulkAssignClassrooms()`
 - `useSuggestClassroomAssignments()`
 
-**API endpoint'leri (15):**
+**API endpoint'leri (16):**
 - `DELETE ${BASE}/departments/${id}`
 - `DELETE ${BASE}/faculties/${id}`
 - `DELETE ${BASE}/programs/${id}`
 - `GET ${BASE}/departments`
 - `GET ${BASE}/faculties`
 - `GET ${BASE}/programs`
+- `POST ${API}/${termId}/cancel`
 - `POST ${API}/${termId}/override`
-- `POST ${API}/${termId}/transition`
+- `POST ${API}/${termId}/uncancel`
 - `POST ${BASE}/departments`
 - `POST ${BASE}/faculties`
 - `POST ${BASE}/programs`
@@ -739,7 +676,32 @@
 ---
 
 
-## Akademik Yapı
+## Akademik İşlemler
+
+### Akademik Dönem Tanımları
+
+| | |
+|---|---|
+| **Route** | `/donem-yonetimi` |
+| **Dosya** | `SIS.Web/src/pages/TermManagementPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 3 (Dialog: 2, Sheet: 0, AlertDialog: 1) |
+
+**Veri kancaları (6):**
+- `useAdminTerms()`
+- `useCreateTerm()`
+- `useUpdateTerm()`
+- `useCancelTerm()`
+- `useUncancelTerm()`
+- `useUpdateTermPhaseOverride()`
+
+**API endpoint'leri (4):**
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/override`
+- `POST ${API}/${termId}/uncancel`
+- `PUT ${API}/${id}`
+
+---
 
 ### Fakülte / Bölüm / Program
 
@@ -800,6 +762,47 @@
 - `GET /admin/advisors`
 - `GET /admin/departments`
 - `GET /admin/programs`
+
+---
+
+### Takvim Oluşturucu
+
+| | |
+|---|---|
+| **Route** | `/akademik-takvim-olusturma` |
+| **Dosya** | `SIS.Web/src/pages/AcademicCalendarGeneratorPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Sekmeler (3):**
+- `generator`
+- `draft`
+- `holidays`
+
+**Veri kancaları (10):**
+- `useApplyDraft()`
+- `useCalendarDraft()`
+- `useCalendarDrafts()`
+- `useCalendarTemplates()`
+- `useDeleteCalendarDraft()`
+- `useGenerateCalendar()`
+- `useHolidayDefinitions()`
+- `useRollbackDraft()`
+- `useUpdateDraftEvent()`
+- `useWhatIfCalendar()`
+
+**API endpoint'leri (11):**
+- `DELETE ${API}/drafts/${draftId}`
+- `GET ${API}/drafts`
+- `GET ${API}/drafts/${draftId}`
+- `GET ${API}/holidays/definitions`
+- `GET ${API}/templates`
+- `POST ${API}/drafts/${draftId}/apply`
+- `POST ${API}/drafts/${draftId}/rollback`
+- `POST ${API}/drafts/${draftId}/what-if`
+- `POST ${API}/generate`
+- `PUT ${API}/drafts/${draftId}/events/${encodeURIComponent(eventId)}`
+- `PUT ${API}/templates`
 
 ---
 
