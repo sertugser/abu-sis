@@ -19,6 +19,7 @@ import TermGpaPage from './pages/TermGpaPage';
 import TranscriptPage from './pages/TranscriptPage';
 import TranscriptScenarioPage from './pages/TranscriptScenarioPage';
 import AcademicCalendarPage from './pages/AcademicCalendarPage';
+import AcademicCalendarAdminPage from './pages/AcademicCalendarAdminPage';
 import AcademicCalendarGeneratorPage from './pages/AcademicCalendarGeneratorPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
@@ -77,6 +78,10 @@ export default function App() {
                   {/* Herkesin erişebildiği sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
                   <Route path="duyurular" element={<AnnouncementsPage />} />
+
+                  <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator', 'AdministrativeStaff']} />}>
+                    <Route path="akademik-takvim-yonetimi" element={<AcademicCalendarAdminPage />} />
+                  </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />

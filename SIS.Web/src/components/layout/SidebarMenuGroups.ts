@@ -340,7 +340,8 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     children: [
       { to: ROUTES.TERM_MANAGEMENT, label: 'Akademik Dönem Tanımları' },
       { to: ROUTES.ACADEMIC_STRUCTURE, label: 'Fakülte / Bölüm / Program' },
-      { to: '/akademik-takvim', label: 'Akademik Takvim' },
+      { to: ROUTES.ACADEMIC_CALENDAR_ADMIN, label: 'Akademik Takvim Yönetimi' },
+      { to: ROUTES.AKADEMIK_TAKVIM, label: 'Akademik Takvim (Görünüm)' },
       { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
       { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
     ],

@@ -36,31 +36,11 @@ export interface AdminTermDto {
 
   yoksisStatus: YoksisStatusValue;
 
-  registrationStart: string;
-  registrationEnd: string;
-  addDropStart: string;
-  addDropEnd: string;
   termStart: string;
   termEnd: string;
-  withdrawalDeadline: string;
-  gradeEntryStart: string;
-  gradeEntryEnd: string;
 
-  registrationOverride: boolean | null;
-  addDropOverride: boolean | null;
-  withdrawalOverride: boolean | null;
-  gradeEntryOverride: boolean | null;
-
-  isRegistrationOpen: boolean;
-  isAddDropOpen: boolean;
-  isWithdrawalOpen: boolean;
-  isGradeEntryOpen: boolean;
   isActive: boolean;
-
-  calendarEventCount: number;
-  generatedCalendarEventCount: number;
-  generatedCalendarDraftId: number | null;
-  hasGeneratedCalendar: boolean;
+  hasAcademicCalendar: boolean;
 }
 
 export interface CreateTermDto {
@@ -72,15 +52,8 @@ export interface CreateTermDto {
   year: number;
   termType: TermTypeValue;
   yoksisStatus: YoksisStatusValue;
-  registrationStart: string;
-  registrationEnd: string;
-  addDropStart: string;
-  addDropEnd: string;
   termStart: string;
   termEnd: string;
-  withdrawalDeadline: string;
-  gradeEntryStart: string;
-  gradeEntryEnd: string;
 }
 
 export interface UpdateTermDto {
@@ -91,20 +64,8 @@ export interface UpdateTermDto {
   otherName: string | null;
   termType: TermTypeValue;
   yoksisStatus: YoksisStatusValue;
-  registrationStart: string;
-  registrationEnd: string;
-  addDropStart: string;
-  addDropEnd: string;
   termStart: string;
   termEnd: string;
-  withdrawalDeadline: string;
-  gradeEntryStart: string;
-  gradeEntryEnd: string;
-}
-
-export interface UpdateTermPhaseOverrideDto {
-  phase: 'Registration' | 'AddDrop' | 'Withdrawal' | 'GradeEntry';
-  value: boolean | null;
 }
 
 function invalidateTerms(qc: ReturnType<typeof useQueryClient>) {
@@ -164,28 +125,6 @@ export function useUncancelTerm() {
   return useMutation({
     mutationFn: async (termId: number) => {
       const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/uncancel`);
-      return data;
-    },
-    onSuccess: () => invalidateTerms(qc),
-  });
-}
-
-export function useUpdateTermPhaseOverride() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      termId,
-      phase,
-      value,
-    }: {
-      termId: number;
-      phase: UpdateTermPhaseOverrideDto['phase'];
-      value: boolean | null;
-    }) => {
-      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/override`, {
-        phase,
-        value,
-      });
       return data;
     },
     onSuccess: () => invalidateTerms(qc),

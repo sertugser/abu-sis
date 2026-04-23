@@ -28,6 +28,7 @@ import { useAdminUsers } from '../hooks/useAdminUsers';
 import { useAdminStudents } from '../hooks/useAdminStudents';
 import { useAdminInstructors } from '../hooks/useAdminInstructors';
 import { useAdminTerms } from '../hooks/useAdminTerms';
+import { useActiveStudentCalendar } from '../hooks/useAcademicCalendar';
 import { ROUTES } from '../lib/constants';
 import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
@@ -145,11 +146,13 @@ function RegistrationStatusCard({
   activeTerm,
   isLoading,
 }: {
-  activeTerm: { registrationStart: string; registrationEnd: string } | undefined;
+  activeTerm: { registrationStart?: string | null; registrationEnd?: string | null } | undefined;
   isLoading: boolean;
 }) {
-  const open = activeTerm ? isWithinRange(activeTerm.registrationStart, activeTerm.registrationEnd) : false;
-  const upcoming = activeTerm && !open && isUpcoming(activeTerm.registrationStart);
+  const open = activeTerm?.registrationStart && activeTerm?.registrationEnd
+    ? isWithinRange(activeTerm.registrationStart, activeTerm.registrationEnd)
+    : false;
+  const upcoming = activeTerm?.registrationStart && !open && isUpcoming(activeTerm.registrationStart);
 
   const borderColor = open
     ? 'border-l-[var(--color-success)]'
@@ -168,8 +171,8 @@ function RegistrationStatusCard({
       <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
-        ) : !activeTerm ? (
-          <p className="text-sm text-muted-foreground">Aktif dönem bulunamadı.</p>
+        ) : !activeTerm || (!activeTerm.registrationStart && !activeTerm.registrationEnd) ? (
+          <p className="text-sm text-muted-foreground">Kayıt tarihi tanımlı değil.</p>
         ) : open ? (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -177,10 +180,10 @@ function RegistrationStatusCard({
               <p className="text-sm font-semibold text-success">Açık</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Bitiş: {fmtDate(activeTerm.registrationEnd)}
+              Bitiş: {activeTerm.registrationEnd ? fmtDate(activeTerm.registrationEnd) : '—'}
             </p>
             <p className="text-xs font-medium text-success">
-              {daysUntil(activeTerm.registrationEnd)} gün kaldı
+              {activeTerm.registrationEnd ? daysUntil(activeTerm.registrationEnd) : '—'} gün kaldı
             </p>
           </div>
         ) : upcoming ? (
@@ -190,10 +193,10 @@ function RegistrationStatusCard({
               <p className="text-sm font-semibold text-warning">Henüz başlamadı</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Başlangıç: {fmtDate(activeTerm.registrationStart)}
+              Başlangıç: {activeTerm.registrationStart ? fmtDate(activeTerm.registrationStart) : '—'}
             </p>
             <p className="text-xs font-medium text-warning">
-              {daysUntil(activeTerm.registrationStart)} gün sonra
+              {activeTerm.registrationStart ? daysUntil(activeTerm.registrationStart) : '—'} gün sonra
             </p>
           </div>
         ) : (
@@ -203,12 +206,12 @@ function RegistrationStatusCard({
               <p className="text-sm text-muted-foreground">Tamamlandı</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              {fmtDate(activeTerm.registrationStart)} — {fmtDate(activeTerm.registrationEnd)}
+              {activeTerm.registrationStart ? fmtDate(activeTerm.registrationStart) : '—'} — {activeTerm.registrationEnd ? fmtDate(activeTerm.registrationEnd) : '—'}
             </p>
           </div>
         )}
         <Link
-          to={ROUTES.TERM_MANAGEMENT}
+          to={ROUTES.ACADEMIC_CALENDAR_ADMIN}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
           Tarihleri Düzenle <ArrowRight className="h-3.5 w-3.5" />
@@ -224,11 +227,13 @@ function AddDropStatusCard({
   activeTerm,
   isLoading,
 }: {
-  activeTerm: { addDropStart: string; addDropEnd: string } | undefined;
+  activeTerm: { addDropStart?: string | null; addDropEnd?: string | null } | undefined;
   isLoading: boolean;
 }) {
-  const open = activeTerm ? isWithinRange(activeTerm.addDropStart, activeTerm.addDropEnd) : false;
-  const upcoming = activeTerm && !open && isUpcoming(activeTerm.addDropStart);
+  const open = activeTerm?.addDropStart && activeTerm?.addDropEnd
+    ? isWithinRange(activeTerm.addDropStart, activeTerm.addDropEnd)
+    : false;
+  const upcoming = activeTerm?.addDropStart && !open && isUpcoming(activeTerm.addDropStart);
 
   const borderColor = open
     ? 'border-l-[var(--color-success)]'
@@ -247,8 +252,8 @@ function AddDropStatusCard({
       <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
-        ) : !activeTerm ? (
-          <p className="text-sm text-muted-foreground">Aktif dönem bulunamadı.</p>
+        ) : !activeTerm || (!activeTerm.addDropStart && !activeTerm.addDropEnd) ? (
+          <p className="text-sm text-muted-foreground">Ekle/bırak tarihi tanımlı değil.</p>
         ) : open ? (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -256,10 +261,10 @@ function AddDropStatusCard({
               <p className="text-sm font-semibold text-success">Açık</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Bitiş: {fmtDate(activeTerm.addDropEnd)}
+              Bitiş: {activeTerm.addDropEnd ? fmtDate(activeTerm.addDropEnd) : '—'}
             </p>
             <p className="text-xs font-medium text-success">
-              {daysUntil(activeTerm.addDropEnd)} gün kaldı
+              {activeTerm.addDropEnd ? daysUntil(activeTerm.addDropEnd) : '—'} gün kaldı
             </p>
           </div>
         ) : upcoming ? (
@@ -269,10 +274,10 @@ function AddDropStatusCard({
               <p className="text-sm font-semibold text-warning">Henüz başlamadı</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Başlangıç: {fmtDate(activeTerm.addDropStart)}
+              Başlangıç: {activeTerm.addDropStart ? fmtDate(activeTerm.addDropStart) : '—'}
             </p>
             <p className="text-xs font-medium text-warning">
-              {daysUntil(activeTerm.addDropStart)} gün sonra
+              {activeTerm.addDropStart ? daysUntil(activeTerm.addDropStart) : '—'} gün sonra
             </p>
           </div>
         ) : (
@@ -282,12 +287,12 @@ function AddDropStatusCard({
               <p className="text-sm text-muted-foreground">Tamamlandı</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              {fmtDate(activeTerm.addDropStart)} — {fmtDate(activeTerm.addDropEnd)}
+              {activeTerm.addDropStart ? fmtDate(activeTerm.addDropStart) : '—'} — {activeTerm.addDropEnd ? fmtDate(activeTerm.addDropEnd) : '—'}
             </p>
           </div>
         )}
         <Link
-          to={ROUTES.TERM_MANAGEMENT}
+          to={ROUTES.ACADEMIC_CALENDAR_ADMIN}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
           Tarihleri Düzenle <ArrowRight className="h-3.5 w-3.5" />
@@ -457,6 +462,7 @@ export default function SystemAdminDashboardPage() {
   const { data: activeStudentsData, isLoading: studentsLoading } = useAdminStudents({ pageSize: 1, page: 1, status: 'Active' });
   const { data: instructors, isLoading: instructorsLoading } = useAdminInstructors({});
   const { data: terms = [], isLoading: termsLoading } = useAdminTerms();
+  const { data: activeCalendar, isLoading: calendarLoading } = useActiveStudentCalendar();
 
   const activeTerm = terms.find(t => t.isActive);
   const termLoading = termsLoading;
@@ -486,8 +492,8 @@ export default function SystemAdminDashboardPage() {
       {/* ── Status Cards ────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <TermStatusCard activeTerm={activeTerm} isLoading={termLoading} />
-        <RegistrationStatusCard activeTerm={activeTerm} isLoading={termLoading} />
-        <AddDropStatusCard activeTerm={activeTerm} isLoading={termLoading} />
+        <RegistrationStatusCard activeTerm={activeCalendar} isLoading={calendarLoading} />
+        <AddDropStatusCard activeTerm={activeCalendar} isLoading={calendarLoading} />
       </div>
 
       {/* ── Stats ────────────────────────────────────────────── */}

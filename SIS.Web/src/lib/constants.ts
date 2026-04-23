@@ -35,6 +35,7 @@ export const ROUTES = {
   SYSTEM_CONFIG: '/sistem-ayarlari',
   AUDIT_LOG: '/denetim-kayitlari',
   PROMOTION_RULES: '/sinif-atlatma-kurallari',
+  ACADEMIC_CALENDAR_ADMIN: '/akademik-takvim-yonetimi',
   SCHEDULE_APPROVAL: '/program-onayi',
   CLASSROOM_ADMIN: '/derslik-yonetimi',
   CONSTRAINT_MANAGEMENT: '/ders-programi-kisitlamalari',
@@ -103,6 +104,12 @@ export const QUERY_KEYS = {
   electiveGroups: (subtype?: string, facultyId?: number) => ['electiveGroups', 'list', subtype, facultyId] as const,
   electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
+  // Academic Calendar
+  adminAcademicCalendar: (termId?: number) => ['admin', 'academicCalendar', termId] as const,
+  adminAcademicCalendarTerms: ['admin', 'academicCalendar', 'terms'] as const,
+  studentAcademicCalendar: (termId?: number | null) => ['academicCalendar', 'student', termId] as const,
+  studentAcademicCalendarActive: ['academicCalendar', 'student', 'active'] as const,
+  academicCalendarTerms: ['academicCalendar', 'terms'] as const,
   // Course Evaluation
   evaluationActivePeriod: ['courseEvaluation', 'activePeriod'] as const,
   evaluationMyCourses: ['courseEvaluation', 'myCourses'] as const,
@@ -192,6 +199,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/degerlendirme-donemi-yonetimi',
   '/duyurular',
   '/duyuru-yonetimi',
+  '/akademik-takvim-yonetimi',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {
