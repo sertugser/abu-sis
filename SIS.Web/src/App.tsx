@@ -109,6 +109,7 @@ export default function App() {
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
                     <Route path="ders-programim" element={<InstructorSchedulingPage />} />
+                    <Route path="ogretim-elemani-akademik-takvim" element={<AcademicCalendarPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager', 'SystemAdministrator']} />}>

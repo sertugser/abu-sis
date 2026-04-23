@@ -101,7 +101,21 @@ function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
   }
 
   const allGroups = orderedIds.map(id => groupsById.get(id)!);
-  return allGroups.length > 0 ? allGroups : studentMenuGroups;
+  const effectiveGroups = allGroups.length > 0 ? allGroups : studentMenuGroups;
+
+  // Öğretim elemanı rolleri için akademik takvim erişimi — "Sık Kullanılanlar" grubuna eklenir
+  const instructorRoles = ['Instructor', 'AcademicAdvisor', 'Dean', 'DepartmentManager'];
+  if (roles.some(r => instructorRoles.includes(r))) {
+    const favoriteGroup = effectiveGroups.find(g => g.id === 'sik-kullanilanlar');
+    if (favoriteGroup && !favoriteGroup.children.some(c => c.to === '/ogretim-elemani-akademik-takvim')) {
+      favoriteGroup.children.push({
+        to: '/ogretim-elemani-akademik-takvim',
+        label: 'Akademik Takvim',
+      });
+    }
+  }
+
+  return effectiveGroups;
 }
 
 function getActiveRoleLabel(activeRole: string | null): string {

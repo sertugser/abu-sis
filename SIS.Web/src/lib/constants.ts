@@ -15,6 +15,7 @@ export const ROUTES = {
   // Instructor routes
   INSTRUCTOR_SECTIONS: '/derslerim',
   INSTRUCTOR_SCHEDULING: '/ders-programim',
+  INSTRUCTOR_ACADEMIC_CALENDAR: '/ogretim-elemani-akademik-takvim',
   GRADE_ENTRY: '/not-girisi',
   CLASS_LISTS: '/sinif-listeleri',
   CLASSROOM_DASHBOARD: '/derslik-doluluk-tablosu',
@@ -173,6 +174,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/derslerim',
   '/not-girisi',
   '/ders-programim',
+  '/ogretim-elemani-akademik-takvim',
   '/sinif-listeleri',
   '/ders-programi-olusturma',
   '/derslik-doluluk-tablosu',
