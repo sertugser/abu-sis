@@ -277,15 +277,19 @@ public class CourseOpeningServiceTests
             EnglishName = "Fall 2025-2026",
             Year = 2025,
             TermType = TermType.Fall,
-            RegistrationStart = DateTime.UtcNow.AddDays(-7),
-            RegistrationEnd = DateTime.UtcNow.AddDays(7),
-            AddDropStart = DateTime.UtcNow.AddDays(8),
-            AddDropEnd = DateTime.UtcNow.AddDays(14),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
             TermStart = DateTime.UtcNow.AddDays(-14),
             TermEnd = termEnd,
-            GradeEntryStart = termEnd.AddDays(-14),
-            GradeEntryEnd = termEnd.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-7),
+                RegistrationEnd = DateTime.UtcNow.AddDays(7),
+                AddDropStart = DateTime.UtcNow.AddDays(8),
+                AddDropEnd = DateTime.UtcNow.AddDays(14),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         context.SaveChanges();

@@ -416,13 +416,19 @@ public class EnrollmentForecastServiceTests
                 Name = "2025-2026 Fall",
                 Year = 2025,
                 TermType = TermType.Fall,
-                RegistrationStart = DateTime.UtcNow.AddDays(-7),
-                RegistrationEnd = DateTime.UtcNow.AddDays(7),
-                AddDropStart = DateTime.UtcNow.AddDays(8),
-                AddDropEnd = DateTime.UtcNow.AddDays(14),
-                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-14),
-                TermEnd = DateTime.UtcNow.AddDays(90)
+                TermEnd = DateTime.UtcNow.AddDays(90),
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = DateTime.UtcNow.AddDays(-7),
+                    RegistrationEnd = DateTime.UtcNow.AddDays(7),
+                    AddDropStart = DateTime.UtcNow.AddDays(8),
+                    AddDropEnd = DateTime.UtcNow.AddDays(14),
+                    WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                    GradeEntryStart = DateTime.UtcNow.AddDays(76),
+                    GradeEntryEnd = DateTime.UtcNow.AddDays(104),
+                    CreatedAt = DateTime.UtcNow,
+                }
             },
             new AcademicTerm
             {
@@ -430,13 +436,19 @@ public class EnrollmentForecastServiceTests
                 Name = "2024-2025 Spring",
                 Year = 2024,
                 TermType = TermType.Spring,
-                RegistrationStart = DateTime.UtcNow.AddDays(-200),
-                RegistrationEnd = DateTime.UtcNow.AddDays(-190),
-                AddDropStart = DateTime.UtcNow.AddDays(-189),
-                AddDropEnd = DateTime.UtcNow.AddDays(-180),
-                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
                 TermStart = DateTime.UtcNow.AddDays(-210),
-                TermEnd = DateTime.UtcNow.AddDays(-120)
+                TermEnd = DateTime.UtcNow.AddDays(-120),
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = DateTime.UtcNow.AddDays(-200),
+                    RegistrationEnd = DateTime.UtcNow.AddDays(-190),
+                    AddDropStart = DateTime.UtcNow.AddDays(-189),
+                    AddDropEnd = DateTime.UtcNow.AddDays(-180),
+                    WithdrawalDeadline = DateTime.UtcNow.AddDays(-135),
+                    GradeEntryStart = DateTime.UtcNow.AddDays(-134),
+                    GradeEntryEnd = DateTime.UtcNow.AddDays(-106),
+                    CreatedAt = DateTime.UtcNow,
+                }
             });
 
         context.Classrooms.AddRange(
@@ -490,6 +502,7 @@ public class EnrollmentForecastServiceTests
             ProgramId = programId,
             CurriculumId = curriculumId,
             Type = StudentProgramType.Main,
+            IsActive = true,
             EnrollmentDate = DateTime.UtcNow.AddYears(-2)
         });
 
@@ -592,13 +605,19 @@ public class EnrollmentForecastServiceTests
             Name = $"{year}-{year + 1} {semester}",
             Year = year,
             TermType = termType,
-            RegistrationStart = DateTime.UtcNow.AddDays(-60),
-            RegistrationEnd = DateTime.UtcNow.AddDays(-50),
-            AddDropStart = DateTime.UtcNow.AddDays(-49),
-            AddDropEnd = DateTime.UtcNow.AddDays(-40),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(-20),
             TermStart = DateTime.UtcNow.AddDays(-70),
-            TermEnd = termEnd
+            TermEnd = termEnd,
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-60),
+                RegistrationEnd = DateTime.UtcNow.AddDays(-50),
+                AddDropStart = DateTime.UtcNow.AddDays(-49),
+                AddDropEnd = DateTime.UtcNow.AddDays(-40),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(-20),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         context.SaveChanges();

@@ -541,18 +541,41 @@ public class TermClosingService : ITermClosingService
 
             int newTermId;
 
+            var withdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49);
             if (existingTerm != null)
             {
                 newTermId = existingTerm.Id;
                 existingTerm.Name = request.Name;
-                existingTerm.RegistrationStart = request.RegistrationStart;
-                existingTerm.RegistrationEnd = request.RegistrationEnd;
-                existingTerm.AddDropStart = request.RegistrationStart;
-                existingTerm.AddDropEnd = request.RegistrationEnd;
                 existingTerm.TermStart = request.TermStart;
                 existingTerm.TermEnd = request.TermEnd;
-                existingTerm.WithdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49);
                 existingTerm.IsCancelled = false;
+                // Update or create AcademicCalendar
+                var existingCal = await _context.TermAcademicCalendars
+                    .FirstOrDefaultAsync(c => c.TermId == existingTerm.Id, ct);
+                if (existingCal != null)
+                {
+                    existingCal.RegistrationStart = request.RegistrationStart;
+                    existingCal.RegistrationEnd = request.RegistrationEnd;
+                    existingCal.AddDropStart = request.RegistrationStart;
+                    existingCal.AddDropEnd = request.RegistrationEnd;
+                    existingCal.WithdrawalDeadline = withdrawalDeadline;
+                    existingCal.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    _context.TermAcademicCalendars.Add(new Domain.Entities.TermAcademicCalendar
+                    {
+                        TermId = existingTerm.Id,
+                        RegistrationStart = request.RegistrationStart,
+                        RegistrationEnd = request.RegistrationEnd,
+                        AddDropStart = request.RegistrationStart,
+                        AddDropEnd = request.RegistrationEnd,
+                        WithdrawalDeadline = withdrawalDeadline,
+                        GradeEntryStart = request.TermEnd,
+                        GradeEntryEnd = request.TermEnd.AddDays(14),
+                        CreatedAt = DateTime.UtcNow,
+                    });
+                }
             }
             else
             {
@@ -561,14 +584,20 @@ public class TermClosingService : ITermClosingService
                     Name = request.Name,
                     Year = request.Year,
                     TermType = newTermType,
-                    RegistrationStart = request.RegistrationStart,
-                    RegistrationEnd = request.RegistrationEnd,
-                    AddDropStart = request.RegistrationStart,
-                    AddDropEnd = request.RegistrationEnd,
-                    WithdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49),
                     TermStart = request.TermStart,
                     TermEnd = request.TermEnd,
                     IsCancelled = false,
+                    AcademicCalendar = new Domain.Entities.TermAcademicCalendar
+                    {
+                        RegistrationStart = request.RegistrationStart,
+                        RegistrationEnd = request.RegistrationEnd,
+                        AddDropStart = request.RegistrationStart,
+                        AddDropEnd = request.RegistrationEnd,
+                        WithdrawalDeadline = withdrawalDeadline,
+                        GradeEntryStart = request.TermEnd,
+                        GradeEntryEnd = request.TermEnd.AddDays(14),
+                        CreatedAt = DateTime.UtcNow,
+                    }
                 };
                 _context.AcademicTerms.Add(newTerm);
                 await _context.SaveChangesAsync(ct);
@@ -942,7 +971,9 @@ public class TermClosingService : ITermClosingService
     private async Task<AcademicTerm?> GetActiveTermAsync(CancellationToken ct)
     {
         var now = _clock.UtcNow;
-        return await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, ct);
+        return await _context.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, ct);
     }
 
     private async Task UpsertProgressAsync(int departmentId, int termId, TermClosingStep step, int userId, string notes, CancellationToken ct)

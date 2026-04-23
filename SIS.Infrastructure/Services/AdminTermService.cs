@@ -29,6 +29,7 @@ public class AdminTermService : IAdminTermService
     {
         var terms = await _context.AcademicTerms
             .Include(t => t.CalendarEvents)
+            .Include(t => t.AcademicCalendar)
             .OrderByDescending(t => t.Year)
             .ThenByDescending(t => t.TermType)
             .ToListAsync();
@@ -39,6 +40,7 @@ public class AdminTermService : IAdminTermService
     {
         var term = await _context.AcademicTerms
             .Include(t => t.CalendarEvents)
+            .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => t.Id == id)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
         return ToDto(term);
@@ -54,10 +56,6 @@ public class AdminTermService : IAdminTermService
             throw new InvalidOperationException(
                 $"{dto.Year} yılı için {GetTermTypeLabel(termType)} dönemi zaten mevcut.");
 
-        ValidateTermDates(dto.RegistrationStart, dto.RegistrationEnd, dto.AddDropStart,
-            dto.AddDropEnd, dto.TermStart, dto.TermEnd, dto.WithdrawalDeadline,
-            dto.GradeEntryStart, dto.GradeEntryEnd);
-
         var term = new AcademicTerm
         {
             Name = dto.Name,
@@ -67,15 +65,8 @@ public class AdminTermService : IAdminTermService
             OtherName = string.IsNullOrWhiteSpace(dto.OtherName) ? null : dto.OtherName,
             Year = dto.Year,
             TermType = termType,
-            RegistrationStart = DateTime.SpecifyKind(dto.RegistrationStart, DateTimeKind.Utc),
-            RegistrationEnd = DateTime.SpecifyKind(dto.RegistrationEnd, DateTimeKind.Utc),
-            AddDropStart = DateTime.SpecifyKind(dto.AddDropStart, DateTimeKind.Utc),
-            AddDropEnd = DateTime.SpecifyKind(dto.AddDropEnd, DateTimeKind.Utc),
             TermStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc),
             TermEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc),
-            WithdrawalDeadline = DateTime.SpecifyKind(dto.WithdrawalDeadline, DateTimeKind.Utc),
-            GradeEntryStart = DateTime.SpecifyKind(dto.GradeEntryStart, DateTimeKind.Utc),
-            GradeEntryEnd = DateTime.SpecifyKind(dto.GradeEntryEnd, DateTimeKind.Utc),
             IsCancelled = false,
             YoksisStatus = ParseYoksisStatus(dto.YoksisStatus),
             CreatedAt = _clock.UtcNow
@@ -98,25 +89,14 @@ public class AdminTermService : IAdminTermService
         if (term.IsCancelled)
             throw new InvalidOperationException("İptal edilmiş dönem düzenlenemez. Önce iptali geri alın.");
 
-        ValidateTermDates(dto.RegistrationStart, dto.RegistrationEnd, dto.AddDropStart,
-            dto.AddDropEnd, dto.TermStart, dto.TermEnd, dto.WithdrawalDeadline,
-            dto.GradeEntryStart, dto.GradeEntryEnd);
-
         term.Name = dto.Name;
         term.ShortName = dto.ShortName;
         term.EnglishName = dto.EnglishName;
         term.ShortEnglishName = dto.ShortEnglishName;
         term.OtherName = string.IsNullOrWhiteSpace(dto.OtherName) ? null : dto.OtherName;
         term.TermType = ParseTermType(dto.TermType);
-        term.RegistrationStart = DateTime.SpecifyKind(dto.RegistrationStart, DateTimeKind.Utc);
-        term.RegistrationEnd = DateTime.SpecifyKind(dto.RegistrationEnd, DateTimeKind.Utc);
-        term.AddDropStart = DateTime.SpecifyKind(dto.AddDropStart, DateTimeKind.Utc);
-        term.AddDropEnd = DateTime.SpecifyKind(dto.AddDropEnd, DateTimeKind.Utc);
         term.TermStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc);
         term.TermEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc);
-        term.WithdrawalDeadline = DateTime.SpecifyKind(dto.WithdrawalDeadline, DateTimeKind.Utc);
-        term.GradeEntryStart = DateTime.SpecifyKind(dto.GradeEntryStart, DateTimeKind.Utc);
-        term.GradeEntryEnd = DateTime.SpecifyKind(dto.GradeEntryEnd, DateTimeKind.Utc);
         term.YoksisStatus = ParseYoksisStatus(dto.YoksisStatus);
         term.UpdatedAt = _clock.UtcNow;
 
@@ -158,27 +138,6 @@ public class AdminTermService : IAdminTermService
         await _context.SaveChangesAsync();
     }
 
-    public async Task UpdatePhaseOverrideAsync(int id, UpdateTermPhaseOverrideDto dto, int? userId)
-    {
-        var term = await _context.AcademicTerms.FindAsync(id)
-            ?? throw new KeyNotFoundException($"Dönem bulunamadı: {id}");
-
-        if (term.IsCancelled)
-            throw new InvalidOperationException("İptal edilmiş dönemin fazları değiştirilemez.");
-
-        switch (dto.Phase)
-        {
-            case "Registration": term.RegistrationOverride = dto.Value; break;
-            case "AddDrop":      term.AddDropOverride = dto.Value; break;
-            case "Withdrawal":   term.WithdrawalOverride = dto.Value; break;
-            case "GradeEntry":   term.GradeEntryOverride = dto.Value; break;
-            default: throw new ArgumentException($"Geçersiz faz: {dto.Phase}");
-        }
-
-        term.UpdatedAt = _clock.UtcNow;
-        await _context.SaveChangesAsync();
-    }
-
     // ── Helpers ───────────────────────────────────────────────────────
 
     private AdminTermDto ToDto(AcademicTerm t)
@@ -200,17 +159,9 @@ public class AdminTermService : IAdminTermService
             GetStatusLabel(status),
             t.IsCancelled,
             t.YoksisStatus.ToString(),
-            t.RegistrationStart, t.RegistrationEnd,
-            t.AddDropStart, t.AddDropEnd,
             t.TermStart, t.TermEnd,
-            t.WithdrawalDeadline,
-            t.GradeEntryStart, t.GradeEntryEnd,
-            t.RegistrationOverride, t.AddDropOverride, t.WithdrawalOverride, t.GradeEntryOverride,
-            t.IsRegistrationOpen(now),
-            t.IsAddDropOpen(now),
-            t.IsWithdrawalOpen(now),
-            t.IsGradeEntryOpen(now),
             t.IsActive(now),
+            t.AcademicCalendar is not null,
             t.CalendarEvents.Count,
             generatedEvents.Count,
             generatedDraftId,
@@ -261,26 +212,4 @@ public class AdminTermService : IAdminTermService
         _ => throw new ArgumentException($"Geçersiz YÖKSİS durumu: {s}")
     };
 
-    private static void ValidateTermDates(DateTime regStart, DateTime regEnd,
-        DateTime addDropStart, DateTime addDropEnd,
-        DateTime termStart, DateTime termEnd, DateTime withdrawalDeadline,
-        DateTime gradeStart, DateTime gradeEnd)
-    {
-        if (regStart >= regEnd)
-            throw new InvalidOperationException("Kayıt başlangıç tarihi bitiş tarihinden önce olmalıdır.");
-        if (termStart >= termEnd)
-            throw new InvalidOperationException("Dönem başlangıç tarihi bitiş tarihinden önce olmalıdır.");
-        if (addDropStart >= addDropEnd)
-            throw new InvalidOperationException("Ders ekleme/bırakma başlangıç tarihi bitiş tarihinden önce olmalıdır.");
-        if (gradeStart >= gradeEnd)
-            throw new InvalidOperationException("Not girişi başlangıç tarihi bitiş tarihinden önce olmalıdır.");
-        if (regEnd > termEnd)
-            throw new InvalidOperationException("Kayıt bitiş tarihi dönem bitiş tarihinden sonra olamaz.");
-        if (addDropEnd > termEnd)
-            throw new InvalidOperationException("Ders ekleme/bırakma bitiş tarihi dönem bitiş tarihinden sonra olamaz.");
-        if (withdrawalDeadline > termEnd)
-            throw new InvalidOperationException("Çekilme tarihi dönem bitiş tarihinden sonra olamaz.");
-        if (withdrawalDeadline < termStart)
-            throw new InvalidOperationException("Çekilme tarihi dönem başlangıç tarihinden önce olamaz.");
-    }
 }

@@ -209,30 +209,12 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("AddDropEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool?>("AddDropOverride")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("AddDropStart")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("EnglishName")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<DateTime>("GradeEntryEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool?>("GradeEntryOverride")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("GradeEntryStart")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsCancelled")
                         .HasColumnType("boolean");
@@ -243,15 +225,6 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<string>("OtherName")
                         .HasColumnType("text");
-
-                    b.Property<DateTime>("RegistrationEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool?>("RegistrationOverride")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("RegistrationStart")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ShortEnglishName")
                         .IsRequired()
@@ -272,12 +245,6 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("WithdrawalDeadline")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool?>("WithdrawalOverride")
-                        .HasColumnType("boolean");
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
@@ -2584,6 +2551,64 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("SystemConfigs");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.TermAcademicCalendar", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AddDropEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("AddDropOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("AddDropStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("GradeEntryEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("GradeEntryOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("GradeEntryStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("RegistrationEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("RegistrationOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("RegistrationStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("WithdrawalDeadline")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("WithdrawalOverride")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TermId")
+                        .IsUnique();
+
+                    b.ToTable("TermAcademicCalendars");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
                 {
                     b.Property<int>("Id")
@@ -3734,6 +3759,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.TermAcademicCalendar", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithOne("AcademicCalendar")
+                        .HasForeignKey("SIS.Domain.Entities.TermAcademicCalendar", "TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Term");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
@@ -3791,6 +3827,8 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.AcademicTerm", b =>
                 {
+                    b.Navigation("AcademicCalendar");
+
                     b.Navigation("CalendarEvents");
                 });
 

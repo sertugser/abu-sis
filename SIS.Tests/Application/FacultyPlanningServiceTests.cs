@@ -247,15 +247,19 @@ public class FacultyPlanningServiceTests : IDisposable
             EnglishName = "Spring 2025-2026",
             Year = 2025,
             TermType = TermType.Spring,
-            RegistrationStart = DateTime.UtcNow.AddDays(-5),
-            RegistrationEnd = DateTime.UtcNow.AddDays(5),
-            AddDropStart = DateTime.UtcNow.AddDays(6),
-            AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
-            GradeEntryStart = termEnd.AddDays(-14),
-            GradeEntryEnd = termEnd.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-5),
+                RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                AddDropStart = DateTime.UtcNow.AddDays(6),
+                AddDropEnd = DateTime.UtcNow.AddDays(12),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         _context.SaveChanges();

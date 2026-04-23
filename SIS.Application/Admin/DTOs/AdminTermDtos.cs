@@ -8,26 +8,16 @@ public record AdminTermDto(
     string ShortEnglishName,
     string? OtherName,
     int Year,
-    string TermType,              // "Fall" | "Spring" | ... 9 değer
-    string TermTypeLabel,         // "Güz" | "Bahar" | ...
-    string Status,                // "Inactive" | "Active" | "Cancelled" — computed
-    string StatusLabel,           // "Pasif" | "Aktif" | "İptal"
-    bool IsCancelled,             // stored — admin'in tek manuel aksiyonu
-    string YoksisStatus,          // "Inactive" | "Active"
-    DateTime RegistrationStart, DateTime RegistrationEnd,
-    DateTime AddDropStart, DateTime AddDropEnd,
-    DateTime TermStart, DateTime TermEnd,
-    DateTime WithdrawalDeadline,
-    DateTime GradeEntryStart, DateTime GradeEntryEnd,
-    bool? RegistrationOverride,
-    bool? AddDropOverride,
-    bool? WithdrawalOverride,
-    bool? GradeEntryOverride,
-    bool IsRegistrationOpen,
-    bool IsAddDropOpen,
-    bool IsWithdrawalOpen,
-    bool IsGradeEntryOpen,
-    bool IsActive,                // computed: GetStatus(now) == Active
+    string TermType,
+    string TermTypeLabel,
+    string Status,
+    string StatusLabel,
+    bool IsCancelled,
+    string YoksisStatus,
+    DateTime TermStart,
+    DateTime TermEnd,
+    bool IsActive,
+    bool HasAcademicCalendar,
     int CalendarEventCount,
     int GeneratedCalendarEventCount,
     int? GeneratedCalendarDraftId,
@@ -43,11 +33,8 @@ public record CreateTermDto(
     int Year,
     string TermType,
     string YoksisStatus,
-    DateTime RegistrationStart, DateTime RegistrationEnd,
-    DateTime AddDropStart, DateTime AddDropEnd,
-    DateTime TermStart, DateTime TermEnd,
-    DateTime WithdrawalDeadline,
-    DateTime GradeEntryStart, DateTime GradeEntryEnd
+    DateTime TermStart,
+    DateTime TermEnd
 );
 
 public record UpdateTermDto(
@@ -58,14 +45,8 @@ public record UpdateTermDto(
     string? OtherName,
     string TermType,
     string YoksisStatus,
-    DateTime RegistrationStart, DateTime RegistrationEnd,
-    DateTime AddDropStart, DateTime AddDropEnd,
-    DateTime TermStart, DateTime TermEnd,
-    DateTime WithdrawalDeadline,
-    DateTime GradeEntryStart, DateTime GradeEntryEnd
+    DateTime TermStart,
+    DateTime TermEnd
 );
 
-public record UpdateTermPhaseOverrideDto(
-    string Phase,      // "Registration" | "AddDrop" | "Withdrawal" | "GradeEntry"
-    bool? Value         // null = takvim konuşsun; true/false = admin override
-);
+// DELETED: UpdateTermPhaseOverrideDto — moved to AcademicCalendarDtos.cs

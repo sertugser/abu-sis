@@ -12,6 +12,4 @@ public interface IAdminTermService
     // Tek manuel aksiyon: Cancel ve tersini alma. Active/Inactive otomatik hesaplanır.
     Task CancelTermAsync(int id);
     Task UncancelTermAsync(int id);
-
-    Task UpdatePhaseOverrideAsync(int id, UpdateTermPhaseOverrideDto dto, int? userId);
 }

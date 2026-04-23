@@ -55,14 +55,19 @@ public class TermClosingServiceTests : IDisposable
             Name = "2025-2026 Guz",
             Year = 2025,
             TermType = TermType.Fall,
-            RegistrationStart = termStart,
-            RegistrationEnd = termStart.AddDays(14),
-            AddDropStart = termStart.AddDays(14),
-            AddDropEnd = termStart.AddDays(21),
             TermStart = termStart,
             TermEnd = termEnd,
-            GradeEntryStart = termEnd.AddDays(-14),
-            GradeEntryEnd = termEnd.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = termStart,
+                RegistrationEnd = termStart.AddDays(14),
+                AddDropStart = termStart.AddDays(14),
+                AddDropEnd = termStart.AddDays(21),
+                WithdrawalDeadline = termEnd.AddDays(-30),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         _context.AcademicPrograms.Add(new AcademicProgram
@@ -344,14 +349,19 @@ public class TermClosingServiceTests : IDisposable
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = 99, Name = "2025-2026 Bahar", Year = 2025, TermType = TermType.Spring,
-            RegistrationStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
-            RegistrationEnd = new DateTime(2026, 2, 15, 0, 0, 0, DateTimeKind.Utc),
-            AddDropStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
-            AddDropEnd = new DateTime(2026, 2, 15, 0, 0, 0, DateTimeKind.Utc),
             TermStart = new DateTime(2026, 2, 15, 0, 0, 0, DateTimeKind.Utc),
             TermEnd = termEnd99,
-            GradeEntryStart = termEnd99.AddDays(-14),
-            GradeEntryEnd = termEnd99.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                RegistrationEnd = new DateTime(2026, 2, 15, 0, 0, 0, DateTimeKind.Utc),
+                AddDropStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                AddDropEnd = new DateTime(2026, 2, 15, 0, 0, 0, DateTimeKind.Utc),
+                WithdrawalDeadline = termEnd99.AddDays(-30),
+                GradeEntryStart = termEnd99.AddDays(-14),
+                GradeEntryEnd = termEnd99.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
         await _context.SaveChangesAsync();
 

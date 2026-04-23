@@ -267,6 +267,7 @@ public class GradeController : ControllerBase
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         var term = await _context.AcademicTerms.AsNoTracking()
+            .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => t.Id == section.TermId);
         if (term == null)
             return NotFound(new { error = "Dönem bulunamadi." });
@@ -355,6 +356,7 @@ public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int c
         return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
     var term = await _context.AcademicTerms.AsNoTracking()
+        .Include(t => t.AcademicCalendar)
         .FirstOrDefaultAsync(t => t.Id == section.TermId);
     if (term == null)
         return NotFound(new { error = "Dönem bulunamadi." });
@@ -468,6 +470,7 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
         return BadRequest(new { error = "Dosya boyutu 5MB'i gecemez." });
 
     var term = await _context.AcademicTerms.AsNoTracking()
+        .Include(t => t.AcademicCalendar)
         .FirstOrDefaultAsync(t => t.Id == section.TermId);
     if (term == null)
         return NotFound(new { error = "Dönem bulunamadi." });
@@ -668,6 +671,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         return BadRequest(new { error = "Dosya boyutu 5MB'i gecemez." });
 
     var term = await _context.AcademicTerms.AsNoTracking()
+        .Include(t => t.AcademicCalendar)
         .FirstOrDefaultAsync(t => t.Id == section.TermId);
     if (term == null)
         return NotFound(new { error = "Dönem bulunamadi." });
@@ -821,6 +825,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         var term = await _context.AcademicTerms.AsNoTracking()
+            .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => t.Id == section.TermId);
         if (term == null)
             return NotFound(new { error = "Dönem bulunamadi." });
@@ -948,6 +953,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         var term = await _context.AcademicTerms.AsNoTracking()
+            .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => t.Id == section.TermId);
         if (term == null)
             return NotFound(new { error = "Dönem bulunamadi." });

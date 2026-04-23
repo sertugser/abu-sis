@@ -38,11 +38,15 @@ public class EvaluationPeriodOpenerJobTests
     private static AcademicTerm TermReady(DateTime now) => new()
     {
         Id = 1, Name = "T",
-        RegistrationStart = now.AddDays(-30), RegistrationEnd = now.AddDays(-20),
-        AddDropStart = now.AddDays(-20), AddDropEnd = now.AddDays(-15),
         TermStart = now.AddDays(-60), TermEnd = now.AddDays(30),
-        WithdrawalDeadline = now.AddDays(-10),
-        GradeEntryStart = now.AddDays(-1), GradeEntryEnd = now.AddDays(20)
+        AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+        {
+            RegistrationStart = now.AddDays(-30), RegistrationEnd = now.AddDays(-20),
+            AddDropStart = now.AddDays(-20), AddDropEnd = now.AddDays(-15),
+            WithdrawalDeadline = now.AddDays(-10),
+            GradeEntryStart = now.AddDays(-1), GradeEntryEnd = now.AddDays(20),
+            CreatedAt = DateTime.UtcNow,
+        }
     };
 
     [Fact]
@@ -82,7 +86,7 @@ public class EvaluationPeriodOpenerJobTests
         var now = DateTime.UtcNow;
         var (ctx, clock) = Build(now);
         var term = TermReady(now);
-        term.GradeEntryStart = now.AddDays(10);
+        term.AcademicCalendar!.GradeEntryStart = now.AddDays(10);
         ctx.AcademicTerms.Add(term);
         await ctx.SaveChangesAsync();
 

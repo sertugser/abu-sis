@@ -75,21 +75,5 @@ public class TermManagementController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
-    [HttpPost("{id:int}/override")]
-    [Authorize(Roles = "SystemAdministrator")]
-    public async Task<IActionResult> UpdatePhaseOverride(int id, [FromBody] UpdateTermPhaseOverrideDto dto)
-    {
-        try
-        {
-            var userIdClaim = User.FindFirst("sub")?.Value
-                ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            int? userId = int.TryParse(userIdClaim, out var uid) ? uid : null;
-
-            await _service.UpdatePhaseOverrideAsync(id, dto, userId);
-            return Ok(await _service.GetTermByIdAsync(id));
-        }
-        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
-        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
-    }
+    // Phase override moved to AcademicCalendarController (POST /api/admin/academic-calendar/{id}/override)
 }

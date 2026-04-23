@@ -41,6 +41,7 @@ public partial class CalendarGeneratorService
                 };
                 var term = await _context.AcademicTerms
                     .Include(t => t.CalendarEvents)
+                    .Include(t => t.AcademicCalendar)
                     .FirstOrDefaultAsync(t => t.Year == startYear && t.TermType == termType, ct);
 
                 if (term == null)
@@ -119,20 +120,26 @@ public partial class CalendarGeneratorService
         {
             var term = await _context.AcademicTerms
                 .Include(t => t.CalendarEvents)
+                .Include(t => t.AcademicCalendar)
                 .FirstOrDefaultAsync(t => t.Id == snapshot.TermId, ct);
             if (term == null || term.IsCancelled)
                 continue;
 
-            term.RegistrationStart = snapshot.RegistrationStart;
-            term.RegistrationEnd = snapshot.RegistrationEnd;
-            term.AddDropStart = snapshot.AddDropStart;
-            term.AddDropEnd = snapshot.AddDropEnd;
-            term.WithdrawalDeadline = snapshot.WithdrawalDeadline;
             term.TermStart = snapshot.TermStart;
             term.TermEnd = snapshot.TermEnd;
-            term.GradeEntryStart = snapshot.GradeEntryStart;
-            term.GradeEntryEnd = snapshot.GradeEntryEnd;
             term.UpdatedAt = DateTime.UtcNow;
+
+            if (term.AcademicCalendar != null)
+            {
+                term.AcademicCalendar.RegistrationStart = snapshot.RegistrationStart;
+                term.AcademicCalendar.RegistrationEnd = snapshot.RegistrationEnd;
+                term.AcademicCalendar.AddDropStart = snapshot.AddDropStart;
+                term.AcademicCalendar.AddDropEnd = snapshot.AddDropEnd;
+                term.AcademicCalendar.WithdrawalDeadline = snapshot.WithdrawalDeadline;
+                term.AcademicCalendar.GradeEntryStart = snapshot.GradeEntryStart;
+                term.AcademicCalendar.GradeEntryEnd = snapshot.GradeEntryEnd;
+                term.AcademicCalendar.UpdatedAt = DateTime.UtcNow;
+            }
 
             _context.TermCalendarEvents.RemoveRange(term.CalendarEvents);
             foreach (var ev in snapshot.GeneratedEvents)
@@ -181,15 +188,15 @@ public partial class CalendarGeneratorService
         public static TermSnapshot From(AcademicTerm term) =>
             new(
                 term.Id,
-                term.RegistrationStart,
-                term.RegistrationEnd,
-                term.AddDropStart,
-                term.AddDropEnd,
-                term.WithdrawalDeadline,
+                term.AcademicCalendar?.RegistrationStart ?? term.TermStart,
+                term.AcademicCalendar?.RegistrationEnd ?? term.TermStart,
+                term.AcademicCalendar?.AddDropStart ?? term.TermStart,
+                term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
+                term.AcademicCalendar?.WithdrawalDeadline ?? term.TermEnd,
                 term.TermStart,
                 term.TermEnd,
-                term.GradeEntryStart,
-                term.GradeEntryEnd,
+                term.AcademicCalendar?.GradeEntryStart ?? term.TermEnd,
+                term.AcademicCalendar?.GradeEntryEnd ?? term.TermEnd,
                 term.CalendarEvents.Select(TermCalendarEventSnapshot.From).ToList());
     }
 

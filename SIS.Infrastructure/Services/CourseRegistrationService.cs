@@ -54,7 +54,9 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // Guard: kayıt dönemi kontrolü
-        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId);
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => t.Id == section.TermId);
         if (term != null && !term.IsRegistrationOpen(_clock.UtcNow) && !term.IsAddDropOpen(_clock.UtcNow))
         {
             response.Success = false;
@@ -930,6 +932,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 .ThenInclude(cs => cs.Course)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Term)
+                    .ThenInclude(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(cr => cr.Id == registrationId && cr.StudentId == studentId);
 
         if (registration == null)
@@ -982,7 +985,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         // Check add-drop period (FR-48)
         var term = registration.CourseSection.Term;
         var now = DateTime.UtcNow;
-        if (now < term.AddDropStart || now > term.AddDropEnd)
+        if (!term.IsAddDropOpen(now))
         {
             // Allow dropping Draft items anytime, but Active/PendingAdvisorApproval only during add-drop
             if (registration.Status != RegistrationStatus.Draft)
@@ -996,7 +999,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                         new()
                         {
                             Rule = "AddDropPeriod",
-                            Message = $"Ders birakma donemi disinda. Ders birakma donemi: {term.AddDropStart:dd.MM.yyyy} - {term.AddDropEnd:dd.MM.yyyy}"
+                            Message = "Ders bırakma dönemi dışında. Ders bırakma dönemi kapalı."
                         }
                     }
                 };
@@ -1042,6 +1045,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 .ThenInclude(cs => cs.Course)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Term)
+                    .ThenInclude(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(cr => cr.Id == registrationId && cr.StudentId == studentId);
 
         if (registration == null)
@@ -1110,12 +1114,12 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // FR-57: Check withdrawal deadline
-        if (DateTime.UtcNow > term.WithdrawalDeadline)
+        if (!term.IsWithdrawalOpen(DateTime.UtcNow))
         {
             errors.Add(new ValidationError
             {
                 Rule = "WithdrawalDeadline",
-                Message = $"Ders çekilme süresi doldu. Son çekilme tarihi: {term.WithdrawalDeadline:dd.MM.yyyy}."
+                Message = "Ders çekilme dönemi kapalı. Çekilme süresi dolmuş veya henüz başlamamış."
             });
         }
 
@@ -1464,7 +1468,9 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         var nowApprove = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
+        var activeTerm = await _context.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto

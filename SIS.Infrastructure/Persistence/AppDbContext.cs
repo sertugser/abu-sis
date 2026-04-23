@@ -24,6 +24,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CourseRegistration> CourseRegistrations => Set<CourseRegistration>();
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
+    public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
     public DbSet<Classroom> Classrooms => Set<Classroom>();
 public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
@@ -443,6 +444,17 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<AcademicTerm>(e =>
         {
             e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
+        });
+
+        // ── TermAcademicCalendar (1-1 AcademicTerm) ────────────
+        builder.Entity<TermAcademicCalendar>(e =>
+        {
+            e.HasOne(c => c.Term)
+             .WithOne(t => t.AcademicCalendar)
+             .HasForeignKey<TermAcademicCalendar>(c => c.TermId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(c => c.TermId).IsUnique();
         });
 
         // ── TermCalendarEvent ──────────────────────────────────

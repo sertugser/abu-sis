@@ -95,15 +95,19 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             Name = "2025-2026 Fall",
             Year = 2025,
             TermType = TermType.Fall,
-            RegistrationStart = DateTime.UtcNow.AddDays(-2),
-            RegistrationEnd = DateTime.UtcNow.AddDays(5),
-            AddDropStart = DateTime.UtcNow.AddDays(6),
-            AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(50),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
-            GradeEntryStart = termEnd.AddDays(-14),
-            GradeEntryEnd = termEnd.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-2),
+                RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                AddDropStart = DateTime.UtcNow.AddDays(6),
+                AddDropEnd = DateTime.UtcNow.AddDays(12),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(50),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
         _context.AcademicPrograms.Add(new AcademicProgram
         {

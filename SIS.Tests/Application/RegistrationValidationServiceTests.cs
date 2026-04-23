@@ -67,15 +67,19 @@ public class RegistrationValidationServiceTests : IDisposable
             Name = "2025-2026 Spring",
             Year = 2025,
             TermType = TermType.Spring,
-            RegistrationStart = DateTime.UtcNow.AddDays(-5),
-            RegistrationEnd = DateTime.UtcNow.AddDays(5),
-            AddDropStart = DateTime.UtcNow.AddDays(6),
-            AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
-            GradeEntryStart = termEnd.AddDays(-14),
-            GradeEntryEnd = termEnd.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-5),
+                RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                AddDropStart = DateTime.UtcNow.AddDays(6),
+                AddDropEnd = DateTime.UtcNow.AddDays(12),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         // Classroom (needed for SectionSchedule records)
@@ -327,8 +331,8 @@ public class RegistrationValidationServiceTests : IDisposable
     public async Task Validate_OutsideRegistrationPeriod_ReturnsPeriodError()
     {
         // Adjust dates so registration period is closed
-        var term = _context.AcademicTerms.Find(TermId)!;
-        term.RegistrationEnd = DateTime.UtcNow.AddDays(-1);
+        var term = _context.AcademicTerms.Include(t => t.AcademicCalendar).First(t => t.Id == TermId);
+        term.AcademicCalendar!.RegistrationEnd = DateTime.UtcNow.AddDays(-1);
         _context.SaveChanges();
 
         var course = AddCourse(300, "CS300", "Operating Systems", 5);
@@ -889,15 +893,19 @@ public class RegistrationValidationServiceTests : IDisposable
             Name = "2024-2025 Fall",
             Year = 2024,
             TermType = TermType.Fall,
-            RegistrationStart = DateTime.UtcNow.AddDays(-200),
-            RegistrationEnd = DateTime.UtcNow.AddDays(-190),
-            AddDropStart = DateTime.UtcNow.AddDays(-189),
-            AddDropEnd = DateTime.UtcNow.AddDays(-183),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-210),
             TermEnd = pastTermEnd,
-            GradeEntryStart = pastTermEnd.AddDays(-14),
-            GradeEntryEnd = pastTermEnd.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-200),
+                RegistrationEnd = DateTime.UtcNow.AddDays(-190),
+                AddDropStart = DateTime.UtcNow.AddDays(-189),
+                AddDropEnd = DateTime.UtcNow.AddDays(-183),
+                WithdrawalDeadline = pastTermEnd.AddDays(-20),
+                GradeEntryStart = pastTermEnd.AddDays(-14),
+                GradeEntryEnd = pastTermEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
         _context.SaveChanges();
 

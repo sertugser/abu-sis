@@ -19,6 +19,7 @@ public static partial class SeedData
             .ToList();
         var allPrereqs = context.CoursePrerequisites.ToList();
         var terms = context.AcademicTerms
+            .Include(t => t.AcademicCalendar)
             .OrderBy(t => t.Year).ThenBy(t => t.TermType)
             .ToList();
         var instructors = context.Instructors.ToList();
@@ -127,7 +128,7 @@ public static partial class SeedData
                         IsRepeated = true,
                         MandatoryAttendance = false,
                         CourseWithdrawalCount = 0,
-                        CreatedAt = term.RegistrationStart,
+                        CreatedAt = term.AcademicCalendar?.RegistrationStart ?? term.TermStart,
                         UpdatedAt = term.TermEnd
                     });
                 }
@@ -156,7 +157,7 @@ public static partial class SeedData
                             IsRepeated = false,
                             MandatoryAttendance = false,
                             CourseWithdrawalCount = 1,
-                            CreatedAt = term.RegistrationStart,
+                            CreatedAt = term.AcademicCalendar?.RegistrationStart ?? term.TermStart,
                             UpdatedAt = term.TermEnd
                         });
                         student.WithdrawalCount = 1;
@@ -197,7 +198,7 @@ public static partial class SeedData
                         IsRepeated = false,
                         MandatoryAttendance = false,
                         CourseWithdrawalCount = 0,
-                        CreatedAt = term.RegistrationStart,
+                        CreatedAt = term.AcademicCalendar?.RegistrationStart ?? term.TermStart,
                         UpdatedAt = term.TermEnd
                     });
                 }

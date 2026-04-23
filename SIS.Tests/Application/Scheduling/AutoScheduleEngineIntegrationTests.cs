@@ -82,13 +82,19 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
             EnglishName = "Fall 2025-2026",
             Year = 2025,
             TermType = TermType.Fall,
-            RegistrationStart = DateTime.UtcNow.AddDays(-5),
-            RegistrationEnd = DateTime.UtcNow.AddDays(5),
-            AddDropStart = DateTime.UtcNow.AddDays(6),
-            AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90)
+            TermEnd = DateTime.UtcNow.AddDays(90),
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-5),
+                RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                AddDropStart = DateTime.UtcNow.AddDays(6),
+                AddDropEnd = DateTime.UtcNow.AddDays(12),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                GradeEntryStart = DateTime.UtcNow.AddDays(76),
+                GradeEntryEnd = DateTime.UtcNow.AddDays(104),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         // Classrooms: 2 Lecture (60 cap), 1 PhysicsLab (30 cap)

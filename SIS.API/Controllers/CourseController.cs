@@ -424,6 +424,7 @@ public class CourseController : ControllerBase
     {
         var now = _clock.UtcNow;
         var term = await _context.AcademicTerms
+            .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
 
         if (term == null)
@@ -435,10 +436,10 @@ public class CourseController : ControllerBase
             Name = term.Name,
             Year = term.Year,
             Semester = term.TermType.ToString(),
-            RegistrationStart = term.RegistrationStart,
-            RegistrationEnd = term.RegistrationEnd,
-            AddDropStart = term.AddDropStart,
-            AddDropEnd = term.AddDropEnd,
+            RegistrationStart = term.AcademicCalendar?.RegistrationStart ?? term.TermStart,
+            RegistrationEnd = term.AcademicCalendar?.RegistrationEnd ?? term.TermStart,
+            AddDropStart = term.AcademicCalendar?.AddDropStart ?? term.TermStart,
+            AddDropEnd = term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
             IsRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow),
             IsAddDropOpen = term.IsAddDropOpen(_clock.UtcNow),
             Status = term.GetStatus(_clock.UtcNow).ToString()

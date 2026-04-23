@@ -217,15 +217,38 @@ public partial class CalendarGeneratorService
             ?? First(events, CalendarEventType.MakeupGradePublication)
             ?? First(events, CalendarEventType.SummerSchoolGradePublication);
 
-        term.RegistrationStart = registration?.StartDate ?? classesStart.StartDate;
-        term.RegistrationEnd = registration?.EndDate ?? registration?.StartDate ?? classesStart.StartDate;
-        term.AddDropStart = addDrop?.StartDate ?? term.RegistrationStart;
-        term.AddDropEnd = addDrop?.EndDate ?? addDrop?.StartDate ?? term.RegistrationEnd;
-        term.WithdrawalDeadline = withdrawal?.StartDate ?? classesEnd.StartDate;
+        var regStart = registration?.StartDate ?? classesStart.StartDate;
+        var regEnd = registration?.EndDate ?? registration?.StartDate ?? classesStart.StartDate;
         term.TermStart = classesStart.StartDate;
         term.TermEnd = classesEnd.StartDate;
-        term.GradeEntryStart = gradeEntry?.StartDate ?? classesEnd.StartDate;
-        term.GradeEntryEnd = gradeEntry?.EndDate ?? gradeEntry?.StartDate ?? classesEnd.StartDate.AddDays(14);
+
+        // Upsert AcademicCalendar with the dates derived from calendar events
+        if (term.AcademicCalendar is null)
+        {
+            term.AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                TermId = term.Id,
+                RegistrationStart = regStart,
+                RegistrationEnd = regEnd,
+                AddDropStart = addDrop?.StartDate ?? regStart,
+                AddDropEnd = addDrop?.EndDate ?? addDrop?.StartDate ?? regEnd,
+                WithdrawalDeadline = withdrawal?.StartDate ?? classesEnd.StartDate,
+                GradeEntryStart = gradeEntry?.StartDate ?? classesEnd.StartDate,
+                GradeEntryEnd = gradeEntry?.EndDate ?? gradeEntry?.StartDate ?? classesEnd.StartDate.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            };
+        }
+        else
+        {
+            term.AcademicCalendar.RegistrationStart = regStart;
+            term.AcademicCalendar.RegistrationEnd = regEnd;
+            term.AcademicCalendar.AddDropStart = addDrop?.StartDate ?? regStart;
+            term.AcademicCalendar.AddDropEnd = addDrop?.EndDate ?? addDrop?.StartDate ?? regEnd;
+            term.AcademicCalendar.WithdrawalDeadline = withdrawal?.StartDate ?? classesEnd.StartDate;
+            term.AcademicCalendar.GradeEntryStart = gradeEntry?.StartDate ?? classesEnd.StartDate;
+            term.AcademicCalendar.GradeEntryEnd = gradeEntry?.EndDate ?? gradeEntry?.StartDate ?? classesEnd.StartDate.AddDays(14);
+            term.AcademicCalendar.UpdatedAt = DateTime.UtcNow;
+        }
     }
 
     private static GeneratedCalendarEventDto? First(IReadOnlyList<GeneratedCalendarEventDto> events, CalendarEventType eventType) =>
@@ -256,11 +279,22 @@ public partial class CalendarGeneratorService
             ShortEnglishName = $"{english} {startYear % 100:00}-{(startYear + 1) % 100:00}",
             Year = startYear,
             TermType = termType,
+            TermStart = now,
+            TermEnd = termEnd,
             IsCancelled = false,
             YoksisStatus = YoksisStatus.Inactive,
             CreatedAt = DateTime.UtcNow,
-            GradeEntryStart = termEnd.AddDays(-14),
-            GradeEntryEnd = termEnd.AddDays(14)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                RegistrationStart = now,
+                RegistrationEnd = now,
+                AddDropStart = now,
+                AddDropEnd = now,
+                WithdrawalDeadline = termEnd.AddDays(-30),
+                CreatedAt = DateTime.UtcNow,
+            }
         };
     }
 

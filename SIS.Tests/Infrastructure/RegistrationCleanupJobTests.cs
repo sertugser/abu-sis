@@ -47,11 +47,15 @@ public class RegistrationCleanupJobTests
         var term = new AcademicTerm
         {
             Id = 1, Name = "2026 Güz",
-            RegistrationStart = now.AddDays(-14), RegistrationEnd = now.AddDays(-5),
-            AddDropStart = now.AddDays(-1), AddDropEnd = now.AddDays(5),
             TermStart = now.AddDays(-1), TermEnd = now.AddDays(100),
-            WithdrawalDeadline = now.AddDays(60),
-            GradeEntryStart = now.AddDays(90), GradeEntryEnd = now.AddDays(110)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = now.AddDays(-14), RegistrationEnd = now.AddDays(-5),
+                AddDropStart = now.AddDays(-1), AddDropEnd = now.AddDays(5),
+                WithdrawalDeadline = now.AddDays(60),
+                GradeEntryStart = now.AddDays(90), GradeEntryEnd = now.AddDays(110),
+                CreatedAt = DateTime.UtcNow,
+            }
         };
         ctx.AcademicTerms.Add(term);
         var section = new CourseSection { Id = 1, TermId = 1, EnrolledCount = 2, Status = CourseSectionStatus.Active, CourseId = 1 };
@@ -78,11 +82,15 @@ public class RegistrationCleanupJobTests
         var term = new AcademicTerm
         {
             Id = 1, Name = "T",
-            RegistrationStart = now.AddDays(-5), RegistrationEnd = now.AddDays(5),
-            AddDropStart = now.AddDays(10), AddDropEnd = now.AddDays(20),
             TermStart = now, TermEnd = now.AddDays(100),
-            WithdrawalDeadline = now.AddDays(60),
-            GradeEntryStart = now.AddDays(90), GradeEntryEnd = now.AddDays(110)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = now.AddDays(-5), RegistrationEnd = now.AddDays(5),
+                AddDropStart = now.AddDays(10), AddDropEnd = now.AddDays(20),
+                WithdrawalDeadline = now.AddDays(60),
+                GradeEntryStart = now.AddDays(90), GradeEntryEnd = now.AddDays(110),
+                CreatedAt = DateTime.UtcNow,
+            }
         };
         ctx.AcademicTerms.Add(term);
         ctx.CourseRegistrations.Add(
@@ -104,11 +112,15 @@ public class RegistrationCleanupJobTests
         var term = new AcademicTerm
         {
             Id = 1, Name = "T",
-            RegistrationStart = now.AddDays(-14), RegistrationEnd = now.AddDays(-5),
-            AddDropStart = now.AddDays(-1), AddDropEnd = now.AddDays(5),
             TermStart = now.AddDays(-1), TermEnd = now.AddDays(100),
-            WithdrawalDeadline = now.AddDays(60),
-            GradeEntryStart = now.AddDays(90), GradeEntryEnd = now.AddDays(110)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = now.AddDays(-14), RegistrationEnd = now.AddDays(-5),
+                AddDropStart = now.AddDays(-1), AddDropEnd = now.AddDays(5),
+                WithdrawalDeadline = now.AddDays(60),
+                GradeEntryStart = now.AddDays(90), GradeEntryEnd = now.AddDays(110),
+                CreatedAt = DateTime.UtcNow,
+            }
         };
         ctx.AcademicTerms.Add(term);
         ctx.CourseSections.Add(new CourseSection { Id = 1, TermId = 1, EnrolledCount = 1, Status = CourseSectionStatus.Active, CourseId = 1 });

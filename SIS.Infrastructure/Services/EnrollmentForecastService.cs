@@ -116,7 +116,9 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
     public async Task<int> CalibrateForTermAsync(int termId, CancellationToken ct = default)
     {
-        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
 
         if (!term.IsActive(_clock.UtcNow) || !term.IsAddDropOpen(_clock.UtcNow))
@@ -298,6 +300,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
+            .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now);
 
         var allTerms = await _context.AcademicTerms

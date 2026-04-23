@@ -32,25 +32,35 @@ public static partial class SeedData
             foreach (var t in terms)
             {
                 var termEnd = ParseUtcDate(t.TermEnd);
-                context.AcademicTerms.Add(new AcademicTerm
+                var regStart = ParseUtcDate(t.RegStart);
+                var regEnd = ParseUtcDate(t.RegEnd);
+                var addStart = ParseUtcDate(t.AddStart);
+                var addEnd = ParseUtcDate(t.AddEnd);
+                var withdrawal = ParseUtcDate(t.WithdrawalDeadline);
+                var term = new AcademicTerm
                 {
                     Name = t.Name,
                     ShortName = t.ShortName,
                     EnglishName = t.EnglishName,
                     Year = t.Year,
                     TermType = t.TermType,
-                    RegistrationStart = ParseUtcDate(t.RegStart),
-                    RegistrationEnd = ParseUtcDate(t.RegEnd),
-                    AddDropStart = ParseUtcDate(t.AddStart),
-                    AddDropEnd = ParseUtcDate(t.AddEnd),
-                    WithdrawalDeadline = ParseUtcDate(t.WithdrawalDeadline),
                     TermStart = ParseUtcDate(t.TermStart),
                     TermEnd = termEnd,
-                    GradeEntryStart = termEnd.AddDays(-14),
-                    GradeEntryEnd = termEnd.AddDays(14),
                     IsCancelled = t.IsCancelled,
                     YoksisStatus = YoksisStatus.Inactive,
-                });
+                    AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                    {
+                        RegistrationStart = regStart,
+                        RegistrationEnd = regEnd,
+                        AddDropStart = addStart,
+                        AddDropEnd = addEnd,
+                        WithdrawalDeadline = withdrawal,
+                        GradeEntryStart = termEnd.AddDays(-14),
+                        GradeEntryEnd = termEnd.AddDays(14),
+                        CreatedAt = DateTime.UtcNow,
+                    }
+                };
+                context.AcademicTerms.Add(term);
             }
             await context.SaveChangesAsync();
         }

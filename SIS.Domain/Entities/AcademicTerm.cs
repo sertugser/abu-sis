@@ -8,69 +8,54 @@ public class AcademicTerm
     public string Name { get; set; } = string.Empty;
     public string ShortName { get; set; } = string.Empty;
     public string EnglishName { get; set; } = string.Empty;
-
-    // YENİ — çok dilli ad desteği
     public string ShortEnglishName { get; set; } = string.Empty;
     public string? OtherName { get; set; }
 
     public int Year { get; set; }
-
-    // SİLİNEN: SemesterType Semester (kullanımdan çıktı)
-
-    // DEĞİŞEN: 9 değerli, default Fall
     public TermType TermType { get; set; } = TermType.Fall;
 
-    public DateTime RegistrationStart { get; set; }
-    public DateTime RegistrationEnd { get; set; }
-    public DateTime AddDropStart { get; set; }
-    public DateTime AddDropEnd { get; set; }
-    public DateTime WithdrawalDeadline { get; set; }
+    // Dönem kimliğini tanımlayan 2 tarih burada kalır
     public DateTime TermStart { get; set; }
     public DateTime TermEnd { get; set; }
-    public DateTime GradeEntryStart { get; set; }
-    public DateTime GradeEntryEnd { get; set; }
 
-    public bool? RegistrationOverride { get; set; }
-    public bool? AddDropOverride { get; set; }
-    public bool? WithdrawalOverride { get; set; }
-    public bool? GradeEntryOverride { get; set; }
+    // SİLİNDİ (Faz 2): RegistrationStart/End, AddDropStart/End, WithdrawalDeadline,
+    //                  GradeEntryStart/End + 4 override — TermAcademicCalendar'a taşındı
 
-    // SİLİNEN: TermStatus Status (stored)
-    // YENİ: tek manuel state
     public bool IsCancelled { get; set; } = false;
-
-    // YENİ
     public YoksisStatus YoksisStatus { get; set; } = YoksisStatus.Inactive;
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
+    // Navigation'lar
+    public TermAcademicCalendar? AcademicCalendar { get; set; }
     public ICollection<TermCalendarEvent> CalendarEvents { get; set; } = new List<TermCalendarEvent>();
 
-    /// <summary>
-    /// Dönemin gösterim durumunu hesaplar. IsCancelled → Cancelled; tarih aralığındaysak Active; aksi Inactive.
-    /// </summary>
+    // ── Computed ─────────────────────────────────────────────────────
+
     public TermStatus GetStatus(DateTime now) =>
         IsCancelled ? TermStatus.Cancelled
         : (now >= TermStart && now <= TermEnd) ? TermStatus.Active
         : TermStatus.Inactive;
 
-    /// <summary>Aktif mi (tarih + iptal değil). Faz öncüsü.</summary>
     public bool IsActive(DateTime now) => GetStatus(now) == TermStatus.Active;
 
+    // Phase method'ları: AcademicCalendar null ise false döner (null-safe, mevcut davranışla uyumlu).
+    // Çağıran tarafın Include'ı şart; aksi EF lazy olmadığından AcademicCalendar null görünür
+    // ve false dönüşü kullanıcıya "kapalı" olarak yansır — veri tutarsızlığı sessiz kalmaz.
     public bool IsRegistrationOpen(DateTime now) =>
-        IsActive(now) &&
-        (RegistrationOverride ?? (now >= RegistrationStart && now <= RegistrationEnd));
+        IsActive(now) && AcademicCalendar is { } cal &&
+        (cal.RegistrationOverride ?? (now >= cal.RegistrationStart && now <= cal.RegistrationEnd));
 
     public bool IsAddDropOpen(DateTime now) =>
-        IsActive(now) &&
-        (AddDropOverride ?? (now >= AddDropStart && now <= AddDropEnd));
+        IsActive(now) && AcademicCalendar is { } cal &&
+        (cal.AddDropOverride ?? (now >= cal.AddDropStart && now <= cal.AddDropEnd));
 
     public bool IsWithdrawalOpen(DateTime now) =>
-        IsActive(now) &&
-        (WithdrawalOverride ?? (now >= TermStart && now <= WithdrawalDeadline));
+        IsActive(now) && AcademicCalendar is { } cal &&
+        (cal.WithdrawalOverride ?? (now >= TermStart && now <= cal.WithdrawalDeadline));
 
     public bool IsGradeEntryOpen(DateTime now) =>
-        IsActive(now) &&
-        (GradeEntryOverride ?? (now >= GradeEntryStart && now <= GradeEntryEnd));
+        IsActive(now) && AcademicCalendar is { } cal &&
+        (cal.GradeEntryOverride ?? (now >= cal.GradeEntryStart && now <= cal.GradeEntryEnd));
 }

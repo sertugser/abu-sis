@@ -49,11 +49,17 @@ public class RegistrationCleanupJob : BackgroundService
         var now = _clock.UtcNow;
 
         var terms = await ctx.AcademicTerms
-            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now && t.AddDropStart <= now)
-            .Select(t => t.Id)
+            .Include(t => t.AcademicCalendar)
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .Select(t => new { t.Id, t.AcademicCalendar })
             .ToListAsync(ct);
 
-        foreach (var termId in terms)
+        var termIds = terms
+            .Where(t => t.AcademicCalendar != null && t.AcademicCalendar.AddDropStart <= now)
+            .Select(t => t.Id)
+            .ToList();
+
+        foreach (var termId in termIds)
         {
             var pending = await ctx.CourseRegistrations
                 .Include(cr => cr.CourseSection)

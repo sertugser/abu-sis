@@ -257,13 +257,19 @@ public class CalendarGeneratorTests : IDisposable
             EnglishName = "Fall 2025-2026",
             Year = 2025,
             TermType = TermType.Fall,
-            RegistrationStart = Utc(2025, 9, 15),
-            RegistrationEnd = Utc(2025, 9, 19),
-            AddDropStart = Utc(2025, 9, 29),
-            AddDropEnd = Utc(2025, 10, 3),
             TermStart = Utc(2025, 9, 22),
             TermEnd = Utc(2026, 1, 2),
-            WithdrawalDeadline = Utc(2025, 11, 7)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = Utc(2025, 9, 15),
+                RegistrationEnd = Utc(2025, 9, 19),
+                AddDropStart = Utc(2025, 9, 29),
+                AddDropEnd = Utc(2025, 10, 3),
+                WithdrawalDeadline = Utc(2025, 11, 7),
+                GradeEntryStart = Utc(2026, 1, 2),
+                GradeEntryEnd = Utc(2026, 1, 16),
+                CreatedAt = DateTime.UtcNow,
+            }
         };
         _context.AcademicTerms.Add(term);
         await _context.SaveChangesAsync();
@@ -287,7 +293,7 @@ public class CalendarGeneratorTests : IDisposable
             Constraints: null,
             TemplateDurationOverrides: null));
 
-        await _generatorService.ApplyAsync(result.DraftId, new ApplyCalendarDraftRequestDto(), userId: null);
+        await _generatorService.ApplyAsync(result.DraftId, new ApplyCalendarDraftRequestDto(ForceOverwrite: true), userId: null);
 
         var titles = await _context.TermCalendarEvents
             .Where(e => e.TermId == term.Id)
@@ -424,11 +430,17 @@ public class CalendarGeneratorTests : IDisposable
             TermType = TermType.Fall,
             TermStart = Utc(2025, 9, 22),
             TermEnd = Utc(2026, 1, 2),
-            RegistrationStart = Utc(2025, 9, 15),
-            RegistrationEnd = Utc(2025, 9, 19),
-            AddDropStart = Utc(2025, 9, 29),
-            AddDropEnd = Utc(2025, 10, 3),
-            WithdrawalDeadline = Utc(2025, 11, 7)
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = Utc(2025, 9, 15),
+                RegistrationEnd = Utc(2025, 9, 19),
+                AddDropStart = Utc(2025, 9, 29),
+                AddDropEnd = Utc(2025, 10, 3),
+                WithdrawalDeadline = Utc(2025, 11, 7),
+                GradeEntryStart = Utc(2026, 1, 2),
+                GradeEntryEnd = Utc(2026, 1, 16),
+                CreatedAt = DateTime.UtcNow,
+            }
         };
         _context.AcademicTerms.Add(term);
         _context.TermCalendarEvents.Add(new TermCalendarEvent
