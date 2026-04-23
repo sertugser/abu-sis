@@ -579,7 +579,8 @@ public class SchedulingServiceTests : IDisposable
             Id = id,
             ProgramId = programId,
             Version = "2025",
-            Status = CurriculumStatus.Published
+            Status = CurriculumStatus.Published,
+            IsActive = true
         };
 
         _context.Curricula.Add(curriculum);
@@ -689,6 +690,7 @@ public class SchedulingServiceTests : IDisposable
             TermId = termId,
             Capacity = capacity,
             EnrolledCount = 0,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false
         };
 
