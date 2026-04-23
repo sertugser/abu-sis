@@ -261,7 +261,7 @@ public class StudentController : ControllerBase
                         // Term label: "23-24G" format
                         var y1 = term.Year % 100;
                         var y2 = (term.Year + 1) % 100;
-                        var semChar = term.Semester == SemesterType.Fall ? "G" : "B";
+                        var semChar = term.TermType == TermType.Fall ? "G" : "B";
                         termLabel = $"{y1:D2}-{y2:D2}{semChar}";
 
                         takenCode = takenCourse.Code;
@@ -841,7 +841,7 @@ public class StudentController : ControllerBase
                 TermId = termGroup.Term.Id,
                 TermName = termGroup.Term.Name,
                 Year = termGroup.Term.Year,
-                Semester = termGroup.Term.Semester.ToString(),
+                Semester = termGroup.Term.TermType.ToString(),
                 AttemptedCredits = attemptedCredits,
                 AttemptedEcts = attemptedEcts,
                 EarnedCredits = earnedCredits,

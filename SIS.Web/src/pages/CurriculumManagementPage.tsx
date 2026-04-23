@@ -13,7 +13,7 @@ import {
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { BookOpen, CheckCircle, Loader2, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, CheckCircle, Loader2, Plus, Settings, Trash2 } from 'lucide-react';
 import {
   useAdminFaculties,
   useAdminDepartmentsByStructure,
@@ -33,6 +33,7 @@ import {
 import SemesterGroup from '../components/curriculum-management/SemesterGroup';
 import AddCourseDialog from '../components/curriculum-management/AddCourseDialog';
 import CourseDetailSheet from '../components/curriculum-management/CourseDetailSheet';
+import { CurriculumEctsRulesDialog } from '../components/curriculum-management/CurriculumEctsRulesDialog';
 import type { CurriculumCourseItemDto } from '../types/curriculumManagement';
 import { ROUTES } from '@/lib/constants';
 
@@ -63,6 +64,7 @@ export default function CurriculumManagementPage() {
   const [createMode, setCreateMode] = useState<CreateMode>('empty');
   const [copySourceId, setCopySourceId] = useState<string>('');
   const [showAddCourse, setShowAddCourse] = useState(false);
+  const [showEctsRulesDialog, setShowEctsRulesDialog] = useState(false);
 
   // ── Tabs ──
 
@@ -504,6 +506,21 @@ export default function CurriculumManagementPage() {
                     )}
                     <Button
                       size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => setShowEctsRulesDialog(true)}
+                      title="Bu müfredata özel AKTS tavanı kuralları"
+                    >
+                      <Settings className="h-3.5 w-3.5 mr-1" />
+                      AKTS Kuralları
+                      {(detail.ectsLimitBelow200 != null
+                        || detail.ectsLimit200To249 != null
+                        || detail.ectsLimitAbove250 != null) && (
+                        <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0">Özel</Badge>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
                       className="h-8 text-xs"
                       onClick={() => setShowAddCourse(true)}
                     >
@@ -719,6 +736,14 @@ export default function CurriculumManagementPage() {
         onOpenChange={setShowDetailSheet}
         curriculumCourse={detailCurriculumCourse}
       />
+
+      {/* ── AKTS Kuralları Dialog ── */}
+      {showEctsRulesDialog && detail && (
+        <CurriculumEctsRulesDialog
+          curriculum={detail}
+          onClose={() => setShowEctsRulesDialog(false)}
+        />
+      )}
     </div>
   );
 }

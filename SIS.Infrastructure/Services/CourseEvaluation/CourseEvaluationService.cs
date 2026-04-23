@@ -319,9 +319,10 @@ public class CourseEvaluationService : ICourseEvaluationService
         if (department == null)
             return null;
 
+        var nowForTerm = DateTime.UtcNow;
         var term = termId.HasValue
             ? await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId.Value, ct)
-            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.IsActive, ct);
+            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowForTerm && t.TermEnd >= nowForTerm, ct);
 
         if (term == null)
             return null;

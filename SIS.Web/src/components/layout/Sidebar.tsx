@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useActiveRole } from '../../context/ActiveRoleContext';
+import { getRoleDisplayLabel } from '../../lib/roles';
 import {
   ChevronRight,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IMPLEMENTED_ROUTES } from '../../lib/constants';
+import { useFavorites } from '../../hooks/useFavorites';
+import { FavoritesDialog } from './FavoritesDialog';
 import logo from '/logo.png';
 import {
   studentMenuGroups,
@@ -23,16 +28,36 @@ import {
 } from './SidebarMenuGroups';
 import type { MenuGroup } from './SidebarMenuGroups';
 
+const HOME_ROUTE = '/';
+
 function openInNewTab(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-function findActiveGroup(pathname: string, menuGroups: MenuGroup[]): string | null {
-  for (const group of menuGroups) {
-    if (group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)))) {
-      return group.id;
-    }
+function resolveActiveGroup(
+  pathname: string,
+  menuGroups: MenuGroup[],
+  currentGroupId: string | null,
+): string | null {
+  const matches = (group: MenuGroup) =>
+    group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)));
+
+  // 1) Kullanici niyetine saygı: su an acik olan grup yeni yolu da iceriyorsa,
+  //    sidebar'da o grup acik kalsin. ("Sik Kullanilanlar"dan Derslerim'e tiklarsan
+  //    favoriler acik kalir; "Ders Islemleri"nden tiklarsan orasi acik kalir.)
+  if (currentGroupId) {
+    const current = menuGroups.find(g => g.id === currentGroupId);
+    if (current && matches(current)) return currentGroupId;
   }
+
+  // 2) Canonical (favori olmayan) ev grubu — URL bar'dan gelindiyse varsayilan.
+  const canonical = menuGroups.find(g => g.id !== 'sik-kullanilanlar' && matches(g));
+  if (canonical) return canonical.id;
+
+  // 3) Son care: sadece favorilerde olan yollar (ör. Ana Sayfa).
+  const favorites = menuGroups.find(g => g.id === 'sik-kullanilanlar' && matches(g));
+  if (favorites) return favorites.id;
+
   return menuGroups[0]?.id ?? null;
 }
 
@@ -48,56 +73,54 @@ function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
     ['Student', studentMenuGroups],
   ];
 
-  const allGroups: MenuGroup[] = [];
-  const seenGroupIds = new Set<string>();
-  const seenRoutes = new Set<string>();
+  // Multi-rol kullanıcılar için: aynı id'li grupları birleştir.
+  // Aynı route farklı gruplarda görünebilir (ör. Sık Kullanılanlar + kendi kategorisi)
+  // — dedup yalnızca TEK bir grup içinde yapılır.
+  const groupsById = new Map<string, MenuGroup>();
+  const orderedIds: string[] = [];
 
   for (const [role, menus] of roleMenuMap) {
     if (!roles.includes(role)) continue;
 
     for (const group of menus) {
-      if (seenGroupIds.has(group.id)) {
-        // Aynı id'li grup zaten var — children'ları birleştir
-        const existing = allGroups.find(g => g.id === group.id);
-        if (existing) {
-          for (const child of group.children) {
-            if (!seenRoutes.has(child.to)) {
-              existing.children.push(child);
-              seenRoutes.add(child.to);
-            }
-          }
-        }
-      } else {
-        // Yeni grup — duplikat route'ları filtrele
-        const filteredChildren = group.children.filter(child => {
-          if (seenRoutes.has(child.to)) return false;
-          seenRoutes.add(child.to);
-          return true;
+      const existing = groupsById.get(group.id);
+      if (existing) {
+        // Grup merge — sadece bu grup içinde route dedup
+        const existingRoutes = new Set(existing.children.map(c => c.to));
+        const additions = group.children.filter(c => !existingRoutes.has(c.to));
+        groupsById.set(group.id, {
+          ...existing,
+          children: [...existing.children, ...additions],
         });
-
-        if (filteredChildren.length > 0) {
-          allGroups.push({ ...group, children: [...filteredChildren] });
-          seenGroupIds.add(group.id);
-        }
+      } else {
+        // Yeni grup — children zaten rolün kendi tanımında; mutation'a karşı shallow copy
+        groupsById.set(group.id, { ...group, children: [...group.children] });
+        orderedIds.push(group.id);
       }
     }
   }
 
-  return allGroups.length > 0 ? allGroups : studentMenuGroups;
+  const allGroups = orderedIds.map(id => groupsById.get(id)!);
+  const effectiveGroups = allGroups.length > 0 ? allGroups : studentMenuGroups;
+
+  // Öğretim elemanı rolleri için akademik takvim erişimi — "Sık Kullanılanlar" grubuna eklenir
+  const instructorRoles = ['Instructor', 'AcademicAdvisor', 'Dean', 'DepartmentManager'];
+  if (roles.some(r => instructorRoles.includes(r))) {
+    const favoriteGroup = effectiveGroups.find(g => g.id === 'sik-kullanilanlar');
+    if (favoriteGroup && !favoriteGroup.children.some(c => c.to === '/ogretim-elemani-akademik-takvim')) {
+      favoriteGroup.children.push({
+        to: '/ogretim-elemani-akademik-takvim',
+        label: 'Akademik Takvim',
+      });
+    }
+  }
+
+  return effectiveGroups;
 }
 
-function getRoleLabel(roles: string[]): string {
-  const labels: string[] = [];
-  if (roles.includes('SystemAdministrator')) labels.push('Yönetici');
-  if (roles.includes('Dean')) labels.push('Dekan');
-  if (roles.includes('DepartmentManager')) labels.push('Bölüm Başkanı');
-  if (roles.includes('AdministrativeStaff')) labels.push('İdari Personel');
-  if (roles.includes('AcademicAdvisor')) labels.push('Danışman');
-  if (roles.includes('Instructor')) labels.push('Öğretim Üyesi');
-  if (roles.includes('Student')) labels.push('Öğrenci');
-
-  if (labels.length === 0) return 'Öğrenci Bilgi Sistemi';
-  return labels.join(' / ') + ' Paneli';
+function getActiveRoleLabel(activeRole: string | null): string {
+  if (!activeRole) return 'Öğrenci Bilgi Sistemi';
+  return `${getRoleDisplayLabel(activeRole)} Paneli`;
 }
 
 const EXPANDED_W = 260;
@@ -111,25 +134,56 @@ interface SidebarProps {
 
 export default function Sidebar({ isCollapsed = false, onToggleSidebar }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { activeRole } = useActiveRole();
   const location = useLocation();
 
-  const roles = user?.roles ?? [];
-  const menuGroups = getMenuGroupsForRole(roles);
+  // Sidebar artık sadece aktif rolün menüsünü gösterir (multi-rol için switcher TopBar'da).
+  // Active rol henüz resolve edilmediyse user.roles ilk elemanını kullan — hydration flash önler.
+  const effectiveRole = activeRole ?? user?.roles?.[0] ?? null;
+  const rawMenuGroups = useMemo(
+    () => getMenuGroupsForRole(effectiveRole ? [effectiveRole] : []),
+    [effectiveRole],
+  );
+  const { favorites, hasCustomized, save: saveFavorites, MAX } = useFavorites();
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+
+  // Apply user's favorite pins to the Sık Kullanılanlar group (if customized)
+  const menuGroups = useMemo<MenuGroup[]>(() => {
+    if (!hasCustomized) return rawMenuGroups;
+    const lookup = new Map<string, MenuGroup['children'][number]>();
+    for (const group of rawMenuGroups) {
+      if (group.id === 'sik-kullanilanlar') continue;
+      for (const child of group.children) lookup.set(child.to, child);
+    }
+    return rawMenuGroups.map(group => {
+      if (group.id !== 'sik-kullanilanlar') return group;
+      const anaSayfa = group.children.find(c => c.to === HOME_ROUTE);
+      const pins = (favorites ?? [])
+        .map(route => lookup.get(route))
+        .filter((c): c is MenuGroup['children'][number] => c !== undefined);
+      const children = anaSayfa ? [anaSayfa, ...pins] : pins;
+      return { ...group, children };
+    });
+  }, [rawMenuGroups, favorites, hasCustomized]);
 
   const [prevPathname, setPrevPathname] = useState(location.pathname);
-  const [openGroup, setOpenGroup] = useState<string | null>(() => findActiveGroup(location.pathname, menuGroups));
+  const [prevRole, setPrevRole] = useState<string | null>(effectiveRole);
+  const [openGroup, setOpenGroup] = useState<string | null>(() => resolveActiveGroup(location.pathname, menuGroups, null));
   const [search, setSearch] = useState('');
-
-  // Sync openGroup when location changes (setState during render — React-approved derived state pattern)
-  if (prevPathname !== location.pathname) {
-    setPrevPathname(location.pathname);
-    const active = findActiveGroup(location.pathname, menuGroups);
-    if (active) setOpenGroup(active);
-  }
-
   const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
   const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const groupBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // Sync openGroup when location OR active role changes (setState during render — React-approved derived state pattern).
+  // Rol değişirken mevcut grup geçerli olmayabilir — o yüzden currentGroupId'yi sifirla.
+  if (prevPathname !== location.pathname || prevRole !== effectiveRole) {
+    const roleChanged = prevRole !== effectiveRole;
+    setPrevPathname(location.pathname);
+    setPrevRole(effectiveRole);
+    const active = resolveActiveGroup(location.pathname, menuGroups, roleChanged ? null : openGroup);
+    setOpenGroup(active);
+    setFlyoutGroup(null);
+  }
 
   const toggleGroup = (id: string) => {
     if (isCollapsed) {
@@ -225,7 +279,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           isCollapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-10 px-5 pt-3 pb-1 opacity-100'
         )}>
           <p className="text-[11px] font-semibold text-primary tracking-[0.08em] whitespace-nowrap">
-            {getRoleLabel(roles).toLocaleUpperCase('tr-TR')}
+            {getActiveRoleLabel(effectiveRole).toLocaleUpperCase('tr-TR')}
           </p>
         </div>
 
@@ -386,6 +440,16 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                             </NavLink>
                           );
                         })}
+                        {group.id === 'sik-kullanilanlar' && (
+                          <button
+                            type="button"
+                            onClick={() => setFavoritesOpen(true)}
+                            className="w-full flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] text-muted-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                            Sık Kullanılanları Düzenle
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -474,11 +538,33 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                   </NavLink>
                 );
               })}
+              {group.id === 'sik-kullanilanlar' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFlyoutGroup(null);
+                    setFavoritesOpen(true);
+                  }}
+                  className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-muted-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Sık Kullanılanları Düzenle
+                </button>
+              )}
             </div>
           </div>,
           document.body,
         );
       })()}
+
+      <FavoritesDialog
+        open={favoritesOpen}
+        onOpenChange={setFavoritesOpen}
+        menuGroups={rawMenuGroups}
+        currentFavorites={favorites ?? []}
+        maxFavorites={MAX}
+        onSave={saveFavorites}
+      />
     </>
   );
 }

@@ -30,6 +30,10 @@ export interface CurriculumDetailDto {
   gradingSystem: string | null;
   internshipDuration: number | null;
   description: string | null;
+  // Müfredat-özel dönem AKTS tavanı override'ları (null = global varsayılan)
+  ectsLimitBelow200: number | null;
+  ectsLimit200To249: number | null;
+  ectsLimitAbove250: number | null;
   courses: CurriculumCourseItemDto[];
 }
 
@@ -78,6 +82,12 @@ export interface UpdateCurriculumRequest {
   gradingSystem?: string;
   internshipDuration?: number;
   description?: string;
+  // AKTS override'ları: uygulanması için ectsLimitsProvided=true gönderilmeli.
+  // true iken üçü de null → override'lar temizlenir (global fallback).
+  ectsLimitBelow200?: number | null;
+  ectsLimit200To249?: number | null;
+  ectsLimitAbove250?: number | null;
+  ectsLimitsProvided?: boolean;
 }
 
 export interface AddCourseRequest {

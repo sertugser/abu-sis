@@ -5,6 +5,7 @@ using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Application.Common.Services;
+using SIS.Application.Common.Time;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -14,11 +15,17 @@ public class StudentEligibilityService : IStudentEligibilityService
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly ISystemConfigProvider _config;
+    private readonly IDateTimeProvider _clock;
 
-    public StudentEligibilityService(AppDbContext context, IGpaCalculationService gpaCalculationService, ISystemConfigProvider? config = null)
+    public StudentEligibilityService(
+        AppDbContext context,
+        IGpaCalculationService gpaCalculationService,
+        IDateTimeProvider clock,
+        ISystemConfigProvider? config = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
+        _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
     }
 
@@ -298,9 +305,10 @@ public class StudentEligibilityService : IStudentEligibilityService
 
     private async Task<EligibilityContextData> BuildEligibilityContextAsync(CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, cancellationToken);
 
         var students = await _context.Students
             .AsNoTracking()

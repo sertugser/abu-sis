@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Common.DTOs;
+using SIS.Application.Common.Time;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
@@ -15,10 +16,12 @@ namespace SIS.API.Controllers;
 public class CourseController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IDateTimeProvider _clock;
 
-    public CourseController(AppDbContext context)
+    public CourseController(AppDbContext context, IDateTimeProvider clock)
     {
         _context = context;
+        _clock = clock;
     }
 
     /// <summary>
@@ -29,8 +32,9 @@ public class CourseController : ControllerBase
     public async Task<IActionResult> GetCourses([FromQuery] int? programId)
     {
         // Find active term
+        var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.IsActive);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
 
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
@@ -147,13 +151,10 @@ public class CourseController : ControllerBase
             return NotFound(new { error = "Aktif program bulunamadi." });
 
         // 2. Active term
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var nowCatalog = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowCatalog && t.TermEnd >= nowCatalog);
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
-
-        // Guard: katalog ancak Published veya sonraki aşamalarda görülebilir
-        if (activeTerm.Status < TermStatus.Published)
-            return BadRequest(new { error = $"Ders kataloğu henüz yayınlanmadı. Dönem durumu: {activeTerm.Status}" });
 
         // 3. Curriculum data — which courses are in the student's program
         var curriculumCourses = await _context.CurriculumCourses
@@ -421,27 +422,28 @@ public class CourseController : ControllerBase
     [HttpGet("terms/active")]
     public async Task<IActionResult> GetActiveTerm()
     {
+        var now = _clock.UtcNow;
         var term = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => t.IsActive);
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
 
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
-
-        var now = DateTime.UtcNow;
 
         var dto = new ActiveTermDto
         {
             Id = term.Id,
             Name = term.Name,
             Year = term.Year,
-            Semester = term.Semester.ToString(),
-            RegistrationStart = term.RegistrationStart,
-            RegistrationEnd = term.RegistrationEnd,
-            AddDropStart = term.AddDropStart,
-            AddDropEnd = term.AddDropEnd,
-            IsRegistrationOpen = term.Status == TermStatus.RegistrationOpen,
-            IsAddDropOpen = term.Status == TermStatus.AddDrop,
-            Status = term.Status.ToString()
+            Semester = term.TermType.ToString(),
+            RegistrationStart = term.AcademicCalendar?.RegistrationStart ?? term.TermStart,
+            RegistrationEnd = term.AcademicCalendar?.RegistrationEnd ?? term.TermStart,
+            AddDropStart = term.AcademicCalendar?.AddDropStart ?? term.TermStart,
+            AddDropEnd = term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
+            IsRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow),
+            IsAddDropOpen = term.IsAddDropOpen(_clock.UtcNow),
+            Status = term.GetStatus(_clock.UtcNow).ToString(),
+            HasAcademicCalendar = term.AcademicCalendar != null
         };
 
         return Ok(dto);

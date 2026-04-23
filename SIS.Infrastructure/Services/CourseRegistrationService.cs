@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AdvisorConstraints.Services;
+using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Common.Services;
@@ -14,15 +15,18 @@ public class CourseRegistrationService : ICourseRegistrationService
     private readonly IRegistrationValidationService _validationService;
     private readonly ISystemConfigProvider _config;
     private readonly IAdvisorConstraintService? _advisorConstraintService;
+    private readonly IDateTimeProvider _clock;
 
     public CourseRegistrationService(
         AppDbContext context,
         IRegistrationValidationService validationService,
+        IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
         IAdvisorConstraintService? advisorConstraintService = null)
     {
         _context = context;
         _validationService = validationService;
+        _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
         _advisorConstraintService = advisorConstraintService;
     }
@@ -50,23 +54,49 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // Guard: kayıt dönemi kontrolü
-        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId);
-        if (term != null && term.Status != TermStatus.RegistrationOpen && term.Status != TermStatus.AddDrop)
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => t.Id == section.TermId);
+        if (term != null)
         {
-            response.Success = false;
-            response.ValidationResult = new ValidationResultDto
+            if (term.AcademicCalendar == null)
             {
-                IsValid = false,
-                Errors = new List<ValidationError>
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
                 {
-                    new() { Rule = "RegistrationClosed", Message = $"Ders kayıt dönemi açık değil. Dönem durumu: {GetTermStatusLabel(term.Status)}" }
-                }
-            };
-            return response;
+                    IsValid = false,
+                    Errors = new List<ValidationError>
+                    {
+                        new() { Rule = "CalendarMissing", Message = "Bu dönemin akademik takvimi henüz tanımlanmamış. Kayıt alamazsınız — lütfen öğrenci işleri ile iletişime geçin." }
+                    }
+                };
+                return response;
+            }
+            if (!term.IsRegistrationOpen(_clock.UtcNow) && !term.IsAddDropOpen(_clock.UtcNow))
+            {
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
+                {
+                    IsValid = false,
+                    Errors = new List<ValidationError>
+                    {
+                        new() { Rule = "RegistrationClosed", Message = "Ders kayıt dönemi açık değil." }
+                    }
+                };
+                return response;
+            }
         }
 
         // Kapasite kontrolü: kontenjan dolu mu?
-        if (section.EnrolledCount >= section.Capacity)
+        // Madde 14: Cross-list grubundaysa toplam sayı grup bazında hesaplanır
+        int effectiveEnrolled = section.EnrolledCount;
+        if (section.CrossListGroupId.HasValue)
+        {
+            effectiveEnrolled = await _context.CourseSections
+                .Where(cs => cs.CrossListGroupId == section.CrossListGroupId.Value)
+                .SumAsync(cs => cs.EnrolledCount);
+        }
+        if (effectiveEnrolled >= section.Capacity)
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -74,7 +104,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı dolu ({section.EnrolledCount}/{section.Capacity})." }
+                    new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı dolu ({effectiveEnrolled}/{section.Capacity})." }
                 }
             };
             return response;
@@ -120,6 +150,19 @@ public class CourseRegistrationService : ICourseRegistrationService
             // Rejected plan can be edited and resubmitted
             plan.Status = RegistrationPlanStatus.Draft;
             plan.UpdatedAt = DateTime.UtcNow;
+
+            // B18: Önceki reddedilmiş kayıtları temizle — plan tazelendi.
+            // Eski Rejected kayıtlar Dropped'a çevrilir (sayaç zaten RejectStudentRegistrations'da düşürülmüştü).
+            var staleRejected = await _context.CourseRegistrations
+                .Where(cr => cr.StudentId == studentId
+                    && cr.RegistrationPlanId == plan.Id
+                    && cr.Status == RegistrationStatus.Rejected)
+                .ToListAsync();
+            foreach (var stale in staleRejected)
+            {
+                stale.Status = RegistrationStatus.Dropped;
+                stale.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         // Check if already in plan (same section)
@@ -166,6 +209,32 @@ public class CourseRegistrationService : ICourseRegistrationService
                 }
             };
             return response;
+        }
+
+        // Madde 14: Cross-list çakışma kontrolü — aynı grup'taki başka bir section'a kayıtlı mı?
+        if (section.CrossListGroupId.HasValue)
+        {
+            var existingInGroup = await _context.CourseRegistrations
+                .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Course)
+                .FirstOrDefaultAsync(cr => cr.StudentId == studentId
+                    && cr.CourseSectionId != courseSectionId
+                    && cr.CourseSection.CrossListGroupId == section.CrossListGroupId.Value
+                    && (cr.Status == RegistrationStatus.Draft
+                        || cr.Status == RegistrationStatus.Active
+                        || cr.Status == RegistrationStatus.PendingAdvisorApproval));
+            if (existingInGroup != null)
+            {
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
+                {
+                    IsValid = false,
+                    Errors = new List<ValidationError>
+                    {
+                        new() { Rule = "CrossListAlreadySelected", Message = $"'{existingInGroup.CourseSection.Course.Code}' bu dersin cross-list eşdeğeri, zaten planda. İki farklı koddan aynı ders alınamaz.", CourseSectionId = courseSectionId }
+                    }
+                };
+                return response;
+            }
         }
 
         // Prerequisite check — block if prerequisites are not met
@@ -257,10 +326,54 @@ public class CourseRegistrationService : ICourseRegistrationService
                 && cr.CourseSection.CourseId == section.CourseId
                 && RegistrationRulePolicy.IsPassedGrade(cr.Grade));
 
-        // Increment section.EnrolledCount (soft hold - FR-44)
-        section.EnrolledCount++;
+        // Madde 6 tamamlama: AKTS snapshot + havuz atamasını çöz ve kayıt satırına yaz
+        var (snapshotEcts, appliedPoolId) = await ResolveEctsSnapshotAsync(studentId, section.CourseId);
+        registration.EctsSnapshot = snapshotEcts;
+        registration.AppliedElectivePoolId = appliedPoolId;
 
-        await _context.SaveChangesAsync();
+        // === KRİTİK BÖLGE: Serializable transaction + fresh kapasite kontrolü + increment ===
+        // Eş zamanlı kayıt çakışmasını önler (B1), kapasite kontrolünü atomik yapar (B3+B4).
+        var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+        await using var tx = useTransaction
+            ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable)
+            : null;
+        try
+        {
+            // Fresh reload — başka bir öğrenci aynı anda koltuğu almış olabilir
+            await _context.Entry(section).ReloadAsync();
+            // Madde 14: Cross-list grubundaysa toplam sayı
+            int freshEffective = section.EnrolledCount;
+            if (section.CrossListGroupId.HasValue)
+            {
+                freshEffective = await _context.CourseSections
+                    .Where(cs => cs.CrossListGroupId == section.CrossListGroupId.Value)
+                    .SumAsync(cs => cs.EnrolledCount);
+            }
+            if (freshEffective >= section.Capacity)
+            {
+                if (tx != null) await tx.RollbackAsync();
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
+                {
+                    IsValid = false,
+                    Errors = new List<ValidationError>
+                    {
+                        new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı bu esnada doldu ({freshEffective}/{section.Capacity})." }
+                    }
+                };
+                return response;
+            }
+
+            // Soft hold: sayımı artır (FR-44)
+            section.EnrolledCount++;
+            await _context.SaveChangesAsync();
+            if (tx != null) await tx.CommitAsync();
+        }
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync();
+            throw;
+        }
 
         response.Success = true;
         response.Registrations = new List<RegistrationItemDto>
@@ -365,20 +478,78 @@ public class CourseRegistrationService : ICourseRegistrationService
                 .Where(cs => missingSectionIds.Contains(cs.Id))
                 .ToListAsync();
 
-            foreach (var section in missingSections)
+            // Daha önce Dropped/Withdrawn olmuş ama unique constraint (Student+Section) nedeniyle
+            // yeniden Add edilirse kırılacak kayıtları önceden yakala — bunları reactivate edeceğiz.
+            var existingAny = await _context.CourseRegistrations
+                .Where(cr => cr.StudentId == studentId && missingSectionIds.Contains(cr.CourseSectionId))
+                .ToListAsync();
+            var existingByDropped = existingAny
+                .Where(cr => cr.Status == RegistrationStatus.Dropped || cr.Status == RegistrationStatus.Withdrawn)
+                .ToDictionary(cr => cr.CourseSectionId);
+
+            // === KRİTİK BÖLGE: Serializable transaction + ders başına fresh kapasite kontrolü + increment ===
+            // Çift sayımı önler (B2), kapasite kontrolünü tüm kayıt noktalarında zorunlu hale getirir (B3).
+            var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+            await using var tx = useTransaction
+                ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable)
+                : null;
+            try
             {
-                var newReg = new Domain.Entities.CourseRegistration
+                foreach (var section in missingSections)
                 {
-                    StudentId = studentId,
-                    CourseSectionId = section.Id,
-                    Status = RegistrationStatus.Draft,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.CourseRegistrations.Add(newReg);
-                section.EnrolledCount++;
-                registrations.Add(newReg);
+                    // Fresh reload — eş zamanlı başka kaydın etkisini gör
+                    await _context.Entry(section).ReloadAsync();
+                    if (section.EnrolledCount >= section.Capacity)
+                    {
+                        if (tx != null) await tx.RollbackAsync();
+                        response.Success = false;
+                        response.ValidationResult = new ValidationResultDto
+                        {
+                            IsValid = false,
+                            Errors = new List<ValidationError>
+                            {
+                                new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı bu esnada doldu ({section.EnrolledCount}/{section.Capacity}).", CourseSectionId = section.Id }
+                            }
+                        };
+                        return response;
+                    }
+
+                    Domain.Entities.CourseRegistration reg;
+                    if (existingByDropped.TryGetValue(section.Id, out var droppedReg))
+                    {
+                        // Reactivate — yeni kayıt oluşturmak unique constraint'i kırardı
+                        droppedReg.Status = RegistrationStatus.Draft;
+                        droppedReg.UpdatedAt = DateTime.UtcNow;
+                        reg = droppedReg;
+                    }
+                    else
+                    {
+                        reg = new Domain.Entities.CourseRegistration
+                        {
+                            StudentId = studentId,
+                            CourseSectionId = section.Id,
+                            Status = RegistrationStatus.Draft,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.CourseRegistrations.Add(reg);
+                    }
+
+                    // Madde 6 tamamlama: AKTS snapshot + havuz atamasını burada da çöz
+                    var (snapshotEcts, appliedPoolId) = await ResolveEctsSnapshotAsync(studentId, section.CourseId);
+                    reg.EctsSnapshot = snapshotEcts;
+                    reg.AppliedElectivePoolId = appliedPoolId;
+
+                    section.EnrolledCount++;
+                    registrations.Add(reg);
+                }
+                await _context.SaveChangesAsync();
+                if (tx != null) await tx.CommitAsync();
             }
-            await _context.SaveChangesAsync();
+            catch
+            {
+                if (tx != null) await tx.RollbackAsync();
+                throw;
+            }
 
             // Reload to get navigation properties
             registrations = await _context.CourseRegistrations
@@ -430,7 +601,8 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
     {
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var now = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
         if (activeTerm == null)
             return new List<StudentRegistrationDto>();
 
@@ -556,8 +728,10 @@ public class CourseRegistrationService : ICourseRegistrationService
                 TermId = cr.CourseSection.Term.Id,
                 TermName = cr.CourseSection.Term.Name,
                 cr.CourseSection.Term.Year,
-                cr.CourseSection.Term.Semester,
-                cr.CourseSection.Term.IsActive
+                cr.CourseSection.Term.TermType,
+                IsActive = !cr.CourseSection.Term.IsCancelled
+                    && cr.CourseSection.Term.TermStart <= DateTime.UtcNow
+                    && cr.CourseSection.Term.TermEnd >= DateTime.UtcNow
             })
             .Distinct()
             .ToListAsync();
@@ -572,7 +746,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                     TermId = term.TermId,
                     TermName = term.TermName,
                     Year = term.Year,
-                    Semester = term.Semester.ToString(),
+                    Semester = term.TermType.ToString(),
                     IsActive = term.IsActive
                 };
             })
@@ -590,9 +764,10 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         if (selectedTerm == null)
         {
+            var nowAttendance = _clock.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.IsActive);
+                .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowAttendance && t.TermEnd >= nowAttendance);
 
             if (activeTerm == null)
                 return null;
@@ -602,8 +777,8 @@ public class CourseRegistrationService : ICourseRegistrationService
                 TermId = activeTerm.Id,
                 TermName = activeTerm.Name,
                 Year = activeTerm.Year,
-                Semester = activeTerm.Semester.ToString(),
-                IsActive = activeTerm.IsActive
+                Semester = activeTerm.TermType.ToString(),
+                IsActive = activeTerm.IsActive(nowAttendance)
             };
             availableTerms.Add(selectedTerm);
         }
@@ -738,7 +913,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                     TermId = term.Id,
                     TermName = term.Name,
                     Year = term.Year,
-                    Semester = term.Semester.ToString(),
+                    Semester = term.TermType.ToString(),
                     Courses = g.Select(r => new CourseHistoryItemDto
                     {
                         RegistrationId = r.Id,
@@ -773,6 +948,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 .ThenInclude(cs => cs.Course)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Term)
+                    .ThenInclude(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(cr => cr.Id == registrationId && cr.StudentId == studentId);
 
         if (registration == null)
@@ -791,7 +967,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         // Guard: dönem AddDrop aşamasında olmalı
         var dropTerm = registration.CourseSection.Term;
-        if (dropTerm.Status != TermStatus.AddDrop && dropTerm.Status != TermStatus.RegistrationOpen)
+        if (!dropTerm.IsAddDropOpen(_clock.UtcNow) && !dropTerm.IsRegistrationOpen(_clock.UtcNow))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -799,7 +975,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(dropTerm.Status)}" }
+                    new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir." }
                 }
             };
             return response;
@@ -825,7 +1001,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         // Check add-drop period (FR-48)
         var term = registration.CourseSection.Term;
         var now = DateTime.UtcNow;
-        if (now < term.AddDropStart || now > term.AddDropEnd)
+        if (!term.IsAddDropOpen(now))
         {
             // Allow dropping Draft items anytime, but Active/PendingAdvisorApproval only during add-drop
             if (registration.Status != RegistrationStatus.Draft)
@@ -839,7 +1015,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                         new()
                         {
                             Rule = "AddDropPeriod",
-                            Message = $"Ders birakma donemi disinda. Ders birakma donemi: {term.AddDropStart:dd.MM.yyyy} - {term.AddDropEnd:dd.MM.yyyy}"
+                            Message = "Ders bırakma dönemi dışında. Ders bırakma dönemi kapalı."
                         }
                     }
                 };
@@ -885,6 +1061,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 .ThenInclude(cs => cs.Course)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Term)
+                    .ThenInclude(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(cr => cr.Id == registrationId && cr.StudentId == studentId);
 
         if (registration == null)
@@ -903,7 +1080,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         // Guard: dönem WithdrawalPeriod aşamasında olmalı
         var withdrawTerm = registration.CourseSection.Term;
-        if (withdrawTerm.Status != TermStatus.WithdrawalPeriod)
+        if (!withdrawTerm.IsWithdrawalOpen(_clock.UtcNow))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -911,7 +1088,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "TermStatus", Message = $"Ders çekilme sadece çekilme döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(withdrawTerm.Status)}" }
+                    new() { Rule = "TermStatus", Message = $"Ders çekilme sadece çekilme döneminde yapılabilir." }
                 }
             };
             return response;
@@ -953,12 +1130,12 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // FR-57: Check withdrawal deadline
-        if (DateTime.UtcNow > term.WithdrawalDeadline)
+        if (!term.IsWithdrawalOpen(DateTime.UtcNow))
         {
             errors.Add(new ValidationError
             {
                 Rule = "WithdrawalDeadline",
-                Message = $"Ders çekilme süresi doldu. Son çekilme tarihi: {term.WithdrawalDeadline:dd.MM.yyyy}."
+                Message = "Ders çekilme dönemi kapalı. Çekilme süresi dolmuş veya henüz başlamamış."
             });
         }
 
@@ -1098,7 +1275,8 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId)
     {
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var nowPending = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowPending && t.TermEnd >= nowPending);
         if (activeTerm == null)
             return new List<PendingApprovalDto>();
 
@@ -1305,7 +1483,10 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var nowApprove = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -1317,12 +1498,12 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // Guard: dönem RegistrationOpen veya AddDrop olmalı
-        if (activeTerm.Status != TermStatus.RegistrationOpen && activeTerm.Status != TermStatus.AddDrop)
+        if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
         {
             return new ApprovalResponseDto
             {
                 Success = false,
-                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir. Mevcut durum: {GetTermStatusLabel(activeTerm.Status)}",
+                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir.",
                 AffectedRegistrations = 0
             };
         }
@@ -1374,7 +1555,8 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive);
+        var nowReject = _clock.UtcNow;
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowReject && t.TermEnd >= nowReject);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -1495,16 +1677,52 @@ public class CourseRegistrationService : ICourseRegistrationService
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft            => "Taslak",
-        TermStatus.Planning         => "Planlama",
-        TermStatus.Scheduling       => "Programlama",
-        TermStatus.Published        => "Yayınlandı",
-        TermStatus.RegistrationOpen => "Kayıt Açık",
-        TermStatus.AddDrop          => "Ders Ekle/Bırak",
-        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
-        TermStatus.GradeEntry       => "Not Girişi",
-        TermStatus.Closed           => "Kapalı",
-        TermStatus.Archived         => "Arşivlendi",
-        _                           => s.ToString()
+        TermStatus.Inactive   => "Pasif",
+        TermStatus.Active     => "Aktif",
+        TermStatus.Cancelled  => "İptal",
+        _                     => s.ToString()
     };
+
+    /// <summary>
+    /// Bir dersin öğrencinin müfredatındaki AKTS değerini ve (varsa) hangi havuza sayılacağını çözer.
+    /// Zorunlu/tekil seçmeli → katalog AKTS, havuz üyesi → havuzun EctsPerCourse (null ise katalog),
+    /// müfredat dışı → katalog AKTS + null havuz.
+    /// Kayıt anında bu değer EctsSnapshot ve AppliedElectivePoolId alanlarına donar.
+    /// </summary>
+    private async Task<(int? ectsSnapshot, int? appliedPoolId)> ResolveEctsSnapshotAsync(
+        int studentId, int courseId, CancellationToken ct = default)
+    {
+        var activeProgram = await _context.StudentPrograms
+            .AsNoTracking()
+            .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)
+            .FirstOrDefaultAsync(ct);
+
+        var catalogCourse = await _context.Courses.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == courseId, ct);
+        var catalogEcts = catalogCourse?.Ects ?? 0;
+
+        if (activeProgram == null)
+            return (catalogEcts, null);
+
+        // 1) Direkt müfredat ataması (zorunlu veya tekil seçmeli)
+        var directExists = await _context.CurriculumCourses.AsNoTracking()
+            .AnyAsync(cc => cc.CurriculumId == activeProgram.CurriculumId && cc.CourseId == courseId, ct);
+        if (directExists)
+            return (catalogEcts, null);
+
+        // 2) Müfredatın havuzlarından birinde mi?
+        var poolHit = await _context.CurriculumElectivePools.AsNoTracking()
+            .Where(p => p.CurriculumId == activeProgram.CurriculumId
+                && p.ElectiveGroup.Courses.Any(egc => egc.CourseId == courseId))
+            .Select(p => new { p.Id, p.EctsPerCourse })
+            .FirstOrDefaultAsync(ct);
+        if (poolHit != null)
+        {
+            var ects = poolHit.EctsPerCourse ?? catalogEcts;
+            return (ects, poolHit.Id);
+        }
+
+        // 3) Müfredat dışı (warning olarak raporlanmıştı) — katalog AKTS
+        return (catalogEcts, null);
+    }
 }

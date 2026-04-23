@@ -157,7 +157,11 @@ export default function InstructorAssignmentPage() {
   }, []);
 
   const handleCopyPreviousTerm = useCallback(() => {
-    setToast({ type: 'error', message: 'Önceki dönemden kopyalama henüz desteklenmiyor.' });
+    // D2: Özellik henüz bu sayfada yok — ayrı bir akış "Dönem Programı Aktarım" sayfasında mevcut
+    setToast({
+      type: 'error',
+      message: 'Bu sayfada önceki dönemden kopyalama yok. Dönem Programı Aktarım sayfasını kullanın.',
+    });
   }, []);
 
   if (contextQuery.isLoading) {

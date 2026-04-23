@@ -408,7 +408,7 @@ public class AcademicProgressionService : IAcademicProgressionService
             ? await _context.AcademicTerms.AsNoTracking()
                 .FirstOrDefaultAsync(t => t.Id == termId.Value, cancellationToken)
             : await _context.AcademicTerms.AsNoTracking()
-                .FirstOrDefaultAsync(t => t.IsActive, cancellationToken);
+                .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= DateTime.UtcNow && t.TermEnd >= DateTime.UtcNow, cancellationToken);
 
         if (resolvedTerm == null)
         {
@@ -420,7 +420,7 @@ public class AcademicProgressionService : IAcademicProgressionService
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == resolvedTerm.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId)
             .ToListAsync(cancellationToken);
 

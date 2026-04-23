@@ -1,93 +1,256 @@
 using Microsoft.EntityFrameworkCore;
-using SIS.Application.Common.DTOs;
-using SIS.Application.Common.Services;
-using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
+using SIS.Application.AcademicCalendar.DTOs;
+using SIS.Application.AcademicCalendar.Services;
+using SIS.Application.Common.Time;
+using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
 
 public class AcademicCalendarService : IAcademicCalendarService
 {
-    private readonly AppDbContext _context;
+    private readonly AppDbContext _ctx;
+    private readonly IDateTimeProvider _clock;
 
-    public AcademicCalendarService(AppDbContext context)
+    public AcademicCalendarService(AppDbContext ctx, IDateTimeProvider clock)
     {
-        _context = context;
+        _ctx   = ctx;
+        _clock = clock;
     }
 
-    public async Task<ActiveTermCalendarDto?> GetActiveTermCalendarAsync()
+    // ── Admin ─────────────────────────────────────────────────────────
+
+    public async Task<AcademicCalendarDto?> GetByTermIdAsync(int termId, CancellationToken ct = default)
     {
-        var appliedDraft = await GetLatestAppliedCalendarDraftAsync();
-        if (appliedDraft is null)
+        var term = await _ctx.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new KeyNotFoundException($"Term {termId} not found.");
+
+        if (term.AcademicCalendar is null)
             return null;
 
-        var draft = appliedDraft.Value;
-        var targetYear = TryParseAcademicYearStart(draft.AcademicYear);
-        if (!targetYear.HasValue)
-            return null;
+        return ToDto(term, term.AcademicCalendar);
+    }
 
-        var terms = await _context.AcademicTerms
+    public async Task<AcademicCalendarDto> UpsertAsync(int termId, UpsertAcademicCalendarDto dto, CancellationToken ct = default)
+    {
+        var term = await _ctx.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new KeyNotFoundException($"Term {termId} not found.");
+
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Bu dönem iptal edilmiş; takvim oluşturulamaz.");
+
+        Validate(dto, term);
+
+        var isNew = term.AcademicCalendar is null;
+        var cal = term.AcademicCalendar ?? new TermAcademicCalendar
+        {
+            TermId    = term.Id,
+            CreatedAt = _clock.UtcNow
+        };
+
+        if (!isNew) cal.UpdatedAt = _clock.UtcNow;
+
+        cal.RegistrationStart  = DateTime.SpecifyKind(dto.RegistrationStart,  DateTimeKind.Utc);
+        cal.RegistrationEnd    = DateTime.SpecifyKind(dto.RegistrationEnd,    DateTimeKind.Utc);
+        cal.AddDropStart       = DateTime.SpecifyKind(dto.AddDropStart,       DateTimeKind.Utc);
+        cal.AddDropEnd         = DateTime.SpecifyKind(dto.AddDropEnd,         DateTimeKind.Utc);
+        cal.WithdrawalDeadline = DateTime.SpecifyKind(dto.WithdrawalDeadline, DateTimeKind.Utc);
+        cal.GradeEntryStart    = DateTime.SpecifyKind(dto.GradeEntryStart,    DateTimeKind.Utc);
+        cal.GradeEntryEnd      = DateTime.SpecifyKind(dto.GradeEntryEnd,      DateTimeKind.Utc);
+
+        if (isNew)
+        {
+            term.AcademicCalendar = cal;
+            _ctx.TermAcademicCalendars.Add(cal);
+        }
+
+        await _ctx.SaveChangesAsync(ct);
+        return ToDto(term, term.AcademicCalendar!);
+    }
+
+    public async Task UpdatePhaseOverrideAsync(int termId, UpdateCalendarPhaseOverrideDto dto, CancellationToken ct = default)
+    {
+        var term = await _ctx.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new KeyNotFoundException($"Term {termId} not found.");
+
+        if (term.IsCancelled)
+            throw new InvalidOperationException("İptal edilmiş dönemde override değiştirilemez.");
+
+        var cal = term.AcademicCalendar
+            ?? throw new InvalidOperationException("Bu dönem için henüz akademik takvim oluşturulmamış.");
+
+        switch (dto.Phase)
+        {
+            case "Registration": cal.RegistrationOverride = dto.Value; break;
+            case "AddDrop":      cal.AddDropOverride      = dto.Value; break;
+            case "Withdrawal":   cal.WithdrawalOverride   = dto.Value; break;
+            case "GradeEntry":   cal.GradeEntryOverride   = dto.Value; break;
+            default:
+                throw new ArgumentException($"Geçersiz faz: '{dto.Phase}'. " +
+                    "Geçerli değerler: Registration, AddDrop, Withdrawal, GradeEntry.");
+        }
+
+        cal.UpdatedAt = _clock.UtcNow;
+        await _ctx.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<AcademicCalendarTermSummaryDto>> ListTermsAsync(CancellationToken ct = default)
+    {
+        var now = _clock.UtcNow;
+
+        var terms = await _ctx.AcademicTerms
             .AsNoTracking()
-            .Include(t => t.CalendarEvents.Where(e =>
-                e.IsPublic
-                && e.IsGenerated
-                && e.GeneratedDraftId == draft.Id))
-            .Where(t => t.Year == targetYear.Value)
-            .OrderBy(t => t.TermStart)
-            .ThenBy(t => t.Semester)
-            .ToListAsync();
+            .Include(t => t.AcademicCalendar)
+            .OrderByDescending(t => t.Year)
+            .ThenBy(t => t.TermType)
+            .ToListAsync(ct);
 
-        if (terms.Count == 0)
+        return terms.Select(t => new AcademicCalendarTermSummaryDto(
+            TermId:       t.Id,
+            TermName:     t.Name,
+            Year:         t.Year,
+            TermTypeLabel: TermLabels.Get(t.TermType),
+            IsActive:     t.IsActive(now),
+            IsCancelled:  t.IsCancelled,
+            HasCalendar:  t.AcademicCalendar is not null,
+            TermStart:    t.TermStart,
+            TermEnd:      t.TermEnd
+        )).ToList();
+    }
+
+    // ── Public (öğrenci / hoca) ───────────────────────────────────────
+
+    public async Task<StudentAcademicCalendarDto?> GetStudentViewAsync(int termId, CancellationToken ct = default)
+    {
+        var term = await _ctx.AcademicTerms
+            .AsNoTracking()
+            .Include(t => t.AcademicCalendar)
+            .Include(t => t.CalendarEvents.Where(e => e.IsPublic))
+            .FirstOrDefaultAsync(t => t.Id == termId, ct);
+
+        if (term is null)
             return null;
 
-        var events = terms
-            .SelectMany(t => t.CalendarEvents)
-            .OrderBy(e => e.StartDate)
-            .Select(e => new PublicCalendarEventDto(
-                e.Id,
-                e.EventType.ToString(),
-                CalendarEventTypeLabels.GetLabel(e.EventType),
-                e.Title,
-                e.StartDate,
-                e.EndDate,
-                e.Note
-            ))
-            .ToList();
+        return BuildStudentDto(term, _clock.UtcNow);
+    }
 
-        if (events.Count == 0)
+    public async Task<StudentAcademicCalendarDto?> GetActiveStudentViewAsync(CancellationToken ct = default)
+    {
+        var now = _clock.UtcNow;
+
+        var term = await _ctx.AcademicTerms
+            .AsNoTracking()
+            .Include(t => t.AcademicCalendar)
+            .Include(t => t.CalendarEvents.Where(e => e.IsPublic))
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .FirstOrDefaultAsync(ct);
+
+        if (term is null)
             return null;
 
-        var term = terms.FirstOrDefault(t => t.IsActive) ?? terms.First();
-        var academicYear = draft.AcademicYear;
+        return BuildStudentDto(term, now);
+    }
 
-        return new ActiveTermCalendarDto(
-            term.Id,
-            $"{academicYear} Akademik Takvim",
-            $"{targetYear.Value % 100:00}-{(targetYear.Value + 1) % 100:00}",
-            $"Academic Calendar {academicYear}",
-            events
+    // ── Helpers ───────────────────────────────────────────────────────
+
+    private static void Validate(UpsertAcademicCalendarDto dto, AcademicTerm term)
+    {
+        if (dto.RegistrationStart >= dto.RegistrationEnd)
+            throw new InvalidOperationException("Kayıt başlangıç tarihi bitiş tarihinden önce olmalıdır.");
+
+        if (dto.AddDropStart >= dto.AddDropEnd)
+            throw new InvalidOperationException("Ders ekleme/bırakma başlangıç tarihi bitiş tarihinden önce olmalıdır.");
+
+        if (dto.GradeEntryStart >= dto.GradeEntryEnd)
+            throw new InvalidOperationException("Not girişi başlangıç tarihi bitiş tarihinden önce olmalıdır.");
+
+        if (dto.RegistrationEnd > term.TermEnd)
+            throw new InvalidOperationException("Kayıt bitiş tarihi dönem bitiş tarihinden sonra olamaz.");
+
+        if (dto.AddDropEnd > term.TermEnd)
+            throw new InvalidOperationException("Ders ekleme/bırakma bitiş tarihi dönem bitiş tarihinden sonra olamaz.");
+
+        if (dto.WithdrawalDeadline > term.TermEnd)
+            throw new InvalidOperationException("Çekilme tarihi dönem bitiş tarihinden sonra olamaz.");
+
+        if (dto.WithdrawalDeadline < term.TermStart)
+            throw new InvalidOperationException("Çekilme tarihi dönem başlangıç tarihinden önce olamaz.");
+    }
+
+    private AcademicCalendarDto ToDto(AcademicTerm term, TermAcademicCalendar cal)
+    {
+        var now = _clock.UtcNow;
+        return new AcademicCalendarDto(
+            Id:                  cal.Id,
+            TermId:              term.Id,
+            TermName:            term.Name,
+            TermStart:           term.TermStart,
+            TermEnd:             term.TermEnd,
+            RegistrationStart:   cal.RegistrationStart,
+            RegistrationEnd:     cal.RegistrationEnd,
+            AddDropStart:        cal.AddDropStart,
+            AddDropEnd:          cal.AddDropEnd,
+            WithdrawalDeadline:  cal.WithdrawalDeadline,
+            GradeEntryStart:     cal.GradeEntryStart,
+            GradeEntryEnd:       cal.GradeEntryEnd,
+            RegistrationOverride: cal.RegistrationOverride,
+            AddDropOverride:     cal.AddDropOverride,
+            WithdrawalOverride:  cal.WithdrawalOverride,
+            GradeEntryOverride:  cal.GradeEntryOverride,
+            IsRegistrationOpen:  term.IsRegistrationOpen(now),
+            IsAddDropOpen:       term.IsAddDropOpen(now),
+            IsWithdrawalOpen:    term.IsWithdrawalOpen(now),
+            IsGradeEntryOpen:    term.IsGradeEntryOpen(now),
+            CreatedAt:           cal.CreatedAt,
+            UpdatedAt:           cal.UpdatedAt
         );
     }
 
-    private async Task<(int Id, string AcademicYear)?> GetLatestAppliedCalendarDraftAsync()
+    private static StudentAcademicCalendarDto BuildStudentDto(AcademicTerm term, DateTime now)
     {
-        var draft = await _context.GeneratedCalendarDrafts
-            .AsNoTracking()
-            .Where(d => d.Status == GeneratedCalendarDraftStatus.Applied)
-            .OrderByDescending(d => d.AppliedAt ?? d.UpdatedAt)
-            .Select(d => new { d.Id, d.AcademicYear })
-            .FirstOrDefaultAsync();
+        var cal = term.AcademicCalendar;
 
-        return draft is null ? null : (draft.Id, draft.AcademicYear);
-    }
+        var events = term.CalendarEvents
+            .OrderBy(e => e.StartDate)
+            .Select(e => new TermCalendarEventDto(
+                e.Id,
+                e.EventType.ToString(),
+                e.Title,
+                e.StartDate,
+                e.EndDate,
+                e.Note,
+                e.IsPublic,
+                e.IsGenerated,
+                e.BlocksAcademicEvents
+            ))
+            .ToList();
 
-    private static int? TryParseAcademicYearStart(string? academicYear)
-    {
-        if (string.IsNullOrWhiteSpace(academicYear))
-            return null;
-
-        var start = academicYear.Split('-', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return int.TryParse(start, out var year) ? year : null;
+        return new StudentAcademicCalendarDto(
+            TermId:            term.Id,
+            TermName:          term.Name,
+            TermTypeLabel:     TermLabels.Get(term.TermType),
+            Year:              term.Year,
+            IsCancelled:       term.IsCancelled,
+            TermStart:         term.TermStart,
+            TermEnd:           term.TermEnd,
+            RegistrationStart: cal?.RegistrationStart,
+            RegistrationEnd:   cal?.RegistrationEnd,
+            AddDropStart:      cal?.AddDropStart,
+            AddDropEnd:        cal?.AddDropEnd,
+            WithdrawalDeadline:cal?.WithdrawalDeadline,
+            GradeEntryStart:   cal?.GradeEntryStart,
+            GradeEntryEnd:     cal?.GradeEntryEnd,
+            IsRegistrationOpen: term.IsRegistrationOpen(now),
+            IsAddDropOpen:      term.IsAddDropOpen(now),
+            IsWithdrawalOpen:   term.IsWithdrawalOpen(now),
+            IsGradeEntryOpen:   term.IsGradeEntryOpen(now),
+            Events:            events
+        );
     }
 }

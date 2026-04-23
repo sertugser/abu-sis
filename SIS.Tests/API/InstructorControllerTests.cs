@@ -9,6 +9,7 @@ using SIS.API.Controllers;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Tests.API;
@@ -148,7 +149,7 @@ public class InstructorControllerTests
             TermId = 1,
             InstructorId = instructorId,
             Capacity = 30,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
         });
 
         context.SaveChanges();

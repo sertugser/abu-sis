@@ -24,6 +24,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CourseRegistration> CourseRegistrations => Set<CourseRegistration>();
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
+    public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
+    public DbSet<OsymRegistrationCalendar> OsymRegistrationCalendars => Set<OsymRegistrationCalendar>();
+    public DbSet<ProgramQuota> ProgramQuotas => Set<ProgramQuota>();
     public DbSet<Classroom> Classrooms => Set<Classroom>();
 public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
@@ -43,6 +46,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<RegistrationPlan> RegistrationPlans => Set<RegistrationPlan>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
     public DbSet<ConstraintDefinition> ConstraintDefinitions => Set<ConstraintDefinition>();
@@ -66,10 +70,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
     public DbSet<ConstraintViolationSnapshot> ConstraintViolationSnapshots => Set<ConstraintViolationSnapshot>();
     public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
-    public DbSet<CourseIntentionSurvey> CourseIntentionSurveys => Set<CourseIntentionSurvey>();
-    public DbSet<CourseIntention> CourseIntentions => Set<CourseIntention>();
-    public DbSet<StudentSurveyPreference> StudentSurveyPreferences => Set<StudentSurveyPreference>();
     public DbSet<AdvisorCourseConstraint> AdvisorCourseConstraints => Set<AdvisorCourseConstraint>();
+    public DbSet<CourseCrossList> CourseCrossLists => Set<CourseCrossList>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -157,6 +159,12 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(c => c.DepartmentId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── CourseSection.CrossListGroupId — index for group lookup ──
+        builder.Entity<CourseSection>(e =>
+        {
+            e.HasIndex(cs => cs.CrossListGroupId);
         });
 
         // ── CurriculumCourse (composite PK) ─────────────────────
@@ -437,7 +445,18 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── AcademicTerm ───────────────────────────────────────
         builder.Entity<AcademicTerm>(e =>
         {
-            e.HasIndex(t => new { t.Year, t.Semester }).IsUnique();
+            e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
+        });
+
+        // ── TermAcademicCalendar (1-1 AcademicTerm) ────────────
+        builder.Entity<TermAcademicCalendar>(e =>
+        {
+            e.HasOne(c => c.Term)
+             .WithOne(t => t.AcademicCalendar)
+             .HasForeignKey<TermAcademicCalendar>(c => c.TermId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(c => c.TermId).IsUnique();
         });
 
         // ── TermCalendarEvent ──────────────────────────────────
@@ -599,61 +618,6 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── CourseIntentionSurvey ────────────────────────────────
-        builder.Entity<CourseIntentionSurvey>(e =>
-        {
-            e.HasIndex(s => s.TermId).IsUnique();
-
-            e.Property(s => s.Title)
-             .HasMaxLength(200);
-
-            e.HasOne(s => s.Term)
-             .WithMany()
-             .HasForeignKey(s => s.TermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // ── CourseIntention ──────────────────────────────────────
-        builder.Entity<CourseIntention>(e =>
-        {
-            e.HasIndex(ci => new { ci.SurveyId, ci.StudentId, ci.CourseId }).IsUnique();
-            e.HasIndex(ci => new { ci.StudentId, ci.SurveyId });
-
-            e.HasOne(ci => ci.Survey)
-             .WithMany(s => s.Intentions)
-             .HasForeignKey(ci => ci.SurveyId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne(ci => ci.Student)
-             .WithMany()
-             .HasForeignKey(ci => ci.StudentId)
-             .OnDelete(DeleteBehavior.Restrict);
-
-            e.HasOne(ci => ci.Course)
-             .WithMany()
-             .HasForeignKey(ci => ci.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // ── StudentSurveyPreference ─────────────────────────────
-        builder.Entity<StudentSurveyPreference>(e =>
-        {
-            e.HasIndex(sp => new { sp.SurveyId, sp.StudentId }).IsUnique();
-
-            e.Property(sp => sp.PreferredDays).HasMaxLength(200);
-            e.Property(sp => sp.PreferredTimeRanges).HasMaxLength(200);
-
-            e.HasOne(sp => sp.Survey)
-             .WithMany(s => s.Preferences)
-             .HasForeignKey(sp => sp.SurveyId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne(sp => sp.Student)
-             .WithMany()
-             .HasForeignKey(sp => sp.StudentId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
         // ── AdvisorCourseConstraint ─────────────────────────────
         builder.Entity<AdvisorCourseConstraint>(e =>
         {
@@ -690,6 +654,29 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
               .WithMany(rp => rp.Registrations)
               .HasForeignKey(cr => cr.RegistrationPlanId)
               .OnDelete(DeleteBehavior.SetNull);
+
+            // Havuz snapshot FK (null = zorunlu veya tekil seçmeli)
+            e2.HasOne(cr => cr.AppliedElectivePool)
+              .WithMany()
+              .HasForeignKey(cr => cr.AppliedElectivePoolId)
+              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── CourseCrossList (M:N Course ↔ Course) ───────────────
+        builder.Entity<CourseCrossList>(e =>
+        {
+            e.HasKey(x => new { x.CourseId, x.LinkedCourseId });
+            e.HasIndex(x => x.LinkedCourseId);
+
+            e.HasOne(x => x.Course)
+             .WithMany()
+             .HasForeignKey(x => x.CourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.LinkedCourse)
+             .WithMany()
+             .HasForeignKey(x => x.LinkedCourseId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── AuditLog ─────────────────────────────────────────────
@@ -706,6 +693,18 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(sc => sc.Key).IsUnique();
             e.Property(sc => sc.RowVersion)
              .IsRowVersion();
+        });
+
+        // ── UserPreference ───────────────────────────────────────
+        builder.Entity<UserPreference>(e =>
+        {
+            e.HasIndex(up => up.UserId).IsUnique();
+            e.Property(up => up.FavoritesJson).HasColumnType("jsonb");
+
+            e.HasOne<ApplicationUser>()
+             .WithOne()
+             .HasForeignKey<UserPreference>(up => up.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── PromotionRule ────────────────────────────────────────
@@ -934,6 +933,25 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(a => a.TargetDepartmentId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── OsymRegistrationCalendar ───────────────────────────
+        builder.Entity<OsymRegistrationCalendar>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.HasIndex(x => new { x.Year, x.Type });
+        });
+
+        // ── ProgramQuota ────────────────────────────────────────
+        builder.Entity<ProgramQuota>(e =>
+        {
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.HasOne(q => q.Program)
+             .WithMany()
+             .HasForeignKey(q => q.ProgramId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(q => new { q.ProgramId, q.Year, q.Type }).IsUnique();
         });
     }
 }

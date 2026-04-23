@@ -25,6 +25,8 @@ public class OpenedCourseSectionDto
     public bool IsActive { get; set; }
     public int? DepartmentId { get; set; }
     public string? DepartmentName { get; set; }
+    /// <summary>Cross-list grup ID'si (null = tek başına).</summary>
+    public int? CrossListGroupId { get; set; }
 }
 
 public class OpenedCourseListDto
@@ -63,6 +65,24 @@ public class CurriculumCourseForOpeningDto
     public int? PreviousTermEnrollment { get; set; }
 
     public bool CanOpen { get; set; }
+
+    /// <summary>
+    /// CanOpen = false olduğunda sebep: "TermNotInPlanning" | "NotOwner" | "CourseUnassigned".
+    /// Null ise açılabilir (CanOpen = true).
+    /// </summary>
+    public string? BlockReason { get; set; }
+
+    // ── Seçmeli havuz bilgileri (null ise zorunlu ders veya müfredatta tekil tanım) ──
+    /// <summary>CurriculumElectivePool Id (null = zorunlu veya tekil seçmeli).</summary>
+    public int? ElectivePoolId { get; set; }
+    /// <summary>ElectiveGroup kodu (ör. "NDE", "TE", "OC"). Null = havuza bağlı değil.</summary>
+    public string? ElectiveGroupCode { get; set; }
+    /// <summary>ElectiveGroup adı (ör. "Bölüm Dışı Seçmeli"). Null = havuza bağlı değil.</summary>
+    public string? ElectiveGroupName { get; set; }
+    /// <summary>Havuz alt türü (NDE/TechnicalElective/UniversityElective/DepartmentalElective gibi).</summary>
+    public string? ElectiveSubtype { get; set; }
+    /// <summary>Kaynak: "Compulsory" (zorunlu müfredat), "Elective" (tekil seçmeli), "Pool" (havuz üyesi).</summary>
+    public string Source { get; set; } = "Compulsory";
 }
 
 public class CrossDepartmentDemandDto
@@ -95,6 +115,12 @@ public class OpenCourseRequest
     /// Dersin hangi bölümlere açık olacağı. Null/boş ise müfredattaki tüm bölümlere otomatik açılır.
     /// </summary>
     public List<int>? AccessibleDepartmentIds { get; set; }
+
+    /// <summary>
+    /// Madde 14: Cross-list'li dersler için paralel section da açılsın mı?
+    /// Ör. YZM301 açılırken BIL301 için de paralel section (aynı hoca/kapasite/grup) oluşturulur.
+    /// </summary>
+    public bool IncludeCrossLists { get; set; } = false;
 }
 
 public class BulkOpenCoursesRequest

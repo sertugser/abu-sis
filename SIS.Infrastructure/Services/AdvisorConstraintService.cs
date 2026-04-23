@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AdvisorConstraints.DTOs;
 using SIS.Application.AdvisorConstraints.Services;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -310,9 +311,10 @@ public class AdvisorConstraintService : IAdvisorConstraintService
 
     private async Task<int?> GetActiveTermIdAsync(CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => t.IsActive)
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
             .Select(t => (int?)t.Id)
             .FirstOrDefaultAsync(cancellationToken);
     }

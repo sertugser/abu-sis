@@ -5,57 +5,48 @@ public record AdminTermDto(
     string Name,
     string ShortName,
     string EnglishName,
+    string ShortEnglishName,
+    string? OtherName,
     int Year,
-    string Semester,        // "Fall" | "Spring" | "Summer"
-    string SemesterLabel,   // "Güz" | "Bahar" | "Yaz"
-    string TermType,        // "Regular" | "Summer" | "Intensive" | "Exemption"
-    string TermTypeLabel,   // "Normal" | "Yaz" | "Tekders" | "Muafiyet"
-    bool IsActive,
-    string Status,          // TermStatus enum name
-    string StatusLabel,     // Turkish label
-    string[] AllowedTransitions, // Next valid states
-    DateTime RegistrationStart,
-    DateTime RegistrationEnd,
-    DateTime AddDropStart,
-    DateTime AddDropEnd,
+    string TermType,
+    string TermTypeLabel,
+    string Status,
+    string StatusLabel,
+    bool IsCancelled,
+    string YoksisStatus,
     DateTime TermStart,
     DateTime TermEnd,
-    DateTime WithdrawalDeadline,
-    bool IsRegistrationOpen,
-    bool IsAddDropOpen,
+    bool IsActive,
+    bool HasAcademicCalendar,
     int CalendarEventCount,
     int GeneratedCalendarEventCount,
     int? GeneratedCalendarDraftId,
     bool HasGeneratedCalendar
 );
 
-public record TransitionTermStatusDto(string TargetStatus);
-
 public record CreateTermDto(
     string Name,
     string ShortName,
     string EnglishName,
+    string ShortEnglishName,
+    string? OtherName,
     int Year,
-    string Semester,
     string TermType,
-    DateTime RegistrationStart,
-    DateTime RegistrationEnd,
-    DateTime AddDropStart,
-    DateTime AddDropEnd,
+    string YoksisStatus,
     DateTime TermStart,
-    DateTime TermEnd,
-    DateTime WithdrawalDeadline
+    DateTime TermEnd
 );
+
 public record UpdateTermDto(
     string Name,
     string ShortName,
     string EnglishName,
+    string ShortEnglishName,
+    string? OtherName,
     string TermType,
-    DateTime RegistrationStart,
-    DateTime RegistrationEnd,
-    DateTime AddDropStart,
-    DateTime AddDropEnd,
+    string YoksisStatus,
     DateTime TermStart,
-    DateTime TermEnd,
-    DateTime WithdrawalDeadline
+    DateTime TermEnd
 );
+
+// DELETED: UpdateTermPhaseOverrideDto — moved to AcademicCalendarDtos.cs

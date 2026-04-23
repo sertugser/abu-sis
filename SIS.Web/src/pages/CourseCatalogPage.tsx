@@ -211,6 +211,19 @@ export default function CourseCatalogPage() {
 
   return (
     <div className="space-y-5">
+      {/* ── Takvim eksikliği uyarısı ── */}
+      {term && !term.hasAcademicCalendar && (
+        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-amber-900">Kayıt alınamıyor</h3>
+            <p className="text-sm text-amber-800 mt-1">
+              Aktif dönemin akademik takvimi henüz tanımlanmamış. Kayıt ve ekle/bırak dönemleri belli değil. Öğrenci işleri daire başkanlığı ile iletişime geçin.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Öğrenci Bilgileri + Durum ── */}
       {student && (
         <Card className="overflow-hidden shadow-sm">
@@ -292,9 +305,9 @@ export default function CourseCatalogPage() {
               <GraduationCap className="h-3.5 w-3.5" />
               Yeni
             </div>
-            <p className="text-base font-semibold text-foreground">Akilli ders onerileri ve niyet anketi acildi</p>
+            <p className="text-base font-semibold text-foreground">Akilli ders onerileri hazir</p>
             <p className="text-sm text-muted-foreground">
-              Bu donem icin sistemin onerilerini gorup almayi dusundugun dersleri anketten isaretleyebilirsin.
+              Bu donem icin sistemin onerilerini skor, zorluk ve kritik yol etkisiyle birlikte inceleyebilirsin.
             </p>
           </div>
           <Button asChild className="gap-2 rounded-xl bg-[#003366] hover:bg-[#002244]">

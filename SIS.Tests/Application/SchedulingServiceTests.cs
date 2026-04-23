@@ -511,30 +511,40 @@ public class SchedulingServiceTests : IDisposable
                 Id = ActiveTermId,
                 Name = "2025-2026 Bahar",
                 Year = 2025,
-                Semester = SemesterType.Spring,
-                RegistrationStart = DateTime.UtcNow.AddDays(-5),
-                RegistrationEnd = DateTime.UtcNow.AddDays(5),
-                AddDropStart = DateTime.UtcNow.AddDays(6),
-                AddDropEnd = DateTime.UtcNow.AddDays(12),
-                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                TermType = TermType.Spring,
                 TermStart = DateTime.UtcNow.AddDays(-10),
                 TermEnd = DateTime.UtcNow.AddDays(90),
-                IsActive = true
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = DateTime.UtcNow.AddDays(-5),
+                    RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                    AddDropStart = DateTime.UtcNow.AddDays(6),
+                    AddDropEnd = DateTime.UtcNow.AddDays(12),
+                    WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                    GradeEntryStart = DateTime.UtcNow.AddDays(76),
+                    GradeEntryEnd = DateTime.UtcNow.AddDays(104),
+                    CreatedAt = DateTime.UtcNow,
+                }
             },
             new AcademicTerm
             {
                 Id = SecondaryTermId,
                 Name = "2024-2025 Guz",
                 Year = 2024,
-                Semester = SemesterType.Fall,
-                RegistrationStart = DateTime.UtcNow.AddDays(-100),
-                RegistrationEnd = DateTime.UtcNow.AddDays(-90),
-                AddDropStart = DateTime.UtcNow.AddDays(-89),
-                AddDropEnd = DateTime.UtcNow.AddDays(-85),
-                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                TermType = TermType.Fall,
                 TermStart = DateTime.UtcNow.AddDays(-120),
                 TermEnd = DateTime.UtcNow.AddDays(-30),
-                IsActive = false
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = DateTime.UtcNow.AddDays(-100),
+                    RegistrationEnd = DateTime.UtcNow.AddDays(-90),
+                    AddDropStart = DateTime.UtcNow.AddDays(-89),
+                    AddDropEnd = DateTime.UtcNow.AddDays(-85),
+                    WithdrawalDeadline = DateTime.UtcNow.AddDays(-44),
+                    GradeEntryStart = DateTime.UtcNow.AddDays(-44),
+                    GradeEntryEnd = DateTime.UtcNow.AddDays(-16),
+                    CreatedAt = DateTime.UtcNow,
+                }
             });
 
         _context.SaveChanges();
@@ -581,6 +591,7 @@ public class SchedulingServiceTests : IDisposable
             Id = id,
             ProgramId = programId,
             Version = "2025",
+            Status = CurriculumStatus.Published,
             IsActive = true
         };
 
@@ -691,7 +702,7 @@ public class SchedulingServiceTests : IDisposable
             TermId = termId,
             Capacity = capacity,
             EnrolledCount = 0,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false
         };
 

@@ -1,5 +1,7 @@
 namespace SIS.Domain.Entities;
 
+using SIS.Domain.Enums;
+
 public class CourseSection
 {
     public int Id { get; set; }
@@ -16,10 +18,26 @@ public class CourseSection
     public int? ClassroomId { get; set; }
     public Classroom? Classroom { get; set; }
     public int SectionNumber { get; set; }
-    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Section lifecycle durumu. Draft (eksik) ↔ Active (tam atama) otomatik.
+    /// Cancelled yalnızca admin manuel aksiyonu; runtime kontroller kilitlenir.
+    /// </summary>
+    public CourseSectionStatus Status { get; set; } = CourseSectionStatus.Draft;
+
+    /// <summary>Geriye uyumluluk: mevcut kod `IsActive` okur, computed olarak Status'tan türetilir.</summary>
+    public bool IsActive => Status == CourseSectionStatus.Active;
+
     public bool IsFinalized { get; set; }
     public bool IsScheduleLocked { get; set; } // true = otomatik scheduling değiştiremez
     public bool IsPinned { get; set; } // true = dışarıdan gelen hoca, saati sabit, optimizasyon değiştiremez
+
+    /// <summary>
+    /// Cross-list grup kimliği. Aynı gruptaki section'lar aynı hoca/sınıf/saat paylaşır,
+    /// kapasite birleşik hesaplanır. Null = tek başına section.
+    /// </summary>
+    public int? CrossListGroupId { get; set; }
+
     public uint RowVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

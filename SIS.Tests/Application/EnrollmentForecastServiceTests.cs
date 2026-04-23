@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
+using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -405,7 +406,7 @@ public class EnrollmentForecastServiceTests
             Id = CurriculumId,
             ProgramId = ProgramId,
             Version = "2025",
-            IsActive = true
+            Status = CurriculumStatus.Published
         });
 
         context.AcademicTerms.AddRange(
@@ -414,30 +415,40 @@ public class EnrollmentForecastServiceTests
                 Id = ActiveTermId,
                 Name = "2025-2026 Fall",
                 Year = 2025,
-                Semester = SemesterType.Fall,
-                RegistrationStart = DateTime.UtcNow.AddDays(-7),
-                RegistrationEnd = DateTime.UtcNow.AddDays(7),
-                AddDropStart = DateTime.UtcNow.AddDays(8),
-                AddDropEnd = DateTime.UtcNow.AddDays(14),
-                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                TermType = TermType.Fall,
                 TermStart = DateTime.UtcNow.AddDays(-14),
                 TermEnd = DateTime.UtcNow.AddDays(90),
-                IsActive = true
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = DateTime.UtcNow.AddDays(-7),
+                    RegistrationEnd = DateTime.UtcNow.AddDays(7),
+                    AddDropStart = DateTime.UtcNow.AddDays(8),
+                    AddDropEnd = DateTime.UtcNow.AddDays(14),
+                    WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                    GradeEntryStart = DateTime.UtcNow.AddDays(76),
+                    GradeEntryEnd = DateTime.UtcNow.AddDays(104),
+                    CreatedAt = DateTime.UtcNow,
+                }
             },
             new AcademicTerm
             {
                 Id = PastTermId,
                 Name = "2024-2025 Spring",
                 Year = 2024,
-                Semester = SemesterType.Spring,
-                RegistrationStart = DateTime.UtcNow.AddDays(-200),
-                RegistrationEnd = DateTime.UtcNow.AddDays(-190),
-                AddDropStart = DateTime.UtcNow.AddDays(-189),
-                AddDropEnd = DateTime.UtcNow.AddDays(-180),
-                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                TermType = TermType.Spring,
                 TermStart = DateTime.UtcNow.AddDays(-210),
                 TermEnd = DateTime.UtcNow.AddDays(-120),
-                IsActive = false
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = DateTime.UtcNow.AddDays(-200),
+                    RegistrationEnd = DateTime.UtcNow.AddDays(-190),
+                    AddDropStart = DateTime.UtcNow.AddDays(-189),
+                    AddDropEnd = DateTime.UtcNow.AddDays(-180),
+                    WithdrawalDeadline = DateTime.UtcNow.AddDays(-135),
+                    GradeEntryStart = DateTime.UtcNow.AddDays(-134),
+                    GradeEntryEnd = DateTime.UtcNow.AddDays(-106),
+                    CreatedAt = DateTime.UtcNow,
+                }
             });
 
         context.Classrooms.AddRange(
@@ -491,8 +502,8 @@ public class EnrollmentForecastServiceTests
             ProgramId = programId,
             CurriculumId = curriculumId,
             Type = StudentProgramType.Main,
-            EnrollmentDate = DateTime.UtcNow.AddYears(-2),
-            IsActive = true
+            IsActive = true,
+            EnrollmentDate = DateTime.UtcNow.AddYears(-2)
         });
 
         context.SaveChanges();
@@ -573,7 +584,7 @@ public class EnrollmentForecastServiceTests
             Id = curriculumId,
             ProgramId = programId,
             Version = "2025",
-            IsActive = true
+            Status = CurriculumStatus.Published
         });
 
         context.SaveChanges();
@@ -581,20 +592,32 @@ public class EnrollmentForecastServiceTests
 
     private static void AddTerm(AppDbContext context, int termId, int year, SemesterType semester, bool isActive)
     {
+        var termType = semester switch
+        {
+            SemesterType.Summer => TermType.Summer,
+            SemesterType.Spring => TermType.Spring,
+            _ => TermType.Fall
+        };
+        var termEnd = isActive ? DateTime.UtcNow.AddDays(30) : DateTime.UtcNow.AddDays(-10);
         context.AcademicTerms.Add(new AcademicTerm
         {
             Id = termId,
             Name = $"{year}-{year + 1} {semester}",
             Year = year,
-            Semester = semester,
-            RegistrationStart = DateTime.UtcNow.AddDays(-60),
-            RegistrationEnd = DateTime.UtcNow.AddDays(-50),
-            AddDropStart = DateTime.UtcNow.AddDays(-49),
-            AddDropEnd = DateTime.UtcNow.AddDays(-40),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(-20),
+            TermType = termType,
             TermStart = DateTime.UtcNow.AddDays(-70),
-            TermEnd = DateTime.UtcNow.AddDays(-10),
-            IsActive = isActive
+            TermEnd = termEnd,
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-60),
+                RegistrationEnd = DateTime.UtcNow.AddDays(-50),
+                AddDropStart = DateTime.UtcNow.AddDays(-49),
+                AddDropEnd = DateTime.UtcNow.AddDays(-40),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(-20),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         context.SaveChanges();
@@ -640,7 +663,7 @@ public class EnrollmentForecastServiceTests
             Capacity = capacity,
             EnrolledCount = enrolledCount,
             ClassroomId = classroomId,
-            IsActive = isActive,
+            Status = isActive ? CourseSectionStatus.Active : CourseSectionStatus.Draft,
         };
 
         context.CourseSections.Add(section);
@@ -686,6 +709,6 @@ public class EnrollmentForecastServiceTests
             .Setup(service => service.CalculateCgpaAsync(It.IsAny<int>()))
             .ReturnsAsync((int studentId) => cgpasByStudentId.TryGetValue(studentId, out var cgpa) ? cgpa : 0m);
 
-        return new EnrollmentForecastService(context, gpaServiceMock.Object, new MemoryCache(new MemoryCacheOptions()));
+        return new EnrollmentForecastService(context, gpaServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), new FakeClock());
     }
 }

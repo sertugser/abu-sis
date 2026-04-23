@@ -152,7 +152,7 @@ public class CourseOpeningServiceTests
         result.Should().HaveCount(2);
         result.Select(section => section.SectionNumber).Should().Equal(2, 3);
         context.CourseAccessPolicies.Should().ContainSingle(policy => policy.CourseId == course.Id && policy.DepartmentId == DepartmentId);
-        context.CourseSections.Count(section => section.CourseId == course.Id && section.IsActive).Should().Be(3);
+        context.CourseSections.Count(section => section.CourseId == course.Id && section.Status == CourseSectionStatus.Active).Should().Be(3);
     }
 
     [Fact]
@@ -268,6 +268,7 @@ public class CourseOpeningServiceTests
                 Code = "MATH"
             });
 
+        var termEnd = DateTime.UtcNow.AddDays(90);
         context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
@@ -275,16 +276,20 @@ public class CourseOpeningServiceTests
             ShortName = "25-26 Güz",
             EnglishName = "Fall 2025-2026",
             Year = 2025,
-            Semester = SemesterType.Fall,
-            RegistrationStart = DateTime.UtcNow.AddDays(-7),
-            RegistrationEnd = DateTime.UtcNow.AddDays(7),
-            AddDropStart = DateTime.UtcNow.AddDays(8),
-            AddDropEnd = DateTime.UtcNow.AddDays(14),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
+            TermType = TermType.Fall,
             TermStart = DateTime.UtcNow.AddDays(-14),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.Planning
+            TermEnd = termEnd,
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-7),
+                RegistrationEnd = DateTime.UtcNow.AddDays(7),
+                AddDropStart = DateTime.UtcNow.AddDays(8),
+                AddDropEnd = DateTime.UtcNow.AddDays(14),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         context.SaveChanges();
@@ -440,7 +445,7 @@ public class CourseOpeningServiceTests
             Capacity = capacity,
             EnrolledCount = enrolledCount,
             SectionNumber = sectionNumber,
-            IsActive = isActive,
+            Status = isActive ? CourseSectionStatus.Active : CourseSectionStatus.Draft,
             IsFinalized = false
         };
 

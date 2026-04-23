@@ -4,7 +4,17 @@ import apiClient from '../api/axios';
 const BASE = '/admin/academic-structure';
 
 export interface FacultyDto { id: number; name: string; code: string; departmentCount: number; }
-export interface DepartmentDto { id: number; name: string; code: string; facultyId: number; facultyName: string; programCount: number; }
+export interface DepartmentDto {
+  id: number;
+  name: string;
+  code: string;
+  facultyId: number;
+  facultyName: string;
+  programCount: number;
+  studentCount: number;
+  instructorCount: number;
+  isServiceUnit: boolean;
+}
 export interface ProgramDto {
   id: number; name: string; code: string;
   departmentId: number; departmentName: string;

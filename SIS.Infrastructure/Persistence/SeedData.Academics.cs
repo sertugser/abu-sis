@@ -52,6 +52,30 @@ public static partial class SeedData
         }
         await context.SaveChangesAsync();
 
+        // Madde 11: Koordinatörlük (Service Unit) seed — ortak derslerin sahibi
+        // MATH, FIZ, KIM, AIIT, TRD, YDL gibi ortak dersler bu birime atanır.
+        var coordinatorships = new (string Name, string Code)[]
+        {
+            ("Temel Bilimler Koordinatörlüğü", "TBK"),
+            ("Atatürk İlkeleri ve İnkılap Tarihi Bölümü", "AIIT"),
+            ("Türk Dili Bölümü", "TRD"),
+            ("Yabancı Diller Yüksekokulu", "YDL"),
+        };
+        foreach (var (name, code) in coordinatorships)
+        {
+            if (!context.Departments.Any(d => d.Code == code))
+            {
+                context.Departments.Add(new Department
+                {
+                    Name = name,
+                    Code = code,
+                    FacultyId = faculty.Id,
+                    IsServiceUnit = true,
+                });
+            }
+        }
+        await context.SaveChangesAsync();
+
         // Programs
         var progData = new (string Name, string Code, string DeptCode)[]
         {

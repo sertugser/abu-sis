@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, Edit2, CheckCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Edit2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,68 +12,56 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   useAdminTerms,
   useCreateTerm,
   useUpdateTerm,
-  useActivateTerm,
-  useTransitionTermStatus,
+  useCancelTerm,
+  useUncancelTerm,
   type AdminTermDto,
   type CreateTermDto,
   type UpdateTermDto,
 } from '../hooks/useAdminTerms';
+import { ROUTES } from '@/lib/constants';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const SEMESTER_OPTIONS = [
+const TERM_TYPE_OPTIONS = [
   { value: 'Fall', label: 'Güz' },
   { value: 'Spring', label: 'Bahar' },
   { value: 'Summer', label: 'Yaz' },
-];
-
-const TERM_TYPE_OPTIONS = [
-  { value: 'Regular', label: 'Normal' },
-  { value: 'Summer', label: 'Yaz' },
-  { value: 'Intensive', label: 'Tekders' },
+  { value: 'FallResit', label: 'Güz Tekders' },
+  { value: 'SpringResit', label: 'Bahar Tekders' },
+  { value: 'SummerResit', label: 'Yaz Tekders' },
+  { value: 'SpringOther', label: 'Bahar Diğer' },
+  { value: 'SummerOther', label: 'Yaz Diğer' },
   { value: 'Exemption', label: 'Muafiyet' },
-];
+] as const;
 
-const TRANSITION_LABELS: Record<string, string> = {
-  Planning: 'Planlamaya Gec',
-  Scheduling: 'Programlamaya Gec',
-  Published: 'Yayinla',
-  RegistrationOpen: 'Kayitlari Ac',
-  AddDrop: 'Ders Ekle/Birak',
-  WithdrawalPeriod: 'Cekilme Donemi',
-  GradeEntry: 'Not Girisi',
-  Closed: 'Donemi Kapat',
-  Archived: 'Arsivle',
-  Draft: 'Taslaga Don',
-};
+const YOKSIS_STATUS_OPTIONS = [
+  { value: 'Inactive', label: 'Pasif' },
+  { value: 'Active', label: 'Aktif' },
+] as const;
 
 const TERM_STATUS_LABELS: Record<string, string> = {
-  Draft: 'Taslak',
-  Planning: 'Planlama',
-  Scheduling: 'Programlama',
-  Published: 'Yayinlandi',
-  RegistrationOpen: 'Kayit Acik',
-  AddDrop: 'Ekle/Birak',
-  WithdrawalPeriod: 'Cekilme Donemi',
-  GradeEntry: 'Not Girisi',
-  Closed: 'Kapali',
-  Archived: 'Arsiv',
+  Inactive:  'Pasif',
+  Active:    'Aktif',
+  Cancelled: 'İptal',
 };
 
 const TERM_STATUS_COLORS: Record<string, string> = {
-  Draft: 'bg-gray-100 text-gray-700 border-gray-300',
-  Planning: 'bg-blue-100 text-blue-700 border-blue-300',
-  Scheduling: 'bg-indigo-100 text-indigo-700 border-indigo-300',
-  Published: 'bg-green-100 text-green-700 border-green-300',
-  RegistrationOpen: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-  AddDrop: 'bg-yellow-100 text-yellow-700 border-yellow-300',
-  WithdrawalPeriod: 'bg-orange-100 text-orange-700 border-orange-300',
-  GradeEntry: 'bg-purple-100 text-purple-700 border-purple-300',
-  Closed: 'bg-red-100 text-red-700 border-red-300',
-  Archived: 'bg-slate-100 text-slate-700 border-slate-300',
+  Inactive:  'bg-slate-100 text-slate-700 border-slate-300',
+  Active:    'bg-emerald-100 text-emerald-700 border-emerald-300',
+  Cancelled: 'bg-red-100 text-red-700 border-red-300',
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -101,16 +90,13 @@ interface TermFormState {
   name: string;
   shortName: string;
   englishName: string;
+  shortEnglishName: string;
+  otherName: string;
   year: number;
-  semester: string;
   termType: string;
-  registrationStart: string;
-  registrationEnd: string;
-  addDropStart: string;
-  addDropEnd: string;
+  yoksisStatus: 'Inactive' | 'Active';
   termStart: string;
   termEnd: string;
-  withdrawalDeadline: string;
 }
 
 function emptyForm(): TermFormState {
@@ -118,16 +104,13 @@ function emptyForm(): TermFormState {
     name: '',
     shortName: '',
     englishName: '',
+    shortEnglishName: '',
+    otherName: '',
     year: CURRENT_YEAR,
-    semester: 'Fall',
-    termType: 'Regular',
-    registrationStart: '',
-    registrationEnd: '',
-    addDropStart: '',
-    addDropEnd: '',
+    termType: 'Fall',
+    yoksisStatus: 'Inactive',
     termStart: '',
     termEnd: '',
-    withdrawalDeadline: '',
   };
 }
 
@@ -136,86 +119,66 @@ function termFromDto(term: AdminTermDto): TermFormState {
     name: term.name,
     shortName: term.shortName,
     englishName: term.englishName,
+    shortEnglishName: term.shortEnglishName,
+    otherName: term.otherName ?? '',
     year: term.year,
-    semester: term.semester,
     termType: term.termType,
-    registrationStart: toDateInput(term.registrationStart),
-    registrationEnd: toDateInput(term.registrationEnd),
-    addDropStart: toDateInput(term.addDropStart),
-    addDropEnd: toDateInput(term.addDropEnd),
+    yoksisStatus: term.yoksisStatus,
     termStart: toDateInput(term.termStart),
     termEnd: toDateInput(term.termEnd),
-    withdrawalDeadline: toDateInput(term.withdrawalDeadline),
   };
 }
 
 
-// ── DateCell ─────────────────────────────────────────────────────────────────
-
-function DateCell({ start, end, active }: { start: string; end: string; active?: boolean }) {
-  return (
-    <div>
-      <p className={`text-sm font-medium ${active ? 'text-success' : 'text-foreground'}`}>
-        {fmt(start)}
-      </p>
-      <p className="text-xs text-muted-foreground">{fmt(end)}</p>
-    </div>
-  );
-}
-
-function academicCalendarSourceText(term: AdminTermDto) {
-  if (!term.hasGeneratedCalendar) return null;
-  const draftText = term.generatedCalendarDraftId ? `Taslak #${term.generatedCalendarDraftId}` : 'Taslak';
-  return `${draftText} · ${term.generatedCalendarEventCount} takvim kaydı`;
-}
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TermManagementPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<AdminTermDto | null>(null);
-  const [activateTarget, setActivateTarget] = useState<AdminTermDto | null>(null);
+  const [viewingTerm, setViewingTerm] = useState<AdminTermDto | null>(null);
   const [form, setForm] = useState<TermFormState>(emptyForm());
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [transitionError, setTransitionError] = useState('');
-  const [transitioningTermId, setTransitioningTermId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
+  const [confirmCancelTarget, setConfirmCancelTarget] = useState<AdminTermDto | null>(null);
 
   const { data: terms = [], isLoading } = useAdminTerms();
   const createTerm = useCreateTerm();
   const updateTerm = useUpdateTerm();
-  const activateTerm = useActivateTerm();
-  const transitionTerm = useTransitionTermStatus();
+  const cancelTerm = useCancelTerm();
+  const uncancelTerm = useUncancelTerm();
 
-  async function handleTransition(termId: number, targetStatus: string) {
-    setTransitionError('');
-    setTransitioningTermId(termId);
-    try {
-      await transitionTerm.mutateAsync({ termId, targetStatus });
-      showSuccess(`Donem durumu "${TERM_STATUS_LABELS[targetStatus] ?? targetStatus}" olarak guncellendi.`);
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
-      const msg = axiosErr?.response?.data?.error
-        ?? axiosErr?.response?.data?.message
-        ?? axiosErr?.response?.data?.title
-        ?? (err instanceof Error ? err.message : 'Gecis basarisiz.');
-      setTransitionError(msg);
-    } finally {
-      setTransitioningTermId(null);
-    }
-  }
-
-  const sortedTerms = [...terms].sort((a, b) => b.year - a.year || b.semester.localeCompare(a.semester));
+  const sortedTerms = [...terms].sort((a, b) => b.year - a.year || a.termType.localeCompare(b.termType));
 
   function openCreate() { setForm(emptyForm()); setFormError(''); setCreateModalOpen(true); }
   function openEdit(term: AdminTermDto) { setForm(termFromDto(term)); setFormError(''); setEditingTerm(term); }
 
   function validateForm(): string | null {
-    if (!form.name.trim()) return 'Dönem adı zorunludur.';
-    if (!form.registrationStart || !form.registrationEnd) return 'Kayıt tarihleri zorunludur.';
-    if (!form.addDropStart || !form.addDropEnd) return 'Ders ekleme/bırakma tarihleri zorunludur.';
+    const name = form.name.trim();
+    const shortName = form.shortName.trim();
+    const shortEnglishName = form.shortEnglishName.trim();
+
+    if (name.length < 3) return 'Dönem adı en az 3 karakter olmalıdır.';
+    if (shortEnglishName.length < 3) return 'Kısa İngilizce ad en az 3 karakter olmalıdır.';
+    if (shortName && shortName.length < 3) return 'Kısa ad boş olabilir ancak girildiyse en az 3 karakter olmalıdır.';
+
     if (!form.termStart || !form.termEnd) return 'Dönem başlangıç/bitiş tarihleri zorunludur.';
-    if (!form.withdrawalDeadline) return 'Ders çekilme son tarihi zorunludur.';
+    const start = new Date(form.termStart);
+    const end = new Date(form.termEnd);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Geçersiz tarih.';
+    if (start >= end) return 'Başlangıç tarihi bitiş tarihinden önce olmalıdır.';
+
     return null;
+  }
+
+  function extractApiError(err: unknown, fallback: string): string {
+    const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
+    return (
+      axiosErr?.response?.data?.error
+      ?? axiosErr?.response?.data?.message
+      ?? axiosErr?.response?.data?.title
+      ?? (err instanceof Error ? err.message : fallback)
+    );
   }
 
   async function handleCreate() {
@@ -225,23 +188,20 @@ export default function TermManagementPage() {
       name: form.name.trim(),
       shortName: form.shortName.trim(),
       englishName: form.englishName.trim(),
+      shortEnglishName: form.shortEnglishName.trim(),
+      otherName: form.otherName.trim() || null,
       year: form.year,
-      semester: form.semester,
-      termType: form.termType,
-      registrationStart: toIsoString(form.registrationStart),
-      registrationEnd: toIsoString(form.registrationEnd),
-      addDropStart: toIsoString(form.addDropStart),
-      addDropEnd: toIsoString(form.addDropEnd),
+      termType: form.termType as CreateTermDto['termType'],
+      yoksisStatus: form.yoksisStatus,
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
-      withdrawalDeadline: toIsoString(form.withdrawalDeadline),
     };
     try {
       await createTerm.mutateAsync(dto);
       setCreateModalOpen(false);
       showSuccess('Dönem oluşturuldu.');
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Dönem oluşturulamadı.');
+      setFormError(extractApiError(err, 'Dönem oluşturulamadı.'));
     }
   }
 
@@ -253,32 +213,50 @@ export default function TermManagementPage() {
       name: form.name.trim(),
       shortName: form.shortName.trim(),
       englishName: form.englishName.trim(),
-      termType: form.termType,
-      registrationStart: toIsoString(form.registrationStart),
-      registrationEnd: toIsoString(form.registrationEnd),
-      addDropStart: toIsoString(form.addDropStart),
-      addDropEnd: toIsoString(form.addDropEnd),
+      shortEnglishName: form.shortEnglishName.trim(),
+      otherName: form.otherName.trim() || null,
+      termType: form.termType as UpdateTermDto['termType'],
+      yoksisStatus: form.yoksisStatus,
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
-      withdrawalDeadline: toIsoString(form.withdrawalDeadline),
     };
     try {
       await updateTerm.mutateAsync({ id: editingTerm.id, dto });
       setEditingTerm(null);
       showSuccess('Dönem güncellendi.');
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Dönem güncellenemedi.');
+      setFormError(extractApiError(err, 'Dönem güncellenemedi.'));
     }
   }
 
-  async function handleActivate() {
-    if (!activateTarget) return;
+  async function handleConfirmCancel() {
+    if (!confirmCancelTarget) return;
+    const termId = confirmCancelTarget.id;
+    setConfirmCancelTarget(null);
     try {
-      await activateTerm.mutateAsync(activateTarget.id);
-      setActivateTarget(null);
-      showSuccess(`"${activateTarget.name}" aktif dönem olarak ayarlandı.`);
-    } catch {
-      setActivateTarget(null);
+      await cancelTerm.mutateAsync(termId);
+      showSuccess('Dönem iptal edildi.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
+      const msg = axiosErr?.response?.data?.error
+        ?? axiosErr?.response?.data?.message
+        ?? axiosErr?.response?.data?.title
+        ?? (err instanceof Error ? err.message : 'İptal işlemi başarısız.');
+      setActionError(msg);
+    }
+  }
+
+  async function handleUncancel(termId: number) {
+    try {
+      await uncancelTerm.mutateAsync(termId);
+      showSuccess('Dönem iptali geri alındı.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
+      const msg = axiosErr?.response?.data?.error
+        ?? axiosErr?.response?.data?.message
+        ?? axiosErr?.response?.data?.title
+        ?? (err instanceof Error ? err.message : 'İptal geri alma başarısız.');
+      setActionError(msg);
     }
   }
 
@@ -307,11 +285,11 @@ export default function TermManagementPage() {
           </div>
         </div>
 
-        {transitionError && (
+        {actionError && (
           <div className="mx-4 mt-3 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive flex items-start gap-2">
             <span className="shrink-0 font-semibold">Hata:</span>
-            <span>{transitionError}</span>
-            <button onClick={() => setTransitionError('')} className="ml-auto shrink-0 text-destructive hover:text-destructive/80 font-bold">&times;</button>
+            <span>{actionError}</span>
+            <button onClick={() => setActionError('')} className="ml-auto shrink-0 text-destructive hover:text-destructive/80 font-bold">&times;</button>
           </div>
         )}
 
@@ -320,27 +298,27 @@ export default function TermManagementPage() {
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Durum</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ders Kaydı</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ekle / Bırak</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">YÖKSİS</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem Tarihi</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Çekilme Son</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Geçiş</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Akademik Takvim</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Yükleniyor...</td>
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Yükleniyor...</td>
               </tr>
             ) : sortedTerms.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
               </tr>
             ) : sortedTerms.map(term => (
               <tr
                 key={term.id}
-                className={`transition-colors hover:bg-muted/20 ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
+                onDoubleClick={() => setViewingTerm(term)}
+                title="Detayları görmek için çift tıklayın"
+                className={`transition-colors hover:bg-muted/20 cursor-pointer select-none ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
               >
                   {/* Ad */}
                   <td className="px-4 py-3">
@@ -348,19 +326,11 @@ export default function TermManagementPage() {
                       <div>
                         <p className="font-semibold text-foreground">{term.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {term.shortName} · {term.termTypeLabel}
+                          {term.year} · {term.termTypeLabel}
                         </p>
-                        {term.hasGeneratedCalendar && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Akademik takvim: {academicCalendarSourceText(term)}
-                          </p>
-                        )}
                       </div>
                       {term.isActive && (
                         <Badge variant="success" className="text-xs shrink-0">Aktif</Badge>
-                      )}
-                      {term.hasGeneratedCalendar && (
-                        <Badge variant="outline" className="text-xs shrink-0">Aktarıldı</Badge>
                       )}
                     </div>
                   </td>
@@ -372,97 +342,97 @@ export default function TermManagementPage() {
                     </span>
                   </td>
 
-                  {/* Kayıt */}
+                  {/* YÖKSİS */}
                   <td className="px-4 py-3">
-                    <DateCell start={term.registrationStart} end={term.registrationEnd} active={term.isRegistrationOpen} />
-                  </td>
-
-                  {/* Ekle/Bırak */}
-                  <td className="px-4 py-3">
-                    <DateCell start={term.addDropStart} end={term.addDropEnd} active={term.isAddDropOpen} />
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${term.yoksisStatus === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                      {term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'}
+                    </span>
                   </td>
 
                   {/* Dönem Tarihi */}
                   <td className="px-4 py-3">
-                    <DateCell start={term.termStart} end={term.termEnd} />
-                  </td>
-
-                  {/* Çekilme Son Tarihi */}
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">
-                      {fmt(term.withdrawalDeadline)}
-                    </p>
-                  </td>
-
-                  {/* Geçiş */}
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {(term.allowedTransitions ?? []).length === 0 ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        term.allowedTransitions.map(target => (
-                          <Button
-                            key={target}
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 px-2"
-                            disabled={transitioningTermId === term.id}
-                            onClick={() => handleTransition(term.id, target)}
-                          >
-                            {transitioningTermId === term.id ? '...' : (TRANSITION_LABELS[target] ?? target)}
-                          </Button>
-                        ))
-                      )}
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{fmt(term.termStart)}</p>
+                      <p className="text-xs text-muted-foreground">{fmt(term.termEnd)}</p>
                     </div>
                   </td>
 
-                  {/* İşlemler */}
+                  {/* Akademik Takvim */}
                   <td className="px-4 py-3">
+                    {term.hasAcademicCalendar
+                      ? <Badge className="bg-emerald-100 text-emerald-700">Takvim Tanımlı</Badge>
+                      : <Badge className="bg-amber-100 text-amber-700">Takvim Eksik</Badge>}
+                  </td>
+
+                  {/* İşlemler */}
+                  <td className="px-4 py-3" onDoubleClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1 justify-end">
-                      {!term.isActive && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setActivateTarget(term)}
-                          className="text-primary hover:text-primary hover:bg-primary/8 text-xs gap-1"
-                        >
-                          <CheckCircle className="h-3.5 w-3.5" />
-                          Aktif Yap
-                        </Button>
-                      )}
                       <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
                         <Edit2 className="h-3.5 w-3.5" />
                       </Button>
+                      {term.status === 'Cancelled' ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={uncancelTerm.isPending}
+                          onClick={() => handleUncancel(term.id)}
+                        >
+                          İptali Geri Al
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={cancelTerm.isPending}
+                          onClick={() => setConfirmCancelTarget(term)}
+                        >
+                          İptal Et
+                        </Button>
+                      )}
                     </div>
                   </td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        <div className="px-4 py-3 border-t border-border bg-muted/10">
+          <p className="text-sm text-muted-foreground italic">
+            Faz tarihleri ve override ayarları için →{' '}
+            <Link to={ROUTES.ACADEMIC_CALENDAR_ADMIN} className="underline text-blue-600">
+              Akademik Takvim Yönetimi
+            </Link>
+          </p>
+        </div>
       </div>
 
-      {/* Activate Confirmation */}
-      <Dialog open={!!activateTarget} onOpenChange={open => !open && setActivateTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Dönemi Aktif Yap</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground py-2">
-            <strong className="text-foreground">{activateTarget?.name}</strong> aktif dönem olarak ayarlanacak.
-            Mevcut aktif dönem otomatik olarak pasife alınacak.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setActivateTarget(null)}>İptal</Button>
-            <Button onClick={handleActivate} disabled={activateTerm.isPending}>
-              {activateTerm.isPending ? 'Ayarlanıyor...' : 'Aktif Yap'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={!!confirmCancelTarget} onOpenChange={(open) => !open && setConfirmCancelTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dönemi İptal Et</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{confirmCancelTarget?.name}</strong> dönemini iptal etmek istediğinize emin misiniz?
+              Bu işlem geri alınabilir, ancak aktif kayıtları etkileyebilir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancel}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              İptal Et
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Yeni Dönem Oluştur</DialogTitle></DialogHeader>
-          <TermForm form={form} setForm={setForm} showYearSemester formError={formError} />
+          <TermForm form={form} setForm={setForm} showYearTermType formError={formError} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateModalOpen(false)}>İptal</Button>
             <Button onClick={handleCreate} disabled={createTerm.isPending}>
@@ -476,7 +446,7 @@ export default function TermManagementPage() {
       <Dialog open={!!editingTerm} onOpenChange={open => !open && setEditingTerm(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Düzenle — {editingTerm?.name}</DialogTitle></DialogHeader>
-          <TermForm form={form} setForm={setForm} showYearSemester={false} formError={formError} />
+          <TermForm form={form} setForm={setForm} showYearTermType={false} formError={formError} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingTerm(null)}>İptal</Button>
             <Button onClick={handleUpdate} disabled={updateTerm.isPending}>
@@ -485,6 +455,91 @@ export default function TermManagementPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Detay Modal (çift tık ile açılır) */}
+      <Dialog open={!!viewingTerm} onOpenChange={open => !open && setViewingTerm(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Dönem Detayları — {viewingTerm?.name}</DialogTitle>
+          </DialogHeader>
+          {viewingTerm && <TermDetailView term={viewingTerm} />}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingTerm(null)}>Kapat</Button>
+            <Button
+              onClick={() => {
+                const t = viewingTerm;
+                setViewingTerm(null);
+                if (t) openEdit(t);
+              }}
+            >
+              Düzenle
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Term Detail View ─────────────────────────────────────────────────────────
+
+function TermDetailView({ term }: { term: AdminTermDto }) {
+  const today = new Date();
+  const start = new Date(term.termStart);
+  const end = new Date(term.termEnd);
+  const withinDates = today >= start && today <= end;
+
+  // "Neden Aktif değil?" açıklaması — kullanıcı sık karşılaştığı için görünür yap
+  const inactiveReason =
+    term.status === 'Active' ? null
+    : term.isCancelled ? 'Bu dönem iptal edilmiş. Aktif olabilmesi için önce iptal geri alınmalı.'
+    : !withinDates ? `Bugün (${fmt(today.toISOString())}) dönem tarih aralığında değil. Aktif olabilmesi için bugünün ${fmt(term.termStart)} ve ${fmt(term.termEnd)} arasında olması gerekir.`
+    : null;
+
+  return (
+    <div className="space-y-3 py-2 text-sm">
+      <DetailRow label="Ad" value={term.name} />
+      <DetailRow label="Kısa Ad" value={term.shortName || '—'} />
+      <DetailRow label="İngilizce Ad" value={term.englishName || '—'} />
+      <DetailRow label="Kısa İngilizce Ad" value={term.shortEnglishName || '—'} />
+      <DetailRow label="Diğer Ad" value={term.otherName || '—'} />
+      <DetailRow label="Yıl" value={String(term.year)} />
+      <DetailRow label="Tür" value={term.termTypeLabel} />
+      <DetailRow label="YÖKSİS Durumu" value={term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'} />
+      <DetailRow
+        label="Durum"
+        value={
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+            term.status === 'Active' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' :
+            term.status === 'Cancelled' ? 'bg-red-100 text-red-700 border-red-300' :
+            'bg-slate-100 text-slate-700 border-slate-300'
+          }`}>
+            {term.statusLabel || term.status}
+          </span>
+        }
+      />
+      <DetailRow label="Başlangıç" value={fmt(term.termStart)} />
+      <DetailRow label="Bitiş" value={fmt(term.termEnd)} />
+      <DetailRow
+        label="Akademik Takvim"
+        value={term.hasAcademicCalendar ? 'Tanımlı' : 'Eksik'}
+      />
+
+      {inactiveReason && (
+        <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
+          <p className="font-semibold mb-1">Neden Aktif değil?</p>
+          <p>{inactiveReason}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground">{value}</span>
     </div>
   );
 }
@@ -492,11 +547,11 @@ export default function TermManagementPage() {
 // ── Term Form ─────────────────────────────────────────────────────────────────
 
 function TermForm({
-  form, setForm, showYearSemester, formError,
+  form, setForm, showYearTermType, formError,
 }: {
   form: TermFormState;
   setForm: React.Dispatch<React.SetStateAction<TermFormState>>;
-  showYearSemester: boolean;
+  showYearTermType: boolean;
   formError: string;
 }) {
   return (
@@ -517,24 +572,25 @@ function TermForm({
         </div>
       </div>
 
-      {showYearSemester ? (
-        <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Kısa İngilizce Ad *</label>
+          <Input value={form.shortEnglishName} onChange={e => setForm(f => ({ ...f, shortEnglishName: e.target.value }))} placeholder="örn. Fall 24-25" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Diğer Ad</label>
+          <Input value={form.otherName} onChange={e => setForm(f => ({ ...f, otherName: e.target.value }))} placeholder="Opsiyonel" />
+        </div>
+      </div>
+
+      {showYearTermType ? (
+        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-sm font-medium">Yıl *</label>
             <Input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: Number(e.target.value) }))} min={2000} max={2100} />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Dönem *</label>
-            <select
-              value={form.semester}
-              onChange={e => setForm(f => ({ ...f, semester: e.target.value }))}
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
-            >
-              {SEMESTER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Tür</label>
+            <label className="text-sm font-medium">Tür *</label>
             <select
               value={form.termType}
               onChange={e => setForm(f => ({ ...f, termType: e.target.value }))}
@@ -557,32 +613,15 @@ function TermForm({
         </div>
       )}
 
-      <div className="border-t border-border pt-3 space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kayıt Tarihleri</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Başlangıç *</label>
-            <Input type="date" value={form.registrationStart} onChange={e => setForm(f => ({ ...f, registrationStart: e.target.value }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Bitiş *</label>
-            <Input type="date" value={form.registrationEnd} onChange={e => setForm(f => ({ ...f, registrationEnd: e.target.value }))} />
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-border pt-3 space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ders Ekle / Bırak Tarihleri</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Başlangıç *</label>
-            <Input type="date" value={form.addDropStart} onChange={e => setForm(f => ({ ...f, addDropStart: e.target.value }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Bitiş *</label>
-            <Input type="date" value={form.addDropEnd} onChange={e => setForm(f => ({ ...f, addDropEnd: e.target.value }))} />
-          </div>
-        </div>
+      <div className="space-y-1">
+        <label className="text-sm font-medium">YÖKSİS Durumu</label>
+        <select
+          value={form.yoksisStatus}
+          onChange={e => setForm(f => ({ ...f, yoksisStatus: e.target.value as 'Inactive' | 'Active' }))}
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
+        >
+          {YOKSIS_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
 
       <div className="border-t border-border pt-3 space-y-2">
@@ -597,15 +636,6 @@ function TermForm({
             <Input type="date" value={form.termEnd} onChange={e => setForm(f => ({ ...f, termEnd: e.target.value }))} />
           </div>
         </div>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Dersten Çekilme Son Tarihi *</label>
-        <Input
-          type="date"
-          value={form.withdrawalDeadline}
-          onChange={e => setForm(f => ({ ...f, withdrawalDeadline: e.target.value }))}
-        />
       </div>
 
       {formError && <p className="text-sm text-destructive">{formError}</p>}

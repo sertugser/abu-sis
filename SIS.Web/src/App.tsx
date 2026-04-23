@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
+import { ActiveRoleProvider } from './context/ActiveRoleContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
@@ -18,6 +19,7 @@ import TermGpaPage from './pages/TermGpaPage';
 import TranscriptPage from './pages/TranscriptPage';
 import TranscriptScenarioPage from './pages/TranscriptScenarioPage';
 import AcademicCalendarPage from './pages/AcademicCalendarPage';
+import AcademicCalendarAdminPage from './pages/AcademicCalendarAdminPage';
 import AcademicCalendarGeneratorPage from './pages/AcademicCalendarGeneratorPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
@@ -31,11 +33,12 @@ import TermClosingPage from './pages/term-closing/TermClosingPage';
 import CourseOpeningPage from './pages/CourseOpeningPage';
 import InstructorAssignmentPage from './pages/InstructorAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
-import CourseIntentionManagementPage from './pages/CourseIntentionManagementPage';
 import StudentDirectoryPage from './pages/StudentDirectoryPage';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
-import AcademicStructurePage from './pages/AcademicStructurePage';
+import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
+import DepartmentDefinitionsPage from './pages/DepartmentDefinitionsPage';
+import ProgramDefinitionsPage from './pages/ProgramDefinitionsPage';
 import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
 import SystemConfigPage from './pages/SystemConfigPage';
 import AuditLogPage from './pages/AuditLogPage';
@@ -52,6 +55,8 @@ import EvaluationResultsPage from './pages/EvaluationResultsPage';
 import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
+import OsymRegistrationCalendarPage from './pages/OsymRegistrationCalendarPage';
+import ProgramQuotaPage from './pages/ProgramQuotaPage';
 import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
@@ -61,8 +66,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider delayDuration={300}>
-          <BrowserRouter>
+        <ActiveRoleProvider>
+          <TooltipProvider delayDuration={300}>
+            <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route element={<ProtectedRoute />}>
@@ -76,6 +82,10 @@ export default function App() {
                   {/* Herkesin erişebildiği sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
                   <Route path="duyurular" element={<AnnouncementsPage />} />
+
+                  <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator', 'AdministrativeStaff']} />}>
+                    <Route path="akademik-takvim-yonetimi" element={<AcademicCalendarAdminPage />} />
+                  </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
@@ -99,6 +109,7 @@ export default function App() {
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
                     <Route path="ders-programim" element={<InstructorSchedulingPage />} />
+                    <Route path="ogretim-elemani-akademik-takvim" element={<AcademicCalendarPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager', 'SystemAdministrator']} />}>
@@ -112,14 +123,16 @@ export default function App() {
                     <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
                     <Route path="donem-kapatma" element={<TermClosingPage />} />
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
-                    <Route path="niyet-anketi-yonetimi" element={<CourseIntentionManagementPage />} />
                     <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
                     <Route path="kullanici-yonetimi" element={<UserManagementPage />} />
                     <Route path="ogrenci-rehberi" element={<StudentDirectoryPage />} />
                     <Route path="personel-listesi" element={<InstructorDirectoryPage />} />
                     <Route path="donem-yonetimi" element={<TermManagementPage />} />
                     <Route path="akademik-takvim-olusturma" element={<AcademicCalendarGeneratorPage />} />
-                    <Route path="akademik-yapi" element={<AcademicStructurePage />} />
+                    <Route path="akademik-yapi" element={<Navigate to="/fakulte-tanimlari" replace />} />
+                    <Route path="fakulte-tanimlari" element={<FacultyDefinitionsPage />} />
+                    <Route path="bolum-tanimlari" element={<DepartmentDefinitionsPage />} />
+                    <Route path="program-tanimlari" element={<ProgramDefinitionsPage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
                     <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
@@ -135,6 +148,11 @@ export default function App() {
                     <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
                     <Route path="denetim-kayitlari" element={<AuditLogPage />} />
                     <Route path="degerlendirme-donemi-yonetimi" element={<EvaluationPeriodAdminPage />} />
+                    <Route path="osym-kayit-takvimi" element={<OsymRegistrationCalendarPage />} />
+                  </Route>
+
+                  <Route element={<RoleProtectedRoute allowedRoles={DEAN_ROLES} />}>
+                    <Route path="program-kontenjan" element={<ProgramQuotaPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>
@@ -145,8 +163,9 @@ export default function App() {
                 </Route>
               </Route>
             </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ActiveRoleProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

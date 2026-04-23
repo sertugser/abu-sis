@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react';
 import {
   Search, Plus, Edit2, Trash2, X, BookOpen, BarChart3, GitBranch,
-  AlertTriangle,
+  AlertTriangle, SlidersHorizontal,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -32,6 +33,9 @@ import {
   useRemovePrerequisite,
   useAddEquivalency,
   useRemoveEquivalency,
+  useCrossLists,
+  useAddCrossList,
+  useRemoveCrossList,
   type CourseListItemDto,
   type CreateCourseDto,
   type PrerequisiteChainNodeDto,
@@ -354,12 +358,16 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
   const removePrereq = useRemovePrerequisite();
   const addEquiv = useAddEquivalency();
   const removeEquiv = useRemoveEquivalency();
+  const { data: crossLists = [] } = useCrossLists(courseId);
+  const addCrossList = useAddCrossList();
+  const removeCrossList = useRemoveCrossList();
 
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formError, setFormError] = useState('');
   const [prereqSearch, setPrereqSearch] = useState('');
   const [equivSearch, setEquivSearch] = useState('');
+  const [crossListSearch, setCrossListSearch] = useState('');
 
   // Get all departments (unfiltered) for the edit form
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
@@ -449,6 +457,18 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
         : false)
     ).slice(0, 8),
     [allCourses, courseId, existingEquivIds, equivSearch]
+  );
+
+  const existingCrossListIds = useMemo(() => new Set(crossLists.map(x => x.courseId)), [crossLists]);
+  const crossListCandidates = useMemo(() =>
+    allCourses.filter(c =>
+      c.id !== courseId && !existingCrossListIds.has(c.id) &&
+      (crossListSearch
+        ? c.code.toLowerCase().includes(crossListSearch.toLowerCase()) ||
+          c.name.toLowerCase().includes(crossListSearch.toLowerCase())
+        : false)
+    ).slice(0, 8),
+    [allCourses, courseId, existingCrossListIds, crossListSearch]
   );
 
   return (
@@ -593,6 +613,55 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
                           key={c.id}
                           className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 flex items-center justify-between"
                           onClick={() => { addEquiv.mutate({ courseId, equivalentCourseId: c.id }); setEquivSearch(''); }}
+                        >
+                          <span><span className="font-mono font-medium">{c.code}</span> — {c.name}</span>
+                          <Plus className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Cross-List (Madde 14) */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-2">
+                    Cross-List Dersler ({crossLists.length})
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mb-2">
+                    İki ders kodunun aynı dersi temsil ettiğini belirtir. Örn: YZM301 ≡ BIL301.
+                  </p>
+                  {crossLists.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {crossLists.map(x => (
+                        <div key={x.courseId} className="flex items-center gap-1 bg-violet-500/10 rounded-full pl-2.5 pr-1 py-0.5 text-xs">
+                          <span className="font-mono font-medium text-violet-700">{x.code}</span>
+                          <span className="text-violet-700/70">{x.name}</span>
+                          <button
+                            className="ml-0.5 text-violet-700/40 hover:text-destructive transition-colors"
+                            onClick={() => removeCrossList.mutate({ courseId, linkedCourseId: x.courseId })}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      className="pl-8 h-8 text-xs"
+                      placeholder="Cross-list ders ekle..."
+                      value={crossListSearch}
+                      onChange={e => setCrossListSearch(e.target.value)}
+                    />
+                  </div>
+                  {crossListSearch && crossListCandidates.length > 0 && (
+                    <div className="border border-border rounded-md mt-1 divide-y divide-border max-h-40 overflow-y-auto bg-background">
+                      {crossListCandidates.map(c => (
+                        <button
+                          key={c.id}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 flex items-center justify-between"
+                          onClick={() => { addCrossList.mutate({ courseId, linkedCourseId: c.id }); setCrossListSearch(''); }}
                         >
                           <span><span className="font-mono font-medium">{c.code}</span> — {c.name}</span>
                           <Plus className="h-3 w-3 text-muted-foreground" />
@@ -909,6 +978,8 @@ export default function CourseCatalogAdminPage() {
   const [languageFilter, setLanguageFilter] = useState<string | undefined>(undefined);
   const [levelFilter, setLevelFilter] = useState<string | undefined>(undefined);
   const [typeFilter, setTypeFilter] = useState<CourseTypeFilter>('all');
+  const [teachingMethodFilter, setTeachingMethodFilter] = useState<string | undefined>(undefined);
+  const [nonGpaFilter, setNonGpaFilter] = useState<'all' | 'gpa' | 'nonGpa'>('all');
 
   // Dialog state
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
@@ -927,7 +998,19 @@ export default function CourseCatalogAdminPage() {
     status: statusFilter,
   });
 
-  const courses = useMemo(() => applyTypeFilter(allCourses, typeFilter), [allCourses, typeFilter]);
+  const courses = useMemo(() => {
+    let filtered = applyTypeFilter(allCourses, typeFilter);
+    if (teachingMethodFilter) {
+      // API enum'u string olarak döndürüyor; tip `number` tanımlı ama gerçekte "FaceToFace"/"Online"/"Hybrid"
+      filtered = filtered.filter(c => String(c.teachingMethod) === teachingMethodFilter);
+    }
+    if (nonGpaFilter === 'gpa') {
+      filtered = filtered.filter(c => !c.isNonGpa);
+    } else if (nonGpaFilter === 'nonGpa') {
+      filtered = filtered.filter(c => c.isNonGpa);
+    }
+    return filtered;
+  }, [allCourses, typeFilter, teachingMethodFilter, nonGpaFilter]);
 
   function handleFacultyChange(val: string) {
     if (val === 'all') {
@@ -946,14 +1029,28 @@ export default function CourseCatalogAdminPage() {
     ['mixed', 'Teori+Lab'],
   ];
 
+  // Aktif (default'tan farklı) filtrelerin sayısı — butondaki rozet için
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter !== 'Active') count++;
+    if (languageFilter !== undefined) count++;
+    if (levelFilter !== undefined) count++;
+    if (facultyId !== undefined) count++;
+    if (departmentId !== undefined) count++;
+    if (typeFilter !== 'all') count++;
+    if (teachingMethodFilter !== undefined) count++;
+    if (nonGpaFilter !== 'all') count++;
+    return count;
+  }, [statusFilter, languageFilter, levelFilter, facultyId, departmentId, typeFilter, teachingMethodFilter, nonGpaFilter]);
+
   return (
     <div className="space-y-4">
-      {/* Filter Bar */}
+      {/* Filter Bar — single search + Filters popover */}
       <Card>
         <CardContent className="pt-3 pb-3">
           <div className="flex items-center gap-2.5 flex-wrap">
             {/* Search */}
-            <div className="relative w-[220px]">
+            <div className="relative flex-1 min-w-[260px] max-w-[420px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 className="pl-8 h-8 text-sm"
@@ -963,120 +1060,212 @@ export default function CourseCatalogAdminPage() {
               />
             </div>
 
-            <div className="h-5 w-px bg-border" />
+            {/* Filtreler — tek buton, popover içinde tüm filtreler */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-2 text-xs">
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  Filtreler
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] rounded-full">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[360px] p-4 space-y-3" align="start">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">Filtreler</h4>
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={() => {
+                        setStatusFilter('Active');
+                        setLanguageFilter(undefined);
+                        setLevelFilter(undefined);
+                        setFacultyId(undefined);
+                        setDepartmentId(undefined);
+                        setTypeFilter('all');
+                        setTeachingMethodFilter(undefined);
+                        setNonGpaFilter('all');
+                      }}
+                      className="text-[11px] text-muted-foreground hover:text-destructive"
+                    >
+                      Tümünü temizle
+                    </button>
+                  )}
+                </div>
 
-            {/* Durum */}
-            <Select
-              value={statusFilter !== undefined ? String(statusFilter) : 'all'}
-              onValueChange={v => setStatusFilter(v === 'all' ? undefined : v)}
-            >
-              <SelectTrigger className="h-8 w-[95px] text-xs">
-                <SelectValue placeholder="Durum" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tüm Durumlar</SelectItem>
-                {Object.entries(COURSE_STATUS_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Durum */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Durum</Label>
+                    <Select
+                      value={statusFilter !== undefined ? String(statusFilter) : 'all'}
+                      onValueChange={v => setStatusFilter(v === 'all' ? undefined : v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Tümü" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        {Object.entries(COURSE_STATUS_LABELS).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            {/* Dil */}
-            <Select
-              value={languageFilter !== undefined ? String(languageFilter) : 'all'}
-              onValueChange={v => setLanguageFilter(v === 'all' ? undefined : v)}
-            >
-              <SelectTrigger className="h-8 w-[105px] text-xs">
-                <SelectValue placeholder="Tüm Diller" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tüm Diller</SelectItem>
-                {Object.entries(COURSE_LANGUAGE_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {/* Dil */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Dil</Label>
+                    <Select
+                      value={languageFilter !== undefined ? String(languageFilter) : 'all'}
+                      onValueChange={v => setLanguageFilter(v === 'all' ? undefined : v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Tümü" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        {Object.entries(COURSE_LANGUAGE_LABELS).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            {/* Seviye */}
-            <Select
-              value={levelFilter !== undefined ? String(levelFilter) : 'all'}
-              onValueChange={v => setLevelFilter(v === 'all' ? undefined : v)}
-            >
-              <SelectTrigger className="h-8 w-[115px] text-xs">
-                <SelectValue placeholder="Tüm Seviyeler" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tüm Seviyeler</SelectItem>
-                {Object.entries(COURSE_LEVEL_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {/* Seviye */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Seviye</Label>
+                    <Select
+                      value={levelFilter !== undefined ? String(levelFilter) : 'all'}
+                      onValueChange={v => setLevelFilter(v === 'all' ? undefined : v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Tümü" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        {Object.entries(COURSE_LEVEL_LABELS).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            {/* Fakülte — seçilmemişse dropdown, seçilmişse chip */}
-            {facultyId === undefined ? (
-              <Select value="all" onValueChange={handleFacultyChange}>
-                <SelectTrigger className="h-8 w-[120px] text-xs">
-                  <SelectValue placeholder="Fakülte" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" disabled>Fakülte seçin</SelectItem>
-                  {faculties.map(f => (
-                    <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="flex items-center gap-1 bg-primary/10 text-primary rounded-md px-2.5 h-8 text-xs font-medium">
-                <span className="truncate max-w-[180px]">{faculties.find(f => f.id === facultyId)?.name ?? 'Fakülte'}</span>
-                <button onClick={() => { setFacultyId(undefined); setDepartmentId(undefined); }} className="ml-0.5 hover:text-destructive">
-                  <X className="h-3 w-3" />
-                </button>
+                  {/* Ders Tipi */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Ders Tipi</Label>
+                    <Select value={typeFilter} onValueChange={v => setTypeFilter(v as CourseTypeFilter)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseTypeOptions.map(([key, label]) => (
+                          <SelectItem key={key} value={key}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Öğretim Şekli */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Öğretim Şekli</Label>
+                    <Select
+                      value={teachingMethodFilter ?? 'all'}
+                      onValueChange={v => setTeachingMethodFilter(v === 'all' ? undefined : v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Tümü" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        {Object.entries(TEACHING_METHOD_LABELS).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* GPA Türü */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">GPA Türü</Label>
+                    <Select value={nonGpaFilter} onValueChange={v => setNonGpaFilter(v as 'all' | 'gpa' | 'nonGpa')}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        <SelectItem value="gpa">GPA'ya Giren</SelectItem>
+                        <SelectItem value="nonGpa">GPA Dışı (S/U)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Fakülte (full width) */}
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-[11px] text-muted-foreground">Fakülte</Label>
+                    <Select
+                      value={facultyId !== undefined ? String(facultyId) : 'all'}
+                      onValueChange={handleFacultyChange}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Tümü" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        {faculties.map(f => (
+                          <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Bölüm (full width, aktif fakülte varsa) */}
+                  {facultyId !== undefined && (
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-[11px] text-muted-foreground">Bölüm</Label>
+                      <Select
+                        value={departmentId !== undefined ? String(departmentId) : 'all'}
+                        onValueChange={v => setDepartmentId(v === 'all' ? undefined : Number(v))}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Tümü" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Tümü</SelectItem>
+                          {deptsByFaculty.map(d => (
+                            <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Aktif filtre chip'leri — bir bakışta görünür */}
+            {activeFilterCount > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {facultyId !== undefined && (
+                  <div className="flex items-center gap-1 bg-primary/10 text-primary rounded-md px-2.5 h-8 text-xs font-medium">
+                    <span className="truncate max-w-[180px]">{faculties.find(f => f.id === facultyId)?.name ?? 'Fakülte'}</span>
+                    <button onClick={() => { setFacultyId(undefined); setDepartmentId(undefined); }} className="ml-0.5 hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                {departmentId !== undefined && (
+                  <div className="flex items-center gap-1 bg-primary/10 text-primary rounded-md px-2.5 h-8 text-xs font-medium">
+                    <span className="truncate max-w-[160px]">{deptsByFaculty.find(d => d.id === departmentId)?.name ?? 'Bölüm'}</span>
+                    <button onClick={() => setDepartmentId(undefined)} className="ml-0.5 hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
-
-            {/* Bölüm — seçilmemişse dropdown, seçilmişse chip */}
-            {facultyId !== undefined && (
-              departmentId === undefined ? (
-                <Select value="all" onValueChange={v => setDepartmentId(v === 'all' ? undefined : Number(v))}>
-                  <SelectTrigger className="h-8 w-[120px] text-xs">
-                    <SelectValue placeholder="Bölüm" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" disabled>Bölüm seçin</SelectItem>
-                    {deptsByFaculty.map(d => (
-                      <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="flex items-center gap-1 bg-primary/10 text-primary rounded-md px-2.5 h-8 text-xs font-medium">
-                  <span className="truncate max-w-[220px]">{deptsByFaculty.find(d => d.id === departmentId)?.name ?? 'Bölüm'}</span>
-                  <button onClick={() => setDepartmentId(undefined)} className="ml-0.5 hover:text-destructive">
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )
-            )}
-
-            <div className="h-5 w-px bg-border" />
-
-            {/* Course type tabs */}
-            <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-              {courseTypeOptions.map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setTypeFilter(key)}
-                  className={`px-2.5 py-1 text-xs rounded transition-all ${
-                    typeFilter === key
-                      ? 'bg-background text-foreground shadow-sm font-medium'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
 
             {/* Count + Add */}
             <div className="ml-auto flex items-center gap-3">

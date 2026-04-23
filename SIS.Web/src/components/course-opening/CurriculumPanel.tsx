@@ -29,6 +29,8 @@ function getSemesterLabel(semester: number) {
   return `${year}. Sınıf ${isFall ? 'Güz' : 'Bahar'}`;
 }
 
+type TabView = 'all' | 'compulsory' | 'pools' | 'singleElective';
+
 export function CurriculumPanel({
   courses,
   isLoading,
@@ -42,6 +44,7 @@ export function CurriculumPanel({
 }: Props) {
   const [search, setSearch] = useState('');
   const [collapsedSemesters, setCollapsedSemesters] = useState<Set<number>>(new Set());
+  const [tabView, setTabView] = useState<TabView>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const [showBottomShadow, setShowBottomShadow] = useState(true);
@@ -52,13 +55,17 @@ export function CurriculumPanel({
       if (semesterFilter !== null && c.suggestedSemester !== semesterFilter) return false;
       if (typeFilter === 'compulsory' && !c.isCompulsory) return false;
       if (typeFilter === 'elective' && c.isCompulsory) return false;
+      // Tab filtresi (3 sekmeli görünüm)
+      if (tabView === 'compulsory' && !c.isCompulsory) return false;
+      if (tabView === 'pools' && c.source !== 'Pool') return false;
+      if (tabView === 'singleElective' && (c.source === 'Pool' || c.isCompulsory)) return false;
       if (search) {
         const q = search.toLowerCase();
         if (!c.courseCode.toLowerCase().includes(q) && !c.courseName.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [courses, semesterFilter, typeFilter, search]);
+  }, [courses, semesterFilter, typeFilter, tabView, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<number, CurriculumCourseForOpeningDto[]>();
@@ -69,6 +76,18 @@ export function CurriculumPanel({
     }
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
   }, [filteredCourses]);
+
+  const counts = useMemo(() => {
+    if (!courses) return { all: 0, compulsory: 0, pools: 0, singleElective: 0 };
+    let all = 0, compulsory = 0, pools = 0, singleElective = 0;
+    for (const c of courses) {
+      all++;
+      if (c.isCompulsory) compulsory++;
+      else if (c.source === 'Pool') pools++;
+      else singleElective++;
+    }
+    return { all, compulsory, pools, singleElective };
+  }, [courses]);
 
   const toggleCollapse = (sem: number) => {
     setCollapsedSemesters(prev => {
@@ -96,6 +115,29 @@ export function CurriculumPanel({
             <h2 className="font-semibold text-sm text-gray-800">Müfredat Dersleri</h2>
             <Badge variant="secondary" className="text-xs rounded-full">{filteredCourses.length}</Badge>
           </div>
+        </div>
+        {/* Madde 1: 3 kategorili sekme — Tümü / Zorunlu / Havuzlar / Tekil Seçmeli */}
+        <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-gray-50/50">
+          {([
+            { key: 'all', label: 'Tümü', count: counts.all },
+            { key: 'compulsory', label: 'Zorunlu', count: counts.compulsory },
+            { key: 'pools', label: 'Havuzlar', count: counts.pools },
+            { key: 'singleElective', label: 'Seçmeli', count: counts.singleElective },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setTabView(tab.key)}
+              className={cn(
+                'flex-1 px-2 py-1 text-xs rounded-md transition-colors inline-flex items-center justify-center gap-1',
+                tabView === tab.key
+                  ? 'bg-white text-gray-900 shadow-sm border'
+                  : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              {tab.label}
+              <span className="text-[10px] text-gray-400 tabular-nums">({tab.count})</span>
+            </button>
+          ))}
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />

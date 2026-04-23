@@ -195,7 +195,7 @@ public class FacultyPlanningServiceTests : IDisposable
     [Fact]
     public async Task AssignSectionAsync_AllowsPlanningStage()
     {
-        SetTermStatus(TermStatus.Planning);
+        SetTermStatus(TermStatus.Active);
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(10, 0), 1);
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(11, 0), 2);
 
@@ -238,6 +238,7 @@ public class FacultyPlanningServiceTests : IDisposable
             Code = "CENG"
         });
 
+        var termEnd = DateTime.UtcNow.AddDays(90);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
@@ -245,16 +246,20 @@ public class FacultyPlanningServiceTests : IDisposable
             ShortName = "25-26 Bahar",
             EnglishName = "Spring 2025-2026",
             Year = 2025,
-            Semester = SemesterType.Spring,
-            RegistrationStart = DateTime.UtcNow.AddDays(-5),
-            RegistrationEnd = DateTime.UtcNow.AddDays(5),
-            AddDropStart = DateTime.UtcNow.AddDays(6),
-            AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
+            TermType = TermType.Spring,
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.Scheduling
+            TermEnd = termEnd,
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-5),
+                RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                AddDropStart = DateTime.UtcNow.AddDays(6),
+                AddDropEnd = DateTime.UtcNow.AddDays(12),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(30),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         _context.SaveChanges();
@@ -342,7 +347,7 @@ public class FacultyPlanningServiceTests : IDisposable
             Capacity = capacity,
             EnrolledCount = 0,
             SectionNumber = id,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false,
             IsPinned = false
         };
@@ -370,7 +375,7 @@ public class FacultyPlanningServiceTests : IDisposable
             Capacity = capacity,
             EnrolledCount = 0,
             SectionNumber = id,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             IsFinalized = false,
             IsPinned = false
         };
@@ -473,8 +478,9 @@ public class FacultyPlanningServiceTests : IDisposable
 
     private void SetTermStatus(TermStatus status)
     {
+        // TermStatus.Cancelled → IsCancelled=true; others → IsCancelled=false (active by dates)
         var term = _context.AcademicTerms.Single(t => t.Id == TermId);
-        term.Status = status;
+        term.IsCancelled = status == TermStatus.Cancelled;
         _context.SaveChanges();
     }
 

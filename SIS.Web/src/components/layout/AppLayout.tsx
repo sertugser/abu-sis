@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
+import RoleInvalidationBanner from './RoleInvalidationBanner';
 
 export default function AppLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -21,6 +22,7 @@ export default function AppLayout() {
         }}
       >
         <TopBar />
+        <RoleInvalidationBanner />
         <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden px-6 py-5 lg:px-8">
           <Outlet />
         </main>

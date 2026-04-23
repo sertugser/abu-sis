@@ -22,6 +22,14 @@ public partial class CalendarGeneratorService
             throw new InvalidOperationException("Yönetmelik veya kronoloji hataları giderilmeden taslak uygulanamaz: " + string.Join(" | ", blockingWarnings.Select(w => w.Message)));
 
         var startYear = ParseAcademicYearStart(draft.AcademicYear);
+        var termsBySemester = await GetMatchingTermsBySemesterAsync(startYear, events, ct);
+        var skippedSemesters = events
+            .Select(e => e.Semester)
+            .Distinct()
+            .Where(s => !termsBySemester.ContainsKey(s))
+            .OrderBy(s => s)
+            .ToList();
+
         var termIds = new List<int>();
         var snapshot = new List<TermSnapshot>();
 
@@ -33,22 +41,13 @@ public partial class CalendarGeneratorService
         {
             foreach (var group in events.GroupBy(e => e.Semester))
             {
-                var term = await _context.AcademicTerms
-                    .Include(t => t.CalendarEvents)
-                    .FirstOrDefaultAsync(t => t.Year == startYear && t.Semester == group.Key, ct);
+                if (!termsBySemester.TryGetValue(group.Key, out var term))
+                    continue;
 
-                if (term == null)
-                {
-                    term = CreateTermShell(draft.AcademicYear, startYear, group.Key);
-                    _context.AcademicTerms.Add(term);
-                    await _context.SaveChangesAsync(ct);
-                    await _context.Entry(term).Collection(t => t.CalendarEvents).LoadAsync(ct);
-                }
-
-                if (term.Status >= TermStatus.Closed)
-                    throw new InvalidOperationException("Kapalı veya arşivlenmiş döneme takvim uygulanamaz.");
-                if (term.Status >= TermStatus.Published && !request.ForceOverwrite)
-                    throw new InvalidOperationException("Yayınlanmış veya daha ileri durumdaki dönem için forceOverwrite gerekir.");
+                if (term.IsCancelled)
+                    throw new InvalidOperationException("İptal edilmiş döneme takvim uygulanamaz.");
+                if (term.CalendarEvents.Count > 0 && !request.ForceOverwrite)
+                    throw new InvalidOperationException("Takvim zaten uygulanmış dönem için forceOverwrite gerekir.");
 
                 snapshot.Add(TermSnapshot.From(term));
                 ApplyTermDates(term, group.ToList());
@@ -80,6 +79,9 @@ public partial class CalendarGeneratorService
                 termIds.Add(term.Id);
             }
 
+            if (termIds.Count == 0)
+                throw new InvalidOperationException("Taslaktaki hiçbir dönem, Dönem İşleri sayfasında eşleşen bir dönem bulamadığı için uygulanamadı.");
+
             draft.PreviousSnapshotJson = Serialize(snapshot);
             draft.Status = GeneratedCalendarDraftStatus.Applied;
             draft.AppliedAt = DateTime.UtcNow;
@@ -90,7 +92,10 @@ public partial class CalendarGeneratorService
             if (tx != null)
                 await tx.CommitAsync(ct);
 
-            return new ApplyCalendarDraftResultDto(true, "Akademik takvim uygulandı.", termIds);
+            var message = skippedSemesters.Count == 0
+                ? "Akademik takvim uygulandı."
+                : $"Akademik takvim eşleşen dönemlere uygulandı. Atlanan dönemler: {FormatSemesterList(skippedSemesters)}.";
+            return new ApplyCalendarDraftResultDto(true, message, termIds);
         }
         catch
         {
@@ -99,6 +104,48 @@ public partial class CalendarGeneratorService
             throw;
         }
     }
+
+    private async Task<Dictionary<SemesterType, AcademicTerm>> GetMatchingTermsBySemesterAsync(
+        int startYear,
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        CancellationToken ct)
+    {
+        var expectedSemesters = events
+            .Select(e => e.Semester)
+            .Distinct()
+            .ToList();
+
+        var terms = await _context.AcademicTerms
+            .Include(t => t.CalendarEvents)
+            .Include(t => t.AcademicCalendar)
+            .Where(t => t.Year == startYear)
+            .ToListAsync(ct);
+
+        var map = new Dictionary<SemesterType, AcademicTerm>();
+        foreach (var semester in expectedSemesters)
+        {
+            var termType = semester switch
+            {
+                SemesterType.Fall => TermType.Fall,
+                SemesterType.Spring => TermType.Spring,
+                SemesterType.Summer => TermType.Summer,
+                _ => TermType.Fall
+            };
+            var term = terms.FirstOrDefault(t => t.TermType == termType);
+            if (term != null)
+                map[semester] = term;
+        }
+        return map;
+    }
+
+    private static string FormatSemesterList(IEnumerable<SemesterType> semesters) =>
+        string.Join(", ", semesters.Select(s => s switch
+        {
+            SemesterType.Fall => "Güz",
+            SemesterType.Spring => "Bahar",
+            SemesterType.Summer => "Yaz",
+            _ => s.ToString()
+        }));
 
     public async Task<ApplyCalendarDraftResultDto> RollbackAsync(int draftId, int? userId, CancellationToken ct = default)
     {
@@ -113,18 +160,26 @@ public partial class CalendarGeneratorService
         {
             var term = await _context.AcademicTerms
                 .Include(t => t.CalendarEvents)
+                .Include(t => t.AcademicCalendar)
                 .FirstOrDefaultAsync(t => t.Id == snapshot.TermId, ct);
-            if (term == null || term.Status >= TermStatus.Closed)
+            if (term == null || term.IsCancelled)
                 continue;
 
-            term.RegistrationStart = snapshot.RegistrationStart;
-            term.RegistrationEnd = snapshot.RegistrationEnd;
-            term.AddDropStart = snapshot.AddDropStart;
-            term.AddDropEnd = snapshot.AddDropEnd;
-            term.WithdrawalDeadline = snapshot.WithdrawalDeadline;
             term.TermStart = snapshot.TermStart;
             term.TermEnd = snapshot.TermEnd;
             term.UpdatedAt = DateTime.UtcNow;
+
+            if (term.AcademicCalendar != null)
+            {
+                term.AcademicCalendar.RegistrationStart = snapshot.RegistrationStart;
+                term.AcademicCalendar.RegistrationEnd = snapshot.RegistrationEnd;
+                term.AcademicCalendar.AddDropStart = snapshot.AddDropStart;
+                term.AcademicCalendar.AddDropEnd = snapshot.AddDropEnd;
+                term.AcademicCalendar.WithdrawalDeadline = snapshot.WithdrawalDeadline;
+                term.AcademicCalendar.GradeEntryStart = snapshot.GradeEntryStart;
+                term.AcademicCalendar.GradeEntryEnd = snapshot.GradeEntryEnd;
+                term.AcademicCalendar.UpdatedAt = DateTime.UtcNow;
+            }
 
             _context.TermCalendarEvents.RemoveRange(term.CalendarEvents);
             foreach (var ev in snapshot.GeneratedEvents)
@@ -166,18 +221,22 @@ public partial class CalendarGeneratorService
         DateTime WithdrawalDeadline,
         DateTime TermStart,
         DateTime TermEnd,
+        DateTime GradeEntryStart,
+        DateTime GradeEntryEnd,
         IReadOnlyList<TermCalendarEventSnapshot> GeneratedEvents)
     {
         public static TermSnapshot From(AcademicTerm term) =>
             new(
                 term.Id,
-                term.RegistrationStart,
-                term.RegistrationEnd,
-                term.AddDropStart,
-                term.AddDropEnd,
-                term.WithdrawalDeadline,
+                term.AcademicCalendar?.RegistrationStart ?? term.TermStart,
+                term.AcademicCalendar?.RegistrationEnd ?? term.TermStart,
+                term.AcademicCalendar?.AddDropStart ?? term.TermStart,
+                term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
+                term.AcademicCalendar?.WithdrawalDeadline ?? term.TermEnd,
                 term.TermStart,
                 term.TermEnd,
+                term.AcademicCalendar?.GradeEntryStart ?? term.TermEnd,
+                term.AcademicCalendar?.GradeEntryEnd ?? term.TermEnd,
                 term.CalendarEvents.Select(TermCalendarEventSnapshot.From).ToList());
     }
 

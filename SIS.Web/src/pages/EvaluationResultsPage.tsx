@@ -129,7 +129,7 @@ function ManagementView() {
   // Dönemleri yeniden-eskiye sırala
   const sortedTerms = [...terms].sort((a, b) => {
     if (a.year !== b.year) return b.year - a.year;
-    return a.semester.localeCompare(b.semester);
+    return a.termType.localeCompare(b.termType);
   });
 
   return (

@@ -355,7 +355,7 @@ public class SchedulingService : ISchedulingService
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == resolvedTerm.Id && cs.IsActive && cs.InstructorId != null);
+            .Where(cs => cs.TermId == resolvedTerm.Id && cs.Status == CourseSectionStatus.Active && cs.InstructorId != null);
 
         // Scope: faculty-based, department-based, or term-wide
         int? scopeFacultyId = request.FacultyId;
@@ -1413,7 +1413,7 @@ public class SchedulingService : ISchedulingService
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
             .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
-            .Where(cs => cs.TermId == termId && cs.IsActive)
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
             .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value);
 
         if (departmentId.HasValue)
@@ -1980,6 +1980,7 @@ public class SchedulingService : ISchedulingService
     /// Writes SectionSchedule records.
     /// Deletes existing records for this section first, then creates new ones
     /// by matching each TimeBlock to TimeSlots in the term.
+    /// BlockType heuristic: course.TheoryHours kadar ilk slot Theory, kalanı Lab.
     /// </summary>
     private async Task WriteSectionScheduleRecordsAsync(
         int sectionId,
@@ -2009,6 +2010,16 @@ public class SchedulingService : ISchedulingService
             .Where(ts => ts.TermId == termId)
             .ToListAsync(cancellationToken);
 
+        // Dersin teorik/uygulama saat dağılımını yükle — BlockType heuristic'i için
+        var courseHours = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.Id == sectionId)
+            .Select(cs => new { cs.Course.TheoryHours, cs.Course.LabHours })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var theoryHours = courseHours?.TheoryHours ?? 0;
+        var slotIndex = 0;
+
         foreach (var slot in slots)
         {
             // Find all TimeSlots that overlap with this TimeBlock on the same day
@@ -2021,12 +2032,21 @@ public class SchedulingService : ISchedulingService
 
             foreach (var ts in matchingTimeSlots)
             {
+                // İlk theoryHours kadar slot Theory, sonrası Lab.
+                // Scheduler CandidateGenerator'ı Theory bloklarını Lab bloklarından önce üretir,
+                // dolayısıyla slot sırası teorik→uygulama düzenindedir.
+                var blockType = slotIndex < theoryHours
+                    ? ScheduleBlockType.Theory
+                    : ScheduleBlockType.Lab;
+
                 _context.SectionSchedules.Add(new SectionSchedule
                 {
                     CourseSectionId = sectionId,
                     TimeSlotId = ts.Id,
-                    ClassroomId = classroomId.Value
+                    ClassroomId = classroomId.Value,
+                    BlockType = blockType,
                 });
+                slotIndex++;
             }
         }
     }
@@ -2311,9 +2331,10 @@ public class SchedulingService : ISchedulingService
                 .FirstOrDefaultAsync(term => term.Id == termId.Value, cancellationToken);
         }
 
+        var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now, cancellationToken);
     }
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(List<int> instructorIds, CancellationToken cancellationToken)

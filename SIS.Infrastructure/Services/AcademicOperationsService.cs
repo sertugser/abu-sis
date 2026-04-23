@@ -168,6 +168,74 @@ public class AcademicOperationsService : IAcademicOperationsService
             .Select(section => MapSectionToDto(section, userMap, scheduleMap))
             .ToList();
 
+        // Madde 14: Cross-list peer kodlarını doldur ve grup içindeki öğrencileri birleştir
+        var groupIds = sectionDtos
+            .Where(s => s.CrossListGroupId.HasValue)
+            .Select(s => s.CrossListGroupId!.Value)
+            .Distinct()
+            .ToList();
+        if (groupIds.Count > 0)
+        {
+            // Grup üyelerinin course kodlarını al (bu sorgu mevcut sections listesinin dışına taşar,
+            // çünkü bazı üyeler başka bölümde açılmış olabilir)
+            var peerSections = await _context.CourseSections
+                .AsNoTracking()
+                .Include(cs => cs.Course)
+                .Include(cs => cs.Registrations).ThenInclude(r => r.Student)
+                .Where(cs => cs.CrossListGroupId != null && groupIds.Contains(cs.CrossListGroupId!.Value))
+                .ToListAsync(cancellationToken);
+
+            var peersByGroup = peerSections
+                .GroupBy(cs => cs.CrossListGroupId!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var dto in sectionDtos)
+            {
+                if (!dto.CrossListGroupId.HasValue) continue;
+                if (!peersByGroup.TryGetValue(dto.CrossListGroupId.Value, out var peers)) continue;
+
+                // Peer kodlar (kendisi hariç)
+                dto.CrossListPeerCodes = peers
+                    .Where(p => p.Id != dto.SectionId)
+                    .Select(p => p.Course.Code)
+                    .Distinct()
+                    .ToList();
+
+                // Tek roster: gruptaki tüm section'ların öğrencileri bu section'ın listesine eklenir
+                // (aynı section'ı tekrar ekleme)
+                var currentIds = dto.Students.Select(s => s.StudentId).ToHashSet();
+                foreach (var peer in peers.Where(p => p.Id != dto.SectionId))
+                {
+                    var peerRegs = peer.Registrations
+                        .Where(r => r.Status != RegistrationStatus.Dropped && r.Status != RegistrationStatus.Draft)
+                        .Where(r => !currentIds.Contains(r.StudentId));
+                    foreach (var r in peerRegs)
+                    {
+                        var user = userMap.GetValueOrDefault(r.Student.UserId);
+                        dto.Students.Add(new DepartmentSectionStudentDto
+                        {
+                            StudentId = r.StudentId,
+                            StudentNumber = r.Student.StudentNumber,
+                            StudentName = user == null
+                                ? r.Student.StudentNumber
+                                : $"{user.FirstName} {user.LastName}".Trim(),
+                            Email = user?.Email ?? string.Empty,
+                            Status = r.Status.ToString(),
+                            Grade = r.Grade?.ToString(),
+                            EnrolledCourseCode = peer.Course.Code,
+                        });
+                        currentIds.Add(r.StudentId);
+                    }
+                }
+                // Öğrencileri yeniden sıralayalım
+                dto.Students = dto.Students
+                    .OrderBy(s => s.StudentName)
+                    .ThenBy(s => s.StudentNumber)
+                    .ToList();
+                dto.ActiveStudentCount = dto.Students.Count;
+            }
+        }
+
         var notes = new List<string>(scope.Notes);
         if (sectionDtos.Any(section => string.IsNullOrWhiteSpace(section.ScheduleSummary)))
             notes.Add("Bazi sectionlarda schedule tanimi henuz tamamlanmamis.");
@@ -285,9 +353,10 @@ public class AcademicOperationsService : IAcademicOperationsService
                 .FirstOrDefaultAsync(term => term.Id == termId.Value, cancellationToken);
         }
 
+        var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now, cancellationToken);
     }
 
     private async Task<DepartmentScopeResolution> ResolveAccessibleDepartmentsAsync(
@@ -399,7 +468,8 @@ public class AcademicOperationsService : IAcademicOperationsService
                         : $"{user.FirstName} {user.LastName}".Trim(),
                     Email = user?.Email ?? string.Empty,
                     Status = r.Status.ToString(),
-                    Grade = r.Grade?.ToString()
+                    Grade = r.Grade?.ToString(),
+                    EnrolledCourseCode = section.Course.Code,
                 };
             })
             .OrderBy(s => s.StudentName)
@@ -430,7 +500,9 @@ public class AcademicOperationsService : IAcademicOperationsService
             EnrolledCount = section.Registrations.Count,
             ActiveStudentCount = activeRegistrations.Count,
             IsActive = section.IsActive,
-            Students = studentDtos
+            Students = studentDtos,
+            CrossListGroupId = section.CrossListGroupId,
+            // CrossListPeerCodes servis tarafından post-process edilir (tek section'ın full context'i yok)
         };
     }
 

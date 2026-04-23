@@ -50,5 +50,6 @@ public enum CalendarEventType
     TransferRegistration = 46,
     GraduateResult = 47,
     GraduateRegistration = 48,
-    ImportantDay = 49
+    ImportantDay = 49,
+    MakeupExamApplication = 50
 }

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -31,8 +32,9 @@ public class AdvisorApprovalServiceTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new AppDbContext(options);
-        var validationService = new RegistrationValidationService(_context);
-        _service = new CourseRegistrationService(_context, validationService);
+        var clock = new FakeClock();
+        var validationService = new RegistrationValidationService(_context, clock);
+        _service = new CourseRegistrationService(_context, validationService, clock);
 
         SeedBaseData();
     }
@@ -52,21 +54,26 @@ public class AdvisorApprovalServiceTests : IDisposable
         });
 
         // Active academic term
+        var termEnd = DateTime.UtcNow.AddDays(90);
         _context.AcademicTerms.Add(new AcademicTerm
         {
             Id = TermId,
             Name = "2025-2026 Spring",
             Year = 2025,
-            Semester = SemesterType.Spring,
-            RegistrationStart = DateTime.UtcNow.AddDays(-5),
-            RegistrationEnd = DateTime.UtcNow.AddDays(5),
-            AddDropStart = DateTime.UtcNow.AddDays(6),
-            AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+            TermType = TermType.Spring,
             TermStart = DateTime.UtcNow.AddDays(-10),
-            TermEnd = DateTime.UtcNow.AddDays(90),
-            IsActive = true,
-            Status = TermStatus.RegistrationOpen
+            TermEnd = termEnd,
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-5),
+                RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                AddDropStart = DateTime.UtcNow.AddDays(6),
+                AddDropEnd = DateTime.UtcNow.AddDays(12),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(49),
+                GradeEntryStart = termEnd.AddDays(-14),
+                GradeEntryEnd = termEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
 
         // Academic program
@@ -180,7 +187,7 @@ public class AdvisorApprovalServiceTests : IDisposable
             TermId = TermId,
             Capacity = capacity,
             EnrolledCount = enrolledCount,
-            IsActive = true,
+            Status = CourseSectionStatus.Active,
             InstructorId = AdvisorInstructorId
         };
         _context.CourseSections.Add(section);
@@ -188,10 +195,10 @@ public class AdvisorApprovalServiceTests : IDisposable
         return section;
     }
 
-    private Domain.Entities.CourseRegistration AddRegistration(
+    private CourseRegistration AddRegistration(
         int id, int studentId, int sectionId, RegistrationStatus status)
     {
-        var reg = new Domain.Entities.CourseRegistration
+        var reg = new CourseRegistration
         {
             Id = id,
             StudentId = studentId,

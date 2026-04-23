@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AcademicProgression.DTOs;
 using SIS.Application.AcademicProgression.Services;
+using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.TermClosing.DTOs;
 using SIS.Application.TermClosing.Services;
@@ -14,6 +15,7 @@ namespace SIS.Infrastructure.Services;
 public class TermClosingService : ITermClosingService
 {
     private readonly AppDbContext _context;
+    private readonly IDateTimeProvider _clock;
     private readonly IAcademicProgressionService _progressionService;
     private readonly IGpaCalculationService _gpaService;
 
@@ -27,10 +29,12 @@ public class TermClosingService : ITermClosingService
 
     public TermClosingService(
         AppDbContext context,
+        IDateTimeProvider clock,
         IAcademicProgressionService progressionService,
         IGpaCalculationService gpaService)
     {
         _context = context;
+        _clock = clock;
         _progressionService = progressionService;
         _gpaService = gpaService;
     }
@@ -95,8 +99,8 @@ public class TermClosingService : ITermClosingService
         if (term == null)
             return new TermClosingStepResultDto { Success = false, Message = "Aktif donem bulunamadi." };
 
-        if (term.Status != TermStatus.GradeEntry && term.Status != TermStatus.Closed)
-            return new TermClosingStepResultDto { Success = false, Message = $"Not kilitleme sadece 'Not Girişi' veya 'Kapalı' aşamasında yapılabilir. Mevcut: {term.Status}" };
+        if (!term.IsGradeEntryOpen(_clock.UtcNow) && term.IsCancelled)
+            return new TermClosingStepResultDto { Success = false, Message = "Not kilitleme sadece not girişi penceresinde veya iptal edilmemiş dönemlerde yapılabilir." };
 
         // C10: Concurrent access protection
         await MarkInProgressAsync(departmentId, term.Id, TermClosingStep.GradeLock, userId, ct);
@@ -104,7 +108,7 @@ public class TermClosingService : ITermClosingService
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId)
             .ToListAsync(ct);
 
@@ -281,7 +285,7 @@ public class TermClosingService : ITermClosingService
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId
                 && cs.IsFinalized)
             .ToListAsync(ct);
@@ -311,8 +315,8 @@ public class TermClosingService : ITermClosingService
         if (term == null)
             throw new InvalidOperationException("Aktif donem bulunamadi.");
 
-        if (term.Status != TermStatus.GradeEntry && term.Status != TermStatus.Closed)
-            throw new InvalidOperationException($"GPA hesaplama sadece 'Not Girisi' veya 'Kapali' asamasinda yapilabilir. Mevcut: {term.Status}");
+        if (!term.IsGradeEntryOpen(_clock.UtcNow) && term.IsCancelled)
+            throw new InvalidOperationException("GPA hesaplama sadece not girişi penceresinde veya iptal edilmemiş dönemlerde yapılabilir.");
 
         // C3: Step order enforcement — LockGrades must be completed first
         var progress = await _context.TermClosingProgresses
@@ -360,8 +364,8 @@ public class TermClosingService : ITermClosingService
         if (promoteTerm == null)
             throw new InvalidOperationException("Aktif donem bulunamadi.");
 
-        if (promoteTerm.Status != TermStatus.GradeEntry && promoteTerm.Status != TermStatus.Closed)
-            throw new InvalidOperationException($"Sinif atlatma sadece 'Not Girisi' veya 'Kapali' asamasinda yapilabilir. Mevcut: {promoteTerm.Status}");
+        if (!promoteTerm.IsGradeEntryOpen(_clock.UtcNow) && promoteTerm.IsCancelled)
+            throw new InvalidOperationException("Sinif atlatma sadece not girişi penceresinde veya iptal edilmemiş dönemlerde yapılabilir.");
 
         // C3: Step order enforcement — CalculateGpa must be completed first
         var progress = await _context.TermClosingProgresses
@@ -525,23 +529,53 @@ public class TermClosingService : ITermClosingService
             : null;
         try
         {
+            var newTermType = request.Semester switch
+            {
+                SemesterType.Spring => TermType.Spring,
+                SemesterType.Summer => TermType.Summer,
+                _ => TermType.Fall
+            };
+
             var existingTerm = await _context.AcademicTerms
-                .FirstOrDefaultAsync(t => t.Year == request.Year && t.Semester == request.Semester, ct);
+                .FirstOrDefaultAsync(t => t.Year == request.Year && t.TermType == newTermType, ct);
 
             int newTermId;
 
+            var withdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49);
             if (existingTerm != null)
             {
                 newTermId = existingTerm.Id;
-                existingTerm.IsActive = true;
                 existingTerm.Name = request.Name;
-                existingTerm.RegistrationStart = request.RegistrationStart;
-                existingTerm.RegistrationEnd = request.RegistrationEnd;
-                existingTerm.AddDropStart = request.RegistrationStart;
-                existingTerm.AddDropEnd = request.RegistrationEnd;
                 existingTerm.TermStart = request.TermStart;
                 existingTerm.TermEnd = request.TermEnd;
-                existingTerm.WithdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49);
+                existingTerm.IsCancelled = false;
+                // Update or create AcademicCalendar
+                var existingCal = await _context.TermAcademicCalendars
+                    .FirstOrDefaultAsync(c => c.TermId == existingTerm.Id, ct);
+                if (existingCal != null)
+                {
+                    existingCal.RegistrationStart = request.RegistrationStart;
+                    existingCal.RegistrationEnd = request.RegistrationEnd;
+                    existingCal.AddDropStart = request.RegistrationStart;
+                    existingCal.AddDropEnd = request.RegistrationEnd;
+                    existingCal.WithdrawalDeadline = withdrawalDeadline;
+                    existingCal.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    _context.TermAcademicCalendars.Add(new Domain.Entities.TermAcademicCalendar
+                    {
+                        TermId = existingTerm.Id,
+                        RegistrationStart = request.RegistrationStart,
+                        RegistrationEnd = request.RegistrationEnd,
+                        AddDropStart = request.RegistrationStart,
+                        AddDropEnd = request.RegistrationEnd,
+                        WithdrawalDeadline = withdrawalDeadline,
+                        GradeEntryStart = request.TermEnd,
+                        GradeEntryEnd = request.TermEnd.AddDays(14),
+                        CreatedAt = DateTime.UtcNow,
+                    });
+                }
             }
             else
             {
@@ -549,15 +583,21 @@ public class TermClosingService : ITermClosingService
                 {
                     Name = request.Name,
                     Year = request.Year,
-                    Semester = request.Semester,
-                    RegistrationStart = request.RegistrationStart,
-                    RegistrationEnd = request.RegistrationEnd,
-                    AddDropStart = request.RegistrationStart,
-                    AddDropEnd = request.RegistrationEnd,
-                    WithdrawalDeadline = request.TermStart.AddDays(request.Semester == SemesterType.Summer ? 28 : 49),
+                    TermType = newTermType,
                     TermStart = request.TermStart,
                     TermEnd = request.TermEnd,
-                    IsActive = true
+                    IsCancelled = false,
+                    AcademicCalendar = new Domain.Entities.TermAcademicCalendar
+                    {
+                        RegistrationStart = request.RegistrationStart,
+                        RegistrationEnd = request.RegistrationEnd,
+                        AddDropStart = request.RegistrationStart,
+                        AddDropEnd = request.RegistrationEnd,
+                        WithdrawalDeadline = withdrawalDeadline,
+                        GradeEntryStart = request.TermEnd,
+                        GradeEntryEnd = request.TermEnd.AddDays(14),
+                        CreatedAt = DateTime.UtcNow,
+                    }
                 };
                 _context.AcademicTerms.Add(newTerm);
                 await _context.SaveChangesAsync(ct);
@@ -606,7 +646,7 @@ public class TermClosingService : ITermClosingService
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId)
             .ToListAsync(ct);
 
@@ -701,7 +741,7 @@ public class TermClosingService : ITermClosingService
         var sectionIds = await _context.CourseSections
             .AsNoTracking()
             .Where(cs => cs.TermId == term.Id
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == departmentId)
             .Select(cs => cs.Id)
             .ToListAsync(ct);
@@ -812,7 +852,7 @@ public class TermClosingService : ITermClosingService
         // Where filters DepartmentId.HasValue, so .Value is safe; groups by non-nullable int key
         var sectionStats = await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == term.Id && cs.IsActive && cs.Course.DepartmentId.HasValue && deptIds.Contains(cs.Course.DepartmentId.Value))
+            .Where(cs => cs.TermId == term.Id && cs.Status == CourseSectionStatus.Active && cs.Course.DepartmentId.HasValue && deptIds.Contains(cs.Course.DepartmentId.Value))
             .GroupBy(cs => cs.Course.DepartmentId!.Value)
             .Select(g => new { DeptId = g.Key, SectionCount = g.Count() })
             .ToListAsync(ct);
@@ -930,7 +970,10 @@ public class TermClosingService : ITermClosingService
 
     private async Task<AcademicTerm?> GetActiveTermAsync(CancellationToken ct)
     {
-        return await _context.AcademicTerms.FirstOrDefaultAsync(t => t.IsActive, ct);
+        var now = _clock.UtcNow;
+        return await _context.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, ct);
     }
 
     private async Task UpsertProgressAsync(int departmentId, int termId, TermClosingStep step, int userId, string notes, CancellationToken ct)

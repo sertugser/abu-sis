@@ -90,11 +90,12 @@ public class GpaCalculationService : IGpaCalculationService
                 TermId = termGroup.Term.Id,
                 TermName = termGroup.Term.Name,
                 Year = termGroup.Term.Year,
-                Semester = termGroup.Term.Semester.ToString(),
+                Semester = termGroup.Term.TermType.ToString(),
                 CourseCount = termGroup.Registrations.Count,
                 TotalCredits = termGroup.Registrations.Sum(registration =>
                     registration.CourseSection.Course.TheoryHours + registration.CourseSection.Course.LabHours),
-                TotalEcts = termGroup.Registrations.Sum(registration => registration.CourseSection.Course.Ects),
+                TotalEcts = termGroup.Registrations.Sum(registration =>
+                    registration.EctsSnapshot ?? registration.CourseSection.Course.Ects),
                 Sgpa = CalculateAverage(termGroup.Registrations),
                 Cgpa = CalculateAverage(latestGradesByChain.Values)
             });
@@ -325,7 +326,9 @@ public class GpaCalculationService : IGpaCalculationService
             if (point == null)
                 continue;
 
-            var akts = registration.CourseSection.Course.Ects;
+            // Madde 7: Kayıt anında donan AKTS değeri önceliklidir; yoksa dersin katalog değeri
+            // (geriye uyumlu — eski kayıtlar için snapshot henüz yok).
+            var akts = registration.EctsSnapshot ?? registration.CourseSection.Course.Ects;
             if (akts <= 0)
                 continue;
 

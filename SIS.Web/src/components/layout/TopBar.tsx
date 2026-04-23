@@ -2,6 +2,7 @@ import { useActiveTerm } from '../../hooks/useActiveTerm';
 import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CircleDot } from 'lucide-react';
+import RoleSwitcher from './RoleSwitcher';
 
 import {
   studentMenuGroups,
@@ -22,6 +23,18 @@ const allMenuGroups = [
   ...deanMenuGroups,
   ...systemAdminMenuGroups,
 ];
+
+const TERM_TYPE_LABELS: Record<string, string> = {
+  Fall: 'Güz',
+  Spring: 'Bahar',
+  Summer: 'Yaz',
+  FallResit: 'Güz Tekders',
+  SpringResit: 'Bahar Tekders',
+  SummerResit: 'Yaz Tekders',
+  SpringOther: 'Bahar Diğer',
+  SummerOther: 'Yaz Diğer',
+  Exemption: 'Muafiyet',
+};
 
 const pageTitles: Record<string, string> = {
   '/': 'Ana Sayfa',
@@ -61,11 +74,21 @@ export default function TopBar() {
 
       <div className="flex-1" />
 
+      <RoleSwitcher />
+
       {term && (
         <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white/80 px-3 py-2 shadow-sm">
           <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="h-4 w-4" />
             <span className="font-medium">{term.name}</span>
+            <span className="text-xs text-muted-foreground/80">
+              · {term.year} {TERM_TYPE_LABELS[term.semester] ?? term.semester}
+            </span>
+            {term.status && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80 rounded-sm bg-muted px-1.5 py-0.5">
+                {term.status}
+              </span>
+            )}
           </div>
 
           <div className="flex gap-2">

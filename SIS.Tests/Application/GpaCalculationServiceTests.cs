@@ -304,30 +304,40 @@ public class GpaCalculationServiceTests : IDisposable
                 Id = oldTermId,
                 Name = "2024 Yaz",
                 Year = 2024,
-                Semester = SemesterType.Summer,
-                RegistrationStart = new DateTime(2024, 6, 1),
-                RegistrationEnd = new DateTime(2024, 6, 10),
-                AddDropStart = new DateTime(2024, 6, 1),
-                AddDropEnd = new DateTime(2024, 6, 10),
-                WithdrawalDeadline = new DateTime(2024, 7, 1),
+                TermType = TermType.Summer,
                 TermStart = new DateTime(2024, 6, 15),
                 TermEnd = new DateTime(2024, 8, 1),
-                IsActive = false
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = new DateTime(2024, 6, 1),
+                    RegistrationEnd = new DateTime(2024, 6, 10),
+                    AddDropStart = new DateTime(2024, 6, 1),
+                    AddDropEnd = new DateTime(2024, 6, 10),
+                    WithdrawalDeadline = new DateTime(2024, 7, 1),
+                    GradeEntryStart = new DateTime(2024, 7, 18),
+                    GradeEntryEnd = new DateTime(2024, 8, 15),
+                    CreatedAt = DateTime.UtcNow,
+                }
             },
             new AcademicTerm
             {
                 Id = newTermId,
                 Name = "2025 Bahar",
                 Year = 2025,
-                Semester = SemesterType.Spring,
-                RegistrationStart = new DateTime(2025, 1, 1),
-                RegistrationEnd = new DateTime(2025, 1, 10),
-                AddDropStart = new DateTime(2025, 1, 1),
-                AddDropEnd = new DateTime(2025, 1, 10),
-                WithdrawalDeadline = new DateTime(2025, 3, 1),
+                TermType = TermType.Spring,
                 TermStart = new DateTime(2025, 2, 10),
                 TermEnd = new DateTime(2025, 6, 1),
-                IsActive = false
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                {
+                    RegistrationStart = new DateTime(2025, 1, 1),
+                    RegistrationEnd = new DateTime(2025, 1, 10),
+                    AddDropStart = new DateTime(2025, 1, 1),
+                    AddDropEnd = new DateTime(2025, 1, 10),
+                    WithdrawalDeadline = new DateTime(2025, 3, 1),
+                    GradeEntryStart = new DateTime(2025, 5, 18),
+                    GradeEntryEnd = new DateTime(2025, 6, 15),
+                    CreatedAt = DateTime.UtcNow,
+                }
             });
 
         _context.Students.Add(new Student
@@ -372,18 +382,26 @@ public class GpaCalculationServiceTests : IDisposable
 
         // Dönemler
         _context.AcademicTerms.AddRange(
-            new AcademicTerm { Id = Term1Id, Name = "2024-2025 Güz", Year = 2024, Semester = SemesterType.Fall,
-                RegistrationStart = term1Start.AddDays(-14), RegistrationEnd = term1Start.AddDays(-7), AddDropStart = term1Start,
-                AddDropEnd = term1Start.AddDays(7), WithdrawalDeadline = term1Start.AddDays(49), TermStart = term1Start, TermEnd = term1Start.AddMonths(4), IsActive = false },
-            new AcademicTerm { Id = Term2Id, Name = "2024-2025 Bahar", Year = 2024, Semester = SemesterType.Spring,
-                RegistrationStart = term2Start.AddDays(-14), RegistrationEnd = term2Start.AddDays(-7), AddDropStart = term2Start,
-                AddDropEnd = term2Start.AddDays(7), WithdrawalDeadline = term2Start.AddDays(49), TermStart = term2Start, TermEnd = term2Start.AddMonths(4), IsActive = true },
-            new AcademicTerm { Id = Term3Id, Name = "2023-2024 Güz", Year = 2023, Semester = SemesterType.Fall,
-                RegistrationStart = term3Start.AddDays(-14), RegistrationEnd = term3Start.AddDays(-7), AddDropStart = term3Start,
-                AddDropEnd = term3Start.AddDays(7), WithdrawalDeadline = term3Start.AddDays(49), TermStart = term3Start, TermEnd = term3Start.AddMonths(4), IsActive = false },
-            new AcademicTerm { Id = Term4Id, Name = "2023-2024 Bahar", Year = 2023, Semester = SemesterType.Spring,
-                RegistrationStart = term4Start.AddDays(-14), RegistrationEnd = term4Start.AddDays(-7), AddDropStart = term4Start,
-                AddDropEnd = term4Start.AddDays(7), WithdrawalDeadline = term4Start.AddDays(49), TermStart = term4Start, TermEnd = term4Start.AddMonths(4), IsActive = false }
+            new AcademicTerm { Id = Term1Id, Name = "2024-2025 Güz", Year = 2024, TermType = TermType.Fall,
+                TermStart = term1Start, TermEnd = term1Start.AddMonths(4),
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar { RegistrationStart = term1Start.AddDays(-14), RegistrationEnd = term1Start.AddDays(-7),
+                    AddDropStart = term1Start, AddDropEnd = term1Start.AddDays(7), WithdrawalDeadline = term1Start.AddDays(49),
+                    GradeEntryStart = term1Start.AddMonths(4).AddDays(-14), GradeEntryEnd = term1Start.AddMonths(4).AddDays(14), CreatedAt = DateTime.UtcNow } },
+            new AcademicTerm { Id = Term2Id, Name = "2024-2025 Bahar", Year = 2024, TermType = TermType.Spring,
+                TermStart = term2Start, TermEnd = term2Start.AddMonths(4),
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar { RegistrationStart = term2Start.AddDays(-14), RegistrationEnd = term2Start.AddDays(-7),
+                    AddDropStart = term2Start, AddDropEnd = term2Start.AddDays(7), WithdrawalDeadline = term2Start.AddDays(49),
+                    GradeEntryStart = term2Start.AddMonths(4).AddDays(-14), GradeEntryEnd = term2Start.AddMonths(4).AddDays(14), CreatedAt = DateTime.UtcNow } },
+            new AcademicTerm { Id = Term3Id, Name = "2023-2024 Güz", Year = 2023, TermType = TermType.Fall,
+                TermStart = term3Start, TermEnd = term3Start.AddMonths(4),
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar { RegistrationStart = term3Start.AddDays(-14), RegistrationEnd = term3Start.AddDays(-7),
+                    AddDropStart = term3Start, AddDropEnd = term3Start.AddDays(7), WithdrawalDeadline = term3Start.AddDays(49),
+                    GradeEntryStart = term3Start.AddMonths(4).AddDays(-14), GradeEntryEnd = term3Start.AddMonths(4).AddDays(14), CreatedAt = DateTime.UtcNow } },
+            new AcademicTerm { Id = Term4Id, Name = "2023-2024 Bahar", Year = 2023, TermType = TermType.Spring,
+                TermStart = term4Start, TermEnd = term4Start.AddMonths(4),
+                AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar { RegistrationStart = term4Start.AddDays(-14), RegistrationEnd = term4Start.AddDays(-7),
+                    AddDropStart = term4Start, AddDropEnd = term4Start.AddDays(7), WithdrawalDeadline = term4Start.AddDays(49),
+                    GradeEntryStart = term4Start.AddMonths(4).AddDays(-14), GradeEntryEnd = term4Start.AddMonths(4).AddDays(14), CreatedAt = DateTime.UtcNow } }
         );
 
         // Öğrenciler
@@ -538,7 +556,7 @@ public class GpaCalculationServiceTests : IDisposable
         var section = new CourseSection
         {
             Id = id, CourseId = courseId, TermId = termId,
-            Capacity = 40, EnrolledCount = 1, IsActive = false
+            Capacity = 40, EnrolledCount = 1, Status = CourseSectionStatus.Draft
         };
         _context.CourseSections.Add(section);
         return section;

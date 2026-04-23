@@ -11,6 +11,14 @@ public class CurriculumElectivePool
     public int SuggestedSemesterEnd { get; set; }
     public int RequiredCourseCount { get; set; }
     public int RequiredEcts { get; set; }
+
+    /// <summary>
+    /// Bu havuzdaki her dersin müfredatta kaç AKTS olarak sayılacağı (sabit değer).
+    /// Null ise dersin katalog AKTS'si kullanılır (geçiş dönemi için geriye uyumlu).
+    /// Örn: NDE=3, TE=5, OC=0.
+    /// </summary>
+    public int? EctsPerCourse { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

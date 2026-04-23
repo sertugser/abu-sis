@@ -80,7 +80,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == termId && cs.IsActive && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
             .ToListAsync(ct);
 
         // Determine which sections have SectionSchedule records
@@ -205,7 +205,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .Include(cs => cs.Course).ThenInclude(c => c.Department)
             .Include(cs => cs.Classroom)
             .Include(cs => cs.Instructor)
-            .Where(cs => cs.TermId == termId && cs.IsActive)
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
             .Where(cs => departmentIds.Contains(cs.Course.DepartmentId ?? 0));
 
         if (departmentId.HasValue)
@@ -330,9 +330,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                 ?? throw new KeyNotFoundException("Sube bulunamadi.");
 
             var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-            if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
-                throw new InvalidOperationException(
-                    $"Hoca/derslik/zaman ataması için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+            if (term != null && term.IsCancelled)
+                throw new InvalidOperationException("Hoca/derslik/zaman ataması için dönem iptal edilmemiş olmalıdır.");
 
             if (section.IsFinalized)
                 throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
@@ -490,9 +489,8 @@ public class FacultyPlanningService : IFacultyPlanningService
             ?? throw new KeyNotFoundException("Sube bulunamadi.");
 
         var unassignTerm = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (unassignTerm != null && unassignTerm.Status != TermStatus.Planning && unassignTerm.Status != TermStatus.Scheduling)
-            throw new InvalidOperationException(
-                $"Atama kaldırma sadece 'Planlama' veya 'Programlama' aşamasında yapılabilir. Mevcut durum: {GetTermStatusLabel(unassignTerm.Status)}");
+        if (unassignTerm != null && unassignTerm.IsCancelled)
+            throw new InvalidOperationException("Atama kaldırma sadece iptal edilmemiş dönemlerde yapılabilir.");
 
         if (section.IsFinalized)
             throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
@@ -553,7 +551,7 @@ public class FacultyPlanningService : IFacultyPlanningService
         var sectionIds = await _context.CourseSections
             .AsNoTracking()
             .Where(cs => cs.TermId == termId
-                && cs.IsActive && !cs.IsFinalized && !cs.IsPinned && !cs.IsScheduleLocked
+                && cs.Status == CourseSectionStatus.Active && !cs.IsFinalized && !cs.IsPinned && !cs.IsScheduleLocked
                 && cs.Course.DepartmentId.HasValue
                 && departmentIds.Contains(cs.Course.DepartmentId.Value))
             .Select(cs => cs.Id)
@@ -738,7 +736,7 @@ public class FacultyPlanningService : IFacultyPlanningService
 
         var facultySectionIds = (await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == termId && cs.IsActive && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
             .Select(cs => cs.Id)
             .ToListAsync(ct)).ToHashSet();
 
@@ -913,17 +911,10 @@ public class FacultyPlanningService : IFacultyPlanningService
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft            => "Taslak",
-        TermStatus.Planning         => "Planlama",
-        TermStatus.Scheduling       => "Programlama",
-        TermStatus.Published        => "Yayınlandı",
-        TermStatus.RegistrationOpen => "Kayıt Açık",
-        TermStatus.AddDrop          => "Ders Ekle/Bırak",
-        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
-        TermStatus.GradeEntry       => "Not Girişi",
-        TermStatus.Closed           => "Kapalı",
-        TermStatus.Archived         => "Arşivlendi",
-        _                           => s.ToString()
+        TermStatus.Inactive  => "Pasif",
+        TermStatus.Active    => "Aktif",
+        TermStatus.Cancelled => "İptal",
+        _                    => s.ToString()
     };
 
     public async Task<List<FacultyPlanningTimeSlotDto>> GetTimeSlotsAsync(int termId, CancellationToken ct = default)

@@ -1,5 +1,7 @@
 namespace SIS.Domain.Entities;
 
+using SIS.Domain.Enums;
+
 public class Curriculum
 {
     public int Id { get; set; }
@@ -18,6 +20,31 @@ public class Curriculum
     public int? InternshipDuration { get; set; }    // Staj süresi (gün)
     public string? Description { get; set; }        // Genel açıklama
     public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Müfredatın yaşam döngüsü durumu.
+    /// Draft: Düzenlenebilir. Published: Kilitli (ders eklenip çıkarılamaz, öğrencilere bağlı).
+    /// Archived: Geçmiş, yeni bağlanamaz.
+    /// </summary>
+    public CurriculumStatus Status { get; set; } = CurriculumStatus.Draft;
+
+    /// <summary>Yayın tarihi (Draft → Published geçişinde doldurulur).</summary>
+    public DateTime? PublishedAt { get; set; }
+
+    // ── Dönem AKTS tavanı override'ları (müfredat-özel kuralları) ──
+    // null = SystemConfig global varsayılanını kullan.
+    // Proliz "Müfredat Sınıf Dönem Tanımları"nın muadili — her müfredat farklı kural tanımlayabilir.
+    // Örn: Tıp Fakültesi 45 AKTS'ye izin verebilirken Güzel Sanatlar 36 AKTS ile sınırlayabilir.
+
+    /// <summary>CGPA &lt; 2.00 için dönem AKTS tavanı (null = global).</summary>
+    public int? EctsLimitBelow200 { get; set; }
+
+    /// <summary>CGPA 2.00–2.49 için dönem AKTS tavanı (null = global).</summary>
+    public int? EctsLimit200To249 { get; set; }
+
+    /// <summary>CGPA ≥ 2.50 için dönem AKTS tavanı (null = global).</summary>
+    public int? EctsLimitAbove250 { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public ICollection<CurriculumCourse> CurriculumCourses { get; set; } = new List<CurriculumCourse>();

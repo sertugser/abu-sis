@@ -61,4 +61,5 @@ export interface ActiveTermDto {
   isRegistrationOpen: boolean;
   isAddDropOpen: boolean;
   status: string;
+  hasAcademicCalendar: boolean;
 }

@@ -32,6 +32,7 @@ export const CALENDAR_EVENT_LABELS: Record<string, string> = {
   FinalGradeEntry: 'Final Not Girişi',
   FinalGradePublication: 'Final Not İlanı',
   MakeupExam: 'Bütünleme Sınavı',
+  MakeupExamApplication: 'Bütünleme Sınav Başvurusu',
   MakeupGradeEntry: 'Bütünleme Not Girişi',
   MakeupGradePublication: 'Bütünleme Not İlanı',
   NationalHoliday: 'Resmi Tatil',
@@ -76,8 +77,58 @@ export const EVENT_TYPE_OPTIONS = Object.entries(CALENDAR_EVENT_LABELS).map(([va
 
 export const EVENT_TYPE_DEFAULTS = CALENDAR_EVENT_LABELS;
 
-export function calendarEventCategory(eventType: string): CalendarEventCategory {
-  if (['MidtermExam', 'FinalExam', 'MakeupExam', 'ExcuseExam', 'PrepSchoolExam', 'SummerSchoolExam'].includes(eventType)) {
+function includesAny(value: string, variants: string[]) {
+  return variants.some(variant => value.includes(variant));
+}
+
+export function resolveCalendarEventType(eventType: string, title?: string | null, templateItemKey?: string | null) {
+  const normalizedTitle = (title ?? '').toLocaleLowerCase('tr-TR');
+
+  if (
+    eventType === 'MakeupExam'
+    && (
+      templateItemKey === 'makeup_application'
+      || (
+        includesAny(normalizedTitle, ['bütünleme', 'butunleme'])
+        && includesAny(normalizedTitle, ['başvuru', 'basvuru'])
+      )
+    )
+  ) {
+    return 'MakeupExamApplication';
+  }
+
+  if (
+    eventType === 'Other'
+    && includesAny(normalizedTitle, ['kayıt dondurma', 'kayit dondurma'])
+    && includesAny(normalizedTitle, ['son günü', 'son gunu', 'son gün', 'son gun'])
+  ) {
+    return 'RegistrationFreezeDeadline';
+  }
+
+  if (
+    eventType === 'Other'
+    && includesAny(normalizedTitle, ['hazırlık', 'hazirlik'])
+    && includesAny(normalizedTitle, ['muafiyet'])
+    && includesAny(normalizedTitle, ['sınav', 'sinav'])
+  ) {
+    return 'PrepSchoolExam';
+  }
+
+  if (
+    eventType === 'MidtermExam'
+    && includesAny(normalizedTitle, ['mazeret'])
+    && includesAny(normalizedTitle, ['sınav', 'sinav'])
+  ) {
+    return 'ExcuseExam';
+  }
+
+  return eventType;
+}
+
+export function calendarEventCategory(eventType: string, title?: string | null, templateItemKey?: string | null): CalendarEventCategory {
+  const resolvedEventType = resolveCalendarEventType(eventType, title, templateItemKey);
+
+  if (['MidtermExam', 'FinalExam', 'MakeupExam', 'ExcuseExam', 'PrepSchoolExam', 'SummerSchoolExam'].includes(resolvedEventType)) {
     return 'exam';
   }
 
@@ -90,11 +141,11 @@ export function calendarEventCategory(eventType: string): CalendarEventCategory 
     'TransferRegistration',
     'GraduateRegistration',
     'SummerSchoolRegistration',
-  ].includes(eventType)) {
+  ].includes(resolvedEventType)) {
     return 'registration';
   }
 
-  if (['NationalHoliday', 'ReligiousHoliday', 'ImportantDay'].includes(eventType)) {
+  if (['NationalHoliday', 'ReligiousHoliday', 'ImportantDay'].includes(resolvedEventType)) {
     return 'holiday';
   }
 
@@ -103,7 +154,7 @@ export function calendarEventCategory(eventType: string): CalendarEventCategory 
     'AdvisorWithdrawal',
     'RegistrationFreezeDeadline',
     'ExcuseExamApplication',
-  ].includes(eventType)) {
+  ].includes(resolvedEventType)) {
     return 'deadline';
   }
 
@@ -121,7 +172,7 @@ export function calendarEventCategory(eventType: string): CalendarEventCategory 
     'TransferResult',
     'GraduateResult',
     'SummerSchoolGradePublication',
-  ].includes(eventType)) {
+  ].includes(resolvedEventType)) {
     return 'result';
   }
 
@@ -129,20 +180,21 @@ export function calendarEventCategory(eventType: string): CalendarEventCategory 
     'GraduateApplication',
     'HorizontalTransfer',
     'DoubleMajor',
+    'MakeupExamApplication',
     'CourseExemptionApplication',
     'ScholarshipApplication',
     'SimurgApplication',
     'InternationalStudentApplication',
     'TransferEvaluation',
-  ].includes(eventType)) {
+  ].includes(resolvedEventType)) {
     return 'application';
   }
 
   return 'academic';
 }
 
-export function calendarEventBadgeVariant(eventType: string): CalendarEventBadgeVariant {
-  switch (calendarEventCategory(eventType)) {
+export function calendarEventBadgeVariant(eventType: string, title?: string | null, templateItemKey?: string | null): CalendarEventBadgeVariant {
+  switch (calendarEventCategory(eventType, title, templateItemKey)) {
     case 'exam':
       return 'destructive';
     case 'registration':
@@ -159,3 +211,13 @@ export function calendarEventBadgeVariant(eventType: string): CalendarEventBadge
       return 'outline';
   }
 }
+
+export const CAT_STYLE: Record<CalendarEventCategory, { bg: string; border: string; text: string; label: string }> = {
+  exam:         { bg: 'bg-red-100',    border: 'border-l-red-500',    text: 'text-red-800',    label: 'SINAV' },
+  registration: { bg: 'bg-blue-100',   border: 'border-l-blue-500',   text: 'text-blue-800',   label: 'KAYIT' },
+  holiday:      { bg: 'bg-green-100',  border: 'border-l-green-500',  text: 'text-green-800',  label: 'TATİL' },
+  deadline:     { bg: 'bg-amber-100',  border: 'border-l-amber-500',  text: 'text-amber-800',  label: 'SON GÜN' },
+  result:       { bg: 'bg-gray-100',   border: 'border-l-gray-400',   text: 'text-gray-700',   label: 'SONUÇ' },
+  application:  { bg: 'bg-teal-100',   border: 'border-l-teal-500',   text: 'text-teal-800',   label: 'BAŞVURU' },
+  academic:     { bg: 'bg-indigo-100', border: 'border-l-indigo-500', text: 'text-indigo-800', label: 'AKADEMİK' },
+};

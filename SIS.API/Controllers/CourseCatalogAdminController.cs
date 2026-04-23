@@ -1,14 +1,19 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Domain.Entities;
+using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
+
+public record CrossListItemDto(int CourseId, string Code, string Name, int Ects);
 
 [ApiController]
 [Route("api/admin/courses")]
 [Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
-public class CourseCatalogAdminController(IAdminCourseCatalogService service) : ControllerBase
+public class CourseCatalogAdminController(IAdminCourseCatalogService service, AppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetCourses([FromQuery] CourseFilterDto filter)
@@ -82,4 +87,56 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service) : 
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
     }
 
+    // ── Madde 14: Cross-Listing CRUD ─────────────────────────────────
+    // İki ders kodunun aynı dersin farklı bölümlerdeki görünümü olduğunu kaydeder.
+    // Örn: YZM301 ≡ BIL301 — aynı hoca, aynı sınıf, iki kod.
+
+    [HttpGet("{id:int}/cross-lists")]
+    public async Task<IActionResult> GetCrossLists(int id)
+    {
+        var items = await db.CourseCrossLists
+            .Where(x => x.CourseId == id)
+            .Include(x => x.LinkedCourse)
+            .Select(x => new CrossListItemDto(
+                x.LinkedCourseId,
+                x.LinkedCourse.Code,
+                x.LinkedCourse.Name,
+                x.LinkedCourse.Ects))
+            .ToListAsync();
+        return Ok(items);
+    }
+
+    [HttpPost("{id:int}/cross-lists/{linkedCourseId:int}")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> AddCrossList(int id, int linkedCourseId)
+    {
+        if (id == linkedCourseId)
+            return BadRequest(new { message = "Bir dersi kendine cross-list edemezsiniz." });
+        if (!await db.Courses.AnyAsync(c => c.Id == id) || !await db.Courses.AnyAsync(c => c.Id == linkedCourseId))
+            return NotFound(new { message = "Ders bulunamadı." });
+        if (await db.CourseCrossLists.AnyAsync(x => x.CourseId == id && x.LinkedCourseId == linkedCourseId))
+            return BadRequest(new { message = "Bu cross-list kaydı zaten mevcut." });
+
+        // Simetrik kayıt — iki yönde de eklenir
+        var now = DateTime.UtcNow;
+        db.CourseCrossLists.Add(new CourseCrossList { CourseId = id, LinkedCourseId = linkedCourseId, IsPrimary = true, CreatedAt = now });
+        if (!await db.CourseCrossLists.AnyAsync(x => x.CourseId == linkedCourseId && x.LinkedCourseId == id))
+            db.CourseCrossLists.Add(new CourseCrossList { CourseId = linkedCourseId, LinkedCourseId = id, IsPrimary = false, CreatedAt = now });
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("{id:int}/cross-lists/{linkedCourseId:int}")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> RemoveCrossList(int id, int linkedCourseId)
+    {
+        var a = await db.CourseCrossLists.FirstOrDefaultAsync(x => x.CourseId == id && x.LinkedCourseId == linkedCourseId);
+        var b = await db.CourseCrossLists.FirstOrDefaultAsync(x => x.CourseId == linkedCourseId && x.LinkedCourseId == id);
+        if (a != null) db.CourseCrossLists.Remove(a);
+        if (b != null) db.CourseCrossLists.Remove(b);
+        if (a == null && b == null)
+            return NotFound(new { message = "Cross-list kaydı bulunamadı." });
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
 }

@@ -132,7 +132,7 @@ function ConstraintRow({
                 <span className="text-xs text-muted-foreground shrink-0 cursor-help">—</span>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="text-xs">Zorunlu kisitlamalarda agirlik uygulanmaz</p>
+                <p className="text-xs">Zorunlu kısıtlamalarda ağırlık uygulanmaz</p>
               </TooltipContent>
             </Tooltip>
           )}

@@ -6,6 +6,7 @@ using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Application.Common.Services;
+using SIS.Application.Common.Time;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -19,12 +20,14 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly IMemoryCache _cache;
     private readonly ISystemConfigProvider _config;
+    private readonly IDateTimeProvider _clock;
 
-    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, ISystemConfigProvider? config = null)
+    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, IDateTimeProvider clock, ISystemConfigProvider? config = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _cache = cache;
+        _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
     }
 
@@ -113,10 +116,12 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
     public async Task<int> CalibrateForTermAsync(int termId, CancellationToken ct = default)
     {
-        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+        var term = await _context.AcademicTerms.AsNoTracking()
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
 
-        if (term.Status < TermStatus.AddDrop)
+        if (!term.IsActive(_clock.UtcNow) || !term.IsAddDropOpen(_clock.UtcNow))
             throw new InvalidOperationException("Kalibrasyon için dönem en az ek/bırak aşamasını geçmiş olmalı.");
 
         // Already calibrated?
@@ -292,13 +297,15 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
     private async Task<ForecastContextData> BuildForecastContextCoreAsync(int? departmentId = null)
     {
+        var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => term.IsActive);
+            .Include(t => t.AcademicCalendar)
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now);
 
         var allTerms = await _context.AcademicTerms
             .AsNoTracking()
-            .OrderBy(t => t.Year).ThenBy(t => t.Semester)
+            .OrderBy(t => t.Year).ThenBy(t => t.TermType)
             .ToListAsync();
 
         var studentQuery = _context.Students
@@ -691,7 +698,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             // Karşılaştırılabilir dönem verilerini filtrele
             var comparableCounts = activeTerm != null
                 ? termEnrollments
-                    .Where(kv => termsById.TryGetValue(kv.Key, out var t) && t.Semester == activeTerm.Semester)
+                    .Where(kv => termsById.TryGetValue(kv.Key, out var t) && t.TermType == activeTerm.TermType)
                     .Select(kv => (double)kv.Value)
                     .ToList()
                 : termEnrollments.Values.Select(v => (double)v).ToList();
@@ -720,7 +727,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             ActiveTermSectionCourseIds = activeTerm == null
                 ? new HashSet<int>()
                 : allSections
-                    .Where(section => section.TermId == activeTerm.Id && section.IsActive)
+                    .Where(section => section.TermId == activeTerm.Id && section.Status == CourseSectionStatus.Active)
                     .Select(section => section.CourseId)
                     .ToHashSet(),
             HistoricalEnrollmentsByCourse = historicalByCourseThenTerm,
@@ -1137,7 +1144,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
 
                 var comparablePrereqCounts = context.ActiveTerm != null
                     ? prereqHistorical
-                        .Where(kv => context.TermsById.TryGetValue(kv.Key, out var t) && t.Semester == context.ActiveTerm.Semester)
+                        .Where(kv => context.TermsById.TryGetValue(kv.Key, out var t) && t.TermType == context.ActiveTerm.TermType)
                         .Select(kv => kv.Value)
                         .ToList()
                     : prereqHistorical.Values.ToList();
@@ -1303,7 +1310,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         var results = new List<HistoricalEnrollmentDto>();
 
         foreach (var (termId, count) in termEnrollments.OrderBy(kv =>
-            context.TermsById.TryGetValue(kv.Key, out var t) ? t.Year * 10 + (int)t.Semester : kv.Key))
+            context.TermsById.TryGetValue(kv.Key, out var t) ? t.Year * 10 + (int)t.TermType : kv.Key))
         {
             var term = context.TermsById.GetValueOrDefault(termId);
             var sectionCount = context.SectionCountByCourseTerm.GetValueOrDefault((courseId, termId));
@@ -1488,7 +1495,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             var activeSections = context.AllSections
                 .Where(section => section.CourseId == course.Id
                     && section.TermId == context.ActiveTerm.Id
-                    && section.IsActive)
+                    && section.Status == CourseSectionStatus.Active)
                 .ToList();
 
             if (TryBuildCapacity(activeSections, "Aktif donem course section ortalamasi", out var activeCapacity))
@@ -1514,7 +1521,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         {
             var activeDepartmentSections = context.AllSections
                 .Where(section => section.TermId == context.ActiveTerm.Id
-                    && section.IsActive
+                    && section.Status == CourseSectionStatus.Active
                     && section.Course.DepartmentId == course.DepartmentId)
                 .ToList();
 
@@ -1933,7 +1940,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
         return historicalData
             .Where(item =>
                 context.TermsById.TryGetValue(item.TermId, out var term)
-                && term.Semester == context.ActiveTerm.Semester)
+                && term.TermType == context.ActiveTerm.TermType)
             .ToList();
     }
 
@@ -2063,7 +2070,7 @@ public class EnrollmentForecastService : IEnrollmentForecastService, IEnrollment
             var weight = 1.0;
             if (context.ActiveTerm != null)
             {
-                if (term.Semester == context.ActiveTerm.Semester)
+                if (term.TermType == context.ActiveTerm.TermType)
                     weight *= 1.6;
 
                 var yearGap = Math.Max(0, context.ActiveTerm.Year - term.Year);

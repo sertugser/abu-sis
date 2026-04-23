@@ -4,65 +4,74 @@ import apiClient from '../api/axios';
 
 const API = '/admin/terms';
 
+export type TermTypeValue =
+  | 'Fall'
+  | 'Spring'
+  | 'Summer'
+  | 'FallResit'
+  | 'SpringResit'
+  | 'SummerResit'
+  | 'SpringOther'
+  | 'SummerOther'
+  | 'Exemption';
+
+export type TermStatusValue = 'Inactive' | 'Active' | 'Cancelled';
+export type YoksisStatusValue = 'Inactive' | 'Active';
+
 export interface AdminTermDto {
   id: number;
   name: string;
   shortName: string;
   englishName: string;
+  shortEnglishName: string;
+  otherName: string | null;
   year: number;
-  semester: string;
-  semesterLabel: string;
-  termType: string;
+
+  termType: TermTypeValue;
   termTypeLabel: string;
-  isActive: boolean;
-  registrationStart: string;
-  registrationEnd: string;
-  addDropStart: string;
-  addDropEnd: string;
+
+  status: TermStatusValue;
+  statusLabel: string;
+  isCancelled: boolean;
+
+  yoksisStatus: YoksisStatusValue;
+
   termStart: string;
   termEnd: string;
-  withdrawalDeadline: string;
-  isRegistrationOpen: boolean;
-  isAddDropOpen: boolean;
-  calendarEventCount: number;
-  generatedCalendarEventCount: number;
-  generatedCalendarDraftId: number | null;
-  hasGeneratedCalendar: boolean;
-  status: string;
-  statusLabel: string;
-  allowedTransitions: string[];
+
+  isActive: boolean;
+  hasAcademicCalendar: boolean;
 }
 
 export interface CreateTermDto {
   name: string;
   shortName: string;
   englishName: string;
+  shortEnglishName: string;
+  otherName: string | null;
   year: number;
-  semester: string;
-  termType: string;
-  registrationStart: string;
-  registrationEnd: string;
-  addDropStart: string;
-  addDropEnd: string;
+  termType: TermTypeValue;
+  yoksisStatus: YoksisStatusValue;
   termStart: string;
   termEnd: string;
-  withdrawalDeadline: string;
 }
 
 export interface UpdateTermDto {
   name: string;
   shortName: string;
   englishName: string;
-  termType: string;
-  registrationStart: string;
-  registrationEnd: string;
-  addDropStart: string;
-  addDropEnd: string;
+  shortEnglishName: string;
+  otherName: string | null;
+  termType: TermTypeValue;
+  yoksisStatus: YoksisStatusValue;
   termStart: string;
   termEnd: string;
-  withdrawalDeadline: string;
 }
 
+function invalidateTerms(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+}
 
 // ── Term CRUD ────────────────────────────────────────────────────────────────
 
@@ -75,6 +84,7 @@ export function useAdminTerms() {
     },
   });
 }
+
 export function useCreateTerm() {
   const qc = useQueryClient();
   return useMutation({
@@ -82,10 +92,7 @@ export function useCreateTerm() {
       const { data } = await apiClient.post<AdminTermDto>(API, dto);
       return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
+    onSuccess: () => invalidateTerms(qc),
   });
 }
 
@@ -96,37 +103,30 @@ export function useUpdateTerm() {
       const { data } = await apiClient.put<AdminTermDto>(`${API}/${id}`, dto);
       return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
+    onSuccess: () => invalidateTerms(qc),
   });
 }
 
-export function useActivateTerm() {
+// ── Term Cancel / Uncancel ───────────────────────────────────────────────────
+
+export function useCancelTerm() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => {
-      await apiClient.post(`${API}/${id}/activate`);
+    mutationFn: async (termId: number) => {
+      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/cancel`);
+      return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
+    onSuccess: () => invalidateTerms(qc),
   });
 }
 
-// ── Term Status Transition ───────────────────────────────────────────────────
-
-export function useTransitionTermStatus() {
+export function useUncancelTerm() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ termId, targetStatus }: { termId: number; targetStatus: string }) => {
-      await apiClient.post(`${API}/${termId}/transition`, { targetStatus });
+    mutationFn: async (termId: number) => {
+      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/uncancel`);
+      return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
-    },
+    onSuccess: () => invalidateTerms(qc),
   });
 }

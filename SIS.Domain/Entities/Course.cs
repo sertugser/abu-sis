@@ -9,7 +9,11 @@ public class Course
     public string Name { get; set; } = string.Empty;
     public string? EnglishName { get; set; }        // İngilizce ders adı
     public string? ExamType { get; set; }           // Sınav Değer Tipi (default: "Otomatik Hesapla ve Harflendir")
-    public int? DepartmentId { get; set; }        // owning department (nullable: some courses are cross-departmental)
+    // Madde 10: Sahiplik zorunluluğu uygulama katmanında yönetilir.
+    // Yeni dersler için DepartmentId doldurma zorunlu (AdminCourseCatalogService).
+    // Ortak dersler (MATH/FIZ/AIIT/TRD/YDL) "Temel Bilimler Koordinatörlüğü" gibi
+    // Department.IsServiceUnit=true olan birimlere atanır. Mevcut null'lar seed migration'da çevrilir.
+    public int? DepartmentId { get; set; }
     public Department? Department { get; set; }
     public int Ects { get; set; }
     public int TheoryHours { get; set; }

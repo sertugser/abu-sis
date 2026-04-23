@@ -34,3 +34,21 @@ export function hasAnyRole(roles: string[], allowedRoles: readonly string[]) {
 export function isManagementRole(roles: string[]) {
   return hasAnyRole(roles, MANAGEMENT_ROLES);
 }
+
+const ROLE_LABELS: Record<AppRole, string> = {
+  SystemAdministrator: 'Yönetici',
+  Dean: 'Dekan',
+  DepartmentManager: 'Bölüm Başkanı',
+  AdministrativeStaff: 'İdari Personel',
+  AcademicAdvisor: 'Danışman',
+  Instructor: 'Öğretim Üyesi',
+  Student: 'Öğrenci',
+};
+
+export function getRoleDisplayLabel(role: string): string {
+  return ROLE_LABELS[role as AppRole] ?? role;
+}
+
+export function sortRolesByPriority(roles: readonly string[]): AppRole[] {
+  return ROLE_PRIORITY.filter(r => roles.includes(r));
+}

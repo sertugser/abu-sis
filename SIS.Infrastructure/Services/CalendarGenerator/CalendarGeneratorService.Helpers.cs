@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CalendarGenerator.DTOs;
@@ -14,6 +14,12 @@ public partial class CalendarGeneratorService
     private const int SummerTeachingWeekdays = 7 * 5;
     private const int SeventhWeekDeadlineDays = 7 * 7 - 1;
     private const int GradePublicationBusinessDayLimit = 10;
+    private const int MakeupExamDurationDays = 7;
+    private const int MidtermEarliestTeachingWeek = 7;
+    private const int MidtermDefaultTeachingWeek = 8;
+    private const int ExcuseExamMinBusinessDays = 3;
+    private const int ExcuseExamMaxBusinessDays = 10;
+    private const int FinalPreparationTeachingWeeks = 7;
 
     private static List<GeneratedCalendarEventDto> Propagate(List<GeneratedCalendarEventDto> events, string changedEventId, DateTime oldStart, DateTime oldEnd, DateTime newStart, DateTime newEnd)
     {
@@ -36,13 +42,26 @@ public partial class CalendarGeneratorService
             var list = group.ToList();
             CheckOrder(list, group.Key, CalendarEventType.CourseRegistration, CalendarEventType.ClassesStart, warnings);
             CheckOrder(list, group.Key, CalendarEventType.ClassesStart, CalendarEventType.AddDrop, warnings);
-            CheckOrder(list, group.Key, CalendarEventType.AddDrop, CalendarEventType.CourseWithdrawal, warnings);
-            CheckOrder(list, group.Key, CalendarEventType.CourseWithdrawal, CalendarEventType.MidtermExam, warnings);
-            CheckOrder(list, group.Key, CalendarEventType.MidtermExam, CalendarEventType.MidtermGradePublication, warnings);
+            CheckOrder(list, group.Key, CalendarEventType.AddDrop, CalendarEventType.MidtermExam, warnings);
+            CheckOrder(list, group.Key, CalendarEventType.MidtermExam, CalendarEventType.ExcuseExamApplication, warnings, secondKeyContains: "midterm_excuse_application");
+            CheckOrder(list, group.Key, CalendarEventType.ExcuseExamApplication, CalendarEventType.ExcuseExam, warnings, firstKeyContains: "midterm_excuse_application", secondKeyContains: "midterm_excuse_exam");
+            CheckOrder(list, group.Key, CalendarEventType.ExcuseExam, CalendarEventType.MidtermGradePublication, warnings, firstKeyContains: "midterm_excuse_exam", secondKeyContains: "midterm_publication");
+            CheckOrder(list, group.Key, CalendarEventType.MidtermGradePublication, CalendarEventType.FinalExam, warnings, firstKeyContains: "midterm_publication", secondKeyContains: "final_exam");
             CheckOrder(list, group.Key, CalendarEventType.ClassesEnd, CalendarEventType.FinalExam, warnings);
             CheckOrder(list, group.Key, CalendarEventType.FinalExam, CalendarEventType.FinalGradePublication, warnings);
             CheckOrder(list, group.Key, CalendarEventType.FinalGradePublication, CalendarEventType.MakeupExam, warnings, secondKeyContains: "makeup_exam");
             CheckOrder(list, group.Key, CalendarEventType.MakeupExam, CalendarEventType.MakeupGradePublication, warnings, firstKeyContains: "makeup_exam");
+
+            var withdrawal = First(list, CalendarEventType.CourseWithdrawal);
+            var midterm = FirstByTemplateKey(list, "midterm_exam") ?? First(list, CalendarEventType.MidtermExam);
+            if (withdrawal != null && midterm != null && withdrawal.StartDate.Date < midterm.StartDate.Date)
+            {
+                warnings.Add(new(
+                    "CHRONOLOGY",
+                    "Error",
+                    $"{SemesterLabel(group.Key)}: {withdrawal.Title} etkinliÄŸi {midterm.Title} baÅŸlamadan Ã¶nce olamaz.",
+                    withdrawal.DraftEventId));
+            }
         }
     }
 
@@ -55,7 +74,7 @@ public partial class CalendarGeneratorService
         if (firstEvent == null || secondEvent == null) return;
 
         if ((firstEvent.EndDate ?? firstEvent.StartDate).Date > secondEvent.StartDate.Date)
-            warnings.Add(new("CHRONOLOGY", "Error", $"{SemesterLabel(semester)}: {firstEvent.Title} etkinliği {secondEvent.Title} etkinliğinden sonra bitiyor.", secondEvent.DraftEventId));
+            warnings.Add(new("CHRONOLOGY", "Error", $"{SemesterLabel(semester)}: {firstEvent.Title} etkinliÄŸi {secondEvent.Title} etkinliÄŸinden sonra bitiyor.", secondEvent.DraftEventId));
     }
 
     private static IEnumerable<CalendarWarningDto> ValidateRegulationRules(IReadOnlyList<GeneratedCalendarEventDto> events, IReadOnlyList<ResolvedHolidayDto> holidays)
@@ -80,7 +99,7 @@ public partial class CalendarGeneratorService
 
         if (classesStart == null || classesEnd == null || finalExam == null)
         {
-            yield return new CalendarWarningDto("REG_REQUIRED_EVENT", "Error", $"{SemesterLabel(semester)}: Yönetmelik kontrolü için ders başlangıcı, ders bitişi ve final sınavı bulunmalıdır.");
+            yield return new CalendarWarningDto("REG_REQUIRED_EVENT", "Error", $"{SemesterLabel(semester)}: YÃ¶netmelik kontrolÃ¼ iÃ§in ders baÅŸlangÄ±cÄ±, ders bitiÅŸi ve final sÄ±navÄ± bulunmalÄ±dÄ±r.");
             yield break;
         }
 
@@ -91,7 +110,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_MIN_TEACHING_WEEKS",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 21 gereği kayıt ve sınavlar hariç ders süresi en az 14 hafta olmalıdır ({teachingPeriodDays} gün).",
+                $"{SemesterLabel(semester)}: Madde 21 gereÄŸi kayÄ±t ve sÄ±navlar hariÃ§ ders sÃ¼resi en az 14 hafta olmalÄ±dÄ±r ({teachingPeriodDays} gÃ¼n).",
                 classesEnd.DraftEventId);
         }
 
@@ -101,24 +120,8 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_MIN_SEMESTER_WEEKS",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 7 gereği yarıyıl sınavlar dahil en az 16 hafta olmalıdır ({semesterWithExamsDays} gün).",
+                $"{SemesterLabel(semester)}: Madde 7 gereÄŸi yarÄ±yÄ±l sÄ±navlar dahil en az 16 hafta olmalÄ±dÄ±r ({semesterWithExamsDays} gÃ¼n).",
                 finalExam.DraftEventId);
-        }
-
-        foreach (var deadlineType in new[] { CalendarEventType.CourseWithdrawal, CalendarEventType.RegistrationFreezeDeadline })
-        {
-            var deadline = First(events, deadlineType);
-            if (deadline == null) continue;
-
-            var lastAllowed = classesStart.StartDate.AddDays(SeventhWeekDeadlineDays);
-            if (deadline.StartDate.Date > lastAllowed.Date)
-            {
-                yield return new CalendarWarningDto(
-                    deadlineType == CalendarEventType.CourseWithdrawal ? "REG_WITHDRAWAL_DEADLINE" : "REG_FREEZE_DEADLINE",
-                    "Error",
-                    $"{SemesterLabel(semester)}: Madde {(deadlineType == CalendarEventType.CourseWithdrawal ? 30 : 51)} gereği son gün yedinci hafta sonunu geçemez.",
-                    deadline.DraftEventId);
-            }
         }
 
         foreach (var warning in ValidatePublicationDeadline(events, holidays, CalendarEventType.MidtermExam, "midterm_exam", CalendarEventType.MidtermGradePublication, "midterm_publication", semester))
@@ -137,7 +140,7 @@ public partial class CalendarGeneratorService
 
         if (classesStart == null || classesEnd == null || summerExam == null)
         {
-            yield return new CalendarWarningDto("REG_SUMMER_REQUIRED_EVENT", "Error", "Yaz: Yönetmelik kontrolü için ders başlangıcı, ders bitişi ve yaz okulu sınavı bulunmalıdır.");
+            yield return new CalendarWarningDto("REG_SUMMER_REQUIRED_EVENT", "Error", "Yaz: YÃ¶netmelik kontrolÃ¼ iÃ§in ders baÅŸlangÄ±cÄ±, ders bitiÅŸi ve yaz okulu sÄ±navÄ± bulunmalÄ±dÄ±r.");
             yield break;
         }
 
@@ -148,7 +151,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_SUMMER_TEACHING_WEEKS",
                 "Error",
-                $"Yaz: Madde 22 gereği yaz okulu sınavlar hariç 7 haftalık ders süresini kapsamalıdır ({teachingWeekdays} hafta içi gün).",
+                $"Yaz: Madde 22 gereÄŸi yaz okulu sÄ±navlar hariÃ§ 7 haftalÄ±k ders sÃ¼resini kapsamalÄ±dÄ±r ({teachingWeekdays} hafta iÃ§i gÃ¼n).",
                 classesEnd.DraftEventId);
         }
 
@@ -157,7 +160,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_SUMMER_EXAM_ORDER",
                 "Error",
-                "Yaz: Madde 22 gereği yaz okulu sınavları ders süresi tamamlandıktan sonra başlamalıdır.",
+                "Yaz: Madde 22 gereÄŸi yaz okulu sÄ±navlarÄ± ders sÃ¼resi tamamlandÄ±ktan sonra baÅŸlamalÄ±dÄ±r.",
                 summerExam.DraftEventId);
         }
 
@@ -189,9 +192,14 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_GRADE_PUBLICATION",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 36 gereği {publication.Title} sınav dönemini izleyen en geç 10 iş günü içinde ilan edilmelidir ({businessDays} iş günü).",
+                $"{SemesterLabel(semester)}: Madde 36 gereÄŸi {publication.Title} sÄ±nav dÃ¶nemini izleyen en geÃ§ 10 iÅŸ gÃ¼nÃ¼ iÃ§inde ilan edilmelidir ({businessDays} iÅŸ gÃ¼nÃ¼).",
                 publication.DraftEventId);
         }
+    }
+
+    private static IEnumerable<CalendarWarningDto> ValidateMidtermAndFinalSpacing(IReadOnlyList<GeneratedCalendarEventDto> events, IReadOnlyList<ResolvedHolidayDto> holidays, SemesterType semester)
+    {
+        yield break;
     }
 
     private static IReadOnlyList<TermSummaryDto> BuildTermSummaries(IReadOnlyList<GeneratedCalendarEventDto> events, IReadOnlyList<ResolvedHolidayDto> holidays) =>
@@ -212,14 +220,32 @@ public partial class CalendarGeneratorService
         var withdrawal = First(events, CalendarEventType.CourseWithdrawal) ?? First(events, CalendarEventType.RegistrationFreezeDeadline) ?? First(events, CalendarEventType.ClassesEnd);
         var classesStart = First(events, CalendarEventType.ClassesStart) ?? events.OrderBy(e => e.StartDate).First();
         var classesEnd = First(events, CalendarEventType.ClassesEnd) ?? events.OrderBy(e => e.StartDate).Last();
+        var gradeEntryStart = First(events, CalendarEventType.MidtermGradePublication)
+            ?? First(events, CalendarEventType.FinalGradePublication)
+            ?? First(events, CalendarEventType.SummerSchoolGradePublication);
+        var gradeEntryEnd = First(events, CalendarEventType.MakeupGradePublication)
+            ?? First(events, CalendarEventType.FinalGradePublication)
+            ?? First(events, CalendarEventType.SummerSchoolGradePublication);
 
-        term.RegistrationStart = registration?.StartDate ?? classesStart.StartDate;
-        term.RegistrationEnd = registration?.EndDate ?? registration?.StartDate ?? classesStart.StartDate;
-        term.AddDropStart = addDrop?.StartDate ?? term.RegistrationStart;
-        term.AddDropEnd = addDrop?.EndDate ?? addDrop?.StartDate ?? term.RegistrationEnd;
-        term.WithdrawalDeadline = withdrawal?.StartDate ?? classesEnd.StartDate;
         term.TermStart = classesStart.StartDate;
         term.TermEnd = classesEnd.StartDate;
+
+        var now = DateTime.UtcNow;
+        term.AcademicCalendar ??= new TermAcademicCalendar
+        {
+            TermId = term.Id,
+            CreatedAt = now
+        };
+
+        var cal = term.AcademicCalendar;
+        cal.RegistrationStart = registration?.StartDate ?? classesStart.StartDate;
+        cal.RegistrationEnd = registration?.EndDate ?? registration?.StartDate ?? classesStart.StartDate;
+        cal.AddDropStart = addDrop?.StartDate ?? cal.RegistrationStart;
+        cal.AddDropEnd = addDrop?.EndDate ?? addDrop?.StartDate ?? cal.RegistrationEnd;
+        cal.WithdrawalDeadline = withdrawal?.StartDate ?? classesEnd.StartDate;
+        cal.GradeEntryStart = gradeEntryStart?.StartDate ?? classesEnd.StartDate;
+        cal.GradeEntryEnd = gradeEntryEnd?.EndDate ?? gradeEntryEnd?.StartDate ?? classesEnd.StartDate.AddDays(21);
+        cal.UpdatedAt = now;
     }
 
     private static GeneratedCalendarEventDto? First(IReadOnlyList<GeneratedCalendarEventDto> events, CalendarEventType eventType) =>
@@ -234,16 +260,21 @@ public partial class CalendarGeneratorService
     {
         var label = SemesterLabel(semester);
         var english = semester switch { SemesterType.Fall => "Fall", SemesterType.Spring => "Spring", SemesterType.Summer => "Summer", _ => semester.ToString() };
+        var termType = semester switch
+        {
+            SemesterType.Fall => TermType.Fall,
+            SemesterType.Spring => TermType.Spring,
+            SemesterType.Summer => TermType.Summer,
+            _ => TermType.Fall
+        };
         return new AcademicTerm
         {
             Name = $"{academicYear} {label}",
             ShortName = $"{startYear % 100:00}-{(startYear + 1) % 100:00} {label}",
             EnglishName = $"{english} {academicYear}",
+            ShortEnglishName = english,
             Year = startYear,
-            Semester = semester,
-            TermType = semester == SemesterType.Summer ? TermType.Summer : TermType.Regular,
-            Status = TermStatus.Draft,
-            IsActive = false,
+            TermType = termType,
             CreatedAt = DateTime.UtcNow
         };
     }
@@ -337,9 +368,9 @@ public partial class CalendarGeneratorService
     private static void EnsureEditable(GeneratedCalendarDraft draft)
     {
         if (draft.Status != GeneratedCalendarDraftStatus.Draft)
-            throw new InvalidOperationException("Sadece taslak durumundaki takvim düzenlenebilir.");
+            throw new InvalidOperationException("Sadece taslak durumundaki takvim dÃ¼zenlenebilir.");
         if (draft.ExpiresAt < DateTime.UtcNow)
-            throw new InvalidOperationException("Takvim taslağının saklama süresi dolmuş.");
+            throw new InvalidOperationException("Takvim taslaÄŸÄ±nÄ±n saklama sÃ¼resi dolmuÅŸ.");
     }
 
     private static int CalculateQualityScore(IReadOnlyList<CalendarWarningDto> warnings) =>
@@ -434,20 +465,60 @@ public partial class CalendarGeneratorService
     private static bool StartsOnWeekend(DateTime start, CalendarEventType eventType) =>
         IsSingleDaySensitive(eventType) && start.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
 
+    private static bool ShouldShiftBackwardForWeekend(CalendarEventType eventType, DateTime start, IReadOnlyList<ResolvedHolidayDto> holidays) =>
+        StartsOnWeekend(start, eventType)
+        && !holidays.Any(h => h.BlocksAcademicEvents && DateRangesOverlap(start, start, h.StartDate, h.EndDate));
+
+    private static bool MustStartOnMonday(CalendarEventType eventType) =>
+        eventType is CalendarEventType.MidtermExam
+            or CalendarEventType.FinalExam
+            or CalendarEventType.MakeupExam
+            or CalendarEventType.PrepSchoolExam
+            or CalendarEventType.SummerSchoolExam;
+
+    private static DateTime MondayOnOrAfter(DateTime date)
+    {
+        var current = date.Date;
+        while (current.DayOfWeek != DayOfWeek.Monday) current = current.AddDays(1);
+        return DateTime.SpecifyKind(current, DateTimeKind.Utc);
+    }
+
+    private static DateTime MondayOnOrBefore(DateTime date)
+    {
+        var current = date.Date;
+        while (current.DayOfWeek != DayOfWeek.Monday) current = current.AddDays(-1);
+        return DateTime.SpecifyKind(current, DateTimeKind.Utc);
+    }
+
+    private static DateTime NearestMonday(DateTime date)
+    {
+        var previousMonday = MondayOnOrBefore(date);
+        var nextMonday = MondayOnOrAfter(date);
+        var previousDistance = Math.Abs((date.Date - previousMonday.Date).Days);
+        var nextDistance = Math.Abs((nextMonday.Date - date.Date).Days);
+        return previousDistance <= nextDistance ? previousMonday : nextMonday;
+    }
+
+    private static int ResolveConflictShiftDays(CalendarEventType eventType, bool shiftBackwardForWeekend) =>
+        MustStartOnMonday(eventType) && !shiftBackwardForWeekend ? 7 : 1;
+
     private static bool IsCriticalEvent(CalendarEventType type) =>
-        type is CalendarEventType.ClassesStart or CalendarEventType.ClassesEnd or CalendarEventType.CourseRegistration
-            or CalendarEventType.AddDrop or CalendarEventType.CourseWithdrawal or CalendarEventType.RegistrationFreezeDeadline
-            or CalendarEventType.MidtermExam or CalendarEventType.FinalExam or CalendarEventType.MakeupExam
+        type is CalendarEventType.ClassesStart or CalendarEventType.ClassesEnd
+            or CalendarEventType.CourseWithdrawal or CalendarEventType.RegistrationFreezeDeadline
+            or CalendarEventType.MidtermExam or CalendarEventType.FinalExam or CalendarEventType.MakeupExamApplication or CalendarEventType.MakeupExam
             or CalendarEventType.ExcuseExam or CalendarEventType.MidtermGradePublication
             or CalendarEventType.FinalGradePublication or CalendarEventType.MakeupGradePublication
             or CalendarEventType.SummerSchoolRegistration or CalendarEventType.SummerSchoolExam
             or CalendarEventType.SummerSchoolGradePublication;
 
+    private static bool CanOverlapBlockingHoliday(CalendarEventType type) =>
+        type is CalendarEventType.CourseRegistration or CalendarEventType.AddDrop;
+
     private static bool IsSingleDaySensitive(CalendarEventType type) =>
         type is CalendarEventType.ClassesStart or CalendarEventType.ClassesEnd or CalendarEventType.CourseWithdrawal
             or CalendarEventType.RegistrationFreezeDeadline or CalendarEventType.MidtermGradePublication
             or CalendarEventType.FinalGradePublication or CalendarEventType.MakeupGradePublication
-            or CalendarEventType.ExcuseExamApplication or CalendarEventType.SummerSchoolGradePublication;
+            or CalendarEventType.ExcuseExamApplication or CalendarEventType.MakeupExamApplication or CalendarEventType.SummerSchoolGradePublication;
 
     private static bool BlocksAcademicEvents(CalendarEventType type) =>
         type is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday or CalendarEventType.ImportantDay;
@@ -488,15 +559,359 @@ public partial class CalendarGeneratorService
         return count;
     }
 
+    private static int CountTeachingWeeksStartedByDate(DateTime classesStart, DateTime date, IReadOnlyList<DateTime> heavyWeeks)
+    {
+        var count = 0;
+        for (var weekStart = MondayOnOrAfter(classesStart); weekStart <= date.Date; weekStart = weekStart.AddDays(7))
+        {
+            if (heavyWeeks.Any(week => week.Date == weekStart.Date))
+                continue;
+
+            count++;
+        }
+
+        return count;
+    }
+
+    private static int CountTeachingWeeksBetween(DateTime fromExclusive, DateTime toInclusive, IReadOnlyList<DateTime> heavyWeeks)
+    {
+        var count = 0;
+        for (var weekStart = MondayOnOrAfter(fromExclusive.AddDays(1)); weekStart < toInclusive.Date; weekStart = weekStart.AddDays(7))
+        {
+            if (heavyWeeks.Any(week => week.Date == weekStart.Date))
+                continue;
+
+            count++;
+        }
+
+        return count;
+    }
+
+    private static List<GeneratedCalendarEventDto> ApplyDependentExamScheduling(
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var updated = events.ToList();
+
+        foreach (var semester in new[] { SemesterType.Fall, SemesterType.Spring })
+        {
+            var finalExam = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "final_exam", StringComparison.OrdinalIgnoreCase));
+            var finalPublication = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "final_publication", StringComparison.OrdinalIgnoreCase));
+            var makeupApplication = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "makeup_application", StringComparison.OrdinalIgnoreCase));
+            var makeupExam = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "makeup_exam", StringComparison.OrdinalIgnoreCase));
+
+            if (finalExam == null || finalPublication == null || makeupExam == null)
+                continue;
+
+            var finalExamEnd = finalExam.EndDate ?? finalExam.StartDate;
+            var fifthBusinessDay = NthBusinessDayAfter(finalExamEnd, 5, holidays);
+            var resultsBufferDate = finalPublication.StartDate.AddDays(4);
+            var makeupStart = MaxDate(fifthBusinessDay, resultsBufferDate);
+            makeupStart = AlignMakeupStart(makeupStart, holidays);
+
+            updated = ReplaceEvent(updated, makeupExam with
+            {
+                StartDate = makeupStart,
+                EndDate = makeupStart.AddDays(MakeupExamDurationDays - 1)
+            });
+
+            if (makeupApplication != null)
+            {
+                var applicationDeadline = PreviousBusinessDayBefore(makeupStart, holidays);
+                updated = ReplaceEvent(updated, makeupApplication with
+                {
+                    StartDate = applicationDeadline,
+                    EndDate = null
+                });
+            }
+        }
+
+        return updated;
+    }
+
+    private static List<GeneratedCalendarEventDto> ApplyHolidayOverflowShifts(
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var updated = events.ToList();
+
+        foreach (var ev in events.Where(e => !e.IsHoliday && !CanOverlapBlockingHoliday(e.EventType)))
+        {
+            var shifted = ShiftEventOffBlockingHolidays(ev, holidays);
+            if (shifted.StartDate != ev.StartDate || shifted.EndDate != ev.EndDate)
+                updated = ReplaceEvent(updated, shifted);
+        }
+
+        return updated;
+    }
+
+    private static List<GeneratedCalendarEventDto> AlignClassesEndToWeekday(IReadOnlyList<GeneratedCalendarEventDto> events)
+    {
+        var updated = events.ToList();
+
+        foreach (var classesEnd in events.Where(e => !e.IsHoliday && e.EventType == CalendarEventType.ClassesEnd))
+        {
+            var alignedDate = WeekdayOnOrBefore(classesEnd.StartDate);
+            if (alignedDate.Date != classesEnd.StartDate.Date)
+                updated = ReplaceEvent(updated, classesEnd with { StartDate = alignedDate, EndDate = null });
+        }
+
+        return updated;
+    }
+
+    private static DateTime WeekdayOnOrBefore(DateTime date)
+    {
+        var day = date.Date;
+        while (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            day = day.AddDays(-1);
+        return EnsureUtcDate(day);
+    }
+
+    private static GeneratedCalendarEventDto ShiftEventOffBlockingHolidays(
+        GeneratedCalendarEventDto ev,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var durationDays = ((ev.EndDate ?? ev.StartDate).Date - ev.StartDate.Date).Days;
+        var start = ev.StartDate;
+        var end = ev.EndDate ?? ev.StartDate;
+        var attempts = 0;
+
+        while (attempts < 90 && OverlapsBlockingHoliday(start, end, holidays))
+        {
+            var blockingHolidayEnd = holidays
+                .Where(h => h.BlocksAcademicEvents && DateRangesOverlap(start, end, h.StartDate, h.EndDate))
+                .Max(h => h.EndDate.Date);
+
+            start = EnsureUtcDate(blockingHolidayEnd.AddDays(1));
+            if (MustStartOnMonday(ev.EventType))
+                start = MondayOnOrAfter(start);
+
+            end = EnsureUtcDate(start.AddDays(durationDays));
+            attempts++;
+        }
+
+        if (start == ev.StartDate && end == (ev.EndDate ?? ev.StartDate))
+            return ev;
+
+        return ev with
+        {
+            StartDate = start,
+            EndDate = durationDays == 0 ? null : end
+        };
+    }
+
+    private static List<GeneratedCalendarEventDto> ApplyRegularSemesterSequenceRules(
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var updated = events.ToList();
+
+        foreach (var semester in new[] { SemesterType.Fall, SemesterType.Spring })
+        {
+            var classesStart = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "classes_start", StringComparison.OrdinalIgnoreCase));
+            var midterm = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_exam", StringComparison.OrdinalIgnoreCase));
+            var finalExam = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "final_exam", StringComparison.OrdinalIgnoreCase));
+            if (classesStart == null || midterm == null || finalExam == null)
+                continue;
+
+            var heavyWeeks = GetHeavyReligiousHolidayWeeks(classesStart.StartDate, finalExam.StartDate, holidays);
+            var countedWeeksBeforeFinal = CountTeachingWeeksBetween(midterm.EndDate ?? midterm.StartDate, finalExam.StartDate, heavyWeeks);
+            if (countedWeeksBeforeFinal < FinalPreparationTeachingWeeks)
+            {
+                midterm = midterm with
+                {
+                    StartDate = midterm.StartDate.AddDays(-7),
+                    EndDate = midterm.EndDate?.AddDays(-7)
+                };
+                updated = ReplaceEvent(updated, midterm);
+            }
+
+            var midtermEnd = midterm.EndDate ?? midterm.StartDate;
+
+            var withdrawal = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "withdrawal_deadline", StringComparison.OrdinalIgnoreCase));
+            if (withdrawal != null && withdrawal.StartDate.Date < midterm.StartDate.Date)
+                updated = ReplaceEvent(updated, withdrawal with { StartDate = midterm.StartDate, EndDate = null });
+
+            var freeze = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "freeze_deadline", StringComparison.OrdinalIgnoreCase));
+            if (freeze != null && freeze.StartDate.Date < midterm.StartDate.Date)
+                updated = ReplaceEvent(updated, freeze with { StartDate = midterm.StartDate, EndDate = null });
+
+            var excuseApplication = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_application", StringComparison.OrdinalIgnoreCase));
+            if (excuseApplication != null && excuseApplication.StartDate.Date <= midtermEnd.Date)
+                updated = ReplaceEvent(updated, excuseApplication with { StartDate = midtermEnd.AddDays(1), EndDate = null });
+
+            var excuseExam = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_exam", StringComparison.OrdinalIgnoreCase));
+            if (excuseExam != null)
+            {
+                var desiredStart = midtermEnd.AddDays(3);
+                var durationDays = ((excuseExam.EndDate ?? excuseExam.StartDate).Date - excuseExam.StartDate.Date).Days;
+                if (excuseExam.StartDate.Date <= desiredStart.Date)
+                    updated = ReplaceEvent(updated, excuseExam with { StartDate = desiredStart, EndDate = desiredStart.AddDays(durationDays) });
+            }
+
+            var midtermPublication = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_publication", StringComparison.OrdinalIgnoreCase));
+            var refreshedExcuseExam = updated.SingleOrDefault(e =>
+                e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_exam", StringComparison.OrdinalIgnoreCase));
+            if (midtermPublication != null && refreshedExcuseExam != null)
+            {
+                var excuseEnd = refreshedExcuseExam.EndDate ?? refreshedExcuseExam.StartDate;
+                if (midtermPublication.StartDate.Date <= excuseEnd.Date)
+                    updated = ReplaceEvent(updated, midtermPublication with { StartDate = excuseEnd.AddDays(1), EndDate = null });
+            }
+        }
+
+        return updated;
+    }
+
+    private static List<GeneratedCalendarEventDto> ReplaceEvent(List<GeneratedCalendarEventDto> events, GeneratedCalendarEventDto replacement) =>
+        events.Select(e => e.DraftEventId == replacement.DraftEventId ? replacement : e).ToList();
+
+    private static List<DateTime> GetHeavyReligiousHolidayWeeks(DateTime semesterStart, DateTime semesterEnd, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var weeks = new List<DateTime>();
+        for (var weekStart = MondayOnOrBefore(semesterStart); weekStart <= semesterEnd.Date; weekStart = weekStart.AddDays(7))
+        {
+            var weekEnd = weekStart.AddDays(6);
+            var blockedDays = new HashSet<DateTime>();
+            foreach (var holiday in holidays.Where(h => h.BlocksAcademicEvents && h.Type == HolidayType.HijriCalculated && DateRangesOverlap(weekStart, weekEnd, h.StartDate, h.EndDate)))
+            {
+                for (var day = holiday.StartDate.Date; day <= holiday.EndDate.Date; day = day.AddDays(1))
+                {
+                    if (day >= weekStart.Date && day <= weekEnd.Date)
+                        blockedDays.Add(day);
+                }
+            }
+
+            if (blockedDays.Count > 3)
+                weeks.Add(EnsureUtcDate(weekStart));
+        }
+
+        return weeks;
+    }
+
+    private static DateTime GetTeachingWeekStart(DateTime classesStart, int teachingWeekNumber, IReadOnlyList<DateTime> heavyWeeks)
+    {
+        var current = MondayOnOrAfter(classesStart);
+        var countedWeeks = 1;
+        while (countedWeeks < teachingWeekNumber)
+        {
+            current = current.AddDays(7);
+            if (heavyWeeks.Any(week => week.Date == current.Date))
+                continue;
+
+            countedWeeks++;
+        }
+
+        return EnsureUtcDate(current);
+    }
+
+    private static DateTime GetTeachingWeekStartAfter(DateTime date, int teachingWeeksAfter, IReadOnlyList<DateTime> heavyWeeks)
+    {
+        var current = MondayOnOrAfter(date.AddDays(1));
+        var countedWeeks = 0;
+        while (countedWeeks < teachingWeeksAfter)
+        {
+            if (!heavyWeeks.Any(week => week.Date == current.Date))
+                countedWeeks++;
+
+            if (countedWeeks == teachingWeeksAfter)
+                break;
+
+            current = current.AddDays(7);
+        }
+
+        return EnsureUtcDate(current);
+    }
+
+    private static DateTime NextBusinessDayAfter(DateTime fromExclusive, IReadOnlyList<ResolvedHolidayDto> holidays) =>
+        NthBusinessDayAfter(fromExclusive, 1, holidays);
+
+    private static DateTime ExtendExamForOfficialHolidays(DateTime start, DateTime initialEnd, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var end = initialEnd.Date;
+        var day = start.Date;
+        while (day <= end)
+        {
+            if (IsOfficialHoliday(day, holidays))
+                end = end.AddDays(1);
+
+            day = day.AddDays(1);
+        }
+
+        return EnsureUtcDate(end);
+    }
+
+    private static DateTime NthBusinessDayAfter(DateTime fromExclusive, int businessDayCount, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var count = 0;
+        var day = fromExclusive.Date;
+        while (count < businessDayCount)
+        {
+            day = day.AddDays(1);
+            if (!IsBusinessDay(day, holidays))
+                continue;
+
+            count++;
+        }
+
+        return EnsureUtcDate(day);
+    }
+
+    private static DateTime PreviousBusinessDayBefore(DateTime date, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var day = date.Date.AddDays(-1);
+        while (!IsBusinessDay(day, holidays))
+            day = day.AddDays(-1);
+
+        return EnsureUtcDate(day);
+    }
+
+    private static DateTime AlignMakeupStart(DateTime candidate, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var current = candidate.Date;
+        while (IsOfficialHoliday(current, holidays))
+            current = current.AddDays(1);
+
+        if (current.DayOfWeek == DayOfWeek.Friday)
+            current = current.AddDays(3);
+        else if (current.DayOfWeek == DayOfWeek.Saturday)
+            current = current.AddDays(2);
+        else if (current.DayOfWeek == DayOfWeek.Sunday)
+            current = current.AddDays(1);
+
+        while (IsOfficialHoliday(current, holidays))
+            current = current.AddDays(1);
+
+        if (current.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            current = MondayOnOrAfter(current);
+
+        return EnsureUtcDate(current);
+    }
+
+    private static bool IsBusinessDay(DateTime day, IReadOnlyList<ResolvedHolidayDto> holidays) =>
+        day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday
+        && !IsOfficialHoliday(day, holidays);
+
+    private static bool IsOfficialHoliday(DateTime day, IReadOnlyList<ResolvedHolidayDto> holidays) =>
+        holidays.Any(h => h.IsOfficialHoliday && h.BlocksAcademicEvents && day >= h.StartDate.Date && day <= h.EndDate.Date);
+
+    private static DateTime MaxDate(DateTime left, DateTime right) =>
+        left >= right ? left : right;
+
     private static int InclusiveDays(DateTime start, DateTime end) =>
         Math.Max(0, (end.Date - start.Date).Days + 1);
-
-    private static DateTime MondayOnOrAfter(DateTime date)
-    {
-        var current = date.Date;
-        while (current.DayOfWeek != DayOfWeek.Monday) current = current.AddDays(1);
-        return DateTime.SpecifyKind(current, DateTimeKind.Utc);
-    }
 
     private static DateTime EnsureUtcDate(DateTime date) => DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
     private static DateTime Utc(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
@@ -524,3 +939,5 @@ internal static class GeneratedCalendarEventDtoOrdering
         _ => ev.IsHoliday ? 950 : 100
     };
 }
+
+

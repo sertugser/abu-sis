@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
+using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -40,7 +41,7 @@ public class RecommendationServiceTests
         var gpaServiceMock = new Mock<IGpaCalculationService>();
         gpaServiceMock.Setup(service => service.CalculateCgpaAsync(StudentId)).ReturnsAsync(2.40m);
 
-        var eligibilityService = new StudentEligibilityService(context, gpaServiceMock.Object);
+        var eligibilityService = new StudentEligibilityService(context, gpaServiceMock.Object, new FakeClock());
         var recommendationService = new RecommendationService(
             context,
             eligibilityService,
@@ -125,37 +126,46 @@ public class RecommendationServiceTests
             EnrollmentDate = DateTime.UtcNow.AddYears(-1),
             IsActive = true
         });
+        var activeTermEnd = DateTime.UtcNow.AddMonths(4);
         context.AcademicTerms.Add(new AcademicTerm
         {
             Id = ActiveTermId,
             Name = "2025-2026 Spring",
             Year = 2026,
-            Semester = SemesterType.Spring,
-            RegistrationStart = DateTime.UtcNow.AddDays(-5),
-            RegistrationEnd = DateTime.UtcNow.AddDays(5),
-            AddDropStart = DateTime.UtcNow.AddDays(6),
-            AddDropEnd = DateTime.UtcNow.AddDays(12),
-            WithdrawalDeadline = DateTime.UtcNow.AddDays(40),
+            TermType = TermType.Spring,
             TermStart = DateTime.UtcNow,
-            TermEnd = DateTime.UtcNow.AddMonths(4),
-            IsActive = true,
-            Status = TermStatus.RegistrationOpen
+            TermEnd = activeTermEnd,
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddDays(-5),
+                RegistrationEnd = DateTime.UtcNow.AddDays(5),
+                AddDropStart = DateTime.UtcNow.AddDays(6),
+                AddDropEnd = DateTime.UtcNow.AddDays(12),
+                WithdrawalDeadline = DateTime.UtcNow.AddDays(40),
+                GradeEntryStart = activeTermEnd.AddDays(-14),
+                GradeEntryEnd = activeTermEnd.AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
         context.AcademicTerms.Add(new AcademicTerm
         {
             Id = PastTermId,
             Name = "2025-2026 Fall",
             Year = 2025,
-            Semester = SemesterType.Fall,
-            RegistrationStart = DateTime.UtcNow.AddMonths(-5),
-            RegistrationEnd = DateTime.UtcNow.AddMonths(-5).AddDays(7),
-            AddDropStart = DateTime.UtcNow.AddMonths(-5).AddDays(8),
-            AddDropEnd = DateTime.UtcNow.AddMonths(-5).AddDays(14),
-            WithdrawalDeadline = DateTime.UtcNow.AddMonths(-4),
+            TermType = TermType.Fall,
             TermStart = DateTime.UtcNow.AddMonths(-5),
             TermEnd = DateTime.UtcNow.AddMonths(-1),
-            IsActive = false,
-            Status = TermStatus.Closed
+            AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+            {
+                RegistrationStart = DateTime.UtcNow.AddMonths(-5),
+                RegistrationEnd = DateTime.UtcNow.AddMonths(-5).AddDays(7),
+                AddDropStart = DateTime.UtcNow.AddMonths(-5).AddDays(8),
+                AddDropEnd = DateTime.UtcNow.AddMonths(-5).AddDays(14),
+                WithdrawalDeadline = DateTime.UtcNow.AddMonths(-4),
+                GradeEntryStart = DateTime.UtcNow.AddMonths(-1).AddDays(-14),
+                GradeEntryEnd = DateTime.UtcNow.AddMonths(-1).AddDays(14),
+                CreatedAt = DateTime.UtcNow,
+            }
         });
         context.SaveChanges();
     }
@@ -209,7 +219,7 @@ public class RecommendationServiceTests
             SectionNumber = 1,
             Capacity = 40,
             EnrolledCount = 0,
-            IsActive = true
+            Status = CourseSectionStatus.Active
         };
         context.CourseSections.Add(section);
         context.SaveChanges();

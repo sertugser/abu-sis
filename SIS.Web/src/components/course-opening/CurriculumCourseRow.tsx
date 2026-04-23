@@ -48,12 +48,31 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOp
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs font-bold text-blue-700 shrink-0">{course.courseCode}</span>
           <span className="text-sm text-gray-800 truncate">{course.courseName}</span>
-          <Badge
-            variant={course.isCompulsory ? 'default' : 'outline'}
-            className="text-[11px] px-1.5 py-0 shrink-0 rounded"
-          >
-            {course.isCompulsory ? 'Zorunlu' : 'Seçmeli'}
-          </Badge>
+          {course.source === 'Pool' && course.electiveGroupCode ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="text-[11px] px-1.5 py-0 shrink-0 rounded border-violet-200 text-violet-700 bg-violet-50"
+                  >
+                    {course.electiveGroupCode}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  <p className="font-medium">{course.electiveGroupName ?? 'Seçmeli Havuz'}</p>
+                  <p className="text-gray-500">Havuz üyesi ders</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <Badge
+              variant={course.isCompulsory ? 'default' : 'outline'}
+              className="text-[11px] px-1.5 py-0 shrink-0 rounded"
+            >
+              {course.isCompulsory ? 'Zorunlu' : 'Seçmeli'}
+            </Badge>
+          )}
         </div>
 
         {/* Line 2: Metadata */}
@@ -110,8 +129,39 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOp
           </span>
         ) : course.canOpen ? (
           <Badge variant="outline" className="text-xs">Açılabilir</Badge>
+        ) : course.blockReason === 'TermNotInPlanning' ? (
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">Kilitli</Badge>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="text-xs max-w-[240px]">
+                <p>Bu dönem planlama fazında değil. Ders açmak için dönemi <b>Planning</b> durumuna alın veya yeni bir planlama dönemine geçin.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : course.blockReason === 'CourseUnassigned' ? (
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-xs border-red-300 text-red-700 bg-red-50">Sahipsiz</Badge>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="text-xs max-w-[240px]">
+                <p>Bu dersin sahip bölümü atanmamış. Ders kataloğundan bir bölüme atayın.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : (
-          <Badge variant="secondary" className="text-xs text-gray-400">Dış ders</Badge>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="text-xs text-gray-400">Dış ders</Badge>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="text-xs max-w-[240px]">
+                <p>Bu ders başka bir bölüme/koordinatörlüğe ait. Açma yetkisi sahip birimdedir.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
         <Button
           size="icon"

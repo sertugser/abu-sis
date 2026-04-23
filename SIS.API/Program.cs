@@ -6,11 +6,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Admin.Services;
+using SIS.Application.AcademicCalendar.Services;
 using SIS.Application.Common.Services;
+using SIS.Application.Common.Time;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.AdvisorConstraints.Services;
-using SIS.Application.CourseIntention.Services;
+using SIS.Application.UserPreferences.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Recommendation.Services;
@@ -28,6 +30,7 @@ using SIS.Application.Announcement.Services;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.Time;
 using SIS.Infrastructure.Services.CourseEvaluation;
 using SIS.Infrastructure.Services.Announcement;
 using SIS.Infrastructure.Services.CalendarGenerator;
@@ -128,10 +131,11 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
+builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
-builder.Services.AddHostedService<TermTransitionBackgroundService>(); // Otomatik dönem geçişleri
-builder.Services.AddHostedService<SurveyAutoOpenService>();
+builder.Services.AddHostedService<RegistrationCleanupJob>();
+builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();
 builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
@@ -150,7 +154,6 @@ builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService
 builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
 builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
-builder.Services.AddScoped<ICourseIntentionService, CourseIntentionService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
@@ -162,18 +165,23 @@ builder.Services.AddScoped<IAdminUserService, AdminUserService>();
 builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
 builder.Services.AddScoped<IAdminTermService, AdminTermService>();
-builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
+builder.Services.AddScoped<SIS.Application.AcademicCalendar.Services.IAcademicCalendarService, AcademicCalendarService>();
 builder.Services.AddScoped<ICalendarTemplateService, CalendarTemplateService>();
 builder.Services.AddScoped<IHolidayCalculatorService, HolidayCalculatorService>();
 builder.Services.AddScoped<IAcademicCalendarRuleService, AcademicCalendarRuleService>();
 builder.Services.AddScoped<ICalendarGeneratorService, CalendarGeneratorService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
+builder.Services.AddScoped<IOsymRegistrationCalendarService, OsymRegistrationCalendarService>();
+builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 
 // Course Evaluation + Internal Announcements
 builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();
 builder.Services.AddScoped<IInternalAnnouncementService, InternalAnnouncementService>();
+
+// Time Provider
+builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 
 var app = builder.Build();
 

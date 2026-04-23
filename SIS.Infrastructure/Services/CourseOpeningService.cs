@@ -24,11 +24,18 @@ public class CourseOpeningService(
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
 
+        // Madde 13: Ortak dersleri de göster — bu bölümün sahip olduğu dersler veya
+        // bu bölümün öğrencilerinin kayıtlanabileceği (CourseAccessPolicy) dersler
         var sections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course).ThenInclude(c => c.Department)
             .Include(cs => cs.Instructor)
-            .Where(cs => cs.TermId == termId && cs.Course.DepartmentId == departmentId)
+            .Where(cs => cs.TermId == termId
+                && (cs.Course.DepartmentId == departmentId
+                    || _context.CourseAccessPolicies.Any(cap =>
+                        cap.CourseId == cs.CourseId
+                        && cap.TermId == termId
+                        && cap.DepartmentId == departmentId)))
             .OrderBy(cs => cs.Course.Code).ThenBy(cs => cs.Id)
             .ToListAsync(ct);
 
@@ -122,76 +129,174 @@ public class CourseOpeningService(
     public async Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, CancellationToken ct = default)
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct);
-        var semesterParity = term?.Semester == SemesterType.Spring ? 0 : 1; // Spring→even(2,4,6,8), Fall→odd(1,3,5,7)
+        var semesterParity = term?.TermType == TermType.Spring ? 0 : 1; // Spring→even(2,4,6,8), Fall→odd(1,3,5,7)
 
+        // 1) Müfredatta tek tek atanmış dersler (zorunlu + tekil seçmeli)
         var curriculumCourses = await _context.CurriculumCourses
             .AsNoTracking()
             .Include(cc => cc.Course)
             .Where(cc => cc.Curriculum.IsActive && cc.Curriculum.Program.DepartmentId == departmentId)
-            .Where(cc => showAll || term == null || term.Semester == SemesterType.Summer || cc.SuggestedSemester % 2 == semesterParity)
+            .Where(cc => showAll || term == null || term.TermType == TermType.Summer || cc.SuggestedSemester % 2 == semesterParity)
             .OrderBy(cc => cc.SuggestedSemester).ThenBy(cc => cc.Course.Code)
             .ToListAsync(ct);
 
-        var courseIds = curriculumCourses.Select(cc => cc.CourseId).Distinct().ToList();
+        // 2) Müfredatın seçmeli havuzlarındaki dersler (CurriculumElectivePool → ElectiveGroup → ElectiveGroupCourse)
+        // Havuzlar için dönem filtresi: aralık >=2 ise her zaman (her iki parite de vardır),
+        // aralık ==1 ise sadece parite eşleşiyorsa dahil edilir.
+        var pools = await _context.CurriculumElectivePools
+            .AsNoTracking()
+            .Include(p => p.ElectiveGroup)
+                .ThenInclude(g => g.Courses)
+                    .ThenInclude(egc => egc.Course)
+            .Where(p => p.Curriculum.IsActive && p.Curriculum.Program.DepartmentId == departmentId)
+            .Where(p => showAll
+                     || term == null
+                     || term.TermType == TermType.Summer
+                     || (p.SuggestedSemesterEnd - p.SuggestedSemesterStart) >= 1
+                     || p.SuggestedSemesterStart % 2 == semesterParity)
+            .ToListAsync(ct);
+
+        // Her havuz için üye dersleri düz listeye aç
+        var poolCourseEntries = pools
+            .SelectMany(p => p.ElectiveGroup.Courses.Select(egc => new
+            {
+                PoolId = p.Id,
+                PoolStart = p.SuggestedSemesterStart,
+                PoolEnd = p.SuggestedSemesterEnd,
+                Group = p.ElectiveGroup,
+                Course = egc.Course,
+            }))
+            .ToList();
+
+        // 3) Toplam ilgili ders kümesi (ek veri sorguları için)
+        var allCourseIds = curriculumCourses.Select(cc => cc.CourseId)
+            .Concat(poolCourseEntries.Select(pce => pce.Course.Id))
+            .Distinct()
+            .ToList();
+
         var existingSectionCounts = await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == termId && cs.IsActive && courseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && allCourseIds.Contains(cs.CourseId))
             .GroupBy(cs => cs.CourseId)
             .Select(g => new { CourseId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
 
         var forecastSummary = await _forecastService.GetDepartmentSummaryAsync(departmentId);
         var forecastMap = (forecastSummary?.CourseSummaries ?? [])
-            .Where(summary => courseIds.Contains(summary.CourseId))
+            .Where(summary => allCourseIds.Contains(summary.CourseId))
             .ToDictionary(summary => summary.CourseId);
 
-        var isTermInPlanning = term?.Status == TermStatus.Planning;
+        var isTermInPlanning = term != null && !term.IsCancelled;
 
-        // Dersin sahibi olmayan bölümler açamaz — dersin DepartmentId'sini kontrol et
-        var courseDeptMap = curriculumCourses
-            .GroupBy(cc => cc.CourseId)
-            .ToDictionary(g => g.Key, g => g.First().Course.DepartmentId);
+        // 4) DTO üretimi — direkt atanmış dersler önce, sonra direkt'te olmayan havuz üyeleri
+        var resultMap = new Dictionary<int, CurriculumCourseForOpeningDto>();
 
-        return curriculumCourses
-            .GroupBy(cc => cc.CourseId)
-            .Select(g =>
+        foreach (var g in curriculumCourses.GroupBy(cc => cc.CourseId))
+        {
+            var first = g.First();
+            existingSectionCounts.TryGetValue(first.CourseId, out var sectionCount);
+            forecastMap.TryGetValue(first.CourseId, out var forecast);
+            // Madde 12: "Sahipsiz ders herkes açabilir" deliği kapatıldı — sahiplik zorunlu
+            var hasOwner = first.Course.DepartmentId.HasValue;
+            var isOwner = hasOwner && first.Course.DepartmentId == departmentId;
+            var blockReason = ResolveBlockReason(isTermInPlanning, hasOwner, isOwner);
+
+            resultMap[first.CourseId] = new CurriculumCourseForOpeningDto
             {
-                var first = g.First();
-                existingSectionCounts.TryGetValue(first.CourseId, out var sectionCount);
-                forecastMap.TryGetValue(first.CourseId, out var forecast);
-                var isOwner = !first.Course.DepartmentId.HasValue || first.Course.DepartmentId == departmentId;
+                CourseId = first.CourseId,
+                CourseCode = first.Course.Code,
+                CourseName = first.Course.Name,
+                TheoryHours = first.Course.TheoryHours,
+                LabHours = first.Course.LabHours,
+                Ects = first.Course.Ects,
+                SuggestedSemester = first.SuggestedSemester,
+                IsCompulsory = first.IsCompulsory,
+                AlreadyOpened = sectionCount > 0,
+                ExistingSectionCount = sectionCount,
+                PredictedDemand = forecast?.TotalPredictedDemand ?? 0,
+                RetakeCount = forecast?.DemandBreakdown.TotalRetake ?? 0,
+                RecommendedSectionCount = forecast?.RecommendedSectionCount ?? 0,
+                RecommendedCapacity = forecast?.SectionDistribution.EffectiveCapacityPerSection ?? 0,
+                CrossDepartmentDemand = (forecast?.CrossDepartmentDemand ?? [])
+                    .Select(item => new CrossDepartmentDemandDto
+                    {
+                        DepartmentId = item.DepartmentId,
+                        DepartmentName = item.DepartmentName,
+                        ProgramName = item.ProgramName,
+                        EstimatedStudentCount = item.EstimatedStudentCount,
+                    })
+                    .ToList(),
+                PreviousTermEnrollment = forecast?.ComparableTermEnrollment,
+                CanOpen = blockReason is null,
+                BlockReason = blockReason,
+                Source = first.IsCompulsory ? "Compulsory" : "Elective",
+            };
+        }
 
-                return new CurriculumCourseForOpeningDto
-                {
-                    CourseId = first.CourseId,
-                    CourseCode = first.Course.Code,
-                    CourseName = first.Course.Name,
-                    TheoryHours = first.Course.TheoryHours,
-                    LabHours = first.Course.LabHours,
-                    Ects = first.Course.Ects,
-                    SuggestedSemester = first.SuggestedSemester,
-                    IsCompulsory = first.IsCompulsory,
-                    AlreadyOpened = sectionCount > 0,
-                    ExistingSectionCount = sectionCount,
-                    PredictedDemand = forecast?.TotalPredictedDemand ?? 0,
-                    RetakeCount = forecast?.DemandBreakdown.TotalRetake ?? 0,
-                    RecommendedSectionCount = forecast?.RecommendedSectionCount ?? 0,
-                    RecommendedCapacity = forecast?.SectionDistribution.EffectiveCapacityPerSection ?? 0,
-                    CrossDepartmentDemand = (forecast?.CrossDepartmentDemand ?? [])
-                        .Select(item => new CrossDepartmentDemandDto
-                        {
-                            DepartmentId = item.DepartmentId,
-                            DepartmentName = item.DepartmentName,
-                            ProgramName = item.ProgramName,
-                            EstimatedStudentCount = item.EstimatedStudentCount,
-                        })
-                        .ToList(),
-                    PreviousTermEnrollment = forecast?.ComparableTermEnrollment,
-                    CanOpen = isTermInPlanning && isOwner,
-                };
-            })
+        // Havuz üyelerini ekle — direkt atanmış derslerle çakışanları atla
+        foreach (var pce in poolCourseEntries)
+        {
+            if (resultMap.ContainsKey(pce.Course.Id))
+                continue; // Direkt atama öncelikli
+
+            existingSectionCounts.TryGetValue(pce.Course.Id, out var sectionCount);
+            forecastMap.TryGetValue(pce.Course.Id, out var forecast);
+            // Madde 12: Havuzdaki ders başka bir birime ait olabilir; açma yetkisi sahibinindir
+            var hasOwner = pce.Course.DepartmentId.HasValue;
+            var isOwner = hasOwner && pce.Course.DepartmentId == departmentId;
+            var blockReason = ResolveBlockReason(isTermInPlanning, hasOwner, isOwner);
+
+            resultMap[pce.Course.Id] = new CurriculumCourseForOpeningDto
+            {
+                CourseId = pce.Course.Id,
+                CourseCode = pce.Course.Code,
+                CourseName = pce.Course.Name,
+                TheoryHours = pce.Course.TheoryHours,
+                LabHours = pce.Course.LabHours,
+                Ects = pce.Course.Ects,
+                SuggestedSemester = pce.PoolStart,
+                IsCompulsory = false,
+                AlreadyOpened = sectionCount > 0,
+                ExistingSectionCount = sectionCount,
+                PredictedDemand = forecast?.TotalPredictedDemand ?? 0,
+                RetakeCount = forecast?.DemandBreakdown.TotalRetake ?? 0,
+                RecommendedSectionCount = forecast?.RecommendedSectionCount ?? 0,
+                RecommendedCapacity = forecast?.SectionDistribution.EffectiveCapacityPerSection ?? 0,
+                CrossDepartmentDemand = (forecast?.CrossDepartmentDemand ?? [])
+                    .Select(item => new CrossDepartmentDemandDto
+                    {
+                        DepartmentId = item.DepartmentId,
+                        DepartmentName = item.DepartmentName,
+                        ProgramName = item.ProgramName,
+                        EstimatedStudentCount = item.EstimatedStudentCount,
+                    })
+                    .ToList(),
+                PreviousTermEnrollment = forecast?.ComparableTermEnrollment,
+                CanOpen = blockReason is null,
+                BlockReason = blockReason,
+                ElectivePoolId = pce.PoolId,
+                ElectiveGroupCode = pce.Group.Code,
+                ElectiveGroupName = pce.Group.Name,
+                ElectiveSubtype = pce.Group.ElectiveSubtype.ToString(),
+                Source = "Pool",
+            };
+        }
+
+        return resultMap.Values
             .OrderBy(c => c.SuggestedSemester).ThenBy(c => c.CourseCode)
             .ToList();
+    }
+
+    /// <summary>
+    /// Ders açma engelinin sebebini belirler. Null dönerse ders açılabilir.
+    /// Öncelik sırası: TermNotInPreparing > CourseUnassigned > NotOwner.
+    /// </summary>
+    private static string? ResolveBlockReason(bool isTermInPlanning, bool hasOwner, bool isOwner)
+    {
+        if (!isTermInPlanning) return "TermNotInPlanning";
+        if (!hasOwner) return "CourseUnassigned";
+        if (!isOwner) return "NotOwner";
+        return null;
     }
 
     public async Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, int? termId = null, CancellationToken ct = default)
@@ -230,7 +335,7 @@ public class CourseOpeningService(
             var instructorIds = instructors.Select(i => i.Id).ToList();
             workloadMap = await _context.CourseSections
                 .AsNoTracking()
-                .Where(cs => instructorIds.Contains(cs.InstructorId!.Value) && cs.TermId == termId.Value && cs.IsActive)
+                .Where(cs => instructorIds.Contains(cs.InstructorId!.Value) && cs.TermId == termId.Value && cs.Status == CourseSectionStatus.Active)
                 .GroupBy(cs => cs.InstructorId!.Value)
                 .Select(g => new { InstructorId = g.Key, TotalHours = g.Sum(cs => cs.Course.TheoryHours + cs.Course.LabHours) })
                 .ToDictionaryAsync(x => x.InstructorId, x => x.TotalHours, ct);
@@ -261,14 +366,16 @@ public class CourseOpeningService(
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
-        if (term.Status != TermStatus.Planning)
-            throw new InvalidOperationException(
-                $"Ders açmak için dönem 'Planlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Ders açmak için dönem iptal edilmemiş olmalıdır.");
 
         var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.CourseId, ct)
             ?? throw new InvalidOperationException($"Ders bulunamadı (ID: {request.CourseId}).");
 
-        if (course.DepartmentId.HasValue && course.DepartmentId != departmentId)
+        // Madde 12: Sahiplik zorunlu — sahipsiz ders açılamaz
+        if (!course.DepartmentId.HasValue)
+            throw new InvalidOperationException($"Ders '{course.Code}' bir bölüme atanmamış; açılamaz. Önce bir birime atayın.");
+        if (course.DepartmentId != departmentId)
             throw new InvalidOperationException($"Ders '{course.Code}' bu bölüme ait değil.");
 
         // Kapasite validasyonu
@@ -292,6 +399,30 @@ public class CourseOpeningService(
         if (request.InstructorId.HasValue)
             await ValidateInstructorAssignmentAsync(request.InstructorId.Value, course.DepartmentId, ct);
 
+        // Madde 14: Cross-list grup hazırlığı (IncludeCrossLists=true ise)
+        int? crossListGroupId = null;
+        var linkedToOpen = new List<(int CourseId, int? DeptId)>();
+        if (request.IncludeCrossLists)
+        {
+            var linked = await _context.CourseCrossLists
+                .AsNoTracking()
+                .Include(x => x.LinkedCourse)
+                .Where(x => x.CourseId == request.CourseId)
+                .Select(x => new { x.LinkedCourseId, DeptId = x.LinkedCourse.DepartmentId })
+                .ToListAsync(ct);
+            if (linked.Any())
+            {
+                var maxGroupId = await _context.CourseSections
+                    .Where(cs => cs.CrossListGroupId != null)
+                    .Select(cs => cs.CrossListGroupId!.Value)
+                    .DefaultIfEmpty(0)
+                    .MaxAsync(ct);
+                crossListGroupId = maxGroupId + 1;
+                foreach (var l in linked)
+                    linkedToOpen.Add((l.LinkedCourseId, l.DeptId));
+            }
+        }
+
         var created = new List<CourseSection>();
         for (var i = 0; i < request.SectionCount; i++)
         {
@@ -305,12 +436,43 @@ public class CourseOpeningService(
                 ExternalQuota = request.ExternalQuota,
                 InstructorId = request.InstructorId,
                 EnrolledCount = 0,
-                IsActive = true,
+                Status = CourseSectionStatus.Active,
                 IsFinalized = false,
+                CrossListGroupId = crossListGroupId,
             };
             _context.CourseSections.Add(section);
             created.Add(section);
         }
+
+        // Cross-list'li dersler için paralel section'lar
+        var linkedCreated = new List<CourseSection>();
+        foreach (var (linkedCourseId, _) in linkedToOpen)
+        {
+            var linkedMax = await _context.CourseSections
+                .Where(cs => cs.CourseId == linkedCourseId && cs.TermId == termId)
+                .Select(cs => (int?)cs.SectionNumber)
+                .MaxAsync(ct) ?? 0;
+            for (var i = 0; i < request.SectionCount; i++)
+            {
+                var linkedSection = new CourseSection
+                {
+                    CourseId = linkedCourseId,
+                    TermId = termId,
+                    SectionNumber = linkedMax + i + 1,
+                    Capacity = request.CapacityPerSection,
+                    InternalQuota = request.InternalQuota,
+                    ExternalQuota = request.ExternalQuota,
+                    InstructorId = request.InstructorId,
+                    EnrolledCount = 0,
+                    Status = CourseSectionStatus.Active,
+                    IsFinalized = false,
+                    CrossListGroupId = crossListGroupId,
+                };
+                _context.CourseSections.Add(linkedSection);
+                linkedCreated.Add(linkedSection);
+            }
+        }
+
         await _context.SaveChangesAsync(ct);
 
         var existingPolicies = await _context.CourseAccessPolicies
@@ -381,31 +543,70 @@ public class CourseOpeningService(
             .Select(cc => (int?)cc.SuggestedSemester)
             .MinAsync(ct) ?? 0;
 
-        return created.Select(s =>
+        // Ana section DTO'ları
+        var mainDtos = created.Select(s => new OpenedCourseSectionDto
         {
-            return new OpenedCourseSectionDto
-            {
-                SectionId = s.Id,
-                SectionNumber = s.SectionNumber,
-                CourseId = s.CourseId,
-                CourseCode = course.Code,
-                CourseName = course.Name,
-                TheoryHours = course.TheoryHours,
-                LabHours = course.LabHours,
-                Credits = course.TheoryHours + course.LabHours,
-                Ects = course.Ects,
-                SuggestedSemester = sugSem,
-                Capacity = s.Capacity,
-                InternalQuota = s.InternalQuota,
-                ExternalQuota = s.ExternalQuota,
-                EnrolledCount = 0,
-                RegisteredCount = 0,
-                DraftOrPendingCount = 0,
-                InstructorId = s.InstructorId,
-                InstructorName = instructorName,
-                IsActive = true,
-            };
+            SectionId = s.Id,
+            SectionNumber = s.SectionNumber,
+            CourseId = s.CourseId,
+            CourseCode = course.Code,
+            CourseName = course.Name,
+            TheoryHours = course.TheoryHours,
+            LabHours = course.LabHours,
+            Credits = course.TheoryHours + course.LabHours,
+            Ects = course.Ects,
+            SuggestedSemester = sugSem,
+            Capacity = s.Capacity,
+            InternalQuota = s.InternalQuota,
+            ExternalQuota = s.ExternalQuota,
+            EnrolledCount = 0,
+            RegisteredCount = 0,
+            DraftOrPendingCount = 0,
+            InstructorId = s.InstructorId,
+            InstructorName = instructorName,
+            IsActive = true,
+            CrossListGroupId = s.CrossListGroupId,
         }).ToList();
+
+        // Madde 14: Cross-list linked section DTO'ları
+        if (linkedCreated.Count > 0)
+        {
+            var linkedCourseIds = linkedCreated.Select(s => s.CourseId).Distinct().ToList();
+            var linkedCourseMap = await _context.Courses
+                .AsNoTracking()
+                .Where(c => linkedCourseIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, ct);
+
+            foreach (var s in linkedCreated)
+            {
+                if (!linkedCourseMap.TryGetValue(s.CourseId, out var lc)) continue;
+                mainDtos.Add(new OpenedCourseSectionDto
+                {
+                    SectionId = s.Id,
+                    SectionNumber = s.SectionNumber,
+                    CourseId = s.CourseId,
+                    CourseCode = lc.Code,
+                    CourseName = lc.Name,
+                    TheoryHours = lc.TheoryHours,
+                    LabHours = lc.LabHours,
+                    Credits = lc.TheoryHours + lc.LabHours,
+                    Ects = lc.Ects,
+                    SuggestedSemester = 0,
+                    Capacity = s.Capacity,
+                    InternalQuota = s.InternalQuota,
+                    ExternalQuota = s.ExternalQuota,
+                    EnrolledCount = 0,
+                    RegisteredCount = 0,
+                    DraftOrPendingCount = 0,
+                    InstructorId = s.InstructorId,
+                    InstructorName = instructorName,
+                    IsActive = true,
+                    CrossListGroupId = s.CrossListGroupId,
+                });
+            }
+        }
+
+        return mainDtos;
     }
 
     public async Task<BulkOpenCoursesResultDto> BulkOpenCoursesAsync(int departmentId, int termId, BulkOpenCoursesRequest request, CancellationToken ct = default)
@@ -459,9 +660,8 @@ public class CourseOpeningService(
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
-            throw new InvalidOperationException(
-                $"Şube güncellemek için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term != null && term.IsCancelled)
+            throw new InvalidOperationException("Şube güncellemek için dönem iptal edilmemiş olmalıdır.");
 
         if (!section.IsActive)
             throw new InvalidOperationException("Pasif şube güncellenemez.");
@@ -545,9 +745,8 @@ public class CourseOpeningService(
             ?? throw new InvalidOperationException("Şube bulunamadı.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
-            throw new InvalidOperationException(
-                $"Şube kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term != null && term.IsCancelled)
+            throw new InvalidOperationException("Şube kapatmak için dönem iptal edilmemiş olmalıdır.");
 
         // Draft/PendingAdvisorApproval kayıtlarını temizle
         var pendingRegistrations = await _context.CourseRegistrations
@@ -572,10 +771,10 @@ public class CourseOpeningService(
             .AnyAsync(cs =>
                 cs.CourseId == section.CourseId
                 && cs.TermId == section.TermId
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Id != section.Id, ct);
 
-        section.IsActive = false;
+        section.Status = CourseSectionStatus.Cancelled;
         section.EnrolledCount = 0;
 
         if (!hasOtherActiveSections)
@@ -594,12 +793,11 @@ public class CourseOpeningService(
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException("Dönem bulunamadı.");
-        if (term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
-            throw new InvalidOperationException(
-                $"Ders kapatmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Ders kapatmak için dönem iptal edilmemiş olmalıdır.");
 
         var sections = await _context.CourseSections
-            .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.IsActive)
+            .Where(cs => cs.CourseId == courseId && cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
             .ToListAsync(ct);
 
         if (sections.Count == 0)
@@ -627,7 +825,7 @@ public class CourseOpeningService(
         // Tüm section'ları kapat
         foreach (var section in sections)
         {
-            section.IsActive = false;
+            section.Status = CourseSectionStatus.Cancelled;
             section.EnrolledCount = 0;
         }
 
@@ -657,11 +855,10 @@ public class CourseOpeningService(
             throw new InvalidOperationException("Şube zaten aktif.");
 
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
-        if (term != null && term.Status != TermStatus.Planning && term.Status != TermStatus.Scheduling)
-            throw new InvalidOperationException(
-                $"Şube yeniden açmak için dönem 'Planlama' veya 'Programlama' aşamasında olmalıdır. Mevcut durum: {GetTermStatusLabel(term.Status)}");
+        if (term != null && term.IsCancelled)
+            throw new InvalidOperationException("Şube yeniden açmak için dönem iptal edilmemiş olmalıdır.");
 
-        section.IsActive = true;
+        section.Status = CourseSectionStatus.Active;
         // EnrolledCount 0 kalır — kapatılırken sıfırlanmıştı
 
         // Bu ders için CourseAccessPolicy yoksa yeniden oluştur
@@ -699,17 +896,10 @@ public class CourseOpeningService(
 
     private static string GetTermStatusLabel(TermStatus s) => s switch
     {
-        TermStatus.Draft            => "Taslak",
-        TermStatus.Planning         => "Planlama",
-        TermStatus.Scheduling       => "Programlama",
-        TermStatus.Published        => "Yayınlandı",
-        TermStatus.RegistrationOpen => "Kayıt Açık",
-        TermStatus.AddDrop          => "Ders Ekle/Bırak",
-        TermStatus.WithdrawalPeriod => "Çekilme Dönemi",
-        TermStatus.GradeEntry       => "Not Girişi",
-        TermStatus.Closed           => "Kapalı",
-        TermStatus.Archived         => "Arşivlendi",
-        _                           => s.ToString()
+        TermStatus.Inactive  => "Pasif",
+        TermStatus.Active    => "Aktif",
+        TermStatus.Cancelled => "İptal",
+        _                    => s.ToString()
     };
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(IEnumerable<int> instructorIds, CancellationToken ct)
@@ -807,7 +997,7 @@ public class CourseOpeningService(
         var sourceSections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
-            .Where(cs => cs.TermId == sourceTermId && cs.IsActive && cs.Course.DepartmentId == departmentId)
+            .Where(cs => cs.TermId == sourceTermId && cs.Status == CourseSectionStatus.Active && cs.Course.DepartmentId == departmentId)
             .OrderBy(cs => cs.Course.Code).ThenBy(cs => cs.Id)
             .ToListAsync(ct);
 
@@ -818,7 +1008,7 @@ public class CourseOpeningService(
         var courseIds = sourceSections.Select(cs => cs.CourseId).Distinct().ToList();
         var alreadyOpenedCourseIds = await _context.CourseSections
             .AsNoTracking()
-            .Where(cs => cs.TermId == targetTermId && cs.IsActive && courseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == targetTermId && cs.Status == CourseSectionStatus.Active && courseIds.Contains(cs.CourseId))
             .Select(cs => cs.CourseId)
             .Distinct()
             .ToListAsync(ct);
@@ -881,7 +1071,7 @@ public class CourseOpeningService(
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Where(cs => cs.TermId == request.SourceTermId
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course.DepartmentId == request.DepartmentId
                 && courseIds.Contains(cs.CourseId))
             .ToListAsync(ct);
@@ -969,7 +1159,7 @@ public class CourseOpeningService(
         var sections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course).ThenInclude(c => c.Department)
-            .Where(cs => cs.TermId == termId && cs.IsActive && externalCourseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && externalCourseIds.Contains(cs.CourseId))
             .ToListAsync(ct);
 
         // Load forecast data for demand

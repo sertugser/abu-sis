@@ -220,3 +220,49 @@ export function useRemoveEquivalency() {
     },
   });
 }
+
+// ── Madde 14: Cross-list hook'ları ──────────────────────────────
+export interface CrossListItem {
+  courseId: number;
+  code: string;
+  name: string;
+  ects: number;
+}
+
+export function useCrossLists(courseId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'courses', 'cross-lists', courseId],
+    queryFn: async () => {
+      if (!courseId) return [] as CrossListItem[];
+      const res = await apiClient.get<CrossListItem[]>(`${BASE}/${courseId}/cross-lists`);
+      return res.data;
+    },
+    enabled: !!courseId,
+  });
+}
+
+export function useAddCrossList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ courseId, linkedCourseId }: { courseId: number; linkedCourseId: number }) => {
+      await apiClient.post(`${BASE}/${courseId}/cross-lists/${linkedCourseId}`);
+    },
+    onSuccess: (_, { courseId, linkedCourseId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'cross-lists', courseId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'cross-lists', linkedCourseId] });
+    },
+  });
+}
+
+export function useRemoveCrossList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ courseId, linkedCourseId }: { courseId: number; linkedCourseId: number }) => {
+      await apiClient.delete(`${BASE}/${courseId}/cross-lists/${linkedCourseId}`);
+    },
+    onSuccess: (_, { courseId, linkedCourseId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'cross-lists', courseId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'cross-lists', linkedCourseId] });
+    },
+  });
+}
