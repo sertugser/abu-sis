@@ -194,20 +194,19 @@ export default function CourseOpeningPage() {
     );
   }
 
-  const termNotInPreparing = !!activeTerm && activeTerm.status !== 'Preparing';
+  const termIsCancelled = !!activeTerm && activeTerm.status === 'Cancelled';
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
-      {termNotInPreparing && (
-        <Alert variant="warning" className="mb-3 shrink-0">
+      {termIsCancelled && (
+        <Alert variant="destructive" className="mb-3 shrink-0">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>
-            {activeTerm?.name} dönemi hazırlık fazında değil (durum: {activeTerm?.status})
+            {activeTerm?.name} dönemi iptal edilmiş
           </AlertTitle>
           <AlertDescription>
-            Yeni ders/şube açma işlemi yalnızca <b>Hazırlık</b> statüsündeki dönemlerde yapılabilir.
-            Ders açmak için Dönem Yönetimi sayfasından yeni bir dönem oluşturup <b>Hazırlık</b> durumuna alın,
-            ya da mevcut dönemi geri alın. Bu sayfadaki müfredat dersleri şu an salt okunur moddadır.
+            İptal edilmiş dönemde yeni ders veya şube açma işlemi yapılamaz.
+            Dönemi Akademik Dönem Tanımları sayfasından tekrar aktif hale getirin.
           </AlertDescription>
         </Alert>
       )}
@@ -233,8 +232,8 @@ export default function CourseOpeningPage() {
           size="sm"
           className="shrink-0 h-auto gap-1.5"
           onClick={() => setFreeCourseDialogOpen(true)}
-          disabled={!deptId || termNotInPreparing}
-          title={termNotInPreparing ? 'Dönem hazırlık fazında değil' : 'Müfredatta olmayan bir dersi serbest aç'}
+          disabled={!deptId || termIsCancelled}
+          title={termIsCancelled ? 'Dönem iptal edilmiş' : 'Müfredatta olmayan bir dersi serbest aç'}
         >
           <Plus className="h-3.5 w-3.5" />
           Serbest Ders Aç
