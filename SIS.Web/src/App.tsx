@@ -36,7 +36,9 @@ import UserManagementPage from './pages/UserManagementPage';
 import StudentDirectoryPage from './pages/StudentDirectoryPage';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
-import AcademicStructurePage from './pages/AcademicStructurePage';
+import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
+import DepartmentDefinitionsPage from './pages/DepartmentDefinitionsPage';
+import ProgramDefinitionsPage from './pages/ProgramDefinitionsPage';
 import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
 import SystemConfigPage from './pages/SystemConfigPage';
 import AuditLogPage from './pages/AuditLogPage';
@@ -124,7 +126,10 @@ export default function App() {
                     <Route path="personel-listesi" element={<InstructorDirectoryPage />} />
                     <Route path="donem-yonetimi" element={<TermManagementPage />} />
                     <Route path="akademik-takvim-olusturma" element={<AcademicCalendarGeneratorPage />} />
-                    <Route path="akademik-yapi" element={<AcademicStructurePage />} />
+                    <Route path="akademik-yapi" element={<Navigate to="/fakulte-tanimlari" replace />} />
+                    <Route path="fakulte-tanimlari" element={<FacultyDefinitionsPage />} />
+                    <Route path="bolum-tanimlari" element={<DepartmentDefinitionsPage />} />
+                    <Route path="program-tanimlari" element={<ProgramDefinitionsPage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
                     <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
