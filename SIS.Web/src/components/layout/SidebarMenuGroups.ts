@@ -4,7 +4,6 @@ import {
   User,
   GraduationCap,
   Users,
-  Building2,
   Shield,
   Settings,
   Calendar,
@@ -335,13 +334,15 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     ],
   },
   {
-    id: 'donem-yonetimi',
-    label: 'Dönem Yönetimi',
+    id: 'akademik-islemler',
+    label: 'Akademik İşlemler',
     icon: Calendar,
     children: [
-      { to: ROUTES.TERM_MANAGEMENT, label: 'Dönem İşlemleri' },
+      { to: ROUTES.TERM_MANAGEMENT, label: 'Akademik Dönem Tanımları' },
+      { to: ROUTES.ACADEMIC_STRUCTURE, label: 'Fakülte / Bölüm / Program' },
       { to: '/akademik-takvim', label: 'Akademik Takvim' },
       { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
+      { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
     ],
   },
   {
@@ -395,15 +396,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.USER_MANAGEMENT, label: 'Kullanıcı Listesi' },
       { to: ROUTES.STUDENT_DIRECTORY, label: 'Öğrenci Rehberi' },
       { to: ROUTES.INSTRUCTOR_DIRECTORY, label: 'Personel Listesi' },
-    ],
-  },
-  {
-    id: 'akademik-yapi',
-    label: 'Akademik Yapı',
-    icon: Building2,
-    children: [
-      { to: ROUTES.ACADEMIC_STRUCTURE, label: 'Fakülte / Bölüm / Program' },
-      { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
     ],
   },
   {
