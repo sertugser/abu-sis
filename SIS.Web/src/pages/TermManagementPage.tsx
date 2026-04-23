@@ -135,6 +135,7 @@ function termFromDto(term: AdminTermDto): TermFormState {
 export default function TermManagementPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<AdminTermDto | null>(null);
+  const [viewingTerm, setViewingTerm] = useState<AdminTermDto | null>(null);
   const [form, setForm] = useState<TermFormState>(emptyForm());
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -153,10 +154,31 @@ export default function TermManagementPage() {
   function openEdit(term: AdminTermDto) { setForm(termFromDto(term)); setFormError(''); setEditingTerm(term); }
 
   function validateForm(): string | null {
-    if (!form.name.trim()) return 'Dönem adı zorunludur.';
-    if (!form.shortEnglishName.trim()) return 'Kısa İngilizce ad zorunludur.';
+    const name = form.name.trim();
+    const shortName = form.shortName.trim();
+    const shortEnglishName = form.shortEnglishName.trim();
+
+    if (name.length < 3) return 'Dönem adı en az 3 karakter olmalıdır.';
+    if (shortEnglishName.length < 3) return 'Kısa İngilizce ad en az 3 karakter olmalıdır.';
+    if (shortName && shortName.length < 3) return 'Kısa ad boş olabilir ancak girildiyse en az 3 karakter olmalıdır.';
+
     if (!form.termStart || !form.termEnd) return 'Dönem başlangıç/bitiş tarihleri zorunludur.';
+    const start = new Date(form.termStart);
+    const end = new Date(form.termEnd);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Geçersiz tarih.';
+    if (start >= end) return 'Başlangıç tarihi bitiş tarihinden önce olmalıdır.';
+
     return null;
+  }
+
+  function extractApiError(err: unknown, fallback: string): string {
+    const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
+    return (
+      axiosErr?.response?.data?.error
+      ?? axiosErr?.response?.data?.message
+      ?? axiosErr?.response?.data?.title
+      ?? (err instanceof Error ? err.message : fallback)
+    );
   }
 
   async function handleCreate() {
@@ -179,7 +201,7 @@ export default function TermManagementPage() {
       setCreateModalOpen(false);
       showSuccess('Dönem oluşturuldu.');
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Dönem oluşturulamadı.');
+      setFormError(extractApiError(err, 'Dönem oluşturulamadı.'));
     }
   }
 
@@ -203,7 +225,7 @@ export default function TermManagementPage() {
       setEditingTerm(null);
       showSuccess('Dönem güncellendi.');
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Dönem güncellenemedi.');
+      setFormError(extractApiError(err, 'Dönem güncellenemedi.'));
     }
   }
 
@@ -249,12 +271,9 @@ export default function TermManagementPage() {
       <div className="bg-background border border-border rounded-xl overflow-hidden">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40">
-          <div>
-            <h1 className="text-base font-semibold">Akademik Dönem Tanımları</h1>
-            <p className="text-sm text-muted-foreground">
-              {isLoading ? '' : `${sortedTerms.length} dönem`}
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {isLoading ? '' : `${sortedTerms.length} dönem`}
+          </p>
           <div className="flex items-center gap-3">
             {successMessage && (
               <span className="text-sm font-medium text-success">{successMessage}</span>
@@ -297,7 +316,9 @@ export default function TermManagementPage() {
             ) : sortedTerms.map(term => (
               <tr
                 key={term.id}
-                className={`transition-colors hover:bg-muted/20 ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
+                onDoubleClick={() => setViewingTerm(term)}
+                title="Detayları görmek için çift tıklayın"
+                className={`transition-colors hover:bg-muted/20 cursor-pointer select-none ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
               >
                   {/* Ad */}
                   <td className="px-4 py-3">
@@ -305,7 +326,7 @@ export default function TermManagementPage() {
                       <div>
                         <p className="font-semibold text-foreground">{term.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {term.shortName} · {term.termTypeLabel}
+                          {term.year} · {term.termTypeLabel}
                         </p>
                       </div>
                       {term.isActive && (
@@ -344,7 +365,7 @@ export default function TermManagementPage() {
                   </td>
 
                   {/* İşlemler */}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onDoubleClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1 justify-end">
                       <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
                         <Edit2 className="h-3.5 w-3.5" />
@@ -434,6 +455,91 @@ export default function TermManagementPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Detay Modal (çift tık ile açılır) */}
+      <Dialog open={!!viewingTerm} onOpenChange={open => !open && setViewingTerm(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Dönem Detayları — {viewingTerm?.name}</DialogTitle>
+          </DialogHeader>
+          {viewingTerm && <TermDetailView term={viewingTerm} />}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingTerm(null)}>Kapat</Button>
+            <Button
+              onClick={() => {
+                const t = viewingTerm;
+                setViewingTerm(null);
+                if (t) openEdit(t);
+              }}
+            >
+              Düzenle
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Term Detail View ─────────────────────────────────────────────────────────
+
+function TermDetailView({ term }: { term: AdminTermDto }) {
+  const today = new Date();
+  const start = new Date(term.termStart);
+  const end = new Date(term.termEnd);
+  const withinDates = today >= start && today <= end;
+
+  // "Neden Aktif değil?" açıklaması — kullanıcı sık karşılaştığı için görünür yap
+  const inactiveReason =
+    term.status === 'Active' ? null
+    : term.isCancelled ? 'Bu dönem iptal edilmiş. Aktif olabilmesi için önce iptal geri alınmalı.'
+    : !withinDates ? `Bugün (${fmt(today.toISOString())}) dönem tarih aralığında değil. Aktif olabilmesi için bugünün ${fmt(term.termStart)} ve ${fmt(term.termEnd)} arasında olması gerekir.`
+    : null;
+
+  return (
+    <div className="space-y-3 py-2 text-sm">
+      <DetailRow label="Ad" value={term.name} />
+      <DetailRow label="Kısa Ad" value={term.shortName || '—'} />
+      <DetailRow label="İngilizce Ad" value={term.englishName || '—'} />
+      <DetailRow label="Kısa İngilizce Ad" value={term.shortEnglishName || '—'} />
+      <DetailRow label="Diğer Ad" value={term.otherName || '—'} />
+      <DetailRow label="Yıl" value={String(term.year)} />
+      <DetailRow label="Tür" value={term.termTypeLabel} />
+      <DetailRow label="YÖKSİS Durumu" value={term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'} />
+      <DetailRow
+        label="Durum"
+        value={
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+            term.status === 'Active' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' :
+            term.status === 'Cancelled' ? 'bg-red-100 text-red-700 border-red-300' :
+            'bg-slate-100 text-slate-700 border-slate-300'
+          }`}>
+            {term.statusLabel || term.status}
+          </span>
+        }
+      />
+      <DetailRow label="Başlangıç" value={fmt(term.termStart)} />
+      <DetailRow label="Bitiş" value={fmt(term.termEnd)} />
+      <DetailRow
+        label="Akademik Takvim"
+        value={term.hasAcademicCalendar ? 'Tanımlı' : 'Eksik'}
+      />
+
+      {inactiveReason && (
+        <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
+          <p className="font-semibold mb-1">Neden Aktif değil?</p>
+          <p>{inactiveReason}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground">{value}</span>
     </div>
   );
 }

@@ -48,7 +48,13 @@ public static partial class SeedData
                     TermEnd = termEnd,
                     IsCancelled = t.IsCancelled,
                     YoksisStatus = YoksisStatus.Inactive,
-                    AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
+                };
+
+                // Seed yalnızca Fall 2024-2025 dönemine otomatik takvim ekler;
+                // diğer dönemlere admin ihtiyaç duydukça kendi takvimini oluşturur.
+                if (t.Year == 2024 && t.TermType == TermType.Fall)
+                {
+                    term.AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
                     {
                         RegistrationStart = regStart,
                         RegistrationEnd = regEnd,
@@ -58,8 +64,9 @@ public static partial class SeedData
                         GradeEntryStart = termEnd.AddDays(-14),
                         GradeEntryEnd = termEnd.AddDays(14),
                         CreatedAt = DateTime.UtcNow,
-                    }
-                };
+                    };
+                }
+
                 context.AcademicTerms.Add(term);
             }
             await context.SaveChangesAsync();
