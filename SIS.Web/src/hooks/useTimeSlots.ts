@@ -5,10 +5,17 @@ const BASE = '/admin/time-slots';
 
 export type TimeSlotAllowedMode = 'Both' | 'OnlineOnly' | 'FaceToFaceOnly';
 
+/**
+ * Backend JsonStringEnumConverter enum'ları string olarak gönderir.
+ * .NET DayOfWeek: Sunday=0, Monday=1, ..., Saturday=6 — ama JSON'da ad gelir.
+ */
+export type DayOfWeekName =
+  | 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
+
 export interface TimeSlotDto {
   id: number;
   termId: number;
-  dayOfWeek: number;
+  dayOfWeek: DayOfWeekName;
   startTime: string;
   endTime: string;
   slotOrder: number;
@@ -18,14 +25,14 @@ export interface TimeSlotDto {
 
 export interface CreateTimeSlotDto {
   termId: number;
-  dayOfWeek: number;
+  dayOfWeek: DayOfWeekName;
   startTime: string;
   endTime: string;
   allowedMode: TimeSlotAllowedMode;
 }
 
 export interface UpdateTimeSlotDto {
-  dayOfWeek: number;
+  dayOfWeek: DayOfWeekName;
   startTime: string;
   endTime: string;
   allowedMode: TimeSlotAllowedMode;
@@ -136,18 +143,23 @@ export const ALLOWED_MODE_OPTIONS: { value: TimeSlotAllowedMode; label: string }
   { value: 'FaceToFaceOnly', label: 'Yalnızca yüz-yüze' },
 ];
 
-export const DAY_OF_WEEK_OPTIONS: { value: number; label: string }[] = [
-  { value: 1, label: 'Pazartesi' },
-  { value: 2, label: 'Salı' },
-  { value: 3, label: 'Çarşamba' },
-  { value: 4, label: 'Perşembe' },
-  { value: 5, label: 'Cuma' },
-  { value: 6, label: 'Cumartesi' },
-  { value: 0, label: 'Pazar' },
+export const DAY_OF_WEEK_OPTIONS: { value: DayOfWeekName; label: string }[] = [
+  { value: 'Monday',    label: 'Pazartesi' },
+  { value: 'Tuesday',   label: 'Salı' },
+  { value: 'Wednesday', label: 'Çarşamba' },
+  { value: 'Thursday',  label: 'Perşembe' },
+  { value: 'Friday',    label: 'Cuma' },
+  { value: 'Saturday',  label: 'Cumartesi' },
+  { value: 'Sunday',    label: 'Pazar' },
 ];
 
-export function dayName(day: number): string {
-  return DAY_OF_WEEK_OPTIONS.find(d => d.value === day)?.label ?? String(day);
+export function dayName(day: DayOfWeekName): string {
+  return DAY_OF_WEEK_OPTIONS.find(d => d.value === day)?.label ?? day;
+}
+
+/** Hafta sonu kontrolü (Cts/Paz) */
+export function isWeekend(day: DayOfWeekName): boolean {
+  return day === 'Saturday' || day === 'Sunday';
 }
 
 export function allowedModeLabel(mode: TimeSlotAllowedMode): string {

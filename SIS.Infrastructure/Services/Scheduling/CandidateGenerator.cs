@@ -52,9 +52,11 @@ public sealed class CandidateGenerator
         if (section.TeachingMethod == TeachingMethod.Online)
             return GenerateOnlineCandidates(section, state, timeSlotsByDay, splitThreshold, excludeBlocks);
 
-        // Sort days by least loaded first (exclude weekends)
+        // Sort days by least loaded first. Hafta sonu slotları da dahil — bu slotlar
+        // zaten AllowedMode=OnlineOnly damgalı gelir (seed'de WeekendOnlineOnly=true);
+        // H17 FaceToFaceSlotRestrictionEvaluator OnlineOnly slota FaceToFace dersi bloklar.
+        // Admin bir hafta sonu slotunu Both'a çevirirse yüz-yüze de düşebilir — tasarım gereği.
         var sortedDays = timeSlotsByDay.Keys
-            .Where(d => d != DayOfWeek.Saturday && d != DayOfWeek.Sunday)
             .OrderBy(d => state.GetDaySectionCount(d))
             .ThenBy(d => d)
             .ToList();
