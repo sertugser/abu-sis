@@ -151,13 +151,13 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       // Açma
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
-      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       // Programlama
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
+      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
+      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       // Dönem içi + kapanış
-      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
+      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
@@ -220,14 +220,14 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       // Açma
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
-      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       // Programlama
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
+      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
+      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
       // Dönem içi
-      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
       { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
+      { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
     ],
   },
   {
@@ -279,16 +279,16 @@ export const deanMenuGroups: MenuGroup[] = [
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       // Açma
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
-      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
-      // Programlama (önce kısıt, sonra oluşturma, sonra onay)
+      // Programlama
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
+      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
+      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
+      { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
       { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
       // Dönem içi + kapanış
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
-      { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },
@@ -353,10 +353,8 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.ACADEMIC_CALENDAR_ADMIN, label: 'Akademik Takvim Yönetimi' },
       { to: ROUTES.AKADEMIK_TAKVIM, label: 'Akademik Takvim (Görünüm)' },
       { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
-      { to: ROUTES.TIME_SLOT_MANAGEMENT, label: 'Ders Saatleri Yönetimi' },
       { to: ROUTES.OSYM_REGISTRATION_CALENDAR, label: 'ÖSYM Kayıt Takvimi' },
       { to: ROUTES.PROGRAM_QUOTA, label: 'Program Kontenjan Bilgileri' },
-      { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
     ],
   },
   {
@@ -368,19 +366,23 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       // Katalog (altyapı, nadiren değişir)
       { to: ROUTES.COURSE_CATALOG_ADMIN, label: 'Ders Kataloğu' },
       { to: ROUTES.CURRICULUM_MANAGEMENT, label: 'Müfredat İşlemleri' },
+      { to: ROUTES.PROMOTION_RULES, label: 'Müfredat Sınıf Dönem Tanımları' },
       { to: ROUTES.ELECTIVE_GROUPS, label: 'Seçmeli Ders Grupları' },
       // Ders açma (dönem başı)
       { to: ROUTES.COURSE_OPENING, label: 'Ders Açma İşlemleri' },
-      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
-      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
-      // Programlama (ders açıldıktan sonra — önce kısıt, sonra oluşturma, sonra onay)
+      { to: ROUTES.SECTIONING, label: 'Şubelendirme İşlemleri' },
+      { to: ROUTES.COURSE_QUOTA, label: 'Ders Kontenjan İşlemleri' },
+      // Programlama altyapısı + kısıt + oluşturma + onay
+      { to: ROUTES.TIME_SLOT_MANAGEMENT, label: 'Ders Saatleri Yönetimi' },
       { to: ROUTES.CONSTRAINT_MANAGEMENT, label: 'Program Kısıtlamaları' },
       { to: ROUTES.SCHEDULE_CREATION, label: 'Ders Programı Oluşturma' },
+      { to: ROUTES.INSTRUCTOR_ASSIGNMENT, label: 'Öğretim Elemanı Atama' },
+      { to: ROUTES.TERM_PROGRAM_TRANSFER, label: 'Dönem Programı Aktarım' },
       { to: ROUTES.CLASSROOM_DASHBOARD, label: 'Derslik Doluluk Tablosu' },
+      { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
       { to: ROUTES.SCHEDULE_APPROVAL, label: 'Program Onayı' },
       // Dönem içi + kapanış
       { to: ROUTES.CLASS_LISTS, label: 'Sınıf Listeleri' },
-      { to: ROUTES.INSTRUCTOR_COURSES_REPORT, label: 'Ders Veren Öğretim Üyeleri' },
       { to: ROUTES.TERM_CLOSING, label: 'Dönem Kapatma İşlemleri' },
     ],
   },

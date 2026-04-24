@@ -58,6 +58,8 @@ import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
 import OsymRegistrationCalendarPage from './pages/OsymRegistrationCalendarPage';
 import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
 import ProgramQuotaPage from './pages/ProgramQuotaPage';
+import SectioningPage from './pages/SectioningPage';
+import CourseQuotaPage from './pages/CourseQuotaPage';
 import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
@@ -151,6 +153,8 @@ export default function App() {
                     <Route path="degerlendirme-donemi-yonetimi" element={<EvaluationPeriodAdminPage />} />
                     <Route path="osym-kayit-takvimi" element={<OsymRegistrationCalendarPage />} />
                     <Route path="ders-saatleri-yonetimi" element={<TimeSlotManagementPage />} />
+                    <Route path="subelendirme-islemleri" element={<SectioningPage />} />
+                    <Route path="ders-kontenjan-islemleri" element={<CourseQuotaPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={DEAN_ROLES} />}>

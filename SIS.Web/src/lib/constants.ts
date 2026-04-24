@@ -49,6 +49,8 @@ export const ROUTES = {
   ELECTIVE_GROUPS: '/secmeli-ders-gruplari',
   INSTRUCTOR_COURSES_REPORT: '/ders-veren-ogretim-uyeleri',
   TERM_PROGRAM_TRANSFER: '/donem-programi-aktarim',
+  SECTIONING: '/subelendirme-islemleri',
+  COURSE_QUOTA: '/ders-kontenjan-islemleri',
   // Course Evaluation
   COURSE_EVALUATION: '/ders-degerlendirme',
   EVALUATION_RESULTS: '/degerlendirme-sonuclari',
@@ -212,6 +214,8 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/osym-kayit-takvimi',
   '/program-kontenjan',
   '/ders-saatleri-yonetimi',
+  '/subelendirme-islemleri',
+  '/ders-kontenjan-islemleri',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {
