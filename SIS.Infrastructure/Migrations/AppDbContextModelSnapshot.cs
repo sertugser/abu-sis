@@ -2445,7 +2445,7 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("BlockType")
                         .HasColumnType("integer");
 
-                    b.Property<int>("ClassroomId")
+                    b.Property<int?>("ClassroomId")
                         .HasColumnType("integer");
 
                     b.Property<int>("CourseSectionId")
@@ -2798,6 +2798,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllowedMode")
+                        .HasColumnType("integer");
 
                     b.Property<int>("DayOfWeek")
                         .HasColumnType("integer");
@@ -3769,8 +3772,7 @@ namespace SIS.Infrastructure.Migrations
                     b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
                         .WithMany()
                         .HasForeignKey("ClassroomId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
                         .WithMany("SectionSchedules")

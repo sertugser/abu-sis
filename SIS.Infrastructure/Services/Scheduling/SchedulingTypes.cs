@@ -19,6 +19,10 @@ public sealed class TermSnapshot
     public List<DistributionConstraint>? DistributionConstraints { get; set; }
     public Dictionary<int, Dictionary<int, int>> CourseSuggestedSemestersByDepartment { get; init; } = new();
     public Dictionary<int, HashSet<int>> CourseAccessibleDepartments { get; init; } = new();
+    /// <summary>
+    /// (DayOfWeek, StartTime) -> TimeSlot.AllowedMode. FaceToFaceSlotRestriction evaluator'ı için.
+    /// </summary>
+    public Dictionary<(DayOfWeek Day, TimeOnly StartTime), TimeSlotAllowedMode> SlotAllowedModes { get; init; } = new();
 }
 
 internal sealed class CourseSchedulingMetadata
@@ -43,6 +47,7 @@ public sealed class SectionSnapshot
     public string CourseCode { get; init; } = string.Empty;
     public string CourseName { get; init; } = string.Empty;
     public int TermId { get; init; }
+    public TeachingMethod TeachingMethod { get; init; } = TeachingMethod.FaceToFace;
     public int TheoryHours { get; init; }
     public int LabHours { get; init; }
     public int Capacity { get; init; }

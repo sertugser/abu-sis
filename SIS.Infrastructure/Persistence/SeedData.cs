@@ -19,8 +19,9 @@ public static partial class SeedData
         await SeedUsersAsync(context, userManager);
         await SeedRegistrationsAsync(context);    // Geçmiş dönem transkript verileri (aktif döneme dokunmaz)
         // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı
-        await SeedTimeSlotsAsync(context);
+        // SystemConfig önce seed edilmeli: TimeSlot generate'i Schedule.* anahtarlarını okuyor (özellikle FaceToFaceCutoffTime + WeekendOnlineOnly için AllowedMode damgalama)
         await SeedSystemConfigAsync(context);
+        await SeedTimeSlotsAsync(context);
         await SeedConstraintDefinitionsAsync(context);
         await SeedEvaluationQuestionsAsync(context);
         await SeedConstraintProfilesAsync(context);

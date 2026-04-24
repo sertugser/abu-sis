@@ -39,6 +39,7 @@ export const ROUTES = {
   AUDIT_LOG: '/denetim-kayitlari',
   PROMOTION_RULES: '/sinif-atlatma-kurallari',
   OSYM_REGISTRATION_CALENDAR: '/osym-kayit-takvimi',
+  TIME_SLOT_MANAGEMENT: '/ders-saatleri-yonetimi',
   PROGRAM_QUOTA: '/program-kontenjan',
   ACADEMIC_CALENDAR_ADMIN: '/akademik-takvim-yonetimi',
   SCHEDULE_APPROVAL: '/program-onayi',
@@ -210,6 +211,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/akademik-takvim-yonetimi',
   '/osym-kayit-takvimi',
   '/program-kontenjan',
+  '/ders-saatleri-yonetimi',
 ]);
 
 export const STUDENT_STATUS_LABELS: Record<string, string> = {

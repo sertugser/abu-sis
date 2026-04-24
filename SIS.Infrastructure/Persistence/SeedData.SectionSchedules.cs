@@ -70,12 +70,15 @@ public static partial class SeedData
                 iSlots.Add(block);
             }
 
-            if (!classroomOccupancy.TryGetValue(ss.ClassroomId, out var cSlots))
+            if (ss.ClassroomId is int classroomId)
             {
-                cSlots = new();
-                classroomOccupancy[ss.ClassroomId] = cSlots;
+                if (!classroomOccupancy.TryGetValue(classroomId, out var cSlots))
+                {
+                    cSlots = new();
+                    classroomOccupancy[classroomId] = cSlots;
+                }
+                cSlots.Add(block);
             }
-            cSlots.Add(block);
         }
 
         var scheduledSectionIds = existingSchedules

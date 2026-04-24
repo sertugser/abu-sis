@@ -184,6 +184,12 @@ public sealed class AutoScheduleEngine
             ? await LoadCoEnrollmentPairsAsync(request.TermId, s4Threshold, ct)
             : new List<CoEnrollmentPair>();
 
+        var slotAllowedModes = timeSlotsByDay
+            .SelectMany(kvp => kvp.Value)
+            .ToDictionary(
+                ts => (ts.DayOfWeek, ts.StartTime),
+                ts => ts.AllowedMode);
+
         var baseSnapshot = new TermSnapshot
         {
             TermId = request.TermId,
@@ -196,6 +202,7 @@ public sealed class AutoScheduleEngine
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
             CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
+            SlotAllowedModes = slotAllowedModes,
         };
 
         // 8b. Build cohort assignments if cohort mode enabled
@@ -452,6 +459,7 @@ public sealed class AutoScheduleEngine
             CourseCode = section.Course.Code,
             CourseName = section.Course.Name,
             TermId = section.TermId,
+            TeachingMethod = section.Course.TeachingMethod,
             TheoryHours = section.Course.TheoryHours,
             LabHours = section.Course.LabHours,
             Capacity = section.Capacity,
@@ -503,7 +511,7 @@ public sealed class AutoScheduleEngine
                 Type: blocks.Count == 0 && section.Course.TheoryHours > 0
                     ? BlockType.Theory
                     : BlockType.Lab,
-                ClassroomId: group.Key.ClassroomId,
+                ClassroomId: group.Key.ClassroomId ?? 0,
                 Day: group.Key.DayOfWeek,
                 StartTime: start,
                 EndTime: end));

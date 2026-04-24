@@ -779,7 +779,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                 && ss.TimeSlot.DayOfWeek == day
                 && ss.TimeSlot.StartTime < endTime
                 && ss.TimeSlot.EndTime > startTime)
-            .Select(ss => ss.ClassroomId)
+            .Where(ss => ss.ClassroomId != null)
+            .Select(ss => ss.ClassroomId!.Value)
             .Distinct()
             .ToListAsync(ct);
 

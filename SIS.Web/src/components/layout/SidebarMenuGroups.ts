@@ -353,6 +353,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.ACADEMIC_CALENDAR_ADMIN, label: 'Akademik Takvim Yönetimi' },
       { to: ROUTES.AKADEMIK_TAKVIM, label: 'Akademik Takvim (Görünüm)' },
       { to: ROUTES.ACADEMIC_CALENDAR_GENERATOR, label: 'Takvim Oluşturucu' },
+      { to: ROUTES.TIME_SLOT_MANAGEMENT, label: 'Ders Saatleri Yönetimi' },
       { to: ROUTES.OSYM_REGISTRATION_CALENDAR, label: 'ÖSYM Kayıt Takvimi' },
       { to: ROUTES.PROGRAM_QUOTA, label: 'Program Kontenjan Bilgileri' },
       { to: ROUTES.PROMOTION_RULES, label: 'Sınıf Atlatma Kuralları' },
