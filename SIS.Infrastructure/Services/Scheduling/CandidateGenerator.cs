@@ -47,6 +47,11 @@ public sealed class CandidateGenerator
         var hasTheory = section.TheoryHours > 0;
         var hasLab = section.LabHours > 0;
 
+        // Online dersler için özel akış: derslik iterasyonu yok, sadece zaman penceresi.
+        // Weekend slotları da dahil — online için OnlineOnly günleri kullanılabilir.
+        if (section.TeachingMethod == TeachingMethod.Online)
+            return GenerateOnlineCandidates(section, state, timeSlotsByDay, splitThreshold, excludeBlocks);
+
         // Sort days by least loaded first (exclude weekends)
         var sortedDays = timeSlotsByDay.Keys
             .Where(d => d != DayOfWeek.Saturday && d != DayOfWeek.Sunday)
@@ -371,5 +376,114 @@ public sealed class CandidateGenerator
     private static bool HasTimeOverlap(BlockAssignment a, BlockAssignment b)
     {
         return a.StartTime < b.EndTime && a.EndTime > b.StartTime;
+    }
+
+    /// <summary>
+    /// Online dersler için candidate üretir. Derslik iterasyonu yok — ClassroomId=null olarak döner.
+    /// Hafta sonu dahil tüm günleri kullanabilir. Teori+Lab saatlerini tek pencerede toplar (split threshold hariç).
+    /// </summary>
+    private static List<BlockCombination> GenerateOnlineCandidates(
+        SectionSnapshot section,
+        MutableScheduleState state,
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        int splitThreshold,
+        HashSet<BlockAssignment>? excludeBlocks)
+    {
+        var totalHours = section.TheoryHours + section.LabHours;
+        if (totalHours == 0)
+            return new List<BlockCombination>();
+
+        // Online dersler tüm günleri kullanabilir (hafta sonu da dahil)
+        var allDays = timeSlotsByDay.Keys
+            .OrderBy(d => state.GetDaySectionCount(d))
+            .ThenBy(d => d)
+            .ToList();
+
+        var results = new List<BlockCombination>();
+        var mustSplit = totalHours > splitThreshold && section.TheoryHours > 0 && section.LabHours > 0;
+
+        if (!mustSplit)
+        {
+            // Tek pencere: totalHours ardışık slot
+            var blocks = FindOnlineBlocks(section.TheoryHours > 0 ? BlockType.Theory : BlockType.Lab,
+                totalHours, state, timeSlotsByDay, allDays, excludeBlocks);
+
+            foreach (var block in blocks.Take(MaxCombinations))
+            {
+                results.Add(new BlockCombination { TheoryBlock = block });
+            }
+            return results;
+        }
+
+        // Split: teori + lab ayrı günlerde
+        var theoryBlocks = FindOnlineBlocks(BlockType.Theory, section.TheoryHours, state, timeSlotsByDay, allDays, excludeBlocks);
+        var labBlocks = FindOnlineBlocks(BlockType.Lab, section.LabHours, state, timeSlotsByDay, allDays, excludeBlocks);
+
+        foreach (var t in theoryBlocks)
+        {
+            foreach (var l in labBlocks)
+            {
+                if (t.Day == l.Day) continue;
+                results.Add(new BlockCombination { TheoryBlock = t, LabBlocks = new List<BlockAssignment> { l } });
+                if (results.Count >= MaxCombinations) return results;
+            }
+        }
+
+        return results;
+    }
+
+    private static List<BlockAssignment> FindOnlineBlocks(
+        BlockType blockType,
+        int requiredHours,
+        MutableScheduleState state,
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        List<DayOfWeek> sortedDays,
+        HashSet<BlockAssignment>? excludeBlocks)
+    {
+        var results = new List<BlockAssignment>();
+
+        foreach (var day in sortedDays)
+        {
+            if (!timeSlotsByDay.TryGetValue(day, out var daySlots) || daySlots.Count == 0)
+                continue;
+
+            var sorted = daySlots.OrderBy(s => s.StartTime).ToList();
+            var windowsFound = 0;
+
+            for (var i = 0; i <= sorted.Count - requiredHours; i++)
+            {
+                if (windowsFound >= MaxWindowsPerDay)
+                    break;
+
+                // Ardışık slot kontrolü (FindBlocks'taki mantık)
+                var valid = true;
+                for (var j = 0; j < requiredHours - 1; j++)
+                {
+                    var current = sorted[i + j];
+                    var next = sorted[i + j + 1];
+                    var gap = next.StartTime - current.EndTime;
+                    if (gap.TotalMinutes > 10 || gap.TotalMinutes < 0)
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (!valid) continue;
+
+                var windowStart = sorted[i].StartTime;
+                var windowEnd = sorted[i + requiredHours - 1].EndTime;
+
+                var block = new BlockAssignment(blockType, null, day, windowStart, windowEnd);
+
+                if (excludeBlocks != null && excludeBlocks.Contains(block))
+                    continue;
+
+                results.Add(block);
+                windowsFound++;
+            }
+        }
+
+        return results;
     }
 }

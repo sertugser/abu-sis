@@ -186,11 +186,14 @@ public sealed class ConstructionSolver
         // This avoids expensive full constraint evaluation for obvious conflicts.
         foreach (var block in blocks)
         {
-            var occupancy = state.GetClassroomOccupancy(block.ClassroomId, block.Day);
-            foreach (var (_, start, end, _) in occupancy)
+            if (block.ClassroomId is int classroomId)
             {
-                if (block.StartTime < end && block.EndTime > start)
-                    return true;
+                var occupancy = state.GetClassroomOccupancy(classroomId, block.Day);
+                foreach (var (_, start, end, _) in occupancy)
+                {
+                    if (block.StartTime < end && block.EndTime > start)
+                        return true;
+                }
             }
 
             if (section.InstructorId.HasValue)
@@ -239,8 +242,9 @@ public sealed class ConstructionSolver
         if (blocks.Count == 0) return snap;
 
         // Use the first block's classroom for the primary ClassroomCapacity/Type fields
+        // Online bloklarda ClassroomId null — enrichment yapılmaz, snap olduğu gibi döner
         var primaryClassroomId = blocks[0].ClassroomId;
-        if (!classroomLookup.TryGetValue(primaryClassroomId, out var primaryClassroom))
+        if (!primaryClassroomId.HasValue || !classroomLookup.TryGetValue(primaryClassroomId.Value, out var primaryClassroom))
             return snap;
 
         return new SectionSnapshot

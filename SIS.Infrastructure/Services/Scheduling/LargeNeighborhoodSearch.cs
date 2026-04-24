@@ -222,7 +222,8 @@ public sealed class LargeNeighborhoodSearch
     private static SectionSnapshot EnrichWithClassroomData(SectionSnapshot snap, List<BlockAssignment> blocks, Dictionary<int, Classroom> classroomLookup)
     {
         if (blocks.Count == 0) return snap;
-        if (!classroomLookup.TryGetValue(blocks[0].ClassroomId, out var cr)) return snap;
+        var firstClassroomId = blocks[0].ClassroomId;
+        if (!firstClassroomId.HasValue || !classroomLookup.TryGetValue(firstClassroomId.Value, out var cr)) return snap;
         return new SectionSnapshot
         {
             SectionId = snap.SectionId, SectionNumber = snap.SectionNumber,

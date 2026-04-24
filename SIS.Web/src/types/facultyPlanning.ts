@@ -126,7 +126,7 @@ export interface AutoSchedulePreviewItem {
   courseCode: string;
   courseName: string;
   departmentCode: string;
-  classroomId: number;
+  classroomId: number | null;
   classroomName: string;
   scheduleSlots: ScheduleSlot[];
   scheduleSummary: string;
@@ -158,7 +158,7 @@ export interface ApplyScheduleRequest {
 
 export interface ApplyScheduleItem {
   sectionId: number;
-  classroomId: number;
+  classroomId: number | null;
   scheduleSlots: ScheduleSlot[];
   instructorId?: number;
 }

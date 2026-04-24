@@ -107,8 +107,7 @@ public sealed class AutoScheduleEngine
                          && !cs.IsFinalized
                          && cs.Status == CourseSectionStatus.Active
                          && cs.Course.DepartmentId.HasValue
-                         && departmentIdSet.Contains(cs.Course.DepartmentId.Value)
-                         && cs.Course.TeachingMethod != TeachingMethod.Online);
+                         && departmentIdSet.Contains(cs.Course.DepartmentId.Value));
 
         if (request.DepartmentId.HasValue)
         {
@@ -346,17 +345,21 @@ public sealed class AutoScheduleEngine
                 ? dc
                 : string.Empty;
 
-            // Determine primary classroom
+            // Determine primary classroom (online bloklarda null)
             var primaryClassroomId = placement.Blocks.Count > 0
                 ? placement.Blocks[0].ClassroomId
-                : 0;
-            var primaryClassroom = classrooms.FirstOrDefault(c => c.Id == primaryClassroomId);
+                : null;
+            var primaryClassroom = primaryClassroomId.HasValue
+                ? classrooms.FirstOrDefault(c => c.Id == primaryClassroomId.Value)
+                : null;
 
             // Build schedule slots
             var scheduleSlots = placement.Blocks
                 .SelectMany(b =>
                 {
-                    var classroom = classrooms.FirstOrDefault(c => c.Id == b.ClassroomId);
+                    var classroom = b.ClassroomId.HasValue
+                        ? classrooms.FirstOrDefault(c => c.Id == b.ClassroomId.Value)
+                        : null;
                     return new[]
                     {
                         new ScheduleSlotDto
@@ -511,7 +514,7 @@ public sealed class AutoScheduleEngine
                 Type: blocks.Count == 0 && section.Course.TheoryHours > 0
                     ? BlockType.Theory
                     : BlockType.Lab,
-                ClassroomId: group.Key.ClassroomId ?? 0,
+                ClassroomId: group.Key.ClassroomId,
                 Day: group.Key.DayOfWeek,
                 StartTime: start,
                 EndTime: end));
@@ -535,7 +538,13 @@ public sealed class AutoScheduleEngine
             .Select(b =>
             {
                 var dayName = SchedulingHelpers.GetDayOfWeekName(b.Day);
-                var classroomName = classroomLookup.TryGetValue(b.ClassroomId, out var cr) ? cr.Name : "?";
+                string classroomName;
+                if (!b.ClassroomId.HasValue)
+                    classroomName = "Online";
+                else if (classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr))
+                    classroomName = cr.Name;
+                else
+                    classroomName = "?";
                 return $"{dayName} {b.StartTime:HH:mm}-{b.EndTime:HH:mm} ({classroomName})";
             });
 

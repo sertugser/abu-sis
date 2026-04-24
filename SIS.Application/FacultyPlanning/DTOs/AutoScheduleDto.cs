@@ -30,7 +30,7 @@ public class AutoSchedulePreviewItemDto
     public string CourseCode { get; set; } = string.Empty;
     public string CourseName { get; set; } = string.Empty;
     public string DepartmentCode { get; set; } = string.Empty;
-    public int ClassroomId { get; set; }
+    public int? ClassroomId { get; set; }
     public string ClassroomName { get; set; } = string.Empty;
     public List<ScheduleSlotDto> ScheduleSlots { get; set; } = new();
     public string ScheduleSummary { get; set; } = string.Empty;
@@ -76,7 +76,7 @@ public class ApplyScheduleRequest
 public class ApplyScheduleItemRequest
 {
     public int SectionId { get; set; }
-    public int ClassroomId { get; set; }
+    public int? ClassroomId { get; set; }
     public List<ScheduleSlotDto> ScheduleSlots { get; set; } = new();
     public int? InstructorId { get; set; }
 }

@@ -419,7 +419,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                     await WriteSectionScheduleRecordsAsync(
                         section.Id,
                         section.TermId,
-                        request.ClassroomId ?? section.ClassroomId ?? 0,
+                        request.ClassroomId ?? section.ClassroomId,
                         request.ScheduleSlots,
                         ct);
                 }
@@ -802,7 +802,7 @@ public class FacultyPlanningService : IFacultyPlanningService
     private async Task WriteSectionScheduleRecordsAsync(
         int sectionId,
         int termId,
-        int classroomId,
+        int? classroomId,
         IReadOnlyList<ScheduleSlotDto> scheduleSlots,
         CancellationToken ct)
     {
@@ -817,7 +817,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .ToListAsync(ct);
 
         // Resolve which academic time slots are covered by the requested ranges
-        var allMatchedSlots = new List<(TimeSlot timeSlot, int classroomId)>();
+        var allMatchedSlots = new List<(TimeSlot timeSlot, int? classroomId)>();
 
         foreach (var slot in scheduleSlots)
         {
@@ -834,6 +834,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                     $"{DayLabel(slot.Day)} {slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm} araligi donem zaman slotlari ile eslesmiyor.");
             }
 
+            // Online section için slot.ClassroomId ve classroomId ikisi de null olabilir — bu kabul
             var effectiveClassroomId = slot.ClassroomId ?? classroomId;
             foreach (var ts in matchingTimeSlots)
                 allMatchedSlots.Add((ts, effectiveClassroomId));
@@ -851,18 +852,21 @@ public class FacultyPlanningService : IFacultyPlanningService
                 $"Slot sayisi uyumsuz: {section.Course.Code} icin {expectedSlotCount} slot gerekli, {allMatchedSlots.Count} slot secildi.");
         }
 
-        // Write with hard guard against classroom double-booking
+        // Write with hard guard against classroom double-booking (online section'lar: ClassroomId null → çakışma kontrolü yok)
         foreach (var (timeSlot, effectiveCrId) in allMatchedSlots)
         {
-            var alreadyOccupied = await _context.SectionSchedules
-                .AnyAsync(ss => ss.ClassroomId == effectiveCrId
-                    && ss.TimeSlotId == timeSlot.Id
-                    && ss.CourseSectionId != sectionId, ct);
-
-            if (alreadyOccupied)
+            if (effectiveCrId.HasValue)
             {
-                throw new InvalidOperationException(
-                    $"Derslik cakismasi: {DayLabel(timeSlot.DayOfWeek)} {timeSlot.StartTime:HH\\:mm}-{timeSlot.EndTime:HH\\:mm} slotunda derslik zaten dolu.");
+                var alreadyOccupied = await _context.SectionSchedules
+                    .AnyAsync(ss => ss.ClassroomId == effectiveCrId.Value
+                        && ss.TimeSlotId == timeSlot.Id
+                        && ss.CourseSectionId != sectionId, ct);
+
+                if (alreadyOccupied)
+                {
+                    throw new InvalidOperationException(
+                        $"Derslik cakismasi: {DayLabel(timeSlot.DayOfWeek)} {timeSlot.StartTime:HH\\:mm}-{timeSlot.EndTime:HH\\:mm} slotunda derslik zaten dolu.");
+                }
             }
 
             _context.SectionSchedules.Add(new SectionSchedule
