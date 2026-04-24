@@ -226,6 +226,12 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("OtherName")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("OverrideEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("OverrideStart")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ShortEnglishName")
                         .IsRequired()
                         .HasColumnType("text");

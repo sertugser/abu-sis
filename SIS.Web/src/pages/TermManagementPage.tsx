@@ -97,6 +97,8 @@ interface TermFormState {
   yoksisStatus: 'Inactive' | 'Active';
   termStart: string;
   termEnd: string;
+  overrideStart: string;
+  overrideEnd: string;
 }
 
 function emptyForm(): TermFormState {
@@ -111,6 +113,8 @@ function emptyForm(): TermFormState {
     yoksisStatus: 'Inactive',
     termStart: '',
     termEnd: '',
+    overrideStart: '',
+    overrideEnd: '',
   };
 }
 
@@ -126,6 +130,8 @@ function termFromDto(term: AdminTermDto): TermFormState {
     yoksisStatus: term.yoksisStatus,
     termStart: toDateInput(term.termStart),
     termEnd: toDateInput(term.termEnd),
+    overrideStart: toDateInput(term.overrideStart ?? ''),
+    overrideEnd: toDateInput(term.overrideEnd ?? ''),
   };
 }
 
@@ -168,6 +174,26 @@ export default function TermManagementPage() {
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Geçersiz tarih.';
     if (start >= end) return 'Başlangıç tarihi bitiş tarihinden önce olmalıdır.';
 
+    // Override validation
+    if (form.overrideStart) {
+      const ovStart = new Date(form.overrideStart);
+      if (Number.isNaN(ovStart.getTime())) return 'Erken aktivasyon tarihi geçersiz.';
+      if (ovStart >= start)
+        return 'Erken aktivasyon tarihi dönem başlangıcından ÖNCE olmalı. Dönemi geciktirmek için TermStart\'ı değiştirin.';
+    }
+    if (form.overrideEnd) {
+      const ovEnd = new Date(form.overrideEnd);
+      if (Number.isNaN(ovEnd.getTime())) return 'Uzatma tarihi geçersiz.';
+      if (ovEnd <= end)
+        return 'Uzatma tarihi dönem bitişinden SONRA olmalı. Kısaltma için TermEnd\'i değiştirin.';
+    }
+    if (form.overrideStart && form.overrideEnd) {
+      const ovStart = new Date(form.overrideStart);
+      const ovEnd = new Date(form.overrideEnd);
+      if (ovEnd <= ovStart)
+        return 'Uzatma tarihi, erken aktivasyon tarihinden sonra olmalı.';
+    }
+
     return null;
   }
 
@@ -195,6 +221,8 @@ export default function TermManagementPage() {
       yoksisStatus: form.yoksisStatus,
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
+      overrideStart: form.overrideStart ? toIsoString(form.overrideStart) : null,
+      overrideEnd: form.overrideEnd ? toIsoString(form.overrideEnd) : null,
     };
     try {
       await createTerm.mutateAsync(dto);
@@ -219,6 +247,8 @@ export default function TermManagementPage() {
       yoksisStatus: form.yoksisStatus,
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
+      overrideStart: form.overrideStart ? toIsoString(form.overrideStart) : null,
+      overrideEnd: form.overrideEnd ? toIsoString(form.overrideEnd) : null,
     };
     try {
       await updateTerm.mutateAsync({ id: editingTerm.id, dto });
@@ -462,7 +492,16 @@ export default function TermManagementPage() {
           <DialogHeader>
             <DialogTitle>Dönem Detayları — {viewingTerm?.name}</DialogTitle>
           </DialogHeader>
-          {viewingTerm && <TermDetailView term={viewingTerm} />}
+          {viewingTerm && (
+            <TermDetailView
+              term={viewingTerm}
+              onEdit={() => {
+                const t = viewingTerm;
+                setViewingTerm(null);
+                openEdit(t);
+              }}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewingTerm(null)}>Kapat</Button>
             <Button
@@ -483,17 +522,20 @@ export default function TermManagementPage() {
 
 // ── Term Detail View ─────────────────────────────────────────────────────────
 
-function TermDetailView({ term }: { term: AdminTermDto }) {
+function TermDetailView({ term, onEdit }: { term: AdminTermDto; onEdit: () => void }) {
   const today = new Date();
   const start = new Date(term.termStart);
   const end = new Date(term.termEnd);
   const withinDates = today >= start && today <= end;
 
+  const hasOverrideStart = !!term.overrideStart;
+  const hasOverrideEnd = !!term.overrideEnd;
+
   // "Neden Aktif değil?" açıklaması — kullanıcı sık karşılaştığı için görünür yap
   const inactiveReason =
     term.status === 'Active' ? null
     : term.isCancelled ? 'Bu dönem iptal edilmiş. Aktif olabilmesi için önce iptal geri alınmalı.'
-    : !withinDates ? `Bugün (${fmt(today.toISOString())}) dönem tarih aralığında değil. Aktif olabilmesi için bugünün ${fmt(term.termStart)} ve ${fmt(term.termEnd)} arasında olması gerekir.`
+    : !withinDates ? `Bugün (${fmt(today.toISOString())}) dönem tarih aralığında değil. Aktif olabilmesi için bugünün ${fmt(term.effectiveStart)} ve ${fmt(term.effectiveEnd)} arasında olması gerekir.`
     : null;
 
   return (
@@ -520,6 +562,38 @@ function TermDetailView({ term }: { term: AdminTermDto }) {
       />
       <DetailRow label="Başlangıç" value={fmt(term.termStart)} />
       <DetailRow label="Bitiş" value={fmt(term.termEnd)} />
+
+      {(hasOverrideStart || hasOverrideEnd) && (
+        <>
+          {hasOverrideStart && (
+            <DetailRow
+              label="Erken Aktivasyon"
+              value={
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-sky-100 text-sky-700 border-sky-300">
+                    🔵 {fmt(term.overrideStart!)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">(dönem başlamadan aktif edildi)</span>
+                </span>
+              }
+            />
+          )}
+          {hasOverrideEnd && (
+            <DetailRow
+              label="Uzatma"
+              value={
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-amber-100 text-amber-700 border-amber-300">
+                    🟡 {fmt(term.overrideEnd!)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">(dönem sonrası uzatıldı)</span>
+                </span>
+              }
+            />
+          )}
+        </>
+      )}
+
       <DetailRow
         label="Akademik Takvim"
         value={term.hasAcademicCalendar ? 'Tanımlı' : 'Eksik'}
@@ -528,7 +602,17 @@ function TermDetailView({ term }: { term: AdminTermDto }) {
       {inactiveReason && (
         <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
           <p className="font-semibold mb-1">Neden Aktif değil?</p>
-          <p>{inactiveReason}</p>
+          <p className="mb-2">{inactiveReason}</p>
+          {!term.isCancelled && (
+            <div className="flex items-center gap-2 pt-1 border-t border-amber-200/60">
+              <Button size="sm" variant="outline" onClick={onEdit} className="h-7 text-xs">
+                Tarihleri Düzenle
+              </Button>
+              <span className="text-[11px] text-amber-800/80">
+                veya Erken Aktivasyon / Uzatma alanını doldurarak override ekleyin.
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -634,6 +718,33 @@ function TermForm({
           <div className="space-y-1">
             <label className="text-sm font-medium">Bitiş *</label>
             <Input type="date" value={form.termEnd} onChange={e => setForm(f => ({ ...f, termEnd: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-3 space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Override Tarihleri
+          <span className="ml-2 font-normal text-muted-foreground normal-case">
+            (Opsiyonel — admin dönem tarihi dışında manuel kontrol için)
+          </span>
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Erken Aktivasyon</label>
+            <Input type="date" value={form.overrideStart}
+              onChange={e => setForm(f => ({ ...f, overrideStart: e.target.value }))} />
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Dönem başlangıcından önce aktif et. TermStart'tan <strong>önce</strong> bir tarih girilmeli.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Uzatma</label>
+            <Input type="date" value={form.overrideEnd}
+              onChange={e => setForm(f => ({ ...f, overrideEnd: e.target.value }))} />
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Dönem bitişinden sonra aktif tut. TermEnd'den <strong>sonra</strong> bir tarih girilmeli.
+            </p>
           </div>
         </div>
       </div>

@@ -56,6 +56,17 @@ public class AdminTermService : IAdminTermService
             throw new InvalidOperationException(
                 $"{dto.Year} yılı için {GetTermTypeLabel(termType)} dönemi zaten mevcut.");
 
+        var termStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc);
+        var termEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc);
+        var overrideStart = dto.OverrideStart.HasValue
+            ? DateTime.SpecifyKind(dto.OverrideStart.Value, DateTimeKind.Utc)
+            : (DateTime?)null;
+        var overrideEnd = dto.OverrideEnd.HasValue
+            ? DateTime.SpecifyKind(dto.OverrideEnd.Value, DateTimeKind.Utc)
+            : (DateTime?)null;
+
+        ValidateDateRange(termStart, termEnd, overrideStart, overrideEnd);
+
         var term = new AcademicTerm
         {
             Name = dto.Name,
@@ -65,8 +76,10 @@ public class AdminTermService : IAdminTermService
             OtherName = string.IsNullOrWhiteSpace(dto.OtherName) ? null : dto.OtherName,
             Year = dto.Year,
             TermType = termType,
-            TermStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc),
-            TermEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc),
+            TermStart = termStart,
+            TermEnd = termEnd,
+            OverrideStart = overrideStart,
+            OverrideEnd = overrideEnd,
             IsCancelled = false,
             YoksisStatus = ParseYoksisStatus(dto.YoksisStatus),
             CreatedAt = _clock.UtcNow
@@ -89,19 +102,57 @@ public class AdminTermService : IAdminTermService
         if (term.IsCancelled)
             throw new InvalidOperationException("İptal edilmiş dönem düzenlenemez. Önce iptali geri alın.");
 
+        var termStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc);
+        var termEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc);
+        var overrideStart = dto.OverrideStart.HasValue
+            ? DateTime.SpecifyKind(dto.OverrideStart.Value, DateTimeKind.Utc)
+            : (DateTime?)null;
+        var overrideEnd = dto.OverrideEnd.HasValue
+            ? DateTime.SpecifyKind(dto.OverrideEnd.Value, DateTimeKind.Utc)
+            : (DateTime?)null;
+
+        ValidateDateRange(termStart, termEnd, overrideStart, overrideEnd);
+
         term.Name = dto.Name;
         term.ShortName = dto.ShortName;
         term.EnglishName = dto.EnglishName;
         term.ShortEnglishName = dto.ShortEnglishName;
         term.OtherName = string.IsNullOrWhiteSpace(dto.OtherName) ? null : dto.OtherName;
         term.TermType = ParseTermType(dto.TermType);
-        term.TermStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc);
-        term.TermEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc);
+        term.TermStart = termStart;
+        term.TermEnd = termEnd;
+        term.OverrideStart = overrideStart;
+        term.OverrideEnd = overrideEnd;
         term.YoksisStatus = ParseYoksisStatus(dto.YoksisStatus);
         term.UpdatedAt = _clock.UtcNow;
 
         await _context.SaveChangesAsync();
         return ToDto(term);
+    }
+
+    /// <summary>
+    /// Dönem ve override tarihleri için tutarlılık kontrolü.
+    /// Hata durumunda ArgumentException fırlatır, mesaj admin'e gösterilir.
+    /// </summary>
+    private static void ValidateDateRange(
+        DateTime termStart, DateTime termEnd,
+        DateTime? overrideStart, DateTime? overrideEnd)
+    {
+        if (termEnd <= termStart)
+            throw new ArgumentException("Dönem bitiş tarihi, başlangıçtan sonra olmalı.");
+
+        if (overrideStart.HasValue && overrideStart.Value >= termStart)
+            throw new ArgumentException(
+                "Erken aktivasyon tarihi (OverrideStart) dönem başlangıcından ÖNCE olmalı. " +
+                "Dönemi geciktirmek istiyorsanız bunun yerine TermStart'ı değiştirin.");
+
+        if (overrideEnd.HasValue && overrideEnd.Value <= termEnd)
+            throw new ArgumentException(
+                "Uzatma tarihi (OverrideEnd) dönem bitişinden SONRA olmalı. " +
+                "Dönemi kısaltmak istiyorsanız TermEnd'i değiştirin veya iptal edin.");
+
+        if (overrideStart.HasValue && overrideEnd.HasValue && overrideEnd.Value <= overrideStart.Value)
+            throw new ArgumentException("Uzatma tarihi, erken aktivasyon tarihinden sonra olmalı.");
     }
 
     public async Task CancelTermAsync(int id)
@@ -160,6 +211,8 @@ public class AdminTermService : IAdminTermService
             t.IsCancelled,
             t.YoksisStatus.ToString(),
             t.TermStart, t.TermEnd,
+            t.OverrideStart, t.OverrideEnd,
+            t.EffectiveStart, t.EffectiveEnd,
             t.IsActive(now),
             t.AcademicCalendar is not null,
             t.CalendarEvents.Count,
