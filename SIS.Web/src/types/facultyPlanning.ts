@@ -106,6 +106,7 @@ export interface AutoSchedulePreview {
   failedCount: number;
   assignments: AutoSchedulePreviewItem[];
   failures: AutoScheduleFailure[];
+  invalidatedAssignments: InvalidatedAssignment[];
   seed: number;
   totalPenalty: number;
   stats: AutoScheduleStats;
@@ -133,6 +134,14 @@ export interface AutoSchedulePreviewItem {
   instructorId: number | null;
   instructorName: string | null;
   fitScore: number;
+}
+
+export interface InvalidatedAssignment {
+  sectionId: number;
+  sectionNumber: number;
+  courseCode: string;
+  courseName: string;
+  reason: string;
 }
 
 export interface AutoScheduleFailure {

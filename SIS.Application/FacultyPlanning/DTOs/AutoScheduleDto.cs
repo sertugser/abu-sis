@@ -18,9 +18,23 @@ public class AutoSchedulePreviewDto
     public int FailedCount { get; set; }
     public List<AutoSchedulePreviewItemDto> Assignments { get; set; } = new();
     public List<AutoScheduleFailureDto> Failures { get; set; } = new();
+    /// <summary>
+    /// Engine çalışırken kural ihlali bulunan mevcut atamalar temizlenip yeniden atandıysa
+    /// bu listede rapor edilir. UI admin'e "şu dersler X sebebiyle sıfırlandı ve yeniden yerleştirildi" gösterir.
+    /// </summary>
+    public List<InvalidatedAssignmentDto> InvalidatedAssignments { get; set; } = new();
     public int Seed { get; set; }
     public double TotalPenalty { get; set; }
     public AutoScheduleStats Stats { get; set; } = new();
+}
+
+public class InvalidatedAssignmentDto
+{
+    public int SectionId { get; set; }
+    public int SectionNumber { get; set; }
+    public string CourseCode { get; set; } = string.Empty;
+    public string CourseName { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
 }
 
 public class AutoSchedulePreviewItemDto

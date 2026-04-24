@@ -224,6 +224,10 @@ public sealed class AutoScheduleEngine
             baseSnapshot.EnrollmentConflicts = enrollmentMatrix;
         }
 
+        // 9a. Kural ihlali retroaktif doğrulama — mevcut atamaları SlotAllowedModes'a göre kontrol et.
+        // Örn: slot AllowedMode=OnlineOnly olduktan sonra eski FaceToFace atamaları temizlenir, yeniden atanır.
+        var invalidationReasons = await InvalidateAssignmentsViolatingSlotModeAsync(sections, slotAllowedModes, ct);
+
         // 9. Populate MutableScheduleState
         var state = new MutableScheduleState(request.TermId);
         state.SetClassroomLookup(classrooms.ToDictionary(c => c.Id));
@@ -233,9 +237,11 @@ public sealed class AutoScheduleEngine
         foreach (var section in sections)
         {
             var snap = sectionSnapshots[section.Id];
+            // SectionSchedules temizlenmiş olabilir (invalidation pass sonrası) — Count'u yeniden oku
             var isScheduled = section.SectionSchedules.Count > 0;
+            var wasInvalidated = invalidationReasons.ContainsKey(section.Id);
 
-            if (isScheduled)
+            if (isScheduled && !wasInvalidated)
             {
                 var blocks = BuildBlockAssignments(section);
 
@@ -254,7 +260,7 @@ public sealed class AutoScheduleEngine
             }
             else
             {
-                // Unscheduled section -> target
+                // Atanmamış VEYA kural ihlali nedeniyle temizlenmiş → target
                 targetSectionIds.Add(section.Id);
             }
         }
@@ -405,6 +411,21 @@ public sealed class AutoScheduleEngine
             Suggestions = f.Suggestions
         }).ToList();
 
+        var invalidatedList = invalidationReasons
+            .Select(kvp =>
+            {
+                var snap = sectionSnapshots.TryGetValue(kvp.Key, out var s) ? s : null;
+                return new InvalidatedAssignmentDto
+                {
+                    SectionId = kvp.Key,
+                    SectionNumber = snap?.SectionNumber ?? 0,
+                    CourseCode = snap?.CourseCode ?? string.Empty,
+                    CourseName = snap?.CourseName ?? string.Empty,
+                    Reason = kvp.Value,
+                };
+            })
+            .ToList();
+
         return new AutoSchedulePreviewDto
         {
             TotalProcessed = targetSectionIds.Count,
@@ -412,6 +433,7 @@ public sealed class AutoScheduleEngine
             FailedCount = failures.Count,
             Assignments = assignments,
             Failures = failures,
+            InvalidatedAssignments = invalidatedList,
             Seed = seed,
             TotalPenalty = saResult.FinalPenalty,
             Stats = new AutoScheduleStats
@@ -424,6 +446,65 @@ public sealed class AutoScheduleEngine
                 ElapsedSeconds = stopwatch.Elapsed.TotalSeconds
             }
         };
+    }
+
+    /// <summary>
+    /// Faz 0: Mevcut atanmış section'ların her bloğu için slot AllowedMode kontrolü yapar.
+    /// FaceToFace section'ı OnlineOnly slotta ise (veya FaceToFaceOnly slotta Online ders ise) ihlal.
+    /// İhlal bulunan section'ların tüm SectionSchedules kayıtlarını siler, in-memory Collection'ı da
+    /// temizler ki main loop "atanmamış" olarak işleyip target listesine alsın.
+    /// Döner: sectionId → neden açıklaması.
+    /// </summary>
+    private async Task<Dictionary<int, string>> InvalidateAssignmentsViolatingSlotModeAsync(
+        List<CourseSection> sections,
+        Dictionary<(DayOfWeek Day, TimeOnly StartTime), Domain.Enums.TimeSlotAllowedMode> slotAllowedModes,
+        CancellationToken ct)
+    {
+        var invalidated = new Dictionary<int, string>();
+        if (slotAllowedModes.Count == 0) return invalidated;
+
+        var toDelete = new List<SectionSchedule>();
+
+        foreach (var section in sections)
+        {
+            if (section.SectionSchedules.Count == 0) continue;
+
+            string? reason = null;
+            foreach (var ss in section.SectionSchedules)
+            {
+                var ts = ss.TimeSlot;
+                if (ts == null) continue;
+                if (!slotAllowedModes.TryGetValue((ts.DayOfWeek, ts.StartTime), out var mode))
+                    continue;
+
+                var method = section.Course.TeachingMethod;
+                if (mode == Domain.Enums.TimeSlotAllowedMode.OnlineOnly && method == TeachingMethod.FaceToFace)
+                {
+                    reason = $"Slot {ts.DayOfWeek} {ts.StartTime:HH\\:mm}–{ts.EndTime:HH\\:mm} artık OnlineOnly; yüz-yüze ders atanamaz.";
+                    break;
+                }
+                if (mode == Domain.Enums.TimeSlotAllowedMode.FaceToFaceOnly && method == TeachingMethod.Online)
+                {
+                    reason = $"Slot {ts.DayOfWeek} {ts.StartTime:HH\\:mm}–{ts.EndTime:HH\\:mm} artık FaceToFaceOnly; online ders atanamaz.";
+                    break;
+                }
+            }
+
+            if (reason != null)
+            {
+                invalidated[section.Id] = reason;
+                toDelete.AddRange(section.SectionSchedules);
+                section.SectionSchedules.Clear(); // in-memory da temizle ki isScheduled=false olsun
+            }
+        }
+
+        if (toDelete.Count > 0)
+        {
+            _context.SectionSchedules.RemoveRange(toDelete);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return invalidated;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────
