@@ -935,7 +935,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                 SlotOrder = ts.SlotOrder,
                 StartTime = ts.StartTime,
                 EndTime = ts.EndTime,
-                DisplayName = ts.DisplayName
+                DisplayName = ts.DisplayName,
+                AllowedMode = ts.AllowedMode
             })
             .ToListAsync(ct);
     }

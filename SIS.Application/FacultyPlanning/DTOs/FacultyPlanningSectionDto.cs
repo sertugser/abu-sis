@@ -1,3 +1,5 @@
+using SIS.Domain.Enums;
+
 namespace SIS.Application.FacultyPlanning.DTOs;
 
 public class FacultyPlanningSectionDto
@@ -39,4 +41,5 @@ public class FacultyPlanningTimeSlotDto
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
     public string DisplayName { get; set; } = string.Empty;
+    public TimeSlotAllowedMode AllowedMode { get; set; }
 }

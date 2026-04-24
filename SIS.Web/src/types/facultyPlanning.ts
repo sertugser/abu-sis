@@ -72,12 +72,15 @@ export interface FacultyPlanningSectionPage {
   pageSize: number;
 }
 
+export type TimeSlotAllowedMode = 'Both' | 'OnlineOnly' | 'FaceToFaceOnly';
+
 export interface FacultyPlanningTimeSlot {
   day: number;
   slotOrder: number;
   startTime: string;
   endTime: string;
   displayName: string;
+  allowedMode: TimeSlotAllowedMode;
 }
 
 export interface AssignSectionRequest {

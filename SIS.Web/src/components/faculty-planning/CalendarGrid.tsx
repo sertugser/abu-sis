@@ -1,20 +1,12 @@
 import { Fragment, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { parseScheduleSummary } from '@/lib/scheduleUtils';
+import { parseScheduleSummary, dayNumberToTurkish, weekOrderKey } from '@/lib/scheduleUtils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Plus, User, Users, Clock, Wifi } from 'lucide-react';
+import { MapPin, Plus, User, Users, Clock, Coffee } from 'lucide-react';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
+import { useScheduleSettings } from '../../hooks/useScheduleSettings';
 import { STATUS_CONFIG } from './sectionUtils';
-
-/* ── Gün tanımları ── */
-const WEEKDAYS = [
-  { day: 1, label: 'Pazartesi' },
-  { day: 2, label: 'Salı' },
-  { day: 3, label: 'Çarşamba' },
-  { day: 4, label: 'Perşembe' },
-  { day: 5, label: 'Cuma' },
-];
 
 /* ── 16 renk paleti — courseCode hash ile sabit renk ── */
 const COURSE_COLORS = [
@@ -48,12 +40,6 @@ function getBlockColor(suggestedSemester: number, status: string) {
   return COURSE_COLORS[colorIdx];
 }
 
-/** Saat >= 18:00 ise akşam (online) dilimi */
-function isEveningSlot(startTime: string): boolean {
-  const h = parseInt(startTime.split(':')[0], 10);
-  return h >= 18;
-}
-
 /* ── Blok tanımları ── */
 interface ParsedBlock {
   sectionId: number;
@@ -81,18 +67,17 @@ function timeToMinutes(t: string): number {
 
 /* ── Plain CalendarCell ── */
 function CalendarCell({
-  isEvening, children,
+  isRestricted, children,
 }: {
-  isEvening: boolean;
+  isRestricted: boolean;
   children: React.ReactNode;
 }) {
   return (
     <td
       className={cn(
-        'border border-slate-200/80 p-1 align-top',
-        isEvening ? 'bg-slate-50/60' : 'bg-white',
+        'border border-slate-200/80 p-0.5 align-top',
+        isRestricted ? 'bg-slate-50/60' : 'bg-white',
       )}
-      style={{ minHeight: 56 }}
     >
       {children}
     </td>
@@ -172,49 +157,65 @@ function SectionBlock({
 }) {
   const color = getBlockColor(section.suggestedSemester, section.status);
 
+  // Continuation = üst slotun devamı; noktalı üst border + daha silik
+  const continuationClass = isContinuation
+    ? 'opacity-60 border-t border-dashed'
+    : '';
+
+  const cardInner = (
+    <div
+      className={cn(
+        'rounded-md border-l-[3px] px-1.5 py-1 cursor-pointer transition-all',
+        'hover:shadow-md',
+        color.bg, color.border, color.text,
+        continuationClass,
+      )}
+      style={{ borderLeftColor: color.accent }}
+      onClick={e => e.stopPropagation()}
+    >
+      {isContinuation ? (
+        <div className="flex items-center gap-1">
+          <span className="font-mono font-semibold text-xs">{section.courseCode}</span>
+          <span className="text-[10px] font-mono opacity-70">·{section.sectionIndex}</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-baseline gap-1 leading-tight">
+            <span className="font-mono font-bold text-sm">{section.courseCode}</span>
+            <span className="text-[10px] font-mono opacity-70">·{section.sectionIndex}</span>
+          </div>
+          {rowSpan >= 2 && (
+            <div className="text-[11px] leading-tight mt-0.5 opacity-80 truncate">{section.courseName}</div>
+          )}
+          {rowSpan >= 2 && (
+            <div className="flex items-center gap-2 mt-0.5 text-[10px] opacity-70">
+              {section.classroomName && (
+                <span className="flex items-center gap-0.5">
+                  <MapPin className="h-2.5 w-2.5" />
+                  {section.classroomName}
+                </span>
+              )}
+              {section.instructorName && (
+                <span className="flex items-center gap-0.5 truncate">
+                  <User className="h-2.5 w-2.5" />
+                  {section.instructorName.split(' ').pop()}
+                </span>
+              )}
+            </div>
+          )}
+          {rowSpan >= 3 && (
+            <div className="text-[10px] mt-0.5 opacity-60">
+              {section.capacity} kişi
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <div
-          className={cn(
-            'rounded-lg border-l-[3px] px-2 py-1.5 cursor-pointer transition-all',
-            'hover:shadow-md hover:scale-[1.01]',
-            color.bg, color.border, color.text,
-          )}
-          style={{ borderLeftColor: color.accent }}
-          onClick={e => e.stopPropagation()}
-        >
-          {isContinuation ? (
-            <span className="font-mono font-semibold text-xs opacity-60">{section.courseCode}</span>
-          ) : (
-            <>
-              <div className="font-mono font-bold text-sm leading-tight">{section.courseCode}</div>
-              <div className="text-xs leading-tight mt-0.5 opacity-80 truncate">{section.courseName}</div>
-              {rowSpan >= 2 && (
-                <div className="flex items-center gap-1 mt-1 text-[11px] opacity-70">
-                  {section.classroomName && (
-                    <span className="flex items-center gap-0.5">
-                      <MapPin className="h-3 w-3" />
-                      {section.classroomName}
-                    </span>
-                  )}
-                  {section.instructorName && (
-                    <span className="flex items-center gap-0.5 ml-1">
-                      <User className="h-3 w-3" />
-                      {section.instructorName.split(' ').pop()}
-                    </span>
-                  )}
-                </div>
-              )}
-              {rowSpan >= 3 && (
-                <div className="text-[10px] mt-0.5 opacity-60">
-                  Ş.{section.sectionIndex} &middot; {section.capacity} kişi
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{cardInner}</PopoverTrigger>
       <PopoverContent className="w-80" side="right" align="start">
         <SectionPopoverContent
           section={section}
@@ -235,6 +236,32 @@ export interface CalendarGridProps {
 export function CalendarGrid({
   sections, timeSlots, onEmptyCellClick,
 }: CalendarGridProps) {
+  /* Görünür günler — veride slot tanımlı olan günleri sırala */
+  const visibleDays = useMemo(() => {
+    const groups = new Map<number, FacultyPlanningTimeSlot[]>();
+    for (const slot of timeSlots) {
+      const arr = groups.get(slot.day) ?? [];
+      arr.push(slot);
+      groups.set(slot.day, arr);
+    }
+    return Array.from(groups.entries())
+      .map(([day, slots]) => ({
+        day,
+        label: dayNumberToTurkish(day),
+        isAllOnline: slots.length > 0 && slots.every(s => s.allowedMode === 'OnlineOnly'),
+      }))
+      .sort((a, b) => weekOrderKey(a.day) - weekOrderKey(b.day));
+  }, [timeSlots]);
+
+  /* (day, startTime) → slot haritası — her hücre kendi AllowedMode'unu bilsin */
+  const slotLookup = useMemo(() => {
+    const map = new Map<string, FacultyPlanningTimeSlot>();
+    for (const slot of timeSlots) {
+      map.set(`${slot.day}-${slot.startTime.slice(0, 5)}`, slot);
+    }
+    return map;
+  }, [timeSlots]);
+
   /* Zaman satırları */
   const timeRows = useMemo(() => {
     const seen = new Map<number, { slotOrder: number; startTime: string; endTime: string }>();
@@ -308,12 +335,25 @@ export function CalendarGrid({
     return { starts, covered };
   }, [allBlocks, timeRows]);
 
-  /* Akşam dilimi başlangıç satırı bul */
-  const eveningStartIdx = useMemo(() => {
-    return timeRows.findIndex(r => isEveningSlot(r.startTime));
-  }, [timeRows]);
+  /* Öğle arası: config'ten oku, uygun satırlar arasına ayırıcı bas */
+  const settings = useScheduleSettings();
+  const lunchBreakIdx = useMemo(() => {
+    if (settings.isLoading) return -1;
+    const lunchStartMin = timeToMinutes(settings.lunchBreakStart);
+    // Öğle arasından HEMEN ÖNCE biten son sabah satırını bul → onun sonrasına ayırıcı
+    let idx = -1;
+    for (let i = 0; i < timeRows.length; i++) {
+      const end = timeToMinutes(timeRows[i].endTime.slice(0, 5));
+      if (end <= lunchStartMin) idx = i;
+    }
+    // Ayırıcı, idx+1 satırından önce basılır. Ama öğle sonrası satırı yoksa basma.
+    if (idx < 0 || idx >= timeRows.length - 1) return -1;
+    return idx + 1;
+  }, [timeRows, settings.lunchBreakStart, settings.isLoading]);
 
-  if (timeRows.length === 0) {
+  const totalColSpan = 1 + visibleDays.length;
+
+  if (timeRows.length === 0 || visibleDays.length === 0) {
     return (
       <div className="h-full border border-slate-200 rounded-xl flex items-center justify-center bg-slate-50">
         <p className="text-base text-slate-400">Zaman dilimi bilgisi bulunamadı</p>
@@ -335,65 +375,81 @@ export function CalendarGrid({
       <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 72 }} />
-          {WEEKDAYS.map(wd => <col key={wd.day} />)}
+          {visibleDays.map(wd => <col key={wd.day} />)}
         </colgroup>
         <thead className="sticky top-0 z-10">
           <tr className="bg-slate-50/95 backdrop-blur-sm">
             <th className="border border-slate-200/80 p-2 text-center font-semibold text-slate-500 text-xs uppercase tracking-wider">
               Saat
             </th>
-            {WEEKDAYS.map(wd => (
-              <th key={wd.day} className="border border-slate-200/80 p-2 text-center">
-                <div className="font-semibold text-slate-700 text-sm">{wd.label}</div>
+            {visibleDays.map(wd => (
+              <th
+                key={wd.day}
+                className={cn(
+                  'border border-slate-200/80 p-2 text-center',
+                  wd.isAllOnline && 'bg-slate-100/80',
+                )}
+              >
+                <div className={cn(
+                  'font-semibold text-sm',
+                  wd.isAllOnline ? 'text-slate-500' : 'text-slate-700',
+                )}>
+                  {wd.label}
+                </div>
+                {wd.isAllOnline && (
+                  <div className="text-[9px] text-slate-400 font-normal mt-0.5">Online</div>
+                )}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {/* Akşam dilimi ayırıcı */}
           {timeRows.map((row, rowIdx) => {
-            const isEvening = isEveningSlot(row.startTime);
-            const showEveningSeparator = rowIdx === eveningStartIdx && eveningStartIdx > 0;
+            const showLunchSeparator = rowIdx === lunchBreakIdx;
 
             return (
               <Fragment key={row.startTime}>
-                {showEveningSeparator && (
+                {showLunchSeparator && (
                   <tr>
-                    <td colSpan={6} className="bg-slate-100 border border-slate-200/80 py-1 px-3">
-                      <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                        <Wifi className="h-3 w-3" />
-                        <span>Akşam Dilimi — Sadece Online Dersler</span>
-                        <div className="flex-1 h-px bg-slate-300" />
+                    <td colSpan={totalColSpan} className="bg-amber-50/60 border border-slate-200/80 py-0.5 px-3">
+                      <div className="flex items-center gap-2 text-[11px] text-amber-700 font-medium">
+                        <Coffee className="h-3 w-3" />
+                        <span>Öğle Arası — {settings.lunchBreakStart}–{settings.lunchBreakEnd}</span>
+                        <div className="flex-1 h-px bg-amber-200" />
                       </div>
                     </td>
                   </tr>
                 )}
-                <tr style={{ height: 64 }}>
+                <tr style={{ height: 44 }}>
                   {/* Saat etiketi */}
-                  <td className={cn(
-                    'border border-slate-200/80 p-1 text-center align-top',
-                    isEvening && 'bg-slate-50/60',
-                  )}>
-                    <span className="font-mono font-semibold text-sm text-slate-500">
+                  <td className="border border-slate-200/80 px-1 py-0.5 text-center align-top bg-white">
+                    <span className="font-mono font-semibold text-[12px] text-slate-600">
                       {row.startTime.slice(0, 5)}
                     </span>
-                    <div className="font-mono text-[10px] text-slate-300">{row.endTime.slice(0, 5)}</div>
+                    <div className="font-mono text-[9px] text-slate-300 leading-none">{row.endTime.slice(0, 5)}</div>
                   </td>
 
                   {/* Gün hücreleri */}
-                  {WEEKDAYS.map(wd => {
+                  {visibleDays.map(wd => {
                     const cellKey = `${wd.day}-${row.startTime}`;
                     const cellBlocks = blockMap.get(cellKey) ?? [];
+                    const slot = slotLookup.get(`${wd.day}-${row.startTime.slice(0, 5)}`);
+                    const isOnlineOnly = slot?.allowedMode === 'OnlineOnly';
+                    const slotMissing = slot === undefined;
 
-                    const isClickableEmpty = cellBlocks.length === 0 && !isEvening && onEmptyCellClick != null;
+                    const isClickableEmpty =
+                      cellBlocks.length === 0 &&
+                      !slotMissing &&
+                      !isOnlineOnly &&
+                      onEmptyCellClick != null;
 
                     return (
-                      <CalendarCell key={cellKey} isEvening={isEvening}>
+                      <CalendarCell key={cellKey} isRestricted={isOnlineOnly || slotMissing}>
                         <div
                           className={cn(
-                            'flex flex-col gap-1',
-                            cellBlocks.length > 0 && 'min-h-[3.5rem]',
-                            isClickableEmpty && 'cursor-pointer hover:bg-blue-50/50 rounded transition-colors group min-h-[3.5rem] items-center justify-center',
+                            'flex flex-col gap-0.5',
+                            cellBlocks.length > 0 && 'min-h-[2.5rem]',
+                            isClickableEmpty && 'cursor-pointer hover:bg-blue-50/50 rounded transition-colors group min-h-[2.5rem] items-center justify-center',
                           )}
                           onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime) : undefined}
                         >
@@ -412,7 +468,7 @@ export function CalendarGrid({
                             );
                           })}
                           {isClickableEmpty && (
-                            <Plus className="h-4 w-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <Plus className="h-3.5 w-3.5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                           )}
                         </div>
                       </CalendarCell>
