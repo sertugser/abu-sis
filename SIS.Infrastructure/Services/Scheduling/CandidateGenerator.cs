@@ -42,10 +42,14 @@ public sealed class CandidateGenerator
         Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
         int splitThreshold,
         HashSet<int> facultyClassroomIds,
-        HashSet<BlockAssignment>? excludeBlocks = null)
+        HashSet<BlockAssignment>? excludeBlocks = null,
+        HashSet<BlockType>? splittableBlockTypes = null)
     {
         var hasTheory = section.TheoryHours > 0;
         var hasLab = section.LabHours > 0;
+
+        // Varsayılan: sadece Lab split'i yapılabilir. Config'ten farklı gelirse üzerine yazar.
+        var splittable = splittableBlockTypes ?? new HashSet<BlockType> { BlockType.Lab };
 
         // Online dersler için özel akış: derslik iterasyonu yok, sadece zaman penceresi.
         // Weekend slotları da dahil — online için OnlineOnly günleri kullanılabilir.
@@ -66,7 +70,7 @@ public sealed class CandidateGenerator
 
         if (hasTheory && hasLab)
             return GenerateMixed(section, state, allClassrooms, timeSlotsByDay, sortedDays,
-                splitThreshold, facultyClassroomIds, excludeBlocks);
+                splitThreshold, facultyClassroomIds, excludeBlocks, splittable);
 
         if (hasTheory)
             return GenerateSingleBlock(
@@ -74,7 +78,7 @@ public sealed class CandidateGenerator
                 section.TheoryHours,
                 section.TheoryClassroomType ?? ClassroomType.Lecture,
                 section, state, allClassrooms, timeSlotsByDay, sortedDays,
-                facultyClassroomIds, excludeBlocks);
+                facultyClassroomIds, excludeBlocks, splittable);
 
         if (hasLab)
             return GenerateSingleBlock(
@@ -82,7 +86,7 @@ public sealed class CandidateGenerator
                 section.LabHours,
                 section.LabClassroomType ?? ClassroomType.Lab,
                 section, state, allClassrooms, timeSlotsByDay, sortedDays,
-                facultyClassroomIds, excludeBlocks);
+                facultyClassroomIds, excludeBlocks, splittable);
 
         return new List<BlockCombination>();
     }
@@ -97,12 +101,14 @@ public sealed class CandidateGenerator
         Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
         List<DayOfWeek> sortedDays,
         HashSet<int> facultyClassroomIds,
-        HashSet<BlockAssignment>? excludeBlocks)
+        HashSet<BlockAssignment>? excludeBlocks,
+        HashSet<BlockType> splittableBlockTypes)
     {
-        if (blockType == BlockType.Lab)
+        // Split izinli block type için kapasite-sığmayan durumda paralel oda split'i dene
+        if (splittableBlockTypes.Contains(blockType))
         {
-            return GenerateLabBlocks(
-                requiredHours, requiredClassroomType, section, state,
+            return GenerateSplittableBlocks(
+                blockType, requiredHours, requiredClassroomType, section, state,
                 allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
         }
 
@@ -111,15 +117,19 @@ public sealed class CandidateGenerator
 
         return blocks
             .Take(MaxCombinations)
-            .Select(b => new BlockCombination { TheoryBlock = b })
+            .Select(b => blockType == BlockType.Lab
+                ? new BlockCombination { LabBlocks = new List<BlockAssignment> { b } }
+                : new BlockCombination { TheoryBlock = b })
             .ToList();
     }
 
     /// <summary>
-    /// Lab blokları üretir. Tek lab dersliği yeterliyse tek blok, yetmezse
-    /// section'ı birden fazla lab grubuna böler.
+    /// Kapasite yetersiz ise paralel oda split'i yapar (aynı zaman dilimi, farklı odalar).
+    /// Proliz pattern'ı: BM 101 Java I Lab, 80 kişi, Salı 14:00 → L139 + L141 aynı anda.
+    /// Tek oda yeterliyse tek block döner. Yetmezse aynı slot'ta birden fazla oda'ya böler.
     /// </summary>
-    private List<BlockCombination> GenerateLabBlocks(
+    private List<BlockCombination> GenerateSplittableBlocks(
+        BlockType blockType,
         int requiredHours,
         ClassroomType requiredClassroomType,
         SectionSnapshot section,
@@ -130,88 +140,78 @@ public sealed class CandidateGenerator
         HashSet<int> facultyClassroomIds,
         HashSet<BlockAssignment>? excludeBlocks)
     {
-        // Try single lab room first (capacity >= section capacity)
+        // 1) Tek oda yeterli mi? Try single room first (capacity >= section capacity)
         var singleRoomClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, section.Capacity, facultyClassroomIds);
         if (singleRoomClassrooms.Count > 0)
         {
-            var blocks = FindBlocks(BlockType.Lab, requiredHours, singleRoomClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+            var blocks = FindBlocks(blockType, requiredHours, singleRoomClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
             return blocks
                 .Take(MaxCombinations)
-                .Select(b => new BlockCombination { LabBlocks = new List<BlockAssignment> { b } })
+                .Select(b => blockType == BlockType.Lab
+                    ? new BlockCombination { LabBlocks = new List<BlockAssignment> { b } }
+                    : new BlockCombination { TheoryBlock = b })
                 .ToList();
         }
 
-        // No single room fits — split into multiple lab groups
-        // Find the largest lab classroom to determine group count
-        var allLabClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, 1, facultyClassroomIds);
-        if (allLabClassrooms.Count == 0)
+        // 2) Tek oda yetmiyor — paralel split dene
+        // Uygun oda sayısını hesapla: en büyük oda bazında
+        var allMatchingClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, 1, facultyClassroomIds);
+        if (allMatchingClassrooms.Count == 0)
             return new List<BlockCombination>();
 
-        var maxLabCapacity = allLabClassrooms.Max(c => c.Capacity);
-        var groupCount = (int)Math.Ceiling((double)section.Capacity / maxLabCapacity);
+        var maxCapacity = allMatchingClassrooms.Max(c => c.Capacity);
+        var groupCount = (int)Math.Ceiling((double)section.Capacity / maxCapacity);
         var minCapacityPerGroup = (int)Math.Ceiling((double)section.Capacity / groupCount);
 
-        var labClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, minCapacityPerGroup, facultyClassroomIds);
-        if (labClassrooms.Count == 0)
+        var splitClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, minCapacityPerGroup, facultyClassroomIds);
+        if (splitClassrooms.Count < groupCount)
             return new List<BlockCombination>();
 
-        var labCandidates = FindBlocks(BlockType.Lab, requiredHours, labClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
-        if (labCandidates.Count < groupCount)
+        var allSplitCandidates = FindBlocks(blockType, requiredHours, splitClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+        if (allSplitCandidates.Count < groupCount)
             return new List<BlockCombination>();
 
-        // Generate combinations of `groupCount` non-overlapping lab blocks
+        // 3) AYNI zaman diliminde (Day + StartTime + EndTime) groupCount adet farklı oda bulunan
+        // pencereler arasından kombinasyon üret. Paralel split = aynı saat, farklı oda.
         var results = new List<BlockCombination>();
-        for (var i = 0; i < labCandidates.Count && results.Count < MaxCombinations; i++)
+        var windowGroups = allSplitCandidates
+            .GroupBy(b => (b.Day, b.StartTime, b.EndTime))
+            .Where(g => g.Count() >= groupCount)
+            .ToList();
+
+        foreach (var windowGroup in windowGroups)
         {
-            var first = labCandidates[i];
-            if (groupCount == 2)
+            var roomsInWindow = windowGroup
+                .OrderBy(b => ClassroomCapacityOf(b.ClassroomId, allMatchingClassrooms))
+                .ToList();
+
+            // Sliding window: [0..groupCount), [1..groupCount+1), ... farklı oda kombinasyonları
+            for (var i = 0; i <= roomsInWindow.Count - groupCount; i++)
             {
-                for (var j = i + 1; j < labCandidates.Count && results.Count < MaxCombinations; j++)
-                {
-                    var second = labCandidates[j];
-                    if (!HasTimeOverlap(first, second))
-                    {
-                        results.Add(new BlockCombination
-                        {
-                            LabBlocks = new List<BlockAssignment> { first, second }
-                        });
-                    }
-                }
-            }
-            else if (groupCount == 3)
-            {
-                for (var j = i + 1; j < labCandidates.Count && results.Count < MaxCombinations; j++)
-                {
-                    var second = labCandidates[j];
-                    if (HasTimeOverlap(first, second)) continue;
-                    for (var k = j + 1; k < labCandidates.Count && results.Count < MaxCombinations; k++)
-                    {
-                        var third = labCandidates[k];
-                        if (!HasTimeOverlap(first, third) && !HasTimeOverlap(second, third))
-                        {
-                            results.Add(new BlockCombination
-                            {
-                                LabBlocks = new List<BlockAssignment> { first, second, third }
-                            });
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // 4+ groups: just pair sequentially (unlikely case)
-                var group = new List<BlockAssignment> { first };
-                for (var j = i + 1; j < labCandidates.Count && group.Count < groupCount; j++)
-                {
-                    if (group.All(g => !HasTimeOverlap(g, labCandidates[j])))
-                        group.Add(labCandidates[j]);
-                }
-                if (group.Count == groupCount)
-                    results.Add(new BlockCombination { LabBlocks = group });
+                if (results.Count >= MaxCombinations)
+                    return results;
+
+                var combo = roomsInWindow.Skip(i).Take(groupCount).ToList();
+                var totalCapacity = combo.Sum(b => ClassroomCapacityOf(b.ClassroomId, allMatchingClassrooms));
+                if (totalCapacity < section.Capacity)
+                    continue; // toplam kapasite hâlâ yetmiyorsa atla
+
+                var blockCombo = blockType == BlockType.Lab
+                    ? new BlockCombination { LabBlocks = combo }
+                    : new BlockCombination { TheoryBlock = combo[0], LabBlocks = combo.Skip(1).ToList() };
+
+                results.Add(blockCombo);
             }
         }
 
         return results;
+    }
+
+    private static int ClassroomCapacityOf(int? classroomId, List<Classroom> classrooms)
+    {
+        if (!classroomId.HasValue) return 0;
+        var cr = classrooms.FirstOrDefault(c => c.Id == classroomId.Value);
+        return cr?.Capacity ?? 0;
     }
 
     private List<BlockCombination> GenerateMixed(
@@ -222,18 +222,50 @@ public sealed class CandidateGenerator
         List<DayOfWeek> sortedDays,
         int splitThreshold,
         HashSet<int> facultyClassroomIds,
-        HashSet<BlockAssignment>? excludeBlocks)
+        HashSet<BlockAssignment>? excludeBlocks,
+        HashSet<BlockType> splittableBlockTypes)
     {
         var theoryType = section.TheoryClassroomType ?? ClassroomType.Lecture;
         var labType = section.LabClassroomType ?? ClassroomType.Lab;
 
-        var theoryClassrooms = FilterClassrooms(allClassrooms, theoryType, section.Capacity, facultyClassroomIds);
-        var theoryBlocks = FindBlocks(BlockType.Theory, section.TheoryHours, theoryClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+        // Teori bloğu: split izinli mi diye bak; çoğu zaman değildir, tek oda bulur.
+        List<BlockAssignment> theoryBlocks;
+        if (splittableBlockTypes.Contains(BlockType.Theory))
+        {
+            var theorySplitCombos = GenerateSplittableBlocks(
+                BlockType.Theory, section.TheoryHours, theoryType, section, state,
+                allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
+            // Mixed mode'da teori tek oda varsayılıyor; eğer theory split olursa burada
+            // TheoryBlock ilk oda, LabBlocks eklenmiş olur — bu durumda mixed kombinasyon
+            // karmaşıklaşır. Pratikte teori split nadir, şu an sadece ilk TheoryBlock'u alıyoruz.
+            theoryBlocks = theorySplitCombos
+                .Where(c => c.TheoryBlock != null)
+                .Select(c => c.TheoryBlock!)
+                .ToList();
+        }
+        else
+        {
+            var theoryClassrooms = FilterClassrooms(allClassrooms, theoryType, section.Capacity, facultyClassroomIds);
+            theoryBlocks = FindBlocks(BlockType.Theory, section.TheoryHours, theoryClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+        }
 
-        // Generate lab combinations (single or multi-group)
-        var labCombos = GenerateLabBlocks(
-            section.LabHours, labType, section, state,
-            allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
+        // Lab kombinasyonları: split izinli ise paralel split dene; değilse tek oda zorunlu.
+        List<BlockCombination> labCombos;
+        if (splittableBlockTypes.Contains(BlockType.Lab))
+        {
+            labCombos = GenerateSplittableBlocks(
+                BlockType.Lab, section.LabHours, labType, section, state,
+                allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
+        }
+        else
+        {
+            var labClassrooms = FilterClassrooms(allClassrooms, labType, section.Capacity, facultyClassroomIds);
+            var labBlocks = FindBlocks(BlockType.Lab, section.LabHours, labClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+            labCombos = labBlocks
+                .Take(MaxCombinations)
+                .Select(b => new BlockCombination { LabBlocks = new List<BlockAssignment> { b } })
+                .ToList();
+        }
 
         var totalHours = section.TheoryHours + section.LabHours;
         var mustSplitDays = totalHours > splitThreshold;

@@ -94,7 +94,7 @@ public sealed class SimulatedAnnealingOptimizer
             // Execute move
             var (affectedIds, rollback, success) = moveType switch
             {
-                MoveType.Relocate => TryRelocate(state, nonPinnedIds, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds, random),
+                MoveType.Relocate => TryRelocate(state, nonPinnedIds, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds, config.SplittableBlockTypes, random),
                 MoveType.Swap => TrySwap(state, nonPinnedIds, random),
                 MoveType.Chain => TryChain(state, nonPinnedIds, random),
                 _ => (Array.Empty<int>(), (Action?)null, false)
@@ -203,6 +203,7 @@ public sealed class SimulatedAnnealingOptimizer
         Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
         int splitThreshold,
         HashSet<int> facultyClassroomIds,
+        HashSet<BlockType> splittableBlockTypes,
         Random random)
     {
         var sectionId = nonPinnedIds[random.Next(nonPinnedIds.Count)];
@@ -216,7 +217,8 @@ public sealed class SimulatedAnnealingOptimizer
         state.Unassign(sectionId);
 
         var excludeBlocks = new HashSet<BlockAssignment>(oldBlocks);
-        var candidates = _candidateGen.Generate(snapshot, state, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds, excludeBlocks);
+        var candidates = _candidateGen.Generate(snapshot, state, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds, excludeBlocks,
+            splittableBlockTypes: splittableBlockTypes);
 
         if (candidates.Count == 0)
         {

@@ -2466,7 +2466,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("TimeSlotId");
 
-                    b.HasIndex("CourseSectionId", "TimeSlotId")
+                    b.HasIndex("CourseSectionId", "TimeSlotId", "ClassroomId")
                         .IsUnique();
 
                     b.ToTable("SectionSchedules");

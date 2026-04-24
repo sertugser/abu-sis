@@ -86,6 +86,7 @@ public static partial class SeedData
             new() { Key = "Schedule.MRV.LabWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: lab gereksinimi ağırlığı" },
             new() { Key = "Schedule.MRV.CapacityWeight", Value = "1", Category = "Scheduling", DataType = "int", Description = "MRV: kapasite kısıtı ağırlığı" },
             new() { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Scheduling", DataType = "int", Description = "Teori+lab toplamı bu değeri aşarsa ayrı günlere bölünür" },
+            new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Scheduling", DataType = "string", Description = "Kapasite yetmeyince paralel oda split'i yapılabilen block tipleri. Virgülle ayrılmış (Theory, Lab). Örn: 80 kişilik lab section'ı L139+L141'e aynı saatte bölünür." },
 
             // ── Ders Programı Grid Parametreleri ─────────────────
             new() { Key = "Schedule.SlotDurationMinutes", Value = "50", Category = "Schedule", DataType = "int", Description = "Bir ders slotunun süresi (dakika)" },

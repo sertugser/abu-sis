@@ -539,7 +539,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── SectionSchedule ──────────────────────────────────────
         builder.Entity<SectionSchedule>(e =>
         {
-            e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId }).IsUnique();
+            // Lab split desteği: aynı section + aynı slot, FARKLI derslik kombinasyonuna izin ver.
+            // Kapasite yetmeyen lab oturumları 2+ oda'ya bölünebilir (ör. BM101 lab L139+L141 aynı anda).
+            // ClassroomId'nin index'e dahil edilmesi (section, slot, classroom) üçlüsünü unique yapar.
+            e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId, ss.ClassroomId }).IsUnique();
 
             e.HasOne(ss => ss.CourseSection)
              .WithMany(cs => cs.SectionSchedules)

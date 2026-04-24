@@ -359,6 +359,9 @@ public sealed class AutoScheduleEngine
                 ? classrooms.FirstOrDefault(c => c.Id == primaryClassroomId.Value)
                 : null;
 
+            // Paralel split: aynı pencerede birden fazla classroom varsa "L139+L141" formatında birleşik göster
+            var classroomDisplayName = BuildClassroomDisplayName(placement.Blocks, classrooms, primaryClassroom?.Name);
+
             // Build schedule slots
             var scheduleSlots = placement.Blocks
                 .SelectMany(b =>
@@ -391,7 +394,7 @@ public sealed class AutoScheduleEngine
                 CourseName = snap.CourseName,
                 DepartmentCode = deptCode,
                 ClassroomId = primaryClassroomId,
-                ClassroomName = primaryClassroom?.Name ?? string.Empty,
+                ClassroomName = classroomDisplayName,
                 ScheduleSlots = scheduleSlots,
                 ScheduleSummary = summary,
                 InstructorId = snap.InstructorId,
@@ -604,6 +607,30 @@ public sealed class AutoScheduleEngine
         return blocks;
     }
 
+    /// <summary>
+    /// Paralel split'te birden fazla oda birleşik gösterilir ("L139+L141").
+    /// Tek oda varsa sadece adı, hiç yoksa boş string döner.
+    /// </summary>
+    private static string BuildClassroomDisplayName(
+        List<BlockAssignment> blocks,
+        List<Classroom> classrooms,
+        string? fallbackName)
+    {
+        var classroomNames = blocks
+            .Where(b => b.ClassroomId.HasValue)
+            .Select(b => classrooms.FirstOrDefault(c => c.Id == b.ClassroomId!.Value)?.Name)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Cast<string>()
+            .Distinct()
+            .ToList();
+
+        if (classroomNames.Count == 0)
+            return fallbackName ?? string.Empty;
+        if (classroomNames.Count == 1)
+            return classroomNames[0];
+        return string.Join("+", classroomNames);
+    }
+
     private static string BuildScheduleSummary(
         List<BlockAssignment> blocks,
         List<Classroom> classrooms)
@@ -613,20 +640,26 @@ public sealed class AutoScheduleEngine
 
         var classroomLookup = classrooms.ToDictionary(c => c.Id);
 
+        // Paralel split desteği: aynı (Day, StartTime, EndTime) pencerelerinde birden fazla
+        // classroom varsa bunları tek girdide "L139+L141" şeklinde birleştir.
         var parts = blocks
-            .OrderBy(b => b.Day)
-            .ThenBy(b => b.StartTime)
-            .Select(b =>
+            .GroupBy(b => (b.Day, b.StartTime, b.EndTime))
+            .OrderBy(g => g.Key.Day)
+            .ThenBy(g => g.Key.StartTime)
+            .Select(g =>
             {
-                var dayName = SchedulingHelpers.GetDayOfWeekName(b.Day);
-                string classroomName;
-                if (!b.ClassroomId.HasValue)
-                    classroomName = "Online";
-                else if (classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr))
-                    classroomName = cr.Name;
-                else
-                    classroomName = "?";
-                return $"{dayName} {b.StartTime:HH:mm}-{b.EndTime:HH:mm} ({classroomName})";
+                var dayName = SchedulingHelpers.GetDayOfWeekName(g.Key.Day);
+                var classroomNames = g
+                    .Select(b =>
+                    {
+                        if (!b.ClassroomId.HasValue) return "Online";
+                        if (classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr)) return cr.Name;
+                        return "?";
+                    })
+                    .Distinct()
+                    .ToList();
+                var roomLabel = string.Join("+", classroomNames);
+                return $"{dayName} {g.Key.StartTime:HH:mm}-{g.Key.EndTime:HH:mm} ({roomLabel})";
             });
 
         return string.Join(", ", parts);
@@ -679,6 +712,8 @@ public sealed class AutoScheduleEngine
             AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
             CurriculumConflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var mode) ? mode : "curriculum",
             EnrollmentConflictHardThreshold = GetInt(config, "Schedule.EnrollmentConflictHardThreshold", 1),
+            SplittableBlockTypes = ParseSplittableBlockTypes(
+                config.TryGetValue("Schedule.SplittableBlockTypes", out var sbt) ? sbt : "Lab"),
         };
     }
 
@@ -861,5 +896,23 @@ public sealed class AutoScheduleEngine
         return config.TryGetValue(key, out var value)
             ? int.TryParse(value, out var result) ? result : defaultValue
             : defaultValue;
+    }
+
+    /// <summary>
+    /// "Lab,Theory" gibi virgülle ayrılmış config değerini BlockType set'ine çevirir.
+    /// Geçersiz/tanınmayan değerler sessizce atlanır. Boş string boş set döner (= split kapalı).
+    /// </summary>
+    private static HashSet<BlockType> ParseSplittableBlockTypes(string value)
+    {
+        var result = new HashSet<BlockType>();
+        if (string.IsNullOrWhiteSpace(value))
+            return result;
+
+        foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Enum.TryParse<BlockType>(token, ignoreCase: true, out var bt))
+                result.Add(bt);
+        }
+        return result;
     }
 }

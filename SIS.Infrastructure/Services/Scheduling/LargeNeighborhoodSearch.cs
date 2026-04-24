@@ -172,7 +172,8 @@ public sealed class LargeNeighborhoodSearch
             .Select(id =>
             {
                 var snap = snapLookup[id];
-                var cands = _candidateGen.Generate(snap, state, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds);
+                var cands = _candidateGen.Generate(snap, state, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds,
+                    splittableBlockTypes: config.SplittableBlockTypes);
                 return (Id: id, Snap: snap, Candidates: cands);
             })
             .OrderBy(x => x.Candidates.Count)

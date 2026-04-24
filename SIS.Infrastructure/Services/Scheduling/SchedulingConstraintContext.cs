@@ -1,4 +1,5 @@
 using SIS.Application.Scheduling.Constraints;
+using SIS.Infrastructure.Services.Scheduling;
 
 namespace SIS.Infrastructure.Services;
 
@@ -20,6 +21,12 @@ public sealed class SchedulingConstraintConfig
     public int AmphiThreshold { get; set; }
     public int TheoryLabSplitThreshold { get; set; }
     public bool AllowSameCourseSectionOverlap { get; set; }
+
+    /// <summary>
+    /// Kapasite yetersiz olduğunda paralel oda split'i yapılabilen block tipleri.
+    /// Varsayılan: sadece Lab. Config: "Schedule.SplittableBlockTypes".
+    /// </summary>
+    public HashSet<BlockType> SplittableBlockTypes { get; set; } = new() { BlockType.Lab };
 
     // Soft constraint params
     public bool S1Enabled { get; set; }
