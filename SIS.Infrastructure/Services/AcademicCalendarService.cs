@@ -161,6 +161,7 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     private static void Validate(UpsertAcademicCalendarDto dto, AcademicTerm term)
     {
+        // ── Aynı faz içi tutarlılık ──
         if (dto.RegistrationStart >= dto.RegistrationEnd)
             throw new InvalidOperationException("Kayıt başlangıç tarihi bitiş tarihinden önce olmalıdır.");
 
@@ -170,6 +171,7 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (dto.GradeEntryStart >= dto.GradeEntryEnd)
             throw new InvalidOperationException("Not girişi başlangıç tarihi bitiş tarihinden önce olmalıdır.");
 
+        // ── Dönem sınırı ──
         if (dto.RegistrationEnd > term.TermEnd)
             throw new InvalidOperationException("Kayıt bitiş tarihi dönem bitiş tarihinden sonra olamaz.");
 
@@ -181,6 +183,19 @@ public class AcademicCalendarService : IAcademicCalendarService
 
         if (dto.WithdrawalDeadline < term.TermStart)
             throw new InvalidOperationException("Çekilme tarihi dönem başlangıç tarihinden önce olamaz.");
+
+        // ── Faz sıralaması (yeni kurallar — mantıksal çelişkiyi engelle) ──
+        if (dto.RegistrationEnd > dto.AddDropStart)
+            throw new InvalidOperationException(
+                "Ekle-bırak, kayıt bitmeden başlayamaz. Kayıt bitişini ekle-bırak başlangıcından önce olacak şekilde ayarlayın.");
+
+        if (dto.AddDropEnd > dto.GradeEntryStart)
+            throw new InvalidOperationException(
+                "Not girişi, ekle-bırak bitmeden başlayamaz. Ekle-bırak bitişini not girişi başlangıcından önce olacak şekilde ayarlayın.");
+
+        if (dto.GradeEntryStart < term.TermStart)
+            throw new InvalidOperationException(
+                "Not girişi, dönem başlamadan başlayamaz. Not girişi başlangıcını dönem başlangıcına veya sonrasına ayarlayın.");
     }
 
     private AcademicCalendarDto ToDto(AcademicTerm term, TermAcademicCalendar cal)

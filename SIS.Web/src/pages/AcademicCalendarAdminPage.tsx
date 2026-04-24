@@ -3,6 +3,16 @@ import { AlertTriangle, CalendarClock, CheckCircle2, Info, Save } from 'lucide-r
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { PhaseRow } from '@/components/academic-calendar/PhaseRow';
 import { CalendarEventsPanel } from '@/components/academic-calendar/CalendarEventsPanel';
 import {
@@ -21,6 +31,79 @@ function toDateInput(iso: string) {
 }
 function toIso(d: string) {
   return d ? new Date(d).toISOString() : '';
+}
+
+function fmtDate(d: string): string {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Dönem tarihleri ile akademik takvim tarihleri arasında tutarlılık kontrolü.
+ * Mantıksal hatalar backend'de reddedilir; burası sadece "şüpheli ama makul" durumları yakalar.
+ * Admin bu uyarıları onaylayıp yine de kaydedebilir.
+ */
+function computeCalendarWarnings(
+  form: UpsertAcademicCalendarDto,
+  termStart: string,
+  termEnd: string
+): string[] {
+  const warnings: string[] = [];
+  if (!termStart || !termEnd) return warnings;
+
+  const ts = new Date(termStart);
+  const te = new Date(termEnd);
+  const regStart = new Date(form.registrationStart);
+  const regEnd = new Date(form.registrationEnd);
+  const gradeEnd = new Date(form.gradeEntryEnd);
+  const addDropStart = new Date(form.addDropStart);
+
+  // Kayıt dönem içinde başlıyor (genelde önce olur)
+  if (regStart >= ts) {
+    warnings.push(
+      `Kayıt (${fmtDate(form.registrationStart)}), dönem başlangıcında (${fmtDate(termStart)}) veya sonrasında başlıyor. ` +
+      `Genelde kayıt dönemden önce açılır.`
+    );
+  }
+
+  // Kayıt çok erken (>90 gün önce)
+  const ninetyDaysBeforeTerm = new Date(ts);
+  ninetyDaysBeforeTerm.setDate(ninetyDaysBeforeTerm.getDate() - 90);
+  if (regStart < ninetyDaysBeforeTerm) {
+    const days = Math.ceil((ts.getTime() - regStart.getTime()) / (1000 * 60 * 60 * 24));
+    warnings.push(
+      `Kayıt, dönem başlangıcından ${days} gün önce açılıyor. 3 aydan uzun kayıt dönemi alışılmadık.`
+    );
+  }
+
+  // Not girişi dönem bitişinden çok sonra (>30 gün)
+  const thirtyDaysAfterTerm = new Date(te);
+  thirtyDaysAfterTerm.setDate(thirtyDaysAfterTerm.getDate() + 30);
+  if (gradeEnd > thirtyDaysAfterTerm) {
+    const days = Math.ceil((gradeEnd.getTime() - te.getTime()) / (1000 * 60 * 60 * 24));
+    warnings.push(
+      `Not girişi bitişi (${fmtDate(form.gradeEntryEnd)}), dönem bitişinden ${days} gün sonra. Normalde 2-4 hafta içinde kapatılır.`
+    );
+  }
+
+  // Ekle-bırak dönem bitişinde veya sonrasında
+  if (addDropStart >= te) {
+    warnings.push(
+      `Ekle-bırak (${fmtDate(form.addDropStart)}), dönem bitişinde (${fmtDate(termEnd)}) veya sonrasında başlıyor. ` +
+      `Ekle-bırak genelde dönemin ilk haftalarında yapılır.`
+    );
+  }
+
+  // Kayıt bitişi, ekle-bırak başlangıcından 30+ gün önce (gap çok büyük)
+  const diffMs = addDropStart.getTime() - regEnd.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  if (diffDays > 30) {
+    warnings.push(
+      `Kayıt bitişi ile ekle-bırak başlangıcı arasında ${Math.floor(diffDays)} gün var. Bu boşluk alışılmadık; tipik aralık 1-2 haftadır.`
+    );
+  }
+
+  return warnings;
 }
 
 // ─── Page ────────────────────────────────────────────────────────
@@ -75,6 +158,7 @@ export default function AcademicCalendarAdminPage() {
   const [termEdits, setTermEdits] = useState<Record<number, Partial<UpsertAcademicCalendarDto>>>({});
   const [validationError, setValidationError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [pendingWarnings, setPendingWarnings] = useState<string[] | null>(null);
 
   const edits = termId !== undefined ? (termEdits[termId] ?? {}) : {};
   const form = baseline ? { ...baseline, ...edits } : null;
@@ -107,6 +191,22 @@ export default function AcademicCalendarAdminPage() {
     }
 
     setValidationError('');
+
+    // Uyarı hesapla — dönem tarihleri ile takvim tarihleri arasında şüpheli durumlar
+    const warnings = selectedTerm
+      ? computeCalendarWarnings(form, selectedTerm.termStart, selectedTerm.termEnd)
+      : [];
+
+    if (warnings.length > 0) {
+      setPendingWarnings(warnings);
+      return;
+    }
+
+    await persistCalendar();
+  }
+
+  async function persistCalendar() {
+    if (!form || !termId) return;
     try {
       await upsert.mutateAsync({
         registrationStart: toIso(form.registrationStart),
@@ -127,6 +227,11 @@ export default function AcademicCalendarAdminPage() {
     } catch {
       // Hata banner'da gösterilir.
     }
+  }
+
+  async function handleConfirmWarnings() {
+    setPendingWarnings(null);
+    await persistCalendar();
   }
 
   const saveErrorMessage = upsert.isError
@@ -316,6 +421,39 @@ export default function AcademicCalendarAdminPage() {
           Henüz dönem tanımlanmamış. Akademik takvim düzenlemek için önce bir dönem oluşturun.
         </div>
       )}
+
+      {/* ── Tutarlılık Uyarı Dialog'u ────────────────────────── */}
+      <AlertDialog open={!!pendingWarnings} onOpenChange={(open) => !open && setPendingWarnings(null)}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              Dönem Tarihleriyle Tutarsızlık
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>Girilen akademik takvim tarihleri dönem tarihleriyle bazı açılardan şüpheli:</p>
+                <ul className="list-disc list-inside space-y-1.5 text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  {pendingWarnings?.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+                <p className="text-muted-foreground">
+                  Bu durumlar mantıksal çelişki değil ama alışılmadık. Kasıtlıysa "Yine de Kaydet"e basın;
+                  aksi halde "Düzelt" ile form'a dönüp tarihleri güncelleyin.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Düzelt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmWarnings}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Yine de Kaydet
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
