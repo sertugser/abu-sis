@@ -213,6 +213,8 @@ public sealed class ConstructionSolver
 
     /// <summary>
     /// Builds a TermSnapshot that excludes the given section, for constraint evaluation.
+    /// SlotAllowedModes MUST be preserved; H17 FaceToFaceSlotRestrictionEvaluator bu dict'e bakıyor,
+    /// boş kalırsa evaluator bypass olur ve yüz-yüze dersler OnlineOnly slot'lara yerleşebilir.
     /// </summary>
     private static TermSnapshot BuildFilteredSnapshot(TermSnapshot snapshot, int excludeSectionId)
     {
@@ -228,12 +230,15 @@ public sealed class ConstructionSolver
             CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+            SlotAllowedModes = snapshot.SlotAllowedModes,
         };
     }
 
     /// <summary>
     /// Enriches a SectionSnapshot with correct classroom capacity and type
     /// based on the actual block assignments.
+    /// Paralel split durumunda (aynı saat birden fazla farklı oda) kapasite toplanır —
+    /// böylece H3 CapacityEvaluator toplam kapasiteyi section kontenjanıyla karşılaştırır.
     /// </summary>
     private static SectionSnapshot EnrichWithClassroomData(
         SectionSnapshot snap,

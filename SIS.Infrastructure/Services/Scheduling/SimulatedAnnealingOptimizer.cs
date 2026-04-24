@@ -352,6 +352,7 @@ public sealed class SimulatedAnnealingOptimizer
             CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+            SlotAllowedModes = snapshot.SlotAllowedModes,
         };
     }
 

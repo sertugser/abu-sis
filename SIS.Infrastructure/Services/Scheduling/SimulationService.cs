@@ -205,6 +205,7 @@ public sealed class SimulationService : ISimulationService
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
             DistributionConstraints = snapshot.DistributionConstraints,
+            SlotAllowedModes = snapshot.SlotAllowedModes,
         };
     }
 
@@ -287,6 +288,7 @@ public sealed class SimulationService : ISimulationService
             CourseSuggestedSemestersByDepartment = original.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = original.CourseAccessibleDepartments,
             DistributionConstraints = original.DistributionConstraints,
+            SlotAllowedModes = original.SlotAllowedModes,
         };
     }
 

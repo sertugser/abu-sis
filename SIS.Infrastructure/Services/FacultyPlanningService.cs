@@ -361,6 +361,52 @@ public class FacultyPlanningService : IFacultyPlanningService
                 if (classroom.Type != expectedType)
                     result.Warnings.Add($"Derslik tipi uyumsuz: beklenen {expectedType}, atanan {classroom.Type}.");
 
+                // H17 koruması: yüz-yüze dersler OnlineOnly slot'lara yerleştirilemez.
+                // Hybrid/Online muaf. Auto-scheduler aynı kuralı evaluator üzerinden uyguluyor; burada manuel atama için ekstra koruma.
+                // Kural parametreleri (cutoff saati, hafta sonu politikası) SystemConfig'ten okunur; hata mesajı dinamik oluşturulur.
+                if (section.Course.TeachingMethod == TeachingMethod.FaceToFace && request.ScheduleSlots is { Count: > 0 })
+                {
+                    var requestedSlotKeys = request.ScheduleSlots
+                        .Select(s => new { Day = (DayOfWeek)s.Day, s.StartTime })
+                        .ToList();
+
+                    var onlineOnlySlots = await _context.TimeSlots
+                        .AsNoTracking()
+                        .Where(ts => ts.TermId == section.TermId && ts.AllowedMode == TimeSlotAllowedMode.OnlineOnly)
+                        .Select(ts => new { ts.DayOfWeek, ts.StartTime })
+                        .ToListAsync(ct);
+
+                    var onlineOnlyLookup = onlineOnlySlots
+                        .Select(s => (s.DayOfWeek, s.StartTime))
+                        .ToHashSet();
+
+                    var violatingSlots = requestedSlotKeys
+                        .Where(k => onlineOnlyLookup.Contains((k.Day, k.StartTime)))
+                        .ToList();
+
+                    if (violatingSlots.Count > 0)
+                    {
+                        // Mesaj için gerçek config değerlerini oku — "18:00" gibi hardcoded değer yazma.
+                        var ruleConfig = await _context.SystemConfigs
+                            .AsNoTracking()
+                            .Where(c => c.Key == "Schedule.FaceToFaceCutoffTime" || c.Key == "Schedule.WeekendOnlineOnly")
+                            .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
+
+                        var cutoff = ruleConfig.TryGetValue("Schedule.FaceToFaceCutoffTime", out var cv) ? cv : "(config yok)";
+                        var weekendOnlyRaw = ruleConfig.TryGetValue("Schedule.WeekendOnlineOnly", out var wv) ? wv : "true";
+                        var weekendNote = bool.TryParse(weekendOnlyRaw, out var wob) && wob
+                            ? " ve hafta sonu slotlari"
+                            : string.Empty;
+
+                        var slotSummary = string.Join(", ", violatingSlots
+                            .Select(v => $"{v.Day} {v.StartTime:HH\\:mm}"));
+                        throw new InvalidOperationException(
+                            $"Yuz-yuze ders ({section.Course.Code}) OnlineOnly damgali slot'a yerlestirilemez: {slotSummary}. " +
+                            $"Kural (config'ten): {cutoff} sonrasi{weekendNote} yalnizca online/hybrid dersler icindir. " +
+                            $"Admin slot AllowedMode'unu Both veya FaceToFaceOnly yaparsa kural gevşer.");
+                    }
+                }
+
                 section.ClassroomId = request.ClassroomId.Value;
             }
             else if (request.ScheduleSlots is { Count: > 0 })
