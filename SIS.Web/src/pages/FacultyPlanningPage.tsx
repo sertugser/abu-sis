@@ -61,7 +61,7 @@ export default function FacultyPlanningPage() {
   }
 
   const termStatus = activeTerm?.status;
-  const isTermEditable = termStatus === 'Preparing';
+  const isTermEditable = termStatus === 'Active';
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden">
@@ -207,7 +207,7 @@ export default function FacultyPlanningPage() {
       {termStatus && !isTermEditable && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-center mb-3">
           <p className="text-xs text-red-700 font-medium">
-            Dönem durumu "{termStatus}" — atama işlemleri yalnızca "Planning" veya "Scheduling" aşamasında yapılabilir.
+            Dönem durumu "{termStatus}" — atama işlemleri yalnızca dönem "Active" (tarih aralığı içinde ve iptal edilmemiş) iken yapılabilir.
           </p>
         </div>
       )}

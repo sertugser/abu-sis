@@ -136,7 +136,7 @@ export function CurriculumCourseRow({ course, forecast, selected, onToggle, onOp
                 <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">Kilitli</Badge>
               </TooltipTrigger>
               <TooltipContent side="left" className="text-xs max-w-[240px]">
-                <p>Bu dönem planlama fazında değil. Ders açmak için dönemi <b>Planning</b> durumuna alın veya yeni bir planlama dönemine geçin.</p>
+                <p>Bu dönem iptal edilmiş veya tarih aralığı dışında. Ders açmak için dönemi <b>Active</b> (tarih aralığı içinde ve iptal edilmemiş) bir döneme geçin.</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
