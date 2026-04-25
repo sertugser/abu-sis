@@ -70,6 +70,7 @@ docs/superpowers/
 # Database backup files
 scripts/*.backup
 scripts/*.dump
+backup_*.sql
 
 # Environment files
 .env

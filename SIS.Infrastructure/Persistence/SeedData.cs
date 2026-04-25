@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using SIS.Domain.Entities;
+using SIS.Infrastructure.Persistence.Seeds;
 using SIS.Infrastructure.Services.CalendarGenerator;
 
 namespace SIS.Infrastructure.Persistence;
@@ -19,10 +20,17 @@ public static partial class SeedData
         await SeedUsersAsync(context, userManager);
         await SeedRegistrationsAsync(context);    // Geçmiş dönem transkript verileri (aktif döneme dokunmaz)
         // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı
-        await SeedTimeSlotsAsync(context);
+        // SystemConfig önce seed edilmeli: TimeSlot generate'i Schedule.* anahtarlarını okuyor (özellikle FaceToFaceCutoffTime + WeekendOnlineOnly için AllowedMode damgalama)
         await SeedSystemConfigAsync(context);
+        await SeedTimeSlotsAsync(context);
         await SeedConstraintDefinitionsAsync(context);
         await SeedEvaluationQuestionsAsync(context);
         await SeedConstraintProfilesAsync(context);
+
+        // ── RBAC Phase 1 (Sprint 1.4) ──────────────────────────
+        // Sıra önemli: Permission → MenuStructure (perm lookup gerekli) → RolePermission (perm + rol lookup)
+        await PermissionSeed.SeedAsync(context);
+        await MenuStructureSeed.SeedAsync(context);
+        await RolePermissionSeed.SeedAsync(context, roleManager);
     }
 }

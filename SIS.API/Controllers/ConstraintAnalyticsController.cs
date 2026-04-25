@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Domain.Enums;
 
@@ -8,7 +9,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/constraints/analytics")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class ConstraintAnalyticsController : ControllerBase
 {
     private readonly IConstraintSnapshotService _snapshotService;
@@ -19,6 +20,7 @@ public class ConstraintAnalyticsController : ControllerBase
     }
 
     [HttpPost("snapshot")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.snapshot")]
     public async Task<IActionResult> TakeSnapshot([FromQuery] int termId, CancellationToken ct)
     {
         if (termId <= 0)
@@ -33,6 +35,7 @@ public class ConstraintAnalyticsController : ControllerBase
     }
 
     [HttpGet("snapshots")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> GetSnapshots(
         [FromQuery] int termId, [FromQuery] int limit = 50, CancellationToken ct = default)
     {
@@ -44,6 +47,7 @@ public class ConstraintAnalyticsController : ControllerBase
     }
 
     [HttpGet("trend")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> GetTrend([FromQuery] int termId, CancellationToken ct)
     {
         if (termId <= 0)
@@ -54,6 +58,7 @@ public class ConstraintAnalyticsController : ControllerBase
     }
 
     [HttpGet("compare")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> Compare([FromQuery] int id1, [FromQuery] int id2, CancellationToken ct)
     {
         if (id1 <= 0 || id2 <= 0)
@@ -71,6 +76,7 @@ public class ConstraintAnalyticsController : ControllerBase
     }
 
     [HttpGet("heatmap")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> GetHeatmap([FromQuery] int termId, CancellationToken ct)
     {
         if (termId <= 0)
@@ -81,6 +87,7 @@ public class ConstraintAnalyticsController : ControllerBase
     }
 
     [HttpGet("bottlenecks")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> GetBottlenecks([FromQuery] int termId, CancellationToken ct)
     {
         if (termId <= 0)

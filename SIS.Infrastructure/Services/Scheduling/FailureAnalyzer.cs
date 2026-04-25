@@ -93,7 +93,8 @@ public sealed class FailureAnalyzer
         // Generate candidates without excluding any blocks
         var candidates = _candidateGen.Generate(
             snapshot, state, classrooms, timeSlotsByDay,
-            splitThreshold, facultyClassroomIds);
+            splitThreshold, facultyClassroomIds,
+            splittableBlockTypes: config.SplittableBlockTypes);
 
         if (candidates.Count == 0)
         {
@@ -230,6 +231,7 @@ public sealed class FailureAnalyzer
             CoEnrollmentPairs = termSnapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = termSnapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = termSnapshot.CourseAccessibleDepartments,
+            SlotAllowedModes = termSnapshot.SlotAllowedModes,
         };
 
         var toTest = candidates.Take(MaxCandidatesToTest).ToList();

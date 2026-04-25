@@ -204,6 +204,40 @@ export function ScheduleResultModal({
           </ScrollArea>
         </div>
 
+        {/* ── Kural ihlali nedeniyle sıfırlanan atamalar ── */}
+        {previewData.invalidatedAssignments && previewData.invalidatedAssignments.length > 0 && (
+          <div className="border-t border-slate-100 px-6 py-3 bg-sky-50/50">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="h-4 w-4 text-sky-600" />
+              <span className="text-sm font-semibold text-slate-700">
+                Kural Değişikliği — Yeniden Atanan Dersler
+              </span>
+              <Badge className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-50">
+                {previewData.invalidatedAssignments.length}
+              </Badge>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Bu dersler eskiden kuralla uyumsuz bir slota atanmıştı. Eski atamaları sıfırlandı;
+              yukarıdaki yerleştirme sonuçları yeni atamaları içerir.
+            </p>
+            <div className="space-y-1">
+              {previewData.invalidatedAssignments.slice(0, 5).map(inv => (
+                <div key={inv.sectionId} className="flex items-start gap-2 text-[11px]">
+                  <span className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200 font-medium shrink-0">
+                    {inv.courseCode}
+                  </span>
+                  <span className="text-slate-600">{inv.reason}</span>
+                </div>
+              ))}
+              {previewData.invalidatedAssignments.length > 5 && (
+                <p className="text-[10px] text-slate-400 italic ml-1">
+                  ...ve {previewData.invalidatedAssignments.length - 5} ders daha
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── Footer — Aksiyonlar ── */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
           <Button variant="outline" onClick={onViewCalendar}>

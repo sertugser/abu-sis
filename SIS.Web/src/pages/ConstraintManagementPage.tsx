@@ -318,7 +318,8 @@ export default function ConstraintManagementPage() {
   const { data: bottleneckData } = useBottlenecks(effectiveTermId);
   const takeSnapshotMut = useTakeSnapshot(effectiveTermId);
 
-  const items = constraints ?? [];
+  // useMemo ile stable referans (logical || [] her render'da yeni array yaratırdı)
+  const items = useMemo(() => constraints ?? [], [constraints]);
 
   const groupedConstraints = useMemo(() => {
     return CONSTRAINT_GROUPS.map(group => ({

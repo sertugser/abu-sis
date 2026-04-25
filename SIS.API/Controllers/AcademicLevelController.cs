@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.AcademicLevel.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -9,7 +10,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor")]
+[Authorize]
 public class AcademicLevelController : ControllerBase
 {
     private readonly IAcademicLevelService _academicLevelService;
@@ -26,7 +27,7 @@ public class AcademicLevelController : ControllerBase
     /// Uyumsuzluk varsa detayli aciklama icinde gelir.
     /// </summary>
     [HttpGet("student/{studentId}")]
-    [Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor,Student")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
     public async Task<IActionResult> GetStudentAcademicLevel(
         int studentId,
         CancellationToken cancellationToken = default)
@@ -64,6 +65,7 @@ public class AcademicLevelController : ControllerBase
     /// Resmi sinif dagilimi ve akademik seviye dagilimi karsilastirilabilir.
     /// </summary>
     [HttpGet("department/{departmentId}")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
     public async Task<IActionResult> GetDepartmentAcademicLevels(
         int departmentId,
         CancellationToken cancellationToken = default)

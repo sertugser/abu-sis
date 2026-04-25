@@ -20,6 +20,7 @@ public static partial class SeedData
 
             // ── GPA Eşikleri ──────────────────────────────────────
             new() { Key = "GPA.RetentionThreshold", Value = "1.70", Category = "GPA", DataType = "decimal", Description = "Bu CGPA altındaki öğrenciler sınıfta kalır (1. dönem sonrası)" },
+            new() { Key = "GPA.MaxScale", Value = "4.00", Category = "GPA", DataType = "decimal", Description = "GPA üst sınırı (4.00 = 4'lük sistem, 100.00 = 100'lük sistem). Form input cap'i ve validation için kullanılır." },
 
             // ── Denetim Kayıtları ─────────────────────────────────
             new() { Key = "Audit.RetentionDays", Value = "365", Category = "General", DataType = "int", Description = "Denetim kayıtlarının saklanma süresi (gün)" },
@@ -86,6 +87,7 @@ public static partial class SeedData
             new() { Key = "Schedule.MRV.LabWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: lab gereksinimi ağırlığı" },
             new() { Key = "Schedule.MRV.CapacityWeight", Value = "1", Category = "Scheduling", DataType = "int", Description = "MRV: kapasite kısıtı ağırlığı" },
             new() { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Scheduling", DataType = "int", Description = "Teori+lab toplamı bu değeri aşarsa ayrı günlere bölünür" },
+            new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Scheduling", DataType = "string", Description = "Kapasite yetmeyince paralel oda split'i yapılabilen block tipleri. Virgülle ayrılmış (Theory, Lab). Örn: 80 kişilik lab section'ı L139+L141'e aynı saatte bölünür." },
 
             // ── Ders Programı Grid Parametreleri ─────────────────
             new() { Key = "Schedule.SlotDurationMinutes", Value = "50", Category = "Schedule", DataType = "int", Description = "Bir ders slotunun süresi (dakika)" },
@@ -93,9 +95,12 @@ public static partial class SeedData
             new() { Key = "Schedule.MorningStartTime", Value = "09:00", Category = "Schedule", DataType = "string", Description = "Sabah ilk ders başlangıç saati" },
             new() { Key = "Schedule.LunchBreakStart", Value = "11:40", Category = "Schedule", DataType = "string", Description = "Öğle arası başlangıç saati" },
             new() { Key = "Schedule.LunchBreakEnd", Value = "12:20", Category = "Schedule", DataType = "string", Description = "Öğle arası bitiş saati" },
+            new() { Key = "Schedule.AfternoonEndTime", Value = "18:30", Category = "Schedule", DataType = "string", Description = "Öğleden sonra son dersin en geç bitiş saati" },
             new() { Key = "Schedule.EveningStartTime", Value = "20:10", Category = "Schedule", DataType = "string", Description = "Akşam dersleri başlangıç saati" },
             new() { Key = "Schedule.EveningSlotCount", Value = "2", Category = "Schedule", DataType = "int", Description = "Akşam ders slot sayısı" },
             new() { Key = "Schedule.WorkDays", Value = "Monday,Tuesday,Wednesday,Thursday,Friday", Category = "Schedule", DataType = "string", Description = "Ders yapılan günler (virgülle ayrılmış)" },
+            new() { Key = "Schedule.FaceToFaceCutoffTime", Value = "18:00", Category = "Schedule", DataType = "string", Description = "Bu saatten sonraki TimeSlot'lar yeni oluşturulduğunda OnlineOnly damgalanır (ve FaceToFaceSlotRestriction evaluator'ı bu saatten sonrasında yüz-yüze ders kabul etmez)" },
+            new() { Key = "Schedule.WeekendOnlineOnly", Value = "true", Category = "Schedule", DataType = "bool", Description = "Hafta sonu (Cts/Paz) slotları OnlineOnly damgalanır ve yüz-yüze ders kabul etmez" },
         };
 
         var existingKeys = await context.SystemConfigs

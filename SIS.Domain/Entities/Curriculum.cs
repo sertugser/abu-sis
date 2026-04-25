@@ -49,4 +49,7 @@ public class Curriculum
     public DateTime? UpdatedAt { get; set; }
     public ICollection<CurriculumCourse> CurriculumCourses { get; set; } = new List<CurriculumCourse>();
     public ICollection<CurriculumElectivePool> ElectivePools { get; set; } = new List<CurriculumElectivePool>();
+
+    /// <summary>Müfredat dönem kuralları (Proliz "Müfredat Dönem Kuralları" muadili).</summary>
+    public ICollection<CurriculumTermRule> TermRules { get; set; } = new List<CurriculumTermRule>();
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -23,12 +23,8 @@ import {
   useGradeLockReadiness,
 } from '../hooks/useAcademicOperations';
 import { getAcademicOperationsErrorMessage, type GradeLockReadiness } from '../api/academicOperations.api';
-import {
-  departmentManagerMenuGroups,
-  administrativeStaffMenuGroups,
-  deanMenuGroups,
-  systemAdminMenuGroups,
-} from '../components/layout/SidebarMenuGroups';
+import { flattenModuleItems } from '../components/layout/SidebarModules';
+import { useMenu } from '../hooks/useMenu';
 import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 import type { DepartmentForecastSummary } from '../types/academicOperations';
 import type { ScheduleValidationResult } from '../types/scheduling';
@@ -493,24 +489,26 @@ interface QuickLinkOption {
   group: string;
 }
 
-function buildAllLinkOptions(): QuickLinkOption[] {
-  const allGroups = [
-    ...systemAdminMenuGroups,
-    ...deanMenuGroups,
-    ...departmentManagerMenuGroups,
-    ...administrativeStaffMenuGroups,
-  ];
-  const seen = new Set<string>();
-  return allGroups.flatMap(g =>
-    g.children
-      .filter(c => c.to !== ROUTES.DASHBOARD && !seen.has(c.to) && seen.add(c.to))
-      .map(c => ({
-        to: c.to,
-        title: c.label,
-        icon: ROUTE_ICONS[c.to] ?? (g.icon as React.ComponentType<{ className?: string }>),
-        group: g.label,
-      })),
-  );
+/**
+ * QuickLink seçeneklerini backend menüsünden derive eder.
+ * Önceden 4 hardcoded admin role array'inin union'undan alınıyordu (Karar 2 öncesi).
+ * Şimdi useMenu() user'ın görebildiği tüm modül/item'ları döner — natural permission filter.
+ */
+function useAllLinkOptions(): QuickLinkOption[] {
+  const { data: modules = [] } = useMenu();
+  return useMemo(() => {
+    const seen = new Set<string>();
+    return modules.flatMap(m =>
+      flattenModuleItems(m)
+        .filter(c => c.to !== ROUTES.DASHBOARD && !seen.has(c.to) && seen.add(c.to))
+        .map(c => ({
+          to: c.to,
+          title: c.label,
+          icon: ROUTE_ICONS[c.to] ?? (m.icon as React.ComponentType<{ className?: string }>),
+          group: m.label,
+        })),
+    );
+  }, [modules]);
 }
 
 function getStoredQuickLinks(): string[] {
@@ -529,7 +527,7 @@ function QuickAccessSection() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>([]);
 
-  const allOptions = buildAllLinkOptions();
+  const allOptions = useAllLinkOptions();
 
   const openEditor = useCallback(() => {
     setDraft([...selectedRoutes]);

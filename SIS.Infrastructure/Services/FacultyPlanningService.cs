@@ -361,6 +361,52 @@ public class FacultyPlanningService : IFacultyPlanningService
                 if (classroom.Type != expectedType)
                     result.Warnings.Add($"Derslik tipi uyumsuz: beklenen {expectedType}, atanan {classroom.Type}.");
 
+                // H17 koruması: yüz-yüze dersler OnlineOnly slot'lara yerleştirilemez.
+                // Hybrid/Online muaf. Auto-scheduler aynı kuralı evaluator üzerinden uyguluyor; burada manuel atama için ekstra koruma.
+                // Kural parametreleri (cutoff saati, hafta sonu politikası) SystemConfig'ten okunur; hata mesajı dinamik oluşturulur.
+                if (section.Course.TeachingMethod == TeachingMethod.FaceToFace && request.ScheduleSlots is { Count: > 0 })
+                {
+                    var requestedSlotKeys = request.ScheduleSlots
+                        .Select(s => new { Day = (DayOfWeek)s.Day, s.StartTime })
+                        .ToList();
+
+                    var onlineOnlySlots = await _context.TimeSlots
+                        .AsNoTracking()
+                        .Where(ts => ts.TermId == section.TermId && ts.AllowedMode == TimeSlotAllowedMode.OnlineOnly)
+                        .Select(ts => new { ts.DayOfWeek, ts.StartTime })
+                        .ToListAsync(ct);
+
+                    var onlineOnlyLookup = onlineOnlySlots
+                        .Select(s => (s.DayOfWeek, s.StartTime))
+                        .ToHashSet();
+
+                    var violatingSlots = requestedSlotKeys
+                        .Where(k => onlineOnlyLookup.Contains((k.Day, k.StartTime)))
+                        .ToList();
+
+                    if (violatingSlots.Count > 0)
+                    {
+                        // Mesaj için gerçek config değerlerini oku — "18:00" gibi hardcoded değer yazma.
+                        var ruleConfig = await _context.SystemConfigs
+                            .AsNoTracking()
+                            .Where(c => c.Key == "Schedule.FaceToFaceCutoffTime" || c.Key == "Schedule.WeekendOnlineOnly")
+                            .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
+
+                        var cutoff = ruleConfig.TryGetValue("Schedule.FaceToFaceCutoffTime", out var cv) ? cv : "(config yok)";
+                        var weekendOnlyRaw = ruleConfig.TryGetValue("Schedule.WeekendOnlineOnly", out var wv) ? wv : "true";
+                        var weekendNote = bool.TryParse(weekendOnlyRaw, out var wob) && wob
+                            ? " ve hafta sonu slotlari"
+                            : string.Empty;
+
+                        var slotSummary = string.Join(", ", violatingSlots
+                            .Select(v => $"{v.Day} {v.StartTime:HH\\:mm}"));
+                        throw new InvalidOperationException(
+                            $"Yuz-yuze ders ({section.Course.Code}) OnlineOnly damgali slot'a yerlestirilemez: {slotSummary}. " +
+                            $"Kural (config'ten): {cutoff} sonrasi{weekendNote} yalnizca online/hybrid dersler icindir. " +
+                            $"Admin slot AllowedMode'unu Both veya FaceToFaceOnly yaparsa kural gevşer.");
+                    }
+                }
+
                 section.ClassroomId = request.ClassroomId.Value;
             }
             else if (request.ScheduleSlots is { Count: > 0 })
@@ -419,7 +465,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                     await WriteSectionScheduleRecordsAsync(
                         section.Id,
                         section.TermId,
-                        request.ClassroomId ?? section.ClassroomId ?? 0,
+                        request.ClassroomId ?? section.ClassroomId,
                         request.ScheduleSlots,
                         ct);
                 }
@@ -779,7 +825,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                 && ss.TimeSlot.DayOfWeek == day
                 && ss.TimeSlot.StartTime < endTime
                 && ss.TimeSlot.EndTime > startTime)
-            .Select(ss => ss.ClassroomId)
+            .Where(ss => ss.ClassroomId != null)
+            .Select(ss => ss.ClassroomId!.Value)
             .Distinct()
             .ToListAsync(ct);
 
@@ -801,7 +848,7 @@ public class FacultyPlanningService : IFacultyPlanningService
     private async Task WriteSectionScheduleRecordsAsync(
         int sectionId,
         int termId,
-        int classroomId,
+        int? classroomId,
         IReadOnlyList<ScheduleSlotDto> scheduleSlots,
         CancellationToken ct)
     {
@@ -816,7 +863,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             .ToListAsync(ct);
 
         // Resolve which academic time slots are covered by the requested ranges
-        var allMatchedSlots = new List<(TimeSlot timeSlot, int classroomId)>();
+        var allMatchedSlots = new List<(TimeSlot timeSlot, int? classroomId)>();
 
         foreach (var slot in scheduleSlots)
         {
@@ -833,6 +880,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                     $"{DayLabel(slot.Day)} {slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm} araligi donem zaman slotlari ile eslesmiyor.");
             }
 
+            // Online section için slot.ClassroomId ve classroomId ikisi de null olabilir — bu kabul
             var effectiveClassroomId = slot.ClassroomId ?? classroomId;
             foreach (var ts in matchingTimeSlots)
                 allMatchedSlots.Add((ts, effectiveClassroomId));
@@ -850,18 +898,21 @@ public class FacultyPlanningService : IFacultyPlanningService
                 $"Slot sayisi uyumsuz: {section.Course.Code} icin {expectedSlotCount} slot gerekli, {allMatchedSlots.Count} slot secildi.");
         }
 
-        // Write with hard guard against classroom double-booking
+        // Write with hard guard against classroom double-booking (online section'lar: ClassroomId null → çakışma kontrolü yok)
         foreach (var (timeSlot, effectiveCrId) in allMatchedSlots)
         {
-            var alreadyOccupied = await _context.SectionSchedules
-                .AnyAsync(ss => ss.ClassroomId == effectiveCrId
-                    && ss.TimeSlotId == timeSlot.Id
-                    && ss.CourseSectionId != sectionId, ct);
-
-            if (alreadyOccupied)
+            if (effectiveCrId.HasValue)
             {
-                throw new InvalidOperationException(
-                    $"Derslik cakismasi: {DayLabel(timeSlot.DayOfWeek)} {timeSlot.StartTime:HH\\:mm}-{timeSlot.EndTime:HH\\:mm} slotunda derslik zaten dolu.");
+                var alreadyOccupied = await _context.SectionSchedules
+                    .AnyAsync(ss => ss.ClassroomId == effectiveCrId.Value
+                        && ss.TimeSlotId == timeSlot.Id
+                        && ss.CourseSectionId != sectionId, ct);
+
+                if (alreadyOccupied)
+                {
+                    throw new InvalidOperationException(
+                        $"Derslik cakismasi: {DayLabel(timeSlot.DayOfWeek)} {timeSlot.StartTime:HH\\:mm}-{timeSlot.EndTime:HH\\:mm} slotunda derslik zaten dolu.");
+                }
             }
 
             _context.SectionSchedules.Add(new SectionSchedule
@@ -930,7 +981,8 @@ public class FacultyPlanningService : IFacultyPlanningService
                 SlotOrder = ts.SlotOrder,
                 StartTime = ts.StartTime,
                 EndTime = ts.EndTime,
-                DisplayName = ts.DisplayName
+                DisplayName = ts.DisplayName,
+                AllowedMode = ts.AllowedMode
             })
             .ToListAsync(ct);
     }

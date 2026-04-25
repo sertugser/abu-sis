@@ -18,6 +18,13 @@ public class AcademicTerm
     public DateTime TermStart { get; set; }
     public DateTime TermEnd { get; set; }
 
+    // Admin override alanları (Faz 4 — manuel kontrol):
+    // OverrideStart: admin dönemi TermStart'tan önce aktif etmek istiyorsa (erken aktif).
+    // OverrideEnd:   admin dönemi TermEnd'den sonra aktif tutmak istiyorsa (uzatma).
+    // Null ise dönem tarihi kullanılır; dolu ise override tarih kazanır (effStart/effEnd).
+    public DateTime? OverrideStart { get; set; }
+    public DateTime? OverrideEnd { get; set; }
+
     // SİLİNDİ (Faz 2): RegistrationStart/End, AddDropStart/End, WithdrawalDeadline,
     //                  GradeEntryStart/End + 4 override — TermAcademicCalendar'a taşındı
 
@@ -33,9 +40,19 @@ public class AcademicTerm
 
     // ── Computed ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Override tarihleri ile efektif başlangıç. OverrideStart varsa onu, yoksa TermStart döner.
+    /// </summary>
+    public DateTime EffectiveStart => OverrideStart ?? TermStart;
+
+    /// <summary>
+    /// Override tarihleri ile efektif bitiş. OverrideEnd varsa onu, yoksa TermEnd döner.
+    /// </summary>
+    public DateTime EffectiveEnd => OverrideEnd ?? TermEnd;
+
     public TermStatus GetStatus(DateTime now) =>
         IsCancelled ? TermStatus.Cancelled
-        : (now >= TermStart && now <= TermEnd) ? TermStatus.Active
+        : (now >= EffectiveStart && now <= EffectiveEnd) ? TermStatus.Active
         : TermStatus.Inactive;
 
     public bool IsActive(DateTime now) => GetStatus(now) == TermStatus.Active;

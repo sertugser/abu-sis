@@ -9,6 +9,7 @@ using SIS.Application.Admin.Services;
 using SIS.Application.AcademicCalendar.Services;
 using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
+using SIS.Application.Identity.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.AdvisorConstraints.Services;
@@ -175,6 +176,10 @@ builder.Services.AddScoped<IOsymRegistrationCalendarService, OsymRegistrationCal
 builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
+
+// RBAC (Phase 1)
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IMenuService, MenuService>();
 
 // Course Evaluation + Internal Announcements
 builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();

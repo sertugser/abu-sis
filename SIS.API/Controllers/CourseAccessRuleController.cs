@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/courses/{courseId:int}/access-rules")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class CourseAccessRuleController(AppDbContext context) : ControllerBase
 {
     public record CourseAccessRuleDto(
@@ -36,6 +37,7 @@ public class CourseAccessRuleController(AppDbContext context) : ControllerBase
         bool? IsOpenToOwnDepartment = null);
 
     [HttpGet]
+    [RequirePermission("menu.ders-katalogu.access-rule.view")]
     public async Task<IActionResult> List(int courseId, CancellationToken ct)
     {
         var courseExists = await context.Courses.AnyAsync(c => c.Id == courseId, ct);
@@ -62,6 +64,7 @@ public class CourseAccessRuleController(AppDbContext context) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("menu.ders-katalogu.access-rule.create")]
     public async Task<IActionResult> Create(int courseId, [FromBody] CreateAccessRuleRequest req, CancellationToken ct)
     {
         var courseExists = await context.Courses.AnyAsync(c => c.Id == courseId, ct);
@@ -96,6 +99,7 @@ public class CourseAccessRuleController(AppDbContext context) : ControllerBase
     }
 
     [HttpPut("{ruleId:int}")]
+    [RequirePermission("menu.ders-katalogu.access-rule.edit")]
     public async Task<IActionResult> Update(int courseId, int ruleId, [FromBody] UpdateAccessRuleRequest req, CancellationToken ct)
     {
         var rule = await context.CourseAccessRules
@@ -119,6 +123,7 @@ public class CourseAccessRuleController(AppDbContext context) : ControllerBase
     }
 
     [HttpDelete("{ruleId:int}")]
+    [RequirePermission("menu.ders-katalogu.access-rule.delete")]
     public async Task<IActionResult> Delete(int courseId, int ruleId, CancellationToken ct)
     {
         var rule = await context.CourseAccessRules

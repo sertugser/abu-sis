@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
@@ -11,7 +12,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 public class SchedulingController : ControllerBase
 {
     private readonly ISchedulingService _schedulingService;
@@ -29,6 +30,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpGet("conflicts")]
+    [RequirePermission("menu.derslik-doluluk.view")]
     public async Task<IActionResult> GetConflicts([FromQuery] int? termId, CancellationToken cancellationToken)
     {
         if (termId.HasValue && termId <= 0)
@@ -39,6 +41,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpGet("dashboard")]
+    [RequirePermission("menu.derslik-doluluk.view")]
     public async Task<IActionResult> GetDashboard(
         [FromQuery] int? termId,
         [FromQuery] int? facultyId,
@@ -56,6 +59,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpGet("available-classrooms")]
+    [RequirePermission("menu.derslik-doluluk.view")]
     public async Task<IActionResult> SearchAvailableClassrooms(
         [FromQuery] int termId,
         [FromQuery] string days,
@@ -81,6 +85,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpGet("classroom-filters")]
+    [RequirePermission("menu.derslik-doluluk.view")]
     public async Task<IActionResult> GetClassroomFilters([FromQuery] int termId, CancellationToken cancellationToken)
     {
         if (termId <= 0) return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
@@ -88,6 +93,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpPost("validate")]
+    [RequirePermission("menu.ders-programi-olusturma.validate")]
     public async Task<IActionResult> Validate([FromBody] ScheduleValidationRequestDto request, CancellationToken cancellationToken)
     {
         if (request.SectionId <= 0)
@@ -103,6 +109,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpPost("suggest")]
+    [RequirePermission("menu.ders-programi-olusturma.suggest")]
     public async Task<IActionResult> Suggest([FromBody] ScheduleSuggestionRequestDto request, CancellationToken cancellationToken)
     {
         if (request.SectionId <= 0)
@@ -118,6 +125,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpPost("apply")]
+    [RequirePermission("menu.ders-programi-olusturma.apply")]
     public async Task<IActionResult> Apply([FromBody] ApplyScheduleRequestDto request, CancellationToken cancellationToken)
     {
         if (request.SectionId <= 0)
@@ -136,6 +144,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpGet("validate-existing")]
+    [RequirePermission("menu.ders-programi-olusturma.validate")]
     public async Task<IActionResult> ValidateExisting([FromQuery] int? termId, CancellationToken cancellationToken)
     {
         if (termId.HasValue && termId <= 0)
@@ -146,6 +155,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpPost("batch-auto-schedule")]
+    [RequirePermission("menu.ders-programi-olusturma.auto-schedule")]
     public async Task<IActionResult> BatchAutoSchedule([FromBody] BatchAutoScheduleRequestDto request, CancellationToken cancellationToken)
     {
         if (request.TermId.HasValue && request.TermId <= 0)
@@ -188,7 +198,7 @@ public class SchedulingController : ControllerBase
     // ── Swap Endpoint ────────────────────────────────────────────────────
 
     [HttpPost("swap")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-olusturma.swap")]
     public async Task<IActionResult> SwapSections([FromBody] SwapSectionsRequestDto request, CancellationToken cancellationToken)
     {
         if (request.SectionId1 <= 0 || request.SectionId2 <= 0)
@@ -317,7 +327,7 @@ public class SchedulingController : ControllerBase
     // ── Lock / Unlock Endpoints ──────────────────────────────────────────
 
     [HttpPost("lock/{sectionId}")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-olusturma.lock")]
     public async Task<IActionResult> LockSection(int sectionId, CancellationToken cancellationToken)
     {
         if (sectionId <= 0)
@@ -347,7 +357,7 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpPost("unlock/{sectionId}")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-olusturma.unlock")]
     public async Task<IActionResult> UnlockSection(int sectionId, CancellationToken cancellationToken)
     {
         if (sectionId <= 0)
@@ -379,7 +389,7 @@ public class SchedulingController : ControllerBase
     // ── Timetable Endpoints ──────────────────────────────────────────────
 
     [HttpGet("instructor/{instructorId}/timetable")]
-    [Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetInstructorTimetable(int instructorId, [FromQuery] int? termId, CancellationToken cancellationToken)
     {
         if (instructorId <= 0)

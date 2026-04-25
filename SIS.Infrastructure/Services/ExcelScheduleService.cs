@@ -48,7 +48,7 @@ public class ExcelScheduleService : IExcelScheduleService
                 StartTime = ss.TimeSlot.StartTime,
                 EndTime = ss.TimeSlot.EndTime,
                 SlotOrder = ss.TimeSlot.SlotOrder,
-                ClassroomName = ss.Classroom.Name,
+                ClassroomName = ss.Classroom!.Name,
                 Capacity = ss.CourseSection.Capacity,
                 IsActive = ss.CourseSection.IsActive,
                 IsFinalized = ss.CourseSection.IsFinalized,
@@ -273,7 +273,7 @@ public class ExcelScheduleService : IExcelScheduleService
                 StartTime      = ss.TimeSlot.StartTime,
                 EndTime        = ss.TimeSlot.EndTime,
                 SlotOrder      = ss.TimeSlot.SlotOrder,
-                ClassroomName  = ss.Classroom.Name,
+                ClassroomName  = ss.Classroom!.Name,
             })
             .OrderBy(r => r.CourseCode)
             .ThenBy(r => r.SectionNumber)

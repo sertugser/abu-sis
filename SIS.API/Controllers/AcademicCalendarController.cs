@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.AcademicCalendar.DTOs;
 using SIS.Application.AcademicCalendar.Services;
 
@@ -16,12 +17,14 @@ public class AcademicCalendarController : ControllerBase
     // Admin
 
     [HttpGet("admin/academic-calendar")]
-    [Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
+    [Authorize]
+    [RequirePermission("menu.akademik-takvim-yonetimi.view")]
     public async Task<IActionResult> ListTerms(CancellationToken ct)
         => Ok(await _svc.ListTermsAsync(ct));
 
     [HttpGet("admin/academic-calendar/{termId:int}")]
-    [Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
+    [Authorize]
+    [RequirePermission("menu.akademik-takvim-yonetimi.view")]
     public async Task<IActionResult> GetByTerm(int termId, CancellationToken ct)
     {
         try
@@ -33,7 +36,8 @@ public class AcademicCalendarController : ControllerBase
     }
 
     [HttpPut("admin/academic-calendar/{termId:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [Authorize]
+    [RequirePermission("menu.akademik-takvim-yonetimi.edit")]
     public async Task<IActionResult> Upsert(int termId, [FromBody] UpsertAcademicCalendarDto dto, CancellationToken ct)
     {
         try { return Ok(await _svc.UpsertAsync(termId, dto, ct)); }
@@ -43,7 +47,8 @@ public class AcademicCalendarController : ControllerBase
     }
 
     [HttpPost("admin/academic-calendar/{termId:int}/override")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [Authorize]
+    [RequirePermission("menu.akademik-takvim-yonetimi.override")]
     public async Task<IActionResult> UpdatePhaseOverride(int termId, [FromBody] UpdateCalendarPhaseOverrideDto dto, CancellationToken ct)
     {
         try
@@ -61,6 +66,7 @@ public class AcademicCalendarController : ControllerBase
 
     [HttpGet("academic-calendar/active")]
     [Authorize]
+    [RequirePermission("menu.akademik-takvim.view")]
     public async Task<IActionResult> GetActiveStudent(CancellationToken ct)
     {
         var view = await _svc.GetActiveStudentViewAsync(ct);
@@ -69,6 +75,7 @@ public class AcademicCalendarController : ControllerBase
 
     [HttpGet("academic-calendar/{termId:int}")]
     [Authorize]
+    [RequirePermission("menu.akademik-takvim.view")]
     public async Task<IActionResult> GetStudent(int termId, CancellationToken ct)
     {
         var view = await _svc.GetStudentViewAsync(termId, ct);
@@ -77,6 +84,7 @@ public class AcademicCalendarController : ControllerBase
 
     [HttpGet("academic-calendar/terms")]
     [Authorize]
+    [RequirePermission("lookup.term")]
     public async Task<IActionResult> ListStudentTerms(CancellationToken ct)
         => Ok(await _svc.ListTermsAsync(ct));
 }

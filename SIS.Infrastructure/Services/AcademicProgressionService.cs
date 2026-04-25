@@ -83,6 +83,8 @@ public class AcademicProgressionService : IAcademicProgressionService
             .Where(pr => programIds.Contains(pr.ProgramId))
             .ToListAsync(cancellationToken);
 
+        // γ hibrit: CurriculumId set olanlar müfredat-spesifik override, null olanlar program-bazlı default.
+        // Her öğrenci değerlendirilirken önce müfredat-spesifik kural aranır, yoksa program-bazlıya düşer.
         var rulesByProgram = promotionRules
             .GroupBy(pr => pr.ProgramId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -140,6 +142,7 @@ public class AcademicProgressionService : IAcademicProgressionService
 
             // Yeni seviye: PromotionRule varsa kural bazlı, yoksa AKTS bazlı fallback
             var programId = mainProgram.ProgramId;
+            var curriculumId = mainProgram.CurriculumId;
             var rules = rulesByProgram.GetValueOrDefault(programId) ?? new List<PromotionRule>();
             var promotionDetails = new List<string>();
 
@@ -148,7 +151,9 @@ public class AcademicProgressionService : IAcademicProgressionService
             int newLevel = Math.Max(1, oldLevel);
             for (int fromYear = newLevel; fromYear < normalDurationYears; fromYear++)
             {
-                var rule = rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1);
+                // γ hibrit lookup: önce müfredat-özel kural (CurriculumId == student.curriculumId), yoksa program-bazlı (CurriculumId == null)
+                var rule = rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1 && r.CurriculumId == curriculumId)
+                        ?? rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1 && r.CurriculumId == null);
 
                 if (rule != null)
                 {

@@ -174,6 +174,73 @@ public class AcademicCalendarServiceTests
     }
 
     [Fact]
+    public async Task UpsertAsync_Throws_WhenAddDropStartsBeforeRegistrationEnds()
+    {
+        using var ctx = CreateContext();
+        var term = SeedTerm(ctx);
+        var svc = CreateService(ctx);
+
+        // Kayıt bitişi, ekle-bırak başlangıcından SONRA → mantıksal çelişki
+        var dto = new UpsertAcademicCalendarDto(
+            RegistrationStart:  term.TermStart.AddDays(-10),
+            RegistrationEnd:    term.TermStart.AddDays(5),
+            AddDropStart:       term.TermStart,                 // RegistrationEnd'den ÖNCE
+            AddDropEnd:         term.TermStart.AddDays(14),
+            WithdrawalDeadline: term.TermEnd.AddDays(-30),
+            GradeEntryStart:    term.TermEnd,
+            GradeEntryEnd:      term.TermEnd.AddDays(14));
+
+        Func<Task> act = async () => await svc.UpsertAsync(term.Id, dto);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*kayıt bitmeden başlayamaz*");
+    }
+
+    [Fact]
+    public async Task UpsertAsync_Throws_WhenGradeEntryStartsBeforeAddDropEnds()
+    {
+        using var ctx = CreateContext();
+        var term = SeedTerm(ctx);
+        var svc = CreateService(ctx);
+
+        var dto = new UpsertAcademicCalendarDto(
+            RegistrationStart:  term.TermStart.AddDays(-10),
+            RegistrationEnd:    term.TermStart,
+            AddDropStart:       term.TermStart,
+            AddDropEnd:         term.TermStart.AddDays(30),
+            WithdrawalDeadline: term.TermEnd.AddDays(-30),
+            GradeEntryStart:    term.TermStart.AddDays(20),     // AddDropEnd'den ÖNCE
+            GradeEntryEnd:      term.TermEnd.AddDays(14));
+
+        Func<Task> act = async () => await svc.UpsertAsync(term.Id, dto);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*ekle-bırak bitmeden başlayamaz*");
+    }
+
+    [Fact]
+    public async Task UpsertAsync_Throws_WhenGradeEntryStartsBeforeTermStart()
+    {
+        using var ctx = CreateContext();
+        var term = SeedTerm(ctx);
+        var svc = CreateService(ctx);
+
+        var dto = new UpsertAcademicCalendarDto(
+            RegistrationStart:  term.TermStart.AddDays(-30),
+            RegistrationEnd:    term.TermStart.AddDays(-20),
+            AddDropStart:       term.TermStart.AddDays(-15),
+            AddDropEnd:         term.TermStart.AddDays(-10),
+            WithdrawalDeadline: term.TermEnd.AddDays(-30),
+            GradeEntryStart:    term.TermStart.AddDays(-5),     // TermStart'tan ÖNCE
+            GradeEntryEnd:      term.TermEnd.AddDays(14));
+
+        Func<Task> act = async () => await svc.UpsertAsync(term.Id, dto);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*dönem başlamadan başlayamaz*");
+    }
+
+    [Fact]
     public async Task UpdatePhaseOverrideAsync_SetsOverride()
     {
         using var ctx = CreateContext();

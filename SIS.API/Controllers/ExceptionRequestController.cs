@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -25,6 +26,7 @@ public class ExceptionRequestController : ControllerBase
 
     // ── POST / ── create request ────────────────────────────────────
     [HttpPost]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception-request")]
     public async Task<IActionResult> Create([FromBody] CreateExceptionRequestDto dto, CancellationToken ct)
     {
         if (dto.InstructorId == null && dto.StudentId == null &&
@@ -63,7 +65,7 @@ public class ExceptionRequestController : ControllerBase
 
     // ── GET /pending ── requests needing current user's approval ─────
     [HttpGet("pending")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception-pending")]
     public async Task<IActionResult> GetPending(CancellationToken ct)
     {
         var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
@@ -88,6 +90,7 @@ public class ExceptionRequestController : ControllerBase
 
     // ── GET /my ── current user's own requests ──────────────────────
     [HttpGet("my")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception-my")]
     public async Task<IActionResult> GetMy(CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
@@ -106,6 +109,7 @@ public class ExceptionRequestController : ControllerBase
 
     // ── GET /{id} ── request detail ─────────────────────────────────
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception-view")]
     public async Task<IActionResult> Get(int id, CancellationToken ct)
     {
         var request = await _context.ConstraintExceptionRequests
@@ -123,7 +127,7 @@ public class ExceptionRequestController : ControllerBase
 
     // ── POST /{id}/approve ──────────────────────────────────────────
     [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception-approve")]
     public async Task<IActionResult> Approve(int id, [FromBody] ApprovalActionDto dto, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
@@ -135,7 +139,7 @@ public class ExceptionRequestController : ControllerBase
 
     // ── POST /{id}/reject ───────────────────────────────────────────
     [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception-reject")]
     public async Task<IActionResult> Reject(int id, [FromBody] ApprovalActionDto dto, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";

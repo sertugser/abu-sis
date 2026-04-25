@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SIS.Domain.Entities;
+using SIS.Domain.Identity;
 
 namespace SIS.Infrastructure.Persistence;
 
@@ -54,6 +55,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ElectiveGroup> ElectiveGroups => Set<ElectiveGroup>();
     public DbSet<ElectiveGroupCourse> ElectiveGroupCourses => Set<ElectiveGroupCourse>();
     public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
+    public DbSet<CurriculumTermRule> CurriculumTermRules => Set<CurriculumTermRule>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
     public DbSet<ForecastCalibration> ForecastCalibrations => Set<ForecastCalibration>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
@@ -72,6 +74,13 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
     public DbSet<AdvisorCourseConstraint> AdvisorCourseConstraints => Set<AdvisorCourseConstraint>();
     public DbSet<CourseCrossList> CourseCrossLists => Set<CourseCrossList>();
+
+    // ── RBAC (Phase 1) ──────────────────────────────────────────
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<MenuModule> MenuModules => Set<MenuModule>();
+    public DbSet<MenuItem> MenuItems => Set<MenuItem>();
+    public DbSet<MenuItemPermission> MenuItemPermissions => Set<MenuItemPermission>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -261,6 +270,20 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany(eg => eg.CurriculumPools)
              .HasForeignKey(cep => cep.ElectiveGroupId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── CurriculumTermRule (Müfredat Dönem Kuralları) ───────
+        builder.Entity<CurriculumTermRule>(e =>
+        {
+            // Aynı (Curriculum, Sınıf, Dönem, Kural Tipi) kombinasyonu benzersizdir.
+            e.HasIndex(r => new { r.CurriculumId, r.ClassYear, r.TermHalf, r.RuleType }).IsUnique();
+
+            e.Property(r => r.Value).HasColumnType("numeric(10,2)");
+
+            e.HasOne(r => r.Curriculum)
+             .WithMany(c => c.TermRules)
+             .HasForeignKey(r => r.CurriculumId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── CourseAccessRule ────────────────────────────────────
@@ -539,7 +562,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── SectionSchedule ──────────────────────────────────────
         builder.Entity<SectionSchedule>(e =>
         {
-            e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId }).IsUnique();
+            // Lab split desteği: aynı section + aynı slot, FARKLI derslik kombinasyonuna izin ver.
+            // Kapasite yetmeyen lab oturumları 2+ oda'ya bölünebilir (ör. BM101 lab L139+L141 aynı anda).
+            // ClassroomId'nin index'e dahil edilmesi (section, slot, classroom) üçlüsünü unique yapar.
+            e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId, ss.ClassroomId }).IsUnique();
 
             e.HasOne(ss => ss.CourseSection)
              .WithMany(cs => cs.SectionSchedules)
@@ -710,12 +736,19 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── PromotionRule ────────────────────────────────────────
         builder.Entity<PromotionRule>(e =>
         {
-            e.HasIndex(pr => new { pr.ProgramId, pr.FromYear, pr.ToYear }).IsUnique();
+            // γ hibrit unique: aynı program×müfredat×fromYear×toYear kombinasyonu tek olabilir.
+            // CurriculumId null olabilir → program-bazlı default; set ise müfredat-spesifik override.
+            e.HasIndex(pr => new { pr.ProgramId, pr.CurriculumId, pr.FromYear, pr.ToYear }).IsUnique();
             e.Property(pr => pr.MinCgpa).HasPrecision(4, 2);
 
             e.HasOne(pr => pr.Program)
              .WithMany()
              .HasForeignKey(pr => pr.ProgramId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(pr => pr.Curriculum)
+             .WithMany()
+             .HasForeignKey(pr => pr.CurriculumId)
              .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -952,6 +985,78 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .HasForeignKey(q => q.ProgramId)
              .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(q => new { q.ProgramId, q.Year, q.Type }).IsUnique();
+        });
+
+        // ── RBAC: Permission ────────────────────────────────────
+        builder.Entity<Permission>(e =>
+        {
+            e.Property(p => p.Key).HasMaxLength(150).IsRequired();
+            e.Property(p => p.Description).HasMaxLength(500);
+            e.HasIndex(p => p.Key).IsUnique();
+            e.HasIndex(p => p.Category);
+        });
+
+        // ── RBAC: RolePermission (composite PK) ─────────────────
+        builder.Entity<RolePermission>(e =>
+        {
+            e.HasKey(rp => new { rp.RoleId, rp.PermissionId });
+            e.HasOne<IdentityRole<int>>()
+             .WithMany()
+             .HasForeignKey(rp => rp.RoleId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(rp => rp.Permission)
+             .WithMany(p => p.RolePermissions)
+             .HasForeignKey(rp => rp.PermissionId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(rp => rp.PermissionId);
+        });
+
+        // ── RBAC: MenuModule (recursive tree) ───────────────────
+        builder.Entity<MenuModule>(e =>
+        {
+            e.Property(m => m.Slug).HasMaxLength(100).IsRequired();
+            e.Property(m => m.Label).HasMaxLength(100).IsRequired();
+            e.Property(m => m.Icon).HasMaxLength(50);
+            e.Property(m => m.AllowedRolesCsv).HasMaxLength(200);
+            e.HasOne(m => m.Parent)
+             .WithMany(m => m.Children)
+             .HasForeignKey(m => m.ParentId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => m.Slug).IsUnique();
+            e.HasIndex(m => m.ParentId);
+            e.HasIndex(m => new { m.ParentId, m.SortOrder });
+        });
+
+        // ── RBAC: MenuItem ──────────────────────────────────────
+        // Route UNIQUE kaldırıldı — aynı route farklı modüllerde olabilir (örn. "Duyurular"
+        // hem "Genel İşlemler" hem "Duyuru Yönetimi" altında). Composite (ModuleId, Route)
+        // UNIQUE: aynı modülde aynı route iki kez yasak.
+        builder.Entity<MenuItem>(e =>
+        {
+            e.Property(mi => mi.Label).HasMaxLength(150).IsRequired();
+            e.Property(mi => mi.Route).HasMaxLength(200).IsRequired();
+            e.Property(mi => mi.Slug).HasMaxLength(100).IsRequired();
+            e.HasOne(mi => mi.Module)
+             .WithMany(m => m.Items)
+             .HasForeignKey(mi => mi.ModuleId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(mi => mi.Route);
+            e.HasIndex(mi => new { mi.ModuleId, mi.Route }).IsUnique();
+            e.HasIndex(mi => new { mi.ModuleId, mi.SortOrder });
+        });
+
+        // ── RBAC: MenuItemPermission (composite PK) ─────────────
+        builder.Entity<MenuItemPermission>(e =>
+        {
+            e.HasKey(mip => new { mip.MenuItemId, mip.PermissionId });
+            e.HasOne(mip => mip.MenuItem)
+             .WithMany(mi => mi.MenuItemPermissions)
+             .HasForeignKey(mip => mip.MenuItemId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(mip => mip.Permission)
+             .WithMany(p => p.MenuItemPermissions)
+             .HasForeignKey(mip => mip.PermissionId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

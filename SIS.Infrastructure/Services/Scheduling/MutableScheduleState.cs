@@ -4,9 +4,12 @@ namespace SIS.Infrastructure.Services.Scheduling;
 
 public enum BlockType { Theory, Lab }
 
+/// <summary>
+/// ClassroomId nullable: online dersler için null olur (classroom ataması yok, sadece zaman).
+/// </summary>
 public sealed record BlockAssignment(
     BlockType Type,
-    int ClassroomId,
+    int? ClassroomId,
     DayOfWeek Day,
     TimeOnly StartTime,
     TimeOnly EndTime);
@@ -76,16 +79,19 @@ public sealed class MutableScheduleState
 
         foreach (var block in blocks)
         {
-            // Classroom occupancy
-            var crKey = (block.ClassroomId, block.Day);
-            if (!_classroomOccupancy.TryGetValue(crKey, out var crSlots))
+            // Classroom occupancy — online bloklarda (ClassroomId null) classroom tracking yapılmaz
+            if (block.ClassroomId is int classroomId)
             {
-                crSlots = new List<(TimeOnly, TimeOnly, int)>();
-                _classroomOccupancy[crKey] = crSlots;
+                var crKey = (classroomId, block.Day);
+                if (!_classroomOccupancy.TryGetValue(crKey, out var crSlots))
+                {
+                    crSlots = new List<(TimeOnly, TimeOnly, int)>();
+                    _classroomOccupancy[crKey] = crSlots;
+                }
+                crSlots.Add((block.StartTime, block.EndTime, sectionId));
             }
-            crSlots.Add((block.StartTime, block.EndTime, sectionId));
 
-            // Instructor occupancy
+            // Instructor occupancy (online dersler de hoca çakışmasına dahil)
             if (snapshot.InstructorId.HasValue)
             {
                 var instrKey = (snapshot.InstructorId.Value, block.Day);
@@ -117,13 +123,16 @@ public sealed class MutableScheduleState
 
         foreach (var block in placement.Blocks)
         {
-            // Remove from classroom occupancy
-            var crKey = (block.ClassroomId, block.Day);
-            if (_classroomOccupancy.TryGetValue(crKey, out var crSlots))
+            // Remove from classroom occupancy — online bloklarda zaten eklenmedi
+            if (block.ClassroomId is int classroomId)
             {
-                crSlots.RemoveAll(s => s.SectionId == sectionId);
-                if (crSlots.Count == 0)
-                    _classroomOccupancy.Remove(crKey);
+                var crKey = (classroomId, block.Day);
+                if (_classroomOccupancy.TryGetValue(crKey, out var crSlots))
+                {
+                    crSlots.RemoveAll(s => s.SectionId == sectionId);
+                    if (crSlots.Count == 0)
+                        _classroomOccupancy.Remove(crKey);
+                }
             }
 
             // Remove from instructor occupancy
@@ -229,8 +238,8 @@ public sealed class MutableScheduleState
 
         // Resolve actual classroom data from blocks (fixes stale data after SA swap/chain)
         var actualClassroomId = placement.Blocks.Count > 0 ? placement.Blocks[0].ClassroomId : snap.ClassroomId;
-        var actualClassroomName = snap.ClassroomName;
-        var actualClassroomCapacity = snap.ClassroomCapacity;
+        var actualClassroomName = actualClassroomId.HasValue ? snap.ClassroomName : string.Empty;
+        var actualClassroomCapacity = actualClassroomId.HasValue ? snap.ClassroomCapacity : 0;
         var actualClassroomType = snap.ClassroomType;
 
         if (actualClassroomId.HasValue && _classroomLookup != null
@@ -249,6 +258,7 @@ public sealed class MutableScheduleState
             CourseCode = snap.CourseCode,
             CourseName = snap.CourseName,
             TermId = snap.TermId,
+            TeachingMethod = snap.TeachingMethod,
             TheoryHours = snap.TheoryHours,
             LabHours = snap.LabHours,
             Capacity = snap.Capacity,
@@ -290,6 +300,7 @@ public sealed class MutableScheduleState
             CoEnrollmentPairs = baseSnapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = baseSnapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = baseSnapshot.CourseAccessibleDepartments,
+            SlotAllowedModes = baseSnapshot.SlotAllowedModes,
         };
     }
 

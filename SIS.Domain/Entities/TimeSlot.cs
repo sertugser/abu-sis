@@ -1,3 +1,5 @@
+using SIS.Domain.Enums;
+
 namespace SIS.Domain.Entities;
 
 /// <summary>
@@ -15,4 +17,11 @@ public class TimeSlot
     public TimeOnly EndTime { get; set; }
     public int SlotOrder { get; set; }  // Günün kaçıncı slotu (1, 2, 3...)
     public string DisplayName { get; set; } = string.Empty;  // e.g., "Pazartesi 1. Ders (09:00-09:50)"
+
+    /// <summary>
+    /// Bu slotta hangi tür dersin yer alabileceğini belirler.
+    /// Both: her türlü ders; OnlineOnly: yalnızca online/hybrid; FaceToFaceOnly: yalnızca yüz-yüze/hybrid.
+    /// Generate sırasında 18:00+ ve hafta sonu slotlar otomatik OnlineOnly damgalanır, admin sonradan değiştirebilir.
+    /// </summary>
+    public TimeSlotAllowedMode AllowedMode { get; set; } = TimeSlotAllowedMode.Both;
 }

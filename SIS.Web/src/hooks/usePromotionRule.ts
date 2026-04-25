@@ -6,13 +6,14 @@ import {
   deletePromotionRule,
   type CreatePromotionRuleDto,
   type UpdatePromotionRuleDto,
+  type PromotionRuleFilter,
 } from '../api/promotionRule.api';
 import { QUERY_KEYS } from '../lib/constants';
 
-export function usePromotionRules(programId?: number) {
+export function usePromotionRules(filter?: PromotionRuleFilter) {
   return useQuery({
-    queryKey: QUERY_KEYS.promotionRules(programId),
-    queryFn: () => getPromotionRules(programId),
+    queryKey: QUERY_KEYS.promotionRules(filter?.programId, filter?.curriculumId),
+    queryFn: () => getPromotionRules(filter),
     staleTime: 60 * 1000,
   });
 }

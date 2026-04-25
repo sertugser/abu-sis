@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
@@ -13,7 +14,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/constraints")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class ConstraintController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -27,6 +28,7 @@ public class ConstraintController : ControllerBase
 
     // ── GET /api/constraints ─────────────────────────────────────────────
     [HttpGet]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> List(CancellationToken ct)
     {
         var definitions = await _context.ConstraintDefinitions
@@ -44,6 +46,7 @@ public class ConstraintController : ControllerBase
 
     // ── GET /api/constraints/{id} ────────────────────────────────────────
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> Get(int id, CancellationToken ct)
     {
         var definition = await _context.ConstraintDefinitions
@@ -100,7 +103,7 @@ public class ConstraintController : ControllerBase
 
     // ── PUT /api/constraints/{id}/toggle ─────────────────────────────────
     [HttpPut("{id:int}/toggle")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.toggle")]
     public async Task<IActionResult> Toggle(int id, CancellationToken ct)
     {
         var definition = await _context.ConstraintDefinitions.FindAsync([id], ct);
@@ -116,7 +119,7 @@ public class ConstraintController : ControllerBase
 
     // ── PUT /api/constraints/{id}/category ───────────────────────────────
     [HttpPut("{id:int}/category")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.edit")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateCategoryRequest request, CancellationToken ct)
     {
         if (request.Category is not ("Hard" or "Soft"))
@@ -135,7 +138,7 @@ public class ConstraintController : ControllerBase
 
     // ── PUT /api/constraints/{id}/parameters ─────────────────────────────
     [HttpPut("{id:int}/parameters")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.edit")]
     public async Task<IActionResult> UpdateParameters(int id, [FromBody] UpdateParametersRequest request, CancellationToken ct)
     {
         // Validate JSON
@@ -164,7 +167,7 @@ public class ConstraintController : ControllerBase
 
     // ── POST /api/constraints/{id}/exceptions ────────────────────────────
     [HttpPost("{id:int}/exceptions")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception")]
     public async Task<IActionResult> AddException(int id, [FromBody] AddExceptionRequest request, CancellationToken ct)
     {
         // Validate at least one entity field is provided
@@ -216,7 +219,7 @@ public class ConstraintController : ControllerBase
 
     // ── DELETE /api/constraints/exceptions/{exceptionId} ─────────────────
     [HttpDelete("exceptions/{exceptionId:int}")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.exception")]
     public async Task<IActionResult> RemoveException(int exceptionId, CancellationToken ct)
     {
         var exception = await _context.ConstraintExceptions.FindAsync([exceptionId], ct);
@@ -231,6 +234,7 @@ public class ConstraintController : ControllerBase
 
     // ── GET /api/constraints/preview ─────────────────────────────────────
     [HttpGet("preview")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> Preview(
         [FromQuery] int sectionId,
         [FromQuery] int? classroomId,
@@ -253,6 +257,7 @@ public class ConstraintController : ControllerBase
 
     // ── GET /api/constraints/score-breakdown ─────────────────────────────
     [HttpGet("score-breakdown")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> GetScoreBreakdown([FromQuery] int termId, CancellationToken ct)
     {
         if (termId <= 0)
@@ -264,7 +269,7 @@ public class ConstraintController : ControllerBase
 
     // ── PUT /api/constraints/{id}/weight ─────────────────────────────────
     [HttpPut("{id:int}/weight")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.edit")]
     public async Task<IActionResult> UpdateWeight(int id, [FromBody] UpdateWeightRequest request, CancellationToken ct)
     {
         if (request.Weight < 1 || request.Weight > 10)

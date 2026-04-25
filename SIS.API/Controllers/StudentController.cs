@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.Common.DTOs;
 using SIS.Application.GpaCalculation.Services;
@@ -14,7 +15,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Student")]
+[Authorize]
 public class StudentController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -32,6 +33,7 @@ public class StudentController : ControllerBase
     /// GET api/student/me — returns the authenticated student's profile info.
     /// </summary>
     [HttpGet("me")]
+    [RequirePermission("menu.ana-sayfa.view")]
     public async Task<IActionResult> GetMe()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -116,6 +118,7 @@ public class StudentController : ControllerBase
     /// GET api/student/curriculum-status — returns the student's curriculum progress.
     /// </summary>
     [HttpGet("curriculum-status")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCurriculumStatus()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -370,7 +373,7 @@ public class StudentController : ControllerBase
     /// GET api/student/term-gpa-history — returns the student's term-based ANO/AGNO timeline.
     /// </summary>
     [HttpGet("term-gpa-history")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.donem-ortalamalari.view")]
     public async Task<IActionResult> GetTermGpaHistory()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -392,7 +395,7 @@ public class StudentController : ControllerBase
     /// GET api/student/registrations/{registrationId}/grade-statistics - returns exam and grade statistics for the student's own registration.
     /// </summary>
     [HttpGet("registrations/{registrationId:int}/grade-statistics")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.alinan-dersler.statistics")]
     public async Task<IActionResult> GetGradeStatistics(int registrationId, [FromQuery] bool commonEvaluation = false)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -624,7 +627,7 @@ public class StudentController : ControllerBase
     /// GET api/student/transcript — returns the authenticated student's transcript document data.
     /// </summary>
     [HttpGet("transcript")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.transkript.view")]
     public async Task<IActionResult> GetTranscript()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

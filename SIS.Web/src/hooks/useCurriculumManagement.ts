@@ -10,18 +10,26 @@ import type {
   UpdatePoolRequest,
 } from '../types/curriculumManagement';
 
+export interface CurriculumListFilters {
+  programId?: number;
+  departmentId?: number;
+  facultyId?: number;
+}
+
 const KEYS = {
-  list: (programId?: number) => ['curriculum', 'list', programId] as const,
+  list: (filters?: CurriculumListFilters) =>
+    ['curriculum', 'list', filters?.programId, filters?.departmentId, filters?.facultyId] as const,
   detail: (id: number) => ['curriculum', 'detail', id] as const,
   courses: (id: number) => ['curriculum', 'courses', id] as const,
   pools: (id: number) => ['curriculum', 'pools', id] as const,
 };
 
-export function useCurriculumList(programId?: number) {
+export function useCurriculumList(filters?: CurriculumListFilters) {
+  const hasFilter = !!(filters?.programId || filters?.departmentId || filters?.facultyId);
   return useQuery({
-    queryKey: KEYS.list(programId),
-    queryFn: () => curriculumApi.list(programId),
-    enabled: !!programId,
+    queryKey: KEYS.list(filters),
+    queryFn: () => curriculumApi.list(filters),
+    enabled: hasFilter,
     staleTime: 2 * 60 * 1000,
   });
 }

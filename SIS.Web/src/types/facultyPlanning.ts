@@ -72,12 +72,15 @@ export interface FacultyPlanningSectionPage {
   pageSize: number;
 }
 
+export type TimeSlotAllowedMode = 'Both' | 'OnlineOnly' | 'FaceToFaceOnly';
+
 export interface FacultyPlanningTimeSlot {
   day: number;
   slotOrder: number;
   startTime: string;
   endTime: string;
   displayName: string;
+  allowedMode: TimeSlotAllowedMode;
 }
 
 export interface AssignSectionRequest {
@@ -106,6 +109,7 @@ export interface AutoSchedulePreview {
   failedCount: number;
   assignments: AutoSchedulePreviewItem[];
   failures: AutoScheduleFailure[];
+  invalidatedAssignments: InvalidatedAssignment[];
   seed: number;
   totalPenalty: number;
   stats: AutoScheduleStats;
@@ -126,13 +130,21 @@ export interface AutoSchedulePreviewItem {
   courseCode: string;
   courseName: string;
   departmentCode: string;
-  classroomId: number;
+  classroomId: number | null;
   classroomName: string;
   scheduleSlots: ScheduleSlot[];
   scheduleSummary: string;
   instructorId: number | null;
   instructorName: string | null;
   fitScore: number;
+}
+
+export interface InvalidatedAssignment {
+  sectionId: number;
+  sectionNumber: number;
+  courseCode: string;
+  courseName: string;
+  reason: string;
 }
 
 export interface AutoScheduleFailure {
@@ -158,7 +170,7 @@ export interface ApplyScheduleRequest {
 
 export interface ApplyScheduleItem {
   sectionId: number;
-  classroomId: number;
+  classroomId: number | null;
   scheduleSlots: ScheduleSlot[];
   instructorId?: number;
 }

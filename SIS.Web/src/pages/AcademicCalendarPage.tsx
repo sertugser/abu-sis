@@ -68,15 +68,14 @@ export default function AcademicCalendarPage() {
 
   const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<'year' | 'month'>('year');
-  const [syncedTermStart, setSyncedTermStart] = useState<string | null | undefined>(null);
 
-  // Dönem değiştiğinde cursor'u TermStart'ın yılına/ayına taşı (adjust state during render)
-  if (data?.termStart !== syncedTermStart) {
-    setSyncedTermStart(data?.termStart ?? null);
-    if (data?.termStart) {
-      const termStart = new Date(data.termStart);
-      setCursorDate(new Date(termStart.getFullYear(), termStart.getMonth(), 1));
-    }
+  // Dönem değiştiğinde cursor'u TermStart'ın yılına/ayına taşı — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const [prevTermStart, setPrevTermStart] = useState(data?.termStart);
+  if (data?.termStart && data.termStart !== prevTermStart) {
+    setPrevTermStart(data.termStart);
+    const termStart = new Date(data.termStart);
+    setCursorDate(new Date(termStart.getFullYear(), termStart.getMonth(), 1));
   }
 
   const events = data?.events;

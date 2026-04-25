@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
@@ -13,7 +14,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/instructor")]
-[Authorize(Roles = "Instructor")]
+[Authorize]
 public class GradeController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -36,6 +37,7 @@ public class GradeController : ControllerBase
     /// Dersin not bileşenlerini listeler (Vize, Final, Ödev vb.)
     /// </summary>
     [HttpGet("section/{sectionId}/components")]
+    [RequirePermission("menu.not-girisi.view")]
     public async Task<IActionResult> GetComponents(int sectionId)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -73,6 +75,7 @@ public class GradeController : ControllerBase
     /// id verilirse günceller, verilmezse yeni ekler.
     /// </summary>
     [HttpPost("section/{sectionId}/components")]
+    [RequirePermission("menu.not-girisi.edit")]
     public async Task<IActionResult> UpsertComponent(int sectionId, [FromBody] ComponentDto dto)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -132,6 +135,7 @@ public class GradeController : ControllerBase
     /// Bileşeni ve ilişkili notları siler.
     /// </summary>
     [HttpDelete("section/{sectionId}/components/{componentId}")]
+    [RequirePermission("menu.not-girisi.edit")]
     public async Task<IActionResult> DeleteComponent(int sectionId, int componentId)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -174,6 +178,7 @@ public class GradeController : ControllerBase
     /// Section'daki tüm öğrencilerin tüm bileşen puanlarını getirir.
     /// </summary>
     [HttpGet("section/{sectionId}/grades")]
+    [RequirePermission("menu.not-girisi.view")]
     public async Task<IActionResult> GetGrades(int sectionId)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -260,6 +265,7 @@ public class GradeController : ControllerBase
     /// Body: { "componentId": 1, "grades": [{ "studentId": 5, "score": 75 }, ...] }
     /// </summary>
     [HttpPost("section/{sectionId}/grades")]
+    [RequirePermission("menu.not-girisi.submit")]
     public async Task<IActionResult> SubmitGrades(int sectionId, [FromBody] GradeSubmitDto dto)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -349,6 +355,7 @@ public class GradeController : ControllerBase
 /// Excel şablonunu indirir.
 /// </summary>
 [HttpGet("section/{sectionId}/grades/export-template")]
+[RequirePermission("menu.not-girisi.export")]
 public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int componentId)
 {
     var section = await GetAuthorizedSectionAsync(sectionId);
@@ -451,6 +458,7 @@ public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int c
 /// Excel dosyasını parse edip önizleme döner.
 /// </summary>
 [HttpPost("section/{sectionId}/grades/import-preview")]
+[RequirePermission("menu.not-girisi.import")]
 [Consumes("multipart/form-data")]
 public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportFileDto request)
 {
@@ -652,6 +660,7 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
 /// Onaylanan Excel notlarını uygular.
 /// </summary>
 [HttpPost("section/{sectionId}/grades/import-apply")]
+[RequirePermission("menu.not-girisi.import")]
 [Consumes("multipart/form-data")]
 public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFileDto request)
 {
@@ -818,6 +827,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     /// 5. Her öğrencinin CGPA/SGPA'sını günceller
     /// </summary>
     [HttpPost("section/{sectionId}/finalize")]
+    [RequirePermission("menu.not-girisi.finalize")]
     public async Task<IActionResult> Finalize(int sectionId)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -946,6 +956,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     /// Sonuçlandırmayı iptal eder — harf notları ve CGPA geri alınır.
     /// </summary>
     [HttpPost("section/{sectionId}/unfinalize")]
+    [RequirePermission("menu.not-girisi.unfinalize")]
     public async Task<IActionResult> Unfinalize(int sectionId)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -1002,6 +1013,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     /// Dersin mevcut not aralıklarını getirir.
     /// </summary>
     [HttpGet("section/{sectionId}/grading-criteria")]
+    [RequirePermission("menu.not-girisi.view")]
     public async Task<IActionResult> GetGradingCriteria(int sectionId)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);
@@ -1032,6 +1044,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     /// Dersin tüm section'larını etkiler.
     /// </summary>
     [HttpPut("section/{sectionId}/grading-criteria")]
+    [RequirePermission("menu.not-girisi.edit")]
     public async Task<IActionResult> UpdateGradingCriteria(int sectionId, [FromBody] GradingCriteriaDto dto)
     {
         var section = await GetAuthorizedSectionAsync(sectionId);

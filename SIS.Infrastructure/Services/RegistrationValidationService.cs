@@ -138,6 +138,15 @@ public class RegistrationValidationService : IRegistrationValidationService
 
         var currentlyFailedCourseIds = failedCourseIds.Except(passedCourseIds).ToList();
 
+        // Tamamlanan kredi/AKTS — course-level Min* kontrolü için.
+        // Snapshot varsa onu, yoksa katalog değerini kullanırız.
+        var passedEcts = allPastRegistrations
+            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
+            .Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
+        var passedCredits = allPastRegistrations
+            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
+            .Sum(r => r.CourseSection.Course.NationalCredit ?? 0);
+
         // Per-section checks
         foreach (var section in sections)
         {
@@ -179,6 +188,57 @@ public class RegistrationValidationService : IRegistrationValidationService
                             CourseSectionId = section.Id
                         });
                     }
+                }
+            }
+
+            // === CHECK 4A: Min Kredi Ön Koşul (Proliz "Diğer Ön Koşul") ===
+            if (course.MinCreditsRequired.HasValue && passedCredits < course.MinCreditsRequired.Value)
+            {
+                errors.Add(new ValidationError
+                {
+                    Rule = "MinCreditsNotMet",
+                    Message = $"'{course.Code} {course.Name}' dersi icin en az {course.MinCreditsRequired.Value} kredi tamamlanmis olmali (mevcut: {passedCredits}).",
+                    CourseSectionId = section.Id
+                });
+            }
+
+            // === CHECK 4B: Min AKTS Ön Koşul (Proliz "Diğer Ön Koşul") ===
+            if (course.MinEctsRequired.HasValue && passedEcts < course.MinEctsRequired.Value)
+            {
+                errors.Add(new ValidationError
+                {
+                    Rule = "MinEctsNotMet",
+                    Message = $"'{course.Code} {course.Name}' dersi icin en az {course.MinEctsRequired.Value} AKTS tamamlanmis olmali (mevcut: {passedEcts}).",
+                    CourseSectionId = section.Id
+                });
+            }
+
+            // === CHECK 4C: Alttan Ders Kuralı (Proliz "Alttan Dersi Olmayanlar Alabilir") ===
+            // Öğrencinin geçmemiş başarısız (FF/NA/U) dersi varsa engellenir.
+            if (course.RequiresNoFailedLowerCourses && currentlyFailedCourseIds.Any())
+            {
+                errors.Add(new ValidationError
+                {
+                    Rule = "HasFailedLowerCourses",
+                    Message = $"'{course.Code} {course.Name}' dersi sadece basarisiz (alttan) dersi olmayan ogrenciler tarafindan alinabilir.",
+                    CourseSectionId = section.Id
+                });
+            }
+
+            // === CHECK 4D: Tekil Alma Kuralı (Proliz "Bu Ders Tek Başına Alınabilir") ===
+            // İşaretliyse: bu dersle birlikte başka ders alınamaz (talep edilen + mevcut aktif kayıtlar).
+            if (course.CanBeTakenStandalone)
+            {
+                var otherRequested = sections.Any(s => s.Id != section.Id);
+                var otherExisting = existingRegistrations.Any(r => r.CourseSection.CourseId != course.Id);
+                if (otherRequested || otherExisting)
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Rule = "MustBeTakenStandalone",
+                        Message = $"'{course.Code} {course.Name}' dersi sadece tek basina alinabilir, baska derslerle birlikte kayit yapilamaz.",
+                        CourseSectionId = section.Id
+                    });
                 }
             }
 

@@ -172,7 +172,8 @@ public sealed class LargeNeighborhoodSearch
             .Select(id =>
             {
                 var snap = snapLookup[id];
-                var cands = _candidateGen.Generate(snap, state, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds);
+                var cands = _candidateGen.Generate(snap, state, classrooms, timeSlotsByDay, splitThreshold, facultyClassroomIds,
+                    splittableBlockTypes: config.SplittableBlockTypes);
                 return (Id: id, Snap: snap, Candidates: cands);
             })
             .OrderBy(x => x.Candidates.Count)
@@ -216,13 +217,15 @@ public sealed class LargeNeighborhoodSearch
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
             CohortConflictPairs = snapshot.CohortConflictPairs,
             EnrollmentConflicts = snapshot.EnrollmentConflicts,
+            SlotAllowedModes = snapshot.SlotAllowedModes,
         };
     }
 
     private static SectionSnapshot EnrichWithClassroomData(SectionSnapshot snap, List<BlockAssignment> blocks, Dictionary<int, Classroom> classroomLookup)
     {
         if (blocks.Count == 0) return snap;
-        if (!classroomLookup.TryGetValue(blocks[0].ClassroomId, out var cr)) return snap;
+        var firstClassroomId = blocks[0].ClassroomId;
+        if (!firstClassroomId.HasValue || !classroomLookup.TryGetValue(firstClassroomId.Value, out var cr)) return snap;
         return new SectionSnapshot
         {
             SectionId = snap.SectionId, SectionNumber = snap.SectionNumber,

@@ -17,7 +17,7 @@ export default function AppLayout() {
       <div
         className="flex min-w-0 flex-1 flex-col"
         style={{
-          paddingLeft: isSidebarCollapsed ? '72px' : '260px',
+          paddingLeft: isSidebarCollapsed ? '72px' : '290px',
           transition: 'padding-left 200ms cubic-bezier(0.25, 0.1, 0.25, 1)',
         }}
       >

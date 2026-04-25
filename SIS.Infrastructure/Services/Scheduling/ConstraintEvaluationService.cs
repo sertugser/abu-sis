@@ -125,6 +125,7 @@ public sealed class ConstraintEvaluationService
                 CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
                 CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
                 CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+                SlotAllowedModes = snapshot.SlotAllowedModes,
             };
 
             var context = new SchedulingConstraintContext
@@ -194,6 +195,7 @@ public sealed class ConstraintEvaluationService
                 CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
                 CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
                 CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+                SlotAllowedModes = snapshot.SlotAllowedModes,
             };
 
             var context = new SchedulingConstraintContext

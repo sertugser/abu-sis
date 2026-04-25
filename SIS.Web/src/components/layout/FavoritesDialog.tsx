@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { MenuGroup } from './SidebarMenuGroups';
+import type { Module } from './SidebarModules';
+import { flattenModuleItems } from './SidebarModules';
 
 interface FavoritesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  menuGroups: MenuGroup[];
+  modules: Module[];
   currentFavorites: string[];
   maxFavorites: number;
   onSave: (favorites: string[]) => void;
@@ -18,19 +19,20 @@ interface FavoritesDialogProps {
 interface FlatItem {
   route: string;
   label: string;
-  groupLabel: string;
+  moduleLabel: string;
 }
 
-function flattenMenu(groups: MenuGroup[]): FlatItem[] {
+function flattenModules(modules: Module[]): FlatItem[] {
   const items: FlatItem[] = [];
   const seen = new Set<string>();
-  for (const group of groups) {
-    if (group.id === 'sik-kullanilanlar') continue;
-    for (const child of group.children) {
+  for (const module of modules) {
+    if (module.id === 'sik-kullanilanlar') continue;
+    // Recursive flatten — Yönetim altındaki nested item'lar dahil
+    for (const child of flattenModuleItems(module)) {
       if (child.openInNewTab) continue;     // external/new-tab links aren't pinnable shortcuts
-      if (seen.has(child.to)) continue;     // skip duplicates already in another group
+      if (seen.has(child.to)) continue;     // skip duplicates already in another module
       seen.add(child.to);
-      items.push({ route: child.to, label: child.label, groupLabel: group.label });
+      items.push({ route: child.to, label: child.label, moduleLabel: module.label });
     }
   }
   return items;
@@ -39,7 +41,7 @@ function flattenMenu(groups: MenuGroup[]): FlatItem[] {
 export function FavoritesDialog({
   open,
   onOpenChange,
-  menuGroups,
+  modules,
   currentFavorites,
   maxFavorites,
   onSave,
@@ -57,23 +59,23 @@ export function FavoritesDialog({
   }, [open, currentFavorites]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const allItems = useMemo(() => flattenMenu(menuGroups), [menuGroups]);
+  const allItems = useMemo(() => flattenModules(modules), [modules]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr-TR');
     if (!q) return allItems;
     return allItems.filter(item =>
       item.label.toLocaleLowerCase('tr-TR').includes(q)
-      || item.groupLabel.toLocaleLowerCase('tr-TR').includes(q)
+      || item.moduleLabel.toLocaleLowerCase('tr-TR').includes(q)
     );
   }, [allItems, query]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, FlatItem[]>();
     for (const item of filteredItems) {
-      const arr = map.get(item.groupLabel) ?? [];
+      const arr = map.get(item.moduleLabel) ?? [];
       arr.push(item);
-      map.set(item.groupLabel, arr);
+      map.set(item.moduleLabel, arr);
     }
     return Array.from(map.entries());
   }, [filteredItems]);
@@ -130,10 +132,10 @@ export function FavoritesDialog({
                 Arama sonucu bulunamadı.
               </p>
             )}
-            {grouped.map(([groupLabel, items]) => (
-              <div key={groupLabel}>
+            {grouped.map(([moduleLabel, items]) => (
+              <div key={moduleLabel}>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground px-2 py-1 sticky top-0 bg-background">
-                  {groupLabel}
+                  {moduleLabel}
                 </div>
                 <div>
                   {items.map(item => {

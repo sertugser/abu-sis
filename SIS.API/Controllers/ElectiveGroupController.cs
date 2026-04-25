@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -8,7 +9,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/elective-groups")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class ElectiveGroupController(AppDbContext context) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── GET /api/elective-groups ────────────────────────────────────
     [HttpGet]
+    [RequirePermission("menu.secmeli-ders-gruplari.view")]
     public async Task<IActionResult> List(
         [FromQuery] ElectiveSubtype? subtype,
         [FromQuery] int? facultyId,
@@ -72,6 +74,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── GET /api/elective-groups/{id} ───────────────────────────────
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.secmeli-ders-gruplari.view")]
     public async Task<IActionResult> Get(int id, CancellationToken ct)
     {
         var group = await context.ElectiveGroups
@@ -98,6 +101,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── POST /api/elective-groups ───────────────────────────────────
     [HttpPost]
+    [RequirePermission("menu.secmeli-ders-gruplari.create")]
     public async Task<IActionResult> Create([FromBody] CreateElectiveGroupRequest req, CancellationToken ct)
     {
         if (req.ElectiveSubtype == ElectiveSubtype.TechnicalElective && !req.FacultyId.HasValue)
@@ -139,6 +143,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── PUT /api/elective-groups/{id} ───────────────────────────────
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.secmeli-ders-gruplari.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateElectiveGroupRequest req, CancellationToken ct)
     {
         var group = await context.ElectiveGroups
@@ -168,6 +173,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── DELETE /api/elective-groups/{id} ────────────────────────────
     [HttpDelete("{id:int}")]
+    [RequirePermission("menu.secmeli-ders-gruplari.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var group = await context.ElectiveGroups
@@ -184,6 +190,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── GET /api/elective-groups/{id}/courses ───────────────────────
     [HttpGet("{id:int}/courses")]
+    [RequirePermission("menu.secmeli-ders-gruplari.view")]
     public async Task<IActionResult> ListCourses(int id, CancellationToken ct)
     {
         var exists = await context.ElectiveGroups.AnyAsync(eg => eg.Id == id, ct);
@@ -204,6 +211,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── POST /api/elective-groups/{id}/courses ──────────────────────
     [HttpPost("{id:int}/courses")]
+    [RequirePermission("menu.secmeli-ders-gruplari.add-course")]
     public async Task<IActionResult> AddCourses(int id, [FromBody] AddCoursesToGroupRequest req, CancellationToken ct)
     {
         var group = await context.ElectiveGroups
@@ -246,6 +254,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     // ── DELETE /api/elective-groups/{id}/courses/{courseId} ──────────
     [HttpDelete("{id:int}/courses/{courseId:int}")]
+    [RequirePermission("menu.secmeli-ders-gruplari.remove-course")]
     public async Task<IActionResult> RemoveCourse(int id, int courseId, CancellationToken ct)
     {
         var egc = await context.ElectiveGroupCourses

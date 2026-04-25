@@ -173,6 +173,16 @@ public static partial class SeedData
                 IsEnabled = true,
                 SortOrder = 16
             },
+            new()
+            {
+                Code = "H17",
+                Name = "Online-Only Slot Koruması",
+                Description = "AllowedMode=OnlineOnly damgalı slotlara (akşam saatleri, hafta sonu vb.) yüz-yüze ders atanmasını engeller. Slot modları Ders Saatleri Yönetimi sayfasından admin tarafından yönetilir; hybrid ve online dersler bu kuraldan muaftır.",
+                Category = "Hard",
+                Scope = "Scheduling",
+                IsEnabled = true,
+                SortOrder = 17
+            },
 
             // ── Soft Constraints (9) ────────────────────────────────
             new()

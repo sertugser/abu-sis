@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Common.DTOs;
 using SIS.Application.Common.Time;
 using SIS.Domain.Enums;
@@ -29,6 +30,7 @@ public class CourseController : ControllerBase
     /// Optionally filter by programId query parameter.
     /// </summary>
     [HttpGet]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCourses([FromQuery] int? programId)
     {
         // Find active term
@@ -133,6 +135,7 @@ public class CourseController : ControllerBase
     /// Each course includes: TakeStatus (IlkDefa/Alttan/OncedenAlindi), PreviousGrade, CurriculumType, PrerequisitesMet.
     /// </summary>
     [HttpGet("student-catalog")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetStudentCatalog()
     {
         // 1. Authenticated student
@@ -366,6 +369,7 @@ public class CourseController : ControllerBase
     /// GET api/course/sections/{id} — get section detail.
     /// </summary>
     [HttpGet("sections/{id}")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetSectionDetail(int id)
     {
         var section = await _context.CourseSections
@@ -420,6 +424,7 @@ public class CourseController : ControllerBase
     /// GET api/course/terms/active — get the active term info.
     /// </summary>
     [HttpGet("terms/active")]
+    [RequirePermission("lookup.term")]
     public async Task<IActionResult> GetActiveTerm()
     {
         var now = _clock.UtcNow;

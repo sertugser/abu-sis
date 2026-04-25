@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
 import { ActiveRoleProvider } from './context/ActiveRoleContext';
+import { PermissionProvider } from './context/PermissionContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
@@ -42,7 +43,32 @@ import ProgramDefinitionsPage from './pages/ProgramDefinitionsPage';
 import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
 import SystemConfigPage from './pages/SystemConfigPage';
 import AuditLogPage from './pages/AuditLogPage';
-import PromotionRulePage from './pages/PromotionRulePage';
+import MufredatSinifDonemTanimlariPage from './pages/MufredatSinifDonemTanimlariPage';
+// ── Öğrenci İşlemleri (placeholder) ──
+import StudentNumberChangePage from './pages/StudentNumberChangePage';
+import StudentPromotionPage from './pages/StudentPromotionPage';
+import BulkAdvisorAssignmentPage from './pages/BulkAdvisorAssignmentPage';
+import BulkInternshipAdvisorAssignmentPage from './pages/BulkInternshipAdvisorAssignmentPage';
+import BulkCurriculumAssignmentPage from './pages/BulkCurriculumAssignmentPage';
+import BulkCourseRegistrationPage from './pages/BulkCourseRegistrationPage';
+import CourseRegistrationEditPage from './pages/CourseRegistrationEditPage';
+import SectionTransferPage from './pages/SectionTransferPage';
+import CourseTransferPage from './pages/CourseTransferPage';
+import LetterGradeEditPage from './pages/LetterGradeEditPage';
+// ── Yönetim → Kullanıcı İşlemleri (placeholder) ──
+import UserPermissionGroupsPage from './pages/UserPermissionGroupsPage';
+import UserReportGroupsPage from './pages/UserReportGroupsPage';
+import UserGroupRestrictionsPage from './pages/UserGroupRestrictionsPage';
+import UserReportDesignGroupsPage from './pages/UserReportDesignGroupsPage';
+import UserDelegationPage from './pages/UserDelegationPage';
+import PasswordChangePage from './pages/PasswordChangePage';
+// ── Yönetim → Genel Ayarlar (placeholder) ──
+import UniversityInfoPage from './pages/UniversityInfoPage';
+import InstitutionalIntegrationPage from './pages/InstitutionalIntegrationPage';
+import DocumentRestrictionsPage from './pages/DocumentRestrictionsPage';
+import WebModuleSettingsPage from './pages/WebModuleSettingsPage';
+import EbysSignatureAuthoritiesPage from './pages/EbysSignatureAuthoritiesPage';
+import FacultySignatureUploadPage from './pages/FacultySignatureUploadPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
@@ -56,18 +82,24 @@ import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
 import OsymRegistrationCalendarPage from './pages/OsymRegistrationCalendarPage';
+import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
 import ProgramQuotaPage from './pages/ProgramQuotaPage';
+import SectioningPage from './pages/SectioningPage';
+import CourseQuotaPage from './pages/CourseQuotaPage';
 import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
+import ForbiddenPage from './pages/ForbiddenPage';
+import RolePermissionMatrix from './components/admin/RolePermissionMatrix';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ActiveRoleProvider>
-          <TooltipProvider delayDuration={300}>
+        <PermissionProvider>
+          <ActiveRoleProvider>
+            <TooltipProvider delayDuration={300}>
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -78,6 +110,9 @@ export default function App() {
 
                 <Route element={<AppLayout />}>
                   <Route index element={<RoleDashboard />} />
+
+                  {/* RBAC: yetki yetersiz olduğunda RoleProtectedRoute buraya yönlendirir */}
+                  <Route path="forbidden" element={<ForbiddenPage />} />
 
                   {/* Herkesin erişebildiği sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
@@ -134,7 +169,34 @@ export default function App() {
                     <Route path="bolum-tanimlari" element={<DepartmentDefinitionsPage />} />
                     <Route path="program-tanimlari" element={<ProgramDefinitionsPage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
-                    <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
+                    <Route path="mufredat-sinif-donem-tanimlari" element={<MufredatSinifDonemTanimlariPage />} />
+                    {/* Eski URL → yeni URL'e redirect (γ hibrit + C rename) */}
+                    <Route path="sinif-atlatma-kurallari" element={<Navigate to="/mufredat-sinif-donem-tanimlari" replace />} />
+                    {/* ── Öğrenci İşlemleri (placeholder, SystemAdmin) ── */}
+                    <Route path="ogrenci-no-degistirme" element={<StudentNumberChangePage />} />
+                    <Route path="sinif-atlatma-islemleri" element={<StudentPromotionPage />} />
+                    <Route path="toplu-danisman-atama" element={<BulkAdvisorAssignmentPage />} />
+                    <Route path="toplu-staj-danisman-atama" element={<BulkInternshipAdvisorAssignmentPage />} />
+                    <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
+                    <Route path="toplu-ders-kaydi" element={<BulkCourseRegistrationPage />} />
+                    <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
+                    <Route path="subeler-arasi-ogrenci-transfer" element={<SectionTransferPage />} />
+                    <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
+                    <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
+                    {/* ── Yönetim → Kullanıcı İşlemleri (placeholder, SystemAdmin) ── */}
+                    <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
+                    <Route path="kullanici-rapor-gruplari" element={<UserReportGroupsPage />} />
+                    <Route path="kullanici-grup-sinirlandirmalar" element={<UserGroupRestrictionsPage />} />
+                    <Route path="kullanici-rapor-tasarim-gruplari" element={<UserReportDesignGroupsPage />} />
+                    <Route path="kullanici-vekalet-islemleri" element={<UserDelegationPage />} />
+                    <Route path="sifre-degistir" element={<PasswordChangePage />} />
+                    {/* ── Yönetim → Genel Ayarlar (placeholder, SystemAdmin) ── */}
+                    <Route path="universite-bilgileri" element={<UniversityInfoPage />} />
+                    <Route path="kurumsal-entegrasyon-tanimlari" element={<InstitutionalIntegrationPage />} />
+                    <Route path="belge-sinirlandirmalar" element={<DocumentRestrictionsPage />} />
+                    <Route path="web-modul-ayarlari" element={<WebModuleSettingsPage />} />
+                    <Route path="ebys-imza-yetkilileri" element={<EbysSignatureAuthoritiesPage />} />
+                    <Route path="fakulte-imza-yukleme-islemleri" element={<FacultySignatureUploadPage />} />
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
                     <Route path="ders-programi-kisitlamalari" element={<ConstraintManagementPage />} />
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
@@ -149,6 +211,9 @@ export default function App() {
                     <Route path="denetim-kayitlari" element={<AuditLogPage />} />
                     <Route path="degerlendirme-donemi-yonetimi" element={<EvaluationPeriodAdminPage />} />
                     <Route path="osym-kayit-takvimi" element={<OsymRegistrationCalendarPage />} />
+                    <Route path="ders-saatleri-yonetimi" element={<TimeSlotManagementPage />} />
+                    <Route path="subelendirme-islemleri" element={<SectioningPage />} />
+                    <Route path="ders-kontenjan-islemleri" element={<CourseQuotaPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute allowedRoles={DEAN_ROLES} />}>
@@ -159,13 +224,27 @@ export default function App() {
                     <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
 
+                  {/* Dev-only test route — Karar 9: production sidebar/route YOK,
+                      Phase 2'de Kullanıcı Yetki Grupları placeholder'a import edilecek */}
+                  {import.meta.env.DEV && (
+                    <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator']} />}>
+                      <Route path="__dev/permission-matrix" element={
+                        <div className="p-6">
+                          <h1 className="text-xl font-semibold mb-4">RolePermissionMatrix (Dev Test)</h1>
+                          <RolePermissionMatrix />
+                        </div>
+                      } />
+                    </Route>
+                  )}
+
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
               </Route>
             </Routes>
             </BrowserRouter>
-          </TooltipProvider>
-        </ActiveRoleProvider>
+            </TooltipProvider>
+          </ActiveRoleProvider>
+        </PermissionProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

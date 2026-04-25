@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 
@@ -7,7 +8,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/constraints/simulate")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class SimulationController : ControllerBase
 {
     private readonly ISimulationService _simulationService;
@@ -22,6 +23,7 @@ public class SimulationController : ControllerBase
     /// Returns before/after constraint evaluation diff.
     /// </summary>
     [HttpPost("move")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.simulate")]
     public async Task<IActionResult> SimulateMove(
         [FromBody] SimulateMoveRequest request, CancellationToken ct)
     {
@@ -33,6 +35,7 @@ public class SimulationController : ControllerBase
     /// Get best alternative slot/classroom suggestions for a section.
     /// </summary>
     [HttpGet("suggestions")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.simulate")]
     public async Task<IActionResult> GetSuggestions(
         [FromQuery] int sectionId,
         [FromQuery] int termId,
@@ -51,6 +54,7 @@ public class SimulationController : ControllerBase
     /// Returns before/after constraint evaluation diff.
     /// </summary>
     [HttpPost("constraint-change")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.simulate")]
     public async Task<IActionResult> SimulateConstraintChange(
         [FromBody] SimulateConstraintChangeRequest request, CancellationToken ct)
     {

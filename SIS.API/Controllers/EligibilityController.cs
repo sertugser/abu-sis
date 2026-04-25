@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -9,7 +10,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor")]
+[Authorize]
 public class EligibilityController : ControllerBase
 {
     private readonly IStudentEligibilityService _eligibilityService;
@@ -26,6 +27,7 @@ public class EligibilityController : ControllerBase
     /// Uygun ve uygun olmayan ogrenciler neden bilgisiyle birlikte listelenir.
     /// </summary>
     [HttpGet("course/{courseId}")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCourseEligibility(
         int courseId,
         [FromQuery] int? departmentId = null,
@@ -47,7 +49,7 @@ public class EligibilityController : ControllerBase
     /// Belirli bir ogrencinin mufredatindaki tum derslere uygunluk analizini dondurur.
     /// </summary>
     [HttpGet("student/{studentId}")]
-    [Authorize(Roles = "AdministrativeStaff,SystemAdministrator,DepartmentManager,Dean,AcademicAdvisor,Student")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetStudentEligibility(
         int studentId,
         CancellationToken cancellationToken = default)

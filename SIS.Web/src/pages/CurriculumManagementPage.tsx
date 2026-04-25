@@ -13,7 +13,18 @@ import {
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { BookOpen, CheckCircle, Loader2, Plus, Settings, Trash2 } from 'lucide-react';
+import {
+  BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Copy, Edit, GraduationCap, Layers, Loader2, MoreHorizontal, Package, Plus, Printer, Scissors,
+  Search, Settings, Trash2,
+} from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   useAdminFaculties,
   useAdminDepartmentsByStructure,
@@ -23,29 +34,62 @@ import {
   useCurriculumList,
   useCurriculumDetail,
   useCreateCurriculum,
+  useUpdateCurriculum,
   useDeleteCurriculum,
   useActivateCurriculum,
   useAddCurriculumCourse,
-  useUpdateCurriculumCourse,
   useRemoveCurriculumCourse,
   useCopyCurriculum,
 } from '../hooks/useCurriculumManagement';
-import SemesterGroup from '../components/curriculum-management/SemesterGroup';
 import AddCourseDialog from '../components/curriculum-management/AddCourseDialog';
 import CourseDetailSheet from '../components/curriculum-management/CourseDetailSheet';
-import { CurriculumEctsRulesDialog } from '../components/curriculum-management/CurriculumEctsRulesDialog';
-import type { CurriculumCourseItemDto } from '../types/curriculumManagement';
+import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
+import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
+import type { CurriculumCourseItemDto, CurriculumListDto } from '../types/curriculumManagement';
+import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/lib/constants';
 
-type SortBy = 'default' | 'code' | 'name' | 'ects';
 type CreateMode = 'empty' | 'copy';
+type StatusFilter = 'all' | 'active' | 'inactive' | 'archived';
+type ViewMode = 'list' | 'courses';
+type YearFilter = 'all' | string; // 'all' veya "2024" gibi yıl değeri
+
+const PAGE_SIZE = 10;          // Müfredat liste sayfalama
+const COURSES_PAGE_SIZE = 15;  // Müfredat detay → ders listesi sayfalama
 
 export default function CurriculumManagementPage() {
+  const navigate = useNavigate();
   // ── Filter state ──
   const [facultyId, setFacultyId] = useState<number | undefined>();
   const [departmentId, setDepartmentId] = useState<number | undefined>();
   const [programId, setProgramId] = useState<number | undefined>();
   const [selectedCurriculumId, setSelectedCurriculumId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [yearFilter, setYearFilter] = useState<YearFilter>('all');
+
+  // Sayfa görünüm modu: 'list' (müfredat listesi tablosu) | 'courses' (ders listesi)
+  const [view, setView] = useState<ViewMode>('list');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  // Müfredat detay → ders listesi pagination (15 ders/sayfa)
+  const [coursesPage, setCoursesPage] = useState(1);
+
+  // Edit Dialog — mevcut müfredatı düzenleme
+  const [editingCurriculumId, setEditingCurriculumId] = useState<number | null>(null);
+
+  // Confirm Dialogları
+  const [activateTarget, setActivateTarget] = useState<{ id: number; label: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; label: string } | null>(null);
+
+  // Copy Dialog — müfredatı kopyala (kaynak + yeni yıl)
+  const [copyTarget, setCopyTarget] = useState<{ id: number; label: string } | null>(null);
+  const [copyNewVersion, setCopyNewVersion] = useState('');
+
+  // Dialog içi seçimler — filtre barından bağımsız, dialog açıldığında filtre barından default alır
+  const [dialogFacultyId, setDialogFacultyId] = useState<number | undefined>();
+  const [dialogDepartmentId, setDialogDepartmentId] = useState<number | undefined>();
+  const [dialogProgramId, setDialogProgramId] = useState<number | undefined>();
 
   // ── Dialogs ──
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -58,13 +102,20 @@ export default function CurriculumManagementPage() {
   const [newDecisionDate, setNewDecisionDate] = useState('');
   const [newDecisionNo, setNewDecisionNo] = useState('');
   const [newDecisionNote, setNewDecisionNote] = useState('');
-  const [newGradingSystem, setNewGradingSystem] = useState('');
+  const [newGradingSystem, setNewGradingSystem] = useState('Sınıf Geçme');
   const [newInternshipDuration, setNewInternshipDuration] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  // UI-only alanlar: backend henüz desteklemiyor, create request'e dahil edilmez
+  const [newStatus, setNewStatus] = useState<'active' | 'inactive'>('active');
+  const [newMufredatTipi, setNewMufredatTipi] = useState<string>('Programa Özel');
+  const [newIncludeFormation, setNewIncludeFormation] = useState(false);
+  const [newHideFromPackage, setNewHideFromPackage] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>('empty');
   const [copySourceId, setCopySourceId] = useState<string>('');
   const [showAddCourse, setShowAddCourse] = useState(false);
-  const [showEctsRulesDialog, setShowEctsRulesDialog] = useState(false);
+  const [showTermRulesDialog, setShowTermRulesDialog] = useState(false);
+  // Hangi müfredat için dialog açıldı (listeden dişli menüsüyle tetikleniyor)
+  const [termRulesTarget, setTermRulesTarget] = useState<{ id: number; label: string } | null>(null);
 
   // ── Tabs ──
 
@@ -73,74 +124,76 @@ export default function CurriculumManagementPage() {
   const [showDetailSheet, setShowDetailSheet] = useState(false);
 
   // ── Search & table filters ──
-  const [searchTerm, setSearchTerm] = useState('');
+  // Proliz tarzı: iki ayrı arama alanı (Ders Kodu | Ders Adı). AND mantığıyla birleşir.
+  const [searchCode, setSearchCode] = useState('');
+  const [searchName, setSearchName] = useState('');
   const [classFilter, setClassFilter] = useState<number | null>(null); // 1,2,3,4
   const [termTypeFilter, setTermTypeFilter] = useState<'all' | 'fall' | 'spring'>('all');
-  const [sortBy, setSortBy] = useState<SortBy>('default');
+  // Gruplu Dersleri Göster — şimdilik UI-only, seçmeli havuzlar entegrasyonu için yer tutucu
+  const [showGroupedCourses, setShowGroupedCourses] = useState(false);
+
+  // ── Satır-içi dişli menü → Ön Koşul / İntibak dialog target ──
+  const [courseLinksTarget, setCourseLinksTarget] = useState<
+    { courseId: number; label: string; mode: 'prerequisite' | 'equivalency' } | null
+  >(null);
 
   // ── Queries ──
   const { data: faculties, isLoading: loadingFaculties } = useAdminFaculties();
   const { data: departments, isLoading: loadingDepts } = useAdminDepartmentsByStructure(facultyId);
   const { data: programs, isLoading: loadingPrograms } = useAdminProgramsByStructure(departmentId);
-  const { data: curricula, isLoading: loadingCurricula } = useCurriculumList(programId);
+  // Filtre barındaki cascade — Fakülte/Bölüm/Program hangi seviyeye kadar seçildiyse o seviyeden liste gelir
+  const { data: curricula, isLoading: loadingCurricula } = useCurriculumList({
+    programId, departmentId, facultyId,
+  });
+  // Dialog cascade (ayrı sorgular — filtre barındaki seçimden bağımsız)
+  const { data: dialogDepartments, isLoading: loadingDialogDepts } = useAdminDepartmentsByStructure(dialogFacultyId);
+  const { data: dialogPrograms, isLoading: loadingDialogPrograms } = useAdminProgramsByStructure(dialogDepartmentId);
+  const { data: dialogCurricula } = useCurriculumList({ programId: dialogProgramId });
   const { data: detail, isLoading: loadingDetail } = useCurriculumDetail(selectedCurriculumId);
 
   // ── Mutations ──
   const createMut = useCreateCurriculum();
+  const updateMut = useUpdateCurriculum();
   const deleteMut = useDeleteCurriculum();
   const activateMut = useActivateCurriculum();
   const addCourseMut = useAddCurriculumCourse();
-  const updateCourseMut = useUpdateCurriculumCourse();
   const removeCourseMut = useRemoveCurriculumCourse();
   const copyMut = useCopyCurriculum();
 
-  // ── Derived ──
-  const semesterGroups = useMemo(() => {
-    if (!detail) return [];
-    const lower = searchTerm.toLowerCase();
+  // ── Derived — düz ders listesi (grup yok) ──
+  const flatCourses = useMemo(() => {
+    if (!detail) return [] as CurriculumCourseItemDto[];
+    const codeLower = searchCode.trim().toLowerCase();
+    const nameLower = searchName.trim().toLowerCase();
 
     let filtered: CurriculumCourseItemDto[] = detail.courses;
 
-    // text search
-    if (lower) {
-      filtered = filtered.filter(
-        c =>
-          c.courseCode.toLowerCase().includes(lower) ||
-          c.courseName.toLowerCase().includes(lower),
-      );
+    if (codeLower) {
+      filtered = filtered.filter(c => c.courseCode.toLowerCase().includes(codeLower));
+    }
+    if (nameLower) {
+      filtered = filtered.filter(c => c.courseName.toLowerCase().includes(nameLower));
     }
 
-    // class filter: 1 → semesters 1,2; 2 → semesters 3,4; 3 → semesters 5,6; 4 → semesters 7,8
+    // Sınıf filtresi: 1 → sem 1,2; 2 → sem 3,4; 3 → sem 5,6; 4 → sem 7,8
     if (classFilter !== null) {
       const minSem = (classFilter - 1) * 2 + 1;
       const maxSem = classFilter * 2;
       filtered = filtered.filter(c => c.suggestedSemester >= minSem && c.suggestedSemester <= maxSem);
     }
 
-    // term type filter: fall → odd semesters, spring → even semesters
+    // Dönem: fall → tek semesterlar (G), spring → çift semesterlar (B)
     if (termTypeFilter === 'fall') {
       filtered = filtered.filter(c => c.suggestedSemester % 2 !== 0);
     } else if (termTypeFilter === 'spring') {
       filtered = filtered.filter(c => c.suggestedSemester % 2 === 0);
     }
 
-    // sort
-    if (sortBy === 'code') {
-      filtered = [...filtered].sort((a, b) => a.courseCode.localeCompare(b.courseCode));
-    } else if (sortBy === 'name') {
-      filtered = [...filtered].sort((a, b) => a.courseName.localeCompare(b.courseName));
-    } else if (sortBy === 'ects') {
-      filtered = [...filtered].sort((a, b) => b.ects - a.ects);
-    }
-
-    const map = new Map<number, CurriculumCourseItemDto[]>();
-    for (const c of filtered) {
-      const arr = map.get(c.suggestedSemester) ?? [];
-      arr.push(c);
-      map.set(c.suggestedSemester, arr);
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => a - b);
-  }, [detail, searchTerm, classFilter, termTypeFilter, sortBy]);
+    // Varsayılan sıralama: sem asc + code asc (sort filtresi kaldırıldı — Proliz davranışı)
+    return [...filtered].sort((a, b) =>
+      a.suggestedSemester - b.suggestedSemester || a.courseCode.localeCompare(b.courseCode),
+    );
+  }, [detail, searchCode, searchName, classFilter, termTypeFilter]);
 
   const existingCourseIds = useMemo(
     () => new Set(detail?.courses?.map(c => c.courseId) ?? []),
@@ -152,7 +205,75 @@ export default function CurriculumManagementPage() {
     [detail],
   );
 
+  // Ders listesi sayfalama (15 ders/sayfa)
+  const coursesTotalPages = Math.max(1, Math.ceil(flatCourses.length / COURSES_PAGE_SIZE));
+  const pagedCourses = useMemo(
+    () => flatCourses.slice((coursesPage - 1) * COURSES_PAGE_SIZE, coursesPage * COURSES_PAGE_SIZE),
+    [flatCourses, coursesPage],
+  );
+  // Filtre değişince ders sayfası 1'e dön — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const courseFilterKey = `${searchCode}|${searchName}|${classFilter}|${termTypeFilter}|${selectedCurriculumId}`;
+  const [prevCourseFilterKey, setPrevCourseFilterKey] = useState(courseFilterKey);
+  if (prevCourseFilterKey !== courseFilterKey) {
+    setPrevCourseFilterKey(courseFilterKey);
+    setCoursesPage(1);
+  }
+  // Toplam sayfa küçüldüğünde mevcut sayfa dışarı taşarsa düzelt
+  if (coursesPage > coursesTotalPages) {
+    setCoursesPage(coursesTotalPages);
+  }
 
+
+
+  // Mevcut müfredat yıllarını distinct listele (Müfredat Yılı dropdown'ı için)
+  const availableYears = useMemo(() => {
+    if (!curricula) return [] as string[];
+    const set = new Set<string>();
+    for (const c of curricula) set.add(c.version);
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [curricula]);
+
+  // Durum + Müfredat Yılı filtreleri birlikte uygulanır (tablo satırlarını süzer)
+  const filteredCurricula = useMemo(() => {
+    if (!curricula) return [];
+    let out = curricula;
+    if (statusFilter === 'active') out = out.filter(c => c.isActive);
+    else if (statusFilter === 'inactive') out = out.filter(c => !c.isActive && c.status !== 2);
+    else if (statusFilter === 'archived') out = out.filter(c => c.status === 2);
+    if (yearFilter !== 'all') out = out.filter(c => c.version === yearFilter);
+    return out;
+  }, [curricula, statusFilter, yearFilter]);
+
+  // Sayfalama
+  const totalPages = Math.max(1, Math.ceil(filteredCurricula.length / PAGE_SIZE));
+  const pagedCurricula = useMemo(
+    () => filteredCurricula.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredCurricula, currentPage],
+  );
+  // Filtre değişince sayfa 1'e dön — adjust-state-during-render pattern
+  const currFilterKey = `${statusFilter}|${yearFilter}|${facultyId}|${departmentId}|${programId}`;
+  const [prevCurrFilterKey, setPrevCurrFilterKey] = useState(currFilterKey);
+  if (prevCurrFilterKey !== currFilterKey) {
+    setPrevCurrFilterKey(currFilterKey);
+    setCurrentPage(1);
+  }
+  // totalPages küçüldüğünde currentPage dışarı taşarsa düzelt
+  if (currentPage > totalPages) {
+    setCurrentPage(totalPages);
+  }
+
+  // Edit dialog'unda gösterilecek mevcut müfredat bilgisi (Fakülte/Program read-only info bar için)
+  const editingCurr = useMemo(
+    () => (editingCurriculumId !== null ? curricula?.find(c => c.id === editingCurriculumId) : undefined),
+    [editingCurriculumId, curricula],
+  );
+
+  // Detay ekranı breadcrumb'ı için aktif müfredat (tablodaki bütün alanlarıyla — facultyName vs)
+  const selectedCurr = useMemo(
+    () => (selectedCurriculumId !== null ? curricula?.find(c => c.id === selectedCurriculumId) : undefined),
+    [selectedCurriculumId, curricula],
+  );
 
   // Get the full curriculum course row for the detail/edit sheet
   const detailCurriculumCourse = useMemo(() => {
@@ -177,6 +298,96 @@ export default function CurriculumManagementPage() {
     setSelectedCurriculumId(null);
   }
 
+  // Dialog cascade handler'ları — filtre barından bağımsız
+  function handleDialogFacultyChange(val: string) {
+    setDialogFacultyId(Number(val));
+    setDialogDepartmentId(undefined);
+    setDialogProgramId(undefined);
+  }
+  function handleDialogDepartmentChange(val: string) {
+    setDialogDepartmentId(Number(val));
+    setDialogProgramId(undefined);
+  }
+  function handleDialogProgramChange(val: string) {
+    setDialogProgramId(Number(val));
+  }
+
+  function handleOpenCreateDialog() {
+    // Filtre barındaki seçimler varsa dialog'a default olarak taşı (kolaylık için)
+    setEditingCurriculumId(null);
+    setDialogFacultyId(facultyId);
+    setDialogDepartmentId(departmentId);
+    setDialogProgramId(programId);
+    setShowCreateDialog(true);
+  }
+
+  // Satırdaki "Düzenle" ikonundan gelen — mevcut müfredatın alanlarını forma yükle
+  function handleOpenEditDialog(c: CurriculumListDto) {
+    setEditingCurriculumId(c.id);
+    setDialogFacultyId(undefined); // Edit modunda readonly, sayım için hydrate etmiyoruz
+    setDialogDepartmentId(undefined);
+    setDialogProgramId(c.programId);
+    setNewVersion(c.version);
+    setNewName(c.name ?? '');
+    setNewShortName('');
+    setNewEnglishName('');
+    setNewStartDate(c.startDate ? c.startDate.slice(0, 10) : '');
+    setNewEndDate(c.endDate ? c.endDate.slice(0, 10) : '');
+    setNewDecisionDate('');
+    setNewDecisionNo('');
+    setNewDecisionNote('');
+    setNewGradingSystem('Sınıf Geçme');
+    setNewInternshipDuration('');
+    setNewDescription('');
+    setNewStatus(c.isActive ? 'active' : 'inactive');
+    setNewMufredatTipi('Programa Özel');
+    setNewIncludeFormation(false);
+    setNewHideFromPackage(false);
+    setShowCreateDialog(true);
+  }
+
+  // "Müfredat Dersi Tanımla" — dişli menüsünden — ders listesi görünümüne geç
+  function handleViewCourses(curriculumId: number) {
+    setSelectedCurriculumId(curriculumId);
+    setView('courses');
+  }
+
+  function handleBackToList() {
+    setView('list');
+    setSelectedCurriculumId(null);
+  }
+
+  function handleConfirmActivate() {
+    if (!activateTarget) return;
+    activateMut.mutate(activateTarget.id, {
+      onSuccess: () => setActivateTarget(null),
+    });
+  }
+
+  function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    deleteMut.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+        // Eğer ders listesi modundaysak ve silinen müfredat açıksa geri dön
+        if (selectedCurriculumId === deleteTarget.id) handleBackToList();
+      },
+    });
+  }
+
+  function handleConfirmCopy() {
+    if (!copyTarget || !copyNewVersion.trim()) return;
+    copyMut.mutate(
+      { sourceId: copyTarget.id, newVersion: copyNewVersion.trim() },
+      {
+        onSuccess: () => {
+          setCopyTarget(null);
+          setCopyNewVersion('');
+        },
+      },
+    );
+  }
+
   function resetCreateForm() {
     setNewVersion('');
     setNewName('');
@@ -187,15 +398,23 @@ export default function CurriculumManagementPage() {
     setNewDecisionDate('');
     setNewDecisionNo('');
     setNewDecisionNote('');
-    setNewGradingSystem('');
+    setNewGradingSystem('Sınıf Geçme');
     setNewInternshipDuration('');
     setNewDescription('');
+    setNewStatus('active');
+    setNewMufredatTipi('Programa Özel');
+    setNewIncludeFormation(false);
+    setNewHideFromPackage(false);
     setCreateMode('empty');
     setCopySourceId('');
+    setDialogFacultyId(undefined);
+    setDialogDepartmentId(undefined);
+    setDialogProgramId(undefined);
+    setEditingCurriculumId(null);
   }
 
   function handleCreate() {
-    if (!programId || !newVersion.trim()) return;
+    if (!newVersion.trim()) return;
 
     const extraFields = {
       name: newName.trim() || undefined,
@@ -211,6 +430,28 @@ export default function CurriculumManagementPage() {
       description: newDescription.trim() || undefined,
     };
 
+    if (editingCurriculumId !== null) {
+      // Edit mode — PUT /api/curriculum/{id}; Durumu Aktif/Pasif backend'e gönderilir
+      updateMut.mutate(
+        {
+          id: editingCurriculumId,
+          version: newVersion.trim(),
+          isActive: newStatus === 'active',
+          ...extraFields,
+        },
+        {
+          onSuccess: () => {
+            setShowCreateDialog(false);
+            resetCreateForm();
+          },
+        },
+      );
+      return;
+    }
+
+    // Create mode
+    if (!dialogProgramId) return;
+
     if (createMode === 'copy' && copySourceId) {
       copyMut.mutate(
         { sourceId: Number(copySourceId), newVersion: newVersion.trim() },
@@ -223,7 +464,7 @@ export default function CurriculumManagementPage() {
         },
       );
     } else {
-      createMut.mutate({ programId, version: newVersion.trim(), ...extraFields }, {
+      createMut.mutate({ programId: dialogProgramId, version: newVersion.trim(), ...extraFields }, {
         onSuccess: () => {
           setShowCreateDialog(false);
           resetCreateForm();
@@ -245,180 +486,397 @@ export default function CurriculumManagementPage() {
     setShowDetailSheet(true);
   }
 
-  // ── Curriculum version dropdown label ──
-  function versionLabel(c: { version: string; isActive: boolean }) {
-    return c.isActive ? `${c.version} (Aktif)` : c.version;
-  }
-
   const isCreatePending = createMut.isPending || copyMut.isPending;
 
   return (
     <div className="space-y-4">
-      {/* ── Row 1: Filter bar (Fakulte / Bölüm / Program / Müfredat) ── */}
-      <Card>
-        <CardContent className="pt-4 pb-4">
-          <div className={`grid items-end gap-3 ${programId ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto_auto]' : 'grid-cols-1 sm:grid-cols-3'}`}>
-            {/* Fakulte */}
-            <div className="space-y-1">
-              <Label className="text-xs">Fakülte</Label>
-              <Select value={facultyId?.toString() ?? ''} onValueChange={handleFacultyChange}>
-                <SelectTrigger className="h-8 text-sm">
-                  {loadingFaculties
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <SelectValue placeholder="Fakülte seçin" />}
-                </SelectTrigger>
-                <SelectContent>
-                  {(faculties ?? []).map(f => (
-                    <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* ── Filtre Barı (iki kolonlu Proliz düzeni) ── */}
+      {view === 'list' && (
+        <Card>
+          <CardContent className="pt-4 pb-4 space-y-3">
+            {/* Üst: "Müfredat İşlemleri" başlığı + Ekle */}
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Müfredat İşlemleri
+              </span>
+              <Button size="sm" className="h-9" onClick={handleOpenCreateDialog} title="Yeni müfredat ekle">
+                <Plus className="h-4 w-4 mr-1" /> Ekle
+              </Button>
             </div>
 
-            {/* Bölüm */}
-            <div className="space-y-1">
-              <Label className="text-xs">Bölüm</Label>
-              <Select
-                value={departmentId?.toString() ?? ''}
-                onValueChange={handleDepartmentChange}
-                disabled={!facultyId}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  {loadingDepts
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <SelectValue placeholder="Bölüm seçin" />}
-                </SelectTrigger>
-                <SelectContent>
-                  {(departments ?? []).map(d => (
-                    <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Program */}
-            <div className="space-y-1">
-              <Label className="text-xs">Program</Label>
-              <Select
-                value={programId?.toString() ?? ''}
-                onValueChange={handleProgramChange}
-                disabled={!departmentId}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  {loadingPrograms
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <SelectValue placeholder="Program seçin" />}
-                </SelectTrigger>
-                <SelectContent>
-                  {(programs ?? []).map(p => (
-                    <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Separator */}
-            {/* separator removed — grid handles spacing */}
-
-            {/* Müfredat version dropdown */}
-            {programId && (
-              <div className="space-y-1 min-w-[180px]">
-                <Label className="text-xs">Müfredat</Label>
-                {loadingCurricula ? (
-                  <Skeleton className="h-9 w-44" />
-                ) : (
-                  <Select
-                    value={selectedCurriculumId?.toString() ?? ''}
-                    onValueChange={val => setSelectedCurriculumId(Number(val))}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Versiyon seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(curricula ?? []).map(c => (
-                        <SelectItem key={c.id} value={c.id.toString()}>
-                          {versionLabel(c)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-2.5">
+              {/* Sol: Fakülte */}
+              <div className="grid grid-cols-[70px_1fr] md:grid-cols-[90px_1fr] items-center gap-2">
+                <Label className="text-sm text-right">Fakülte</Label>
+                <Select value={facultyId?.toString() ?? ''} onValueChange={handleFacultyChange}>
+                  <SelectTrigger className="h-9 text-sm">
+                    {loadingFaculties
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <SelectValue placeholder="Seçin" />}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(faculties ?? []).map(f => (
+                      <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            )}
 
-            {/* + Yeni button */}
-            {programId && (
-              <div className="self-end">
+              {/* Sağ: Müfredat Yılı */}
+              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-2">
+                <Label className="text-sm text-right">Müfredat Yılı</Label>
+                <Select value={yearFilter} onValueChange={val => setYearFilter(val as YearFilter)}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tümü</SelectItem>
+                    {availableYears.map(y => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sol: Bölüm */}
+              <div className="grid grid-cols-[70px_1fr] md:grid-cols-[90px_1fr] items-center gap-2">
+                <Label className="text-sm text-right">Bölüm</Label>
+                <Select
+                  value={departmentId?.toString() ?? ''}
+                  onValueChange={handleDepartmentChange}
+                  disabled={!facultyId}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    {loadingDepts
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <SelectValue placeholder="Seçin" />}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(departments ?? []).map(d => (
+                      <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sağ: Durum */}
+              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-2">
+                <Label className="text-sm text-right">Durum</Label>
+                <Select value={statusFilter} onValueChange={val => setStatusFilter(val as StatusFilter)}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tümü</SelectItem>
+                    <SelectItem value="active">Aktif</SelectItem>
+                    <SelectItem value="inactive">Pasif</SelectItem>
+                    <SelectItem value="archived">Arşiv</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sol: Program */}
+              <div className="grid grid-cols-[70px_1fr] md:grid-cols-[90px_1fr] items-center gap-2">
+                <Label className="text-sm text-right">Program</Label>
+                <Select
+                  value={programId?.toString() ?? ''}
+                  onValueChange={handleProgramChange}
+                  disabled={!departmentId}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    {loadingPrograms
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <SelectValue placeholder="Seçin" />}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(programs ?? []).map(p => (
+                      <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sağ: Ara/Bul (işlevi şimdilik yok — reactive filtreler çalışır) */}
+              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-2">
+                <span />
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="h-9"
-                  onClick={() => setShowCreateDialog(true)}
+                  variant="secondary"
+                  className="h-9 w-full text-sm"
+                  onClick={() => { /* filtreler reactive çalışır; buton Proliz uyumluluğu için burada */ }}
+                  title="Filtreler otomatik uygulanır"
                 >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Yeni
+                  <Search className="h-4 w-4 mr-1" /> Ara/Bul
                 </Button>
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Empty state: no program selected ── */}
-      {!programId && (
-        <Card>
-          <CardContent className="py-16 text-center text-muted-foreground">
-            <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>Müfredatları görüntülemek için bir program seçin</p>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* ── No curriculum selected ── */}
-      {programId && !selectedCurriculumId && !loadingCurricula && (curricula ?? []).length === 0 && (
+      {/* ── LISTE VIEW: Müfredat tablosu ── */}
+      {view === 'list' && !facultyId && !departmentId && !programId && (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            <p className="mb-2">Bu program için henüz müfredat oluşturulmamış.</p>
-            <Button variant="outline" onClick={() => setShowCreateDialog(true)}>
+            <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p>Müfredatları listelemek için en az bir fakülte seçin</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {view === 'list' && (facultyId || departmentId || programId) && loadingCurricula && (
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+            Yükleniyor...
+          </CardContent>
+        </Card>
+      )}
+
+      {view === 'list' && (facultyId || departmentId || programId) && !loadingCurricula && filteredCurricula.length === 0 && (
+        <Card>
+          <CardContent className="py-16 text-center text-muted-foreground">
+            <p className="mb-2">Filtre kriterlerinize uygun müfredat bulunamadı.</p>
+            <Button variant="outline" onClick={handleOpenCreateDialog}>
               <Plus className="h-4 w-4 mr-1" /> Yeni Müfredat Oluştur
             </Button>
           </CardContent>
         </Card>
       )}
 
-      {programId && !selectedCurriculumId && (curricula ?? []).length > 0 && (
+      {view === 'list' && (facultyId || departmentId || programId) && !loadingCurricula && filteredCurricula.length > 0 && (
         <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">
-            Yukarıdan bir müfredat versiyonu seçin
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 border-b">
+                  <tr className="text-left">
+                    <th className="px-3 py-2.5 font-medium w-10"></th>
+                    <th className="px-3 py-2.5 font-medium whitespace-nowrap">Yıl</th>
+                    <th className="px-3 py-2.5 font-medium min-w-[200px]">Müfredat Adı</th>
+                    <th className="px-3 py-2.5 font-medium whitespace-nowrap">Başl.Tarihi</th>
+                    <th className="px-3 py-2.5 font-medium whitespace-nowrap">Bit.Tarihi</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Aktif</th>
+                    <th className="px-3 py-2.5 font-medium min-w-[180px]">Fakülte</th>
+                    <th className="px-3 py-2.5 font-medium min-w-[200px]">Program</th>
+                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.Kredi</th>
+                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.AKTS</th>
+                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.Ders</th>
+                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Zor.Ders</th>
+                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Seç.Ders</th>
+                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Akt.Öğr.Say</th>
+                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.Öğr.Say</th>
+                    <th className="px-3 py-2.5 font-medium w-32 text-center">İşlem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedCurricula.map(c => (
+                    <tr key={c.id} className="border-b hover:bg-muted/30">
+                      {/* Sol dişli menü */}
+                      <td className="px-3 py-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="İşlemler">
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-56">
+                            <DropdownMenuItem onClick={() => handleViewCourses(c.id)}>
+                              <BookOpen className="h-4 w-4 mr-2" /> Müfredat Dersleri
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setTermRulesTarget({ id: c.id, label: `(${c.version}) ${c.name ?? c.programName}` });
+                              setShowTermRulesDialog(true);
+                            }}>
+                              <Settings className="h-4 w-4 mr-2" /> Dönem Kuralları
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => navigate(ROUTES.PROMOTION_RULES)}
+                              title="Müfredat Sınıf Dönem Tanımları sayfasını aç"
+                            >
+                              <GraduationCap className="h-4 w-4 mr-2" /> Sınıf Atlatma Kuralları
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled title="Yakında">
+                              <Scissors className="h-4 w-4 mr-2" /> Enstitü İlişik Kesme Kr.
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled title="Yakında">
+                              <Printer className="h-4 w-4 mr-2" /> Ders Listesi Yazdır
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap font-medium">{c.version}</td>
+                      <td className="px-3 py-2">{c.name ?? '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{c.startDate ? c.startDate.slice(0, 10) : '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{c.endDate ? c.endDate.slice(0, 10) : '—'}</td>
+                      <td className="px-3 py-2 text-center">
+                        {c.isActive && <CheckCircle className="h-4 w-4 text-green-600 mx-auto" />}
+                      </td>
+                      <td className="px-3 py-2">{c.facultyName}</td>
+                      <td className="px-3 py-2">{c.programName}</td>
+                      <td className="px-3 py-2 text-right">{c.totalCredit}</td>
+                      <td className="px-3 py-2 text-right">{c.totalEcts}</td>
+                      <td className="px-3 py-2 text-right">{c.courseCount}</td>
+                      <td className="px-3 py-2 text-right">{c.compulsoryCount}</td>
+                      <td className="px-3 py-2 text-right">{c.electiveCount}</td>
+                      <td className="px-3 py-2 text-right">{c.activeStudentCount}</td>
+                      <td className="px-3 py-2 text-right">{c.totalStudentCount}</td>
+                      {/* Sağ 4 ikon */}
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <Button
+                            variant="ghost" size="icon" className="h-8 w-8"
+                            title="Düzenle"
+                            onClick={() => handleOpenEditDialog(c)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="h-8 w-8"
+                            title="Kopyala"
+                            onClick={() => {
+                              setCopyTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` });
+                              setCopyNewVersion('');
+                            }}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="h-8 w-8"
+                            title={c.isActive ? 'Zaten aktif' : 'Aktif Et'}
+                            disabled={c.isActive}
+                            onClick={() => setActivateTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` })}
+                          >
+                            <CheckCircle className={`h-4 w-4 ${c.isActive ? 'text-green-600' : ''}`} />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                            title="Sil"
+                            onClick={() => setDeleteTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` })}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination — mobilde flex-wrap */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-t bg-muted/20 text-sm">
+              <span className="text-muted-foreground">
+                {filteredCurricula.length} kayıt — Sayfa {currentPage}/{totalPages}
+              </span>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="px-2 min-w-[2rem] text-center">{currentPage}</span>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* ── Main content: curriculum detail ── */}
-      {programId && selectedCurriculumId && (
+      {/* ── COURSES VIEW: Seçili müfredatın ders listesi (semester groups) ── */}
+      {view === 'courses' && (
         <>
-          {/* ── Row 2: Search + table filters + header info ── */}
+          {/* Breadcrumb + geri butonu + müfredat aksiyonları */}
+          <Card>
+            <CardContent className="py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Button variant="ghost" size="sm" className="h-8" onClick={handleBackToList}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Müfredat Listesi
+                  </Button>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="font-medium">
+                    {detail ? `${detail.programName} — ${detail.version}` : 'Yükleniyor...'}
+                  </span>
+                  {detail?.isActive && <Badge variant="default" className="text-xs">Aktif</Badge>}
+                </div>
+                {/* Müfredat seviyesi aksiyonlar */}
+                {detail && selectedCurr && (
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost" size="icon" className="h-8 w-8"
+                      title="Düzenle"
+                      onClick={() => handleOpenEditDialog(selectedCurr)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-8 w-8"
+                      title="Kopyala"
+                      onClick={() => {
+                        setCopyTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` });
+                        setCopyNewVersion('');
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-8 w-8"
+                      title={detail.isActive ? 'Zaten aktif' : 'Aktif Et'}
+                      disabled={detail.isActive}
+                      onClick={() => setActivateTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` })}
+                    >
+                      <CheckCircle className={`h-4 w-4 ${detail.isActive ? 'text-green-600' : ''}`} />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                      title="Sil"
+                      onClick={() => setDeleteTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` })}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {!selectedCurriculumId ? null : (
+            <>
+          {/* ── Tek satır: Filtreler + Bilgi + Aksiyonlar ── */}
           {loadingDetail ? (
-            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-16 w-full" />
           ) : detail && (
             <Card>
-              <CardContent className="pt-3 pb-3">
-                {/* Filter row */}
+              <CardContent className="py-3">
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Proliz tarzı: iki ayrı arama alanı (Ders Kodu | Ders Adı) */}
                   <Input
-                    placeholder="Ders kodu veya adı ile ara..."
-                    className="h-8 w-full sm:w-56 text-xs"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Ders Kodu"
+                    className="h-9 w-full sm:w-32 text-sm"
+                    value={searchCode}
+                    onChange={e => setSearchCode(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Ders Adı"
+                    className="h-9 w-full sm:w-44 text-sm"
+                    value={searchName}
+                    onChange={e => setSearchName(e.target.value)}
                   />
 
-                  {/* Seçmeli dersler pool üzerinden yönetilir — type filter kaldırıldı */}
-
-                  {/* Sınıf filter */}
                   <Select
                     value={classFilter?.toString() ?? 'all'}
                     onValueChange={val => setClassFilter(val === 'all' ? null : Number(val))}
                   >
-                    <SelectTrigger className="h-8 w-32 text-xs">
+                    <SelectTrigger className="h-9 w-32 text-sm">
                       <SelectValue placeholder="Sınıf: Tümü" />
                     </SelectTrigger>
                     <SelectContent>
@@ -430,12 +888,11 @@ export default function CurriculumManagementPage() {
                     </SelectContent>
                   </Select>
 
-                  {/* Dönem filter */}
                   <Select
                     value={termTypeFilter}
                     onValueChange={val => setTermTypeFilter(val as 'all' | 'fall' | 'spring')}
                   >
-                    <SelectTrigger className="h-8 w-32 text-xs">
+                    <SelectTrigger className="h-9 w-32 text-sm">
                       <SelectValue placeholder="Dönem: Tümü" />
                     </SelectTrigger>
                     <SelectContent>
@@ -445,87 +902,59 @@ export default function CurriculumManagementPage() {
                     </SelectContent>
                   </Select>
 
-                  {/* Sort */}
-                  <Select
-                    value={sortBy}
-                    onValueChange={val => setSortBy(val as SortBy)}
-                  >
-                    <SelectTrigger className="h-8 w-40 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Sırala: Varsayılan</SelectItem>
-                      <SelectItem value="code">Sırala: Ders Kodu</SelectItem>
-                      <SelectItem value="name">Sırala: Ders Adı</SelectItem>
-                      <SelectItem value="ects">Sırala: AKTS</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <span className="hidden md:inline text-muted-foreground">|</span>
 
-                {/* Header info row */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 pt-3 border-t">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-semibold">{detail.programName} — {detail.version}</span>
-                    {detail.isActive && <Badge variant="default" className="text-[10px]">Aktif</Badge>}
-                    <span className="text-muted-foreground hidden sm:inline">|</span>
-                    <span className="text-muted-foreground">{detail.courses.length} ders</span>
-                    <span className="text-muted-foreground hidden sm:inline">|</span>
-                    <span className="text-muted-foreground">{totalEcts} AKTS</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!detail.isActive && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-xs"
-                          onClick={() => activateMut.mutate(selectedCurriculumId)}
-                          disabled={activateMut.isPending}
-                        >
-                          {activateMut.isPending
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                            : <CheckCircle className="h-3.5 w-3.5 mr-1" />}
-                          Aktif Et
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-xs text-destructive hover:text-destructive"
-                          onClick={() => {
-                            deleteMut.mutate(selectedCurriculumId);
-                            setSelectedCurriculumId(null);
-                          }}
-                          disabled={deleteMut.isPending}
-                        >
-                          {deleteMut.isPending
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                            : <Trash2 className="h-3.5 w-3.5 mr-1" />}
-                          Sil
-                        </Button>
-                      </>
-                    )}
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    {detail.courses.length} ders • {totalEcts} AKTS
+                  </span>
+
+                  <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showGroupedCourses}
+                      onChange={e => setShowGroupedCourses(e.target.checked)}
+                      className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                    />
+                    <span>Gruplu Dersleri Göster</span>
+                  </label>
+
+                  {/* Sağ aksiyonlar — Proliz: Ders Ekle | Grup Ekle | Ek İşlemler */}
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="h-9 text-sm"
+                      onClick={() => setShowAddCourse(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Ders Ekle
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-8 text-xs"
-                      onClick={() => setShowEctsRulesDialog(true)}
-                      title="Bu müfredata özel AKTS tavanı kuralları"
+                      className="h-9 text-sm"
+                      disabled
+                      title="Yakında"
                     >
-                      <Settings className="h-3.5 w-3.5 mr-1" />
-                      AKTS Kuralları
-                      {(detail.ectsLimitBelow200 != null
-                        || detail.ectsLimit200To249 != null
-                        || detail.ectsLimitAbove250 != null) && (
-                        <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0">Özel</Badge>
-                      )}
+                      <Plus className="h-4 w-4 mr-1" /> Grup Ekle
                     </Button>
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => setShowAddCourse(true)}
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-1" /> Ders Ekle
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-9 text-sm">
+                          <MoreHorizontal className="h-4 w-4 mr-1" />
+                          Ek İşlemler
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem disabled title="Yakında">
+                          <Printer className="h-4 w-4 mr-2" /> Ders Listesi Yazdır
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled title="Yakında">
+                          <Package className="h-4 w-4 mr-2" /> Bilgi Paketi
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled title="Yakında">
+                          <Layers className="h-4 w-4 mr-2" /> Toplu Gruplandırma
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </CardContent>
@@ -533,133 +962,455 @@ export default function CurriculumManagementPage() {
           )}
 
           {loadingDetail ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-40" />)}
-            </div>
+            <Skeleton className="h-64 w-full" />
           ) : !detail ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
                 Veri yüklenemedi
               </CardContent>
             </Card>
-          ) : semesterGroups.length === 0 ? (
+          ) : flatCourses.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
-                {searchTerm || classFilter !== null || termTypeFilter !== 'all'
+                {searchCode || searchName || classFilter !== null || termTypeFilter !== 'all'
                   ? 'Filtrenizle eşleşen ders bulunamadı'
                   : 'Henüz ders eklenmemiş'}
               </CardContent>
             </Card>
           ) : (
-            semesterGroups.map(([sem, courses]) => (
-              <SemesterGroup
-                key={sem}
-                semester={sem}
-                courses={courses}
-                onUpdateCourse={(courseId, req) =>
-                  updateCourseMut.mutate({ curriculumId: selectedCurriculumId!, courseId, ...req })
-                }
-                onRemoveCourse={courseId =>
-                  removeCourseMut.mutate({ curriculumId: selectedCurriculumId!, courseId })
-                }
-                onAddCourse={() => setShowAddCourse(true)}
-                onShowCourseDetail={handleShowCourseDetail}
-                isUpdating={updateCourseMut.isPending}
-                isRemoving={removeCourseMut.isPending}
-              />
-            ))
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 border-b">
+                      <tr className="text-left">
+                        <th className="px-2 py-2.5 w-10"></th>
+                        <th className="px-3 py-2.5 font-medium whitespace-nowrap">Ders Kodu</th>
+                        <th className="px-3 py-2.5 font-medium min-w-[240px]">Ders Adı</th>
+                        <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Z/S</th>
+                        <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Krd</th>
+                        <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">AKTS</th>
+                        <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Teo</th>
+                        <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Uyg</th>
+                        <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Lab</th>
+                        <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Sınıf</th>
+                        <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Dönem</th>
+                        <th className="px-3 py-2.5 font-medium whitespace-nowrap">Kategori</th>
+                        <th className="px-3 py-2.5 font-medium whitespace-nowrap">Öğr.Elemanı</th>
+                        <th className="px-3 py-2.5 font-medium whitespace-nowrap">İntibak</th>
+                        <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Ön K</th>
+                        <th className="px-3 py-2.5 font-medium text-center w-24">İşlem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedCourses.map(c => {
+                        const sinif = Math.ceil(c.suggestedSemester / 2);
+                        const donem = c.suggestedSemester % 2 === 1 ? 'G' : 'B';
+                        const courseLabel = `${c.courseCode} — ${c.courseName}`;
+                        return (
+                          <tr key={c.courseId} className="border-b hover:bg-muted/30">
+                            <td className="px-2 py-2">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Ders işlemleri"
+                                  >
+                                    <Settings className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  <DropdownMenuItem disabled title="Yakında">
+                                    <Package className="h-4 w-4 mr-2" /> Bilgi Paketi
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      setCourseLinksTarget({
+                                        courseId: c.courseId,
+                                        label: courseLabel,
+                                        mode: 'prerequisite',
+                                      })
+                                    }
+                                  >
+                                    <BookOpen className="h-4 w-4 mr-2" /> Ön Koşul Tanımları
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled title="Yakında">
+                                    <Layers className="h-4 w-4 mr-2" /> Gruplandırma İşlemleri
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      setCourseLinksTarget({
+                                        courseId: c.courseId,
+                                        label: courseLabel,
+                                        mode: 'equivalency',
+                                      })
+                                    }
+                                  >
+                                    <Scissors className="h-4 w-4 mr-2" /> İntibak İşlemleri
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap font-medium">{c.courseCode}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => handleShowCourseDetail(c.courseId)}
+                                className="text-left text-primary hover:underline"
+                                title="Ders detayı"
+                              >
+                                {c.courseName}
+                              </button>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <Badge variant={c.isCompulsory ? 'default' : 'secondary'} className="text-xs">
+                                {c.isCompulsory ? 'Z' : 'S'}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-right">{c.ects}</td>
+                            <td className="px-3 py-2 text-right">{c.theoryHours}</td>
+                            <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-right">{c.labHours}</td>
+                            <td className="px-3 py-2 text-center">{sinif}</td>
+                            <td className="px-3 py-2 text-center">{donem}</td>
+                            <td className="px-3 py-2">{c.courseCategory ?? '—'}</td>
+                            <td className="px-3 py-2 text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-center text-muted-foreground">—</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center justify-center gap-0.5">
+                                <Button
+                                  variant="ghost" size="icon" className="h-8 w-8"
+                                  title="Düzenle"
+                                  onClick={() => handleShowCourseDetail(c.courseId)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                                  title="Sil"
+                                  onClick={() => removeCourseMut.mutate({ curriculumId: selectedCurriculumId!, courseId: c.courseId })}
+                                  disabled={removeCourseMut.isPending}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination — ders listesi (15 ders/sayfa) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-t bg-muted/20 text-sm">
+                  <span className="text-muted-foreground">
+                    {flatCourses.length} ders — Sayfa {coursesPage}/{coursesTotalPages}
+                  </span>
+                  {coursesTotalPages > 1 && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === 1}
+                        onClick={() => setCoursesPage(1)}
+                        title="İlk sayfa"
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === 1}
+                        onClick={() => setCoursesPage(p => Math.max(1, p - 1))}
+                        title="Önceki"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="px-2 min-w-[2rem] text-center">{coursesPage}</span>
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === coursesTotalPages}
+                        onClick={() => setCoursesPage(p => Math.min(coursesTotalPages, p + 1))}
+                        title="Sonraki"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === coursesTotalPages}
+                        onClick={() => setCoursesPage(coursesTotalPages)}
+                        title="Son sayfa"
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+            </>
           )}
         </>
       )}
 
-      {/* ── Create Curriculum Dialog ── */}
+      {/* ── Create / Edit Curriculum Dialog ── */}
       <Dialog open={showCreateDialog} onOpenChange={(open) => {
         setShowCreateDialog(open);
         if (!open) resetCreateForm();
       }}>
         <ResizableDialogContent defaultWidth={750} minWidth={500} minHeight={400} className="flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
-            <DialogTitle>Yeni Müfredat Versiyonu</DialogTitle>
+            <DialogTitle>
+              {editingCurriculumId !== null ? 'Müfredat Düzenleniyor' : 'Müfredat (Yeni Ekleniyor)'}
+            </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 space-y-5">
-            {/* ── Temel Bilgiler ── */}
-            <fieldset className="space-y-3">
-              <legend className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Temel Bilgiler</legend>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Versiyon *</Label>
-                  <Input value={newVersion} onChange={e => setNewVersion(e.target.value)} placeholder="2024" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Müfredat Adı</Label>
-                  <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Bilgisayar Müh. 2024 Müfredatı" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Kısa Adı</Label>
-                  <Input value={newShortName} onChange={e => setNewShortName(e.target.value)} placeholder="BM-2024" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">İngilizce Adı</Label>
-                  <Input value={newEnglishName} onChange={e => setNewEnglishName(e.target.value)} placeholder="Computer Eng. 2024 Curriculum" />
-                </div>
-              </div>
-            </fieldset>
-
-            {/* ── Tarihler ── */}
-            <fieldset className="space-y-3">
-              <legend className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tarihler</legend>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Başlangıç Tarihi</Label>
-                  <Input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Bitiş Tarihi</Label>
-                  <Input type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)} />
-                </div>
-              </div>
-            </fieldset>
-
-            {/* ── Resmi Bilgiler ── */}
-            <fieldset className="space-y-3">
-              <legend className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Resmi Bilgiler</legend>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Karar Tarihi</Label>
-                  <Input value={newDecisionDate} onChange={e => setNewDecisionDate(e.target.value)} placeholder="01.01.2024" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Karar No</Label>
-                  <Input value={newDecisionNo} onChange={e => setNewDecisionNo(e.target.value)} placeholder="2024/01" />
-                </div>
+          <div className="flex-1 overflow-y-auto px-6 pb-2 space-y-4">
+            {/* Yıl + Durumu */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Yıl *</Label>
+                <Input
+                  value={newVersion}
+                  onChange={e => setNewVersion(e.target.value)}
+                  placeholder="2024"
+                />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Karar Açıklama</Label>
-                <Input value={newDecisionNote} onChange={e => setNewDecisionNote(e.target.value)} placeholder="Senato kararı ile kabul edilmiştir" />
+                <Label className="text-xs">Durumu</Label>
+                <Select value={newStatus} onValueChange={(val) => setNewStatus(val as 'active' | 'inactive')}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Aktif</SelectItem>
+                    <SelectItem value="inactive">Pasif</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </fieldset>
+            </div>
 
-            {/* ── Diğer ── */}
-            <fieldset className="space-y-3">
-              <legend className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Diğer</legend>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Ders Geçme Sistemi</Label>
-                  <Input value={newGradingSystem} onChange={e => setNewGradingSystem(e.target.value)} placeholder="Ders Geçme" />
+            {/* Fakülte / Bölüm / Program — Edit mode'da readonly info bar, Create mode'da seçilebilir dropdown'lar */}
+            {editingCurriculumId !== null && editingCurr && (
+              <div className="rounded-md border bg-muted/50 p-3 text-xs space-y-1">
+                <div className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
+                  Müfredat Bilgisi (değiştirilemez)
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Staj Süresi (gün)</Label>
-                  <Input type="number" min={0} value={newInternshipDuration} onChange={e => setNewInternshipDuration(e.target.value)} placeholder="40" />
-                </div>
+                <div><span className="text-muted-foreground">Fakülte:</span> <span className="font-medium">{editingCurr.facultyName}</span></div>
+                <div><span className="text-muted-foreground">Program:</span> <span className="font-medium">{editingCurr.programName}</span></div>
+              </div>
+            )}
+            {editingCurriculumId === null && (
+              <>
+            <div className="space-y-1">
+              <Label className="text-xs">Fakülte *</Label>
+              <Select
+                value={dialogFacultyId?.toString() ?? ''}
+                onValueChange={handleDialogFacultyChange}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  {loadingFaculties
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <SelectValue placeholder="Fakülte seçin" />}
+                </SelectTrigger>
+                <SelectContent>
+                  {(faculties ?? []).map(f => (
+                    <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Bölüm *</Label>
+              <Select
+                value={dialogDepartmentId?.toString() ?? ''}
+                onValueChange={handleDialogDepartmentChange}
+                disabled={!dialogFacultyId}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  {loadingDialogDepts
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <SelectValue placeholder="Bölüm seçin" />}
+                </SelectTrigger>
+                <SelectContent>
+                  {(dialogDepartments ?? []).map(d => (
+                    <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Program *</Label>
+              <Select
+                value={dialogProgramId?.toString() ?? ''}
+                onValueChange={handleDialogProgramChange}
+                disabled={!dialogDepartmentId}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  {loadingDialogPrograms
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <SelectValue placeholder="Program seçin" />}
+                </SelectTrigger>
+                <SelectContent>
+                  {(dialogPrograms ?? []).map(p => (
+                    <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+              </>
+            )}
+
+            {/* Müfredat Tipi */}
+            <div className="space-y-1">
+              <Label className="text-xs">Müfredat Tipi</Label>
+              <Select value={newMufredatTipi} onValueChange={setNewMufredatTipi}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Programa Özel">Programa Özel</SelectItem>
+                  <SelectItem value="Ortak Müfredat">Ortak Müfredat</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Müfredat Ad */}
+            <div className="space-y-1">
+              <Label className="text-xs">Müfredat Ad</Label>
+              <Input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="Bilgisayar Müh. 2024 Müfredatı"
+              />
+            </div>
+
+            {/* Kısa Ad */}
+            <div className="space-y-1">
+              <Label className="text-xs">Kısa Ad</Label>
+              <Input
+                value={newShortName}
+                onChange={e => setNewShortName(e.target.value)}
+                placeholder="BM-2024"
+              />
+            </div>
+
+            {/* İngilizce Ad */}
+            <div className="space-y-1">
+              <Label className="text-xs">İngilizce Ad</Label>
+              <Input
+                value={newEnglishName}
+                onChange={e => setNewEnglishName(e.target.value)}
+                placeholder="Computer Eng. 2024 Curriculum"
+              />
+            </div>
+
+            {/* Başlangıç / Bitiş Tarihi */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Başlangıç Tarihi</Label>
+                <Input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Açıklama</Label>
-                <Textarea value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Genel açıklama..." rows={2} />
+                <Label className="text-xs">Bitiş Tarihi</Label>
+                <Input type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)} />
               </div>
-            </fieldset>
+            </div>
 
-            {/* ── Kopyalama ── */}
-            {(curricula ?? []).length > 0 && (
+            {/* Karar Tarih / Karar No */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Karar Tarih</Label>
+                <Input
+                  value={newDecisionDate}
+                  onChange={e => setNewDecisionDate(e.target.value)}
+                  placeholder="01.01.2024"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Karar No</Label>
+                <Input
+                  value={newDecisionNo}
+                  onChange={e => setNewDecisionNo(e.target.value)}
+                  placeholder="2024/01"
+                />
+              </div>
+            </div>
+
+            {/* Karar Açıklama */}
+            <div className="space-y-1">
+              <Label className="text-xs">Karar Açıklama</Label>
+              <Input
+                value={newDecisionNote}
+                onChange={e => setNewDecisionNote(e.target.value)}
+                placeholder="Senato kararı ile kabul edilmiştir"
+              />
+            </div>
+
+            {/* Geçme Sistemi / Staj Süresi */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Geçme Sistemi</Label>
+                <Select value={newGradingSystem} onValueChange={setNewGradingSystem}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Sınıf Geçme">Sınıf Geçme</SelectItem>
+                    <SelectItem value="Ders Geçme">Ders Geçme</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Staj Süresi (gün)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={newInternshipDuration}
+                  onChange={e => setNewInternshipDuration(e.target.value)}
+                  placeholder="40"
+                />
+              </div>
+            </div>
+
+            {/* Açıklama */}
+            <div className="space-y-1">
+              <Label className="text-xs">Açıklama</Label>
+              <Textarea
+                value={newDescription}
+                onChange={e => setNewDescription(e.target.value)}
+                placeholder="Genel açıklama..."
+                rows={2}
+              />
+            </div>
+
+            {/* Checkbox'lar — UI-only, backend'e gitmez */}
+            <div className="space-y-2 pt-1">
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newIncludeFormation}
+                  onChange={e => setNewIncludeFormation(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                />
+                <span>Mezuniyette Formasyon Derslerini Toplam Kredi/AKTS ve Seçmeli/Zorunlu Ders Sayılarına Dahil Et</span>
+              </label>
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newHideFromPackage}
+                  onChange={e => setNewHideFromPackage(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                />
+                <span>Bilgi Paketinde Gösterme</span>
+              </label>
+            </div>
+
+            {/* ── Kopyalama (en altta) — dialog'da seçili programa göre, sadece Create mode ── */}
+            {editingCurriculumId === null && (dialogCurricula ?? []).length > 0 && (
               <fieldset className="space-y-3">
                 <legend className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kopyalama</legend>
                 <div className="flex items-center gap-1 border rounded-md p-1">
@@ -690,7 +1441,7 @@ export default function CurriculumManagementPage() {
                       <SelectValue placeholder="Kaynak versiyon seçin" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(curricula ?? []).map(c => (
+                      {(dialogCurricula ?? []).map(c => (
                         <SelectItem key={c.id} value={c.id.toString()}>
                           {c.version} ({c.courseCount} ders, {c.totalEcts} AKTS)
                           {c.isActive ? ' — Aktif' : ''}
@@ -708,10 +1459,18 @@ export default function CurriculumManagementPage() {
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={isCreatePending || !newVersion.trim() || (createMode === 'copy' && !copySourceId)}
+              disabled={
+                isCreatePending
+                || updateMut.isPending
+                || !newVersion.trim()
+                || (editingCurriculumId === null && !dialogProgramId)
+                || (editingCurriculumId === null && createMode === 'copy' && !copySourceId)
+              }
             >
-              {isCreatePending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {createMode === 'copy' ? 'Kopyala' : 'Oluştur'}
+              {(isCreatePending || updateMut.isPending) && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {editingCurriculumId !== null
+                ? 'Kaydet'
+                : createMode === 'copy' ? 'Kopyala' : 'Oluştur'}
             </Button>
           </DialogFooter>
         </ResizableDialogContent>
@@ -737,13 +1496,110 @@ export default function CurriculumManagementPage() {
         curriculumCourse={detailCurriculumCourse}
       />
 
-      {/* ── AKTS Kuralları Dialog ── */}
-      {showEctsRulesDialog && detail && (
-        <CurriculumEctsRulesDialog
-          curriculum={detail}
-          onClose={() => setShowEctsRulesDialog(false)}
+      {/* ── Müfredat Dönem Kuralları Dialog (Proliz tarzı, 3 panel) ── */}
+      {showTermRulesDialog && termRulesTarget && (
+        <CurriculumTermRulesDialog
+          curriculumId={termRulesTarget.id}
+          curriculumLabel={termRulesTarget.label}
+          open={showTermRulesDialog}
+          onClose={() => {
+            setShowTermRulesDialog(false);
+            setTermRulesTarget(null);
+          }}
         />
       )}
+
+      {/* ── Ders Ön Koşul / İntibak Dialog ── */}
+      <CourseLinksDialog
+        mode={courseLinksTarget?.mode ?? 'prerequisite'}
+        open={courseLinksTarget !== null}
+        courseId={courseLinksTarget?.courseId ?? null}
+        courseLabel={courseLinksTarget?.label ?? ''}
+        onClose={() => setCourseLinksTarget(null)}
+      />
+
+      {/* ── Aktif Et Confirm Dialog ── */}
+      <AlertDialog open={activateTarget !== null} onOpenChange={(open) => !open && setActivateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Müfredat aktif edilsin mi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium">{activateTarget?.label}</span> müfredatı yeni kayıtlar için
+              varsayılan yapılacak. Aynı programın mevcut aktif müfredatı otomatik pasif olur.
+              Mevcut öğrenciler kendi müfredatlarında kalır, etkilenmez.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={activateMut.isPending}>İptal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmActivate} disabled={activateMut.isPending}>
+              {activateMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Aktif Et
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Sil Confirm Dialog ── */}
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Müfredat silinsin mi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium">{deleteTarget?.label}</span> müfredatı silinecek.
+              Bu işlem geri alınamaz. Müfredata bağlı öğrenci varsa silme işlemi reddedilir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMut.isPending}>İptal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleteMut.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Sil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Kopyala Dialog ── */}
+      <Dialog open={copyTarget !== null} onOpenChange={(open) => {
+        if (!open) { setCopyTarget(null); setCopyNewVersion(''); }
+      }}>
+        <ResizableDialogContent defaultWidth={500} minWidth={400} minHeight={220} className="flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
+            <DialogTitle>Müfredatı Kopyala</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 px-6 pb-3 space-y-3">
+            <div className="rounded-md border bg-muted/50 p-2 text-xs">
+              <span className="text-muted-foreground">Kaynak: </span>
+              <span className="font-medium">{copyTarget?.label}</span>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Yeni Yıl *</Label>
+              <Input
+                value={copyNewVersion}
+                onChange={e => setCopyNewVersion(e.target.value)}
+                placeholder="2025"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Kaynak müfredatın tüm dersleri yeni versiyona kopyalanır. Yeni müfredat Pasif olarak oluşur.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="shrink-0 px-6 py-4 border-t gap-2">
+            <Button variant="outline" onClick={() => { setCopyTarget(null); setCopyNewVersion(''); }}>
+              İptal
+            </Button>
+            <Button onClick={handleConfirmCopy} disabled={copyMut.isPending || !copyNewVersion.trim()}>
+              {copyMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Kopyala
+            </Button>
+          </DialogFooter>
+        </ResizableDialogContent>
+      </Dialog>
     </div>
   );
 }

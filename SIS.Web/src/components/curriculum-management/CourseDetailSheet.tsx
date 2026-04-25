@@ -419,6 +419,51 @@ function CourseDetailForm({ course, curriculumCourse, curriculumId, courseId, on
                 <ExternalLink className="h-3 w-3" />
               </Link>
             </section>
+
+            <Separator />
+
+            {/* ═══ Ön Koşul Kuralları (read-only) ═══ */}
+            <section>
+              <h4 className="text-sm font-semibold text-foreground mb-2">Ön Koşul Kuralları</h4>
+              {course.minCreditsRequired == null
+                && course.minEctsRequired == null
+                && !course.requiresNoFailedLowerCourses
+                && !course.canBeTakenStandalone ? (
+                <p className="text-sm text-muted-foreground italic">Tanımlı kural yok</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {course.minCreditsRequired != null && (
+                    <li className="flex items-center gap-2">
+                      <span className="text-muted-foreground">&#x2022;</span>
+                      <span className="text-muted-foreground">Min Kredi:</span>
+                      <span className="font-medium">{course.minCreditsRequired}</span>
+                    </li>
+                  )}
+                  {course.minEctsRequired != null && (
+                    <li className="flex items-center gap-2">
+                      <span className="text-muted-foreground">&#x2022;</span>
+                      <span className="text-muted-foreground">Min AKTS:</span>
+                      <span className="font-medium">{course.minEctsRequired}</span>
+                    </li>
+                  )}
+                  {course.requiresNoFailedLowerCourses && (
+                    <li className="flex items-center gap-2">
+                      <span className="text-muted-foreground">&#x2022;</span>
+                      <span>Alttan dersi olmayanlar alabilir</span>
+                    </li>
+                  )}
+                  {course.canBeTakenStandalone && (
+                    <li className="flex items-center gap-2">
+                      <span className="text-muted-foreground">&#x2022;</span>
+                      <span>Tek başına alınabilir (başka derslerle birlikte alınamaz)</span>
+                    </li>
+                  )}
+                </ul>
+              )}
+              <p className="text-xs text-muted-foreground mt-2">
+                Düzenlemek için: Müfredat &rarr; Ders satırı <span className="font-medium">⚙</span> &rarr; "Ön Koşul Tanımları"
+              </p>
+            </section>
           </div>
 
       {/* ═══ Footer: İptal / Kaydet ═══ */}

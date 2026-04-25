@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
 using SIS.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin/instructors")]
-[Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff")]
+[Authorize]
 public class InstructorManagementController : ControllerBase
 {
     private readonly IAdminInstructorService _service;
@@ -23,6 +24,7 @@ public class InstructorManagementController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("menu.personel-listesi.view")]
     public async Task<IActionResult> GetInstructors([FromQuery] AdminInstructorFilterDto filter)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -39,6 +41,7 @@ public class InstructorManagementController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.personel-listesi.view")]
     public async Task<IActionResult> GetInstructor(int id)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -61,7 +64,7 @@ public class InstructorManagementController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
+    [RequirePermission("menu.personel-listesi.create")]
     public async Task<IActionResult> CreateInstructor([FromBody] CreateInstructorDto dto)
     {
         try

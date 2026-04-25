@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
@@ -12,12 +13,13 @@ public record CreateCourseAccessPolicyDto(int CourseId, int TermId, int? Faculty
 
 [ApiController]
 [Route("api/course-access-policy")]
-[Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 public class CourseAccessPolicyController(AppDbContext context) : ControllerBase
 {
     private readonly AppDbContext _context = context;
 
     [HttpGet]
+    [RequirePermission("menu.ders-katalogu.access-policy.view")]
     public async Task<IActionResult> GetPolicies([FromQuery] int courseId, [FromQuery] int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -40,6 +42,7 @@ public class CourseAccessPolicyController(AppDbContext context) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("menu.ders-katalogu.access-policy.create")]
     public async Task<IActionResult> Create([FromBody] CreateCourseAccessPolicyDto dto, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -106,6 +109,7 @@ public class CourseAccessPolicyController(AppDbContext context) : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("menu.ders-katalogu.access-policy.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();

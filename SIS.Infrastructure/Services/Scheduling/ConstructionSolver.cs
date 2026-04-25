@@ -53,7 +53,8 @@ public sealed class ConstructionSolver
         {
             var candidates = _candidateGen.Generate(
                 section, state, classrooms, timeSlotsByDay,
-                splitThreshold, facultyClassroomIds);
+                splitThreshold, facultyClassroomIds,
+                splittableBlockTypes: config.SplittableBlockTypes);
             domainStore.InitDomain(section.SectionId, section, candidates);
         }
 
@@ -186,11 +187,14 @@ public sealed class ConstructionSolver
         // This avoids expensive full constraint evaluation for obvious conflicts.
         foreach (var block in blocks)
         {
-            var occupancy = state.GetClassroomOccupancy(block.ClassroomId, block.Day);
-            foreach (var (_, start, end, _) in occupancy)
+            if (block.ClassroomId is int classroomId)
             {
-                if (block.StartTime < end && block.EndTime > start)
-                    return true;
+                var occupancy = state.GetClassroomOccupancy(classroomId, block.Day);
+                foreach (var (_, start, end, _) in occupancy)
+                {
+                    if (block.StartTime < end && block.EndTime > start)
+                        return true;
+                }
             }
 
             if (section.InstructorId.HasValue)
@@ -209,6 +213,8 @@ public sealed class ConstructionSolver
 
     /// <summary>
     /// Builds a TermSnapshot that excludes the given section, for constraint evaluation.
+    /// SlotAllowedModes MUST be preserved; H17 FaceToFaceSlotRestrictionEvaluator bu dict'e bakıyor,
+    /// boş kalırsa evaluator bypass olur ve yüz-yüze dersler OnlineOnly slot'lara yerleşebilir.
     /// </summary>
     private static TermSnapshot BuildFilteredSnapshot(TermSnapshot snapshot, int excludeSectionId)
     {
@@ -224,12 +230,15 @@ public sealed class ConstructionSolver
             CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+            SlotAllowedModes = snapshot.SlotAllowedModes,
         };
     }
 
     /// <summary>
     /// Enriches a SectionSnapshot with correct classroom capacity and type
     /// based on the actual block assignments.
+    /// Paralel split durumunda (aynı saat birden fazla farklı oda) kapasite toplanır —
+    /// böylece H3 CapacityEvaluator toplam kapasiteyi section kontenjanıyla karşılaştırır.
     /// </summary>
     private static SectionSnapshot EnrichWithClassroomData(
         SectionSnapshot snap,
@@ -238,10 +247,29 @@ public sealed class ConstructionSolver
     {
         if (blocks.Count == 0) return snap;
 
-        // Use the first block's classroom for the primary ClassroomCapacity/Type fields
+        // Use the first block's classroom for the primary ClassroomName/Type fields
+        // Online bloklarda ClassroomId null — enrichment yapılmaz, snap olduğu gibi döner
         var primaryClassroomId = blocks[0].ClassroomId;
-        if (!classroomLookup.TryGetValue(primaryClassroomId, out var primaryClassroom))
+        if (!primaryClassroomId.HasValue || !classroomLookup.TryGetValue(primaryClassroomId.Value, out var primaryClassroom))
             return snap;
+
+        // Paralel split tespiti: aynı (Day, StartTime, EndTime) penceresinde BİRDEN FAZLA
+        // farklı classroom varsa bunlar paralel çalışıyor demektir — toplam kapasite = odaların toplamı.
+        // Farklı pencerelerdeki block'lar (örn. teori + lab farklı saatlerde) ayrı değerlendirilir;
+        // burada "primary window" için paralel kapasiteyi hesaplıyoruz (en büyük oda bazlı).
+        var primaryWindowBlocks = blocks
+            .Where(b => b.Day == blocks[0].Day && b.StartTime == blocks[0].StartTime && b.EndTime == blocks[0].EndTime)
+            .ToList();
+
+        var combinedCapacity = 0;
+        foreach (var block in primaryWindowBlocks)
+        {
+            if (block.ClassroomId.HasValue && classroomLookup.TryGetValue(block.ClassroomId.Value, out var cr))
+                combinedCapacity += cr.Capacity;
+        }
+
+        // Eğer paralel split yoksa combinedCapacity == primaryClassroom.Capacity olur (fallback).
+        var effectiveCapacity = combinedCapacity > 0 ? combinedCapacity : primaryClassroom.Capacity;
 
         return new SectionSnapshot
         {
@@ -257,7 +285,7 @@ public sealed class ConstructionSolver
             EnrolledCount = snap.EnrolledCount,
             ClassroomId = snap.ClassroomId,
             ClassroomName = primaryClassroom.Name,
-            ClassroomCapacity = primaryClassroom.Capacity,
+            ClassroomCapacity = effectiveCapacity,
             ClassroomType = primaryClassroom.Type,
             TheoryClassroomType = snap.TheoryClassroomType,
             LabClassroomType = snap.LabClassroomType,

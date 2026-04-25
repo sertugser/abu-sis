@@ -16,6 +16,10 @@ public record AdminTermDto(
     string YoksisStatus,
     DateTime TermStart,
     DateTime TermEnd,
+    DateTime? OverrideStart,
+    DateTime? OverrideEnd,
+    DateTime EffectiveStart,
+    DateTime EffectiveEnd,
     bool IsActive,
     bool HasAcademicCalendar,
     int CalendarEventCount,
@@ -34,7 +38,9 @@ public record CreateTermDto(
     string TermType,
     string YoksisStatus,
     DateTime TermStart,
-    DateTime TermEnd
+    DateTime TermEnd,
+    DateTime? OverrideStart,
+    DateTime? OverrideEnd
 );
 
 public record UpdateTermDto(
@@ -46,7 +52,9 @@ public record UpdateTermDto(
     string TermType,
     string YoksisStatus,
     DateTime TermStart,
-    DateTime TermEnd
+    DateTime TermEnd,
+    DateTime? OverrideStart,
+    DateTime? OverrideEnd
 );
 
 // DELETED: UpdateTermPhaseOverrideDto — moved to AcademicCalendarDtos.cs

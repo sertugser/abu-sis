@@ -49,7 +49,7 @@ export default function TermProgramTransferPage() {
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const targetTermId = activeTerm?.id ?? null;
   const termStatus = activeTerm?.status;
-  const isTermSuitable = termStatus === 'Draft' || termStatus === 'Preparing';
+  const isTermSuitable = termStatus === 'Active';
   const sourceTerms = useMemo(() => (allTerms ?? []).filter((t) => t.id !== targetTermId), [allTerms, targetTermId]);
   const selectedSourceTerm = sourceTerms.find((t) => t.id === sourceTermId);
 
@@ -170,7 +170,7 @@ export default function TermProgramTransferPage() {
           <AlertTitle>Dönem durumu uygun değil</AlertTitle>
           <AlertDescription>
             Aktif dönem şu anda <strong>{termStatus}</strong> durumunda. Aktarım yapabilmek için dönemin{' '}
-            <strong>Planning</strong> veya <strong>Draft</strong> durumunda olması gerekiyor.
+            <strong>Active</strong> (tarih aralığı içinde ve iptal edilmemiş) olması gerekiyor.
           </AlertDescription>
         </Alert>
       )}

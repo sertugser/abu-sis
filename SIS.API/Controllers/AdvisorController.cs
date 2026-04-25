@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Enums;
@@ -11,7 +12,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/advisor")]
-[Authorize(Roles = "AcademicAdvisor,Instructor")]
+[Authorize]
 public class AdvisorController : ControllerBase
 {
     private readonly ICourseRegistrationService _registrationService;
@@ -24,6 +25,7 @@ public class AdvisorController : ControllerBase
     }
 
     [HttpGet("pending-approvals")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
     public async Task<IActionResult> GetPendingApprovals()
     {
         var instructorId = await GetInstructorIdAsync();
@@ -35,6 +37,7 @@ public class AdvisorController : ControllerBase
     }
 
     [HttpGet("students")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
     public async Task<IActionResult> GetAdvisorStudents(CancellationToken cancellationToken = default)
     {
         var instructorId = await GetInstructorIdAsync();
@@ -66,6 +69,7 @@ public class AdvisorController : ControllerBase
     }
 
     [HttpPost("approve")]
+    [RequirePermission("menu.ders-kayit-duzenleme.approve")]
     public async Task<IActionResult> Approve([FromBody] ApprovalActionDto dto)
     {
         var instructorId = await GetInstructorIdAsync();
@@ -80,6 +84,7 @@ public class AdvisorController : ControllerBase
     }
 
     [HttpPost("reject")]
+    [RequirePermission("menu.ders-kayit-duzenleme.reject")]
     public async Task<IActionResult> Reject([FromBody] ApprovalActionDto dto)
     {
         var instructorId = await GetInstructorIdAsync();

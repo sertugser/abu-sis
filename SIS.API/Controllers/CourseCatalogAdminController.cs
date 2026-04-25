@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
 using SIS.Domain.Entities;
@@ -12,14 +13,16 @@ public record CrossListItemDto(int CourseId, string Code, string Name, int Ects)
 
 [ApiController]
 [Route("api/admin/courses")]
-[Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
+[Authorize]
 public class CourseCatalogAdminController(IAdminCourseCatalogService service, AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission("menu.ders-katalogu.view")]
     public async Task<IActionResult> GetCourses([FromQuery] CourseFilterDto filter)
         => Ok(await service.GetCoursesAsync(filter));
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.ders-katalogu.view")]
     public async Task<IActionResult> GetCourse(int id)
     {
         var result = await service.GetCourseByIdAsync(id);
@@ -27,7 +30,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpPost]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.create")]
     public async Task<IActionResult> CreateCourse([FromBody] CreateCourseDto dto)
     {
         try { return Ok(await service.CreateCourseAsync(dto)); }
@@ -36,7 +39,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.edit")]
     public async Task<IActionResult> UpdateCourse(int id, [FromBody] UpdateCourseDto dto)
     {
         try { return Ok(await service.UpdateCourseAsync(id, dto)); }
@@ -45,7 +48,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.delete")]
     public async Task<IActionResult> DeleteCourse(int id)
     {
         try { await service.DeleteCourseAsync(id); return NoContent(); }
@@ -54,7 +57,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpPost("{id:int}/prerequisites")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.prerequisite")]
     public async Task<IActionResult> AddPrerequisite(int id, [FromBody] AddPrerequisiteDto dto)
     {
         try { await service.AddPrerequisiteAsync(id, dto); return NoContent(); }
@@ -63,7 +66,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpDelete("{id:int}/prerequisites/{requiredCourseId:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.prerequisite")]
     public async Task<IActionResult> RemovePrerequisite(int id, int requiredCourseId)
     {
         try { await service.RemovePrerequisiteAsync(id, requiredCourseId); return NoContent(); }
@@ -71,7 +74,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpPost("{id:int}/equivalencies")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.equivalency")]
     public async Task<IActionResult> AddEquivalency(int id, [FromBody] AddEquivalencyDto dto)
     {
         try { await service.AddEquivalencyAsync(id, dto); return NoContent(); }
@@ -80,11 +83,21 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpDelete("{id:int}/equivalencies/{equivalentCourseId:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.equivalency")]
     public async Task<IActionResult> RemoveEquivalency(int id, int equivalentCourseId)
     {
         try { await service.RemoveEquivalencyAsync(id, equivalentCourseId); return NoContent(); }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+    }
+
+    // Proliz "Diğer Ön Koşul Tanımları" — sadece course-level kural alanları (Min kredi/AKTS, Alttan, Tekil Alma)
+    [HttpPut("{id:int}/prereq-rules")]
+    [RequirePermission("menu.ders-katalogu.edit")]
+    public async Task<IActionResult> UpdatePrereqRules(int id, [FromBody] UpdateCoursePrereqRulesDto dto)
+    {
+        try { return Ok(await service.UpdateCoursePrereqRulesAsync(id, dto)); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     // ── Madde 14: Cross-Listing CRUD ─────────────────────────────────
@@ -92,6 +105,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     // Örn: YZM301 ≡ BIL301 — aynı hoca, aynı sınıf, iki kod.
 
     [HttpGet("{id:int}/cross-lists")]
+    [RequirePermission("menu.ders-katalogu.view")]
     public async Task<IActionResult> GetCrossLists(int id)
     {
         var items = await db.CourseCrossLists
@@ -107,7 +121,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpPost("{id:int}/cross-lists/{linkedCourseId:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.cross-list")]
     public async Task<IActionResult> AddCrossList(int id, int linkedCourseId)
     {
         if (id == linkedCourseId)
@@ -127,7 +141,7 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
     }
 
     [HttpDelete("{id:int}/cross-lists/{linkedCourseId:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.ders-katalogu.cross-list")]
     public async Task<IActionResult> RemoveCrossList(int id, int linkedCourseId)
     {
         var a = await db.CourseCrossLists.FirstOrDefaultAsync(x => x.CourseId == id && x.LinkedCourseId == linkedCourseId);

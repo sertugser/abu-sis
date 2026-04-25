@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -8,14 +9,19 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/curriculum")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class CurriculumController(AppDbContext context) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
     public record CurriculumListDto(
         int Id, int ProgramId, string ProgramName, string ProgramCode,
+        string FacultyName,
         string Version, string? Name, DateTime? StartDate, DateTime? EndDate,
-        bool IsActive, int CourseCount, int TotalEcts, DateTime CreatedAt);
+        bool IsActive, CurriculumStatus Status,
+        int CourseCount, int TotalEcts, int TotalCredit,
+        int CompulsoryCount, int ElectiveCount,
+        int ActiveStudentCount, int TotalStudentCount,
+        DateTime CreatedAt);
 
     public record CurriculumDetailDto(
         int Id, int ProgramId, string ProgramName, string Version, bool IsActive,
@@ -79,18 +85,29 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         int? SuggestedSemesterStart = null, int? SuggestedSemesterEnd = null,
         int? RequiredCourseCount = null, int? RequiredEcts = null);
 
-    // ── GET /api/curriculum?programId=X ─────────────────────────────
+    // ── GET /api/curriculum?programId=X&departmentId=Y&facultyId=Z ──
+    // Filtre önceliği: programId > departmentId > facultyId (en dar olan uygulanır).
+    // Hiçbiri verilmezse tüm müfredatlar döner.
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] int? programId, CancellationToken ct)
+    [RequirePermission("menu.mufredat-islemleri.view")]
+    public async Task<IActionResult> List(
+        [FromQuery] int? programId,
+        [FromQuery] int? departmentId,
+        [FromQuery] int? facultyId,
+        CancellationToken ct)
     {
         var query = context.Curricula
             .AsNoTracking()
-            .Include(c => c.Program)
+            .Include(c => c.Program).ThenInclude(p => p.Department).ThenInclude(d => d.Faculty)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
             .AsQueryable();
 
         if (programId.HasValue)
             query = query.Where(c => c.ProgramId == programId.Value);
+        else if (departmentId.HasValue)
+            query = query.Where(c => c.Program.DepartmentId == departmentId.Value);
+        else if (facultyId.HasValue)
+            query = query.Where(c => c.Program.Department.FacultyId == facultyId.Value);
 
         var list = await query
             .OrderByDescending(c => c.IsActive)
@@ -100,13 +117,20 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 c.ProgramId,
                 c.Program.Name,
                 c.Program.Code,
+                c.Program.Department.Faculty.Name,
                 c.Version,
                 c.Name,
                 c.StartDate,
                 c.EndDate,
                 c.IsActive,
+                c.Status,
                 c.CurriculumCourses.Count,
                 c.CurriculumCourses.Sum(cc => cc.Course.Ects),
+                c.Program.TotalRequiredEcts,
+                c.CurriculumCourses.Count(cc => cc.IsCompulsory),
+                c.CurriculumCourses.Count(cc => !cc.IsCompulsory),
+                context.StudentPrograms.Count(sp => sp.CurriculumId == c.Id && sp.IsActive),
+                context.StudentPrograms.Count(sp => sp.CurriculumId == c.Id),
                 c.CreatedAt))
             .ToListAsync(ct);
 
@@ -115,6 +139,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── GET /api/curriculum/{id} ────────────────────────────────────
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.mufredat-islemleri.view")]
     public async Task<IActionResult> Get(int id, CancellationToken ct)
     {
         var curriculum = await context.Curricula
@@ -162,9 +187,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── POST /api/curriculum ────────────────────────────────────────
     [HttpPost]
+    [RequirePermission("menu.mufredat-islemleri.create")]
     public async Task<IActionResult> Create([FromBody] CreateCurriculumRequest req, CancellationToken ct)
     {
         var program = await context.Set<Domain.Entities.AcademicProgram>()
+            .Include(p => p.Department).ThenInclude(d => d.Faculty)
             .FirstOrDefaultAsync(p => p.Id == req.ProgramId, ct);
         if (program is null)
             return NotFound(new { message = "Program bulunamadı." });
@@ -198,12 +225,17 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
         return Ok(new CurriculumListDto(
             entity.Id, entity.ProgramId, program.Name, program.Code,
+            program.Department.Faculty.Name,
             entity.Version, entity.Name, entity.StartDate, entity.EndDate,
-            entity.IsActive, 0, 0, entity.CreatedAt));
+            entity.IsActive, entity.Status,
+            0, 0, program.TotalRequiredEcts,
+            0, 0, 0, 0,
+            entity.CreatedAt));
     }
 
     // ── PUT /api/curriculum/{id} ────────────────────────────────────
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.mufredat-islemleri.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateCurriculumRequest req, CancellationToken ct)
     {
         var curriculum = await context.Curricula
@@ -253,6 +285,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── DELETE /api/curriculum/{id} ─────────────────────────────────
     [HttpDelete("{id:int}")]
+    [RequirePermission("menu.mufredat-islemleri.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var curriculum = await context.Curricula
@@ -273,6 +306,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── GET /api/curriculum/{id}/courses ─────────────────────────────
     [HttpGet("{id:int}/courses")]
+    [RequirePermission("menu.mufredat-islemleri.view")]
     public async Task<IActionResult> ListCourses(int id, CancellationToken ct)
     {
         var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
@@ -298,6 +332,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── POST /api/curriculum/{id}/courses ────────────────────────────
     [HttpPost("{id:int}/courses")]
+    [RequirePermission("menu.mufredat-islemleri.add-course")]
     public async Task<IActionResult> AddCourse(int id, [FromBody] AddCourseRequest req, CancellationToken ct)
     {
         // Madde 8: Published müfredat kilit — ders eklenip çıkarılamaz
@@ -344,6 +379,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── PUT /api/curriculum/{id}/courses/{courseId} ──────────────────
     [HttpPut("{id:int}/courses/{courseId:int}")]
+    [RequirePermission("menu.mufredat-islemleri.edit-course")]
     public async Task<IActionResult> UpdateCourse(int id, int courseId, [FromBody] UpdateCourseRequest req, CancellationToken ct)
     {
         // Madde 8: Published guard
@@ -376,6 +412,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── DELETE /api/curriculum/{id}/courses/{courseId} ───────────────
     [HttpDelete("{id:int}/courses/{courseId:int}")]
+    [RequirePermission("menu.mufredat-islemleri.remove-course")]
     public async Task<IActionResult> RemoveCourse(int id, int courseId, CancellationToken ct)
     {
         // Madde 8: Published guard
@@ -396,6 +433,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── POST /api/curriculum/{id}/copy ────────────────────────────
     [HttpPost("{id:int}/copy")]
+    [RequirePermission("menu.mufredat-islemleri.copy")]
     public async Task<IActionResult> Copy(int id, [FromBody] CopyCurriculumRequest req, CancellationToken ct)
     {
         var source = await context.Curricula
@@ -493,6 +531,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── POST /api/curriculum/{id}/activate ──────────────────────────
     [HttpPost("{id:int}/activate")]
+    [RequirePermission("menu.mufredat-islemleri.activate")]
     public async Task<IActionResult> Activate(int id, CancellationToken ct)
     {
         var curriculum = await context.Curricula
@@ -520,6 +559,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── GET /api/curriculum/{id}/elective-pools ─────────────────────
     [HttpGet("{id:int}/elective-pools")]
+    [RequirePermission("menu.mufredat-islemleri.view")]
     public async Task<IActionResult> ListPools(int id, CancellationToken ct)
     {
         var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
@@ -544,6 +584,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── POST /api/curriculum/{id}/elective-pools ────────────────────
     [HttpPost("{id:int}/elective-pools")]
+    [RequirePermission("menu.mufredat-islemleri.create-pool")]
     public async Task<IActionResult> CreatePool(int id, [FromBody] CreatePoolRequest req, CancellationToken ct)
     {
         // Madde 8: Published müfredat kilit
@@ -593,6 +634,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── PUT /api/curriculum/{id}/elective-pools/{poolId} ────────────
     [HttpPut("{id:int}/elective-pools/{poolId:int}")]
+    [RequirePermission("menu.mufredat-islemleri.edit-pool")]
     public async Task<IActionResult> UpdatePool(int id, int poolId, [FromBody] UpdatePoolRequest req, CancellationToken ct)
     {
         // Madde 8: Published müfredat kilit
@@ -618,6 +660,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     // ── DELETE /api/curriculum/{id}/elective-pools/{poolId} ─────────
     [HttpDelete("{id:int}/elective-pools/{poolId:int}")]
+    [RequirePermission("menu.mufredat-islemleri.delete-pool")]
     public async Task<IActionResult> DeletePool(int id, int poolId, CancellationToken ct)
     {
         // Madde 8: Published müfredat kilit
@@ -640,7 +683,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     /// <summary>Draft → Published geçişi. Yayınlandıktan sonra ders/havuz değişikliği engellenir.</summary>
     [HttpPost("{id:int}/publish")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.mufredat-islemleri.publish")]
     public async Task<IActionResult> PublishCurriculum(int id, CancellationToken ct)
     {
         var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
@@ -660,7 +703,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
     /// <summary>Published → Archived geçişi. Eski müfredat kapatılır; yeni öğrenci bağlanamaz.</summary>
     [HttpPost("{id:int}/archive")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.mufredat-islemleri.archive")]
     public async Task<IActionResult> ArchiveCurriculum(int id, CancellationToken ct)
     {
         var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
@@ -675,6 +718,119 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         return Ok(new { message = "Müfredat arşive alındı." });
     }
 
+    // ── Müfredat Dönem Kuralları (Proliz "Müfredat Dönem Kuralları" muadili) ─────────────
+
+    public record CurriculumTermRuleDto(
+        int Id,
+        int CurriculumId,
+        CurriculumClassYear ClassYear,
+        CurriculumTermHalf TermHalf,
+        CurriculumTermRuleType RuleType,
+        decimal Value,
+        DateTime CreatedAt,
+        DateTime? UpdatedAt);
+
+    public record CreateTermRuleRequest(
+        CurriculumClassYear ClassYear,
+        CurriculumTermHalf TermHalf,
+        CurriculumTermRuleType RuleType,
+        decimal Value);
+
+    public record UpdateTermRuleRequest(decimal Value);
+
+    [HttpGet("{id:int}/term-rules")]
+    [RequirePermission("menu.mufredat-sinif-donem.view")]
+    public async Task<IActionResult> ListTermRules(int id, CancellationToken ct)
+    {
+        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
+        if (!exists)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var rules = await context.CurriculumTermRules
+            .AsNoTracking()
+            .Where(r => r.CurriculumId == id)
+            .OrderBy(r => r.ClassYear)
+            .ThenBy(r => r.TermHalf)
+            .ThenBy(r => r.RuleType)
+            .Select(r => new CurriculumTermRuleDto(
+                r.Id, r.CurriculumId, r.ClassYear, r.TermHalf, r.RuleType, r.Value, r.CreatedAt, r.UpdatedAt))
+            .ToListAsync(ct);
+
+        return Ok(rules);
+    }
+
+    [HttpPost("{id:int}/term-rules")]
+    [RequirePermission("menu.mufredat-sinif-donem.create")]
+    public async Task<IActionResult> CreateTermRule(int id, [FromBody] CreateTermRuleRequest req, CancellationToken ct)
+    {
+        var curriculum = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var duplicate = await context.CurriculumTermRules.AnyAsync(
+            r => r.CurriculumId == id
+              && r.ClassYear == req.ClassYear
+              && r.TermHalf == req.TermHalf
+              && r.RuleType == req.RuleType,
+            ct);
+        if (duplicate)
+            return BadRequest(new { message = "Bu sınıf/dönem/kural kombinasyonu zaten tanımlı. Var olan kuralı düzenleyin." });
+
+        if (req.Value < 0)
+            return BadRequest(new { message = "Değer negatif olamaz." });
+
+        var entity = new Domain.Entities.CurriculumTermRule
+        {
+            CurriculumId = id,
+            ClassYear = req.ClassYear,
+            TermHalf = req.TermHalf,
+            RuleType = req.RuleType,
+            Value = req.Value,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        context.CurriculumTermRules.Add(entity);
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new CurriculumTermRuleDto(
+            entity.Id, entity.CurriculumId, entity.ClassYear, entity.TermHalf,
+            entity.RuleType, entity.Value, entity.CreatedAt, entity.UpdatedAt));
+    }
+
+    [HttpPut("{id:int}/term-rules/{ruleId:int}")]
+    [RequirePermission("menu.mufredat-sinif-donem.edit")]
+    public async Task<IActionResult> UpdateTermRule(int id, int ruleId, [FromBody] UpdateTermRuleRequest req, CancellationToken ct)
+    {
+        var rule = await context.CurriculumTermRules
+            .FirstOrDefaultAsync(r => r.Id == ruleId && r.CurriculumId == id, ct);
+        if (rule is null)
+            return NotFound(new { message = "Kural bulunamadı." });
+
+        if (req.Value < 0)
+            return BadRequest(new { message = "Değer negatif olamaz." });
+
+        rule.Value = req.Value;
+        rule.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Kural güncellendi." });
+    }
+
+    [HttpDelete("{id:int}/term-rules/{ruleId:int}")]
+    [RequirePermission("menu.mufredat-sinif-donem.delete")]
+    public async Task<IActionResult> DeleteTermRule(int id, int ruleId, CancellationToken ct)
+    {
+        var rule = await context.CurriculumTermRules
+            .FirstOrDefaultAsync(r => r.Id == ruleId && r.CurriculumId == id, ct);
+        if (rule is null)
+            return NotFound(new { message = "Kural bulunamadı." });
+
+        context.CurriculumTermRules.Remove(rule);
+        await context.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+
     // ── Madde 17: Öğrencinin havuz tamamlama durumu ──────────────
     public record PoolProgressDto(
         int PoolId, string PoolCode, string PoolName, string Subtype,
@@ -684,7 +840,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         bool IsFulfilled);
 
     [HttpGet("student/{studentId:int}/pool-status")]
-    [Authorize(Roles = "Student,AcademicAdvisor,DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetPoolStatus(int studentId, CancellationToken ct)
     {
         // Öğrencinin aktif ana müfredatı

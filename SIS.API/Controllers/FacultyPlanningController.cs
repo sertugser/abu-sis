@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/faculty-planning")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class FacultyPlanningController : ControllerBase
 {
     private readonly IFacultyPlanningService _service;
@@ -30,6 +31,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpGet("overview")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetOverview([FromQuery] int facultyId, [FromQuery] int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -41,6 +43,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpGet("sections")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetSections(
         [FromQuery] int facultyId, [FromQuery] int termId,
         [FromQuery] int? departmentId, [FromQuery] string? status,
@@ -58,6 +61,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpPost("assign")]
+    [RequirePermission("menu.ders-programi-olusturma.assign")]
     public async Task<IActionResult> AssignSection([FromBody] AssignSectionRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -71,6 +75,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpDelete("unassign/{sectionId}")]
+    [RequirePermission("menu.ders-programi-olusturma.unassign")]
     public async Task<IActionResult> UnassignSection(int sectionId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -84,6 +89,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpDelete("reset-all/{facultyId}/{termId}")]
+    [RequirePermission("menu.ders-programi-olusturma.reset-all")]
     public async Task<IActionResult> ResetAllSchedules(int facultyId, int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -94,6 +100,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpPost("auto-schedule")]
+    [RequirePermission("menu.ders-programi-olusturma.auto-schedule")]
     public async Task<IActionResult> AutoSchedule([FromBody] AutoScheduleRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -104,6 +111,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpPost("apply-schedule")]
+    [RequirePermission("menu.ders-programi-olusturma.apply")]
     public async Task<IActionResult> ApplySchedule([FromBody] ApplyScheduleRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -120,6 +128,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpGet("available-classrooms")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetAvailableClassrooms(
         [FromQuery] int termId, [FromQuery] DayOfWeek? day,
         [FromQuery] TimeOnly? startTime, [FromQuery] TimeOnly? endTime,
@@ -131,6 +140,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpGet("time-slots")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetTimeSlots([FromQuery] int termId, CancellationToken ct)
     {
         var slots = await _service.GetTimeSlotsAsync(termId, ct);
@@ -138,6 +148,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpGet("conflicts")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetConflicts([FromQuery] int facultyId, [FromQuery] int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -148,6 +159,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpGet("schedule-runs")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetScheduleRuns(
         [FromQuery] int facultyId, [FromQuery] int termId, CancellationToken ct = default)
     {
@@ -159,6 +171,7 @@ public class FacultyPlanningController : ControllerBase
     }
 
     [HttpGet("schedule-runs/{id}")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
     public async Task<IActionResult> GetScheduleRun(int id, CancellationToken ct = default)
     {
         if (!TryGetUserId(out _)) return Unauthorized();

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Recommendation.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -30,7 +31,7 @@ public class RecommendationController : ControllerBase
     }
 
     [HttpGet("my")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.akilli-planlama.view")]
     public async Task<IActionResult> GetMyRecommendations([FromQuery] int pacePreference = 50, CancellationToken cancellationToken = default)
     {
         var studentId = await GetStudentIdAsync(cancellationToken);
@@ -42,7 +43,7 @@ public class RecommendationController : ControllerBase
     }
 
     [HttpGet("difficulty/{courseId:int}")]
-    [Authorize(Roles = "Student,AcademicAdvisor,Instructor,AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
+    [RequirePermission("menu.akilli-planlama.view")]
     public async Task<IActionResult> GetCourseDifficulty(int courseId, CancellationToken cancellationToken = default)
     {
         if (courseId <= 0)
@@ -59,7 +60,7 @@ public class RecommendationController : ControllerBase
     }
 
     [HttpGet("critical-path/{courseId:int}")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.akilli-planlama.view")]
     public async Task<IActionResult> GetCriticalPath(int courseId, CancellationToken cancellationToken = default)
     {
         if (courseId <= 0)

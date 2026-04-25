@@ -1,0 +1,411 @@
+using Microsoft.EntityFrameworkCore;
+using SIS.Domain.Enums;
+using SIS.Domain.Identity;
+
+namespace SIS.Infrastructure.Persistence.Seeds;
+
+/// <summary>
+/// RBAC Phase 1 — DB seed edilen tüm <see cref="Permission"/> kayıtları.
+///
+/// Kapsam:
+///  - Sadece <c>menu.*</c> permission'ları seed edilir (sidebar item'lara bağlı).
+///  - <c>lookup.*</c> permission'ları SEED EDİLMEZ — Karar 7 gereği kod düzeyinde
+///    <see cref="Microsoft.AspNetCore.Authorization.IAuthorizationFilter"/> shortcut ile
+///    her authenticated user'a açık (`RequirePermissionAttribute` içinde hardcoded).
+///  - <c>system.*</c> permission'ları sadece admin UI (PermissionAdminController) için —
+///    sidebar'da gözükmez, RolePermissionSeed'e eklenmez. SystemAdmin kod-shortcut ile erişir.
+///
+/// Inventory: <c>docs/superpowers/plans/2026-04-25-rbac-permission-inventory.md</c> (Sprint 0.1).
+/// </summary>
+public static class PermissionSeed
+{
+    /// <summary>
+    /// Tüm DB-seed edilen permission tanımları. Sprint 0.1 inventory'sinden derive edildi.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Key, PermissionCategory Category, string Description)> All =
+        new List<(string, PermissionCategory, string)>
+    {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 1: Sık Kullanılanlar
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.ana-sayfa.view",                          PermissionCategory.Menu, "Ana sayfa görüntüleme"),
+        ("menu.akademik-takvim.view",                    PermissionCategory.Menu, "Akademik takvim (öğrenci görünümü) görüntüleme"),
+        ("menu.duyurular.view",                          PermissionCategory.Menu, "Duyurular sayfası — Genel İşlemler altındaki link (öğrenci/instructor/advisor)"),
+        ("menu.duyurular-admin.view",                    PermissionCategory.Menu, "Duyurular sayfası — Duyuru Yönetimi altındaki link (admin)"),
+        ("menu.alinan-dersler.view",                     PermissionCategory.Menu, "Alınan dersler listesi görüntüleme"),
+        ("menu.alinan-dersler.statistics",               PermissionCategory.Menu, "Alınan ders not istatistikleri"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 2: Akademik İşlemler
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Akademik Dönem Tanımları
+        ("menu.akademik-donem.view",                     PermissionCategory.Menu, "Akademik dönem listesi görüntüleme"),
+        ("menu.akademik-donem.create",                   PermissionCategory.Menu, "Yeni akademik dönem oluşturma"),
+        ("menu.akademik-donem.edit",                     PermissionCategory.Menu, "Akademik dönem düzenleme"),
+        ("menu.akademik-donem.cancel",                   PermissionCategory.Menu, "Akademik dönem iptal etme"),
+        ("menu.akademik-donem.uncancel",                 PermissionCategory.Menu, "Akademik dönem iptalini geri alma"),
+
+        // Fakülte Tanımları
+        ("menu.fakulte-tanimlari.view",                  PermissionCategory.Menu, "Fakülte listesi görüntüleme"),
+        ("menu.fakulte-tanimlari.create",                PermissionCategory.Menu, "Yeni fakülte oluşturma"),
+        ("menu.fakulte-tanimlari.edit",                  PermissionCategory.Menu, "Fakülte düzenleme"),
+        ("menu.fakulte-tanimlari.delete",                PermissionCategory.Menu, "Fakülte silme"),
+
+        // Bölüm Tanımları
+        ("menu.bolum-tanimlari.view",                    PermissionCategory.Menu, "Bölüm listesi görüntüleme"),
+        ("menu.bolum-tanimlari.create",                  PermissionCategory.Menu, "Yeni bölüm oluşturma"),
+        ("menu.bolum-tanimlari.edit",                    PermissionCategory.Menu, "Bölüm düzenleme"),
+        ("menu.bolum-tanimlari.delete",                  PermissionCategory.Menu, "Bölüm silme"),
+
+        // Program Tanımları
+        ("menu.program-tanimlari.view",                  PermissionCategory.Menu, "Program listesi görüntüleme"),
+        ("menu.program-tanimlari.create",                PermissionCategory.Menu, "Yeni program oluşturma"),
+        ("menu.program-tanimlari.edit",                  PermissionCategory.Menu, "Program düzenleme"),
+        ("menu.program-tanimlari.delete",                PermissionCategory.Menu, "Program silme"),
+
+        // Akademik Takvim Yönetimi (admin CRUD)
+        ("menu.akademik-takvim-yonetimi.view",           PermissionCategory.Menu, "Akademik takvim yönetim sayfası görüntüleme"),
+        ("menu.akademik-takvim-yonetimi.edit",           PermissionCategory.Menu, "Akademik takvim güncelleme (upsert)"),
+        ("menu.akademik-takvim-yonetimi.override",       PermissionCategory.Menu, "Akademik takvim faz override"),
+
+        // Takvim Oluşturucu
+        ("menu.akademik-takvim-olusturma.view",          PermissionCategory.Menu, "Takvim oluşturucu görüntüleme"),
+        ("menu.akademik-takvim-olusturma.edit",          PermissionCategory.Menu, "Şablon/holiday/draft düzenleme"),
+        ("menu.akademik-takvim-olusturma.delete",        PermissionCategory.Menu, "Draft silme"),
+        ("menu.akademik-takvim-olusturma.generate",      PermissionCategory.Menu, "Yeni takvim üretme"),
+        ("menu.akademik-takvim-olusturma.simulate",      PermissionCategory.Menu, "What-if simülasyonu"),
+        ("menu.akademik-takvim-olusturma.apply",         PermissionCategory.Menu, "Üretilen takvimi uygula"),
+        ("menu.akademik-takvim-olusturma.rollback",      PermissionCategory.Menu, "Uygulanan takvimi geri al"),
+
+        // ÖSYM Kayıt Takvimi
+        ("menu.osym-kayit-takvimi.view",                 PermissionCategory.Menu, "ÖSYM kayıt takvimi listesi"),
+        ("menu.osym-kayit-takvimi.create",               PermissionCategory.Menu, "Yeni ÖSYM kayıt takvimi"),
+        ("menu.osym-kayit-takvimi.edit",                 PermissionCategory.Menu, "ÖSYM kayıt takvimi düzenleme"),
+        ("menu.osym-kayit-takvimi.delete",               PermissionCategory.Menu, "ÖSYM kayıt takvimi silme"),
+
+        // Program Kontenjan Bilgileri
+        ("menu.program-kontenjan.view",                  PermissionCategory.Menu, "Program kontenjan listesi"),
+        ("menu.program-kontenjan.create",                PermissionCategory.Menu, "Yeni program kontenjan"),
+        ("menu.program-kontenjan.edit",                  PermissionCategory.Menu, "Program kontenjan düzenleme"),
+        ("menu.program-kontenjan.delete",                PermissionCategory.Menu, "Program kontenjan silme"),
+
+        // Sınıf Atlatma Kuralları
+        ("menu.sinif-atlatma-kurallari.view",            PermissionCategory.Menu, "Sınıf atlatma kuralları listesi"),
+        ("menu.sinif-atlatma-kurallari.create",          PermissionCategory.Menu, "Yeni promotion rule"),
+        ("menu.sinif-atlatma-kurallari.edit",            PermissionCategory.Menu, "Promotion rule düzenleme"),
+        ("menu.sinif-atlatma-kurallari.delete",          PermissionCategory.Menu, "Promotion rule silme"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 4: Ders ve Dönem İşlemleri (öğrenci tarafı)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Ders Kayıt
+        ("menu.ders-kayit.view",                         PermissionCategory.Menu, "Ders kayıt sayfası görüntüleme"),
+        ("menu.ders-kayit.plan",                         PermissionCategory.Menu, "Ders kayıt planı oluşturma (soft hold)"),
+        ("menu.ders-kayit.submit",                       PermissionCategory.Menu, "Ders kayıt onayı gönderme"),
+        ("menu.ders-kayit.drop",                         PermissionCategory.Menu, "Ders bırakma (drop)"),
+        ("menu.ders-kayit.withdraw",                     PermissionCategory.Menu, "Ders çekilme (withdraw)"),
+
+        // Akıllı Planlama
+        ("menu.akilli-planlama.view",                    PermissionCategory.Menu, "Akıllı ders önerileri sayfası"),
+        ("menu.akilli-planlama.recommendation",          PermissionCategory.Menu, "Kişisel ders önerisi"),
+        ("menu.akilli-planlama.difficulty",              PermissionCategory.Menu, "Ders zorluk metriği"),
+        ("menu.akilli-planlama.critical-path",           PermissionCategory.Menu, "Kritik yol grafiği"),
+        ("menu.akilli-planlama.forecast",                PermissionCategory.Menu, "Ders talep tahmini"),
+        ("menu.akilli-planlama.simulate",                PermissionCategory.Menu, "Talep simülasyonu"),
+
+        // Diğer öğrenci sayfaları
+        ("menu.plan.view",                               PermissionCategory.Menu, "Kayıt planım (soft hold) görüntüleme"),
+        ("menu.not-listesi.view",                        PermissionCategory.Menu, "Not listesi (geçmiş) görüntüleme"),
+        ("menu.devamsizlik-durumu.view",                 PermissionCategory.Menu, "Devamsızlık durumu görüntüleme"),
+        ("menu.donem-ortalamalari.view",                 PermissionCategory.Menu, "Dönem ortalamaları görüntüleme"),
+        ("menu.mufredat-durum.view",                     PermissionCategory.Menu, "Müfredat durum + havuz tamamlama"),
+        ("menu.transkript.view",                         PermissionCategory.Menu, "Transkript görüntüleme/yazdırma"),
+        ("menu.transkript-senaryosu.view",               PermissionCategory.Menu, "Transkript senaryosu (what-if)"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 5: Ders İşlemleri (admin + instructor + advisor)
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Ders Kataloğu
+        ("menu.ders-katalogu.view",                      PermissionCategory.Menu, "Ders kataloğu görüntüleme"),
+        ("menu.ders-katalogu.create",                    PermissionCategory.Menu, "Yeni ders ekleme"),
+        ("menu.ders-katalogu.edit",                      PermissionCategory.Menu, "Ders düzenleme + prereq-rules"),
+        ("menu.ders-katalogu.delete",                    PermissionCategory.Menu, "Ders silme"),
+        ("menu.ders-katalogu.prerequisite",              PermissionCategory.Menu, "Ön koşul ekle/sil"),
+        ("menu.ders-katalogu.equivalency",               PermissionCategory.Menu, "Eşdeğer ders ekle/sil"),
+        ("menu.ders-katalogu.cross-list",                PermissionCategory.Menu, "Cross-list ekle/sil"),
+        ("menu.ders-katalogu.access-policy.view",        PermissionCategory.Menu, "Ders erişim politikası listesi"),
+        ("menu.ders-katalogu.access-policy.create",      PermissionCategory.Menu, "Ders erişim politikası oluştur"),
+        ("menu.ders-katalogu.access-policy.delete",      PermissionCategory.Menu, "Ders erişim politikası sil"),
+        ("menu.ders-katalogu.access-rule.view",          PermissionCategory.Menu, "Ders erişim kuralı listesi"),
+        ("menu.ders-katalogu.access-rule.create",        PermissionCategory.Menu, "Ders erişim kuralı oluştur"),
+        ("menu.ders-katalogu.access-rule.edit",          PermissionCategory.Menu, "Ders erişim kuralı düzenle"),
+        ("menu.ders-katalogu.access-rule.delete",        PermissionCategory.Menu, "Ders erişim kuralı sil"),
+
+        // Müfredat İşlemleri
+        ("menu.mufredat-islemleri.view",                 PermissionCategory.Menu, "Müfredat listesi/detay görüntüleme"),
+        ("menu.mufredat-islemleri.create",               PermissionCategory.Menu, "Yeni müfredat oluşturma"),
+        ("menu.mufredat-islemleri.edit",                 PermissionCategory.Menu, "Müfredat düzenleme"),
+        ("menu.mufredat-islemleri.delete",               PermissionCategory.Menu, "Müfredat silme"),
+        ("menu.mufredat-islemleri.add-course",           PermissionCategory.Menu, "Müfredata ders ekleme"),
+        ("menu.mufredat-islemleri.edit-course",          PermissionCategory.Menu, "Müfredat dersi düzenleme"),
+        ("menu.mufredat-islemleri.remove-course",        PermissionCategory.Menu, "Müfredattan ders çıkarma"),
+        ("menu.mufredat-islemleri.copy",                 PermissionCategory.Menu, "Müfredat kopyalama"),
+        ("menu.mufredat-islemleri.activate",             PermissionCategory.Menu, "Müfredat aktifleştirme"),
+        ("menu.mufredat-islemleri.create-pool",          PermissionCategory.Menu, "Seçmeli havuz ekleme"),
+        ("menu.mufredat-islemleri.edit-pool",            PermissionCategory.Menu, "Seçmeli havuz düzenleme"),
+        ("menu.mufredat-islemleri.delete-pool",          PermissionCategory.Menu, "Seçmeli havuz silme"),
+        ("menu.mufredat-islemleri.publish",              PermissionCategory.Menu, "Müfredat yayınlama"),
+        ("menu.mufredat-islemleri.archive",              PermissionCategory.Menu, "Müfredat arşivleme"),
+
+        // Müfredat Sınıf Dönem Tanımları
+        ("menu.mufredat-sinif-donem.view",               PermissionCategory.Menu, "Müfredat term-rules listesi"),
+        ("menu.mufredat-sinif-donem.create",             PermissionCategory.Menu, "Yeni term-rule oluşturma"),
+        ("menu.mufredat-sinif-donem.edit",               PermissionCategory.Menu, "Term-rule düzenleme"),
+        ("menu.mufredat-sinif-donem.delete",             PermissionCategory.Menu, "Term-rule silme"),
+
+        // Seçmeli Ders Grupları
+        ("menu.secmeli-ders-gruplari.view",              PermissionCategory.Menu, "Elective grup listesi"),
+        ("menu.secmeli-ders-gruplari.create",            PermissionCategory.Menu, "Yeni elective grup"),
+        ("menu.secmeli-ders-gruplari.edit",              PermissionCategory.Menu, "Elective grup düzenleme"),
+        ("menu.secmeli-ders-gruplari.delete",            PermissionCategory.Menu, "Elective grup silme"),
+        ("menu.secmeli-ders-gruplari.add-course",        PermissionCategory.Menu, "Elective gruba ders ekleme"),
+        ("menu.secmeli-ders-gruplari.remove-course",     PermissionCategory.Menu, "Elective gruptan ders çıkarma"),
+
+        // Ders Açma İşlemleri
+        ("menu.ders-acma-islemleri.view",                PermissionCategory.Menu, "Ders açma listesi + curriculum/instructors lookup"),
+        ("menu.ders-acma-islemleri.open",                PermissionCategory.Menu, "Tek ders açma (section)"),
+        ("menu.ders-acma-islemleri.bulk-open",           PermissionCategory.Menu, "Toplu ders açma"),
+        ("menu.ders-acma-islemleri.edit",                PermissionCategory.Menu, "Section düzenleme"),
+        ("menu.ders-acma-islemleri.close-section",       PermissionCategory.Menu, "Section kapatma"),
+        ("menu.ders-acma-islemleri.close-all",           PermissionCategory.Menu, "Tüm dersi kapatma"),
+        ("menu.ders-acma-islemleri.reactivate",          PermissionCategory.Menu, "Section yeniden aktifleştirme"),
+
+        // Şubelendirme İşlemleri (sidebar item; backend henüz yok ama placeholder)
+        ("menu.subelendirme-islemleri.view",             PermissionCategory.Menu, "Şubelendirme işlemleri sayfası"),
+
+        // Ders Kontenjan İşlemleri (sidebar placeholder)
+        ("menu.ders-kontenjan-islemleri.view",           PermissionCategory.Menu, "Ders kontenjan işlemleri sayfası"),
+
+        // Ders Saatleri Yönetimi
+        ("menu.ders-saatleri-yonetimi.view",             PermissionCategory.Menu, "Time slot listesi"),
+        ("menu.ders-saatleri-yonetimi.create",           PermissionCategory.Menu, "Yeni time slot"),
+        ("menu.ders-saatleri-yonetimi.edit",             PermissionCategory.Menu, "Time slot düzenleme"),
+        ("menu.ders-saatleri-yonetimi.delete",           PermissionCategory.Menu, "Time slot silme"),
+        ("menu.ders-saatleri-yonetimi.regenerate",       PermissionCategory.Menu, "Time slot grid yeniden üret"),
+
+        // Ders Programı Kısıtlamaları
+        ("menu.ders-programi-kisitlamalari.view",        PermissionCategory.Menu, "Constraint görüntüleme (profile/distribution/analytics)"),
+        ("menu.ders-programi-kisitlamalari.create",      PermissionCategory.Menu, "Yeni constraint/profile/distribution"),
+        ("menu.ders-programi-kisitlamalari.edit",        PermissionCategory.Menu, "Constraint parametre/category/weight düzenleme"),
+        ("menu.ders-programi-kisitlamalari.delete",      PermissionCategory.Menu, "Constraint/profile/distribution silme"),
+        ("menu.ders-programi-kisitlamalari.toggle",      PermissionCategory.Menu, "Constraint aktif/pasif toggle"),
+        ("menu.ders-programi-kisitlamalari.snapshot",    PermissionCategory.Menu, "Constraint analytics snapshot"),
+        ("menu.ders-programi-kisitlamalari.simulate",    PermissionCategory.Menu, "Constraint simülasyon (move/suggest/change)"),
+        ("menu.ders-programi-kisitlamalari.apply",       PermissionCategory.Menu, "Constraint profile uygulama"),
+        ("menu.ders-programi-kisitlamalari.exception",   PermissionCategory.Menu, "Constraint exception oluştur/sil"),
+        ("menu.ders-programi-kisitlamalari.exception-request",  PermissionCategory.Menu, "Exception talebi oluştur (authenticated)"),
+        ("menu.ders-programi-kisitlamalari.exception-my",       PermissionCategory.Menu, "Kendi exception talepleri"),
+        ("menu.ders-programi-kisitlamalari.exception-view",     PermissionCategory.Menu, "Exception talep detayı"),
+        ("menu.ders-programi-kisitlamalari.exception-pending",  PermissionCategory.Menu, "Onay bekleyen exception talepleri"),
+        ("menu.ders-programi-kisitlamalari.exception-approve",  PermissionCategory.Menu, "Exception talebini onayla"),
+        ("menu.ders-programi-kisitlamalari.exception-reject",   PermissionCategory.Menu, "Exception talebini reddet"),
+
+        // Ders Programı Oluşturma
+        ("menu.ders-programi-olusturma.view",            PermissionCategory.Menu, "Faculty planning + scheduling görüntüleme"),
+        ("menu.ders-programi-olusturma.assign",          PermissionCategory.Menu, "Section ataması"),
+        ("menu.ders-programi-olusturma.unassign",        PermissionCategory.Menu, "Section atama iptali"),
+        ("menu.ders-programi-olusturma.reset-all",       PermissionCategory.Menu, "Faculty/term reset-all"),
+        ("menu.ders-programi-olusturma.auto-schedule",   PermissionCategory.Menu, "Otomatik schedule (faculty + batch)"),
+        ("menu.ders-programi-olusturma.apply",           PermissionCategory.Menu, "Schedule uygulama"),
+        ("menu.ders-programi-olusturma.validate",        PermissionCategory.Menu, "Schedule validate (existing + new)"),
+        ("menu.ders-programi-olusturma.suggest",         PermissionCategory.Menu, "Schedule önerisi"),
+        ("menu.ders-programi-olusturma.export",          PermissionCategory.Menu, "Excel export"),
+        ("menu.ders-programi-olusturma.export-pdf",      PermissionCategory.Menu, "PDF export"),
+        ("menu.ders-programi-olusturma.import",          PermissionCategory.Menu, "Schedule import (preview + apply)"),
+        ("menu.ders-programi-olusturma.swap",            PermissionCategory.Menu, "Section swap"),
+        ("menu.ders-programi-olusturma.lock",            PermissionCategory.Menu, "Section lock"),
+        ("menu.ders-programi-olusturma.unlock",          PermissionCategory.Menu, "Section unlock"),
+
+        // Öğretim Elemanı Atama
+        ("menu.ogretim-elemani-atama.view",              PermissionCategory.Menu, "Öğretim elemanı atama + workload"),
+        ("menu.ogretim-elemani-atama.bulk-assign",       PermissionCategory.Menu, "Toplu öğretim elemanı atama"),
+
+        // Dönem Programı Aktarım
+        ("menu.donem-programi-aktarim.view",             PermissionCategory.Menu, "Önceki dönem dersleri görüntüleme"),
+        ("menu.donem-programi-aktarim.transfer",         PermissionCategory.Menu, "Önceki dönemden ders aktarma"),
+
+        // Derslik Doluluk Tablosu
+        ("menu.derslik-doluluk.view",                    PermissionCategory.Menu, "Derslik doluluk tablosu (scheduling dashboard)"),
+        ("menu.derslik-doluluk.export",                  PermissionCategory.Menu, "Derslik doluluk CSV export"),
+
+        // Ders Veren Öğretim Üyeleri (sidebar placeholder)
+        ("menu.ders-veren-ogretim-uyeleri.view",         PermissionCategory.Menu, "Ders veren öğretim üyeleri sayfası"),
+
+        // Program Onayı
+        ("menu.program-onayi.view",                      PermissionCategory.Menu, "Program onayı durum görüntüleme"),
+        ("menu.program-onayi.approve",                   PermissionCategory.Menu, "Faculty schedule onayla"),
+        ("menu.program-onayi.revoke",                    PermissionCategory.Menu, "Faculty schedule onayını geri al"),
+
+        // Sınıf Listeleri
+        ("menu.sinif-listeleri.view",                    PermissionCategory.Menu, "Sınıf listeleri görüntüleme"),
+
+        // Dönem Kapatma İşlemleri
+        ("menu.donem-kapatma.view",                      PermissionCategory.Menu, "Dönem kapatma overview/status/preview"),
+        ("menu.donem-kapatma.lock-grades",               PermissionCategory.Menu, "Notları kilitleme"),
+        ("menu.donem-kapatma.unlock-grades",             PermissionCategory.Menu, "Not kilidini açma"),
+        ("menu.donem-kapatma.calculate-gpa",             PermissionCategory.Menu, "Toplu GPA hesaplama"),
+        ("menu.donem-kapatma.open-new-term",             PermissionCategory.Menu, "Yeni dönem açma"),
+
+        // Derslerim (instructor + paylaşımlı)
+        ("menu.derslerim.view",                          PermissionCategory.Menu, "Derslerim sayfası (my-sections, profile, context)"),
+
+        // Ders Programım
+        ("menu.ders-programim.view",                     PermissionCategory.Menu, "Ders programım görüntüleme"),
+        ("menu.ders-programim.edit",                     PermissionCategory.Menu, "Section schedule apply"),
+
+        // Not Girişi
+        ("menu.not-girisi.view",                         PermissionCategory.Menu, "Not girişi sayfası (components/grades/criteria)"),
+        ("menu.not-girisi.edit",                         PermissionCategory.Menu, "Bileşen + grading criteria düzenleme"),
+        ("menu.not-girisi.submit",                       PermissionCategory.Menu, "Toplu not gönderme"),
+        ("menu.not-girisi.export",                       PermissionCategory.Menu, "Excel şablon indirme"),
+        ("menu.not-girisi.import",                       PermissionCategory.Menu, "Excel import (preview + apply)"),
+        ("menu.not-girisi.finalize",                     PermissionCategory.Menu, "Section sonuçlandırma"),
+        ("menu.not-girisi.unfinalize",                   PermissionCategory.Menu, "Sonuçlandırmayı geri alma"),
+
+        // Danışman Ders Kısıtları
+        ("menu.danisman-ders-kisitlari.view",            PermissionCategory.Menu, "Advisor ders kısıtları görüntüleme"),
+        ("menu.danisman-ders-kisitlari.create",          PermissionCategory.Menu, "Yeni advisor kısıt"),
+        ("menu.danisman-ders-kisitlari.edit",            PermissionCategory.Menu, "Advisor kısıt düzenleme"),
+        ("menu.danisman-ders-kisitlari.delete",          PermissionCategory.Menu, "Advisor kısıt silme"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 6: Öğrenci İşlemleri
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.ogrenci-rehberi.view",                    PermissionCategory.Menu, "Öğrenci listesi/detay görüntüleme"),
+        ("menu.ogrenci-rehberi.create",                  PermissionCategory.Menu, "Yeni öğrenci oluşturma"),
+        ("menu.ogrenci-rehberi.eligibility",             PermissionCategory.Menu, "Öğrenci ders uygunluk analizi"),
+
+        // Sidebar placeholder sayfaları (Faz 4 — backend stub)
+        ("menu.ogrenci-no-degistirme.view",              PermissionCategory.Menu, "Öğrenci no değiştirme sayfası"),
+        ("menu.sinif-atlatma-islemleri.view",            PermissionCategory.Menu, "Sınıf atlatma işlemleri sayfası"),
+        ("menu.sinif-atlatma-islemleri.promote",         PermissionCategory.Menu, "Sınıf atlatma uygulama"),
+        ("menu.sinif-atlatma-islemleri.rollback",        PermissionCategory.Menu, "Sınıf atlatmayı geri alma"),
+        ("menu.sinif-atlatma-islemleri.export",          PermissionCategory.Menu, "Promotion sonuçlarını export"),
+        ("menu.toplu-danisman-atama.view",               PermissionCategory.Menu, "Toplu danışman atama sayfası"),
+        ("menu.toplu-danisman-atama.assign",             PermissionCategory.Menu, "Tek/toplu danışman ataması"),
+        ("menu.toplu-staj-danisman-atama.view",          PermissionCategory.Menu, "Toplu staj danışman atama sayfası"),
+        ("menu.toplu-mufredat-atama.view",               PermissionCategory.Menu, "Toplu müfredat atama sayfası"),
+        ("menu.toplu-ders-kaydi.view",                   PermissionCategory.Menu, "Toplu ders kaydı sayfası"),
+        ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
+        ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
+        ("menu.ders-kayit-duzenleme.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
+        ("menu.subeler-arasi-transfer.view",             PermissionCategory.Menu, "Şubeler arası öğrenci transfer sayfası"),
+        ("menu.dersler-arasi-transfer.view",             PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
+        ("menu.harf-notu-duzenleme.view",                PermissionCategory.Menu, "Harf notu düzenleme sayfası"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 7: Anketler
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.ders-degerlendirme.view",                 PermissionCategory.Menu, "Ders değerlendirme listesi/active period"),
+        ("menu.ders-degerlendirme.submit",               PermissionCategory.Menu, "Ders değerlendirme gönderme"),
+        ("menu.degerlendirme-sonuclari.view",            PermissionCategory.Menu, "Değerlendirme sonuçları (section/department)"),
+        ("menu.degerlendirme-donemi-yonetimi.view",      PermissionCategory.Menu, "Değerlendirme dönemi yönetimi listesi"),
+        ("menu.degerlendirme-donemi-yonetimi.open",      PermissionCategory.Menu, "Değerlendirme dönemi açma"),
+        ("menu.degerlendirme-donemi-yonetimi.close",     PermissionCategory.Menu, "Değerlendirme dönemi kapatma"),
+        ("menu.degerlendirme-donemi-yonetimi.create",    PermissionCategory.Menu, "Değerlendirme sorusu oluşturma"),
+        ("menu.degerlendirme-donemi-yonetimi.edit",      PermissionCategory.Menu, "Değerlendirme sorusu düzenleme"),
+        ("menu.degerlendirme-donemi-yonetimi.delete",    PermissionCategory.Menu, "Değerlendirme sorusu silme"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 8: Kaynak Yönetimi
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.derslik-yonetimi.view",                   PermissionCategory.Menu, "Derslik listesi/detay"),
+        ("menu.derslik-yonetimi.create",                 PermissionCategory.Menu, "Yeni derslik"),
+        ("menu.derslik-yonetimi.edit",                   PermissionCategory.Menu, "Derslik düzenleme"),
+        ("menu.derslik-yonetimi.delete",                 PermissionCategory.Menu, "Derslik silme"),
+        ("menu.derslik-fakulte-atamasi.view",            PermissionCategory.Menu, "Derslik-fakülte ataması listesi"),
+        ("menu.derslik-fakulte-atamasi.suggest",         PermissionCategory.Menu, "Atama önerisi"),
+        ("menu.derslik-fakulte-atamasi.create",          PermissionCategory.Menu, "Atama oluştur (tek/toplu)"),
+        ("menu.derslik-fakulte-atamasi.delete",          PermissionCategory.Menu, "Atama sil"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 9: Duyuru Yönetimi
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.duyuru-yonetimi.view",                    PermissionCategory.Menu, "Internal announcement (all) listesi"),
+        ("menu.duyuru-yonetimi.create",                  PermissionCategory.Menu, "Yeni internal announcement"),
+        ("menu.duyuru-yonetimi.edit",                    PermissionCategory.Menu, "Internal announcement düzenleme"),
+        ("menu.duyuru-yonetimi.delete",                  PermissionCategory.Menu, "Internal announcement silme"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 10: Hesabım
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.sifre-degistir.view",                     PermissionCategory.Menu, "Şifre değiştir sayfası (herkes)"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 11.1: Yönetim → Kullanıcı İşlemleri
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.kullanici-tanimlama.view",                PermissionCategory.Menu, "Kullanıcı listesi/detay"),
+        ("menu.kullanici-tanimlama.update-roles",        PermissionCategory.Menu, "Kullanıcı rolleri güncelleme"),
+        ("menu.kullanici-tanimlama.reset-password",      PermissionCategory.Menu, "Kullanıcı şifre sıfırlama"),
+        ("menu.kullanici-tanimlama.set-status",          PermissionCategory.Menu, "Kullanıcı aktif/pasif durumu"),
+        ("menu.personel-listesi.view",                   PermissionCategory.Menu, "Personel (instructor) listesi"),
+        ("menu.personel-listesi.create",                 PermissionCategory.Menu, "Yeni personel oluşturma"),
+        ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası"),
+        ("menu.kullanici-rapor-gruplari.view",           PermissionCategory.Menu, "Kullanıcı rapor grupları sayfası"),
+        ("menu.kullanici-grup-sinirlandirmalar.view",    PermissionCategory.Menu, "Kullanıcı grup sınırlandırmalar sayfası"),
+        ("menu.kullanici-rapor-tasarim-gruplari.view",   PermissionCategory.Menu, "Kullanıcı rapor tasarım grupları sayfası"),
+        ("menu.kullanici-vekalet-islemleri.view",        PermissionCategory.Menu, "Kullanıcı vekalet işlemleri sayfası"),
+        ("menu.audit-log.view",                          PermissionCategory.Menu, "Denetim kayıtları listesi/stats/anomalies"),
+        ("menu.audit-log.export",                        PermissionCategory.Menu, "Denetim kayıtları CSV export"),
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Modül 11.2: Yönetim → Genel Ayarlar
+        // ═══════════════════════════════════════════════════════════════════════════
+        ("menu.universite-bilgileri.view",               PermissionCategory.Menu, "Üniversite bilgileri sayfası"),
+        ("menu.kurumsal-entegrasyon-tanimlari.view",     PermissionCategory.Menu, "Kurumsal entegrasyon tanımları sayfası"),
+        ("menu.belge-sinirlandirmalar.view",             PermissionCategory.Menu, "Belge sınırlandırmalar sayfası"),
+        ("menu.web-modul-ayarlari.view",                 PermissionCategory.Menu, "Web modül ayarları sayfası"),
+        ("menu.system-config.view",                      PermissionCategory.Menu, "Sistem konfigürasyonu görüntüleme"),
+        ("menu.system-config.edit",                      PermissionCategory.Menu, "Sistem konfigürasyonu düzenleme"),
+        ("menu.system-config.export",                    PermissionCategory.Menu, "Sistem konfigürasyonu export"),
+        ("menu.system-config.import",                    PermissionCategory.Menu, "Sistem konfigürasyonu import"),
+        ("menu.ebys-imza-yetkilileri.view",              PermissionCategory.Menu, "EBYS imza yetkilileri sayfası"),
+        ("menu.fakulte-imza-yukleme.view",               PermissionCategory.Menu, "Fakülte imza yükleme sayfası"),
+
+        // ─── system.* (Phase 1) ─────────────────────────────────────────────
+        // Sidebar'da görünmeyen, sadece SystemAdministrator'ın admin UI'da kullandığı permission'lar.
+        // Sprint 2 PermissionAdminController bu key'leri kullanır. RolePermissionSeed'e eklenmez —
+        // SystemAdmin kod-shortcut ile zaten otomatik erişir (Karar 4).
+        ("system.permission.view",                       PermissionCategory.System, "Permission tablosu görüntüleme (admin UI)"),
+        ("system.permission.assign",                     PermissionCategory.System, "Role permission atama (admin UI)"),
+    };
+
+    /// <summary>
+    /// Merge seed. Mevcut Permissions tablosunda olmayan key'leri ekler; mevcutlara dokunmaz.
+    /// Sprint 5+ kapsamında controller migration sırasında yeni permission key'leri eklendikçe
+    /// her uygulama açılışında otomatik senkronize olur. Mevcut RolePermission ilişkileri korunur.
+    /// </summary>
+    public static async Task SeedAsync(AppDbContext context, CancellationToken ct = default)
+    {
+        var existingKeys = await context.Permissions
+            .Select(p => p.Key)
+            .ToListAsync(ct);
+        var existingSet = new HashSet<string>(existingKeys, StringComparer.Ordinal);
+
+        var missing = All
+            .Where(p => !existingSet.Contains(p.Key))
+            .Select(p => new Permission
+            {
+                Key = p.Key,
+                Category = p.Category,
+                Description = p.Description,
+                CreatedAt = DateTime.UtcNow,
+            })
+            .ToList();
+
+        if (missing.Count == 0) return;
+
+        context.Permissions.AddRange(missing);
+        await context.SaveChangesAsync(ct);
+    }
+}

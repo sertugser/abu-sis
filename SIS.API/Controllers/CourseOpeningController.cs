@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
 using SIS.Domain.Enums;
@@ -11,13 +12,14 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/course-opening")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class CourseOpeningController(ICourseOpeningService courseOpeningService, AppDbContext context) : ControllerBase
 {
     private readonly ICourseOpeningService _courseOpeningService = courseOpeningService;
     private readonly AppDbContext _context = context;
 
     [HttpGet("list")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
     public async Task<IActionResult> GetOpenedCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -28,6 +30,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpGet("curriculum-courses")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
     public async Task<IActionResult> GetCurriculumCoursesForOpening([FromQuery] int departmentId, [FromQuery] int termId, [FromQuery] bool showAll = false, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -38,6 +41,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpGet("instructors")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
     public async Task<IActionResult> GetDepartmentInstructors([FromQuery] int departmentId, [FromQuery] int? termId = null, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -48,6 +52,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpPost("open")]
+    [RequirePermission("menu.ders-acma-islemleri.open")]
     public async Task<IActionResult> OpenCourse([FromQuery] int departmentId, [FromQuery] int termId, [FromBody] OpenCourseRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -65,6 +70,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpPost("bulk-open")]
+    [RequirePermission("menu.ders-acma-islemleri.bulk-open")]
     public async Task<IActionResult> BulkOpenCourses([FromQuery] int departmentId, [FromQuery] int termId, [FromBody] BulkOpenCoursesRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -75,6 +81,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpPut("section")]
+    [RequirePermission("menu.ders-acma-islemleri.edit")]
     public async Task<IActionResult> UpdateSection([FromBody] UpdateOpenedSectionRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -101,6 +108,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpDelete("section/{id}")]
+    [RequirePermission("menu.ders-acma-islemleri.close-section")]
     public async Task<IActionResult> CloseSection(int id, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -126,6 +134,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpDelete("course/{courseId}")]
+    [RequirePermission("menu.ders-acma-islemleri.close-all")]
     public async Task<IActionResult> CloseAllSections(int courseId, [FromQuery] int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -147,6 +156,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpPut("section/{id}/reactivate")]
+    [RequirePermission("menu.ders-acma-islemleri.reactivate")]
     public async Task<IActionResult> ReactivateSection(int id, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -172,6 +182,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpPost("bulk-assign-instructor")]
+    [RequirePermission("menu.ogretim-elemani-atama.bulk-assign")]
     public async Task<IActionResult> BulkAssignInstructor(
         [FromQuery] int departmentId, [FromQuery] int termId,
         [FromBody] BulkAssignInstructorRequest request, CancellationToken ct)
@@ -184,6 +195,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpGet("instructors/{instructorId}/workload")]
+    [RequirePermission("menu.ogretim-elemani-atama.view")]
     public async Task<IActionResult> GetInstructorWorkload(int instructorId, [FromQuery] int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -241,6 +253,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpGet("previous-term-courses")]
+    [RequirePermission("menu.donem-programi-aktarim.view")]
     public async Task<IActionResult> GetPreviousTermCourses(
         [FromQuery] int departmentId, [FromQuery] int sourceTermId, [FromQuery] int targetTermId, CancellationToken ct)
     {
@@ -252,6 +265,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpPost("transfer-from-term")]
+    [RequirePermission("menu.donem-programi-aktarim.transfer")]
     public async Task<IActionResult> TransferFromTerm([FromBody] TransferFromTermRequest request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -262,6 +276,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     }
 
     [HttpGet("external-courses")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
     public async Task<IActionResult> GetExternalCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();

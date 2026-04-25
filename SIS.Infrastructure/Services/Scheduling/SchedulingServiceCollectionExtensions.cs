@@ -30,6 +30,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEvaluator, LunchBreakEvaluator>();
         services.AddScoped<IConstraintEvaluator, MaxConsecutiveHoursEvaluator>();
         services.AddScoped<IConstraintEvaluator, TheoryLabDaySplitEvaluator>();
+        services.AddScoped<IConstraintEvaluator, FaceToFaceSlotRestrictionEvaluator>();
 
         // Soft constraint evaluators
         services.AddScoped<IConstraintEvaluator, OccupancyEvaluator>();

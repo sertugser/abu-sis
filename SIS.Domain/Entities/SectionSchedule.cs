@@ -14,8 +14,13 @@ public class SectionSchedule
     public CourseSection CourseSection { get; set; } = null!;
     public int TimeSlotId { get; set; }
     public TimeSlot TimeSlot { get; set; } = null!;
-    public int ClassroomId { get; set; }
-    public Classroom Classroom { get; set; } = null!;
+
+    /// <summary>
+    /// Online dersler için null olabilir. Yüz-yüze ve hybrid için zorunludur.
+    /// Scheduler, Course.TeachingMethod == Online ise classroom ataması yapmaz.
+    /// </summary>
+    public int? ClassroomId { get; set; }
+    public Classroom? Classroom { get; set; }
 
     /// <summary>
     /// Bu slot teorik mi uygulama mı? Default: Theory.

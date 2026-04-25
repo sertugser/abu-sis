@@ -29,7 +29,8 @@ public class InstructorControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/[controller]");
-        authorizeAttribute.Roles.Should().Be("Instructor");
+        // Sprint 5: [Authorize(Roles=...)] -> [Authorize] + method-level [RequirePermission]
+        authorizeAttribute.Roles.Should().BeNull();
     }
 
     [Fact]

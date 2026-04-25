@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -10,7 +11,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/constraints/distributions")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class DistributionConstraintController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -24,6 +25,7 @@ public class DistributionConstraintController : ControllerBase
     /// GET api/constraints/distributions?termId=X — list distribution constraints for a term.
     /// </summary>
     [HttpGet]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> List([FromQuery] int termId)
     {
         if (termId <= 0)
@@ -46,6 +48,7 @@ public class DistributionConstraintController : ControllerBase
     /// GET api/constraints/distributions/{id} — get a single distribution constraint.
     /// </summary>
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> Get(int id)
     {
         var constraint = await _context.DistributionConstraints
@@ -65,6 +68,7 @@ public class DistributionConstraintController : ControllerBase
     /// POST api/constraints/distributions — create a new distribution constraint.
     /// </summary>
     [HttpPost]
+    [RequirePermission("menu.ders-programi-kisitlamalari.create")]
     public async Task<IActionResult> Create([FromBody] CreateDistributionConstraintRequest request)
     {
         if (request.Courses == null || request.Courses.Count < 2)
@@ -119,6 +123,7 @@ public class DistributionConstraintController : ControllerBase
     /// PUT api/constraints/distributions/{id} — update a distribution constraint.
     /// </summary>
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] CreateDistributionConstraintRequest request)
     {
         var entity = await _context.DistributionConstraints
@@ -178,6 +183,7 @@ public class DistributionConstraintController : ControllerBase
     /// DELETE api/constraints/distributions/{id} — delete a distribution constraint.
     /// </summary>
     [HttpDelete("{id:int}")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.delete")]
     public async Task<IActionResult> Delete(int id)
     {
         var entity = await _context.DistributionConstraints.FindAsync(id);

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.AcademicProgression.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -9,7 +10,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 public class AcademicProgressionController : ControllerBase
 {
     private readonly IAcademicProgressionService _progressionService;
@@ -22,6 +23,7 @@ public class AcademicProgressionController : ControllerBase
     }
 
     [HttpGet("grade-lock-readiness/{departmentId}")]
+    [RequirePermission("menu.donem-kapatma.view")]
     public async Task<IActionResult> CheckGradeLockReadiness(
         int departmentId,
         [FromQuery] int? termId = null,

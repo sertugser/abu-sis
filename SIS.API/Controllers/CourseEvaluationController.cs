@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.CourseEvaluation.DTOs;
 using SIS.Application.CourseEvaluation.Services;
 
@@ -19,6 +20,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpGet("period/active")]
+    [RequirePermission("lookup.evaluation-period")]
     public async Task<IActionResult> GetActivePeriod(CancellationToken ct)
     {
         var period = await _service.GetActivePeriodAsync(ct);
@@ -28,7 +30,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpGet("my-courses")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.ders-degerlendirme.view")]
     public async Task<IActionResult> GetMyCourses(CancellationToken ct)
     {
         var userId = GetUserId();
@@ -40,7 +42,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpGet("questions")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.ders-degerlendirme.view")]
     public async Task<IActionResult> GetActiveQuestions(CancellationToken ct)
     {
         var questions = await _service.GetActiveQuestionsAsync(ct);
@@ -48,7 +50,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpPost("submit")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.ders-degerlendirme.submit")]
     public async Task<IActionResult> Submit([FromBody] SubmitEvaluationDto dto, CancellationToken ct)
     {
         var userId = GetUserId();
@@ -63,7 +65,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpGet("results/section/{sectionId:int}")]
-    [Authorize(Roles = "Instructor,AcademicAdvisor,DepartmentManager,Dean,SystemAdministrator,AdministrativeStaff")]
+    [RequirePermission("menu.degerlendirme-sonuclari.view")]
     public async Task<IActionResult> GetSectionResults(int sectionId, CancellationToken ct)
     {
         var result = await _service.GetSectionResultsAsync(sectionId, ct);
@@ -74,7 +76,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpGet("results/department/{departmentId:int}")]
-    [Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator,AdministrativeStaff")]
+    [RequirePermission("menu.degerlendirme-sonuclari.view")]
     public async Task<IActionResult> GetDepartmentSummary(
         int departmentId,
         [FromQuery] int? termId,
@@ -88,7 +90,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpPost("period/open")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.degerlendirme-donemi-yonetimi.open")]
     public async Task<IActionResult> OpenPeriod([FromBody] OpenPeriodRequest request, CancellationToken ct)
     {
         var userId = GetUserId();
@@ -107,7 +109,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpPost("period/{periodId:int}/close")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.degerlendirme-donemi-yonetimi.close")]
     public async Task<IActionResult> ClosePeriod(int periodId, CancellationToken ct)
     {
         try
@@ -122,7 +124,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpGet("questions/all")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.degerlendirme-donemi-yonetimi.view")]
     public async Task<IActionResult> GetAllQuestions(CancellationToken ct)
     {
         var questions = await _service.GetAllQuestionsAsync(ct);
@@ -130,7 +132,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpPost("questions")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.degerlendirme-donemi-yonetimi.create")]
     public async Task<IActionResult> CreateQuestion([FromBody] CreateEvaluationQuestionDto dto, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(dto.Text))
@@ -141,7 +143,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpPut("questions/{id:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.degerlendirme-donemi-yonetimi.edit")]
     public async Task<IActionResult> UpdateQuestion(int id, [FromBody] UpdateEvaluationQuestionDto dto, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(dto.Text))
@@ -155,7 +157,7 @@ public class CourseEvaluationController : ControllerBase
     }
 
     [HttpDelete("questions/{id:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.degerlendirme-donemi-yonetimi.delete")]
     public async Task<IActionResult> DeleteQuestion(int id, CancellationToken ct)
     {
         var success = await _service.DeleteQuestionAsync(id, ct);

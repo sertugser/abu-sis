@@ -107,8 +107,7 @@ public sealed class AutoScheduleEngine
                          && !cs.IsFinalized
                          && cs.Status == CourseSectionStatus.Active
                          && cs.Course.DepartmentId.HasValue
-                         && departmentIdSet.Contains(cs.Course.DepartmentId.Value)
-                         && cs.Course.TeachingMethod != TeachingMethod.Online);
+                         && departmentIdSet.Contains(cs.Course.DepartmentId.Value));
 
         if (request.DepartmentId.HasValue)
         {
@@ -184,6 +183,12 @@ public sealed class AutoScheduleEngine
             ? await LoadCoEnrollmentPairsAsync(request.TermId, s4Threshold, ct)
             : new List<CoEnrollmentPair>();
 
+        var slotAllowedModes = timeSlotsByDay
+            .SelectMany(kvp => kvp.Value)
+            .ToDictionary(
+                ts => (ts.DayOfWeek, ts.StartTime),
+                ts => ts.AllowedMode);
+
         var baseSnapshot = new TermSnapshot
         {
             TermId = request.TermId,
@@ -196,6 +201,7 @@ public sealed class AutoScheduleEngine
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
             CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
+            SlotAllowedModes = slotAllowedModes,
         };
 
         // 8b. Build cohort assignments if cohort mode enabled
@@ -218,6 +224,10 @@ public sealed class AutoScheduleEngine
             baseSnapshot.EnrollmentConflicts = enrollmentMatrix;
         }
 
+        // 9a. Kural ihlali retroaktif doğrulama — mevcut atamaları SlotAllowedModes'a göre kontrol et.
+        // Örn: slot AllowedMode=OnlineOnly olduktan sonra eski FaceToFace atamaları temizlenir, yeniden atanır.
+        var invalidationReasons = await InvalidateAssignmentsViolatingSlotModeAsync(sections, slotAllowedModes, ct);
+
         // 9. Populate MutableScheduleState
         var state = new MutableScheduleState(request.TermId);
         state.SetClassroomLookup(classrooms.ToDictionary(c => c.Id));
@@ -227,9 +237,11 @@ public sealed class AutoScheduleEngine
         foreach (var section in sections)
         {
             var snap = sectionSnapshots[section.Id];
+            // SectionSchedules temizlenmiş olabilir (invalidation pass sonrası) — Count'u yeniden oku
             var isScheduled = section.SectionSchedules.Count > 0;
+            var wasInvalidated = invalidationReasons.ContainsKey(section.Id);
 
-            if (isScheduled)
+            if (isScheduled && !wasInvalidated)
             {
                 var blocks = BuildBlockAssignments(section);
 
@@ -248,7 +260,7 @@ public sealed class AutoScheduleEngine
             }
             else
             {
-                // Unscheduled section -> target
+                // Atanmamış VEYA kural ihlali nedeniyle temizlenmiş → target
                 targetSectionIds.Add(section.Id);
             }
         }
@@ -339,17 +351,24 @@ public sealed class AutoScheduleEngine
                 ? dc
                 : string.Empty;
 
-            // Determine primary classroom
+            // Determine primary classroom (online bloklarda null)
             var primaryClassroomId = placement.Blocks.Count > 0
                 ? placement.Blocks[0].ClassroomId
-                : 0;
-            var primaryClassroom = classrooms.FirstOrDefault(c => c.Id == primaryClassroomId);
+                : null;
+            var primaryClassroom = primaryClassroomId.HasValue
+                ? classrooms.FirstOrDefault(c => c.Id == primaryClassroomId.Value)
+                : null;
+
+            // Paralel split: aynı pencerede birden fazla classroom varsa "L139+L141" formatında birleşik göster
+            var classroomDisplayName = BuildClassroomDisplayName(placement.Blocks, classrooms, primaryClassroom?.Name);
 
             // Build schedule slots
             var scheduleSlots = placement.Blocks
                 .SelectMany(b =>
                 {
-                    var classroom = classrooms.FirstOrDefault(c => c.Id == b.ClassroomId);
+                    var classroom = b.ClassroomId.HasValue
+                        ? classrooms.FirstOrDefault(c => c.Id == b.ClassroomId.Value)
+                        : null;
                     return new[]
                     {
                         new ScheduleSlotDto
@@ -375,7 +394,7 @@ public sealed class AutoScheduleEngine
                 CourseName = snap.CourseName,
                 DepartmentCode = deptCode,
                 ClassroomId = primaryClassroomId,
-                ClassroomName = primaryClassroom?.Name ?? string.Empty,
+                ClassroomName = classroomDisplayName,
                 ScheduleSlots = scheduleSlots,
                 ScheduleSummary = summary,
                 InstructorId = snap.InstructorId,
@@ -395,6 +414,21 @@ public sealed class AutoScheduleEngine
             Suggestions = f.Suggestions
         }).ToList();
 
+        var invalidatedList = invalidationReasons
+            .Select(kvp =>
+            {
+                var snap = sectionSnapshots.TryGetValue(kvp.Key, out var s) ? s : null;
+                return new InvalidatedAssignmentDto
+                {
+                    SectionId = kvp.Key,
+                    SectionNumber = snap?.SectionNumber ?? 0,
+                    CourseCode = snap?.CourseCode ?? string.Empty,
+                    CourseName = snap?.CourseName ?? string.Empty,
+                    Reason = kvp.Value,
+                };
+            })
+            .ToList();
+
         return new AutoSchedulePreviewDto
         {
             TotalProcessed = targetSectionIds.Count,
@@ -402,6 +436,7 @@ public sealed class AutoScheduleEngine
             FailedCount = failures.Count,
             Assignments = assignments,
             Failures = failures,
+            InvalidatedAssignments = invalidatedList,
             Seed = seed,
             TotalPenalty = saResult.FinalPenalty,
             Stats = new AutoScheduleStats
@@ -414,6 +449,65 @@ public sealed class AutoScheduleEngine
                 ElapsedSeconds = stopwatch.Elapsed.TotalSeconds
             }
         };
+    }
+
+    /// <summary>
+    /// Faz 0: Mevcut atanmış section'ların her bloğu için slot AllowedMode kontrolü yapar.
+    /// FaceToFace section'ı OnlineOnly slotta ise (veya FaceToFaceOnly slotta Online ders ise) ihlal.
+    /// İhlal bulunan section'ların tüm SectionSchedules kayıtlarını siler, in-memory Collection'ı da
+    /// temizler ki main loop "atanmamış" olarak işleyip target listesine alsın.
+    /// Döner: sectionId → neden açıklaması.
+    /// </summary>
+    private async Task<Dictionary<int, string>> InvalidateAssignmentsViolatingSlotModeAsync(
+        List<CourseSection> sections,
+        Dictionary<(DayOfWeek Day, TimeOnly StartTime), Domain.Enums.TimeSlotAllowedMode> slotAllowedModes,
+        CancellationToken ct)
+    {
+        var invalidated = new Dictionary<int, string>();
+        if (slotAllowedModes.Count == 0) return invalidated;
+
+        var toDelete = new List<SectionSchedule>();
+
+        foreach (var section in sections)
+        {
+            if (section.SectionSchedules.Count == 0) continue;
+
+            string? reason = null;
+            foreach (var ss in section.SectionSchedules)
+            {
+                var ts = ss.TimeSlot;
+                if (ts == null) continue;
+                if (!slotAllowedModes.TryGetValue((ts.DayOfWeek, ts.StartTime), out var mode))
+                    continue;
+
+                var method = section.Course.TeachingMethod;
+                if (mode == Domain.Enums.TimeSlotAllowedMode.OnlineOnly && method == TeachingMethod.FaceToFace)
+                {
+                    reason = $"Slot {ts.DayOfWeek} {ts.StartTime:HH\\:mm}–{ts.EndTime:HH\\:mm} artık OnlineOnly; yüz-yüze ders atanamaz.";
+                    break;
+                }
+                if (mode == Domain.Enums.TimeSlotAllowedMode.FaceToFaceOnly && method == TeachingMethod.Online)
+                {
+                    reason = $"Slot {ts.DayOfWeek} {ts.StartTime:HH\\:mm}–{ts.EndTime:HH\\:mm} artık FaceToFaceOnly; online ders atanamaz.";
+                    break;
+                }
+            }
+
+            if (reason != null)
+            {
+                invalidated[section.Id] = reason;
+                toDelete.AddRange(section.SectionSchedules);
+                section.SectionSchedules.Clear(); // in-memory da temizle ki isScheduled=false olsun
+            }
+        }
+
+        if (toDelete.Count > 0)
+        {
+            _context.SectionSchedules.RemoveRange(toDelete);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return invalidated;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────
@@ -452,6 +546,7 @@ public sealed class AutoScheduleEngine
             CourseCode = section.Course.Code,
             CourseName = section.Course.Name,
             TermId = section.TermId,
+            TeachingMethod = section.Course.TeachingMethod,
             TheoryHours = section.Course.TheoryHours,
             LabHours = section.Course.LabHours,
             Capacity = section.Capacity,
@@ -512,6 +607,30 @@ public sealed class AutoScheduleEngine
         return blocks;
     }
 
+    /// <summary>
+    /// Paralel split'te birden fazla oda birleşik gösterilir ("L139+L141").
+    /// Tek oda varsa sadece adı, hiç yoksa boş string döner.
+    /// </summary>
+    private static string BuildClassroomDisplayName(
+        List<BlockAssignment> blocks,
+        List<Classroom> classrooms,
+        string? fallbackName)
+    {
+        var classroomNames = blocks
+            .Where(b => b.ClassroomId.HasValue)
+            .Select(b => classrooms.FirstOrDefault(c => c.Id == b.ClassroomId!.Value)?.Name)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Cast<string>()
+            .Distinct()
+            .ToList();
+
+        if (classroomNames.Count == 0)
+            return fallbackName ?? string.Empty;
+        if (classroomNames.Count == 1)
+            return classroomNames[0];
+        return string.Join("+", classroomNames);
+    }
+
     private static string BuildScheduleSummary(
         List<BlockAssignment> blocks,
         List<Classroom> classrooms)
@@ -521,14 +640,26 @@ public sealed class AutoScheduleEngine
 
         var classroomLookup = classrooms.ToDictionary(c => c.Id);
 
+        // Paralel split desteği: aynı (Day, StartTime, EndTime) pencerelerinde birden fazla
+        // classroom varsa bunları tek girdide "L139+L141" şeklinde birleştir.
         var parts = blocks
-            .OrderBy(b => b.Day)
-            .ThenBy(b => b.StartTime)
-            .Select(b =>
+            .GroupBy(b => (b.Day, b.StartTime, b.EndTime))
+            .OrderBy(g => g.Key.Day)
+            .ThenBy(g => g.Key.StartTime)
+            .Select(g =>
             {
-                var dayName = SchedulingHelpers.GetDayOfWeekName(b.Day);
-                var classroomName = classroomLookup.TryGetValue(b.ClassroomId, out var cr) ? cr.Name : "?";
-                return $"{dayName} {b.StartTime:HH:mm}-{b.EndTime:HH:mm} ({classroomName})";
+                var dayName = SchedulingHelpers.GetDayOfWeekName(g.Key.Day);
+                var classroomNames = g
+                    .Select(b =>
+                    {
+                        if (!b.ClassroomId.HasValue) return "Online";
+                        if (classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr)) return cr.Name;
+                        return "?";
+                    })
+                    .Distinct()
+                    .ToList();
+                var roomLabel = string.Join("+", classroomNames);
+                return $"{dayName} {g.Key.StartTime:HH:mm}-{g.Key.EndTime:HH:mm} ({roomLabel})";
             });
 
         return string.Join(", ", parts);
@@ -581,6 +712,8 @@ public sealed class AutoScheduleEngine
             AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
             CurriculumConflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var mode) ? mode : "curriculum",
             EnrollmentConflictHardThreshold = GetInt(config, "Schedule.EnrollmentConflictHardThreshold", 1),
+            SplittableBlockTypes = ParseSplittableBlockTypes(
+                config.TryGetValue("Schedule.SplittableBlockTypes", out var sbt) ? sbt : "Lab"),
         };
     }
 
@@ -763,5 +896,23 @@ public sealed class AutoScheduleEngine
         return config.TryGetValue(key, out var value)
             ? int.TryParse(value, out var result) ? result : defaultValue
             : defaultValue;
+    }
+
+    /// <summary>
+    /// "Lab,Theory" gibi virgülle ayrılmış config değerini BlockType set'ine çevirir.
+    /// Geçersiz/tanınmayan değerler sessizce atlanır. Boş string boş set döner (= split kapalı).
+    /// </summary>
+    private static HashSet<BlockType> ParseSplittableBlockTypes(string value)
+    {
+        var result = new HashSet<BlockType>();
+        if (string.IsNullOrWhiteSpace(value))
+            return result;
+
+        foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Enum.TryParse<BlockType>(token, ignoreCase: true, out var bt))
+                result.Add(bt);
+        }
+        return result;
     }
 }

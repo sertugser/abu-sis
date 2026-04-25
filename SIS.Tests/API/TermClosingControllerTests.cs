@@ -21,7 +21,8 @@ public class TermClosingControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/term-closing");
-        authorizeAttribute.Roles.Should().Be("DepartmentManager,Dean,SystemAdministrator");
+        // Sprint 5: [Authorize(Roles=...)] -> [Authorize] + method-level [RequirePermission]
+        authorizeAttribute.Roles.Should().BeNull();
     }
 
     [Theory]

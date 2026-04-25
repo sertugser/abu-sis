@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.TermClosing.DTOs;
 using SIS.Application.TermClosing.Services;
 using SIS.Infrastructure.Persistence;
@@ -11,7 +12,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/term-closing")]
-[Authorize(Roles = "DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 [RequestTimeout(milliseconds: 300_000)] // 5 dakika — büyük bölümlerde not kilitleme + GPA uzun sürebilir
 public class TermClosingController : ControllerBase
 {
@@ -25,6 +26,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpGet("{departmentId}/status")]
+    [RequirePermission("menu.donem-kapatma.view")]
     public async Task<IActionResult> GetStatus(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -35,6 +37,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpPost("{departmentId}/lock-grades")]
+    [RequirePermission("menu.donem-kapatma.lock-grades")]
     public async Task<IActionResult> LockGrades(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -52,6 +55,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpPost("{departmentId}/unlock-grades")]
+    [RequirePermission("menu.donem-kapatma.unlock-grades")]
     public async Task<IActionResult> UnlockGrades(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -69,6 +73,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpPost("{departmentId}/calculate-gpa")]
+    [RequirePermission("menu.donem-kapatma.calculate-gpa")]
     public async Task<IActionResult> CalculateGpa(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -86,6 +91,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpGet("{departmentId}/preview-promote")]
+    [RequirePermission("menu.donem-kapatma.view")]
     public async Task<IActionResult> PreviewPromotion(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -103,6 +109,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpPost("{departmentId}/promote")]
+    [RequirePermission("menu.sinif-atlatma-islemleri.promote")]
     public async Task<IActionResult> Promote(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -120,6 +127,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpPost("{departmentId}/rollback-promote")]
+    [RequirePermission("menu.sinif-atlatma-islemleri.rollback")]
     public async Task<IActionResult> RollbackPromotion(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -137,6 +145,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpPost("{departmentId}/open-new-term")]
+    [RequirePermission("menu.donem-kapatma.open-new-term")]
     public async Task<IActionResult> OpenNewTerm(int departmentId, [FromBody] NewTermRequestDto request, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -154,6 +163,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpGet("{departmentId}/grade-readiness-detail")]
+    [RequirePermission("menu.donem-kapatma.view")]
     public async Task<IActionResult> GetGradeReadinessDetail(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -164,6 +174,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpGet("{departmentId}/grade-distribution")]
+    [RequirePermission("menu.donem-kapatma.view")]
     public async Task<IActionResult> GetGradeDistribution(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -174,6 +185,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpGet("overview")]
+    [RequirePermission("menu.donem-kapatma.view")]
     public async Task<IActionResult> GetDepartmentOverview([FromQuery] int? facultyId, CancellationToken ct)
     {
         if (!TryGetUserId(out _)) return Unauthorized();
@@ -188,6 +200,7 @@ public class TermClosingController : ControllerBase
     }
 
     [HttpGet("{departmentId}/export-promotion")]
+    [RequirePermission("menu.sinif-atlatma-islemleri.export")]
     public async Task<IActionResult> ExportPromotionReport(int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();

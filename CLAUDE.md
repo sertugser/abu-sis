@@ -133,6 +133,45 @@ Dean grubunda akademik-islemler: sadece Program Kontenjan Bilgileri (dean endpoi
 
 Eski gruplar ("Dönem Yönetimi", "Akademik Yapı", "Fakülte / Bölüm / Program" tek sayfa) silindi.
 
+## RBAC (Phase 1 — DB-driven Permissions, tag: `rbac-phase1-mvp`)
+
+Yetki sistemi DB-driven, admin UI'dan deployment'sız değişebilir. Tüm controller'lar `[RequirePermission("...")]` ile korunur (eski `[Authorize(Roles=...)]` kalkmıştır).
+
+### Permission key formatı
+```
+<category>.<resource>.<action>
+```
+- `menu.*` — sidebar item'lara bağlı (DB seed, ~237 key)
+- `lookup.*` — dropdown lookup (DB seed YOK, hardcoded shortcut: her authenticated)
+- `system.*` — admin UI (DB seed, ~2 key, sadece SysAdmin)
+
+### Authorization akışı
+1. Backend: `[RequirePermission("menu.akademik-donem.view")]` → 3 katmanlı check (SysAdmin shortcut → lookup.* shortcut → DB cache lookup)
+2. Frontend: `usePermissions().hasPermission("menu.akademik-donem.view")` → SysAdmin shortcut + 5dk cache'li `/api/me/permissions`
+3. Sidebar: `useMenu()` → DB-driven dinamik menü (permission-filtered)
+
+### SystemAdmin (Karar 4 — locked)
+- DB'de RolePermission satırı YOK
+- `RequirePermissionAttribute` ve `PermissionService.GetUserPermissionsAsync` kod-shortcut: `IsInRole("SystemAdministrator")` ise tüm permission'lara erişim
+- Admin UI rol listesinde HİÇ GÖZÜKMEZ
+
+### JWT (Karar 6)
+JWT'ye permission claim **eklenmez** (~640 bytes sabit). Frontend `/api/me/permissions` endpoint'inden 5dk cache ile çeker. Permission değişikliği max 5dk sonra refresh'te yansır.
+
+### Yeni endpoint eklerken
+1. Controller method'a `[RequirePermission("menu.<slug>.<action>")]` ekle
+2. Permission key DB'de yoksa: `PermissionSeed.cs`'in `All` listesine ekle (merge semantiği — API restart sonrası otomatik DB'ye eklenir)
+3. Default seed'e dahil etmek istiyorsan: `RolePermissionSeed.cs`'te ilgili rol(ler)e ekle (yeni rol-permission satırları için DB temizleme + re-seed gerekir, ya da manuel SQL INSERT)
+4. Orphan check: `bash scripts/check-permission-orphans.sh`
+
+### Codemap
+Tam detay: [docs/CODEMAPS/permission-system.md](docs/CODEMAPS/permission-system.md)
+
+### Ana dosyalar
+- Backend: `SIS.API/Authorization/RequirePermissionAttribute.cs`, `SIS.Infrastructure/Services/PermissionService.cs`, `MenuService.cs`
+- Frontend: `SIS.Web/src/context/PermissionContext.tsx`, `hooks/useMenu.ts`, `components/admin/RolePermissionMatrix.tsx`
+- Seed: `SIS.Infrastructure/Persistence/Seeds/{Permission,MenuStructure,RolePermission}Seed.cs`
+
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports
 - ApplicationUser (IdentityUser) lives in SIS.Infrastructure/Persistence/

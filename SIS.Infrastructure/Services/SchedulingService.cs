@@ -1482,6 +1482,27 @@ public class SchedulingService : ISchedulingService
             .Where(d => d.TermId == termId)
             .ToListAsync(cancellationToken);
 
+        // H17 FaceToFaceSlotRestriction için slot allowed mode haritası.
+        // Bu dict boş kalırsa H17 evaluator bypass olur ve FaceToFace dersler OnlineOnly slot'lara yerleşebilir.
+        // Duplicate (Day, StartTime) pair'leri varsa (test fixture veya bozuk veri) son değer üstüne yazılır;
+        // çakışma durumunda OnlineOnly'yi tercih et (daha kısıtlayıcı, güvenli).
+        var slotRecords = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .Select(ts => new { ts.DayOfWeek, ts.StartTime, ts.AllowedMode })
+            .ToListAsync(cancellationToken);
+
+        var slotAllowedModes = new Dictionary<(DayOfWeek, TimeOnly), TimeSlotAllowedMode>();
+        foreach (var slot in slotRecords)
+        {
+            var key = (slot.DayOfWeek, slot.StartTime);
+            if (!slotAllowedModes.TryGetValue(key, out var existing)
+                || slot.AllowedMode == TimeSlotAllowedMode.OnlineOnly)
+            {
+                slotAllowedModes[key] = slot.AllowedMode;
+            }
+        }
+
         var snapshots = sections
             .Select(section => BuildExistingSectionSnapshot(
                 section,
@@ -1504,6 +1525,7 @@ public class SchedulingService : ISchedulingService
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
             CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
             DistributionConstraints = distributionConstraints,
+            SlotAllowedModes = slotAllowedModes,
         };
     }
 

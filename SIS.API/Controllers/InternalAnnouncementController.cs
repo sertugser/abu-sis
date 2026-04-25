@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Announcement.DTOs;
 using SIS.Application.Announcement.Services;
 using SIS.Infrastructure.Persistence;
@@ -29,6 +30,9 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpGet("active")]
+    // Patch: Permission kaldırıldı; sayfa public-tipi (üniversite duyurularını listeliyor),
+    // sidebar görünürlüğü 2 ayrı permission ile yönetilir (menu.duyurular.view öğrenci için,
+    // menu.duyurular-admin.view admin için). Endpoint herkes için açık (sadece authenticated).
     public async Task<IActionResult> GetActive([FromQuery] int? max, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -68,6 +72,9 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    // Patch: Permission kaldırıldı; sayfa public-tipi (üniversite duyurularını listeliyor),
+    // sidebar görünürlüğü 2 ayrı permission ile yönetilir (menu.duyurular.view öğrenci için,
+    // menu.duyurular-admin.view admin için). Endpoint herkes için açık (sadece authenticated).
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var item = await _service.GetByIdAsync(id, ct);
@@ -78,7 +85,7 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpGet("all")]
-    [Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff")]
+    [RequirePermission("menu.duyuru-yonetimi.view")]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
         var items = await _service.GetAllAsync(ct);
@@ -86,7 +93,7 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff")]
+    [RequirePermission("menu.duyuru-yonetimi.create")]
     public async Task<IActionResult> Create([FromBody] CreateAnnouncementDto dto, CancellationToken ct)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -113,7 +120,7 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff")]
+    [RequirePermission("menu.duyuru-yonetimi.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateAnnouncementDto dto, CancellationToken ct)
     {
         try
@@ -130,7 +137,7 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff")]
+    [RequirePermission("menu.duyuru-yonetimi.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var success = await _service.DeleteAsync(id, ct);

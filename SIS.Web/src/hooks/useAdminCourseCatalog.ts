@@ -85,6 +85,11 @@ export interface CourseDetailDto {
   description: string | null;
   level: number;
   nationalCredit: number | null;
+  // Proliz "Diğer Ön Koşul Tanımları"
+  minCreditsRequired: number | null;
+  minEctsRequired: number | null;
+  requiresNoFailedLowerCourses: boolean;
+  canBeTakenStandalone: boolean;
   stats: CourseStatsDto | null;
   prerequisiteChain: PrerequisiteChainNodeDto[] | null;
 }
@@ -114,6 +119,11 @@ export interface CreateCourseDto {
   description?: string | null;
   level: number | string;
   nationalCredit?: number | null;
+  // Proliz "Diğer Ön Koşul Tanımları" (opsiyonel — backend default'a düşer)
+  minCreditsRequired?: number | null;
+  minEctsRequired?: number | null;
+  requiresNoFailedLowerCourses?: boolean;
+  canBeTakenStandalone?: boolean;
 }
 
 export function useAdminCourses(filter?: CourseFilterParams) {
@@ -217,6 +227,28 @@ export function useRemoveEquivalency() {
     },
     onSuccess: (_, { courseId }) => {
       qc.invalidateQueries({ queryKey: ['admin', 'courses', 'detail', courseId] });
+    },
+  });
+}
+
+// Proliz "Diğer Ön Koşul Tanımları" — sadece 4 kural alanını güncellemek için ayrı endpoint
+export interface UpdateCoursePrereqRulesDto {
+  minCreditsRequired: number | null;
+  minEctsRequired: number | null;
+  requiresNoFailedLowerCourses: boolean;
+  canBeTakenStandalone: boolean;
+}
+
+export function useUpdateCoursePrereqRules() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ courseId, dto }: { courseId: number; dto: UpdateCoursePrereqRulesDto }) => {
+      const { data } = await apiClient.put<CourseDetailDto>(`${BASE}/${courseId}/prereq-rules`, dto);
+      return data;
+    },
+    onSuccess: (_, { courseId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses', 'detail', courseId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'courses'] });
     },
   });
 }

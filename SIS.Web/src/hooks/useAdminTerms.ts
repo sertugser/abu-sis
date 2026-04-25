@@ -39,6 +39,11 @@ export interface AdminTermDto {
   termStart: string;
   termEnd: string;
 
+  overrideStart: string | null;
+  overrideEnd: string | null;
+  effectiveStart: string;
+  effectiveEnd: string;
+
   isActive: boolean;
   hasAcademicCalendar: boolean;
 }
@@ -54,6 +59,8 @@ export interface CreateTermDto {
   yoksisStatus: YoksisStatusValue;
   termStart: string;
   termEnd: string;
+  overrideStart: string | null;
+  overrideEnd: string | null;
 }
 
 export interface UpdateTermDto {
@@ -66,6 +73,8 @@ export interface UpdateTermDto {
   yoksisStatus: YoksisStatusValue;
   termStart: string;
   termEnd: string;
+  overrideStart: string | null;
+  overrideEnd: string | null;
 }
 
 function invalidateTerms(qc: ReturnType<typeof useQueryClient>) {

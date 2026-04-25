@@ -4,6 +4,9 @@ export interface PromotionRuleDto {
   id: number;
   programId: number;
   programName?: string;
+  // γ hibrit: null = program-bazlı default, set = müfredat-spesifik override
+  curriculumId: number | null;
+  curriculumVersion: string | null;
   fromYear: number;
   toYear: number;
   minCgpa: number | null;
@@ -15,6 +18,7 @@ export interface PromotionRuleDto {
 
 export interface CreatePromotionRuleDto {
   programId: number;
+  curriculumId?: number | null;
   fromYear: number;
   toYear: number;
   minCgpa?: number | null;
@@ -25,6 +29,7 @@ export interface CreatePromotionRuleDto {
 }
 
 export interface UpdatePromotionRuleDto {
+  curriculumId?: number | null;
   fromYear: number;
   toYear: number;
   minCgpa?: number | null;
@@ -34,9 +39,18 @@ export interface UpdatePromotionRuleDto {
   minCompulsoryCoursePassed?: number | null;
 }
 
-export async function getPromotionRules(programId?: number): Promise<PromotionRuleDto[]> {
-  const params = programId ? { programId } : undefined;
-  const { data } = await apiClient.get<PromotionRuleDto[]>('/admin/promotion-rules', { params });
+export interface PromotionRuleFilter {
+  programId?: number;
+  curriculumId?: number;
+}
+
+export async function getPromotionRules(filter?: PromotionRuleFilter): Promise<PromotionRuleDto[]> {
+  const params: Record<string, number> = {};
+  if (filter?.programId !== undefined) params.programId = filter.programId;
+  if (filter?.curriculumId !== undefined) params.curriculumId = filter.curriculumId;
+  const { data } = await apiClient.get<PromotionRuleDto[]>('/admin/promotion-rules', {
+    params: Object.keys(params).length > 0 ? params : undefined,
+  });
   return data;
 }
 
