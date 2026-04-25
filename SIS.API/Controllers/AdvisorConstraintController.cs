@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.AdvisorConstraints.DTOs;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/advisor/constraints")]
-[Authorize(Roles = "AcademicAdvisor,Instructor")]
+[Authorize]
 public class AdvisorConstraintController : ControllerBase
 {
     private readonly IAdvisorConstraintService _constraintService;
@@ -23,6 +24,7 @@ public class AdvisorConstraintController : ControllerBase
     }
 
     [HttpGet("student/{studentId:int}")]
+    [RequirePermission("menu.danisman-ders-kisitlari.view")]
     public async Task<IActionResult> GetStudentConstraints(int studentId, [FromQuery] int? termId = null, CancellationToken cancellationToken = default)
     {
         if (studentId <= 0)
@@ -33,6 +35,7 @@ public class AdvisorConstraintController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("menu.danisman-ders-kisitlari.create")]
     public async Task<IActionResult> UpsertConstraint([FromBody] UpsertAdvisorCourseConstraintRequest request, CancellationToken cancellationToken = default)
     {
         var instructorId = await GetInstructorIdAsync(cancellationToken);
@@ -51,6 +54,7 @@ public class AdvisorConstraintController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.danisman-ders-kisitlari.edit")]
     public async Task<IActionResult> UpdateConstraint(int id, [FromBody] UpdateAdvisorCourseConstraintRequest request, CancellationToken cancellationToken = default)
     {
         if (id <= 0)
@@ -74,6 +78,7 @@ public class AdvisorConstraintController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [RequirePermission("menu.danisman-ders-kisitlari.delete")]
     public async Task<IActionResult> DeleteConstraint(int id, CancellationToken cancellationToken = default)
     {
         if (id <= 0)

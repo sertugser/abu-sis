@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Infrastructure.Persistence;
@@ -26,7 +27,7 @@ public class RegistrationController : ControllerBase
     /// POST api/registration/plan — add a course section to the student's plan.
     /// </summary>
     [HttpPost("plan")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.ders-kayit.plan")]
     public async Task<IActionResult> AddToPlan([FromBody] RegistrationPlanItemDto dto)
     {
         var studentId = await GetStudentIdAsync();
@@ -44,7 +45,7 @@ public class RegistrationController : ControllerBase
     /// POST api/registration/submit — submit the registration (validate and finalize).
     /// </summary>
     [HttpPost("submit")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.ders-kayit.submit")]
     public async Task<IActionResult> SubmitRegistration([FromBody] RegistrationSubmitDto dto)
     {
         var studentId = await GetStudentIdAsync();
@@ -62,7 +63,7 @@ public class RegistrationController : ControllerBase
     /// GET api/registration/my — list the student's registrations for the current term.
     /// </summary>
     [HttpGet("my")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.alinan-dersler.view")]
     public async Task<IActionResult> GetMyRegistrations()
     {
         var studentId = await GetStudentIdAsync();
@@ -77,7 +78,7 @@ public class RegistrationController : ControllerBase
     /// GET api/registrations/attendance-status — list the student's active-term attendance status.
     /// </summary>
     [HttpGet("attendance-status")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.devamsizlik-durumu.view")]
     public async Task<IActionResult> GetAttendanceStatus([FromQuery] int? termId)
     {
         var studentId = await GetStudentIdAsync();
@@ -95,7 +96,7 @@ public class RegistrationController : ControllerBase
     /// GET api/registrations/history — list the student's course history with grades, grouped by term.
     /// </summary>
     [HttpGet("history")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.not-listesi.view")]
     public async Task<IActionResult> GetCourseHistory()
     {
         var studentId = await GetStudentIdAsync();
@@ -110,7 +111,7 @@ public class RegistrationController : ControllerBase
     /// DELETE api/registration/{id}/drop — drop a course (add-drop period).
     /// </summary>
     [HttpDelete("{id}/drop")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.ders-kayit.drop")]
     public async Task<IActionResult> DropCourse(int id)
     {
         var studentId = await GetStudentIdAsync();
@@ -128,7 +129,7 @@ public class RegistrationController : ControllerBase
     /// POST api/registration/{id}/withdraw — withdraw from a course.
     /// </summary>
     [HttpPost("{id}/withdraw")]
-    [Authorize(Roles = "Student")]
+    [RequirePermission("menu.ders-kayit.withdraw")]
     public async Task<IActionResult> WithdrawCourse(int id)
     {
         var studentId = await GetStudentIdAsync();

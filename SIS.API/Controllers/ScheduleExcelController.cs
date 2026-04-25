@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 
@@ -7,7 +8,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/schedule-excel")]
-[Authorize(Roles = "AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 public class ScheduleExcelController : ControllerBase
 {
     private readonly IExcelScheduleService _excelService;
@@ -18,6 +19,7 @@ public class ScheduleExcelController : ControllerBase
     }
 
     [HttpGet("export")]
+    [RequirePermission("menu.ders-programi-olusturma.export")]
     public async Task<IActionResult> ExportSchedule(
         [FromQuery] int termId,
         [FromQuery] int facultyId,
@@ -29,6 +31,7 @@ public class ScheduleExcelController : ControllerBase
     }
 
     [HttpGet("export-pdf")]
+    [RequirePermission("menu.ders-programi-olusturma.export-pdf")]
     public async Task<IActionResult> ExportPdf(
         [FromQuery] int termId,
         [FromQuery] int facultyId,
@@ -41,6 +44,7 @@ public class ScheduleExcelController : ControllerBase
     }
 
     [HttpPost("import-preview")]
+    [RequirePermission("menu.ders-programi-olusturma.import")]
     public async Task<ActionResult<ImportPreviewDto>> ImportPreview(
         [FromQuery] int termId,
         [FromQuery] int facultyId,
@@ -56,6 +60,7 @@ public class ScheduleExcelController : ControllerBase
     }
 
     [HttpPost("import-apply")]
+    [RequirePermission("menu.ders-programi-olusturma.import")]
     public async Task<ActionResult<ImportResultDto>> ImportApply(
         [FromBody] ImportApplyRequest request,
         CancellationToken ct = default)

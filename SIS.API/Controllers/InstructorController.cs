@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -12,7 +13,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Instructor")]
+[Authorize]
 public class InstructorController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -28,6 +29,7 @@ public class InstructorController : ControllerBase
     /// GET api/instructor/profile — get the authenticated instructor's profile.
     /// </summary>
     [HttpGet("profile")]
+    [RequirePermission("menu.derslerim.view")]
     public async Task<IActionResult> GetProfile()
     {
         var instructor = await GetInstructorAsync();
@@ -58,6 +60,7 @@ public class InstructorController : ControllerBase
     /// Geçmiş dönem section'larına erişim (değerlendirme sonuçları için salt-okunur).
     /// </summary>
     [HttpGet("my-sections")]
+    [RequirePermission("menu.derslerim.view")]
     public async Task<IActionResult> GetMySections([FromQuery] int? termId = null)
     {
         var instructor = await GetInstructorAsync();
@@ -125,6 +128,7 @@ public class InstructorController : ControllerBase
     /// Değerlendirme sonuçları sayfasında geçmiş dönem seçimi için kullanılır.
     /// </summary>
     [HttpGet("my-terms")]
+    [RequirePermission("lookup.term")]
     public async Task<IActionResult> GetMyTerms()
     {
         var instructor = await GetInstructorAsync();
@@ -154,6 +158,7 @@ public class InstructorController : ControllerBase
     /// GET api/instructor/section/{id}/students — list students enrolled in a specific section.
     /// </summary>
     [HttpGet("section/{id}/students")]
+    [RequirePermission("menu.sinif-listeleri.view")]
     public async Task<IActionResult> GetSectionStudents(int id)
     {
         var instructor = await GetInstructorAsync();
@@ -210,6 +215,7 @@ public class InstructorController : ControllerBase
     /// POST api/instructor/section/{id}/schedule/apply — apply a schedule suggestion to the instructor's section.
     /// </summary>
     [HttpPost("section/{id}/schedule/apply")]
+    [RequirePermission("menu.ders-programim.edit")]
     public async Task<IActionResult> ApplySectionSchedule(
         int id,
         [FromBody] ApplyScheduleRequestDto request,
@@ -232,6 +238,7 @@ public class InstructorController : ControllerBase
     /// POST api/instructor/section/{id}/schedule/validate — validate the current instructor section schedule.
     /// </summary>
     [HttpPost("section/{id}/schedule/validate")]
+    [RequirePermission("menu.ders-programim.view")]
     public async Task<IActionResult> ValidateSectionSchedule(
         int id,
         [FromBody] ScheduleValidationRequestDto? request,
@@ -256,6 +263,7 @@ public class InstructorController : ControllerBase
     /// POST api/instructor/section/{id}/schedule/suggest — generate a schedule suggestion for the current instructor section.
     /// </summary>
     [HttpPost("section/{id}/schedule/suggest")]
+    [RequirePermission("menu.ders-programim.view")]
     public async Task<IActionResult> SuggestSectionSchedule(
         int id,
         [FromBody] ScheduleSuggestionRequestDto? request,

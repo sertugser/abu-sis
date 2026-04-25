@@ -1,16 +1,18 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin")]
-[Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff,AcademicAdvisor")]
+[Authorize]
 public class AdminLookupController(AppDbContext db) : ControllerBase
 {
     [HttpGet("departments")]
+    [RequirePermission("lookup.department")]
     public async Task<IActionResult> GetDepartments()
     {
         var departments = await db.Departments
@@ -21,6 +23,7 @@ public class AdminLookupController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("programs")]
+    [RequirePermission("lookup.program")]
     public async Task<IActionResult> GetPrograms([FromQuery] int? departmentId)
     {
         var query = db.AcademicPrograms.AsQueryable();
@@ -35,6 +38,7 @@ public class AdminLookupController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("advisors")]
+    [RequirePermission("lookup.advisor")]
     public async Task<IActionResult> GetAdvisors()
     {
         var advisors = await (

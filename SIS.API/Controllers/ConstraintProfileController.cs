@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/constraints/profiles")]
-[Authorize(Roles = "DepartmentManager,Dean,AdministrativeStaff,SystemAdministrator")]
+[Authorize]
 public class ConstraintProfileController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -21,6 +22,7 @@ public class ConstraintProfileController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> List(CancellationToken ct)
     {
         var profiles = await _context.ConstraintProfiles
@@ -34,6 +36,7 @@ public class ConstraintProfileController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> Get(int id, CancellationToken ct)
     {
         var profile = await _context.ConstraintProfiles
@@ -52,6 +55,7 @@ public class ConstraintProfileController : ControllerBase
     }
 
     [HttpPost("from-current")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.create")]
     public async Task<IActionResult> CreateFromCurrent([FromBody] CreateProfileRequest request, CancellationToken ct)
     {
         var definitions = await _context.ConstraintDefinitions.AsNoTracking().ToListAsync(ct);
@@ -75,6 +79,7 @@ public class ConstraintProfileController : ControllerBase
     }
 
     [HttpPost("{id:int}/apply")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.apply")]
     public async Task<IActionResult> Apply(int id, CancellationToken ct)
     {
         var profile = await _context.ConstraintProfiles
@@ -123,6 +128,7 @@ public class ConstraintProfileController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var profile = await _context.ConstraintProfiles.FindAsync(new object[] { id }, ct);

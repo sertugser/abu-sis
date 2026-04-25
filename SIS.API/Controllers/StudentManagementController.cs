@@ -2,16 +2,17 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
+using SIS.API.Filters;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
-using SIS.API.Filters;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin/students")]
-[Authorize(Roles = "SystemAdministrator,Dean,DepartmentManager,AdministrativeStaff")]
+[Authorize]
 public class StudentManagementController : ControllerBase
 {
     private readonly IAdminStudentService _service;
@@ -24,6 +25,7 @@ public class StudentManagementController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
     [ServiceFilter(typeof(SensitiveDataAccessFilter))]
     [SensitiveDataAccess(EntityType = "Student")]
     public async Task<IActionResult> GetStudents([FromQuery] AdminStudentFilterDto filter)
@@ -43,6 +45,7 @@ public class StudentManagementController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
     [ServiceFilter(typeof(SensitiveDataAccessFilter))]
     [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
     public async Task<IActionResult> GetStudent(int id)
@@ -71,7 +74,7 @@ public class StudentManagementController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
+    [RequirePermission("menu.ogrenci-rehberi.create")]
     public async Task<IActionResult> CreateStudent([FromBody] CreateStudentDto dto)
     {
         try
@@ -90,7 +93,7 @@ public class StudentManagementController : ControllerBase
     }
 
     [HttpPut("{id:int}/advisor")]
-    [Authorize(Roles = "SystemAdministrator,DepartmentManager,AdministrativeStaff")]
+    [RequirePermission("menu.toplu-danisman-atama.assign")]
     public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorDto dto)
     {
         try

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.CalendarGenerator.DTOs;
 using SIS.Application.CalendarGenerator.Services;
 
@@ -8,7 +9,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin/calendar-generator")]
-[Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
+[Authorize]
 public class CalendarGeneratorController : ControllerBase
 {
     private readonly ICalendarGeneratorService _generatorService;
@@ -21,20 +22,22 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpGet("templates")]
+    [RequirePermission("menu.akademik-takvim-olusturma.view")]
     public async Task<IActionResult> GetTemplates(CancellationToken ct) =>
         Ok(await _templateService.GetTemplatesAsync(ct));
 
     [HttpPut("templates")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.akademik-takvim-olusturma.edit")]
     public async Task<IActionResult> ReplaceTemplates([FromBody] IReadOnlyList<UpsertCalendarTemplateDto> templates, CancellationToken ct) =>
         Ok(await _templateService.ReplaceTemplatesAsync(templates, ct));
 
     [HttpGet("holidays/definitions")]
+    [RequirePermission("menu.akademik-takvim-olusturma.view")]
     public async Task<IActionResult> GetHolidayDefinitions(CancellationToken ct) =>
         Ok(await _templateService.GetHolidayDefinitionsAsync(ct));
 
     [HttpPost("holidays/definitions")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.akademik-takvim-olusturma.edit")]
     public async Task<IActionResult> UpsertHolidayDefinition([FromQuery] int? id, [FromBody] UpsertHolidayDefinitionDto dto, CancellationToken ct)
     {
         try
@@ -48,6 +51,7 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpPost("generate")]
+    [RequirePermission("menu.akademik-takvim-olusturma.generate")]
     public async Task<IActionResult> Generate([FromBody] GenerateCalendarRequestDto request, CancellationToken ct)
     {
         try
@@ -61,6 +65,7 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpGet("drafts/{id:int}")]
+    [RequirePermission("menu.akademik-takvim-olusturma.view")]
     public async Task<IActionResult> GetDraft(int id, CancellationToken ct)
     {
         try
@@ -74,11 +79,12 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpGet("drafts")]
+    [RequirePermission("menu.akademik-takvim-olusturma.view")]
     public async Task<IActionResult> ListDrafts([FromQuery] int take = 50, CancellationToken ct = default) =>
         Ok(await _generatorService.ListDraftsAsync(take, ct));
 
     [HttpDelete("drafts/{id:int}")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.akademik-takvim-olusturma.delete")]
     public async Task<IActionResult> DeleteDraft(int id, CancellationToken ct)
     {
         try
@@ -93,6 +99,7 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpPut("drafts/{id:int}/events/{eventId}")]
+    [RequirePermission("menu.akademik-takvim-olusturma.edit")]
     public async Task<IActionResult> UpdateDraftEvent(int id, string eventId, [FromBody] UpdateDraftEventDto dto, CancellationToken ct)
     {
         try
@@ -110,6 +117,7 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpPost("drafts/{id:int}/what-if")]
+    [RequirePermission("menu.akademik-takvim-olusturma.simulate")]
     public async Task<IActionResult> WhatIf(int id, [FromBody] WhatIfRequestDto request, CancellationToken ct)
     {
         try
@@ -123,7 +131,7 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpPost("drafts/{id:int}/apply")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.akademik-takvim-olusturma.apply")]
     public async Task<IActionResult> Apply(int id, [FromBody] ApplyCalendarDraftRequestDto request, CancellationToken ct)
     {
         try
@@ -141,7 +149,7 @@ public class CalendarGeneratorController : ControllerBase
     }
 
     [HttpPost("drafts/{id:int}/rollback")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.akademik-takvim-olusturma.rollback")]
     public async Task<IActionResult> Rollback(int id, CancellationToken ct)
     {
         try

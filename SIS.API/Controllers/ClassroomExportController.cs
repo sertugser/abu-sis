@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -9,13 +10,14 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin/classroom-export")]
-[Authorize(Roles = "AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 public class ClassroomExportController(AppDbContext context, ISchedulingService schedulingService) : ControllerBase
 {
     private readonly AppDbContext _context = context;
     private readonly ISchedulingService _schedulingService = schedulingService;
 
     [HttpGet("csv")]
+    [RequirePermission("menu.derslik-doluluk.export")]
     public async Task<IActionResult> ExportCsv([FromQuery] int? termId, CancellationToken ct)
     {
         var dashboard = await _schedulingService.GetClassroomDashboardAsync(termId, cancellationToken: ct);

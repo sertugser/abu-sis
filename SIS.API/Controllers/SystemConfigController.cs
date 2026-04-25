@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
@@ -15,7 +16,7 @@ public record SystemConfigImportItemDto(string Key, string Value);
 
 [ApiController]
 [Route("api/admin/system-config")]
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize]
 public class SystemConfigController(AppDbContext context, ISystemConfigProvider configProvider) : ControllerBase
 {
     private readonly AppDbContext _context = context;
@@ -98,6 +99,7 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         | NumberStyles.AllowDecimalPoint;
 
     [HttpGet]
+    [RequirePermission("menu.system-config.view")]
     public async Task<IActionResult> GetAll([FromQuery] string? category, CancellationToken ct)
     {
         var query = _context.SystemConfigs.AsNoTracking();
@@ -114,6 +116,7 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
     }
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.system-config.view")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var config = await _context.SystemConfigs.AsNoTracking()
@@ -128,6 +131,7 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
     }
 
     [HttpGet("limits")]
+    [RequirePermission("menu.system-config.view")]
     public IActionResult GetLimits()
     {
         var limits = NumericLimits.ToDictionary(
@@ -139,6 +143,7 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
     }
 
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.system-config.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSystemConfigDto dto, CancellationToken ct)
     {
         var config = await _context.SystemConfigs.FirstOrDefaultAsync(c => c.Id == id, ct);
@@ -166,6 +171,7 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
     }
 
     [HttpGet("export")]
+    [RequirePermission("menu.system-config.export")]
     public async Task<IActionResult> Export(CancellationToken ct)
     {
         var configs = await _context.SystemConfigs
@@ -181,6 +187,7 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
     }
 
     [HttpPost("import")]
+    [RequirePermission("menu.system-config.import")]
     public async Task<IActionResult> Import([FromBody] List<SystemConfigImportItemDto>? items, CancellationToken ct)
     {
         if (items is null || items.Count == 0)

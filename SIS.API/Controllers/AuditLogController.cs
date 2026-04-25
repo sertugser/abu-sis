@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.API.Filters;
 using SIS.Application.Admin.DTOs;
 using SIS.Domain.Entities;
@@ -12,7 +13,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin/audit-logs")]
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize]
 public class AuditLogController(AppDbContext context) : ControllerBase
 {
     private readonly AppDbContext _context = context;
@@ -29,6 +30,7 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     /// Filtrelenebilir, sayfalanmış, sıralanabilir audit log listesi döner.
     /// </summary>
     [HttpGet]
+    [RequirePermission("menu.audit-log.view")]
     [EnableRateLimiting("AuditLogRead")]
     [SensitiveDataAccess("AuditLog")]
     public async Task<IActionResult> GetAll(
@@ -69,6 +71,7 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     /// Filtrelenmiş audit log kayıtlarını CSV olarak dışa aktarır (max 50.000 satır).
     /// </summary>
     [HttpGet("export/csv")]
+    [RequirePermission("menu.audit-log.export")]
     [EnableRateLimiting("AuditLogExport")]
     [SensitiveDataAccess("AuditLog")]
     public async Task<IActionResult> ExportCsv(
@@ -127,6 +130,7 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     /// Tek bir audit log kaydını tam OldValue/NewValue JSON'ıyla döner.
     /// </summary>
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.audit-log.view")]
     [EnableRateLimiting("AuditLogRead")]
     [SensitiveDataAccess("AuditLog", EntityIdRouteParam = "id")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
@@ -159,6 +163,7 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     /// Bugün ve son 7 günün özet istatistiklerini döner.
     /// </summary>
     [HttpGet("stats")]
+    [RequirePermission("menu.audit-log.view")]
     [EnableRateLimiting("AuditLogRead")]
     public async Task<IActionResult> GetStats(CancellationToken ct)
     {
@@ -185,6 +190,7 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     /// Son 24 saatte tespit edilen anomalileri döner.
     /// </summary>
     [HttpGet("anomalies")]
+    [RequirePermission("menu.audit-log.view")]
     [EnableRateLimiting("AuditLogRead")]
     public async Task<IActionResult> GetAnomalies(CancellationToken ct)
     {

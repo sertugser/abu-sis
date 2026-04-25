@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Domain.Entities;
@@ -14,13 +15,14 @@ public record BulkClassroomTermAssignmentDto(int TermId, List<BulkAssignmentItem
 
 [ApiController]
 [Route("api/admin/classroom-assignments")]
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize]
 public class ClassroomTermAssignmentController(AppDbContext context, ClassroomSuggestionService suggestionService) : ControllerBase
 {
     private readonly AppDbContext _context = context;
     private readonly ClassroomSuggestionService _suggestionService = suggestionService;
 
     [HttpPost("suggest")]
+    [RequirePermission("menu.derslik-fakulte-atamasi.suggest")]
     public async Task<IActionResult> SuggestAssignments([FromQuery] int termId, CancellationToken ct)
     {
         try
@@ -35,6 +37,7 @@ public class ClassroomTermAssignmentController(AppDbContext context, ClassroomSu
     }
 
     [HttpGet]
+    [RequirePermission("menu.derslik-fakulte-atamasi.view")]
     public async Task<IActionResult> GetByTerm([FromQuery] int termId, CancellationToken ct)
     {
         var assignments = await _context.ClassroomTermAssignments
@@ -52,6 +55,7 @@ public class ClassroomTermAssignmentController(AppDbContext context, ClassroomSu
     }
 
     [HttpPost]
+    [RequirePermission("menu.derslik-fakulte-atamasi.create")]
     public async Task<IActionResult> Create([FromBody] CreateClassroomTermAssignmentDto dto, CancellationToken ct)
     {
         // Aynı dönemde aynı derslik başka fakülteye atanmış mı kontrol et
@@ -89,6 +93,7 @@ public class ClassroomTermAssignmentController(AppDbContext context, ClassroomSu
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("menu.derslik-fakulte-atamasi.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var assignment = await _context.ClassroomTermAssignments.FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -103,6 +108,7 @@ public class ClassroomTermAssignmentController(AppDbContext context, ClassroomSu
     }
 
     [HttpPost("bulk")]
+    [RequirePermission("menu.derslik-fakulte-atamasi.create")]
     public async Task<IActionResult> BulkAssign([FromBody] BulkClassroomTermAssignmentDto dto, CancellationToken ct)
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == dto.TermId, ct);

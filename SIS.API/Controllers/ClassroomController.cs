@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -13,12 +14,13 @@ public record UpdateClassroomDto(string Name, string BuildingName, int Floor, in
 
 [ApiController]
 [Route("api/admin/classrooms")]
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize]
 public class ClassroomController(AppDbContext context) : ControllerBase
 {
     private readonly AppDbContext _context = context;
 
     [HttpGet]
+    [RequirePermission("menu.derslik-yonetimi.view")]
     public async Task<IActionResult> GetAll([FromQuery] string? type, CancellationToken ct)
     {
         var query = _context.Classrooms.AsNoTracking().AsQueryable();
@@ -35,6 +37,7 @@ public class ClassroomController(AppDbContext context) : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.derslik-yonetimi.view")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var classroom = await _context.Classrooms.AsNoTracking()
@@ -47,6 +50,7 @@ public class ClassroomController(AppDbContext context) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("menu.derslik-yonetimi.create")]
     public async Task<IActionResult> Create([FromBody] CreateClassroomDto dto, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(dto.Name))
@@ -80,6 +84,7 @@ public class ClassroomController(AppDbContext context) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.derslik-yonetimi.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateClassroomDto dto, CancellationToken ct)
     {
         var classroom = await _context.Classrooms.FirstOrDefaultAsync(c => c.Id == id, ct);
@@ -116,6 +121,7 @@ public class ClassroomController(AppDbContext context) : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [RequirePermission("menu.derslik-yonetimi.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var classroom = await _context.Classrooms.FirstOrDefaultAsync(c => c.Id == id, ct);

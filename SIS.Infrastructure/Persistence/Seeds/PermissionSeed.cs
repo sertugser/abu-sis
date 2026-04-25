@@ -12,8 +12,8 @@ namespace SIS.Infrastructure.Persistence.Seeds;
 ///  - <c>lookup.*</c> permission'ları SEED EDİLMEZ — Karar 7 gereği kod düzeyinde
 ///    <see cref="Microsoft.AspNetCore.Authorization.IAuthorizationFilter"/> shortcut ile
 ///    her authenticated user'a açık (`RequirePermissionAttribute` içinde hardcoded).
-///  - <c>system.*</c> permission'ları Phase 1'de yok (system-config sidebar'da olduğu için
-///    `menu.system-config.*` olarak modellendi).
+///  - <c>system.*</c> permission'ları sadece admin UI (PermissionAdminController) için —
+///    sidebar'da gözükmez, RolePermissionSeed'e eklenmez. SystemAdmin kod-shortcut ile erişir.
 ///
 /// Inventory: <c>docs/superpowers/plans/2026-04-25-rbac-permission-inventory.md</c> (Sprint 0.1).
 /// </summary>
@@ -370,28 +370,41 @@ public static class PermissionSeed
         ("menu.system-config.import",                    PermissionCategory.Menu, "Sistem konfigürasyonu import"),
         ("menu.ebys-imza-yetkilileri.view",              PermissionCategory.Menu, "EBYS imza yetkilileri sayfası"),
         ("menu.fakulte-imza-yukleme.view",               PermissionCategory.Menu, "Fakülte imza yükleme sayfası"),
+
+        // ─── system.* (Phase 1) ─────────────────────────────────────────────
+        // Sidebar'da görünmeyen, sadece SystemAdministrator'ın admin UI'da kullandığı permission'lar.
+        // Sprint 2 PermissionAdminController bu key'leri kullanır. RolePermissionSeed'e eklenmez —
+        // SystemAdmin kod-shortcut ile zaten otomatik erişir (Karar 4).
+        ("system.permission.view",                       PermissionCategory.System, "Permission tablosu görüntüleme (admin UI)"),
+        ("system.permission.assign",                     PermissionCategory.System, "Role permission atama (admin UI)"),
     };
 
     /// <summary>
-    /// Idempotent seed. Permissions tablosu boşsa <see cref="All"/> listesindeki tüm permission'ları ekler.
+    /// Merge seed. Mevcut Permissions tablosunda olmayan key'leri ekler; mevcutlara dokunmaz.
+    /// Sprint 5+ kapsamında controller migration sırasında yeni permission key'leri eklendikçe
+    /// her uygulama açılışında otomatik senkronize olur. Mevcut RolePermission ilişkileri korunur.
     /// </summary>
     public static async Task SeedAsync(AppDbContext context, CancellationToken ct = default)
     {
-        if (await context.Permissions.AnyAsync(ct))
-        {
-            // Daha önce seed edildi — idempotent kalıyoruz, hiçbir şey yapma.
-            return;
-        }
+        var existingKeys = await context.Permissions
+            .Select(p => p.Key)
+            .ToListAsync(ct);
+        var existingSet = new HashSet<string>(existingKeys, StringComparer.Ordinal);
 
-        var permissions = All.Select(p => new Permission
-        {
-            Key = p.Key,
-            Category = p.Category,
-            Description = p.Description,
-            CreatedAt = DateTime.UtcNow,
-        }).ToList();
+        var missing = All
+            .Where(p => !existingSet.Contains(p.Key))
+            .Select(p => new Permission
+            {
+                Key = p.Key,
+                Category = p.Category,
+                Description = p.Description,
+                CreatedAt = DateTime.UtcNow,
+            })
+            .ToList();
 
-        context.Permissions.AddRange(permissions);
+        if (missing.Count == 0) return;
+
+        context.Permissions.AddRange(missing);
         await context.SaveChangesAsync(ct);
     }
 }

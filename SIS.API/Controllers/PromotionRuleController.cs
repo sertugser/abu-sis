@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
@@ -29,7 +30,7 @@ public record UpdatePromotionRuleDto(
 
 [ApiController]
 [Route("api/admin/promotion-rules")]
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize]
 public class PromotionRuleController(AppDbContext context, ISystemConfigProvider config) : ControllerBase
 {
     private readonly AppDbContext _context = context;
@@ -50,6 +51,7 @@ public class PromotionRuleController(AppDbContext context, ISystemConfigProvider
     }
 
     [HttpGet]
+    [RequirePermission("menu.sinif-atlatma-kurallari.view")]
     public async Task<IActionResult> Get(
         [FromQuery] int? programId,
         [FromQuery] int? curriculumId,
@@ -95,6 +97,7 @@ public class PromotionRuleController(AppDbContext context, ISystemConfigProvider
     }
 
     [HttpPost]
+    [RequirePermission("menu.sinif-atlatma-kurallari.create")]
     public async Task<IActionResult> Create([FromBody] CreatePromotionRuleDto dto, CancellationToken ct)
     {
         var program = await _context.AcademicPrograms.AsNoTracking().FirstOrDefaultAsync(p => p.Id == dto.ProgramId, ct);
@@ -165,6 +168,7 @@ public class PromotionRuleController(AppDbContext context, ISystemConfigProvider
     }
 
     [HttpPut("{id}")]
+    [RequirePermission("menu.sinif-atlatma-kurallari.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdatePromotionRuleDto dto, CancellationToken ct)
     {
         var rule = await _context.PromotionRules
@@ -231,6 +235,7 @@ public class PromotionRuleController(AppDbContext context, ISystemConfigProvider
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("menu.sinif-atlatma-kurallari.delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var rule = await _context.PromotionRules.FirstOrDefaultAsync(r => r.Id == id, ct);

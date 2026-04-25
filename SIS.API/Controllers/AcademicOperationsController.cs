@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.AcademicOperations.DTOs;
 using SIS.Application.AcademicOperations.Services;
 
@@ -8,7 +9,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 public class AcademicOperationsController : ControllerBase
 {
     private readonly IAcademicOperationsService _academicOperationsService;
@@ -20,6 +21,7 @@ public class AcademicOperationsController : ControllerBase
     }
 
     [HttpGet("context")]
+    [RequirePermission("menu.derslerim.view")]
     public async Task<IActionResult> GetContext(CancellationToken cancellationToken)
     {
         if (!TryGetAuthenticatedUser(out var userId, out var roles))
@@ -30,6 +32,7 @@ public class AcademicOperationsController : ControllerBase
     }
 
     [HttpGet("planning-summary")]
+    [RequirePermission("menu.akilli-planlama.view")]
     public async Task<IActionResult> GetPlanningSummary([FromQuery] int departmentId, [FromQuery] int? termId, CancellationToken cancellationToken)
     {
         if (departmentId <= 0)
@@ -52,6 +55,7 @@ public class AcademicOperationsController : ControllerBase
     }
 
     [HttpGet("class-lists")]
+    [RequirePermission("menu.sinif-listeleri.view")]
     public async Task<IActionResult> GetDepartmentClassLists([FromQuery] int departmentId, [FromQuery] int? termId, [FromQuery] string? search, CancellationToken cancellationToken)
     {
         if (departmentId <= 0)
@@ -77,6 +81,7 @@ public class AcademicOperationsController : ControllerBase
     }
 
     [HttpGet("curriculum-overview")]
+    [RequirePermission("menu.mufredat-islemleri.view")]
     public async Task<IActionResult> GetCurriculumOverview([FromQuery] int departmentId, CancellationToken cancellationToken)
     {
         if (departmentId <= 0)

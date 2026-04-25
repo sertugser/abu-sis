@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 
@@ -7,14 +8,16 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin/time-slots")]
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize]
 public sealed class TimeSlotController(ITimeSlotService service) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission("menu.ders-saatleri-yonetimi.view")]
     public async Task<IActionResult> GetByTerm([FromQuery] int termId, CancellationToken ct)
         => Ok(await service.GetByTermAsync(termId, ct));
 
     [HttpPost]
+    [RequirePermission("menu.ders-saatleri-yonetimi.create")]
     public async Task<IActionResult> Create([FromBody] CreateTimeSlotDto dto, CancellationToken ct)
     {
         try { return Ok(await service.CreateAsync(dto, ct)); }
@@ -24,6 +27,7 @@ public sealed class TimeSlotController(ITimeSlotService service) : ControllerBas
     }
 
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.ders-saatleri-yonetimi.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateTimeSlotDto dto, CancellationToken ct)
     {
         try { return Ok(await service.UpdateAsync(id, dto, ct)); }
@@ -33,6 +37,7 @@ public sealed class TimeSlotController(ITimeSlotService service) : ControllerBas
     }
 
     [HttpDelete("{id:int}")]
+    [RequirePermission("menu.ders-saatleri-yonetimi.delete")]
     public async Task<IActionResult> Delete(int id, [FromQuery] bool force = false, CancellationToken ct = default)
     {
         try
@@ -47,6 +52,7 @@ public sealed class TimeSlotController(ITimeSlotService service) : ControllerBas
     }
 
     [HttpPost("regenerate")]
+    [RequirePermission("menu.ders-saatleri-yonetimi.regenerate")]
     public async Task<IActionResult> Regenerate([FromQuery] int termId, [FromQuery] bool force = false, CancellationToken ct = default)
     {
         try

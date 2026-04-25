@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
 
 namespace SIS.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/admin/terms")]
-[Authorize(Roles = "SystemAdministrator,AdministrativeStaff")]
 public class TermManagementController : ControllerBase
 {
     private readonly IAdminTermService _service;
@@ -18,10 +19,12 @@ public class TermManagementController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("menu.akademik-donem.view")]
     public async Task<IActionResult> GetAllTerms()
         => Ok(await _service.GetAllTermsAsync());
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.akademik-donem.view")]
     public async Task<IActionResult> GetTerm(int id)
     {
         try { return Ok(await _service.GetTermByIdAsync(id)); }
@@ -29,6 +32,7 @@ public class TermManagementController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("menu.akademik-donem.create")]
     public async Task<IActionResult> CreateTerm([FromBody] CreateTermDto dto)
     {
         try
@@ -41,6 +45,7 @@ public class TermManagementController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [RequirePermission("menu.akademik-donem.edit")]
     public async Task<IActionResult> UpdateTerm(int id, [FromBody] UpdateTermDto dto)
     {
         try { return Ok(await _service.UpdateTermAsync(id, dto)); }
@@ -50,7 +55,7 @@ public class TermManagementController : ControllerBase
     }
 
     [HttpPost("{id:int}/cancel")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.akademik-donem.cancel")]
     public async Task<IActionResult> Cancel(int id)
     {
         try
@@ -63,7 +68,7 @@ public class TermManagementController : ControllerBase
     }
 
     [HttpPost("{id:int}/uncancel")]
-    [Authorize(Roles = "SystemAdministrator")]
+    [RequirePermission("menu.akademik-donem.uncancel")]
     public async Task<IActionResult> Uncancel(int id)
     {
         try

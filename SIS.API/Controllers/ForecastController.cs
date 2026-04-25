@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.EnrollmentForecast.DTOs;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator")]
+[Authorize]
 public class ForecastController : ControllerBase
 {
     private readonly IEnrollmentForecastService _forecastService;
@@ -23,6 +24,7 @@ public class ForecastController : ControllerBase
     }
 
     [HttpGet("course-demand")]
+    [RequirePermission("menu.akilli-planlama.forecast")]
     public async Task<IActionResult> GetCourseDemand([FromQuery] int courseId, [FromQuery] bool includeTrace = false)
     {
         if (courseId <= 0)
@@ -48,6 +50,7 @@ public class ForecastController : ControllerBase
     }
 
     [HttpGet("department-summary")]
+    [RequirePermission("menu.akilli-planlama.forecast")]
     public async Task<IActionResult> GetDepartmentSummary([FromQuery] int departmentId)
     {
         if (departmentId <= 0)
@@ -68,6 +71,7 @@ public class ForecastController : ControllerBase
     }
 
     [HttpPost("simulate")]
+    [RequirePermission("menu.akilli-planlama.simulate")]
     public async Task<IActionResult> SimulateCourseDemand([FromQuery] int courseId, [FromBody] ForecastSimulationParams parameters)
     {
         if (courseId <= 0)

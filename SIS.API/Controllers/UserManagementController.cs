@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
 
@@ -7,7 +8,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/admin/users")]
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize]
 public class UserManagementController : ControllerBase
 {
     private readonly IAdminUserService _service;
@@ -18,6 +19,7 @@ public class UserManagementController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("menu.kullanici-tanimlama.view")]
     public async Task<IActionResult> GetUsers([FromQuery] AdminUserFilterDto filter)
     {
         var result = await _service.GetUsersAsync(filter);
@@ -25,6 +27,7 @@ public class UserManagementController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [RequirePermission("menu.kullanici-tanimlama.view")]
     public async Task<IActionResult> GetUser(int id)
     {
         try
@@ -39,6 +42,7 @@ public class UserManagementController : ControllerBase
     }
 
     [HttpPut("{id:int}/roles")]
+    [RequirePermission("menu.kullanici-tanimlama.update-roles")]
     public async Task<IActionResult> UpdateRoles(int id, [FromBody] UpdateUserRolesDto dto)
     {
         try
@@ -53,6 +57,7 @@ public class UserManagementController : ControllerBase
     }
 
     [HttpPost("{id:int}/reset-password")]
+    [RequirePermission("menu.kullanici-tanimlama.reset-password")]
     public async Task<IActionResult> ResetPassword(int id, [FromBody] AdminResetPasswordDto dto)
     {
         try
@@ -71,6 +76,7 @@ public class UserManagementController : ControllerBase
     }
 
     [HttpPut("{id:int}/status")]
+    [RequirePermission("menu.kullanici-tanimlama.set-status")]
     public async Task<IActionResult> SetStatus(int id, [FromBody] SetUserStatusDto dto)
     {
         try

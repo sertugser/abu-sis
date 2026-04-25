@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -11,7 +12,7 @@ namespace SIS.API.Controllers;
 
 [ApiController]
 [Route("api/schedule-approval")]
-[Authorize(Roles = "Dean,SystemAdministrator")]
+[Authorize]
 public class ScheduleApprovalController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -22,6 +23,7 @@ public class ScheduleApprovalController : ControllerBase
     }
 
     [HttpPost("faculty/{facultyId}/approve")]
+    [RequirePermission("menu.program-onayi.approve")]
     public async Task<IActionResult> ApproveFacultySchedule(int facultyId, [FromBody] ApproveFacultyScheduleRequestDto request, CancellationToken cancellationToken)
     {
         if (facultyId <= 0)
@@ -97,6 +99,7 @@ public class ScheduleApprovalController : ControllerBase
     }
 
     [HttpGet("faculty/{facultyId}/status")]
+    [RequirePermission("menu.program-onayi.view")]
     public async Task<IActionResult> GetApprovalStatus(int facultyId, [FromQuery] int? termId, CancellationToken cancellationToken)
     {
         if (facultyId <= 0)
@@ -185,6 +188,7 @@ public class ScheduleApprovalController : ControllerBase
     }
 
     [HttpDelete("faculty/{facultyId}/revoke")]
+    [RequirePermission("menu.program-onayi.revoke")]
     public async Task<IActionResult> RevokeApproval(int facultyId, [FromQuery] int? termId, CancellationToken cancellationToken)
     {
         if (facultyId <= 0)
