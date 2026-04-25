@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, CalendarDays, UserPlus, Repeat2, LogOut, Grid3x3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
@@ -69,12 +69,14 @@ export default function AcademicCalendarPage() {
   const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<'year' | 'month'>('year');
 
-  // Dönem değiştiğinde cursor'u TermStart'ın yılına/ayına taşı.
-  useEffect(() => {
-    if (!data?.termStart) return;
+  // Dönem değiştiğinde cursor'u TermStart'ın yılına/ayına taşı — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const [prevTermStart, setPrevTermStart] = useState(data?.termStart);
+  if (data?.termStart && data.termStart !== prevTermStart) {
+    setPrevTermStart(data.termStart);
     const termStart = new Date(data.termStart);
     setCursorDate(new Date(termStart.getFullYear(), termStart.getMonth(), 1));
-  }, [data?.termStart]);
+  }
 
   const events = data?.events;
   const eventsByDay = useMemo(() => {

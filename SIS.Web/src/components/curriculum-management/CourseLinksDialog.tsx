@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,14 +67,19 @@ export default function CourseLinksDialog({ mode, open, courseId, courseLabel, o
   const [requiresNoFailedLower, setRequiresNoFailedLower] = useState(false);
   const [canBeStandalone, setCanBeStandalone] = useState(false);
 
-  // Course detail yüklenince form alanlarını hydrate et
-  useEffect(() => {
-    if (!course || mode !== 'prerequisite') return;
-    setMinCredits(course.minCreditsRequired?.toString() ?? '');
-    setMinEcts(course.minEctsRequired?.toString() ?? '');
-    setRequiresNoFailedLower(course.requiresNoFailedLowerCourses);
-    setCanBeStandalone(course.canBeTakenStandalone);
-  }, [course, mode]);
+  // Course detail yüklenince form alanlarını hydrate et — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const [prevHydrationKey, setPrevHydrationKey] = useState<string | null>(null);
+  const hydrationKey = course && mode === 'prerequisite' ? `${course.id}-${mode}` : null;
+  if (hydrationKey !== prevHydrationKey) {
+    setPrevHydrationKey(hydrationKey);
+    if (course && mode === 'prerequisite') {
+      setMinCredits(course.minCreditsRequired?.toString() ?? '');
+      setMinEcts(course.minEctsRequired?.toString() ?? '');
+      setRequiresNoFailedLower(course.requiresNoFailedLowerCourses);
+      setCanBeStandalone(course.canBeTakenStandalone);
+    }
+  }
 
   function handleClose() {
     setSearch('');

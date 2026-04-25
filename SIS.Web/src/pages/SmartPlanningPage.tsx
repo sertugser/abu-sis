@@ -41,7 +41,11 @@ export default function SmartPlanningPage() {
   const [isPending, startTransition] = useTransition();
   const recommendationsQuery = useRecommendations(pacePreference);
 
-  const recommendations = recommendationsQuery.data?.recommendations ?? [];
+  // useMemo ile stable referans (?? [] her render'da yeni array yaratırdı)
+  const recommendations = useMemo(
+    () => recommendationsQuery.data?.recommendations ?? [],
+    [recommendationsQuery.data],
+  );
   const groupedRecommendations = useMemo(() => {
     return [...recommendations]
       .sort((a, b) => {

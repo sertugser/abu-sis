@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { DialogTitle } from '@/components/ui/dialog';
 import ResizableDialogContent from '@/components/ui/resizable-dialog';

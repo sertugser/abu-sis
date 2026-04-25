@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Edit2, Trash2, RefreshCw, AlertTriangle, Sparkles, Coffee, Sunset, Moon, Copy, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -63,12 +63,12 @@ export default function TimeSlotManagementPage() {
   const { data: terms = [] } = useAdminTerms();
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (selectedTermId == null && terms.length > 0) {
-      const active = terms.find(t => t.isActive) ?? terms[0];
-      setSelectedTermId(active.id);
-    }
-  }, [terms, selectedTermId]);
+  // Terms yüklenince ilk active term'i seç — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, render'da bir kez set)
+  if (selectedTermId == null && terms.length > 0) {
+    const active = terms.find(t => t.isActive) ?? terms[0];
+    setSelectedTermId(active.id);
+  }
 
   const { data: slots = [], isLoading } = useTimeSlots(selectedTermId);
   const settings = useScheduleSettings();

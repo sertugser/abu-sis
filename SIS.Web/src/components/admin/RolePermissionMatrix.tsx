@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -131,10 +131,15 @@ export function RolePermissionMatrix() {
   // Local draft (optimistic) — Set<permissionId>
   const [draft, setDraft] = useState<Set<number>>(new Set());
 
-  // Server'dan rol permission'ları gelince draft'ı senkronize et
-  useEffect(() => {
+  // Server'dan rol permission'ları gelince draft'ı senkronize et — adjust-state-during-render
+  // pattern (React 19+: useEffect içinde setState yasaklandı, yerine prev-tracking ile render'da update).
+  const [prevRolePermIds, setPrevRolePermIds] = useState(rolePermIds);
+  const [prevSelectedRoleId, setPrevSelectedRoleId] = useState(selectedRoleId);
+  if (prevRolePermIds !== rolePermIds || prevSelectedRoleId !== selectedRoleId) {
+    setPrevRolePermIds(rolePermIds);
+    setPrevSelectedRoleId(selectedRoleId);
     setDraft(new Set(rolePermIds));
-  }, [rolePermIds, selectedRoleId]);
+  }
 
   const grouped = useMemo(() => groupByCategoryAndResource(permissions), [permissions]);
   const original = useMemo(() => new Set(rolePermIds), [rolePermIds]);

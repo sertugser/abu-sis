@@ -15,7 +15,11 @@ import { NewTermStep } from './components/NewTermStep';
 
 export default function TermClosingPage() {
   const opsContext = useAcademicOperationsContext();
-  const departments = opsContext.data?.accessibleDepartments ?? [];
+  // useMemo ile stable referans (?? [] her render'da yeni array yaratırdı)
+  const departments = useMemo(
+    () => opsContext.data?.accessibleDepartments ?? [],
+    [opsContext.data],
+  );
   const { data: faculties } = useAdminFaculties();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
 

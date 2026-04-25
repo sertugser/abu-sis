@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -211,12 +211,18 @@ export default function CurriculumManagementPage() {
     () => flatCourses.slice((coursesPage - 1) * COURSES_PAGE_SIZE, coursesPage * COURSES_PAGE_SIZE),
     [flatCourses, coursesPage],
   );
-  // Filtre değişince ders sayfası 1'e dön
-  useEffect(() => { setCoursesPage(1); }, [searchCode, searchName, classFilter, termTypeFilter, selectedCurriculumId]);
+  // Filtre değişince ders sayfası 1'e dön — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const courseFilterKey = `${searchCode}|${searchName}|${classFilter}|${termTypeFilter}|${selectedCurriculumId}`;
+  const [prevCourseFilterKey, setPrevCourseFilterKey] = useState(courseFilterKey);
+  if (prevCourseFilterKey !== courseFilterKey) {
+    setPrevCourseFilterKey(courseFilterKey);
+    setCoursesPage(1);
+  }
   // Toplam sayfa küçüldüğünde mevcut sayfa dışarı taşarsa düzelt
-  useEffect(() => {
-    if (coursesPage > coursesTotalPages) setCoursesPage(coursesTotalPages);
-  }, [coursesPage, coursesTotalPages]);
+  if (coursesPage > coursesTotalPages) {
+    setCoursesPage(coursesTotalPages);
+  }
 
 
 
@@ -245,12 +251,17 @@ export default function CurriculumManagementPage() {
     () => filteredCurricula.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
     [filteredCurricula, currentPage],
   );
-  // Filtre değişince sayfa 1'e dön
-  useEffect(() => { setCurrentPage(1); }, [statusFilter, yearFilter, facultyId, departmentId, programId]);
+  // Filtre değişince sayfa 1'e dön — adjust-state-during-render pattern
+  const currFilterKey = `${statusFilter}|${yearFilter}|${facultyId}|${departmentId}|${programId}`;
+  const [prevCurrFilterKey, setPrevCurrFilterKey] = useState(currFilterKey);
+  if (prevCurrFilterKey !== currFilterKey) {
+    setPrevCurrFilterKey(currFilterKey);
+    setCurrentPage(1);
+  }
   // totalPages küçüldüğünde currentPage dışarı taşarsa düzelt
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  if (currentPage > totalPages) {
+    setCurrentPage(totalPages);
+  }
 
   // Edit dialog'unda gösterilecek mevcut müfredat bilgisi (Fakülte/Program read-only info bar için)
   const editingCurr = useMemo(
