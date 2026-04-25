@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SIS.Domain.Entities;
+using SIS.Domain.Identity;
 
 namespace SIS.Infrastructure.Persistence;
 
@@ -73,6 +74,13 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
     public DbSet<AdvisorCourseConstraint> AdvisorCourseConstraints => Set<AdvisorCourseConstraint>();
     public DbSet<CourseCrossList> CourseCrossLists => Set<CourseCrossList>();
+
+    // ── RBAC (Phase 1) ──────────────────────────────────────────
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<MenuModule> MenuModules => Set<MenuModule>();
+    public DbSet<MenuItem> MenuItems => Set<MenuItem>();
+    public DbSet<MenuItemPermission> MenuItemPermissions => Set<MenuItemPermission>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -977,6 +985,71 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .HasForeignKey(q => q.ProgramId)
              .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(q => new { q.ProgramId, q.Year, q.Type }).IsUnique();
+        });
+
+        // ── RBAC: Permission ────────────────────────────────────
+        builder.Entity<Permission>(e =>
+        {
+            e.Property(p => p.Key).HasMaxLength(150).IsRequired();
+            e.Property(p => p.Description).HasMaxLength(500);
+            e.HasIndex(p => p.Key).IsUnique();
+            e.HasIndex(p => p.Category);
+        });
+
+        // ── RBAC: RolePermission (composite PK) ─────────────────
+        builder.Entity<RolePermission>(e =>
+        {
+            e.HasKey(rp => new { rp.RoleId, rp.PermissionId });
+            e.HasOne<IdentityRole<int>>()
+             .WithMany()
+             .HasForeignKey(rp => rp.RoleId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(rp => rp.Permission)
+             .WithMany(p => p.RolePermissions)
+             .HasForeignKey(rp => rp.PermissionId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(rp => rp.PermissionId);
+        });
+
+        // ── RBAC: MenuModule (recursive tree) ───────────────────
+        builder.Entity<MenuModule>(e =>
+        {
+            e.Property(m => m.Label).HasMaxLength(100).IsRequired();
+            e.Property(m => m.Icon).HasMaxLength(50);
+            e.HasOne(m => m.Parent)
+             .WithMany(m => m.Children)
+             .HasForeignKey(m => m.ParentId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => m.ParentId);
+            e.HasIndex(m => new { m.ParentId, m.SortOrder });
+        });
+
+        // ── RBAC: MenuItem ──────────────────────────────────────
+        builder.Entity<MenuItem>(e =>
+        {
+            e.Property(mi => mi.Label).HasMaxLength(150).IsRequired();
+            e.Property(mi => mi.Route).HasMaxLength(200).IsRequired();
+            e.Property(mi => mi.Slug).HasMaxLength(100).IsRequired();
+            e.HasOne(mi => mi.Module)
+             .WithMany(m => m.Items)
+             .HasForeignKey(mi => mi.ModuleId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(mi => mi.Route).IsUnique();
+            e.HasIndex(mi => new { mi.ModuleId, mi.SortOrder });
+        });
+
+        // ── RBAC: MenuItemPermission (composite PK) ─────────────
+        builder.Entity<MenuItemPermission>(e =>
+        {
+            e.HasKey(mip => new { mip.MenuItemId, mip.PermissionId });
+            e.HasOne(mip => mip.MenuItem)
+             .WithMany(mi => mi.MenuItemPermissions)
+             .HasForeignKey(mip => mip.MenuItemId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(mip => mip.Permission)
+             .WithMany(p => p.MenuItemPermissions)
+             .HasForeignKey(mip => mip.PermissionId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

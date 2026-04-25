@@ -1,0 +1,584 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using SIS.Domain.Identity;
+
+namespace SIS.Infrastructure.Persistence.Seeds;
+
+/// <summary>
+/// RBAC Phase 1 — 6 default rol için RolePermission mapping'ini seed eder.
+///
+/// Inventory: <c>docs/superpowers/plans/2026-04-25-rbac-default-seed.md</c> (Sprint 0.3 sign-off).
+///
+/// Önemli kurallar:
+///  - <b>SystemAdministrator</b> rolü için seed YOK — Karar 4 gereği kod düzeyinde
+///    <c>RequirePermissionAttribute</c> shortcut ile tüm permission'lara erişir.
+///  - Her rol için sadece <see cref="RoleDefaults"/>'da listelenen permission key'ler verilir.
+///  - <c>lookup.*</c> permission'ları DB'de yok — hardcoded shortcut ile her authenticated user'a açık.
+///  - Permission key bulunamazsa (typo / drift) warning log + atla.
+///  - Rol bulunamazsa warning log + atla.
+///
+/// Beklenen toplam: <b>~462 RolePermission</b> satırı.
+///
+/// Çalıştırma sırası: <see cref="PermissionSeed"/> + IdentityRole seed ÖNCE çalışmalı.
+/// </summary>
+public static class RolePermissionSeed
+{
+    /// <summary>
+    /// Default rol → permission key listesi mapping'i. SystemAdministrator dahil değildir (locked).
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> RoleDefaults =
+        new Dictionary<string, IReadOnlyList<string>>
+        {
+            // ═══════════════════════════════════════════════════════════════════════════
+            // Student — 29 permission (15 view + 14 action)
+            // Sidebar: Sık Kullanılanlar + Ders ve Dönem İşlemleri + Anketler + Hesabım
+            // ═══════════════════════════════════════════════════════════════════════════
+            ["Student"] = new[]
+            {
+                // ── View permissions (15) ──
+                "menu.ana-sayfa.view",
+                "menu.akademik-takvim.view",
+                "menu.duyurular.view",
+                "menu.alinan-dersler.view",
+                "menu.ders-kayit.view",
+                "menu.akilli-planlama.view",
+                "menu.plan.view",
+                "menu.not-listesi.view",
+                "menu.devamsizlik-durumu.view",
+                "menu.donem-ortalamalari.view",
+                "menu.mufredat-durum.view",
+                "menu.transkript.view",
+                "menu.transkript-senaryosu.view",
+                "menu.ders-degerlendirme.view",
+                "menu.sifre-degistir.view",
+
+                // ── Action permissions (14) ──
+                "menu.ders-kayit.plan",
+                "menu.ders-kayit.submit",
+                "menu.ders-kayit.drop",
+                "menu.ders-kayit.withdraw",
+                "menu.alinan-dersler.statistics",
+                "menu.ders-degerlendirme.submit",
+                "menu.akilli-planlama.recommendation",
+                "menu.akilli-planlama.difficulty",
+                "menu.akilli-planlama.critical-path",
+                "menu.ders-programi-kisitlamalari.exception-request",
+                "menu.ders-programi-kisitlamalari.exception-my",
+                "menu.ders-programi-kisitlamalari.exception-view",
+                "menu.ogrenci-rehberi.eligibility",
+                "menu.ogrenci-rehberi.view",
+            },
+
+            // ═══════════════════════════════════════════════════════════════════════════
+            // Instructor — 26 permission (9 view + 17 action)
+            // Sidebar: Sık Kullanılanlar + Ders İşlemleri (subset) + Anketler + Hesabım
+            // ═══════════════════════════════════════════════════════════════════════════
+            ["Instructor"] = new[]
+            {
+                // ── View permissions (9) ──
+                "menu.ana-sayfa.view",
+                "menu.akademik-takvim.view",
+                "menu.duyurular.view",
+                "menu.derslerim.view",
+                "menu.ders-programim.view",
+                "menu.not-girisi.view",
+                "menu.danisman-ders-kisitlari.view",
+                "menu.sinif-listeleri.view",
+                "menu.degerlendirme-sonuclari.view",
+                "menu.sifre-degistir.view",
+
+                // ── Action permissions (17) ──
+                "menu.not-girisi.edit",
+                "menu.not-girisi.submit",
+                "menu.not-girisi.export",
+                "menu.not-girisi.import",
+                "menu.not-girisi.finalize",
+                "menu.not-girisi.unfinalize",
+                "menu.ders-programim.edit",
+                "menu.danisman-ders-kisitlari.create",
+                "menu.danisman-ders-kisitlari.edit",
+                "menu.danisman-ders-kisitlari.delete",
+                "menu.ders-degerlendirme.view",
+                "menu.ders-programi-kisitlamalari.exception-request",
+                "menu.ders-programi-kisitlamalari.exception-my",
+                "menu.ders-programi-kisitlamalari.exception-view",
+                "menu.ders-kayit.view",
+                "menu.akilli-planlama.difficulty",
+                "menu.mufredat-durum.view",
+            },
+
+            // ═══════════════════════════════════════════════════════════════════════════
+            // AcademicAdvisor — 32 permission (10 view + 22 action)
+            // C2 sign-off: not-girisi.* YOK — sidebar'dan kaldırıldı.
+            // ═══════════════════════════════════════════════════════════════════════════
+            ["AcademicAdvisor"] = new[]
+            {
+                // ── View permissions (10) ──
+                "menu.ana-sayfa.view",
+                "menu.akademik-takvim.view",
+                "menu.duyurular.view",
+                "menu.danisman-ders-kisitlari.view",
+                "menu.derslerim.view",
+                "menu.ders-programim.view",
+                "menu.sinif-listeleri.view",
+                "menu.ders-kayit-duzenleme.view",
+                "menu.ogrenci-rehberi.view",
+                "menu.ogrenci-rehberi.eligibility",
+                "menu.sifre-degistir.view",
+
+                // ── Action permissions (22) ──
+                "menu.ders-kayit-duzenleme.approve",
+                "menu.ders-kayit-duzenleme.reject",
+                "menu.danisman-ders-kisitlari.create",
+                "menu.danisman-ders-kisitlari.edit",
+                "menu.danisman-ders-kisitlari.delete",
+                "menu.degerlendirme-sonuclari.view",
+                "menu.ders-degerlendirme.view",
+                "menu.ders-programi-kisitlamalari.exception-request",
+                "menu.ders-programi-kisitlamalari.exception-my",
+                "menu.ders-programi-kisitlamalari.exception-view",
+                "menu.ders-kayit.view",
+                "menu.akilli-planlama.difficulty",
+                "menu.mufredat-durum.view",
+            },
+
+            // ═══════════════════════════════════════════════════════════════════════════
+            // AdministrativeStaff — 105 permission (18 view + 87 action)
+            // ═══════════════════════════════════════════════════════════════════════════
+            ["AdministrativeStaff"] = new[]
+            {
+                // ── View permissions (18) ──
+                "menu.ana-sayfa.view",
+                "menu.akademik-takvim.view",
+                "menu.duyurular.view",
+                "menu.akademik-takvim-yonetimi.view",
+                "menu.akademik-takvim-olusturma.view",
+                "menu.ders-katalogu.view",
+                "menu.mufredat-islemleri.view",
+                "menu.secmeli-ders-gruplari.view",
+                "menu.ders-acma-islemleri.view",
+                "menu.ders-programi-olusturma.view",
+                "menu.ogretim-elemani-atama.view",
+                "menu.donem-programi-aktarim.view",
+                "menu.derslik-doluluk.view",
+                "menu.ders-veren-ogretim-uyeleri.view",
+                "menu.sinif-listeleri.view",
+                "menu.ders-programi-kisitlamalari.view",
+                "menu.ogrenci-rehberi.view",
+                "menu.duyuru-yonetimi.view",
+                "menu.sifre-degistir.view",
+                "menu.degerlendirme-sonuclari.view",
+                "menu.personel-listesi.view",
+
+                // ── Action permissions: Akademik Takvim Oluşturucu (broad) ──
+                "menu.akademik-takvim-olusturma.generate",
+                "menu.akademik-takvim-olusturma.simulate",
+
+                // ── Müfredat (publish/archive HARİÇ — DepMgr+) ──
+                "menu.mufredat-islemleri.create",
+                "menu.mufredat-islemleri.edit",
+                "menu.mufredat-islemleri.delete",
+                "menu.mufredat-islemleri.add-course",
+                "menu.mufredat-islemleri.edit-course",
+                "menu.mufredat-islemleri.remove-course",
+                "menu.mufredat-islemleri.copy",
+                "menu.mufredat-islemleri.activate",
+                "menu.mufredat-islemleri.create-pool",
+                "menu.mufredat-islemleri.edit-pool",
+                "menu.mufredat-islemleri.delete-pool",
+                "menu.mufredat-sinif-donem.view",
+                "menu.mufredat-sinif-donem.create",
+                "menu.mufredat-sinif-donem.edit",
+                "menu.mufredat-sinif-donem.delete",
+
+                // ── Seçmeli Gruplar ──
+                "menu.secmeli-ders-gruplari.create",
+                "menu.secmeli-ders-gruplari.edit",
+                "menu.secmeli-ders-gruplari.delete",
+                "menu.secmeli-ders-gruplari.add-course",
+                "menu.secmeli-ders-gruplari.remove-course",
+
+                // ── Ders Açma ──
+                "menu.ders-acma-islemleri.open",
+                "menu.ders-acma-islemleri.bulk-open",
+                "menu.ders-acma-islemleri.edit",
+                "menu.ders-acma-islemleri.close-section",
+                "menu.ders-acma-islemleri.close-all",
+                "menu.ders-acma-islemleri.reactivate",
+                "menu.ogretim-elemani-atama.bulk-assign",
+
+                // ── Programlama (swap/lock/unlock HARİÇ — DepMgr+) ──
+                "menu.ders-programi-olusturma.assign",
+                "menu.ders-programi-olusturma.unassign",
+                "menu.ders-programi-olusturma.reset-all",
+                "menu.ders-programi-olusturma.auto-schedule",
+                "menu.ders-programi-olusturma.apply",
+                "menu.ders-programi-olusturma.validate",
+                "menu.ders-programi-olusturma.suggest",
+                "menu.ders-programi-olusturma.export",
+                "menu.ders-programi-olusturma.export-pdf",
+                "menu.ders-programi-olusturma.import",
+
+                // ── Kısıtlamalar (toggle/weight HARİÇ — SysAdmin only; exception HARİÇ — DepMgr+) ──
+                "menu.ders-programi-kisitlamalari.snapshot",
+                "menu.ders-programi-kisitlamalari.create",
+                "menu.ders-programi-kisitlamalari.edit",
+                "menu.ders-programi-kisitlamalari.delete",
+                "menu.ders-programi-kisitlamalari.simulate",
+                "menu.ders-programi-kisitlamalari.apply",
+
+                // ── Dönem Programı Aktarım ──
+                "menu.donem-programi-aktarim.transfer",
+
+                // ── Derslik Export ──
+                "menu.derslik-doluluk.export",
+
+                // ── Öğrenci & Personel CRUD ──
+                "menu.ogrenci-rehberi.create",
+                "menu.toplu-danisman-atama.assign",
+                "menu.personel-listesi.create",
+
+                // ── Duyuru Yönetimi CRUD ──
+                "menu.duyuru-yonetimi.create",
+                "menu.duyuru-yonetimi.edit",
+                "menu.duyuru-yonetimi.delete",
+
+                // ── Cross-cutting (authenticated) ──
+                "menu.ders-kayit.view",
+                "menu.ders-degerlendirme.view",
+                "menu.ders-programi-kisitlamalari.exception-request",
+                "menu.ders-programi-kisitlamalari.exception-my",
+                "menu.ders-programi-kisitlamalari.exception-view",
+
+                // ── Cross-cutting (broad role list) ──
+                "menu.ogrenci-rehberi.eligibility",
+                "menu.akilli-planlama.forecast",
+                "menu.akilli-planlama.simulate",
+                "menu.mufredat-durum.view",
+            },
+
+            // ═══════════════════════════════════════════════════════════════════════════
+            // DepartmentManager — 126 permission (24 view + 102 action)
+            // AdministrativeStaff'ın yetkileri + onay ekleri (publish/archive, swap/lock/unlock,
+            // exception approve, dönem kapatma, sınıf atlatma)
+            // ═══════════════════════════════════════════════════════════════════════════
+            ["DepartmentManager"] = new[]
+            {
+                // ── View permissions (24) ──
+                "menu.ana-sayfa.view",
+                "menu.akademik-takvim.view",
+                "menu.duyurular.view",
+                "menu.ders-katalogu.view",
+                "menu.mufredat-islemleri.view",
+                "menu.secmeli-ders-gruplari.view",
+                "menu.ders-acma-islemleri.view",
+                "menu.ders-programi-kisitlamalari.view",
+                "menu.ogretim-elemani-atama.view",
+                "menu.donem-programi-aktarim.view",
+                "menu.ders-veren-ogretim-uyeleri.view",
+                "menu.sinif-listeleri.view",
+                "menu.donem-kapatma.view",
+                "menu.derslerim.view",
+                "menu.ders-programim.view",
+                "menu.not-girisi.view",
+                "menu.ders-programi-olusturma.view",
+                "menu.derslik-doluluk.view",
+                "menu.degerlendirme-sonuclari.view",
+                "menu.ogrenci-rehberi.view",
+                "menu.duyuru-yonetimi.view",
+                "menu.personel-listesi.view",
+                "menu.sifre-degistir.view",
+                "menu.sinif-atlatma-islemleri.view",
+
+                // ── Müfredat (publish/archive DAHIL) ──
+                "menu.mufredat-islemleri.create",
+                "menu.mufredat-islemleri.edit",
+                "menu.mufredat-islemleri.delete",
+                "menu.mufredat-islemleri.add-course",
+                "menu.mufredat-islemleri.edit-course",
+                "menu.mufredat-islemleri.remove-course",
+                "menu.mufredat-islemleri.copy",
+                "menu.mufredat-islemleri.activate",
+                "menu.mufredat-islemleri.create-pool",
+                "menu.mufredat-islemleri.edit-pool",
+                "menu.mufredat-islemleri.delete-pool",
+                "menu.mufredat-islemleri.publish",
+                "menu.mufredat-islemleri.archive",
+                "menu.mufredat-sinif-donem.create",
+                "menu.mufredat-sinif-donem.edit",
+                "menu.mufredat-sinif-donem.delete",
+
+                // ── Seçmeli Gruplar ──
+                "menu.secmeli-ders-gruplari.create",
+                "menu.secmeli-ders-gruplari.edit",
+                "menu.secmeli-ders-gruplari.delete",
+                "menu.secmeli-ders-gruplari.add-course",
+                "menu.secmeli-ders-gruplari.remove-course",
+
+                // ── Ders Açma ──
+                "menu.ders-acma-islemleri.open",
+                "menu.ders-acma-islemleri.bulk-open",
+                "menu.ders-acma-islemleri.edit",
+                "menu.ders-acma-islemleri.close-section",
+                "menu.ders-acma-islemleri.close-all",
+                "menu.ders-acma-islemleri.reactivate",
+                "menu.ogretim-elemani-atama.bulk-assign",
+
+                // ── Programlama (swap/lock/unlock DAHIL) ──
+                "menu.ders-programi-olusturma.assign",
+                "menu.ders-programi-olusturma.unassign",
+                "menu.ders-programi-olusturma.reset-all",
+                "menu.ders-programi-olusturma.auto-schedule",
+                "menu.ders-programi-olusturma.apply",
+                "menu.ders-programi-olusturma.validate",
+                "menu.ders-programi-olusturma.suggest",
+                "menu.ders-programi-olusturma.export",
+                "menu.ders-programi-olusturma.export-pdf",
+                "menu.ders-programi-olusturma.import",
+                "menu.ders-programi-olusturma.swap",
+                "menu.ders-programi-olusturma.lock",
+                "menu.ders-programi-olusturma.unlock",
+
+                // ── Kısıtlamalar (exception DAHIL) ──
+                "menu.ders-programi-kisitlamalari.snapshot",
+                "menu.ders-programi-kisitlamalari.create",
+                "menu.ders-programi-kisitlamalari.edit",
+                "menu.ders-programi-kisitlamalari.delete",
+                "menu.ders-programi-kisitlamalari.simulate",
+                "menu.ders-programi-kisitlamalari.apply",
+                "menu.ders-programi-kisitlamalari.exception",
+                "menu.ders-programi-kisitlamalari.exception-pending",
+                "menu.ders-programi-kisitlamalari.exception-approve",
+                "menu.ders-programi-kisitlamalari.exception-reject",
+
+                // ── Dönem Programı Aktarım ──
+                "menu.donem-programi-aktarim.transfer",
+
+                // ── Dönem Kapatma + Sınıf Atlatma ──
+                "menu.donem-kapatma.lock-grades",
+                "menu.donem-kapatma.unlock-grades",
+                "menu.donem-kapatma.calculate-gpa",
+                "menu.donem-kapatma.open-new-term",
+                "menu.sinif-atlatma-islemleri.promote",
+                "menu.sinif-atlatma-islemleri.rollback",
+                "menu.sinif-atlatma-islemleri.export",
+
+                // ── Derslik Export ──
+                "menu.derslik-doluluk.export",
+
+                // ── Öğrenci ──
+                "menu.toplu-danisman-atama.assign",
+
+                // ── Duyuru Yönetimi CRUD ──
+                "menu.duyuru-yonetimi.create",
+                "menu.duyuru-yonetimi.edit",
+                "menu.duyuru-yonetimi.delete",
+
+                // ── Cross-cutting (authenticated) ──
+                "menu.ders-kayit.view",
+                "menu.ders-degerlendirme.view",
+                "menu.ders-programi-kisitlamalari.exception-request",
+                "menu.ders-programi-kisitlamalari.exception-my",
+                "menu.ders-programi-kisitlamalari.exception-view",
+
+                // ── Cross-cutting (broad role list) ──
+                "menu.ogrenci-rehberi.eligibility",
+                "menu.akilli-planlama.forecast",
+                "menu.akilli-planlama.simulate",
+                "menu.akilli-planlama.difficulty",
+                "menu.mufredat-durum.view",
+            },
+
+            // ═══════════════════════════════════════════════════════════════════════════
+            // Dean — 144 permission (27 view + 117 action)
+            // DepartmentManager + faculty-level program onayı + program kontenjan + AdminStaff CRUD
+            // ═══════════════════════════════════════════════════════════════════════════
+            ["Dean"] = new[]
+            {
+                // ── View permissions (27) ──
+                "menu.ana-sayfa.view",
+                "menu.akademik-takvim.view",
+                "menu.duyurular.view",
+                "menu.program-kontenjan.view",
+                "menu.ders-katalogu.view",
+                "menu.mufredat-islemleri.view",
+                "menu.secmeli-ders-gruplari.view",
+                "menu.ders-acma-islemleri.view",
+                "menu.ders-programi-kisitlamalari.view",
+                "menu.ders-programi-olusturma.view",
+                "menu.ogretim-elemani-atama.view",
+                "menu.donem-programi-aktarim.view",
+                "menu.derslik-doluluk.view",
+                "menu.ders-veren-ogretim-uyeleri.view",
+                "menu.program-onayi.view",
+                "menu.sinif-listeleri.view",
+                "menu.donem-kapatma.view",
+                "menu.derslerim.view",
+                "menu.ders-programim.view",
+                "menu.not-girisi.view",
+                "menu.degerlendirme-sonuclari.view",
+                "menu.ogrenci-rehberi.view",
+                "menu.duyuru-yonetimi.view",
+                "menu.personel-listesi.view",
+                "menu.sifre-degistir.view",
+                "menu.sinif-atlatma-islemleri.view",
+
+                // ── Program Kontenjan ──
+                "menu.program-kontenjan.create",
+                "menu.program-kontenjan.edit",
+                "menu.program-kontenjan.delete",
+
+                // ── Müfredat (publish/archive DAHIL) ──
+                "menu.mufredat-islemleri.create",
+                "menu.mufredat-islemleri.edit",
+                "menu.mufredat-islemleri.delete",
+                "menu.mufredat-islemleri.add-course",
+                "menu.mufredat-islemleri.edit-course",
+                "menu.mufredat-islemleri.remove-course",
+                "menu.mufredat-islemleri.copy",
+                "menu.mufredat-islemleri.activate",
+                "menu.mufredat-islemleri.create-pool",
+                "menu.mufredat-islemleri.edit-pool",
+                "menu.mufredat-islemleri.delete-pool",
+                "menu.mufredat-islemleri.publish",
+                "menu.mufredat-islemleri.archive",
+                "menu.mufredat-sinif-donem.create",
+                "menu.mufredat-sinif-donem.edit",
+                "menu.mufredat-sinif-donem.delete",
+
+                // ── Seçmeli Gruplar ──
+                "menu.secmeli-ders-gruplari.create",
+                "menu.secmeli-ders-gruplari.edit",
+                "menu.secmeli-ders-gruplari.delete",
+                "menu.secmeli-ders-gruplari.add-course",
+                "menu.secmeli-ders-gruplari.remove-course",
+
+                // ── Ders Açma ──
+                "menu.ders-acma-islemleri.open",
+                "menu.ders-acma-islemleri.bulk-open",
+                "menu.ders-acma-islemleri.edit",
+                "menu.ders-acma-islemleri.close-section",
+                "menu.ders-acma-islemleri.close-all",
+                "menu.ders-acma-islemleri.reactivate",
+                "menu.ogretim-elemani-atama.bulk-assign",
+
+                // ── Programlama (swap/lock/unlock DAHIL) ──
+                "menu.ders-programi-olusturma.assign",
+                "menu.ders-programi-olusturma.unassign",
+                "menu.ders-programi-olusturma.reset-all",
+                "menu.ders-programi-olusturma.auto-schedule",
+                "menu.ders-programi-olusturma.apply",
+                "menu.ders-programi-olusturma.validate",
+                "menu.ders-programi-olusturma.suggest",
+                "menu.ders-programi-olusturma.export",
+                "menu.ders-programi-olusturma.export-pdf",
+                "menu.ders-programi-olusturma.import",
+                "menu.ders-programi-olusturma.swap",
+                "menu.ders-programi-olusturma.lock",
+                "menu.ders-programi-olusturma.unlock",
+
+                // ── Kısıtlamalar (exception DAHIL) ──
+                "menu.ders-programi-kisitlamalari.snapshot",
+                "menu.ders-programi-kisitlamalari.create",
+                "menu.ders-programi-kisitlamalari.edit",
+                "menu.ders-programi-kisitlamalari.delete",
+                "menu.ders-programi-kisitlamalari.simulate",
+                "menu.ders-programi-kisitlamalari.apply",
+                "menu.ders-programi-kisitlamalari.exception",
+                "menu.ders-programi-kisitlamalari.exception-pending",
+                "menu.ders-programi-kisitlamalari.exception-approve",
+                "menu.ders-programi-kisitlamalari.exception-reject",
+
+                // ── Dönem Programı Aktarım ──
+                "menu.donem-programi-aktarim.transfer",
+
+                // ── Program Onayı (Dean'e özel) ──
+                "menu.program-onayi.approve",
+                "menu.program-onayi.revoke",
+
+                // ── Dönem Kapatma + Sınıf Atlatma ──
+                "menu.donem-kapatma.lock-grades",
+                "menu.donem-kapatma.unlock-grades",
+                "menu.donem-kapatma.calculate-gpa",
+                "menu.donem-kapatma.open-new-term",
+                "menu.sinif-atlatma-islemleri.promote",
+                "menu.sinif-atlatma-islemleri.rollback",
+                "menu.sinif-atlatma-islemleri.export",
+
+                // ── Derslik Export ──
+                "menu.derslik-doluluk.export",
+
+                // ── Duyuru Yönetimi CRUD ──
+                "menu.duyuru-yonetimi.create",
+                "menu.duyuru-yonetimi.edit",
+                "menu.duyuru-yonetimi.delete",
+
+                // ── Cross-cutting (authenticated) ──
+                "menu.ders-kayit.view",
+                "menu.ders-degerlendirme.view",
+                "menu.ders-programi-kisitlamalari.exception-request",
+                "menu.ders-programi-kisitlamalari.exception-my",
+                "menu.ders-programi-kisitlamalari.exception-view",
+
+                // ── Cross-cutting (broad role list) ──
+                "menu.ogrenci-rehberi.eligibility",
+                "menu.akilli-planlama.forecast",
+                "menu.akilli-planlama.simulate",
+                "menu.akilli-planlama.difficulty",
+                "menu.mufredat-durum.view",
+            },
+
+            // SystemAdministrator YOK — Karar 4: locked role, kod düzeyinde
+            // RequirePermissionAttribute içinde shortcut ile tüm permission'lara açık.
+        };
+
+    /// <summary>
+    /// Idempotent seed. RolePermissions tablosu boşsa <see cref="RoleDefaults"/>'taki tüm rol-permission
+    /// bağlantılarını ekler. Permission key bulunamazsa ya da rol bulunamazsa warning log + atla.
+    /// </summary>
+    public static async Task SeedAsync(
+        AppDbContext context,
+        RoleManager<IdentityRole<int>> roleManager,
+        CancellationToken ct = default)
+    {
+        if (await context.RolePermissions.AnyAsync(ct))
+        {
+            // Daha önce seed edildi.
+            return;
+        }
+
+        // Permission key → entity lookup (drift detection için her satırda kontrol edilir).
+        var permissions = await context.Permissions.ToDictionaryAsync(p => p.Key, ct);
+        var rolePermissions = new List<RolePermission>();
+
+        foreach (var (roleName, permissionKeys) in RoleDefaults)
+        {
+            var role = await roleManager.FindByNameAsync(roleName);
+            if (role == null)
+            {
+                Console.WriteLine($"[RolePermissionSeed] WARNING: Role '{roleName}' bulunamadı, atlandı.");
+                continue;
+            }
+
+            foreach (var key in permissionKeys)
+            {
+                if (!permissions.TryGetValue(key, out var permission))
+                {
+                    Console.WriteLine($"[RolePermissionSeed] WARNING: Permission '{key}' bulunamadı (rol: {roleName}), atlandı.");
+                    continue;
+                }
+
+                rolePermissions.Add(new RolePermission
+                {
+                    RoleId = role.Id,
+                    PermissionId = permission.Id,
+                    GrantedAt = DateTime.UtcNow,
+                    GrantedByUserId = null, // seed → grant kaynağı yok
+                });
+            }
+        }
+
+        context.RolePermissions.AddRange(rolePermissions);
+        await context.SaveChangesAsync(ct);
+    }
+}

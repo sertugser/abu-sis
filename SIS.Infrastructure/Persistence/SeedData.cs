@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using SIS.Domain.Entities;
+using SIS.Infrastructure.Persistence.Seeds;
 using SIS.Infrastructure.Services.CalendarGenerator;
 
 namespace SIS.Infrastructure.Persistence;
@@ -25,5 +26,11 @@ public static partial class SeedData
         await SeedConstraintDefinitionsAsync(context);
         await SeedEvaluationQuestionsAsync(context);
         await SeedConstraintProfilesAsync(context);
+
+        // ── RBAC Phase 1 (Sprint 1.4) ──────────────────────────
+        // Sıra önemli: Permission → MenuStructure (perm lookup gerekli) → RolePermission (perm + rol lookup)
+        await PermissionSeed.SeedAsync(context);
+        await MenuStructureSeed.SeedAsync(context);
+        await RolePermissionSeed.SeedAsync(context, roleManager);
     }
 }

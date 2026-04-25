@@ -2915,6 +2915,167 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("UserPreferences");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Identity.MenuItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("ModuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("OpenInNewTab")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Route")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Route")
+                        .IsUnique();
+
+                    b.HasIndex("ModuleId", "SortOrder");
+
+                    b.ToTable("MenuItems");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.MenuItemPermission", b =>
+                {
+                    b.Property<int>("MenuItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MenuItemId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("MenuItemPermissions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.MenuModule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Icon")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("ParentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("ParentId", "SortOrder");
+
+                    b.ToTable("MenuModules");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.Permission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("Permissions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
+                {
+                    b.Property<int>("RoleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("GrantedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("RolePermissions");
+                });
+
             modelBuilder.Entity("SIS.Infrastructure.Persistence.ApplicationUser", b =>
                 {
                     b.Property<int>("Id")
@@ -3994,6 +4155,63 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SIS.Domain.Identity.MenuItem", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.MenuModule", "Module")
+                        .WithMany("Items")
+                        .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Module");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.MenuItemPermission", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.MenuItem", "MenuItem")
+                        .WithMany("MenuItemPermissions")
+                        .HasForeignKey("MenuItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Identity.Permission", "Permission")
+                        .WithMany("MenuItemPermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MenuItem");
+
+                    b.Navigation("Permission");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.MenuModule", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.MenuModule", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<int>", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
                 {
                     b.Navigation("Curricula");
@@ -4096,6 +4314,25 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Registrations");
 
                     b.Navigation("StudentPrograms");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.MenuItem", b =>
+                {
+                    b.Navigation("MenuItemPermissions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.MenuModule", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.Permission", b =>
+                {
+                    b.Navigation("MenuItemPermissions");
+
+                    b.Navigation("RolePermissions");
                 });
 #pragma warning restore 612, 618
         }
