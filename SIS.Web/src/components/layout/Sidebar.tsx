@@ -18,19 +18,11 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { FavoritesDialog } from './FavoritesDialog';
 import logo from '/logo.png';
 import {
-  studentModules,
-  instructorModules,
-  advisorModules,
-  departmentManagerModules,
-  administrativeStaffModules,
-  deanModules,
-  systemAdminModules,
   flattenModuleItems,
   isModule,
-  mergeModuleChildren,
-  cloneModule,
 } from './SidebarModules';
 import type { Module, ModuleItem, ModuleNode } from './SidebarModules';
+import { useMenu } from '../../hooks/useMenu';
 
 const HOME_ROUTE = '/';
 
@@ -99,67 +91,6 @@ function resolveOpenPath(
   return modules[0] ? [modules[0].id] : [];
 }
 
-function getModulesForRole(roles: string[]): Module[] {
-  // Kullanıcının TÜM rollerine ait modülleri topla ve birleştir
-  const roleModuleMap: [string, Module[]][] = [
-    ['SystemAdministrator', systemAdminModules],
-    ['Dean', deanModules],
-    ['DepartmentManager', departmentManagerModules],
-    ['AdministrativeStaff', administrativeStaffModules],
-    ['AcademicAdvisor', advisorModules],
-    ['Instructor', instructorModules],
-    ['Student', studentModules],
-  ];
-
-  // Multi-rol kullanıcılar için: aynı id'li modülleri birleştir.
-  // Aynı route farklı modüllerde görünebilir (ör. Sık Kullanılanlar + kendi kategorisi)
-  // — dedup yalnızca TEK bir modül içinde yapılır.
-  const modulesById = new Map<string, Module>();
-  const orderedIds: string[] = [];
-
-  for (const [role, mods] of roleModuleMap) {
-    if (!roles.includes(role)) continue;
-
-    for (const module of mods) {
-      const existing = modulesById.get(module.id);
-      if (existing) {
-        // Recursive deep merge: aynı id'li nested modüller derin birleşir, leaf'ler dedup
-        modulesById.set(module.id, {
-          ...existing,
-          children: mergeModuleChildren(existing.children, module.children),
-        });
-      } else {
-        // Yeni modül — recursive deep clone (mutation'a karşı)
-        modulesById.set(module.id, cloneModule(module));
-        orderedIds.push(module.id);
-      }
-    }
-  }
-
-  const allModules = orderedIds.map(id => modulesById.get(id)!);
-  const effectiveModules = allModules.length > 0 ? allModules : studentModules;
-
-  // Öğretim elemanı rolleri için akademik takvim erişimi — Sık Kullanılanlar modülüne eklenir
-  // (Sık Kullanılanlar her zaman flat: sadece ModuleItem children — sözleşme)
-  const instructorRoles = ['Instructor', 'AcademicAdvisor', 'Dean', 'DepartmentManager'];
-  if (roles.some(r => instructorRoles.includes(r))) {
-    const favoriteModule = effectiveModules.find(m => m.id === 'sik-kullanilanlar');
-    if (favoriteModule) {
-      const hasItem = favoriteModule.children.some(
-        c => !isModule(c) && c.to === '/ogretim-elemani-akademik-takvim',
-      );
-      if (!hasItem) {
-        favoriteModule.children.push({
-          to: '/ogretim-elemani-akademik-takvim',
-          label: 'Akademik Takvim',
-        });
-      }
-    }
-  }
-
-  return effectiveModules;
-}
-
 function getActiveRoleLabel(activeRole: string | null): string {
   if (!activeRole) return 'Öğrenci Bilgi Sistemi';
   return `${getRoleDisplayLabel(activeRole)} Paneli`;
@@ -182,10 +113,11 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   // Sidebar artık sadece aktif rolün modülünü gösterir (multi-rol için switcher TopBar'da).
   // Active rol henüz resolve edilmediyse user.roles ilk elemanını kullan — hydration flash önler.
   const effectiveRole = activeRole ?? user?.roles?.[0] ?? null;
-  const rawModules = useMemo(
-    () => getModulesForRole(effectiveRole ? [effectiveRole] : []),
-    [effectiveRole],
-  );
+
+  // v2 Karar 2: Modüller backend'den dinamik gelir (DB-driven, permission-filtered).
+  // useMenu() data layer; render kısmı (renderNestedNode, openPath, vb.) aynı kalır.
+  const { data: rawModulesFromBackend = [] } = useMenu();
+  const rawModules = useMemo<Module[]>(() => rawModulesFromBackend, [rawModulesFromBackend]);
   const { favorites, hasCustomized, save: saveFavorites, MAX } = useFavorites();
   const [favoritesOpen, setFavoritesOpen] = useState(false);
 

@@ -1,29 +1,12 @@
+import { useMemo } from 'react';
 import { useActiveTerm } from '../../hooks/useActiveTerm';
 import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CircleDot } from 'lucide-react';
 import RoleSwitcher from './RoleSwitcher';
 
-import {
-  studentModules,
-  instructorModules,
-  advisorModules,
-  departmentManagerModules,
-  administrativeStaffModules,
-  deanModules,
-  systemAdminModules,
-  flattenModuleItems,
-} from './SidebarModules';
-
-const allModules = [
-  ...studentModules,
-  ...instructorModules,
-  ...advisorModules,
-  ...departmentManagerModules,
-  ...administrativeStaffModules,
-  ...deanModules,
-  ...systemAdminModules,
-];
+import { flattenModuleItems } from './SidebarModules';
+import { useMenu } from '../../hooks/useMenu';
 
 const TERM_TYPE_LABELS: Record<string, string> = {
   Fall: 'Güz',
@@ -37,28 +20,37 @@ const TERM_TYPE_LABELS: Record<string, string> = {
   Exemption: 'Muafiyet',
 };
 
-const pageTitles: Record<string, string> = {
-  '/': 'Ana Sayfa',
-};
-
-// Modül leaf item'larından dinamik olarak ekle (recursive — nested item'lar dahil)
-allModules.forEach(module => {
-  flattenModuleItems(module).forEach(child => {
-    if (!pageTitles[child.to]) {
-      pageTitles[child.to] = child.label;
+/**
+ * Backend'den gelen menüden route → sayfa başlığı haritası kurar.
+ * Önceden tüm 7 rol array'inin union'undan derive ediliyordu (Karar 2 öncesi).
+ * Şimdi useMenu() user'ın kendi modüllerini verir → harita user-spesifik.
+ * Permission'ı olmayan route için fallback (location.pathname) kullanılır.
+ */
+function usePageTitleMap(): Record<string, string> {
+  const { data: modules = [] } = useMenu();
+  return useMemo(() => {
+    const map: Record<string, string> = { '/': 'Ana Sayfa' };
+    for (const module of modules) {
+      for (const child of flattenModuleItems(module)) {
+        if (!map[child.to]) {
+          map[child.to] = child.label;
+        }
+      }
     }
-  });
-});
+    return map;
+  }, [modules]);
+}
 
 export default function TopBar() {
   const { data: term } = useActiveTerm();
   const location = useLocation();
   const navigate = useNavigate();
+  const pageTitleMap = usePageTitleMap();
 
   const isHome = location.pathname === '/';
   const pageTitle = location.pathname.startsWith('/not-girisi/')
     ? 'Not Girişi'
-    : pageTitles[location.pathname] || 'Sayfa';
+    : pageTitleMap[location.pathname] || 'Sayfa';
 
   return (
     <header className="sticky top-0 z-30 flex h-20 items-center gap-4 border-b border-border/70 bg-white/90 shadow-[0_10px_35px_rgba(15,23,42,0.05)] backdrop-blur-xl px-6 lg:px-8">

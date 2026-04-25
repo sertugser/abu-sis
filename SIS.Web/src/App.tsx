@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
 import { ActiveRoleProvider } from './context/ActiveRoleContext';
+import { PermissionProvider } from './context/PermissionContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
@@ -88,14 +89,16 @@ import CourseQuotaPage from './pages/CourseQuotaPage';
 import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
+import ForbiddenPage from './pages/ForbiddenPage';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ActiveRoleProvider>
-          <TooltipProvider delayDuration={300}>
+        <PermissionProvider>
+          <ActiveRoleProvider>
+            <TooltipProvider delayDuration={300}>
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -106,6 +109,9 @@ export default function App() {
 
                 <Route element={<AppLayout />}>
                   <Route index element={<RoleDashboard />} />
+
+                  {/* RBAC: yetki yetersiz olduğunda RoleProtectedRoute buraya yönlendirir */}
+                  <Route path="forbidden" element={<ForbiddenPage />} />
 
                   {/* Herkesin erişebildiği sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
@@ -222,8 +228,9 @@ export default function App() {
               </Route>
             </Routes>
             </BrowserRouter>
-          </TooltipProvider>
-        </ActiveRoleProvider>
+            </TooltipProvider>
+          </ActiveRoleProvider>
+        </PermissionProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

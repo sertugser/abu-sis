@@ -23,13 +23,8 @@ import {
   useGradeLockReadiness,
 } from '../hooks/useAcademicOperations';
 import { getAcademicOperationsErrorMessage, type GradeLockReadiness } from '../api/academicOperations.api';
-import {
-  departmentManagerModules,
-  administrativeStaffModules,
-  deanModules,
-  systemAdminModules,
-  flattenModuleItems,
-} from '../components/layout/SidebarModules';
+import { flattenModuleItems } from '../components/layout/SidebarModules';
+import { useMenu } from '../hooks/useMenu';
 import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 import type { DepartmentForecastSummary } from '../types/academicOperations';
 import type { ScheduleValidationResult } from '../types/scheduling';
@@ -494,25 +489,26 @@ interface QuickLinkOption {
   group: string;
 }
 
-function buildAllLinkOptions(): QuickLinkOption[] {
-  const allModules = [
-    ...systemAdminModules,
-    ...deanModules,
-    ...departmentManagerModules,
-    ...administrativeStaffModules,
-  ];
-  const seen = new Set<string>();
-  return allModules.flatMap(m =>
-    // Recursive flatten — Yönetim altındaki nested item'lar dahil
-    flattenModuleItems(m)
-      .filter(c => c.to !== ROUTES.DASHBOARD && !seen.has(c.to) && seen.add(c.to))
-      .map(c => ({
-        to: c.to,
-        title: c.label,
-        icon: ROUTE_ICONS[c.to] ?? (m.icon as React.ComponentType<{ className?: string }>),
-        group: m.label,
-      })),
-  );
+/**
+ * QuickLink seçeneklerini backend menüsünden derive eder.
+ * Önceden 4 hardcoded admin role array'inin union'undan alınıyordu (Karar 2 öncesi).
+ * Şimdi useMenu() user'ın görebildiği tüm modül/item'ları döner — natural permission filter.
+ */
+function useAllLinkOptions(): QuickLinkOption[] {
+  const { data: modules = [] } = useMenu();
+  return useMemo(() => {
+    const seen = new Set<string>();
+    return modules.flatMap(m =>
+      flattenModuleItems(m)
+        .filter(c => c.to !== ROUTES.DASHBOARD && !seen.has(c.to) && seen.add(c.to))
+        .map(c => ({
+          to: c.to,
+          title: c.label,
+          icon: ROUTE_ICONS[c.to] ?? (m.icon as React.ComponentType<{ className?: string }>),
+          group: m.label,
+        })),
+    );
+  }, [modules]);
 }
 
 function getStoredQuickLinks(): string[] {
@@ -531,7 +527,7 @@ function QuickAccessSection() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>([]);
 
-  const allOptions = buildAllLinkOptions();
+  const allOptions = useAllLinkOptions();
 
   const openEditor = useCallback(() => {
     setDraft([...selectedRoutes]);
