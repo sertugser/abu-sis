@@ -25,7 +25,9 @@ public class AcademicOperationsControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/[controller]");
-        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator");
+        // Sprint 5: [Authorize(Roles=...)] kaldırıldı, method-level [RequirePermission] ile değiştirildi.
+        // Class-level [Authorize] sadece authentication için (Roles=null).
+        authorizeAttribute.Roles.Should().BeNull();
     }
 
     [Fact]

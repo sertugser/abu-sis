@@ -41,7 +41,8 @@ public class ForecastControllerTests
             .Single();
 
         routeAttribute.Template.Should().Be("api/[controller]");
-        authorizeAttribute.Roles.Should().Be("AdministrativeStaff,DepartmentManager,Dean,SystemAdministrator");
+        // Sprint 5: [Authorize(Roles=...)] -> [Authorize] + method-level [RequirePermission]
+        authorizeAttribute.Roles.Should().BeNull();
     }
 
     [Fact]

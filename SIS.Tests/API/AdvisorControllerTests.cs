@@ -22,7 +22,8 @@ public class AdvisorControllerTests
             .GetCustomAttributes(typeof(AuthorizeAttribute), true)
             .Cast<AuthorizeAttribute>()
             .Single();
-        authAttr.Roles.Should().Be("AcademicAdvisor,Instructor");
+        // Sprint 5: [Authorize(Roles=...)] -> [Authorize] + method-level [RequirePermission]
+        authAttr.Roles.Should().BeNull();
     }
 
     [Fact]

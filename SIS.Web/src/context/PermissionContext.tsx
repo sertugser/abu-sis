@@ -11,7 +11,7 @@ interface PermissionContextValue {
   /** Tek permission kontrolü. SystemAdmin → her zaman true. */
   hasPermission: (key: string) => boolean;
   /** Bir set'ten en az birine sahip mi (OR mantığı). SystemAdmin → true. */
-  hasAnyPermission: (keys: string[]) => boolean;
+  hasAnyPermission: (keys: readonly string[]) => boolean;
   /** İlk yükleme veya refetch sırasında true. */
   isLoading: boolean;
   /** SystemAdministrator rolüne sahip kullanıcı (Karar 4 — locked, kod-shortcut). */
@@ -41,7 +41,7 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     isLoading: isAuthenticated && isLoading,
     isSystemAdmin,
     hasPermission: (key: string) => isSystemAdmin || permissions.has(key),
-    hasAnyPermission: (keys: string[]) => isSystemAdmin || keys.some(k => permissions.has(k)),
+    hasAnyPermission: (keys: readonly string[]) => isSystemAdmin || keys.some(k => permissions.has(k)),
   }), [permissions, isAuthenticated, isLoading, isSystemAdmin]);
 
   return <PermissionContext.Provider value={value}>{children}</PermissionContext.Provider>;
