@@ -27,7 +27,7 @@ public class EligibilityController : ControllerBase
     /// Uygun ve uygun olmayan ogrenciler neden bilgisiyle birlikte listelenir.
     /// </summary>
     [HttpGet("course/{courseId}")]
-    [RequirePermission("menu.ders-kayit.view")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCourseEligibility(
         int courseId,
         [FromQuery] int? departmentId = null,
@@ -49,7 +49,7 @@ public class EligibilityController : ControllerBase
     /// Belirli bir ogrencinin mufredatindaki tum derslere uygunluk analizini dondurur.
     /// </summary>
     [HttpGet("student/{studentId}")]
-    [RequirePermission("menu.ders-kayit.view")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetStudentEligibility(
         int studentId,
         CancellationToken cancellationToken = default)

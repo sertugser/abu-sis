@@ -30,7 +30,7 @@ public class CourseController : ControllerBase
     /// Optionally filter by programId query parameter.
     /// </summary>
     [HttpGet]
-    [RequirePermission("menu.ders-kayit.view")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCourses([FromQuery] int? programId)
     {
         // Find active term
@@ -135,7 +135,7 @@ public class CourseController : ControllerBase
     /// Each course includes: TakeStatus (IlkDefa/Alttan/OncedenAlindi), PreviousGrade, CurriculumType, PrerequisitesMet.
     /// </summary>
     [HttpGet("student-catalog")]
-    [RequirePermission("menu.ders-kayit.view")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetStudentCatalog()
     {
         // 1. Authenticated student
@@ -369,7 +369,7 @@ public class CourseController : ControllerBase
     /// GET api/course/sections/{id} — get section detail.
     /// </summary>
     [HttpGet("sections/{id}")]
-    [RequirePermission("menu.ders-kayit.view")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetSectionDetail(int id)
     {
         var section = await _context.CourseSections

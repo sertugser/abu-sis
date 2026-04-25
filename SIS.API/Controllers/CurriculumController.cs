@@ -840,7 +840,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         bool IsFulfilled);
 
     [HttpGet("student/{studentId:int}/pool-status")]
-    [RequirePermission("menu.mufredat-durum.view")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetPoolStatus(int studentId, CancellationToken ct)
     {
         // Öğrencinin aktif ana müfredatı

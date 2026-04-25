@@ -118,7 +118,7 @@ public class StudentController : ControllerBase
     /// GET api/student/curriculum-status — returns the student's curriculum progress.
     /// </summary>
     [HttpGet("curriculum-status")]
-    [RequirePermission("menu.mufredat-durum.view")]
+    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCurriculumStatus()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

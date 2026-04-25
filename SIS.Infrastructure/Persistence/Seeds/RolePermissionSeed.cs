@@ -102,9 +102,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
-                "menu.ders-kayit.view",
+                // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
+                // "Ders ve Dönem İşlemleri" modülü sadece Student için (sidebar görünürlüğü).
+                // Backend Course/Eligibility/Curriculum endpoint'leri permission'sız (multi-rol authenticated).
                 "menu.akilli-planlama.difficulty",
-                "menu.mufredat-durum.view",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -137,9 +138,8 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
-                "menu.ders-kayit.view",
+                // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
                 "menu.akilli-planlama.difficulty",
-                "menu.mufredat-durum.view",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -245,7 +245,8 @@ public static class RolePermissionSeed
                 "menu.duyuru-yonetimi.delete",
 
                 // ── Cross-cutting (authenticated) ──
-                "menu.ders-kayit.view",
+                // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı (sidebar Ders ve Dönem
+                // sadece Student'ta gözükür; backend Course/Eligibility/Curriculum permission'sız).
                 "menu.ders-degerlendirme.view",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
@@ -255,7 +256,6 @@ public static class RolePermissionSeed
                 "menu.ogrenci-rehberi.eligibility",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
-                "menu.mufredat-durum.view",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -376,7 +376,7 @@ public static class RolePermissionSeed
                 "menu.duyuru-yonetimi.delete",
 
                 // ── Cross-cutting (authenticated) ──
-                "menu.ders-kayit.view",
+                // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
                 "menu.ders-degerlendirme.view",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
@@ -387,7 +387,6 @@ public static class RolePermissionSeed
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
                 "menu.akilli-planlama.difficulty",
-                "menu.mufredat-durum.view",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -515,7 +514,7 @@ public static class RolePermissionSeed
                 "menu.duyuru-yonetimi.delete",
 
                 // ── Cross-cutting (authenticated) ──
-                "menu.ders-kayit.view",
+                // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
                 "menu.ders-degerlendirme.view",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
@@ -526,7 +525,6 @@ public static class RolePermissionSeed
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
                 "menu.akilli-planlama.difficulty",
-                "menu.mufredat-durum.view",
             },
 
             // SystemAdministrator YOK — Karar 4: locked role, kod düzeyinde
