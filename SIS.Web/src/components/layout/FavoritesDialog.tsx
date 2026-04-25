@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Search, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MenuGroup } from './SidebarMenuGroups';
+import { flattenGroupItems } from './SidebarMenuGroups';
 
 interface FavoritesDialogProps {
   open: boolean;
@@ -26,7 +27,8 @@ function flattenMenu(groups: MenuGroup[]): FlatItem[] {
   const seen = new Set<string>();
   for (const group of groups) {
     if (group.id === 'sik-kullanilanlar') continue;
-    for (const child of group.children) {
+    // Hem flat children hem nested subGroups items'ı topla
+    for (const child of flattenGroupItems(group)) {
       if (child.openInNewTab) continue;     // external/new-tab links aren't pinnable shortcuts
       if (seen.has(child.to)) continue;     // skip duplicates already in another group
       seen.add(child.to);

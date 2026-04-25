@@ -55,7 +55,8 @@ type StatusFilter = 'all' | 'active' | 'inactive' | 'archived';
 type ViewMode = 'list' | 'courses';
 type YearFilter = 'all' | string; // 'all' veya "2024" gibi yıl değeri
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 10;          // Müfredat liste sayfalama
+const COURSES_PAGE_SIZE = 15;  // Müfredat detay → ders listesi sayfalama
 
 export default function CurriculumManagementPage() {
   const navigate = useNavigate();
@@ -72,6 +73,8 @@ export default function CurriculumManagementPage() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+  // Müfredat detay → ders listesi pagination (15 ders/sayfa)
+  const [coursesPage, setCoursesPage] = useState(1);
 
   // Edit Dialog — mevcut müfredatı düzenleme
   const [editingCurriculumId, setEditingCurriculumId] = useState<number | null>(null);
@@ -203,6 +206,19 @@ export default function CurriculumManagementPage() {
     () => detail?.courses?.reduce((s, c) => s + c.ects, 0) ?? 0,
     [detail],
   );
+
+  // Ders listesi sayfalama (15 ders/sayfa)
+  const coursesTotalPages = Math.max(1, Math.ceil(flatCourses.length / COURSES_PAGE_SIZE));
+  const pagedCourses = useMemo(
+    () => flatCourses.slice((coursesPage - 1) * COURSES_PAGE_SIZE, coursesPage * COURSES_PAGE_SIZE),
+    [flatCourses, coursesPage],
+  );
+  // Filtre değişince ders sayfası 1'e dön
+  useEffect(() => { setCoursesPage(1); }, [searchCode, searchName, classFilter, termTypeFilter, selectedCurriculumId]);
+  // Toplam sayfa küçüldüğünde mevcut sayfa dışarı taşarsa düzelt
+  useEffect(() => {
+    if (coursesPage > coursesTotalPages) setCoursesPage(coursesTotalPages);
+  }, [coursesPage, coursesTotalPages]);
 
 
 
@@ -978,7 +994,7 @@ export default function CurriculumManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {flatCourses.map(c => {
+                      {pagedCourses.map(c => {
                         const sinif = Math.ceil(c.suggestedSemester / 2);
                         const donem = c.suggestedSemester % 2 === 1 ? 'G' : 'B';
                         const courseLabel = `${c.courseCode} — ${c.courseName}`;
@@ -1079,6 +1095,50 @@ export default function CurriculumManagementPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Pagination — ders listesi (15 ders/sayfa) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-t bg-muted/20 text-sm">
+                  <span className="text-muted-foreground">
+                    {flatCourses.length} ders — Sayfa {coursesPage}/{coursesTotalPages}
+                  </span>
+                  {coursesTotalPages > 1 && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === 1}
+                        onClick={() => setCoursesPage(1)}
+                        title="İlk sayfa"
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === 1}
+                        onClick={() => setCoursesPage(p => Math.max(1, p - 1))}
+                        title="Önceki"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="px-2 min-w-[2rem] text-center">{coursesPage}</span>
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === coursesTotalPages}
+                        onClick={() => setCoursesPage(p => Math.min(coursesTotalPages, p + 1))}
+                        title="Sonraki"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-8 w-8"
+                        disabled={coursesPage === coursesTotalPages}
+                        onClick={() => setCoursesPage(coursesTotalPages)}
+                        title="Son sayfa"
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

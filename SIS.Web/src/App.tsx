@@ -43,6 +43,31 @@ import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
 import SystemConfigPage from './pages/SystemConfigPage';
 import AuditLogPage from './pages/AuditLogPage';
 import MufredatSinifDonemTanimlariPage from './pages/MufredatSinifDonemTanimlariPage';
+// ── Öğrenci İşlemleri (placeholder) ──
+import StudentNumberChangePage from './pages/StudentNumberChangePage';
+import StudentPromotionPage from './pages/StudentPromotionPage';
+import BulkAdvisorAssignmentPage from './pages/BulkAdvisorAssignmentPage';
+import BulkInternshipAdvisorAssignmentPage from './pages/BulkInternshipAdvisorAssignmentPage';
+import BulkCurriculumAssignmentPage from './pages/BulkCurriculumAssignmentPage';
+import BulkCourseRegistrationPage from './pages/BulkCourseRegistrationPage';
+import CourseRegistrationEditPage from './pages/CourseRegistrationEditPage';
+import SectionTransferPage from './pages/SectionTransferPage';
+import CourseTransferPage from './pages/CourseTransferPage';
+import LetterGradeEditPage from './pages/LetterGradeEditPage';
+// ── Yönetim → Kullanıcı İşlemleri (placeholder) ──
+import UserPermissionGroupsPage from './pages/UserPermissionGroupsPage';
+import UserReportGroupsPage from './pages/UserReportGroupsPage';
+import UserGroupRestrictionsPage from './pages/UserGroupRestrictionsPage';
+import UserReportDesignGroupsPage from './pages/UserReportDesignGroupsPage';
+import UserDelegationPage from './pages/UserDelegationPage';
+import PasswordChangePage from './pages/PasswordChangePage';
+// ── Yönetim → Genel Ayarlar (placeholder) ──
+import UniversityInfoPage from './pages/UniversityInfoPage';
+import InstitutionalIntegrationPage from './pages/InstitutionalIntegrationPage';
+import DocumentRestrictionsPage from './pages/DocumentRestrictionsPage';
+import WebModuleSettingsPage from './pages/WebModuleSettingsPage';
+import EbysSignatureAuthoritiesPage from './pages/EbysSignatureAuthoritiesPage';
+import FacultySignatureUploadPage from './pages/FacultySignatureUploadPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
@@ -140,6 +165,31 @@ export default function App() {
                     <Route path="mufredat-sinif-donem-tanimlari" element={<MufredatSinifDonemTanimlariPage />} />
                     {/* Eski URL → yeni URL'e redirect (γ hibrit + C rename) */}
                     <Route path="sinif-atlatma-kurallari" element={<Navigate to="/mufredat-sinif-donem-tanimlari" replace />} />
+                    {/* ── Öğrenci İşlemleri (placeholder, SystemAdmin) ── */}
+                    <Route path="ogrenci-no-degistirme" element={<StudentNumberChangePage />} />
+                    <Route path="sinif-atlatma-islemleri" element={<StudentPromotionPage />} />
+                    <Route path="toplu-danisman-atama" element={<BulkAdvisorAssignmentPage />} />
+                    <Route path="toplu-staj-danisman-atama" element={<BulkInternshipAdvisorAssignmentPage />} />
+                    <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
+                    <Route path="toplu-ders-kaydi" element={<BulkCourseRegistrationPage />} />
+                    <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
+                    <Route path="subeler-arasi-ogrenci-transfer" element={<SectionTransferPage />} />
+                    <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
+                    <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
+                    {/* ── Yönetim → Kullanıcı İşlemleri (placeholder, SystemAdmin) ── */}
+                    <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
+                    <Route path="kullanici-rapor-gruplari" element={<UserReportGroupsPage />} />
+                    <Route path="kullanici-grup-sinirlandirmalar" element={<UserGroupRestrictionsPage />} />
+                    <Route path="kullanici-rapor-tasarim-gruplari" element={<UserReportDesignGroupsPage />} />
+                    <Route path="kullanici-vekalet-islemleri" element={<UserDelegationPage />} />
+                    <Route path="sifre-degistir" element={<PasswordChangePage />} />
+                    {/* ── Yönetim → Genel Ayarlar (placeholder, SystemAdmin) ── */}
+                    <Route path="universite-bilgileri" element={<UniversityInfoPage />} />
+                    <Route path="kurumsal-entegrasyon-tanimlari" element={<InstitutionalIntegrationPage />} />
+                    <Route path="belge-sinirlandirmalar" element={<DocumentRestrictionsPage />} />
+                    <Route path="web-modul-ayarlari" element={<WebModuleSettingsPage />} />
+                    <Route path="ebys-imza-yetkilileri" element={<EbysSignatureAuthoritiesPage />} />
+                    <Route path="fakulte-imza-yukleme-islemleri" element={<FacultySignatureUploadPage />} />
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
                     <Route path="ders-programi-kisitlamalari" element={<ConstraintManagementPage />} />
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />

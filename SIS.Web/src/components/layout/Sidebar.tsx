@@ -25,8 +25,9 @@ import {
   administrativeStaffMenuGroups,
   deanMenuGroups,
   systemAdminMenuGroups,
+  flattenGroupItems,
 } from './SidebarMenuGroups';
-import type { MenuGroup } from './SidebarMenuGroups';
+import type { MenuGroup, MenuItem } from './SidebarMenuGroups';
 
 const HOME_ROUTE = '/';
 
@@ -40,7 +41,7 @@ function resolveActiveGroup(
   currentGroupId: string | null,
 ): string | null {
   const matches = (group: MenuGroup) =>
-    group.children.some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)));
+    flattenGroupItems(group).some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)));
 
   // 1) Kullanici niyetine saygı: su an acik olan grup yeni yolu da iceriyorsa,
   //    sidebar'da o grup acik kalsin. ("Sik Kullanilanlar"dan Derslerim'e tiklarsan
@@ -85,16 +86,26 @@ function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
     for (const group of menus) {
       const existing = groupsById.get(group.id);
       if (existing) {
-        // Grup merge — sadece bu grup içinde route dedup
-        const existingRoutes = new Set(existing.children.map(c => c.to));
-        const additions = group.children.filter(c => !existingRoutes.has(c.to));
+        // Nested gruplar (subGroups) merge edilmez — ilk gelen kalır (tipik olarak tek role özgüdür)
+        if (existing.subGroups || group.subGroups) continue;
+        // Düz gruplar: route dedup ile birleştir
+        const existingChildren = existing.children ?? [];
+        const incomingChildren = group.children ?? [];
+        const existingRoutes = new Set(existingChildren.map(c => c.to));
+        const additions = incomingChildren.filter(c => !existingRoutes.has(c.to));
         groupsById.set(group.id, {
           ...existing,
-          children: [...existing.children, ...additions],
+          children: [...existingChildren, ...additions],
         });
       } else {
-        // Yeni grup — children zaten rolün kendi tanımında; mutation'a karşı shallow copy
-        groupsById.set(group.id, { ...group, children: [...group.children] });
+        // Yeni grup — mutation'a karşı shallow copy
+        groupsById.set(group.id, {
+          ...group,
+          children: group.children ? [...group.children] : undefined,
+          subGroups: group.subGroups
+            ? group.subGroups.map(sg => ({ ...sg, items: [...sg.items] }))
+            : undefined,
+        });
         orderedIds.push(group.id);
       }
     }
@@ -104,10 +115,11 @@ function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
   const effectiveGroups = allGroups.length > 0 ? allGroups : studentMenuGroups;
 
   // Öğretim elemanı rolleri için akademik takvim erişimi — "Sık Kullanılanlar" grubuna eklenir
+  // (Sık Kullanılanlar her zaman flat children kullanır — subGroups değil)
   const instructorRoles = ['Instructor', 'AcademicAdvisor', 'Dean', 'DepartmentManager'];
   if (roles.some(r => instructorRoles.includes(r))) {
     const favoriteGroup = effectiveGroups.find(g => g.id === 'sik-kullanilanlar');
-    if (favoriteGroup && !favoriteGroup.children.some(c => c.to === '/ogretim-elemani-akademik-takvim')) {
+    if (favoriteGroup?.children && !favoriteGroup.children.some(c => c.to === '/ogretim-elemani-akademik-takvim')) {
       favoriteGroup.children.push({
         to: '/ogretim-elemani-akademik-takvim',
         label: 'Akademik Takvim',
@@ -150,17 +162,20 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   // Apply user's favorite pins to the Sık Kullanılanlar group (if customized)
   const menuGroups = useMemo<MenuGroup[]>(() => {
     if (!hasCustomized) return rawMenuGroups;
-    const lookup = new Map<string, MenuGroup['children'][number]>();
+    // Tüm menü itemlerini topla (hem flat children hem nested subGroups items)
+    const lookup = new Map<string, MenuItem>();
     for (const group of rawMenuGroups) {
       if (group.id === 'sik-kullanilanlar') continue;
-      for (const child of group.children) lookup.set(child.to, child);
+      for (const child of flattenGroupItems(group)) lookup.set(child.to, child);
     }
     return rawMenuGroups.map(group => {
       if (group.id !== 'sik-kullanilanlar') return group;
-      const anaSayfa = group.children.find(c => c.to === HOME_ROUTE);
+      // Sık Kullanılanlar her zaman flat — children kullanır
+      const existingChildren = group.children ?? [];
+      const anaSayfa = existingChildren.find(c => c.to === HOME_ROUTE);
       const pins = (favorites ?? [])
         .map(route => lookup.get(route))
-        .filter((c): c is MenuGroup['children'][number] => c !== undefined);
+        .filter((c): c is MenuItem => c !== undefined);
       const children = anaSayfa ? [anaSayfa, ...pins] : pins;
       return { ...group, children };
     });
@@ -217,6 +232,90 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     : '??';
 
   const textCls = cn('transition-opacity', DURATION, isCollapsed ? 'opacity-0' : 'opacity-100');
+
+  // Tek bir menü item'ını render eder — flat ve nested layoutlarda paylaşılır
+  function renderMenuItem(child: MenuItem) {
+    const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+    const baseClassName = cn(
+      'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
+      isDead
+        ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+    );
+
+    if (child.openInNewTab) {
+      return (
+        <button
+          key={child.to}
+          type="button"
+          onClick={() => openInNewTab(child.to)}
+          className={cn(baseClassName, 'w-full text-left')}
+        >
+          {child.label}
+        </button>
+      );
+    }
+
+    return (
+      <NavLink
+        key={child.to}
+        to={child.to}
+        end={child.to === '/'}
+        className={({ isActive }) =>
+          cn(
+            baseClassName,
+            !isDead && isActive && 'text-primary font-semibold bg-primary/5'
+          )
+        }
+      >
+        {child.label}
+      </NavLink>
+    );
+  }
+
+  // Flyout (collapsed sidebar dropdown) için item render
+  function renderFlyoutItem(child: MenuItem) {
+    const isDead = !IMPLEMENTED_ROUTES.has(child.to);
+    const baseClassName = cn(
+      'block px-3 py-1.5 text-[13px] transition-colors duration-150',
+      isDead
+        ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
+        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+    );
+
+    if (child.openInNewTab) {
+      return (
+        <button
+          key={child.to}
+          type="button"
+          onClick={() => {
+            setFlyoutGroup(null);
+            openInNewTab(child.to);
+          }}
+          className={cn(baseClassName, 'w-full text-left')}
+        >
+          {child.label}
+        </button>
+      );
+    }
+
+    return (
+      <NavLink
+        key={child.to}
+        to={child.to}
+        end={child.to === '/'}
+        onClick={() => setFlyoutGroup(null)}
+        className={({ isActive }) =>
+          cn(
+            baseClassName,
+            !isDead && isActive && 'text-primary font-semibold bg-primary/5'
+          )
+        }
+      >
+        {child.label}
+      </NavLink>
+    );
+  }
 
   return (
     <>
@@ -306,8 +405,9 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
               /* Arama sonuçları — düz liste */
               (() => {
                 const q = search.trim().toLocaleLowerCase('tr-TR');
+                // Hem flat children hem nested subGroups items'ı tara
                 const results = menuGroups.flatMap(group =>
-                  group.children
+                  flattenGroupItems(group)
                     .filter(c => c.label.toLocaleLowerCase('tr-TR').includes(q))
                     .map(c => ({ ...c, groupLabel: group.label }))
                 );
@@ -402,44 +502,20 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
 
                     {isOpen && !isCollapsed && (
                       <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
-                        {group.children.map(child => {
-                          const isDead = !IMPLEMENTED_ROUTES.has(child.to);
-                          const baseClassName = cn(
-                            'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
-                            isDead
-                              ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                          );
-
-                          if (child.openInNewTab) {
-                            return (
-                              <button
-                                key={child.to}
-                                type="button"
-                                onClick={() => openInNewTab(child.to)}
-                                className={cn(baseClassName, 'w-full text-left')}
-                              >
-                                {child.label}
-                              </button>
-                            );
-                          }
-
-                          return (
-                            <NavLink
-                              key={child.to}
-                              to={child.to}
-                              end={child.to === '/'}
-                              className={({ isActive }) =>
-                                cn(
-                                  baseClassName,
-                                  !isDead && isActive && 'text-primary font-semibold bg-primary/5'
-                                )
-                              }
-                            >
-                              {child.label}
-                            </NavLink>
-                          );
-                        })}
+                        {group.subGroups ? (
+                          // Nested 2-seviye render: alt-grup başlığı + items (Yönetim grubu için)
+                          group.subGroups.map(sg => (
+                            <div key={sg.id} className="space-y-1">
+                              <p className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                {sg.label}
+                              </p>
+                              {sg.items.map(child => renderMenuItem(child))}
+                            </div>
+                          ))
+                        ) : (
+                          // Flat render: mevcut yapı (children)
+                          (group.children ?? []).map(child => renderMenuItem(child))
+                        )}
                         {group.id === 'sik-kullanilanlar' && (
                           <button
                             type="button"
@@ -496,62 +572,31 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           >
             <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
             <div className="max-h-80 overflow-y-auto">
-              {group.children.map(child => {
-                const isDead = !IMPLEMENTED_ROUTES.has(child.to);
-                const baseClassName = cn(
-                  'block px-3 py-1.5 text-[13px] transition-colors duration-150',
-                  isDead
-                    ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                );
-
-                if (child.openInNewTab) {
-                  return (
-                    <button
-                      key={child.to}
-                      type="button"
-                      onClick={() => {
-                        setFlyoutGroup(null);
-                        openInNewTab(child.to);
-                      }}
-                      className={cn(baseClassName, 'w-full text-left')}
-                    >
-                      {child.label}
-                    </button>
-                  );
-                }
-
-                return (
-                  <NavLink
-                    key={child.to}
-                    to={child.to}
-                    end={child.to === '/'}
-                    onClick={() => setFlyoutGroup(null)}
-                    className={({ isActive }) =>
-                      cn(
-                        baseClassName,
-                        !isDead && isActive && 'text-primary font-semibold bg-primary/5'
-                      )
-                    }
-                  >
-                    {child.label}
-                  </NavLink>
-                );
-              })}
-              {group.id === 'sik-kullanilanlar' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFlyoutGroup(null);
-                    setFavoritesOpen(true);
-                  }}
-                  className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-muted-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                  Sık Kullanılanları Düzenle
-                </button>
+              {/* Nested grup ise alt-grup başlıkları + items; flat ise direkt children */}
+              {group.subGroups ? (
+                group.subGroups.flatMap(sg => [
+                  <p key={`sg-${sg.id}`} className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                    {sg.label}
+                  </p>,
+                  ...sg.items.map(child => renderFlyoutItem(child)),
+                ])
+              ) : (
+                (group.children ?? []).map(child => renderFlyoutItem(child))
               )}
             </div>
+            {group.id === 'sik-kullanilanlar' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFlyoutGroup(null);
+                  setFavoritesOpen(true);
+                }}
+                className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-muted-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                Sık Kullanılanları Düzenle
+              </button>
+            )}
           </div>,
           document.body,
         );

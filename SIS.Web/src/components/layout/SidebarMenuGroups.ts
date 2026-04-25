@@ -13,11 +13,44 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../../lib/constants';
 
+export interface MenuItem {
+  to: string;
+  label: string;
+  openInNewTab?: boolean;
+}
+
+/**
+ * Alt-grup (2. seviye nested). Tek bir grup içinde alt başlıklara ayırma için kullanılır.
+ * Sadece `subGroups` opsiyonu kullanan gruplarda anlamlıdır (örn. Yönetim grubu).
+ * 3+ seviye nested gerekirse type genişletilmeli — şu an yok.
+ */
+export interface MenuSubGroup {
+  id: string;
+  label: string;
+  items: MenuItem[];
+}
+
+/**
+ * Sidebar grubu. İki şekilde içerik tanımlanır:
+ * - `children`: düz, tek seviye linkler (mevcut çoğu grup)
+ * - `subGroups`: 2. seviye gruplama (Yönetim → Kullanıcı İşlemleri / Genel Ayarlar)
+ *
+ * Bir grup ya `children` ya da `subGroups` kullanır — ikisi birden tanımlanmamalı.
+ */
 export interface MenuGroup {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  children: { to: string; label: string; openInNewTab?: boolean }[];
+  children?: MenuItem[];
+  subGroups?: MenuSubGroup[];
+}
+
+/** Bir grubun tüm leaf item'larını döndürür (children veya subGroups → items düzleştirilmiş). */
+export function flattenGroupItems(group: MenuGroup): MenuItem[] {
+  if (group.subGroups) {
+    return group.subGroups.flatMap(sg => sg.items);
+  }
+  return group.children ?? [];
 }
 
 // ─── STUDENT MENU ───────────────────────────────────────────────
@@ -358,6 +391,24 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     ],
   },
   {
+    id: 'ogrenci-islemleri',
+    label: 'Öğrenci İşlemleri',
+    icon: Users,
+    children: [
+      { to: ROUTES.STUDENT_DIRECTORY, label: 'Öğrenci Rehberi' },
+      { to: ROUTES.STUDENT_NUMBER_CHANGE, label: 'Öğrenci No Değiştirme' },
+      { to: ROUTES.STUDENT_PROMOTION, label: 'Sınıf Atlatma İşlemleri' },
+      { to: ROUTES.BULK_ADVISOR_ASSIGNMENT, label: 'Toplu Danışman Atama' },
+      { to: ROUTES.BULK_INTERNSHIP_ADVISOR_ASSIGNMENT, label: 'Toplu Staj Danışman Atama' },
+      { to: ROUTES.BULK_CURRICULUM_ASSIGNMENT, label: 'Toplu Müfredat Atama' },
+      { to: ROUTES.BULK_COURSE_REGISTRATION, label: 'Toplu Ders Kaydı' },
+      { to: ROUTES.COURSE_REGISTRATION_EDIT, label: 'Ders Kayıt Düzenleme' },
+      { to: ROUTES.SECTION_TRANSFER, label: 'Şubeler Arası Öğrenci Transfer' },
+      { to: ROUTES.COURSE_TRANSFER, label: 'Dersler Arası Öğrenci Transfer' },
+      { to: ROUTES.LETTER_GRADE_EDIT, label: 'Harf Notu Düzenleme' },
+    ],
+  },
+  {
     id: 'ders-islemleri',
     label: 'Ders İşlemleri',
     icon: BookOpen,
@@ -405,16 +456,6 @@ export const systemAdminMenuGroups: MenuGroup[] = [
     ],
   },
   {
-    id: 'kullanici-yonetimi',
-    label: 'Kullanıcı Yönetimi',
-    icon: Settings,
-    children: [
-      { to: ROUTES.USER_MANAGEMENT, label: 'Kullanıcı Listesi' },
-      { to: ROUTES.STUDENT_DIRECTORY, label: 'Öğrenci Rehberi' },
-      { to: ROUTES.INSTRUCTOR_DIRECTORY, label: 'Personel Listesi' },
-    ],
-  },
-  {
     id: 'duyuru-yonetimi',
     label: 'Duyuru Yönetimi',
     icon: Megaphone,
@@ -423,13 +464,41 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
+  // ── Yönetim — Proliz tarzı 2-seviye nested grup (subGroups kullanır) ──
+  // Eski "Kullanıcı Yönetimi" + "Sistem" grupları bu grup altında alt-gruplara taşındı.
   {
-    id: 'sistem',
-    label: 'Sistem',
+    id: 'yonetim',
+    label: 'Yönetim',
     icon: Shield,
-    children: [
-      { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Ayarları' },
-      { to: ROUTES.AUDIT_LOG, label: 'Denetim Kayıtları' },
+    subGroups: [
+      {
+        id: 'kullanici-islemleri',
+        label: 'Kullanıcı İşlemleri',
+        items: [
+          { to: ROUTES.USER_MANAGEMENT, label: 'Kullanıcı Tanımlama' },
+          { to: ROUTES.INSTRUCTOR_DIRECTORY, label: 'Personel Listesi' },
+          { to: ROUTES.USER_PERMISSION_GROUPS, label: 'Kullanıcı Yetki Grupları' },
+          { to: ROUTES.USER_REPORT_GROUPS, label: 'Kullanıcı Rapor Grupları' },
+          { to: ROUTES.USER_GROUP_RESTRICTIONS, label: 'Kullanıcı Grupları Sınırlandırmalar' },
+          { to: ROUTES.USER_REPORT_DESIGN_GROUPS, label: 'Kullanıcı Rapor Tasarım Grupları' },
+          { to: ROUTES.USER_DELEGATION, label: 'Kullanıcı Vekalet İşlemleri' },
+          { to: ROUTES.AUDIT_LOG, label: 'LOG' },
+          { to: ROUTES.PASSWORD_CHANGE, label: 'Şifre Değiştir' },
+        ],
+      },
+      {
+        id: 'genel-ayarlar',
+        label: 'Genel Ayarlar',
+        items: [
+          { to: ROUTES.UNIVERSITY_INFO, label: 'Üniversite Bilgileri' },
+          { to: ROUTES.INSTITUTIONAL_INTEGRATION, label: 'Kurumsal Entegrasyon Tanımları' },
+          { to: ROUTES.DOCUMENT_RESTRICTIONS, label: 'Belge Sınırlandırmalar' },
+          { to: ROUTES.WEB_MODULE_SETTINGS, label: 'Web Modül Ayarları' },
+          { to: ROUTES.SYSTEM_CONFIG, label: 'Sistem Konfigürasyonu' },
+          { to: ROUTES.EBYS_SIGNATURE_AUTHORITIES, label: 'EBYS İmza Yetkilileri' },
+          { to: ROUTES.FACULTY_SIGNATURE_UPLOAD, label: 'Fakülte İmza Yükleme İşlemleri' },
+        ],
+      },
     ],
   },
 ];
