@@ -90,6 +90,7 @@ import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import ForbiddenPage from './pages/ForbiddenPage';
+import RolePermissionMatrix from './components/admin/RolePermissionMatrix';
 import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
@@ -222,6 +223,19 @@ export default function App() {
                   <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>
                     <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
+
+                  {/* Dev-only test route — Karar 9: production sidebar/route YOK,
+                      Phase 2'de Kullanıcı Yetki Grupları placeholder'a import edilecek */}
+                  {import.meta.env.DEV && (
+                    <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator']} />}>
+                      <Route path="__dev/permission-matrix" element={
+                        <div className="p-6">
+                          <h1 className="text-xl font-semibold mb-4">RolePermissionMatrix (Dev Test)</h1>
+                          <RolePermissionMatrix />
+                        </div>
+                      } />
+                    </Route>
+                  )}
 
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
