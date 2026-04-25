@@ -115,8 +115,9 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   const effectiveRole = activeRole ?? user?.roles?.[0] ?? null;
 
   // v2 Karar 2: Modüller backend'den dinamik gelir (DB-driven, permission-filtered).
-  // useMenu() data layer; render kısmı (renderNestedNode, openPath, vb.) aynı kalır.
-  const { data: rawModulesFromBackend = [] } = useMenu();
+  // useMenu(activeRole) data layer — Patch 3: panel switcher.
+  // activeRole değişince queryKey değişir, backend yeni role için filtrelenmiş menü döner.
+  const { data: rawModulesFromBackend = [] } = useMenu(activeRole);
   const rawModules = useMemo<Module[]>(() => rawModulesFromBackend, [rawModulesFromBackend]);
   const { favorites, hasCustomized, save: saveFavorites, MAX } = useFavorites();
   const [favoritesOpen, setFavoritesOpen] = useState(false);

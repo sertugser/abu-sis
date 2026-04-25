@@ -10,13 +10,17 @@ import type { Module, ModuleItem, ModuleNode } from '../components/layout/Sideba
  *
  * v2 Karar 2: Pure DB — menü artık DB-driven; bu hook tek source of truth.
  * staleTime 5dk: backend permission değişikliği max 5dk içinde refresh'te yansır.
+ *
+ * Patch 3 (panel switcher): activeRole queryKey'in parçası — multi-rol kullanıcı
+ * RoleSwitcher'dan rol değiştirince yeni query tetiklenir, sidebar o role'in
+ * modülleriyle yeniden render olur. activeRole null/undefined ise tüm rollerin union'u.
  */
-export function useMenu() {
+export function useMenu(activeRole?: string | null) {
   const { user, isAuthenticated } = useAuth();
   return useQuery({
-    queryKey: ['menu', user?.userId],
+    queryKey: ['menu', user?.userId, activeRole ?? null],
     queryFn: async (): Promise<Module[]> => {
-      const data = await getMyMenu();
+      const data = await getMyMenu(activeRole);
       return data.map(toModule);
     },
     enabled: isAuthenticated && !!user,

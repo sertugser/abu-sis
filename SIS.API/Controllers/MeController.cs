@@ -39,16 +39,22 @@ public class MeController : ControllerBase
     /// <summary>
     /// Kullanıcının dinamik menüsünü döner — sidebar render'ı için.
     /// SidebarModules.ts hardcoded array'lerinin yerini alır.
+    ///
+    /// Patch 3 (panel switcher): <c>?role=Dean</c> query param ile multi-rol kullanıcı
+    /// belirli bir panele filtrelenebilir. MenuService kullanıcının o role'e sahip olup
+    /// olmadığını doğrular; yoksa union davranışına düşer.
     /// </summary>
     [HttpGet("menu")]
-    public async Task<ActionResult<List<MenuModuleDto>>> GetMyMenu(CancellationToken ct)
+    public async Task<ActionResult<List<MenuModuleDto>>> GetMyMenu(
+        [FromQuery] string? role,
+        CancellationToken ct)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized();
         }
 
-        var menu = await _menuService.GetUserMenuAsync(userId, ct);
+        var menu = await _menuService.GetUserMenuAsync(userId, role, ct);
         return Ok(menu);
     }
 

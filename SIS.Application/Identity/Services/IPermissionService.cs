@@ -26,6 +26,13 @@ public interface IPermissionService
     Task<List<int>> GetRolePermissionIdsAsync(int roleId, CancellationToken ct = default);
 
     /// <summary>
+    /// Belirli bir rol adı için permission key'lerini döner (panel switcher için tek-rol filter).
+    /// SystemAdmin shortcut UYGULANMAZ — sadece DB'deki RolePermissions'dan gelen explicit liste.
+    /// Kullanıcının o role'e sahip olup olmadığı caller tarafından doğrulanmalı.
+    /// </summary>
+    Task<HashSet<string>> GetPermissionsByRoleNameAsync(string roleName, CancellationToken ct = default);
+
+    /// <summary>
     /// Bir kullanıcının permission cache'ini invalidate eder (rol değişiminde).
     /// </summary>
     void InvalidateUserCache(int userId);

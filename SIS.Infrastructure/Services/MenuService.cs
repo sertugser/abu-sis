@@ -23,17 +23,30 @@ public class MenuService : IMenuService
         _userManager = userManager;
     }
 
-    public async Task<List<MenuModuleDto>> GetUserMenuAsync(int userId, CancellationToken ct = default)
+    public async Task<List<MenuModuleDto>> GetUserMenuAsync(int userId, string? activeRole = null, CancellationToken ct = default)
     {
-        var permissions = await _permissionService.GetUserPermissionsAsync(userId, ct);
-
         // Patch 2C: Modül-bazlı role filter için user'ın role'lerini al.
-        // SystemAdmin shortcut bu kontrolü BYPASS ETMEZ — modül AllowedRolesCsv kuralı
-        // her kullanıcı için (admin dahil) çalışır.
         var user = await _userManager.FindByIdAsync(userId.ToString());
         var userRoles = user is not null
             ? (await _userManager.GetRolesAsync(user)).ToHashSet(StringComparer.Ordinal)
             : new HashSet<string>(StringComparer.Ordinal);
+
+        // Patch 3 (panel switcher): activeRole verilmişse + kullanıcı o role'e sahipse →
+        // SADECE o role'in DB permission'ları (SystemAdmin shortcut bypass).
+        // Aksi halde tüm rollerin union'u (mevcut davranış).
+        HashSet<string> permissions;
+        HashSet<string> filterRoles;
+        if (!string.IsNullOrWhiteSpace(activeRole) && userRoles.Contains(activeRole))
+        {
+            permissions = await _permissionService.GetPermissionsByRoleNameAsync(activeRole, ct);
+            // AllowedRolesCsv kontrolü için tek-rol set ver (multi-rol union yerine)
+            filterRoles = new HashSet<string>(new[] { activeRole }, StringComparer.Ordinal);
+        }
+        else
+        {
+            permissions = await _permissionService.GetUserPermissionsAsync(userId, ct);
+            filterRoles = userRoles;
+        }
 
         // v2 perf: AsSplitQuery (cartesian explosion önler) + AsNoTracking (read-only).
         // EF Core .Include(Children) sadece 1 seviye yükler — biz tüm modülleri tek query
@@ -51,9 +64,9 @@ public class MenuService : IMenuService
         // Top-level (ParentId == null) modüllerden başla, recursive map et
         return allModules
             .Where(m => m.ParentId == null)
-            .Where(m => IsModuleAllowedForRoles(m, userRoles))
+            .Where(m => IsModuleAllowedForRoles(m, filterRoles))
             .OrderBy(m => m.SortOrder)
-            .Select(m => MapToDto(m, permissions, allModules, userRoles))
+            .Select(m => MapToDto(m, permissions, allModules, filterRoles))
             .Where(IsNonEmpty)
             .ToList();
     }

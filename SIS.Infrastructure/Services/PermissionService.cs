@@ -86,6 +86,37 @@ public class PermissionService : IPermissionService
         return perms.Contains(permissionKey);
     }
 
+    public async Task<HashSet<string>> GetPermissionsByRoleNameAsync(string roleName, CancellationToken ct = default)
+    {
+        // Patch 3: Panel switcher için — sadece o role'in DB'deki permission'ları döner.
+        // SystemAdmin shortcut UYGULANMAZ; SysAdmin "Dekan paneli"ne girerse Dean'in
+        // explicit DB permission'larını görür (multi-rol kullanıcının tek-rol görünümü).
+        var cacheKey = CacheKeyForRole(roleName);
+        if (_cache.TryGetValue<HashSet<string>>(cacheKey, out var cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        var role = await _context.Roles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == roleName, ct);
+        if (role is null)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var keys = await _context.RolePermissions
+            .AsNoTracking()
+            .Where(rp => rp.RoleId == role.Id)
+            .Select(rp => rp.Permission!.Key)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var set = new HashSet<string>(keys, StringComparer.Ordinal);
+        _cache.Set(cacheKey, set, CacheTtl);
+        return set;
+    }
+
     public async Task SetRolePermissionsAsync(
         int roleId,
         IReadOnlyList<int> permissionIds,
@@ -131,6 +162,17 @@ public class PermissionService : IPermissionService
 
     public async Task InvalidateRoleCacheAsync(int roleId, CancellationToken ct = default)
     {
+        // Önce role-name'i bul → role-cache key'i de invalidate et (Patch 3)
+        var roleName = await _context.Roles
+            .AsNoTracking()
+            .Where(r => r.Id == roleId)
+            .Select(r => r.Name)
+            .FirstOrDefaultAsync(ct);
+        if (roleName is not null)
+        {
+            _cache.Remove(CacheKeyForRole(roleName));
+        }
+
         // IdentityDbContext UserRoles'u expose etmez doğrudan; AspNetUserRoles tablosuna direkt sorgu
         var userIds = await _context.Set<IdentityUserRole<int>>()
             .AsNoTracking()
@@ -145,4 +187,5 @@ public class PermissionService : IPermissionService
     }
 
     private static string CacheKeyForUser(int userId) => $"permissions:user:{userId}";
+    private static string CacheKeyForRole(string roleName) => $"permissions:role:{roleName}";
 }
