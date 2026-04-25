@@ -30,7 +30,9 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpGet("active")]
-    [RequirePermission("menu.duyurular.view")]
+    // Patch: Permission kaldırıldı; sayfa public-tipi (üniversite duyurularını listeliyor),
+    // sidebar görünürlüğü 2 ayrı permission ile yönetilir (menu.duyurular.view öğrenci için,
+    // menu.duyurular-admin.view admin için). Endpoint herkes için açık (sadece authenticated).
     public async Task<IActionResult> GetActive([FromQuery] int? max, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -70,7 +72,9 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [RequirePermission("menu.duyurular.view")]
+    // Patch: Permission kaldırıldı; sayfa public-tipi (üniversite duyurularını listeliyor),
+    // sidebar görünürlüğü 2 ayrı permission ile yönetilir (menu.duyurular.view öğrenci için,
+    // menu.duyurular-admin.view admin için). Endpoint herkes için açık (sadece authenticated).
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var item = await _service.GetByIdAsync(id, ct);

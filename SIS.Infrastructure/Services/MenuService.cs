@@ -51,6 +51,7 @@ public class MenuService : IMenuService
         return new MenuModuleDto
         {
             Id = module.Id,
+            Slug = module.Slug,
             Label = module.Label,
             Icon = module.Icon,
             SortOrder = module.SortOrder,

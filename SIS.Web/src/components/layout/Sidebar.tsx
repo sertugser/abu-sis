@@ -221,7 +221,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     if (child.openInNewTab) {
       return (
         <button
-          key={child.to}
+          key={child.slug ?? child.to}
           type="button"
           onClick={() => openInNewTab(child.to)}
           title={child.label}
@@ -234,7 +234,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
 
     return (
       <NavLink
-        key={child.to}
+        key={child.slug ?? child.to}
         to={child.to}
         end={child.to === '/'}
         title={child.label}
@@ -303,7 +303,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     if (child.openInNewTab) {
       return (
         <button
-          key={child.to}
+          key={child.slug ?? child.to}
           type="button"
           onClick={() => {
             setFlyoutModule(null);
@@ -318,7 +318,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
 
     return (
       <NavLink
-        key={child.to}
+        key={child.slug ?? child.to}
         to={child.to}
         end={child.to === '/'}
         onClick={() => setFlyoutModule(null)}
@@ -459,7 +459,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                     if (child.openInNewTab) {
                       return (
                         <button
-                          key={child.to}
+                          key={child.slug ?? child.to}
                           type="button"
                           onClick={() => {
                             setSearch('');
@@ -475,7 +475,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
 
                     return (
                       <NavLink
-                        key={child.to}
+                        key={child.slug ?? child.to}
                         to={child.to}
                         end={child.to === '/'}
                         onClick={() => setSearch('')}

@@ -4,6 +4,11 @@ public class MenuModule
 {
     public int Id { get; set; }
     public int? ParentId { get; set; }
+    /// <summary>
+    /// Stabil string identifier — frontend'in 'sik-kullanilanlar', 'yonetim' gibi key'lerde
+    /// güvenle kullanması için. Label değişse bile slug aynı kalır (immutable kontrat).
+    /// </summary>
+    public string Slug { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public string? Icon { get; set; }
     public int SortOrder { get; set; }

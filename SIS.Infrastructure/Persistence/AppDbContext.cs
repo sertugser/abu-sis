@@ -1014,17 +1014,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── RBAC: MenuModule (recursive tree) ───────────────────
         builder.Entity<MenuModule>(e =>
         {
+            e.Property(m => m.Slug).HasMaxLength(100).IsRequired();
             e.Property(m => m.Label).HasMaxLength(100).IsRequired();
             e.Property(m => m.Icon).HasMaxLength(50);
             e.HasOne(m => m.Parent)
              .WithMany(m => m.Children)
              .HasForeignKey(m => m.ParentId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => m.Slug).IsUnique();
             e.HasIndex(m => m.ParentId);
             e.HasIndex(m => new { m.ParentId, m.SortOrder });
         });
 
         // ── RBAC: MenuItem ──────────────────────────────────────
+        // Route UNIQUE kaldırıldı — aynı route farklı modüllerde olabilir (örn. "Duyurular"
+        // hem "Genel İşlemler" hem "Duyuru Yönetimi" altında). Composite (ModuleId, Route)
+        // UNIQUE: aynı modülde aynı route iki kez yasak.
         builder.Entity<MenuItem>(e =>
         {
             e.Property(mi => mi.Label).HasMaxLength(150).IsRequired();
@@ -1034,7 +1039,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany(m => m.Items)
              .HasForeignKey(mi => mi.ModuleId)
              .OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(mi => mi.Route).IsUnique();
+            e.HasIndex(mi => mi.Route);
+            e.HasIndex(mi => new { mi.ModuleId, mi.Route }).IsUnique();
             e.HasIndex(mi => new { mi.ModuleId, mi.SortOrder });
         });
 

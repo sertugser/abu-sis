@@ -43,6 +43,13 @@ export function resolveIcon(name: string | null | undefined): React.ComponentTyp
 export interface ModuleItem {
   to: string;
   label: string;
+  /**
+   * Unique sidebar key (aynı route iki MenuItem'da olabilir, ör. /duyurular
+   * hem Genel İşlemler altında hem Duyuru Yönetimi altında — React key collision
+   * önlemek için her item'ın benzersiz slug'ı). Favoriler injection ile gelen
+   * item'larda undefined olabilir, render kodu `slug ?? to` fallback kullanır.
+   */
+  slug?: string;
   openInNewTab?: boolean;
 }
 

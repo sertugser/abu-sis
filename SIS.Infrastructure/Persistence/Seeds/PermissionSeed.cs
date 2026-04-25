@@ -30,7 +30,8 @@ public static class PermissionSeed
         // ═══════════════════════════════════════════════════════════════════════════
         ("menu.ana-sayfa.view",                          PermissionCategory.Menu, "Ana sayfa görüntüleme"),
         ("menu.akademik-takvim.view",                    PermissionCategory.Menu, "Akademik takvim (öğrenci görünümü) görüntüleme"),
-        ("menu.duyurular.view",                          PermissionCategory.Menu, "Duyurular görüntüleme"),
+        ("menu.duyurular.view",                          PermissionCategory.Menu, "Duyurular sayfası — Genel İşlemler altındaki link (öğrenci/instructor/advisor)"),
+        ("menu.duyurular-admin.view",                    PermissionCategory.Menu, "Duyurular sayfası — Duyuru Yönetimi altındaki link (admin)"),
         ("menu.alinan-dersler.view",                     PermissionCategory.Menu, "Alınan dersler listesi görüntüleme"),
         ("menu.alinan-dersler.statistics",               PermissionCategory.Menu, "Alınan ders not istatistikleri"),
 

@@ -11,6 +11,8 @@ export interface MenuItemDto {
 
 export interface MenuModuleDto {
   id: number;
+  /** Stabil string identifier (örn. "sik-kullanilanlar", "yonetim"). Label değişse bile sabit. */
+  slug: string;
   label: string;
   icon?: string | null;
   sortOrder: number;

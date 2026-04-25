@@ -147,10 +147,11 @@ public static class RolePermissionSeed
             // ═══════════════════════════════════════════════════════════════════════════
             ["AdministrativeStaff"] = new[]
             {
-                // ── View permissions (18) ──
+                // ── View permissions ──
                 "menu.ana-sayfa.view",
-                "menu.akademik-takvim.view",
-                "menu.duyurular.view",
+                // Patch: Akademik takvim + duyurular admin'lerden kaldırıldı (Genel İşlemler
+                // modülü öğrenci-merkezli). Admin için Duyurular Duyuru Yönetimi altında.
+                "menu.duyurular-admin.view",
                 "menu.akademik-takvim-yonetimi.view",
                 "menu.akademik-takvim-olusturma.view",
                 "menu.ders-katalogu.view",
@@ -264,10 +265,10 @@ public static class RolePermissionSeed
             // ═══════════════════════════════════════════════════════════════════════════
             ["DepartmentManager"] = new[]
             {
-                // ── View permissions (24) ──
+                // ── View permissions ──
                 "menu.ana-sayfa.view",
-                "menu.akademik-takvim.view",
-                "menu.duyurular.view",
+                // Patch: akademik-takvim + duyurular admin'lerden kaldırıldı.
+                "menu.duyurular-admin.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
                 "menu.secmeli-ders-gruplari.view",
@@ -395,10 +396,10 @@ public static class RolePermissionSeed
             // ═══════════════════════════════════════════════════════════════════════════
             ["Dean"] = new[]
             {
-                // ── View permissions (27) ──
+                // ── View permissions ──
                 "menu.ana-sayfa.view",
-                "menu.akademik-takvim.view",
-                "menu.duyurular.view",
+                // Patch: akademik-takvim + duyurular admin'lerden kaldırıldı.
+                "menu.duyurular-admin.view",
                 "menu.program-kontenjan.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",

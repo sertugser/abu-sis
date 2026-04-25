@@ -2958,7 +2958,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Route")
+                    b.HasIndex("Route");
+
+                    b.HasIndex("ModuleId", "Route")
                         .IsUnique();
 
                     b.HasIndex("ModuleId", "SortOrder");
@@ -3007,6 +3009,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("ParentId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
@@ -3016,6 +3023,9 @@ namespace SIS.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParentId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
 
                     b.HasIndex("ParentId", "SortOrder");
 
