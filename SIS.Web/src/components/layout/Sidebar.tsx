@@ -18,16 +18,19 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { FavoritesDialog } from './FavoritesDialog';
 import logo from '/logo.png';
 import {
-  studentMenuGroups,
-  instructorMenuGroups,
-  advisorMenuGroups,
-  departmentManagerMenuGroups,
-  administrativeStaffMenuGroups,
-  deanMenuGroups,
-  systemAdminMenuGroups,
-  flattenGroupItems,
-} from './SidebarMenuGroups';
-import type { MenuGroup, MenuItem } from './SidebarMenuGroups';
+  studentModules,
+  instructorModules,
+  advisorModules,
+  departmentManagerModules,
+  administrativeStaffModules,
+  deanModules,
+  systemAdminModules,
+  flattenModuleItems,
+  isModule,
+  mergeModuleChildren,
+  cloneModule,
+} from './SidebarModules';
+import type { Module, ModuleItem, ModuleNode } from './SidebarModules';
 
 const HOME_ROUTE = '/';
 
@@ -35,99 +38,126 @@ function openInNewTab(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-function resolveActiveGroup(
-  pathname: string,
-  menuGroups: MenuGroup[],
-  currentGroupId: string | null,
-): string | null {
-  const matches = (group: MenuGroup) =>
-    flattenGroupItems(group).some(c => c.to === pathname || (c.to !== '/' && pathname.startsWith(c.to)));
-
-  // 1) Kullanici niyetine saygı: su an acik olan grup yeni yolu da iceriyorsa,
-  //    sidebar'da o grup acik kalsin. ("Sik Kullanilanlar"dan Derslerim'e tiklarsan
-  //    favoriler acik kalir; "Ders Islemleri"nden tiklarsan orasi acik kalir.)
-  if (currentGroupId) {
-    const current = menuGroups.find(g => g.id === currentGroupId);
-    if (current && matches(current)) return currentGroupId;
+/**
+ * Verilen pathname'e karşılık gelen leaf'i bulur ve onu içeren MODÜL id'lerinin
+ * dizisini döndürür (root → leaf yönünde).
+ *  - `null` → eşleşme yok
+ *  - `[]`   → leaf doğrudan bu seviyede
+ *  - `['yonetim', 'kullanici-islemleri']` → 2-seviye derin
+ */
+function findPathToRoute(nodes: ModuleNode[], pathname: string): string[] | null {
+  for (const node of nodes) {
+    if (isModule(node)) {
+      const sub = findPathToRoute(node.children, pathname);
+      if (sub !== null) return [node.id, ...sub];
+    } else {
+      const matches = node.to === pathname || (node.to !== '/' && pathname.startsWith(node.to));
+      if (matches) return [];
+    }
   }
-
-  // 2) Canonical (favori olmayan) ev grubu — URL bar'dan gelindiyse varsayilan.
-  const canonical = menuGroups.find(g => g.id !== 'sik-kullanilanlar' && matches(g));
-  if (canonical) return canonical.id;
-
-  // 3) Son care: sadece favorilerde olan yollar (ör. Ana Sayfa).
-  const favorites = menuGroups.find(g => g.id === 'sik-kullanilanlar' && matches(g));
-  if (favorites) return favorites.id;
-
-  return menuGroups[0]?.id ?? null;
+  return null;
 }
 
-function getMenuGroupsForRole(roles: string[]): MenuGroup[] {
-  // Kullanıcının TÜM rollerine ait menüleri topla ve birleştir
-  const roleMenuMap: [string, MenuGroup[]][] = [
-    ['SystemAdministrator', systemAdminMenuGroups],
-    ['Dean', deanMenuGroups],
-    ['DepartmentManager', departmentManagerMenuGroups],
-    ['AdministrativeStaff', administrativeStaffMenuGroups],
-    ['AcademicAdvisor', advisorMenuGroups],
-    ['Instructor', instructorMenuGroups],
-    ['Student', studentMenuGroups],
+/**
+ * Sidebar açık-yol state'i (`openPath`) için route bazlı çözüm.
+ * 4 strateji:
+ *   1) Kullanıcı niyeti — mevcut top-level modül hâlâ pathname'i içeriyorsa korunur
+ *   2) Canonical (favori-dışı) ilk eşleşme
+ *   3) Son çare favori modülü
+ *   4) Default ilk modül (alt-state yok)
+ */
+function resolveOpenPath(
+  pathname: string,
+  modules: Module[],
+  currentPath: string[],
+): string[] {
+  // 1) Kullanıcı niyetine saygı — currentPath[0] hâlâ pathname'i içeriyorsa onu kullan,
+  //    nested seviye yeni pathname'e göre güncellenir (alt-modül intent korunmaz)
+  if (currentPath.length > 0) {
+    const currentTop = modules.find(m => m.id === currentPath[0]);
+    if (currentTop) {
+      const sub = findPathToRoute(currentTop.children, pathname);
+      if (sub !== null) return [currentTop.id, ...sub];
+    }
+  }
+
+  // 2) Canonical: ilk favori-dışı eşleşme
+  for (const module of modules) {
+    if (module.id === 'sik-kullanilanlar') continue;
+    const sub = findPathToRoute(module.children, pathname);
+    if (sub !== null) return [module.id, ...sub];
+  }
+
+  // 3) Son çare: favoriler (sadece orada bulunan route — ör. Ana Sayfa)
+  const favorites = modules.find(m => m.id === 'sik-kullanilanlar');
+  if (favorites) {
+    const sub = findPathToRoute(favorites.children, pathname);
+    if (sub !== null) return [favorites.id, ...sub];
+  }
+
+  // 4) Default: ilk modül, alt-state yok
+  return modules[0] ? [modules[0].id] : [];
+}
+
+function getModulesForRole(roles: string[]): Module[] {
+  // Kullanıcının TÜM rollerine ait modülleri topla ve birleştir
+  const roleModuleMap: [string, Module[]][] = [
+    ['SystemAdministrator', systemAdminModules],
+    ['Dean', deanModules],
+    ['DepartmentManager', departmentManagerModules],
+    ['AdministrativeStaff', administrativeStaffModules],
+    ['AcademicAdvisor', advisorModules],
+    ['Instructor', instructorModules],
+    ['Student', studentModules],
   ];
 
-  // Multi-rol kullanıcılar için: aynı id'li grupları birleştir.
-  // Aynı route farklı gruplarda görünebilir (ör. Sık Kullanılanlar + kendi kategorisi)
-  // — dedup yalnızca TEK bir grup içinde yapılır.
-  const groupsById = new Map<string, MenuGroup>();
+  // Multi-rol kullanıcılar için: aynı id'li modülleri birleştir.
+  // Aynı route farklı modüllerde görünebilir (ör. Sık Kullanılanlar + kendi kategorisi)
+  // — dedup yalnızca TEK bir modül içinde yapılır.
+  const modulesById = new Map<string, Module>();
   const orderedIds: string[] = [];
 
-  for (const [role, menus] of roleMenuMap) {
+  for (const [role, mods] of roleModuleMap) {
     if (!roles.includes(role)) continue;
 
-    for (const group of menus) {
-      const existing = groupsById.get(group.id);
+    for (const module of mods) {
+      const existing = modulesById.get(module.id);
       if (existing) {
-        // Nested gruplar (subGroups) merge edilmez — ilk gelen kalır (tipik olarak tek role özgüdür)
-        if (existing.subGroups || group.subGroups) continue;
-        // Düz gruplar: route dedup ile birleştir
-        const existingChildren = existing.children ?? [];
-        const incomingChildren = group.children ?? [];
-        const existingRoutes = new Set(existingChildren.map(c => c.to));
-        const additions = incomingChildren.filter(c => !existingRoutes.has(c.to));
-        groupsById.set(group.id, {
+        // Recursive deep merge: aynı id'li nested modüller derin birleşir, leaf'ler dedup
+        modulesById.set(module.id, {
           ...existing,
-          children: [...existingChildren, ...additions],
+          children: mergeModuleChildren(existing.children, module.children),
         });
       } else {
-        // Yeni grup — mutation'a karşı shallow copy
-        groupsById.set(group.id, {
-          ...group,
-          children: group.children ? [...group.children] : undefined,
-          subGroups: group.subGroups
-            ? group.subGroups.map(sg => ({ ...sg, items: [...sg.items] }))
-            : undefined,
-        });
-        orderedIds.push(group.id);
+        // Yeni modül — recursive deep clone (mutation'a karşı)
+        modulesById.set(module.id, cloneModule(module));
+        orderedIds.push(module.id);
       }
     }
   }
 
-  const allGroups = orderedIds.map(id => groupsById.get(id)!);
-  const effectiveGroups = allGroups.length > 0 ? allGroups : studentMenuGroups;
+  const allModules = orderedIds.map(id => modulesById.get(id)!);
+  const effectiveModules = allModules.length > 0 ? allModules : studentModules;
 
-  // Öğretim elemanı rolleri için akademik takvim erişimi — "Sık Kullanılanlar" grubuna eklenir
-  // (Sık Kullanılanlar her zaman flat children kullanır — subGroups değil)
+  // Öğretim elemanı rolleri için akademik takvim erişimi — Sık Kullanılanlar modülüne eklenir
+  // (Sık Kullanılanlar her zaman flat: sadece ModuleItem children — sözleşme)
   const instructorRoles = ['Instructor', 'AcademicAdvisor', 'Dean', 'DepartmentManager'];
   if (roles.some(r => instructorRoles.includes(r))) {
-    const favoriteGroup = effectiveGroups.find(g => g.id === 'sik-kullanilanlar');
-    if (favoriteGroup?.children && !favoriteGroup.children.some(c => c.to === '/ogretim-elemani-akademik-takvim')) {
-      favoriteGroup.children.push({
-        to: '/ogretim-elemani-akademik-takvim',
-        label: 'Akademik Takvim',
-      });
+    const favoriteModule = effectiveModules.find(m => m.id === 'sik-kullanilanlar');
+    if (favoriteModule) {
+      const hasItem = favoriteModule.children.some(
+        c => !isModule(c) && c.to === '/ogretim-elemani-akademik-takvim',
+      );
+      if (!hasItem) {
+        favoriteModule.children.push({
+          to: '/ogretim-elemani-akademik-takvim',
+          label: 'Akademik Takvim',
+        });
+      }
     }
   }
 
-  return effectiveGroups;
+  return effectiveModules;
 }
 
 function getActiveRoleLabel(activeRole: string | null): string {
@@ -135,7 +165,7 @@ function getActiveRoleLabel(activeRole: string | null): string {
   return `${getRoleDisplayLabel(activeRole)} Paneli`;
 }
 
-const EXPANDED_W = 260;
+const EXPANDED_W = 290;
 const COLLAPSED_W = 72;
 const DURATION = 'duration-200';
 
@@ -149,83 +179,96 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
   const { activeRole } = useActiveRole();
   const location = useLocation();
 
-  // Sidebar artık sadece aktif rolün menüsünü gösterir (multi-rol için switcher TopBar'da).
+  // Sidebar artık sadece aktif rolün modülünü gösterir (multi-rol için switcher TopBar'da).
   // Active rol henüz resolve edilmediyse user.roles ilk elemanını kullan — hydration flash önler.
   const effectiveRole = activeRole ?? user?.roles?.[0] ?? null;
-  const rawMenuGroups = useMemo(
-    () => getMenuGroupsForRole(effectiveRole ? [effectiveRole] : []),
+  const rawModules = useMemo(
+    () => getModulesForRole(effectiveRole ? [effectiveRole] : []),
     [effectiveRole],
   );
   const { favorites, hasCustomized, save: saveFavorites, MAX } = useFavorites();
   const [favoritesOpen, setFavoritesOpen] = useState(false);
 
-  // Apply user's favorite pins to the Sık Kullanılanlar group (if customized)
-  const menuGroups = useMemo<MenuGroup[]>(() => {
-    if (!hasCustomized) return rawMenuGroups;
-    // Tüm menü itemlerini topla (hem flat children hem nested subGroups items)
-    const lookup = new Map<string, MenuItem>();
-    for (const group of rawMenuGroups) {
-      if (group.id === 'sik-kullanilanlar') continue;
-      for (const child of flattenGroupItems(group)) lookup.set(child.to, child);
+  // Apply user's favorite pins to the Sık Kullanılanlar modülüne (if customized)
+  const modules = useMemo<Module[]>(() => {
+    if (!hasCustomized) return rawModules;
+    // Tüm modül leaf'lerini topla (recursive — Yönetim altındaki nested item'lar dahil)
+    const lookup = new Map<string, ModuleItem>();
+    for (const module of rawModules) {
+      if (module.id === 'sik-kullanilanlar') continue;
+      for (const child of flattenModuleItems(module)) lookup.set(child.to, child);
     }
-    return rawMenuGroups.map(group => {
-      if (group.id !== 'sik-kullanilanlar') return group;
-      // Sık Kullanılanlar her zaman flat — children kullanır
-      const existingChildren = group.children ?? [];
-      const anaSayfa = existingChildren.find(c => c.to === HOME_ROUTE);
+    return rawModules.map(module => {
+      if (module.id !== 'sik-kullanilanlar') return module;
+      // Sık Kullanılanlar her zaman flat (sadece ModuleItem children — sözleşme)
+      const existingItems = module.children.filter((c): c is ModuleItem => !isModule(c));
+      const anaSayfa = existingItems.find(c => c.to === HOME_ROUTE);
       const pins = (favorites ?? [])
         .map(route => lookup.get(route))
-        .filter((c): c is MenuItem => c !== undefined);
-      const children = anaSayfa ? [anaSayfa, ...pins] : pins;
-      return { ...group, children };
+        .filter((c): c is ModuleItem => c !== undefined);
+      const children: ModuleNode[] = anaSayfa ? [anaSayfa, ...pins] : pins;
+      return { ...module, children };
     });
-  }, [rawMenuGroups, favorites, hasCustomized]);
+  }, [rawModules, favorites, hasCustomized]);
 
   const [prevPathname, setPrevPathname] = useState(location.pathname);
   const [prevRole, setPrevRole] = useState<string | null>(effectiveRole);
-  const [openGroup, setOpenGroup] = useState<string | null>(() => resolveActiveGroup(location.pathname, menuGroups, null));
+  const [openPath, setOpenPath] = useState<string[]>(() =>
+    resolveOpenPath(location.pathname, modules, []),
+  );
   const [search, setSearch] = useState('');
-  const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
+  const [flyoutModule, setFlyoutModule] = useState<string | null>(null);
   const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const groupBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const moduleBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  // Sync openGroup when location OR active role changes (setState during render — React-approved derived state pattern).
-  // Rol değişirken mevcut grup geçerli olmayabilir — o yüzden currentGroupId'yi sifirla.
+  // Sync openPath when location OR active role changes (setState during render — React-approved derived state pattern).
+  // Rol değişirken mevcut path geçerli olmayabilir — o yüzden currentPath'i sıfırla.
   if (prevPathname !== location.pathname || prevRole !== effectiveRole) {
     const roleChanged = prevRole !== effectiveRole;
     setPrevPathname(location.pathname);
     setPrevRole(effectiveRole);
-    const active = resolveActiveGroup(location.pathname, menuGroups, roleChanged ? null : openGroup);
-    setOpenGroup(active);
-    setFlyoutGroup(null);
+    const next = resolveOpenPath(
+      location.pathname,
+      modules,
+      roleChanged ? [] : openPath,
+    );
+    setOpenPath(next);
+    setFlyoutModule(null);
   }
 
-  const toggleGroup = (id: string) => {
-    if (isCollapsed) {
-      const btn = groupBtnRefs.current[id];
+  const toggleNode = (id: string, depth: number) => {
+    // Collapsed mode flyout sadece top-level (depth 0) için anlamlıdır.
+    // Nested toggle collapsed mode'da YOK — flyout içinde nested modüller her zaman expanded.
+    if (isCollapsed && depth === 0) {
+      const btn = moduleBtnRefs.current[id];
       if (btn) {
         const rect = btn.getBoundingClientRect();
         const top = Math.min(rect.top - 8, window.innerHeight - 400);
         setFlyoutPos({ top: Math.max(8, top), left: rect.right + 8 });
       }
-      setFlyoutGroup(prev => prev === id ? null : id);
+      setFlyoutModule(prev => prev === id ? null : id);
       return;
     }
-    setOpenGroup(prev => prev === id ? null : id);
+
+    // Akkordeon: aynı node tıklanırsa kapat (ve descendants'ı), farklıysa aynı seviyede değiştir
+    setOpenPath(prev => {
+      if (prev[depth] === id) return prev.slice(0, depth);
+      return [...prev.slice(0, depth), id];
+    });
   };
 
   // Close flyout when clicking outside
   useEffect(() => {
-    if (!flyoutGroup) return;
+    if (!flyoutModule) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-flyout]') && !target.closest('[data-group-btn]')) {
-        setFlyoutGroup(null);
+      if (!target.closest('[data-flyout]') && !target.closest('[data-module-btn]')) {
+        setFlyoutModule(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [flyoutGroup]);
+  }, [flyoutModule]);
 
   const initials = user?.name
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -233,11 +276,11 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
 
   const textCls = cn('transition-opacity', DURATION, isCollapsed ? 'opacity-0' : 'opacity-100');
 
-  // Tek bir menü item'ını render eder — flat ve nested layoutlarda paylaşılır
-  function renderMenuItem(child: MenuItem) {
+  // Tek bir leaf item'ı render eder — flat, nested ve flyout layoutlarda paylaşılır
+  function renderModuleItem(child: ModuleItem) {
     const isDead = !IMPLEMENTED_ROUTES.has(child.to);
     const baseClassName = cn(
-      'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 whitespace-nowrap',
+      'block rounded-md px-3 py-1.5 text-[13px] transition-all duration-150 truncate',
       isDead
         ? 'text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10'
         : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -249,6 +292,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           key={child.to}
           type="button"
           onClick={() => openInNewTab(child.to)}
+          title={child.label}
           className={cn(baseClassName, 'w-full text-left')}
         >
           {child.label}
@@ -261,6 +305,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
         key={child.to}
         to={child.to}
         end={child.to === '/'}
+        title={child.label}
         className={({ isActive }) =>
           cn(
             baseClassName,
@@ -273,8 +318,48 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     );
   }
 
-  // Flyout (collapsed sidebar dropdown) için item render
-  function renderFlyoutItem(child: MenuItem) {
+  // Nested modül veya leaf render — depth >= 1.
+  // Akkordeon: openPath[depth] === node.id ise içindekiler render'lanır.
+  function renderNestedNode(node: ModuleNode, depth: number): React.ReactNode {
+    if (!isModule(node)) return renderModuleItem(node);
+
+    const isOpen = openPath[depth] === node.id;
+    const Icon = node.icon;
+
+    return (
+      <div key={node.id} className="space-y-1">
+        <button
+          type="button"
+          onClick={() => toggleNode(node.id, depth)}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors',
+            isOpen
+              ? 'text-foreground bg-muted/60'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+          )}
+        >
+          {Icon && <Icon className="h-4 w-4 shrink-0" />}
+          <span className="flex-1 text-left truncate">{node.label}</span>
+          <ChevronRight
+            className={cn(
+              'h-4 w-4 shrink-0 transition-transform',
+              DURATION,
+              isOpen ? 'rotate-90' : 'opacity-60',
+            )}
+          />
+        </button>
+
+        {isOpen && (
+          <div className="pl-2 border-l border-border/40 space-y-1 pb-1">
+            {node.children.map(child => renderNestedNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Flyout (collapsed sidebar dropdown) için leaf item render
+  function renderFlyoutItem(child: ModuleItem) {
     const isDead = !IMPLEMENTED_ROUTES.has(child.to);
     const baseClassName = cn(
       'block px-3 py-1.5 text-[13px] transition-colors duration-150',
@@ -289,7 +374,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
           key={child.to}
           type="button"
           onClick={() => {
-            setFlyoutGroup(null);
+            setFlyoutModule(null);
             openInNewTab(child.to);
           }}
           className={cn(baseClassName, 'w-full text-left')}
@@ -304,7 +389,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
         key={child.to}
         to={child.to}
         end={child.to === '/'}
-        onClick={() => setFlyoutGroup(null)}
+        onClick={() => setFlyoutModule(null)}
         className={({ isActive }) =>
           cn(
             baseClassName,
@@ -314,6 +399,20 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
       >
         {child.label}
       </NavLink>
+    );
+  }
+
+  // Flyout — nested modüller her zaman expanded (akkordeon yok, küçük popover sözleşmesi)
+  function renderFlyoutNode(node: ModuleNode): React.ReactNode {
+    if (!isModule(node)) return renderFlyoutItem(node);
+
+    return (
+      <div key={node.id}>
+        <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          {node.label}
+        </p>
+        {node.children.map(child => renderFlyoutNode(child))}
+      </div>
     );
   }
 
@@ -405,11 +504,11 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
               /* Arama sonuçları — düz liste */
               (() => {
                 const q = search.trim().toLocaleLowerCase('tr-TR');
-                // Hem flat children hem nested subGroups items'ı tara
-                const results = menuGroups.flatMap(group =>
-                  flattenGroupItems(group)
+                // Recursive flatten — Yönetim altındaki nested item'lar dahil
+                const results = modules.flatMap(module =>
+                  flattenModuleItems(module)
                     .filter(c => c.label.toLocaleLowerCase('tr-TR').includes(q))
-                    .map(c => ({ ...c, groupLabel: group.label }))
+                    .map(c => ({ ...c, moduleLabel: module.label }))
                 );
                 return results.length === 0 ? (
                   <p className="px-3 py-4 text-[13px] text-muted-foreground/60 text-center">
@@ -437,7 +536,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                           className={cn(baseClassName, 'w-full text-left')}
                         >
                           <span className="font-medium">{child.label}</span>
-                          <span className="text-[11px] text-muted-foreground/60">{child.groupLabel}</span>
+                          <span className="text-[11px] text-muted-foreground/60">{child.moduleLabel}</span>
                         </button>
                       );
                     }
@@ -456,39 +555,39 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
                         }
                       >
                         <span className="font-medium">{child.label}</span>
-                        <span className="text-[11px] text-muted-foreground/60">{child.groupLabel}</span>
+                        <span className="text-[11px] text-muted-foreground/60">{child.moduleLabel}</span>
                       </NavLink>
                     );
                   })
                 );
               })()
             ) : (
-              /* Normal gruplu görünüm */
-              menuGroups.map(group => {
-                const isOpen = openGroup === group.id;
-                const Icon = group.icon;
+              /* Normal modül görünümü */
+              modules.map(module => {
+                const isOpen = openPath[0] === module.id;
+                const Icon = module.icon;
 
                 return (
-                  <div key={group.id} className="mb-1">
+                  <div key={module.id} className="mb-1">
                     <button
-                      ref={el => { groupBtnRefs.current[group.id] = el; }}
-                      data-group-btn
-                      onClick={() => toggleGroup(group.id)}
-                      title={group.label}
+                      ref={el => { moduleBtnRefs.current[module.id] = el; }}
+                      data-module-btn
+                      onClick={() => toggleNode(module.id, 0)}
+                      title={module.label}
                       className={cn(
                         'group flex items-center rounded-md text-sm font-medium transition-colors duration-150',
                         isCollapsed
                           ? cn('w-10 h-10 justify-center',
-                              (isOpen || flyoutGroup === group.id) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')
+                              (isOpen || flyoutModule === module.id) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')
                           : cn('w-full gap-3 px-3 py-2',
                               isOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')
                       )}
                     >
-                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      {Icon && <Icon className="h-[18px] w-[18px] shrink-0" />}
                       {!isCollapsed && (
                         <>
                           <span className="flex-1 text-left truncate">
-                            {group.label}
+                            {module.label}
                           </span>
                           <ChevronRight
                             className={cn(
@@ -502,21 +601,8 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
 
                     {isOpen && !isCollapsed && (
                       <div className="mt-1 ml-[22px] border-l-2 border-primary/20 pl-3 space-y-1 pb-1">
-                        {group.subGroups ? (
-                          // Nested 2-seviye render: alt-grup başlığı + items (Yönetim grubu için)
-                          group.subGroups.map(sg => (
-                            <div key={sg.id} className="space-y-1">
-                              <p className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                                {sg.label}
-                              </p>
-                              {sg.items.map(child => renderMenuItem(child))}
-                            </div>
-                          ))
-                        ) : (
-                          // Flat render: mevcut yapı (children)
-                          (group.children ?? []).map(child => renderMenuItem(child))
-                        )}
-                        {group.id === 'sik-kullanilanlar' && (
+                        {module.children.map(child => renderNestedNode(child, 1))}
+                        {module.id === 'sik-kullanilanlar' && (
                           <button
                             type="button"
                             onClick={() => setFavoritesOpen(true)}
@@ -561,34 +647,24 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
     </aside>
 
       {/* Flyout portal — rendered outside sidebar to avoid overflow clipping */}
-      {isCollapsed && flyoutGroup && (() => {
-        const group = menuGroups.find(g => g.id === flyoutGroup);
-        if (!group) return null;
+      {isCollapsed && flyoutModule && (() => {
+        const module = modules.find(m => m.id === flyoutModule);
+        if (!module) return null;
         return createPortal(
           <div
             data-flyout
             className="fixed z-[60] w-56 bg-card border rounded-lg shadow-xl py-2 animate-in fade-in-0 zoom-in-95 duration-150"
             style={{ top: flyoutPos.top, left: flyoutPos.left }}
           >
-            <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
+            <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{module.label}</p>
             <div className="max-h-80 overflow-y-auto">
-              {/* Nested grup ise alt-grup başlıkları + items; flat ise direkt children */}
-              {group.subGroups ? (
-                group.subGroups.flatMap(sg => [
-                  <p key={`sg-${sg.id}`} className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                    {sg.label}
-                  </p>,
-                  ...sg.items.map(child => renderFlyoutItem(child)),
-                ])
-              ) : (
-                (group.children ?? []).map(child => renderFlyoutItem(child))
-              )}
+              {module.children.map(child => renderFlyoutNode(child))}
             </div>
-            {group.id === 'sik-kullanilanlar' && (
+            {module.id === 'sik-kullanilanlar' && (
               <button
                 type="button"
                 onClick={() => {
-                  setFlyoutGroup(null);
+                  setFlyoutModule(null);
                   setFavoritesOpen(true);
                 }}
                 className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-muted-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
@@ -605,7 +681,7 @@ export default function Sidebar({ isCollapsed = false, onToggleSidebar }: Sideba
       <FavoritesDialog
         open={favoritesOpen}
         onOpenChange={setFavoritesOpen}
-        menuGroups={rawMenuGroups}
+        modules={rawModules}
         currentFavorites={favorites ?? []}
         maxFavorites={MAX}
         onSave={saveFavorites}

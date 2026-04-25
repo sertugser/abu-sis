@@ -38,7 +38,6 @@ import {
   useDeleteCurriculum,
   useActivateCurriculum,
   useAddCurriculumCourse,
-  useUpdateCurriculumCourse,
   useRemoveCurriculumCourse,
   useCopyCurriculum,
 } from '../hooks/useCurriculumManagement';
@@ -158,7 +157,6 @@ export default function CurriculumManagementPage() {
   const deleteMut = useDeleteCurriculum();
   const activateMut = useActivateCurriculum();
   const addCourseMut = useAddCurriculumCourse();
-  const updateCourseMut = useUpdateCurriculumCourse();
   const removeCourseMut = useRemoveCurriculumCourse();
   const copyMut = useCopyCurriculum();
 

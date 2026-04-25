@@ -24,11 +24,12 @@ import {
 } from '../hooks/useAcademicOperations';
 import { getAcademicOperationsErrorMessage, type GradeLockReadiness } from '../api/academicOperations.api';
 import {
-  departmentManagerMenuGroups,
-  administrativeStaffMenuGroups,
-  deanMenuGroups,
-  systemAdminMenuGroups,
-} from '../components/layout/SidebarMenuGroups';
+  departmentManagerModules,
+  administrativeStaffModules,
+  deanModules,
+  systemAdminModules,
+  flattenModuleItems,
+} from '../components/layout/SidebarModules';
 import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 import type { DepartmentForecastSummary } from '../types/academicOperations';
 import type { ScheduleValidationResult } from '../types/scheduling';
@@ -494,21 +495,22 @@ interface QuickLinkOption {
 }
 
 function buildAllLinkOptions(): QuickLinkOption[] {
-  const allGroups = [
-    ...systemAdminMenuGroups,
-    ...deanMenuGroups,
-    ...departmentManagerMenuGroups,
-    ...administrativeStaffMenuGroups,
+  const allModules = [
+    ...systemAdminModules,
+    ...deanModules,
+    ...departmentManagerModules,
+    ...administrativeStaffModules,
   ];
   const seen = new Set<string>();
-  return allGroups.flatMap(g =>
-    g.children
+  return allModules.flatMap(m =>
+    // Recursive flatten — Yönetim altındaki nested item'lar dahil
+    flattenModuleItems(m)
       .filter(c => c.to !== ROUTES.DASHBOARD && !seen.has(c.to) && seen.add(c.to))
       .map(c => ({
         to: c.to,
         title: c.label,
-        icon: ROUTE_ICONS[c.to] ?? (g.icon as React.ComponentType<{ className?: string }>),
-        group: g.label,
+        icon: ROUTE_ICONS[c.to] ?? (m.icon as React.ComponentType<{ className?: string }>),
+        group: m.label,
       })),
   );
 }

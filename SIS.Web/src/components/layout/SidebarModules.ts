@@ -5,7 +5,6 @@ import {
   GraduationCap,
   Users,
   Shield,
-  Settings,
   Calendar,
   School,
   Megaphone,
@@ -13,48 +12,96 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../../lib/constants';
 
-export interface MenuItem {
+/** Sidebar'daki tıklanabilir leaf — bir route'a gider. */
+export interface ModuleItem {
   to: string;
   label: string;
   openInNewTab?: boolean;
 }
 
 /**
- * Alt-grup (2. seviye nested). Tek bir grup içinde alt başlıklara ayırma için kullanılır.
- * Sadece `subGroups` opsiyonu kullanan gruplarda anlamlıdır (örn. Yönetim grubu).
- * 3+ seviye nested gerekirse type genişletilmeli — şu an yok.
+ * Sidebar modülü — recursive yapı.
+ * - `children`: ModuleItem (leaf link) veya Module (nested modül) içerebilir
+ * - `icon`: top-level modüllerde zorunlu (sidebar'da gözükür), nested modüllerde opsiyonel
+ * - 3+ seviye nested otomatik desteklenir (tip recursive)
+ *
+ * Domain notu: OBS/Proliz dilinde "modül" = sidebar'daki üst grup.
+ * UI'da "modül" kelimesi gözükmez — sadece modül adları (Yönetim, Akademik İşlemler...) görünür.
  */
-export interface MenuSubGroup {
+export interface Module {
   id: string;
   label: string;
-  items: MenuItem[];
+  icon?: React.ComponentType<{ className?: string }>;
+  children: ModuleNode[];
+}
+
+export type ModuleNode = ModuleItem | Module;
+
+/** True iff node bir modüldür (link değil). Yapısal ayrım: ModuleItem'da `children` yok. */
+export function isModule(node: ModuleNode): node is Module {
+  return 'children' in node;
+}
+
+/** Bir modülün tüm leaf ModuleItem'larını recursive olarak düzleştirir. */
+export function flattenModuleItems(module: Module): ModuleItem[] {
+  return module.children.flatMap(child =>
+    isModule(child) ? flattenModuleItems(child) : [child],
+  );
 }
 
 /**
- * Sidebar grubu. İki şekilde içerik tanımlanır:
- * - `children`: düz, tek seviye linkler (mevcut çoğu grup)
- * - `subGroups`: 2. seviye gruplama (Yönetim → Kullanıcı İşlemleri / Genel Ayarlar)
- *
- * Bir grup ya `children` ya da `subGroups` kullanır — ikisi birden tanımlanmamalı.
+ * Multi-rol birleştirme için recursive merge.
+ * - Aynı `id`'li nested modüller children'larıyla birlikte derin birleşir
+ * - Leaf ModuleItem'lar `to` ile dedup edilir (aynı route iki rolde varsa tek görünür)
+ * - Sıralama: existing önce, incoming'den yeni olanlar sona eklenir
  */
-export interface MenuGroup {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children?: MenuItem[];
-  subGroups?: MenuSubGroup[];
-}
+export function mergeModuleChildren(
+  existing: ModuleNode[],
+  incoming: ModuleNode[],
+): ModuleNode[] {
+  const result: ModuleNode[] = [...existing];
+  const moduleIdxById = new Map<string, number>();
+  const seenRoutes = new Set<string>();
 
-/** Bir grubun tüm leaf item'larını döndürür (children veya subGroups → items düzleştirilmiş). */
-export function flattenGroupItems(group: MenuGroup): MenuItem[] {
-  if (group.subGroups) {
-    return group.subGroups.flatMap(sg => sg.items);
+  result.forEach((node, idx) => {
+    if (isModule(node)) moduleIdxById.set(node.id, idx);
+    else seenRoutes.add(node.to);
+  });
+
+  for (const node of incoming) {
+    if (isModule(node)) {
+      const idx = moduleIdxById.get(node.id);
+      if (idx !== undefined) {
+        const existingModule = result[idx] as Module;
+        result[idx] = {
+          ...existingModule,
+          children: mergeModuleChildren(existingModule.children, node.children),
+        };
+      } else {
+        result.push(cloneModule(node));
+        moduleIdxById.set(node.id, result.length - 1);
+      }
+    } else if (!seenRoutes.has(node.to)) {
+      result.push({ ...node });
+      seenRoutes.add(node.to);
+    }
   }
-  return group.children ?? [];
+
+  return result;
 }
 
-// ─── STUDENT MENU ───────────────────────────────────────────────
-export const studentMenuGroups: MenuGroup[] = [
+/** Recursive deep clone — mutation'a karşı güvenli kopya. */
+export function cloneModule(module: Module): Module {
+  return {
+    ...module,
+    children: module.children.map(child =>
+      isModule(child) ? cloneModule(child) : { ...child },
+    ),
+  };
+}
+
+// ─── STUDENT MODULES ────────────────────────────────────────────
+export const studentModules: Module[] = [
   {
     id: 'genel',
     label: 'Genel İşlemler',
@@ -100,8 +147,8 @@ export const studentMenuGroups: MenuGroup[] = [
   },
 ];
 
-// ─── INSTRUCTOR MENU ────────────────────────────────────────────
-export const instructorMenuGroups: MenuGroup[] = [
+// ─── INSTRUCTOR MODULES ─────────────────────────────────────────
+export const instructorModules: Module[] = [
   {
     id: 'sik-kullanilanlar',
     label: 'Sık Kullanılanlar',
@@ -131,8 +178,8 @@ export const instructorMenuGroups: MenuGroup[] = [
   },
 ];
 
-// ─── ACADEMIC ADVISOR MENU ──────────────────────────────────────
-export const advisorMenuGroups: MenuGroup[] = [
+// ─── ACADEMIC ADVISOR MODULES ───────────────────────────────────
+export const advisorModules: Module[] = [
   {
     id: 'sik-kullanilanlar',
     label: 'Sık Kullanılanlar',
@@ -162,8 +209,8 @@ export const advisorMenuGroups: MenuGroup[] = [
   },
 ];
 
-// ─── DEPARTMENT MANAGER MENU ────────────────────────────────────
-export const departmentManagerMenuGroups: MenuGroup[] = [
+// ─── DEPARTMENT MANAGER MODULES ─────────────────────────────────
+export const departmentManagerModules: Module[] = [
   {
     id: 'sik-kullanilanlar',
     label: 'Sık Kullanılanlar',
@@ -231,8 +278,8 @@ export const departmentManagerMenuGroups: MenuGroup[] = [
   },
 ];
 
-// ─── ADMINISTRATIVE STAFF MENU ──────────────────────────────────
-export const administrativeStaffMenuGroups: MenuGroup[] = [
+// ─── ADMINISTRATIVE STAFF MODULES ───────────────────────────────
+export const administrativeStaffModules: Module[] = [
   {
     id: 'sik-kullanilanlar',
     label: 'Sık Kullanılanlar',
@@ -282,8 +329,8 @@ export const administrativeStaffMenuGroups: MenuGroup[] = [
   },
 ];
 
-// ─── DEAN MENU ──────────────────────────────────────────────────
-export const deanMenuGroups: MenuGroup[] = [
+// ─── DEAN MODULES ───────────────────────────────────────────────
+export const deanModules: Module[] = [
   {
     id: 'sik-kullanilanlar',
     label: 'Sık Kullanılanlar',
@@ -362,10 +409,10 @@ export const deanMenuGroups: MenuGroup[] = [
   },
 ];
 
-// ─── SYSTEM ADMINISTRATOR MENU ──────────────────────────────────
-// Gruplar workflow sıralı: Sık Kullanılanlar → Dönem → Ders İşlemleri → Anketler →
-//                         Kaynaklar → Kullanıcılar → Akademik Yapı → Duyuru → Sistem
-export const systemAdminMenuGroups: MenuGroup[] = [
+// ─── SYSTEM ADMINISTRATOR MODULES ───────────────────────────────
+// Modüller workflow sıralı: Sık Kullanılanlar → Akademik → Öğrenci → Ders → Anketler →
+//                          Kaynaklar → Duyuru → Yönetim (nested)
+export const systemAdminModules: Module[] = [
   {
     id: 'sik-kullanilanlar',
     label: 'Sık Kullanılanlar',
@@ -464,17 +511,17 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       { to: ROUTES.ANNOUNCEMENTS, label: 'Tüm Duyurular' },
     ],
   },
-  // ── Yönetim — Proliz tarzı 2-seviye nested grup (subGroups kullanır) ──
-  // Eski "Kullanıcı Yönetimi" + "Sistem" grupları bu grup altında alt-gruplara taşındı.
+  // ── Yönetim — Proliz tarzı 2-seviye nested modül (recursive children) ──
+  // Eski "Kullanıcı Yönetimi" + "Sistem" grupları bu modül altında alt-modüllere taşındı.
   {
     id: 'yonetim',
     label: 'Yönetim',
     icon: Shield,
-    subGroups: [
+    children: [
       {
         id: 'kullanici-islemleri',
         label: 'Kullanıcı İşlemleri',
-        items: [
+        children: [
           { to: ROUTES.USER_MANAGEMENT, label: 'Kullanıcı Tanımlama' },
           { to: ROUTES.INSTRUCTOR_DIRECTORY, label: 'Personel Listesi' },
           { to: ROUTES.USER_PERMISSION_GROUPS, label: 'Kullanıcı Yetki Grupları' },
@@ -489,7 +536,7 @@ export const systemAdminMenuGroups: MenuGroup[] = [
       {
         id: 'genel-ayarlar',
         label: 'Genel Ayarlar',
-        items: [
+        children: [
           { to: ROUTES.UNIVERSITY_INFO, label: 'Üniversite Bilgileri' },
           { to: ROUTES.INSTITUTIONAL_INTEGRATION, label: 'Kurumsal Entegrasyon Tanımları' },
           { to: ROUTES.DOCUMENT_RESTRICTIONS, label: 'Belge Sınırlandırmalar' },

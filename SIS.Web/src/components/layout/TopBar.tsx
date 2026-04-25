@@ -5,23 +5,24 @@ import { Calendar, CircleDot } from 'lucide-react';
 import RoleSwitcher from './RoleSwitcher';
 
 import {
-  studentMenuGroups,
-  instructorMenuGroups,
-  advisorMenuGroups,
-  departmentManagerMenuGroups,
-  administrativeStaffMenuGroups,
-  deanMenuGroups,
-  systemAdminMenuGroups,
-} from './SidebarMenuGroups';
+  studentModules,
+  instructorModules,
+  advisorModules,
+  departmentManagerModules,
+  administrativeStaffModules,
+  deanModules,
+  systemAdminModules,
+  flattenModuleItems,
+} from './SidebarModules';
 
-const allMenuGroups = [
-  ...studentMenuGroups,
-  ...instructorMenuGroups,
-  ...advisorMenuGroups,
-  ...departmentManagerMenuGroups,
-  ...administrativeStaffMenuGroups,
-  ...deanMenuGroups,
-  ...systemAdminMenuGroups,
+const allModules = [
+  ...studentModules,
+  ...instructorModules,
+  ...advisorModules,
+  ...departmentManagerModules,
+  ...administrativeStaffModules,
+  ...deanModules,
+  ...systemAdminModules,
 ];
 
 const TERM_TYPE_LABELS: Record<string, string> = {
@@ -40,9 +41,9 @@ const pageTitles: Record<string, string> = {
   '/': 'Ana Sayfa',
 };
 
-// Menülerden gelen yolları dinamik olarak ekle
-allMenuGroups.forEach(group => {
-  group.children.forEach(child => {
+// Modül leaf item'larından dinamik olarak ekle (recursive — nested item'lar dahil)
+allModules.forEach(module => {
+  flattenModuleItems(module).forEach(child => {
     if (!pageTitles[child.to]) {
       pageTitles[child.to] = child.label;
     }

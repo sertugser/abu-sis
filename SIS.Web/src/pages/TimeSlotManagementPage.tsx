@@ -326,7 +326,7 @@ export default function TimeSlotManagementPage() {
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${regenerateSlots.isPending ? 'animate-spin' : ''}`} />
             Yeniden Üret
           </Button>
-          <Button size="sm" disabled={!isTermEditable} onClick={openCreate}>
+          <Button size="sm" disabled={!isTermEditable} onClick={() => openCreate()}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Yeni Slot
           </Button>
         </div>
