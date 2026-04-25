@@ -295,13 +295,13 @@ public static class MenuStructureSeed
         yonetimKullanici.Items = new List<MenuItem>
         {
             BuildItem(permissions, "Kullanıcı Tanımlama",                  "/kullanici-yonetimi",                   "kullanici-tanimlama",                 1, "menu.kullanici-tanimlama.view"),
-            BuildItem(permissions, "Personel Listesi",                     "/personel-listesi",                     "personel-listesi",                    2, "menu.personel-listesi.view"),
-            BuildItem(permissions, "Kullanıcı Yetki Grupları",             "/kullanici-yetki-gruplari",             "kullanici-yetki-gruplari",            3, "menu.kullanici-yetki-gruplari.view"),
-            BuildItem(permissions, "Kullanıcı Rapor Grupları",             "/kullanici-rapor-gruplari",             "kullanici-rapor-gruplari",            4, "menu.kullanici-rapor-gruplari.view"),
-            BuildItem(permissions, "Kullanıcı Grupları Sınırlandırmalar",  "/kullanici-grup-sinirlandirmalar",      "kullanici-grup-sinirlandirmalar",     5, "menu.kullanici-grup-sinirlandirmalar.view"),
-            BuildItem(permissions, "Kullanıcı Rapor Tasarım Grupları",     "/kullanici-rapor-tasarim-gruplari",     "kullanici-rapor-tasarim-gruplari",    6, "menu.kullanici-rapor-tasarim-gruplari.view"),
-            BuildItem(permissions, "Kullanıcı Vekalet İşlemleri",          "/kullanici-vekalet-islemleri",          "kullanici-vekalet-islemleri",         7, "menu.kullanici-vekalet-islemleri.view"),
-            BuildItem(permissions, "LOG",                                  "/denetim-kayitlari",                    "audit-log",                           8, "menu.audit-log.view"),
+            // "Personel Listesi" buradan kaldırıldı — yeni "Personel İşlemleri" top-level modülüne taşındı (SortOrder 14).
+            BuildItem(permissions, "Kullanıcı Yetki Grupları",             "/kullanici-yetki-gruplari",             "kullanici-yetki-gruplari",            2, "menu.kullanici-yetki-gruplari.view"),
+            BuildItem(permissions, "Kullanıcı Rapor Grupları",             "/kullanici-rapor-gruplari",             "kullanici-rapor-gruplari",            3, "menu.kullanici-rapor-gruplari.view"),
+            BuildItem(permissions, "Kullanıcı Grupları Sınırlandırmalar",  "/kullanici-grup-sinirlandirmalar",      "kullanici-grup-sinirlandirmalar",     4, "menu.kullanici-grup-sinirlandirmalar.view"),
+            BuildItem(permissions, "Kullanıcı Rapor Tasarım Grupları",     "/kullanici-rapor-tasarim-gruplari",     "kullanici-rapor-tasarim-gruplari",    5, "menu.kullanici-rapor-tasarim-gruplari.view"),
+            BuildItem(permissions, "Kullanıcı Vekalet İşlemleri",          "/kullanici-vekalet-islemleri",          "kullanici-vekalet-islemleri",         6, "menu.kullanici-vekalet-islemleri.view"),
+            BuildItem(permissions, "LOG",                                  "/denetim-kayitlari",                    "audit-log",                           7, "menu.audit-log.view"),
         };
 
         // ─── Modül 12.2: Yönetim → Genel Ayarlar ─────────────────────────────────
@@ -325,6 +325,27 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Sistem Konfigürasyonu",                "/sistem-ayarlari",                      "system-config",                       5, "menu.system-config.view"),
             BuildItem(permissions, "EBYS İmza Yetkilileri",                "/ebys-imza-yetkilileri",                "ebys-imza-yetkilileri",               6, "menu.ebys-imza-yetkilileri.view"),
             BuildItem(permissions, "Fakülte İmza Yükleme İşlemleri",       "/fakulte-imza-yukleme-islemleri",       "fakulte-imza-yukleme",                7, "menu.fakulte-imza-yukleme.view"),
+        };
+
+        // ─── Modül 14: Personel İşlemleri (top-level, SystemAdmin-only) ──────────
+        // Patch: "Personel Listesi" Yönetim → Kullanıcı İşlemleri'nden buraya taşındı.
+        // AllowedRolesCsv = "SystemAdministrator" → kullanıcı kararı: şimdilik sadece SysAdmin.
+        // İleride başka roller eklenecekse AllowedRolesCsv güncellenir + ilgili rol(ler)e
+        // "menu.personel-listesi.view" RolePermission ataması yapılır.
+        var personelIslemleri = new MenuModule
+        {
+            Slug = "personel-islemleri",
+            Label = "Personel İşlemleri",
+            Icon = "IdCard",
+            SortOrder = 14,
+            AllowedRolesCsv = "SystemAdministrator",
+        };
+        context.MenuModules.Add(personelIslemleri);
+        await context.SaveChangesAsync(ct);
+
+        personelIslemleri.Items = new List<MenuItem>
+        {
+            BuildItem(permissions, "Personel Listesi", "/personel-listesi", "personel-listesi", 1, "menu.personel-listesi.view"),
         };
 
         await context.SaveChangesAsync(ct);

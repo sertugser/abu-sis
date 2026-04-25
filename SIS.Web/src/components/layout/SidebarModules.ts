@@ -10,6 +10,8 @@ import {
   Megaphone,
   ClipboardCheck,
   Settings,
+  Briefcase,
+  IdCard,
   HelpCircle,
 } from 'lucide-react';
 
@@ -31,6 +33,8 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   Megaphone,
   ClipboardCheck,
   Settings,
+  Briefcase,
+  IdCard,
   HelpCircle,
 };
 
