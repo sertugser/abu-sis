@@ -42,7 +42,7 @@ import ProgramDefinitionsPage from './pages/ProgramDefinitionsPage';
 import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
 import SystemConfigPage from './pages/SystemConfigPage';
 import AuditLogPage from './pages/AuditLogPage';
-import PromotionRulePage from './pages/PromotionRulePage';
+import MufredatSinifDonemTanimlariPage from './pages/MufredatSinifDonemTanimlariPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
@@ -137,7 +137,9 @@ export default function App() {
                     <Route path="bolum-tanimlari" element={<DepartmentDefinitionsPage />} />
                     <Route path="program-tanimlari" element={<ProgramDefinitionsPage />} />
                     <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
-                    <Route path="sinif-atlatma-kurallari" element={<PromotionRulePage />} />
+                    <Route path="mufredat-sinif-donem-tanimlari" element={<MufredatSinifDonemTanimlariPage />} />
+                    {/* Eski URL → yeni URL'e redirect (γ hibrit + C rename) */}
+                    <Route path="sinif-atlatma-kurallari" element={<Navigate to="/mufredat-sinif-donem-tanimlari" replace />} />
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
                     <Route path="ders-programi-kisitlamalari" element={<ConstraintManagementPage />} />
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />

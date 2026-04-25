@@ -47,6 +47,7 @@ import CourseDetailSheet from '../components/curriculum-management/CourseDetailS
 import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
 import type { CurriculumCourseItemDto, CurriculumListDto } from '../types/curriculumManagement';
+import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/lib/constants';
 
 type CreateMode = 'empty' | 'copy';
@@ -57,6 +58,7 @@ type YearFilter = 'all' | string; // 'all' veya "2024" gibi yıl değeri
 const PAGE_SIZE = 10;
 
 export default function CurriculumManagementPage() {
+  const navigate = useNavigate();
   // ── Filter state ──
   const [facultyId, setFacultyId] = useState<number | undefined>();
   const [departmentId, setDepartmentId] = useState<number | undefined>();
@@ -663,7 +665,10 @@ export default function CurriculumManagementPage() {
                             }}>
                               <Settings className="h-4 w-4 mr-2" /> Dönem Kuralları
                             </DropdownMenuItem>
-                            <DropdownMenuItem disabled title="Yakında">
+                            <DropdownMenuItem
+                              onClick={() => navigate(ROUTES.PROMOTION_RULES)}
+                              title="Müfredat Sınıf Dönem Tanımları sayfasını aç"
+                            >
                               <GraduationCap className="h-4 w-4 mr-2" /> Sınıf Atlatma Kuralları
                             </DropdownMenuItem>
                             <DropdownMenuItem disabled title="Yakında">

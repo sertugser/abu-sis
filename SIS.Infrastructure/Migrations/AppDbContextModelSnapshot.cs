@@ -2328,6 +2328,9 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CurriculumId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("FromYear")
                         .HasColumnType("integer");
 
@@ -2355,7 +2358,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProgramId", "FromYear", "ToYear")
+                    b.HasIndex("CurriculumId");
+
+                    b.HasIndex("ProgramId", "CurriculumId", "FromYear", "ToYear")
                         .IsUnique();
 
                     b.ToTable("PromotionRules");
@@ -3775,11 +3780,18 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
                 {
+                    b.HasOne("SIS.Domain.Entities.Curriculum", "Curriculum")
+                        .WithMany()
+                        .HasForeignKey("CurriculumId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
                         .WithMany()
                         .HasForeignKey("ProgramId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Curriculum");
 
                     b.Navigation("Program");
                 });

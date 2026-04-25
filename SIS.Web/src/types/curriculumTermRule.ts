@@ -2,7 +2,7 @@
 export type CurriculumClassYear = 0 | 1 | 2 | 3 | 4; // 0 = Hazırlık, 1-4 = Sınıf
 
 // Backend: SIS.Domain.Enums.CurriculumTermHalf
-export type CurriculumTermHalf = 0 | 1; // 0 = Güz, 1 = Bahar
+export type CurriculumTermHalf = 0 | 1 | 2; // 0 = Güz, 1 = Bahar, 2 = Yaz
 
 // Backend: SIS.Domain.Enums.CurriculumTermRuleType
 export type CurriculumTermRuleType =
@@ -55,6 +55,7 @@ export const CLASS_YEAR_LABELS: Record<CurriculumClassYear, string> = {
 export const TERM_HALF_LABELS: Record<CurriculumTermHalf, string> = {
   0: 'Güz',
   1: 'Bahar',
+  2: 'Yaz',
 };
 
 export const RULE_TYPE_LABELS: Record<CurriculumTermRuleType, string> = {
@@ -82,4 +83,4 @@ export const ALL_RULE_TYPES: readonly CurriculumTermRuleType[] = [
 ] as const;
 
 export const ALL_CLASS_YEARS: readonly CurriculumClassYear[] = [0, 1, 2, 3, 4] as const;
-export const ALL_TERM_HALVES: readonly CurriculumTermHalf[] = [0, 1] as const;
+export const ALL_TERM_HALVES: readonly CurriculumTermHalf[] = [0, 1, 2] as const;

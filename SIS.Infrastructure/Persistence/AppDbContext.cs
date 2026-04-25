@@ -728,12 +728,19 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── PromotionRule ────────────────────────────────────────
         builder.Entity<PromotionRule>(e =>
         {
-            e.HasIndex(pr => new { pr.ProgramId, pr.FromYear, pr.ToYear }).IsUnique();
+            // γ hibrit unique: aynı program×müfredat×fromYear×toYear kombinasyonu tek olabilir.
+            // CurriculumId null olabilir → program-bazlı default; set ise müfredat-spesifik override.
+            e.HasIndex(pr => new { pr.ProgramId, pr.CurriculumId, pr.FromYear, pr.ToYear }).IsUnique();
             e.Property(pr => pr.MinCgpa).HasPrecision(4, 2);
 
             e.HasOne(pr => pr.Program)
              .WithMany()
              .HasForeignKey(pr => pr.ProgramId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(pr => pr.Curriculum)
+             .WithMany()
+             .HasForeignKey(pr => pr.CurriculumId)
              .OnDelete(DeleteBehavior.Cascade);
         });
 
