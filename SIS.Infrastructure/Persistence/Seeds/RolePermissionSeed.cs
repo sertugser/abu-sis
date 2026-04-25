@@ -86,6 +86,11 @@ public static class RolePermissionSeed
                 "menu.sinif-listeleri.view",
                 "menu.degerlendirme-sonuclari.view",
                 "menu.sifre-degistir.view",
+                // Patch 2B: "Bölüm İşlemleri" modülü için (Proliz tarzı hoca paneli)
+                "menu.subelendirme-islemleri.view",
+                "menu.ders-veren-ogretim-uyeleri.view",
+                "menu.toplu-danisman-atama.view",
+                "menu.toplu-mufredat-atama.view",
 
                 // ── Action permissions (17) ──
                 "menu.not-girisi.edit",

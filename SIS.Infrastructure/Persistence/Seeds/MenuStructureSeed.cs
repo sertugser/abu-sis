@@ -152,13 +152,33 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Ders Kısıtları",                 "/danisman-ders-kisitlari",             "danisman-ders-kisitlari",        21, "menu.danisman-ders-kisitlari.view"),
         };
 
-        // ─── Modül 7: Öğrenci İşlemleri ──────────────────────────────────────────
+        // ─── Modül 7: Bölüm İşlemleri (hoca + admin için) ────────────────────────
+        // Patch 2B: Proliz tarzı hoca paneli — bölüm-level operasyonlar
+        var bolumIslemleri = new MenuModule
+        {
+            Slug = "bolum-islemleri",
+            Label = "Bölüm İşlemleri",
+            Icon = "Briefcase",
+            SortOrder = 7,
+        };
+        context.MenuModules.Add(bolumIslemleri);
+        await context.SaveChangesAsync(ct);
+
+        bolumIslemleri.Items = new List<MenuItem>
+        {
+            BuildItem(permissions, "Şubelendirme İşlemleri",         "/subelendirme-islemleri",         "subelendirme-islemleri-bolum",      1, "menu.subelendirme-islemleri.view"),
+            BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",     "ders-veren-ogretim-uyeleri-bolum",  2, "menu.ders-veren-ogretim-uyeleri.view"),
+            BuildItem(permissions, "Toplu Danışman Atama",           "/toplu-danisman-atama",           "toplu-danisman-atama-bolum",        3, "menu.toplu-danisman-atama.view"),
+            BuildItem(permissions, "Toplu Müfredat Atama",           "/toplu-mufredat-atama",           "toplu-mufredat-atama-bolum",        4, "menu.toplu-mufredat-atama.view"),
+        };
+
+        // ─── Modül 8: Öğrenci İşlemleri (kayma: 7 → 8) ───────────────────────────
         var ogrenciIslemleri = new MenuModule
         {
             Slug = "ogrenci-islemleri",
             Label = "Öğrenci İşlemleri",
             Icon = "Users",
-            SortOrder = 7,
+            SortOrder = 8,
         };
         context.MenuModules.Add(ogrenciIslemleri);
         await context.SaveChangesAsync(ct);
@@ -178,13 +198,13 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Harf Notu Düzenleme",            "/harf-notu-duzenleme",                 "harf-notu-duzenleme",            11, "menu.harf-notu-duzenleme.view"),
         };
 
-        // ─── Modül 8: Anketler ───────────────────────────────────────────────────
+        // ─── Modül 9: Anketler (kayma: 8 → 9) ────────────────────────────────────
         var anketler = new MenuModule
         {
             Slug = "anketler",
             Label = "Anketler",
             Icon = "ClipboardCheck",
-            SortOrder = 8,
+            SortOrder = 9,
         };
         context.MenuModules.Add(anketler);
         await context.SaveChangesAsync(ct);
@@ -196,13 +216,13 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Değerlendirme Dönemi Yönetimi",  "/degerlendirme-donemi-yonetimi",       "degerlendirme-donemi-yonetimi",  3, "menu.degerlendirme-donemi-yonetimi.view"),
         };
 
-        // ─── Modül 9: Kaynak Yönetimi ────────────────────────────────────────────
+        // ─── Modül 10: Kaynak Yönetimi (kayma: 9 → 10) ───────────────────────────
         var kaynakYonetimi = new MenuModule
         {
             Slug = "kaynak-yonetimi",
             Label = "Kaynak Yönetimi",
             Icon = "School",
-            SortOrder = 9,
+            SortOrder = 10,
         };
         context.MenuModules.Add(kaynakYonetimi);
         await context.SaveChangesAsync(ct);
@@ -213,13 +233,13 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Derslik-Fakülte Ataması",        "/derslik-fakulte-atamasi",             "derslik-fakulte-atamasi",        2, "menu.derslik-fakulte-atamasi.view"),
         };
 
-        // ─── Modül 10: Duyuru Yönetimi (admin) — DUYURULAR LINKİ DE BURADA ───────
+        // ─── Modül 11: Duyuru Yönetimi (kayma: 10 → 11) — DUYURULAR LINKİ DE BURADA ─
         var duyuruYonetimi = new MenuModule
         {
             Slug = "duyuru-yonetimi-grubu",
             Label = "Duyuru Yönetimi",
             Icon = "Megaphone",
-            SortOrder = 10,
+            SortOrder = 11,
         };
         context.MenuModules.Add(duyuruYonetimi);
         await context.SaveChangesAsync(ct);
@@ -230,13 +250,13 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Duyuru Yönetimi",                "/duyuru-yonetimi",                     "duyuru-yonetimi",                2, "menu.duyuru-yonetimi.view"),
         };
 
-        // ─── Modül 11: Hesabım ───────────────────────────────────────────────────
+        // ─── Modül 12: Hesabım (kayma: 11 → 12) ──────────────────────────────────
         var hesabim = new MenuModule
         {
             Slug = "hesabim",
             Label = "Hesabım",
             Icon = "User",
-            SortOrder = 11,
+            SortOrder = 12,
         };
         context.MenuModules.Add(hesabim);
         await context.SaveChangesAsync(ct);
@@ -246,13 +266,13 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Şifre Değiştir",                 "/sifre-degistir",                      "sifre-degistir",                 1, "menu.sifre-degistir.view"),
         };
 
-        // ─── Modül 12: Yönetim (nested parent) ───────────────────────────────────
+        // ─── Modül 13: Yönetim (kayma: 12 → 13, nested parent) ───────────────────
         var yonetim = new MenuModule
         {
             Slug = "yonetim",
             Label = "Yönetim",
             Icon = "Shield",
-            SortOrder = 12,
+            SortOrder = 13,
         };
         context.MenuModules.Add(yonetim);
         await context.SaveChangesAsync(ct);
