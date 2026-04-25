@@ -33,7 +33,10 @@ function toModule(dto: MenuModuleDto): Module {
     ...dto.items.map(toItem),
   ];
   return {
-    id: dto.id.toString(),
+    // Sidebar.tsx'in 'sik-kullanilanlar' / 'yonetim' gibi string id'lere bağlı favorites + accordion
+    // mantığı için label'dan deterministik slug üretilir (Türkçe karakter normalize).
+    // Backend integer DTO id'si yeterli değil çünkü frontend slug-based key'lerle çalışıyor.
+    id: slugify(dto.label),
     label: dto.label,
     icon: resolveIcon(dto.icon),
     children,
@@ -46,4 +49,25 @@ function toItem(dto: MenuItemDto): ModuleItem {
     label: dto.label,
     openInNewTab: dto.openInNewTab,
   };
+}
+
+/**
+ * Türkçe label'ı sidebar slug'ına çevirir.
+ * Menu inventory'deki id'lerle (Sprint 0.2) uyumlu:
+ *   "Sık Kullanılanlar" → "sik-kullanilanlar"
+ *   "Yönetim"           → "yonetim"
+ *   "Akademik İşlemler" → "akademik-islemler"
+ *   "Hesabım"           → "hesabim"
+ */
+function slugify(label: string): string {
+  return label
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
