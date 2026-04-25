@@ -72,6 +72,11 @@ function emptyCourseForm(): CreateCourseDto {
     level: 'Undergraduate',
     description: null,
     nationalCredit: null,
+    // Proliz "Diğer Ön Koşul Tanımları"
+    minCreditsRequired: null,
+    minEctsRequired: null,
+    requiresNoFailedLowerCourses: false,
+    canBeTakenStandalone: false,
   };
 }
 
@@ -322,6 +327,54 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
         </div>
       </FieldSection>
 
+      {/* Diğer Ön Koşul Tanımları (Proliz) */}
+      <FieldSection title="Ön Koşul Kuralları">
+        <div className="grid grid-cols-2 gap-3 mt-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Min Kredi Ön Koşul</Label>
+            <Input
+              type="number" min={0}
+              value={form.minCreditsRequired ?? ''}
+              onChange={e => onChange({ ...form, minCreditsRequired: e.target.value ? Number(e.target.value) : null })}
+              disabled={disabled}
+              placeholder="—"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Min AKTS Ön Koşul</Label>
+            <Input
+              type="number" min={0}
+              value={form.minEctsRequired ?? ''}
+              onChange={e => onChange({ ...form, minEctsRequired: e.target.value ? Number(e.target.value) : null })}
+              disabled={disabled}
+              placeholder="—"
+            />
+          </div>
+        </div>
+        <div className="mt-3 space-y-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.requiresNoFailedLowerCourses ?? false}
+              onChange={e => onChange({ ...form, requiresNoFailedLowerCourses: e.target.checked })}
+              disabled={disabled}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+            <span>Alttan Dersi Olmayanlar Alabilir</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.canBeTakenStandalone ?? false}
+              onChange={e => onChange({ ...form, canBeTakenStandalone: e.target.checked })}
+              disabled={disabled}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+            <span>Bu Ders Tek Başına Alınabilir</span>
+          </label>
+        </div>
+      </FieldSection>
+
       {/* Açıklama */}
       <FieldSection title="Açıklama">
         <div className="mt-2 space-y-1">
@@ -391,6 +444,10 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
       level: detail.level,
       description: detail.description,
       nationalCredit: detail.nationalCredit,
+      minCreditsRequired: detail.minCreditsRequired,
+      minEctsRequired: detail.minEctsRequired,
+      requiresNoFailedLowerCourses: detail.requiresNoFailedLowerCourses,
+      canBeTakenStandalone: detail.canBeTakenStandalone,
     };
   }, [detail]);
 

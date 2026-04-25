@@ -15,4 +15,7 @@ public interface IAdminCourseCatalogService
 
     Task AddEquivalencyAsync(int courseId, AddEquivalencyDto dto);
     Task RemoveEquivalencyAsync(int courseId, int equivalentCourseId);
+
+    // Proliz "Diğer Ön Koşul Tanımları" — sadece course-level kural alanlarını günceller.
+    Task<CourseDetailDto> UpdateCoursePrereqRulesAsync(int courseId, UpdateCoursePrereqRulesDto dto);
 }

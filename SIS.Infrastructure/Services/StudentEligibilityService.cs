@@ -221,6 +221,39 @@ public class StudentEligibilityService : IStudentEligibilityService
             }
         }
 
+        // 4A. Min Kredi Ön Koşul (Proliz "Diğer Ön Koşul")
+        if (course.MinCreditsRequired.HasValue && snapshot.PassedCredits < course.MinCreditsRequired.Value)
+        {
+            reasons.Add(new IneligibilityReasonDto
+            {
+                Reason = IneligibilityReason.MinCreditsNotMet,
+                Message = $"Min kredi sarti saglanmadi: {snapshot.PassedCredits} < {course.MinCreditsRequired.Value}"
+            });
+        }
+
+        // 4B. Min AKTS Ön Koşul (Proliz "Diğer Ön Koşul")
+        if (course.MinEctsRequired.HasValue && snapshot.PassedEcts < course.MinEctsRequired.Value)
+        {
+            reasons.Add(new IneligibilityReasonDto
+            {
+                Reason = IneligibilityReason.MinEctsNotMet,
+                Message = $"Min AKTS sarti saglanmadi: {snapshot.PassedEcts} < {course.MinEctsRequired.Value}"
+            });
+        }
+
+        // 4C. Alttan Ders Kuralı (Proliz "Alttan Dersi Olmayanlar Alabilir")
+        if (course.RequiresNoFailedLowerCourses && snapshot.FailedCourseIds.Count > 0)
+        {
+            reasons.Add(new IneligibilityReasonDto
+            {
+                Reason = IneligibilityReason.HasFailedLowerCourses,
+                Message = "Basarisiz (alttan) ders mevcut: bu ders sadece alttan dersi olmayan ogrencilere acik."
+            });
+        }
+
+        // Not: CanBeTakenStandalone burada kontrol edilmez — eligibility "alabilir miyim" sorusudur,
+        // tekil alma kuralı kayıt anında diğer dersler bilindiğinde RegistrationValidationService'de uygulanır.
+
         // 5. CGPA restriction
         if (RegistrationRulePolicy.HasLowCgpaRestriction(snapshot.Cgpa, snapshot.CompletedSemesters, context.RetentionThreshold))
         {
@@ -411,6 +444,14 @@ public class StudentEligibilityService : IStudentEligibilityService
 
             failedCourseIds.ExceptWith(passedCourseIds);
 
+            // Tamamlanan kredi/AKTS — course-level Min* kontrolü için (Proliz "Diğer Ön Koşul")
+            var passedEcts = studentRegistrations
+                .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
+                .Sum(r => r.EctsSnapshot ?? r.CourseSection.Course?.Ects ?? 0);
+            var passedCredits = studentRegistrations
+                .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
+                .Sum(r => r.CourseSection.Course?.NationalCredit ?? 0);
+
             var lastGradeByCourse = studentRegistrations
                 .GroupBy(r => r.CourseSection.CourseId)
                 .ToDictionary(
@@ -438,7 +479,9 @@ public class StudentEligibilityService : IStudentEligibilityService
                 ProgramDepartmentId = mainProgram.Program?.DepartmentId,
                 PassedCourseIds = passedCourseIds,
                 FailedCourseIds = failedCourseIds,
-                LastGradeByCourse = lastGradeByCourse!
+                LastGradeByCourse = lastGradeByCourse!,
+                PassedEcts = passedEcts,
+                PassedCredits = passedCredits
             });
         }
 
@@ -512,5 +555,8 @@ public class StudentEligibilityService : IStudentEligibilityService
         public HashSet<int> PassedCourseIds { get; init; } = new();
         public HashSet<int> FailedCourseIds { get; init; } = new();
         public Dictionary<int, GradeCode?> LastGradeByCourse { get; init; } = new();
+        // Course.Min* kontrolü için (Proliz "Diğer Ön Koşul")
+        public int PassedEcts { get; init; }
+        public int PassedCredits { get; init; }
     }
 }

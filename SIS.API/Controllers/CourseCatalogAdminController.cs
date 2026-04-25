@@ -87,6 +87,16 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
     }
 
+    // Proliz "Diğer Ön Koşul Tanımları" — sadece course-level kural alanları (Min kredi/AKTS, Alttan, Tekil Alma)
+    [HttpPut("{id:int}/prereq-rules")]
+    [Authorize(Roles = "SystemAdministrator")]
+    public async Task<IActionResult> UpdatePrereqRules(int id, [FromBody] UpdateCoursePrereqRulesDto dto)
+    {
+        try { return Ok(await service.UpdateCoursePrereqRulesAsync(id, dto)); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     // ── Madde 14: Cross-Listing CRUD ─────────────────────────────────
     // İki ders kodunun aynı dersin farklı bölümlerdeki görünümü olduğunu kaydeder.
     // Örn: YZM301 ≡ BIL301 — aynı hoca, aynı sınıf, iki kod.

@@ -9,5 +9,10 @@ public enum IneligibilityReason
     FinancialBlock,
     StudentNotActive,
     CourseNotInCurriculum,
-    ProgramMismatch
+    ProgramMismatch,
+    // Proliz "Diğer Ön Koşul Tanımları" — kayıt anında uygulanan course-level kurallar
+    MinCreditsNotMet,
+    MinEctsNotMet,
+    HasFailedLowerCourses,
+    MustBeTakenStandalone
 }

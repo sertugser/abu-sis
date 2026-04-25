@@ -15,7 +15,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
   BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Copy, Edit, GraduationCap, Loader2, Plus, Printer, Scissors, Search, Settings, Trash2,
+  Copy, Edit, GraduationCap, Layers, Loader2, MoreHorizontal, Package, Plus, Printer, Scissors,
+  Search, Settings, Trash2,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -43,11 +44,11 @@ import {
 } from '../hooks/useCurriculumManagement';
 import AddCourseDialog from '../components/curriculum-management/AddCourseDialog';
 import CourseDetailSheet from '../components/curriculum-management/CourseDetailSheet';
+import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
 import type { CurriculumCourseItemDto, CurriculumListDto } from '../types/curriculumManagement';
 import { ROUTES } from '@/lib/constants';
 
-type SortBy = 'default' | 'code' | 'name' | 'ects';
 type CreateMode = 'empty' | 'copy';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'archived';
 type ViewMode = 'list' | 'courses';
@@ -119,12 +120,18 @@ export default function CurriculumManagementPage() {
   const [showDetailSheet, setShowDetailSheet] = useState(false);
 
   // ── Search & table filters ──
-  const [searchTerm, setSearchTerm] = useState('');
+  // Proliz tarzı: iki ayrı arama alanı (Ders Kodu | Ders Adı). AND mantığıyla birleşir.
+  const [searchCode, setSearchCode] = useState('');
+  const [searchName, setSearchName] = useState('');
   const [classFilter, setClassFilter] = useState<number | null>(null); // 1,2,3,4
   const [termTypeFilter, setTermTypeFilter] = useState<'all' | 'fall' | 'spring'>('all');
-  const [sortBy, setSortBy] = useState<SortBy>('default');
   // Gruplu Dersleri Göster — şimdilik UI-only, seçmeli havuzlar entegrasyonu için yer tutucu
   const [showGroupedCourses, setShowGroupedCourses] = useState(false);
+
+  // ── Satır-içi dişli menü → Ön Koşul / İntibak dialog target ──
+  const [courseLinksTarget, setCourseLinksTarget] = useState<
+    { courseId: number; label: string; mode: 'prerequisite' | 'equivalency' } | null
+  >(null);
 
   // ── Queries ──
   const { data: faculties, isLoading: loadingFaculties } = useAdminFaculties();
@@ -153,16 +160,16 @@ export default function CurriculumManagementPage() {
   // ── Derived — düz ders listesi (grup yok) ──
   const flatCourses = useMemo(() => {
     if (!detail) return [] as CurriculumCourseItemDto[];
-    const lower = searchTerm.toLowerCase();
+    const codeLower = searchCode.trim().toLowerCase();
+    const nameLower = searchName.trim().toLowerCase();
 
     let filtered: CurriculumCourseItemDto[] = detail.courses;
 
-    if (lower) {
-      filtered = filtered.filter(
-        c =>
-          c.courseCode.toLowerCase().includes(lower) ||
-          c.courseName.toLowerCase().includes(lower),
-      );
+    if (codeLower) {
+      filtered = filtered.filter(c => c.courseCode.toLowerCase().includes(codeLower));
+    }
+    if (nameLower) {
+      filtered = filtered.filter(c => c.courseName.toLowerCase().includes(nameLower));
     }
 
     // Sınıf filtresi: 1 → sem 1,2; 2 → sem 3,4; 3 → sem 5,6; 4 → sem 7,8
@@ -179,21 +186,11 @@ export default function CurriculumManagementPage() {
       filtered = filtered.filter(c => c.suggestedSemester % 2 === 0);
     }
 
-    // Sıralama — varsayılan: sem asc + code asc
-    if (sortBy === 'code') {
-      filtered = [...filtered].sort((a, b) => a.courseCode.localeCompare(b.courseCode));
-    } else if (sortBy === 'name') {
-      filtered = [...filtered].sort((a, b) => a.courseName.localeCompare(b.courseName));
-    } else if (sortBy === 'ects') {
-      filtered = [...filtered].sort((a, b) => b.ects - a.ects);
-    } else {
-      filtered = [...filtered].sort((a, b) =>
-        a.suggestedSemester - b.suggestedSemester || a.courseCode.localeCompare(b.courseCode),
-      );
-    }
-
-    return filtered;
-  }, [detail, searchTerm, classFilter, termTypeFilter, sortBy]);
+    // Varsayılan sıralama: sem asc + code asc (sort filtresi kaldırıldı — Proliz davranışı)
+    return [...filtered].sort((a, b) =>
+      a.suggestedSemester - b.suggestedSemester || a.courseCode.localeCompare(b.courseCode),
+    );
+  }, [detail, searchCode, searchName, classFilter, termTypeFilter]);
 
   const existingCourseIds = useMemo(
     () => new Set(detail?.courses?.map(c => c.courseId) ?? []),
@@ -831,11 +828,18 @@ export default function CurriculumManagementPage() {
             <Card>
               <CardContent className="py-3">
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Proliz tarzı: iki ayrı arama alanı (Ders Kodu | Ders Adı) */}
                   <Input
-                    placeholder="Ders kodu veya adı ile ara..."
-                    className="h-9 w-full sm:w-56 text-sm"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Ders Kodu"
+                    className="h-9 w-full sm:w-32 text-sm"
+                    value={searchCode}
+                    onChange={e => setSearchCode(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Ders Adı"
+                    className="h-9 w-full sm:w-44 text-sm"
+                    value={searchName}
+                    onChange={e => setSearchName(e.target.value)}
                   />
 
                   <Select
@@ -868,21 +872,6 @@ export default function CurriculumManagementPage() {
                     </SelectContent>
                   </Select>
 
-                  <Select
-                    value={sortBy}
-                    onValueChange={val => setSortBy(val as SortBy)}
-                  >
-                    <SelectTrigger className="h-9 w-40 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Sırala: Varsayılan</SelectItem>
-                      <SelectItem value="code">Sırala: Ders Kodu</SelectItem>
-                      <SelectItem value="name">Sırala: Ders Adı</SelectItem>
-                      <SelectItem value="ects">Sırala: AKTS</SelectItem>
-                    </SelectContent>
-                  </Select>
-
                   <span className="hidden md:inline text-muted-foreground">|</span>
 
                   <span className="text-sm text-muted-foreground whitespace-nowrap">
@@ -899,25 +888,8 @@ export default function CurriculumManagementPage() {
                     <span>Gruplu Dersleri Göster</span>
                   </label>
 
-                  {/* Sağ aksiyonlar */}
+                  {/* Sağ aksiyonlar — Proliz: Ders Ekle | Grup Ekle | Ek İşlemler */}
                   <div className="ml-auto flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 text-sm"
-                      onClick={() => {
-                        if (!selectedCurr) return;
-                        setTermRulesTarget({
-                          id: selectedCurr.id,
-                          label: `(${selectedCurr.version}) ${selectedCurr.name ?? selectedCurr.programName}`,
-                        });
-                        setShowTermRulesDialog(true);
-                      }}
-                      title="Müfredat dönem kuralları (sınıf + dönem bazlı)"
-                    >
-                      <Settings className="h-4 w-4 mr-1" />
-                      Dönem Kuralları
-                    </Button>
                     <Button
                       size="sm"
                       className="h-9 text-sm"
@@ -925,6 +897,34 @@ export default function CurriculumManagementPage() {
                     >
                       <Plus className="h-4 w-4 mr-1" /> Ders Ekle
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 text-sm"
+                      disabled
+                      title="Yakında"
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Grup Ekle
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-9 text-sm">
+                          <MoreHorizontal className="h-4 w-4 mr-1" />
+                          Ek İşlemler
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem disabled title="Yakında">
+                          <Printer className="h-4 w-4 mr-2" /> Ders Listesi Yazdır
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled title="Yakında">
+                          <Package className="h-4 w-4 mr-2" /> Bilgi Paketi
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled title="Yakında">
+                          <Layers className="h-4 w-4 mr-2" /> Toplu Gruplandırma
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </CardContent>
@@ -942,7 +942,7 @@ export default function CurriculumManagementPage() {
           ) : flatCourses.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
-                {searchTerm || classFilter !== null || termTypeFilter !== 'all'
+                {searchCode || searchName || classFilter !== null || termTypeFilter !== 'all'
                   ? 'Filtrenizle eşleşen ders bulunamadı'
                   : 'Henüz ders eklenmemiş'}
               </CardContent>
@@ -954,6 +954,7 @@ export default function CurriculumManagementPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50 border-b">
                       <tr className="text-left">
+                        <th className="px-2 py-2.5 w-10"></th>
                         <th className="px-3 py-2.5 font-medium whitespace-nowrap">Ders Kodu</th>
                         <th className="px-3 py-2.5 font-medium min-w-[240px]">Ders Adı</th>
                         <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Z/S</th>
@@ -975,8 +976,53 @@ export default function CurriculumManagementPage() {
                       {flatCourses.map(c => {
                         const sinif = Math.ceil(c.suggestedSemester / 2);
                         const donem = c.suggestedSemester % 2 === 1 ? 'G' : 'B';
+                        const courseLabel = `${c.courseCode} — ${c.courseName}`;
                         return (
                           <tr key={c.courseId} className="border-b hover:bg-muted/30">
+                            <td className="px-2 py-2">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Ders işlemleri"
+                                  >
+                                    <Settings className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  <DropdownMenuItem disabled title="Yakında">
+                                    <Package className="h-4 w-4 mr-2" /> Bilgi Paketi
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      setCourseLinksTarget({
+                                        courseId: c.courseId,
+                                        label: courseLabel,
+                                        mode: 'prerequisite',
+                                      })
+                                    }
+                                  >
+                                    <BookOpen className="h-4 w-4 mr-2" /> Ön Koşul Tanımları
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled title="Yakında">
+                                    <Layers className="h-4 w-4 mr-2" /> Gruplandırma İşlemleri
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      setCourseLinksTarget({
+                                        courseId: c.courseId,
+                                        label: courseLabel,
+                                        mode: 'equivalency',
+                                      })
+                                    }
+                                  >
+                                    <Scissors className="h-4 w-4 mr-2" /> İntibak İşlemleri
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </td>
                             <td className="px-3 py-2 whitespace-nowrap font-medium">{c.courseCode}</td>
                             <td className="px-3 py-2">
                               <button
@@ -1388,6 +1434,15 @@ export default function CurriculumManagementPage() {
           }}
         />
       )}
+
+      {/* ── Ders Ön Koşul / İntibak Dialog ── */}
+      <CourseLinksDialog
+        mode={courseLinksTarget?.mode ?? 'prerequisite'}
+        open={courseLinksTarget !== null}
+        courseId={courseLinksTarget?.courseId ?? null}
+        courseLabel={courseLinksTarget?.label ?? ''}
+        onClose={() => setCourseLinksTarget(null)}
+      />
 
       {/* ── Aktif Et Confirm Dialog ── */}
       <AlertDialog open={activateTarget !== null} onOpenChange={(open) => !open && setActivateTarget(null)}>

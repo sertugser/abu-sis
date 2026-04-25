@@ -23,6 +23,11 @@ public record CourseDetailDto(
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
     CourseLevel Level, int? NationalCredit,
+    // Proliz "Diğer Ön Koşul Tanımları"
+    int? MinCreditsRequired,
+    int? MinEctsRequired,
+    bool RequiresNoFailedLowerCourses,
+    bool CanBeTakenStandalone,
     CourseStatsDto? Stats = null,
     List<PrerequisiteChainNodeDto>? PrerequisiteChain = null
 );
@@ -42,7 +47,12 @@ public record CreateCourseDto(
     int? DepartmentId,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit
+    CourseLevel Level, int? NationalCredit,
+    // Proliz "Diğer Ön Koşul Tanımları" (opsiyonel — default değerler kullanılır)
+    int? MinCreditsRequired = null,
+    int? MinEctsRequired = null,
+    bool RequiresNoFailedLowerCourses = false,
+    bool CanBeTakenStandalone = false
 );
 
 public record UpdateCourseDto(
@@ -52,7 +62,12 @@ public record UpdateCourseDto(
     int? DepartmentId,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit
+    CourseLevel Level, int? NationalCredit,
+    // Proliz "Diğer Ön Koşul Tanımları"
+    int? MinCreditsRequired = null,
+    int? MinEctsRequired = null,
+    bool RequiresNoFailedLowerCourses = false,
+    bool CanBeTakenStandalone = false
 );
 
 public record CourseStatsDto(
@@ -91,6 +106,14 @@ public record PrerequisiteChainNodeDto(
 
 public record AddPrerequisiteDto(int RequiredCourseId);
 public record AddEquivalencyDto(int EquivalentCourseId);
+
+// Proliz "Diğer Ön Koşul Tanımları" — sadece 4 kuralı güncellemek için ayrı endpoint
+public record UpdateCoursePrereqRulesDto(
+    int? MinCreditsRequired,
+    int? MinEctsRequired,
+    bool RequiresNoFailedLowerCourses,
+    bool CanBeTakenStandalone
+);
 
 public record CourseFilterDto
 {

@@ -109,6 +109,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             curriculumAssignments,
             course.Language, course.TeachingMethod, course.Status,
             course.Description, course.Level, course.NationalCredit,
+            course.MinCreditsRequired,
+            course.MinEctsRequired,
+            course.RequiresNoFailedLowerCourses,
+            course.CanBeTakenStandalone,
             stats,
             chain
         );
@@ -285,7 +289,11 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             Status = dto.Status,
             Description = dto.Description,
             Level = dto.Level,
-            NationalCredit = dto.NationalCredit
+            NationalCredit = dto.NationalCredit,
+            MinCreditsRequired = dto.MinCreditsRequired,
+            MinEctsRequired = dto.MinEctsRequired,
+            RequiresNoFailedLowerCourses = dto.RequiresNoFailedLowerCourses,
+            CanBeTakenStandalone = dto.CanBeTakenStandalone
         };
         db.Courses.Add(course);
         await db.SaveChangesAsync();
@@ -319,6 +327,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         course.Description = dto.Description;
         course.Level = dto.Level;
         course.NationalCredit = dto.NationalCredit;
+        course.MinCreditsRequired = dto.MinCreditsRequired;
+        course.MinEctsRequired = dto.MinEctsRequired;
+        course.RequiresNoFailedLowerCourses = dto.RequiresNoFailedLowerCourses;
+        course.CanBeTakenStandalone = dto.CanBeTakenStandalone;
         await db.SaveChangesAsync();
         return (await GetCourseByIdAsync(id))!;
     }
@@ -449,6 +461,26 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             ?? throw new KeyNotFoundException("Eşdeğerlik bulunamadı.");
         db.CourseEquivalencies.Remove(equiv);
         await db.SaveChangesAsync();
+    }
+
+    // Proliz "Diğer Ön Koşul Tanımları" — sadece course-level kural alanlarını günceller.
+    public async Task<CourseDetailDto> UpdateCoursePrereqRulesAsync(int courseId, UpdateCoursePrereqRulesDto dto)
+    {
+        var course = await db.Courses.FindAsync(courseId)
+            ?? throw new KeyNotFoundException("Ders bulunamadı.");
+
+        // Negatif değer engellenir; null = "kural tanımlı değil" anlamına gelir.
+        if (dto.MinCreditsRequired.HasValue && dto.MinCreditsRequired.Value < 0)
+            throw new InvalidOperationException("Min kredi negatif olamaz.");
+        if (dto.MinEctsRequired.HasValue && dto.MinEctsRequired.Value < 0)
+            throw new InvalidOperationException("Min AKTS negatif olamaz.");
+
+        course.MinCreditsRequired = dto.MinCreditsRequired;
+        course.MinEctsRequired = dto.MinEctsRequired;
+        course.RequiresNoFailedLowerCourses = dto.RequiresNoFailedLowerCourses;
+        course.CanBeTakenStandalone = dto.CanBeTakenStandalone;
+        await db.SaveChangesAsync();
+        return (await GetCourseByIdAsync(courseId))!;
     }
 
 }

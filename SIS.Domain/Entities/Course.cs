@@ -29,6 +29,18 @@ public class Course
     public string? Description { get; set; }
     public CourseLevel Level { get; set; } = CourseLevel.Undergraduate;
     public int? NationalCredit { get; set; }
+
+    // Proliz "Diğer Ön Koşul Tanımları" — kayıt anında uygulanan kural alanları.
+    // Hepsi opt-in: null/false ise ilgili kontrol atlanır.
+    /// <summary>Bu dersi alabilmek için tamamlanmış olması gereken minimum kredi miktarı.</summary>
+    public int? MinCreditsRequired { get; set; }
+    /// <summary>Bu dersi alabilmek için tamamlanmış olması gereken minimum AKTS miktarı.</summary>
+    public int? MinEctsRequired { get; set; }
+    /// <summary>true → öğrencinin alt sınıflardan başarısız (FF/NA/U) dersi olmamalı.</summary>
+    public bool RequiresNoFailedLowerCourses { get; set; }
+    /// <summary>true → bu ders sadece tek başına alınabilir, başka derslerle aynı dönemde kayıtlanamaz.</summary>
+    public bool CanBeTakenStandalone { get; set; }
+
     public ICollection<CoursePrerequisite> Prerequisites { get; set; } = new List<CoursePrerequisite>();
     public ICollection<CourseEquivalency> Equivalencies { get; set; } = new List<CourseEquivalency>();
 }
