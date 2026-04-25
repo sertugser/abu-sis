@@ -1,15 +1,26 @@
+// Backend: SIS.Domain.Enums.CurriculumStatus
+// 0 = Draft (Düzenlenebilir), 1 = Published (Yayında, kilitli), 2 = Archived (Geçmiş)
+export type CurriculumStatusValue = 0 | 1 | 2;
+
 export interface CurriculumListDto {
   id: number;
   programId: number;
   programName: string;
   programCode: string;
+  facultyName: string;
   version: string;
   name: string | null;
   startDate: string | null;
   endDate: string | null;
   isActive: boolean;
+  status: CurriculumStatusValue;
   courseCount: number;
   totalEcts: number;
+  totalCredit: number;
+  compulsoryCount: number;
+  electiveCount: number;
+  activeStudentCount: number;
+  totalStudentCount: number;
   createdAt: string;
 }
 

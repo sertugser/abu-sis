@@ -12,12 +12,24 @@ import type {
   CreatePoolRequest,
   UpdatePoolRequest,
 } from '../types/curriculumManagement';
+import type {
+  CurriculumTermRuleDto,
+  CreateTermRuleRequest,
+  UpdateTermRuleRequest,
+} from '../types/curriculumTermRule';
 
 const BASE = '/curriculum';
 
 export const curriculumApi = {
-  list: (programId?: number) =>
-    apiClient.get<CurriculumListDto[]>(BASE, { params: programId ? { programId } : undefined }).then(r => r.data),
+  list: (filters?: { programId?: number; departmentId?: number; facultyId?: number }) => {
+    const params: Record<string, number> = {};
+    if (filters?.programId) params.programId = filters.programId;
+    else if (filters?.departmentId) params.departmentId = filters.departmentId;
+    else if (filters?.facultyId) params.facultyId = filters.facultyId;
+    return apiClient.get<CurriculumListDto[]>(BASE, {
+      params: Object.keys(params).length ? params : undefined,
+    }).then(r => r.data);
+  },
 
   get: (id: number) =>
     apiClient.get<CurriculumDetailDto>(`${BASE}/${id}`).then(r => r.data),
@@ -60,4 +72,17 @@ export const curriculumApi = {
 
   deletePool: (id: number, poolId: number) =>
     apiClient.delete(`${BASE}/${id}/elective-pools/${poolId}`),
+
+  // ── Müfredat Dönem Kuralları ──
+  listTermRules: (curriculumId: number) =>
+    apiClient.get<CurriculumTermRuleDto[]>(`${BASE}/${curriculumId}/term-rules`).then(r => r.data),
+
+  createTermRule: (curriculumId: number, req: CreateTermRuleRequest) =>
+    apiClient.post<CurriculumTermRuleDto>(`${BASE}/${curriculumId}/term-rules`, req).then(r => r.data),
+
+  updateTermRule: (curriculumId: number, ruleId: number, req: UpdateTermRuleRequest) =>
+    apiClient.put(`${BASE}/${curriculumId}/term-rules/${ruleId}`, req).then(r => r.data),
+
+  deleteTermRule: (curriculumId: number, ruleId: number) =>
+    apiClient.delete(`${BASE}/${curriculumId}/term-rules/${ruleId}`),
 };

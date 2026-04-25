@@ -54,6 +54,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ElectiveGroup> ElectiveGroups => Set<ElectiveGroup>();
     public DbSet<ElectiveGroupCourse> ElectiveGroupCourses => Set<ElectiveGroupCourse>();
     public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
+    public DbSet<CurriculumTermRule> CurriculumTermRules => Set<CurriculumTermRule>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
     public DbSet<ForecastCalibration> ForecastCalibrations => Set<ForecastCalibration>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
@@ -261,6 +262,20 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany(eg => eg.CurriculumPools)
              .HasForeignKey(cep => cep.ElectiveGroupId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── CurriculumTermRule (Müfredat Dönem Kuralları) ───────
+        builder.Entity<CurriculumTermRule>(e =>
+        {
+            // Aynı (Curriculum, Sınıf, Dönem, Kural Tipi) kombinasyonu benzersizdir.
+            e.HasIndex(r => new { r.CurriculumId, r.ClassYear, r.TermHalf, r.RuleType }).IsUnique();
+
+            e.Property(r => r.Value).HasColumnType("numeric(10,2)");
+
+            e.HasOne(r => r.Curriculum)
+             .WithMany(c => c.TermRules)
+             .HasForeignKey(r => r.CurriculumId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── CourseAccessRule ────────────────────────────────────

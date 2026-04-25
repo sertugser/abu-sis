@@ -1456,6 +1456,43 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("CurriculumElectivePools");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.CurriculumTermRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClassYear")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurriculumId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RuleType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermHalf")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Value")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CurriculumId", "ClassYear", "TermHalf", "RuleType")
+                        .IsUnique();
+
+                    b.ToTable("CurriculumTermRules");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Department", b =>
                 {
                     b.Property<int>("Id")
@@ -3450,6 +3487,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("ElectiveGroup");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.CurriculumTermRule", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Curriculum", "Curriculum")
+                        .WithMany("TermRules")
+                        .HasForeignKey("CurriculumId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Curriculum");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Department", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
@@ -3973,6 +4021,8 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("CurriculumCourses");
 
                     b.Navigation("ElectivePools");
+
+                    b.Navigation("TermRules");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Department", b =>
