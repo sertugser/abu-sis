@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.Application.Identity.Services;
@@ -15,12 +16,25 @@ public class MenuServiceTests
             .UseInMemoryDatabase($"MenuSvc-{Guid.NewGuid()}")
             .Options);
 
-    private static MenuService CreateService(AppDbContext ctx, HashSet<string> userPerms)
+    private static Mock<UserManager<ApplicationUser>> CreateUserManagerMock(IList<string>? roles = null)
+    {
+        var store = new Mock<IUserStore<ApplicationUser>>();
+        var mgr = new Mock<UserManager<ApplicationUser>>(
+            store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+        mgr.Setup(m => m.FindByIdAsync(It.IsAny<string>()))
+           .ReturnsAsync((string id) => new ApplicationUser { Id = int.Parse(id) });
+        mgr.Setup(m => m.GetRolesAsync(It.IsAny<ApplicationUser>()))
+           .ReturnsAsync(roles ?? new List<string>());
+        return mgr;
+    }
+
+    private static MenuService CreateService(AppDbContext ctx, HashSet<string> userPerms, IList<string>? userRoles = null)
     {
         var permSvc = new Mock<IPermissionService>();
         permSvc.Setup(p => p.GetUserPermissionsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(userPerms);
-        return new MenuService(ctx, permSvc.Object);
+        var userMgr = CreateUserManagerMock(userRoles);
+        return new MenuService(ctx, permSvc.Object, userMgr.Object);
     }
 
     private static (MenuModule mod, MenuItem item, Permission perm) AddSimpleModuleWithItem(
@@ -177,5 +191,63 @@ public class MenuServiceTests
 
         var menu = await svc.GetUserMenuAsync(1);
         menu.Select(m => m.Label).Should().Equal("First", "Second");
+    }
+
+    [Fact]
+    public async Task GetUserMenuAsync_HidesModule_WhenAllowedRolesCsvDoesNotMatch()
+    {
+        using var ctx = CreateContext();
+        // Patch 2C: modül AllowedRolesCsv ile filtrelenir
+        var perm = new Permission { Key = "menu.x.view" };
+        ctx.Permissions.Add(perm);
+        ctx.SaveChanges();
+
+        var mod = new MenuModule { Slug = "test", Label = "Test", SortOrder = 1, AllowedRolesCsv = "Student" };
+        ctx.MenuModules.Add(mod);
+        ctx.SaveChanges();
+
+        ctx.MenuItems.Add(new MenuItem
+        {
+            ModuleId = mod.Id,
+            Label = "Item",
+            Route = "/x",
+            Slug = "x",
+            MenuItemPermissions = new List<MenuItemPermission> { new() { PermissionId = perm.Id } }
+        });
+        ctx.SaveChanges();
+
+        // Kullanıcı Instructor rolünde, permission'ı VAR ama modül AllowedRolesCsv "Student" → modül gizlenir
+        var svc = CreateService(ctx, new HashSet<string> { "menu.x.view" }, userRoles: new[] { "Instructor" });
+
+        var menu = await svc.GetUserMenuAsync(1);
+        menu.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetUserMenuAsync_ShowsModule_WhenAllowedRolesCsvMatches()
+    {
+        using var ctx = CreateContext();
+        var perm = new Permission { Key = "menu.x.view" };
+        ctx.Permissions.Add(perm);
+        ctx.SaveChanges();
+
+        var mod = new MenuModule { Slug = "test", Label = "Test", SortOrder = 1, AllowedRolesCsv = "Student,Instructor" };
+        ctx.MenuModules.Add(mod);
+        ctx.SaveChanges();
+
+        ctx.MenuItems.Add(new MenuItem
+        {
+            ModuleId = mod.Id,
+            Label = "Item",
+            Route = "/x",
+            Slug = "x",
+            MenuItemPermissions = new List<MenuItemPermission> { new() { PermissionId = perm.Id } }
+        });
+        ctx.SaveChanges();
+
+        var svc = CreateService(ctx, new HashSet<string> { "menu.x.view" }, userRoles: new[] { "Instructor" });
+
+        var menu = await svc.GetUserMenuAsync(1);
+        menu.Should().HaveCount(1);
     }
 }

@@ -1017,6 +1017,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.Property(m => m.Slug).HasMaxLength(100).IsRequired();
             e.Property(m => m.Label).HasMaxLength(100).IsRequired();
             e.Property(m => m.Icon).HasMaxLength(50);
+            e.Property(m => m.AllowedRolesCsv).HasMaxLength(200);
             e.HasOne(m => m.Parent)
              .WithMany(m => m.Children)
              .HasForeignKey(m => m.ParentId)

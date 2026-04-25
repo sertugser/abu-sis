@@ -13,6 +13,12 @@ public class MenuModule
     public string? Icon { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>
+    /// Bu modülün hangi rollere gözükeceği (CSV, ör. "Student,Instructor"). Null ise herkes görür (default).
+    /// SystemAdmin shortcut bu kuralı BYPASS ETMEZ — modül-bazlı role filter PermissionService
+    /// shortcut'ından bağımsız çalışır (admin için modül gizleme amaçlı).
+    /// </summary>
+    public string? AllowedRolesCsv { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

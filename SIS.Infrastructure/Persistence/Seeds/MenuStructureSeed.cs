@@ -23,13 +23,14 @@ public static class MenuStructureSeed
 
         var permissions = await context.Permissions.ToDictionaryAsync(p => p.Key, ct);
 
-        // ─── Modül 1: Genel İşlemler (öğrenci-merkezli, admin için boş elenir) ────
+        // ─── Modül 1: Genel İşlemler (Patch 2C: SADECE Student) ──────────────────
         var genelIslemler = new MenuModule
         {
             Slug = "genel-islemler",
             Label = "Genel İşlemler",
             Icon = "Compass",
             SortOrder = 1,
+            AllowedRolesCsv = "Student",
         };
         context.MenuModules.Add(genelIslemler);
         await context.SaveChangesAsync(ct);
@@ -92,13 +93,14 @@ public static class MenuStructureSeed
         context.MenuModules.Add(danismanlikIslemleri);
         await context.SaveChangesAsync(ct);
 
-        // ─── Modül 5: Ders ve Dönem İşlemleri (öğrenci tarafı) ──────────────────
+        // ─── Modül 5: Ders ve Dönem İşlemleri (Patch 2C: SADECE Student) ────────
         var dersVeDonemIslemleri = new MenuModule
         {
             Slug = "ders-ve-donem-islemleri",
             Label = "Ders ve Dönem İşlemleri",
             Icon = "BookOpen",
             SortOrder = 5,
+            AllowedRolesCsv = "Student",
         };
         context.MenuModules.Add(dersVeDonemIslemleri);
         await context.SaveChangesAsync(ct);
@@ -250,13 +252,14 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Duyuru Yönetimi",                "/duyuru-yonetimi",                     "duyuru-yonetimi",                2, "menu.duyuru-yonetimi.view"),
         };
 
-        // ─── Modül 12: Hesabım (kayma: 11 → 12) ──────────────────────────────────
+        // ─── Modül 12: Hesabım (Patch 2C: SADECE Student) ────────────────────────
         var hesabim = new MenuModule
         {
             Slug = "hesabim",
             Label = "Hesabım",
             Icon = "User",
             SortOrder = 12,
+            AllowedRolesCsv = "Student",
         };
         context.MenuModules.Add(hesabim);
         await context.SaveChangesAsync(ct);
