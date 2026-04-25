@@ -1,0 +1,213 @@
+# Permission System (RBAC Phase 1) — Codemap
+
+> **Phase 1 MVP** — DB-driven role/permission/menu sistemi. SystemAdmin admin UI'dan yetki değişikliği yapabilir, deployment gerekmez.
+>
+> **Plan referans:** `docs/superpowers/plans/2026-04-25-rbac-dynamic-menu-phase1.md` (gitignore'da, local).
+> **Tag:** `rbac-phase1-mvp`
+
+## Hızlı Tanıtım
+
+| Soru | Cevap |
+|------|-------|
+| Yetki kontrolü nerede yapılır? | Backend `[RequirePermission("...")]` attribute (controller method-level), frontend `usePermissions().hasPermission(key)` |
+| SystemAdmin nasıl her şeye erişir? | Kod-shortcut: `RequirePermissionAttribute` + `PermissionService.GetUserPermissionsAsync` `IsInRole("SystemAdministrator")` ise erken dönüş. DB'de RolePermission satırı YOK. |
+| Permission key formatı | `<category>.<resource>.<action>` (örn. `menu.akademik-donem.cancel`) — 3 kategori: `menu.*`, `lookup.*`, `system.*` |
+| Permission değişikliği ne kadar sürede yansır? | Backend cache 5 dk TTL → ilgili rolün tüm kullanıcıları max 5 dk içinde refresh'te güncel görür |
+| Menü nereden geliyor? | DB'den dinamik (`MenuModule` + `MenuItem`); frontend `useMenu()` hook ile çeker, permission'a göre filtrelenmiş liste döner |
+
+## Permission Key Naming
+
+```
+<category>.<resource>.<action>
+```
+
+### 3 Kategori
+
+| Kategori | Örnek | DB seed | Açıklama |
+|----------|-------|---------|----------|
+| `menu.*` | `menu.akademik-donem.view`, `menu.fakulte-tanimlari.edit` | ✅ Var (~237 key) | Sidebar item'lara bağlı endpoint'ler |
+| `lookup.*` | `lookup.faculty`, `lookup.term` | ❌ Yok (Karar 7) | Dropdown lookup'lar — `RequirePermissionAttribute` içinde hardcoded shortcut: her authenticated user'a açık |
+| `system.*` | `system.permission.view`, `system.permission.assign` | ✅ Var (~2 key) | Admin UI operasyonları, sadece SysAdmin için |
+
+### Action suffix konvansiyonu
+
+| Action | Anlam |
+|--------|-------|
+| `.view` | Görüntüle/listele/oku |
+| `.create` | Yeni oluştur |
+| `.edit` | Düzenle/güncelle |
+| `.delete` | Sil |
+| `.{verb}` | Domain-specific (`.cancel`, `.approve`, `.lock-grades`, `.promote`, vb.) |
+
+## DB Schema (5 tablo)
+
+[`SIS.Domain/Identity/`](../../SIS.Domain/Identity/) altında 5 entity:
+
+| Entity | Dosya | Açıklama |
+|--------|-------|----------|
+| `Permission` | [Permission.cs](../../SIS.Domain/Identity/Permission.cs) | (Id, Key UNIQUE, Category, Description) |
+| `RolePermission` | [RolePermission.cs](../../SIS.Domain/Identity/RolePermission.cs) | Composite PK (RoleId int, PermissionId int) |
+| `MenuModule` | [MenuModule.cs](../../SIS.Domain/Identity/MenuModule.cs) | Self-ref tree (ParentId) |
+| `MenuItem` | [MenuItem.cs](../../SIS.Domain/Identity/MenuItem.cs) | Route UNIQUE, ModuleId FK |
+| `MenuItemPermission` | [MenuItemPermission.cs](../../SIS.Domain/Identity/MenuItemPermission.cs) | M:N item↔permission |
+
+Migration: [`20260425132603_AddRBACPermissions`](../../SIS.Infrastructure/Migrations/20260425132603_AddRBACPermissions.cs) — 5 tablo + 8 index + 6 FK + cascade.
+
+**ER (özet):**
+```
+AspNetRoles  ──< RolePermissions >──  Permissions
+                                          ▲
+                                          │
+                            MenuItemPermissions
+                                     ▲
+                                     │
+                                  MenuItems  >── MenuModules (self-ref)
+```
+
+## Backend (SIS.Infrastructure + SIS.API)
+
+### Servis Katmanı ([SIS.Infrastructure/Services/](../../SIS.Infrastructure/Services/))
+
+| Servis | Sorumluluk | Cache |
+|--------|-----------|-------|
+| [PermissionService.cs](../../SIS.Infrastructure/Services/PermissionService.cs) | `GetUserPermissionsAsync`, `HasPermissionAsync`, `SetRolePermissionsAsync`, `InvalidateUserCache`, `InvalidateRoleCacheAsync` | IMemoryCache 5dk TTL, key=`permissions:user:{userId}` |
+| [MenuService.cs](../../SIS.Infrastructure/Services/MenuService.cs) | `GetUserMenuAsync` (recursive in-memory tree, OR-permission filter, empty module elimination) | DbContext direkt; AsSplitQuery + AsNoTracking |
+
+### Authorization Attribute ([SIS.API/Authorization/](../../SIS.API/Authorization/))
+
+[`RequirePermissionAttribute.cs`](../../SIS.API/Authorization/RequirePermissionAttribute.cs) — 3 katmanlı check:
+1. **Unauthenticated** → 401
+2. **SystemAdministrator rolü** → izin (DB lookup yapılmaz, en hızlı yol)
+3. **`lookup.*` key** → izin (hardcoded shortcut, her authenticated user)
+4. **`PermissionService.HasPermissionAsync`** → DB/cache lookup
+
+### Controller'lar ([SIS.API/Controllers/](../../SIS.API/Controllers/))
+
+51 controller × ~310 endpoint hepsi `[RequirePermission("...")]` ile korunuyor (Sprint 5'te migrate). 3 controller hariç tutuldu:
+- `AuthController/login` — `[AllowAnonymous]`
+- `AnnouncementController/scrape` — `[AllowAnonymous]` (public scrape)
+- `UserPreferencesController` — `[Authorize]` (sadece authenticated, permission yok)
+
+### API Endpoint'leri (RBAC için)
+
+| Endpoint | Açıklama | Permission |
+|----------|----------|-----------|
+| `GET /api/me/permissions` | Kullanıcının tüm permission key'leri | `[Authorize]` (her authenticated) |
+| `GET /api/me/menu` | Kullanıcının dinamik menüsü (permission-filtered) | `[Authorize]` |
+| `GET /api/admin/permissions` | Tüm DB-seed permission'lar (admin matrisi) | `system.permission.view` |
+| `GET /api/admin/permissions/roles` | Atanabilir roller (SysAdmin hariç) | `system.permission.view` |
+| `GET /api/admin/permissions/roles/{id}` | Rol permission ID listesi | `system.permission.view` |
+| `PUT /api/admin/permissions/roles/{id}` | Rol permission'larını TOPLU set | `system.permission.assign` |
+
+### JWT (v2 Karar 6)
+
+JWT'ye permission claim **EKLENMEZ**. Permission listesi `/api/me/permissions` endpoint'inden cache'li çekilir. JWT boyutu sabit kalır (~640 bytes), permission değişikliği max 5 dk içinde yansır.
+
+## Frontend (SIS.Web)
+
+### Context ([SIS.Web/src/context/](../../SIS.Web/src/context/))
+
+[`PermissionContext.tsx`](../../SIS.Web/src/context/PermissionContext.tsx) — 5 dk staleTime ile `/api/me/permissions` cache'ler. SystemAdmin shortcut.
+
+### Hook'lar ([SIS.Web/src/hooks/](../../SIS.Web/src/hooks/))
+
+| Hook | Kaynak | Açıklama |
+|------|--------|----------|
+| `usePermissions()` | PermissionContext | `hasPermission(key)`, `hasAnyPermission(keys[])`, `isSystemAdmin` |
+| `useMenu()` | [useMenu.ts](../../SIS.Web/src/hooks/useMenu.ts) | Backend menü → frontend `Module[]`; ICON_MAP fallback HelpCircle; `slugify()` Türkçe karakter normalize |
+| `useAllPermissions()`, `useAssignableRoles()`, `useRolePermissions()`, `useUpdateRolePermissions()` | [useRolePermissions.ts](../../SIS.Web/src/hooks/useRolePermissions.ts) | Admin matrix için |
+
+### Bileşenler
+
+| Component | Dosya | Açıklama |
+|-----------|-------|----------|
+| `RoleProtectedRoute` | [RoleProtectedRoute.tsx](../../SIS.Web/src/components/RoleProtectedRoute.tsx) | Transition mode: `permission` / `anyPermission` / `allowedRoles` (eski) — herhangi biri uyarsa izin |
+| `Sidebar` | [Sidebar.tsx](../../SIS.Web/src/components/layout/Sidebar.tsx) | `useMenu()` data layer, render kısmı (favorites injection, accordion, flyout) korundu |
+| `RolePermissionMatrix` | [admin/RolePermissionMatrix.tsx](../../SIS.Web/src/components/admin/RolePermissionMatrix.tsx) | Admin UI (sidebar'a EKLENMEDİ — Karar 9, Phase 2'de "Kullanıcı Yetki Grupları" placeholder içine import) |
+| `ForbiddenPage` | [ForbiddenPage.tsx](../../SIS.Web/src/pages/ForbiddenPage.tsx) | 403 sayfası |
+
+### Dev-only Test Route
+
+`/__dev/permission-matrix` — `import.meta.env.DEV` koşullu, prod build'de yok. SystemAdmin için admin UI manuel testi.
+
+### SidebarModules.ts (slim)
+
+Sprint 3'te 7 hardcoded role array silindi (-449 satır). Sadece type'lar + helper'lar + `ICON_MAP` + `resolveIcon` kalır. Backend menü Tek Kaynak.
+
+## Seed (Sprint 1.4)
+
+[`SIS.Infrastructure/Persistence/Seeds/`](../../SIS.Infrastructure/Persistence/Seeds/):
+
+| Seed | Dosya | Sayı | Notlar |
+|------|-------|------|--------|
+| `PermissionSeed` | [PermissionSeed.cs](../../SIS.Infrastructure/Persistence/Seeds/PermissionSeed.cs) | 239 key | Merge semantiği — eksik key'leri ekler, mevcuda dokunmaz (gelecek migration'lar için) |
+| `MenuStructureSeed` | [MenuStructureSeed.cs](../../SIS.Infrastructure/Persistence/Seeds/MenuStructureSeed.cs) | 13 modül + 75 item | Idempotent (AnyAsync check) |
+| `RolePermissionSeed` | [RolePermissionSeed.cs](../../SIS.Infrastructure/Persistence/Seeds/RolePermissionSeed.cs) | 6 rol × ortalama 60 key = 365 satır | SystemAdmin **YOK** (locked) |
+
+`SeedData.SeedAsync` orchestrator [SeedData.cs:23-26](../../SIS.Infrastructure/Persistence/SeedData.cs) içinde sırayla çağırır.
+
+## Kararlar (Locked)
+
+| # | Karar | Kısa Açıklama |
+|---|-------|---------------|
+| 1 | Permission naming | Menu-merkezli (`menu.<slug>.<action>`) |
+| 2 | Menu source | Pure DB (SidebarModules.ts hardcoded array'leri silindi) |
+| 3 | Granularity | Hem menü hem endpoint |
+| 4 | SystemAdmin | Locked, kod-shortcut, admin UI'da hiç gözükmez |
+| 5 | Migration | Transition mode (Sprint 1-3 yan yana, Sprint 5 cleanup) |
+| 6 | JWT permission claim | YOK — frontend `/api/me/permissions` cache eder (5dk) |
+| 7 | `lookup.*` | DB seed YOK, hardcoded shortcut (her authenticated user) |
+| 8 | `system.menu.*` | Phase 1'de yok (Phase 4'e ertelendi) |
+| 9 | Admin UI lokasyonu | Phase 1'de sidebar'a EKLENMEZ, Phase 2'de import edilir |
+| 10 | Audit logging | Phase 1'de YOK |
+
+## Ölçümler (Sprint Final)
+
+| Metrik | Değer | Hedef |
+|--------|-------|-------|
+| JWT boyutu (avg) | ~640 bytes | < 4KB |
+| JWT boyutu (max) | 667 bytes | < 8KB |
+| `/api/me/permissions` cache miss | ~58ms | — |
+| `/api/me/permissions` cache hit | ~3ms | — |
+| `/api/me/menu` cache miss | ~120ms | < 500ms |
+| `/api/me/menu` cache hit | ~9ms | < 200ms |
+
+## Test Coverage
+
+| Layer | Dosya | Test sayısı |
+|-------|-------|-------------|
+| `PermissionService` | [PermissionServiceTests.cs](../../SIS.Tests/Application/PermissionServiceTests.cs) | 6 |
+| `MenuService` | [MenuServiceTests.cs](../../SIS.Tests/Application/MenuServiceTests.cs) | 5 |
+| `RequirePermissionAttribute` | [RequirePermissionAttributeTests.cs](../../SIS.Tests/Authorization/RequirePermissionAttributeTests.cs) | 6 |
+| **Toplam** | | **17** (hepsi yeşil) |
+
+## Operasyonel
+
+### Orphan Detection Script
+
+[`scripts/check-permission-orphans.sh`](../../scripts/check-permission-orphans.sh) — codebase'de kullanılan permission key'leri ile DB'deki Permissions tablosunu karşılaştırır:
+- Eksik DB key (kritik) → PermissionSeed.All'a ekle, API restart
+- Orphan DB key (risksiz) → cleanup adayı
+
+### PermissionSeed Merge Semantiği
+
+Yeni permission key eklenince (controller'da `[RequirePermission("yeni.key")]`):
+1. PermissionSeed.cs'in `All` listesine ekle
+2. API restart → `SeedAsync` mevcut DB ile diff alır, sadece eksiği INSERT eder
+3. Mevcut RolePermission ilişkileri korunur
+
+### Cache Invalidation
+
+Admin UI'dan permission değiştirince:
+1. `PUT /api/admin/permissions/roles/{id}` çağrısı
+2. Backend: `PermissionService.SetRolePermissionsAsync` → ilgili rolün TÜM kullanıcılarının cache'i drop edilir (`AspNetUserRoles`'dan UserId çekilir)
+3. Frontend: `useUpdateRolePermissions` mutation onSuccess → `permissions` ve `menu` query cache'leri invalid
+4. Etkilenen kullanıcılar sayfayı yenilediğinde max **anlık** olarak güncel veriyi görür
+
+## Sonraki Phase'ler (Plan'da, bu codemap kapsamında değil)
+
+- **Phase 2:** Permission grupları (`<RolePermissionMatrix />` "Kullanıcı Yetki Grupları" placeholder'a import)
+- **Phase 3:** Vekalet (delegation)
+- **Phase 4:** Modül editörü (admin yeni modül oluşturabilir, `system.menu.*` permission'ları)
+- **Phase 5:** Data-scope sınırlandırmalar ("sadece şu fakülte")
+- **Phase 6:** Rapor grupları
