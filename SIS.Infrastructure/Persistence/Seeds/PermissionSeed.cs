@@ -299,10 +299,8 @@ public static class PermissionSeed
         ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
         ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
         ("menu.ders-kayit-duzenleme.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
-        ("menu.subeler-arasi-transfer.view",             PermissionCategory.Menu, "Şubeler arası öğrenci transfer sayfası"),
-        ("menu.subeler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Şubeler arası öğrenci transfer sayfası (frontend route)"),
-        ("menu.dersler-arasi-transfer.view",             PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
-        ("menu.dersler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası (frontend route)"),
+        ("menu.subeler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Şubeler arası öğrenci transfer sayfası"),
+        ("menu.dersler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
         ("menu.harf-notu-duzenleme.view",                PermissionCategory.Menu, "Harf notu düzenleme sayfası"),
 
         // ═══════════════════════════════════════════════════════════════════════════

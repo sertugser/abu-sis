@@ -195,8 +195,8 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Toplu Müfredat Atama",           "/toplu-mufredat-atama",                "toplu-mufredat-atama",           6,  "menu.toplu-mufredat-atama.view"),
             BuildItem(permissions, "Toplu Ders Kaydı",               "/toplu-ders-kaydi",                    "toplu-ders-kaydi",               7,  "menu.toplu-ders-kaydi.view"),
             BuildItem(permissions, "Ders Kayıt Düzenleme",           "/ders-kayit-duzenleme",                "ders-kayit-duzenleme",           8,  "menu.ders-kayit-duzenleme.view"),
-            BuildItem(permissions, "Şubeler Arası Öğrenci Transfer", "/subeler-arasi-ogrenci-transfer",      "subeler-arasi-transfer",         9,  "menu.subeler-arasi-transfer.view"),
-            BuildItem(permissions, "Dersler Arası Öğrenci Transfer", "/dersler-arasi-ogrenci-transfer",      "dersler-arasi-transfer",         10, "menu.dersler-arasi-transfer.view"),
+            BuildItem(permissions, "Şubeler Arası Öğrenci Transfer", "/subeler-arasi-ogrenci-transfer",      "subeler-arasi-transfer",         9,  "menu.subeler-arasi-ogrenci-transfer.view"),
+            BuildItem(permissions, "Dersler Arası Öğrenci Transfer", "/dersler-arasi-ogrenci-transfer",      "dersler-arasi-transfer",         10, "menu.dersler-arasi-ogrenci-transfer.view"),
             BuildItem(permissions, "Harf Notu Düzenleme",            "/harf-notu-duzenleme",                 "harf-notu-duzenleme",            11, "menu.harf-notu-duzenleme.view"),
         };
 
