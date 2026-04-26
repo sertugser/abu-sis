@@ -67,6 +67,21 @@ export interface CurriculumCourseItemDto {
   openingReasonName: string | null;
   groupCode: string | null;
   nationalCredit: number;
+  // Phase 2 — flags
+  isMainGroupCourse: boolean;
+  isFormationCourse: boolean;
+  excludedFromCreditTotal: boolean;
+  excludedFromTranscriptTotal: boolean;
+  autoAddOnNewRegistration: boolean;
+  showAtTakenCurriculum: boolean;
+  showInstructorAtRegistration: boolean;
+  hasCustomExamCurriculum: boolean;
+  // Phase 2 — decision metadata
+  decisionDate: string | null;
+  decisionNo: string | null;
+  decisionNote: string | null;
+  // Phase 2 — curriculum-specific description
+  curriculumDescription: string | null;
 }
 
 export interface CreateCurriculumRequest {
@@ -116,6 +131,21 @@ export interface AddCourseRequest {
   categoryId?: number | null;
   openingReasonId?: number | null;
   groupCode?: string;
+  // Phase 2 — flags
+  isMainGroupCourse?: boolean;
+  isFormationCourse?: boolean;
+  excludedFromCreditTotal?: boolean;
+  excludedFromTranscriptTotal?: boolean;
+  autoAddOnNewRegistration?: boolean;
+  showAtTakenCurriculum?: boolean;
+  showInstructorAtRegistration?: boolean;
+  hasCustomExamCurriculum?: boolean;
+  // Phase 2 — decision metadata
+  decisionDate?: string | null;
+  decisionNo?: string | null;
+  decisionNote?: string | null;
+  // Phase 2 — curriculum-specific description
+  curriculumDescription?: string | null;
 }
 
 export interface UpdateCourseRequest {
@@ -128,6 +158,23 @@ export interface UpdateCourseRequest {
   groupCode?: string;
   clearCategory?: boolean;
   clearOpeningReason?: boolean;
+  // Phase 2 — flags (null/undefined = no change)
+  isMainGroupCourse?: boolean;
+  isFormationCourse?: boolean;
+  excludedFromCreditTotal?: boolean;
+  excludedFromTranscriptTotal?: boolean;
+  autoAddOnNewRegistration?: boolean;
+  showAtTakenCurriculum?: boolean;
+  showInstructorAtRegistration?: boolean;
+  hasCustomExamCurriculum?: boolean;
+  // Phase 2 — decision metadata
+  decisionDate?: string | null;
+  decisionNo?: string | null;
+  decisionNote?: string | null;
+  clearDecisionDate?: boolean;
+  // Phase 2 — curriculum-specific description
+  curriculumDescription?: string | null;
+  clearCurriculumDescription?: boolean;
 }
 
 export interface CopyCurriculumRequest {

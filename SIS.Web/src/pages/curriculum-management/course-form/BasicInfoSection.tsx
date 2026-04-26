@@ -1,5 +1,6 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import SharedFieldWrapper from './SharedFieldWrapper';
 import type { CourseBasicState } from './types';
 
@@ -48,6 +49,27 @@ export default function BasicInfoSection({ value, onChange, codeReadonly = false
             value={value.englishName}
             onChange={e => onChange({ ...value, englishName: e.target.value })}
             placeholder="English course name"
+          />
+        </div>
+      </SharedFieldWrapper>
+
+      <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
+        <div className="space-y-1">
+          <Label className="text-xs">Diğer Adı</Label>
+          <Input
+            value={value.alternativeName}
+            onChange={e => onChange({ ...value, alternativeName: e.target.value })}
+            placeholder="Alternatif ders adı"
+          />
+        </div>
+      </SharedFieldWrapper>
+
+      <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs">Bilgi Paketinde Göster</Label>
+          <Switch
+            checked={value.showInInfoPackage}
+            onCheckedChange={(checked) => onChange({ ...value, showInInfoPackage: checked })}
           />
         </div>
       </SharedFieldWrapper>

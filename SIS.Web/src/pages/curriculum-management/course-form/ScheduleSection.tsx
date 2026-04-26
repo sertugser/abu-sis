@@ -14,7 +14,7 @@ export default function ScheduleSection({ value, onChange, showSharedHints = fal
     <fieldset className="space-y-3">
       <legend className="text-sm font-semibold mb-2">Ders Saatleri ve Krediler</legend>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
           <div className="space-y-1">
             <Label className="text-xs">Teori Saat</Label>
@@ -35,6 +35,22 @@ export default function ScheduleSection({ value, onChange, showSharedHints = fal
               min={0}
               value={value.labHours}
               onChange={e => onChange({ ...value, labHours: Number(e.target.value) })}
+            />
+          </div>
+        </SharedFieldWrapper>
+
+        <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
+          <div className="space-y-1">
+            <Label className="text-xs">Uygulama Saat</Label>
+            <Input
+              type="number"
+              min={0}
+              value={value.applicationHours ?? ''}
+              onChange={e => onChange({
+                ...value,
+                applicationHours: e.target.value === '' ? null : Number(e.target.value),
+              })}
+              placeholder="0"
             />
           </div>
         </SharedFieldWrapper>

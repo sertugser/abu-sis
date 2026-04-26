@@ -70,23 +70,50 @@ export default function ClassificationSection({
         </SharedFieldWrapper>
       </div>
 
-      <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
-        <div className="space-y-1">
-          <Label className="text-xs">Sınav Değer Tipi</Label>
-          <Select
-            value={classification.examType ?? 'auto'}
-            onValueChange={(v) => onClassificationChange({ ...classification, examType: v === 'auto' ? null : v })}
-          >
-            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Otomatik Hesapla ve Harflendir</SelectItem>
-              <SelectItem value="autoSU">Otomatik Hesapla ve Başarılı/Başarısız Harflendir</SelectItem>
-              <SelectItem value="manualSU">Manuel Başarılı/Başarısız Değerlendir</SelectItem>
-              <SelectItem value="manualScore">Manuel Sonuç Değeri Girilmesine İzin Ver</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </SharedFieldWrapper>
+      <div className="grid grid-cols-2 gap-3">
+        <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
+          <div className="space-y-1">
+            <Label className="text-xs">Sınav Değer Tipi</Label>
+            <Select
+              value={classification.examType ?? 'auto'}
+              onValueChange={(v) => onClassificationChange({ ...classification, examType: v === 'auto' ? null : v })}
+            >
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Otomatik Hesapla ve Harflendir</SelectItem>
+                <SelectItem value="autoSU">Otomatik Hesapla ve Başarılı/Başarısız Harflendir</SelectItem>
+                <SelectItem value="manualSU">Manuel Başarılı/Başarısız Değerlendir</SelectItem>
+                <SelectItem value="manualScore">Manuel Sonuç Değeri Girilmesine İzin Ver</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </SharedFieldWrapper>
+
+        <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
+          <div className="space-y-1">
+            <Label className="text-xs">Açma Tipi</Label>
+            <Select
+              value={classification.openType ?? '__none__'}
+              onValueChange={(v) => onClassificationChange({
+                ...classification,
+                openType: v === '__none__' ? null : (v as 'Standart' | 'Closed' | 'PendingApproval'),
+              })}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Standart (varsayılan)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground">— Standart (varsayılan) —</span>
+                </SelectItem>
+                <SelectItem value="Standart">Standart</SelectItem>
+                <SelectItem value="Closed">Kapatıldı</SelectItem>
+                <SelectItem value="PendingApproval">Açık (Onay Bekleniyor)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </SharedFieldWrapper>
+      </div>
 
       {curriculumSpecific !== undefined && onCurriculumSpecificChange !== undefined && (
         <div className="grid grid-cols-2 gap-3">

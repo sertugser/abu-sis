@@ -1,10 +1,14 @@
 // State carried across all form sections.
 // Each parent dialog instantiates these and passes slices to sections.
 
+export type CourseOpenTypeState = 'Standart' | 'Closed' | 'PendingApproval' | null;
+
 export interface CourseBasicState {
   code: string;
   name: string;
   englishName: string;
+  alternativeName: string;
+  showInInfoPackage: boolean;
 }
 
 export interface CourseScheduleState {
@@ -12,6 +16,7 @@ export interface CourseScheduleState {
   nationalCredit: number | null;
   theoryHours: number;
   labHours: number;
+  applicationHours: number | null;
 }
 
 export interface CourseClassificationState {
@@ -21,6 +26,7 @@ export interface CourseClassificationState {
   isNonGpa: boolean;
   status: 'Active' | 'Passive';
   level: 'Undergraduate' | 'Graduate' | 'Doctorate';
+  openType: CourseOpenTypeState;
 }
 
 // CurriculumCourse-specific (only used in CurriculumCourseEditDialog)
@@ -32,10 +38,30 @@ export interface CurriculumSpecificState {
   categoryId: number | null;
   openingReasonId: number | null;
   groupCode: string;
+  curriculumDescription: string;
 }
 
 export interface CourseDescriptionState {
   description: string;
+}
+
+// Phase 2 — CurriculumCourse-specific flag bundle
+export interface CourseFlagsState {
+  isMainGroupCourse: boolean;
+  isFormationCourse: boolean;
+  excludedFromCreditTotal: boolean;
+  excludedFromTranscriptTotal: boolean;
+  autoAddOnNewRegistration: boolean;
+  showAtTakenCurriculum: boolean;
+  showInstructorAtRegistration: boolean;
+  hasCustomExamCurriculum: boolean;
+}
+
+// Phase 2 — CurriculumCourse-specific decision metadata (Senato kararı vb.)
+export interface CourseDecisionState {
+  decisionDate: string;     // YYYY-MM-DD format from <input type="date">; empty string = null
+  decisionNo: string;
+  decisionNote: string;
 }
 
 export type FieldOwnership = 'shared' | 'curriculum-specific';

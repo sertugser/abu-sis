@@ -64,6 +64,8 @@ export interface PrerequisiteChainNodeDto {
   prerequisites: PrerequisiteChainNodeDto[];
 }
 
+export type CourseOpenTypeValue = 'Standart' | 'Closed' | 'PendingApproval';
+
 export interface CourseDetailDto {
   id: number;
   code: string;
@@ -90,6 +92,11 @@ export interface CourseDetailDto {
   minEctsRequired: number | null;
   requiresNoFailedLowerCourses: boolean;
   canBeTakenStandalone: boolean;
+  // Phase 2 — Proliz B "Genel Bilgiler"
+  alternativeName: string | null;
+  showInInfoPackage: boolean;
+  applicationHours: number | null;
+  openType: CourseOpenTypeValue | null;
   stats: CourseStatsDto | null;
   prerequisiteChain: PrerequisiteChainNodeDto[] | null;
 }
@@ -124,6 +131,11 @@ export interface CreateCourseDto {
   minEctsRequired?: number | null;
   requiresNoFailedLowerCourses?: boolean;
   canBeTakenStandalone?: boolean;
+  // Phase 2 — Proliz B "Genel Bilgiler"
+  alternativeName?: string | null;
+  showInInfoPackage?: boolean;
+  applicationHours?: number | null;
+  openType?: CourseOpenTypeValue | null;
 }
 
 export function useAdminCourses(filter?: CourseFilterParams) {

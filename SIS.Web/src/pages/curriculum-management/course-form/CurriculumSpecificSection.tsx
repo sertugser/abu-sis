@@ -1,6 +1,7 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import type { CurriculumSpecificState } from './types';
 
 interface Props {
@@ -62,6 +63,20 @@ export default function CurriculumSpecificSection({ value, onChange }: Props) {
             onCheckedChange={(c) => onChange({ ...value, showOnTranscript: c })}
           />
         </div>
+      </div>
+
+      <div className="space-y-1 pt-1">
+        <Label className="text-xs">Müfredata Özel Açıklama</Label>
+        <Textarea
+          rows={3}
+          value={value.curriculumDescription}
+          onChange={e => onChange({ ...value, curriculumDescription: e.target.value })}
+          placeholder="Yalnızca bu müfredatta görünür (Course açıklamasından farklı)"
+          className="text-sm"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Course açıklamasından bağımsız — yalnızca bu müfredattaki görüntülemelerde gözükür.
+        </p>
       </div>
     </fieldset>
   );

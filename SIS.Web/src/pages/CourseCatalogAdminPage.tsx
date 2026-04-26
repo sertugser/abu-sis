@@ -77,6 +77,12 @@ function emptyCourseForm(): CreateCourseDto {
     minEctsRequired: null,
     requiresNoFailedLowerCourses: false,
     canBeTakenStandalone: false,
+    // Phase 2 — Proliz B "Genel Bilgiler" (defaults; not yet surfaced in catalog admin form,
+    // but pass-through prevents data loss on save when set via curriculum-side dialog)
+    alternativeName: null,
+    showInInfoPackage: true,
+    applicationHours: null,
+    openType: null,
   };
 }
 
@@ -448,6 +454,11 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
       minEctsRequired: detail.minEctsRequired,
       requiresNoFailedLowerCourses: detail.requiresNoFailedLowerCourses,
       canBeTakenStandalone: detail.canBeTakenStandalone,
+      // Phase 2 pass-through: preserve values set from curriculum-side dialog
+      alternativeName: detail.alternativeName,
+      showInInfoPackage: detail.showInInfoPackage,
+      applicationHours: detail.applicationHours,
+      openType: detail.openType,
     };
   }, [detail]);
 

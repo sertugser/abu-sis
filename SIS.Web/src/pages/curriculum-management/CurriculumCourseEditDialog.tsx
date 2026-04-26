@@ -16,6 +16,8 @@ import ClassificationSection from './course-form/ClassificationSection';
 import CurriculumSpecificSection from './course-form/CurriculumSpecificSection';
 import GroupSection from './course-form/GroupSection';
 import DescriptionSection from './course-form/DescriptionSection';
+import FlagsSection from './course-form/FlagsSection';
+import DecisionSection from './course-form/DecisionSection';
 import SideEffectWarningDialog, { type FieldChange } from './course-form/SideEffectWarningDialog';
 import type {
   CourseBasicState,
@@ -23,6 +25,8 @@ import type {
   CourseClassificationState,
   CurriculumSpecificState,
   CourseDescriptionState,
+  CourseFlagsState,
+  CourseDecisionState,
 } from './course-form/types';
 
 interface Props {
@@ -50,10 +54,10 @@ export default function CurriculumCourseEditDialog({
 
   // ── Section state ──
   const [basic, setBasic] = useState<CourseBasicState>({
-    code: '', name: '', englishName: '',
+    code: '', name: '', englishName: '', alternativeName: '', showInInfoPackage: true,
   });
   const [schedule, setSchedule] = useState<CourseScheduleState>({
-    ects: 0, nationalCredit: null, theoryHours: 0, labHours: 0,
+    ects: 0, nationalCredit: null, theoryHours: 0, labHours: 0, applicationHours: null,
   });
   const [classification, setClassification] = useState<CourseClassificationState>({
     language: 'Turkish',
@@ -62,6 +66,7 @@ export default function CurriculumCourseEditDialog({
     isNonGpa: false,
     status: 'Active',
     level: 'Undergraduate',
+    openType: null,
   });
   const [curriculumSpecific, setCurriculumSpecific] = useState<CurriculumSpecificState>({
     suggestedSemester: 1,
@@ -71,8 +76,24 @@ export default function CurriculumCourseEditDialog({
     categoryId: null,
     openingReasonId: null,
     groupCode: '',
+    curriculumDescription: '',
   });
   const [description, setDescription] = useState<CourseDescriptionState>({ description: '' });
+  const [flags, setFlags] = useState<CourseFlagsState>({
+    isMainGroupCourse: false,
+    isFormationCourse: false,
+    excludedFromCreditTotal: false,
+    excludedFromTranscriptTotal: false,
+    autoAddOnNewRegistration: false,
+    showAtTakenCurriculum: false,
+    showInstructorAtRegistration: true,
+    hasCustomExamCurriculum: false,
+  });
+  const [decision, setDecision] = useState<CourseDecisionState>({
+    decisionDate: '',
+    decisionNo: '',
+    decisionNote: '',
+  });
 
   // ── Initialize on open ──
   useEffect(() => {
@@ -82,12 +103,15 @@ export default function CurriculumCourseEditDialog({
       code: courseDetail.code,
       name: courseDetail.name,
       englishName: courseDetail.englishName ?? '',
+      alternativeName: courseDetail.alternativeName ?? '',
+      showInInfoPackage: courseDetail.showInInfoPackage,
     });
     setSchedule({
       ects: courseDetail.ects,
       nationalCredit: courseDetail.nationalCredit,
       theoryHours: courseDetail.theoryHours,
       labHours: courseDetail.labHours,
+      applicationHours: courseDetail.applicationHours,
     });
     // CourseDetailDto types language/teachingMethod/status/level as number, but with
     // JsonStringEnumConverter the runtime values are strings ("Turkish", "FaceToFace", …).
@@ -99,6 +123,7 @@ export default function CurriculumCourseEditDialog({
       isNonGpa: courseDetail.isNonGpa,
       status: courseDetail.status as unknown as CourseClassificationState['status'],
       level: courseDetail.level as unknown as CourseClassificationState['level'],
+      openType: courseDetail.openType,
     });
     setCurriculumSpecific({
       suggestedSemester: curriculumCourse.suggestedSemester,
@@ -108,8 +133,24 @@ export default function CurriculumCourseEditDialog({
       categoryId: curriculumCourse.categoryId,
       openingReasonId: curriculumCourse.openingReasonId,
       groupCode: curriculumCourse.groupCode ?? '',
+      curriculumDescription: curriculumCourse.curriculumDescription ?? '',
     });
     setDescription({ description: courseDetail.description ?? '' });
+    setFlags({
+      isMainGroupCourse: curriculumCourse.isMainGroupCourse,
+      isFormationCourse: curriculumCourse.isFormationCourse,
+      excludedFromCreditTotal: curriculumCourse.excludedFromCreditTotal,
+      excludedFromTranscriptTotal: curriculumCourse.excludedFromTranscriptTotal,
+      autoAddOnNewRegistration: curriculumCourse.autoAddOnNewRegistration,
+      showAtTakenCurriculum: curriculumCourse.showAtTakenCurriculum,
+      showInstructorAtRegistration: curriculumCourse.showInstructorAtRegistration,
+      hasCustomExamCurriculum: curriculumCourse.hasCustomExamCurriculum,
+    });
+    setDecision({
+      decisionDate: curriculumCourse.decisionDate ? curriculumCourse.decisionDate.slice(0, 10) : '',
+      decisionNo: curriculumCourse.decisionNo ?? '',
+      decisionNote: curriculumCourse.decisionNote ?? '',
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, courseDetail?.id, curriculumCourse.courseId]);
 
@@ -132,12 +173,22 @@ export default function CurriculumCourseEditDialog({
       c.push({ label: 'Ders Adı', oldValue: courseDetail.name, newValue: basic.name });
     if (basic.englishName !== (courseDetail.englishName ?? ''))
       c.push({ label: 'İngilizce Ad', oldValue: courseDetail.englishName ?? '—', newValue: basic.englishName || '—' });
+    if (basic.alternativeName !== (courseDetail.alternativeName ?? ''))
+      c.push({ label: 'Diğer Adı', oldValue: courseDetail.alternativeName ?? '—', newValue: basic.alternativeName || '—' });
+    if (basic.showInInfoPackage !== courseDetail.showInInfoPackage)
+      c.push({ label: 'Bilgi Paketinde Göster', oldValue: courseDetail.showInInfoPackage ? 'Evet' : 'Hayır', newValue: basic.showInInfoPackage ? 'Evet' : 'Hayır' });
     if (schedule.ects !== courseDetail.ects)
       c.push({ label: 'AKTS', oldValue: String(courseDetail.ects), newValue: String(schedule.ects) });
     if (schedule.theoryHours !== courseDetail.theoryHours)
       c.push({ label: 'Teori Saat', oldValue: String(courseDetail.theoryHours), newValue: String(schedule.theoryHours) });
     if (schedule.labHours !== courseDetail.labHours)
       c.push({ label: 'Lab Saat', oldValue: String(courseDetail.labHours), newValue: String(schedule.labHours) });
+    if ((schedule.applicationHours ?? null) !== (courseDetail.applicationHours ?? null))
+      c.push({
+        label: 'Uygulama Saat',
+        oldValue: courseDetail.applicationHours != null ? String(courseDetail.applicationHours) : '—',
+        newValue: schedule.applicationHours != null ? String(schedule.applicationHours) : '—',
+      });
     if ((schedule.nationalCredit ?? null) !== (courseDetail.nationalCredit ?? null))
       c.push({
         label: 'Kredi',
@@ -154,6 +205,12 @@ export default function CurriculumCourseEditDialog({
       c.push({ label: 'Öğretim Şekli', oldValue: String(courseDetail.teachingMethod), newValue: classification.teachingMethod });
     if ((classification.examType ?? null) !== (courseDetail.examType ?? null))
       c.push({ label: 'Sınav Değer Tipi', oldValue: courseDetail.examType ?? '—', newValue: classification.examType ?? '—' });
+    if ((classification.openType ?? null) !== (courseDetail.openType ?? null))
+      c.push({
+        label: 'Açma Tipi',
+        oldValue: courseDetail.openType ?? '—',
+        newValue: classification.openType ?? '—',
+      });
     return c;
   }
 
@@ -187,9 +244,12 @@ export default function CurriculumCourseEditDialog({
           code: courseDetail.code,
           name: basic.name,
           englishName: basic.englishName || null,
+          alternativeName: basic.alternativeName || null,
+          showInInfoPackage: basic.showInInfoPackage,
           ects: schedule.ects,
           theoryHours: schedule.theoryHours,
           labHours: schedule.labHours,
+          applicationHours: schedule.applicationHours,
           nationalCredit: schedule.nationalCredit,
           isNonGpa: courseDetail.isNonGpa,
           examType: classification.examType,
@@ -199,6 +259,7 @@ export default function CurriculumCourseEditDialog({
           status: classification.status,
           description: description.description || null,
           level: classification.level,
+          openType: classification.openType,
           minCreditsRequired: courseDetail.minCreditsRequired,
           minEctsRequired: courseDetail.minEctsRequired,
           requiresNoFailedLowerCourses: courseDetail.requiresNoFailedLowerCourses,
@@ -221,6 +282,23 @@ export default function CurriculumCourseEditDialog({
         groupCode: curriculumSpecific.groupCode || undefined,
         clearCategory: curriculumSpecific.categoryId === null,
         clearOpeningReason: curriculumSpecific.openingReasonId === null,
+        // Phase 2 — flags
+        isMainGroupCourse: flags.isMainGroupCourse,
+        isFormationCourse: flags.isFormationCourse,
+        excludedFromCreditTotal: flags.excludedFromCreditTotal,
+        excludedFromTranscriptTotal: flags.excludedFromTranscriptTotal,
+        autoAddOnNewRegistration: flags.autoAddOnNewRegistration,
+        showAtTakenCurriculum: flags.showAtTakenCurriculum,
+        showInstructorAtRegistration: flags.showInstructorAtRegistration,
+        hasCustomExamCurriculum: flags.hasCustomExamCurriculum,
+        // Phase 2 — decision metadata (empty string maps to null via Clear flag)
+        decisionDate: decision.decisionDate || undefined,
+        clearDecisionDate: decision.decisionDate === '',
+        decisionNo: decision.decisionNo,
+        decisionNote: decision.decisionNote,
+        // Phase 2 — curriculum-specific description
+        curriculumDescription: curriculumSpecific.curriculumDescription,
+        clearCurriculumDescription: curriculumSpecific.curriculumDescription === '',
       }),
     );
 
@@ -261,10 +339,12 @@ export default function CurriculumCourseEditDialog({
                 value={curriculumSpecific}
                 onChange={setCurriculumSpecific}
               />
+              <FlagsSection value={flags} onChange={setFlags} />
               <GroupSection
                 groupCode={curriculumSpecific.groupCode}
                 onGroupCodeChange={(g) => setCurriculumSpecific({ ...curriculumSpecific, groupCode: g })}
               />
+              <DecisionSection value={decision} onChange={setDecision} />
               <DescriptionSection
                 value={description.description}
                 onChange={(d) => setDescription({ description: d })}
