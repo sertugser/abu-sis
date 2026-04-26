@@ -38,7 +38,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         int Ects, int TheoryHours, int LabHours,
         int SuggestedSemester, bool IsCompulsory,
         bool IncludeInGpa, bool ShowOnTranscript,
-        string? CourseCategory, string? GroupCode);
+        string? CourseCategory, string? GroupCode,
+        int NationalCredit);
 
     public record CreateCurriculumRequest(
         int ProgramId, string Version,
@@ -127,7 +128,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 c.Status,
                 c.CurriculumCourses.Count,
                 c.CurriculumCourses.Sum(cc => cc.Course.Ects),
-                c.Program.TotalRequiredEcts,
+                c.CurriculumCourses.Sum(cc => cc.Course.NationalCredit ?? 0),
                 c.CurriculumCourses.Count(cc => cc.IsCompulsory),
                 c.CurriculumCourses.Count(cc => !cc.IsCompulsory),
                 context.StudentPrograms.Count(sp => sp.CurriculumId == c.Id && sp.IsActive),
@@ -180,7 +181,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                     cc.SuggestedSemester, cc.IsCompulsory,
                     cc.IncludeInGpa, cc.ShowOnTranscript,
-                    cc.CourseCategory, cc.GroupCode))
+                    cc.CourseCategory, cc.GroupCode,
+                    cc.Course.NationalCredit ?? 0))
                 .ToList());
 
         return Ok(dto);
@@ -325,7 +327,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                 cc.SuggestedSemester, cc.IsCompulsory,
                 cc.IncludeInGpa, cc.ShowOnTranscript,
-                cc.CourseCategory, cc.GroupCode))
+                cc.CourseCategory, cc.GroupCode,
+                cc.Course.NationalCredit ?? 0))
             .ToListAsync(ct);
 
         return Ok(courses);
@@ -375,7 +378,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             course.Ects, course.TheoryHours, course.LabHours,
             req.SuggestedSemester, req.IsCompulsory,
             req.IncludeInGpa, req.ShowOnTranscript,
-            req.CourseCategory, req.GroupCode));
+            req.CourseCategory, req.GroupCode,
+            course.NationalCredit ?? 0));
     }
 
     // ── PUT /api/curriculum/{id}/courses/{courseId} ──────────────────
@@ -526,7 +530,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                     cc.SuggestedSemester, cc.IsCompulsory,
                     cc.IncludeInGpa, cc.ShowOnTranscript,
-                    cc.CourseCategory, cc.GroupCode))
+                    cc.CourseCategory, cc.GroupCode,
+                    cc.Course.NationalCredit ?? 0))
                 .ToList()));
     }
 

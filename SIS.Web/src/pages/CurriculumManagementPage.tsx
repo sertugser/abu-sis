@@ -154,6 +154,15 @@ export default function CurriculumManagementPage() {
     () => flatCourses.slice((coursesPage - 1) * COURSES_PAGE_SIZE, coursesPage * COURSES_PAGE_SIZE),
     [flatCourses, coursesPage],
   );
+  // Filtre sonrası listelenen derslerin toplam kredi/AKTS değerleri (alt summary bar için)
+  const flatCoursesCredit = useMemo(
+    () => flatCourses.reduce((s, c) => s + (c.nationalCredit ?? 0), 0),
+    [flatCourses],
+  );
+  const flatCoursesEcts = useMemo(
+    () => flatCourses.reduce((s, c) => s + c.ects, 0),
+    [flatCourses],
+  );
   // Filtre değişince ders sayfası 1'e dön — adjust-state-during-render
   // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
   const courseFilterKey = `${searchCode}|${searchName}|${classFilter}|${termTypeFilter}|${selectedCurriculumId}`;
@@ -442,6 +451,8 @@ export default function CurriculumManagementPage() {
           onShowGroupedCoursesChange={setShowGroupedCourses}
           pagedCourses={pagedCourses}
           flatCoursesCount={flatCourses.length}
+          flatCoursesCredit={flatCoursesCredit}
+          flatCoursesEcts={flatCoursesEcts}
           coursesPage={coursesPage}
           coursesTotalPages={coursesTotalPages}
           onCoursesPageChange={setCoursesPage}

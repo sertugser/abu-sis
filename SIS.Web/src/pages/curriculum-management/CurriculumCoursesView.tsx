@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -54,6 +55,8 @@ interface Props {
   // Course list + pagination
   pagedCourses: CurriculumCourseItemDto[];
   flatCoursesCount: number;
+  flatCoursesCredit: number;
+  flatCoursesEcts: number;
   coursesPage: number;
   coursesTotalPages: number;
   onCoursesPageChange: (page: number) => void;
@@ -94,6 +97,8 @@ export default function CurriculumCoursesView({
   onShowGroupedCoursesChange,
   pagedCourses,
   flatCoursesCount,
+  flatCoursesCredit,
+  flatCoursesEcts,
   coursesPage,
   coursesTotalPages,
   onCoursesPageChange,
@@ -108,6 +113,16 @@ export default function CurriculumCoursesView({
   onRemoveCourse,
   isRemovingCourse,
 }: Props) {
+  // Müfredatın tamamı — filtreden bağımsız (tüm dersler)
+  const curriculumTotal = useMemo(() => {
+    if (!detail) return { count: 0, credit: 0, ects: 0 };
+    return {
+      count: detail.courses.length,
+      credit: detail.courses.reduce((s, c) => s + (c.nationalCredit ?? 0), 0),
+      ects: detail.courses.reduce((s, c) => s + c.ects, 0),
+    };
+  }, [detail]);
+
   return (
     <>
       {/* Breadcrumb + geri butonu + müfredat aksiyonları */}
@@ -460,6 +475,42 @@ export default function CurriculumCoursesView({
                       </Button>
                     </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Alt Summary Bar — Listelenen + Müfredat Dönem ── */}
+          {!isLoadingDetail && detail && (
+            <Card>
+              <CardContent className="py-3 text-sm tabular-nums space-y-1">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+                  <span>
+                    <span className="font-medium">Listelenen Ders Say:</span>{' '}
+                    <span>{flatCoursesCount}</span>
+                  </span>
+                  <span>
+                    <span className="font-medium">Kredi:</span>{' '}
+                    <span>{flatCoursesCredit}</span>
+                  </span>
+                  <span>
+                    <span className="font-medium">AKTS:</span>{' '}
+                    <span>{flatCoursesEcts}</span>
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+                  <span>
+                    <span className="font-medium">Müfredat Dönem Ders Say:</span>{' '}
+                    <span>{curriculumTotal.count}</span>
+                  </span>
+                  <span>
+                    <span className="font-medium">Kredi:</span>{' '}
+                    <span>{curriculumTotal.credit}</span>
+                  </span>
+                  <span>
+                    <span className="font-medium">AKTS:</span>{' '}
+                    <span>{curriculumTotal.ects}</span>
+                  </span>
                 </div>
               </CardContent>
             </Card>

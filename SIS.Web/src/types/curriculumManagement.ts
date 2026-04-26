@@ -62,6 +62,7 @@ export interface CurriculumCourseItemDto {
   showOnTranscript: boolean;
   courseCategory: string | null;
   groupCode: string | null;
+  nationalCredit: number;
 }
 
 export interface CreateCurriculumRequest {
