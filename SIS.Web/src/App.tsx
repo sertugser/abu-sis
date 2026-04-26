@@ -122,16 +122,34 @@ export default function App() {
                     <Route path="akademik-takvim-yonetimi" element={<AcademicCalendarAdminPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-kayit.view" />}>
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.akilli-planlama.view" />}>
                     <Route path="akilli-planlama" element={<SmartPlanningPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.plan.view" />}>
                     <Route path="plan" element={<RegistrationPlanPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.alinan-dersler.view" />}>
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.not-listesi.view" />}>
                     <Route path="not-listesi" element={<GradeListPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.devamsizlik-durumu.view" />}>
                     <Route path="devamsizlik-durumu" element={<AttendanceStatusPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.donem-ortalamalari.view" />}>
                     <Route path="donem-ortalamalari" element={<TermGpaPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.mufredat-durum.view" />}>
                     <Route path="mufredat-durum" element={<CurriculumStatusPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.transkript-senaryosu.view" />}>
                     <Route path="transkript-senaryosu" element={<TranscriptScenarioPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-degerlendirme.view" />}>
                     <Route path="ders-degerlendirme" element={<CourseEvaluationPage />} />
                   </Route>
 
