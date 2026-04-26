@@ -1,34 +1,30 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../context/PermissionContext';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface RoleProtectedRouteProps {
-  /** Mevcut role-based check (Sprint 5 controller migration sonrası kalkacak). */
-  allowedRoles?: readonly string[];
-  /** Yeni: tek permission key kontrolü. SystemAdmin shortcut otomatik. */
+  /** Tek permission key kontrolü. SystemAdmin shortcut otomatik. */
   permission?: string;
-  /** Yeni: en az birine sahip olunca yeterli (OR mantığı). */
+  /** En az birine sahip olunca yeterli (OR mantığı). SystemAdmin → true. */
   anyPermission?: readonly string[];
 }
 
 /**
- * Sayfa erişim kontrolü. Transition mode (v2 Karar 5):
+ * Sayfa erişim kontrolü — DB-driven permission check.
  *   1) `permission` prop varsa ve user'da varsa → izin
  *   2) `anyPermission` set'inden birinde user varsa → izin
- *   3) `allowedRoles` mevcut → role kontrolü (geriye uyumluluk)
- *   4) Hiçbiri eşleşmezse → /forbidden redirect
+ *   3) Hiç prop verilmemişse → default izin (sadece authenticated yeterli)
+ *   4) Verilen prop eşleşmezse → /forbidden redirect
  *
  * SystemAdmin: PermissionContext shortcut'ı sayesinde her zaman izin alır.
  *
- * Sprint 5'te tüm route'ların `allowedRoles` prop'u kalkıp `permission` ile değiştirilecek.
+ * Migration tarihi: 2026-04-26 — Sprint 5 frontend permission migration tamamlandı.
+ * Eski `allowedRoles` prop'u (geçiş süreci içindi) bu commit'te kaldırıldı.
  */
 export default function RoleProtectedRoute({
-  allowedRoles,
   permission,
   anyPermission,
 }: RoleProtectedRouteProps) {
-  const { user } = useAuth();
   const { hasPermission, hasAnyPermission, isLoading } = usePermissions();
 
   // Permission verilerini bekle (ilk login flash'ını önlemek için)
@@ -40,7 +36,7 @@ export default function RoleProtectedRoute({
     );
   }
 
-  // 1) Permission check (öncelikli)
+  // 1) Permission check
   if (permission && hasPermission(permission)) {
     return <Outlet />;
   }
@@ -48,17 +44,8 @@ export default function RoleProtectedRoute({
     return <Outlet />;
   }
 
-  // 2) Role check (transition için)
-  if (allowedRoles && allowedRoles.length > 0) {
-    const roles = user?.roles ?? [];
-    if (allowedRoles.some(role => roles.includes(role))) {
-      return <Outlet />;
-    }
-  }
-
-  // 3) Hiçbiri yok ama permission/role props'u verilmemişse default izin
-  // (legacy davranış — props'suz <RoleProtectedRoute /> kullanan eski kod için)
-  if (!permission && !anyPermission && (!allowedRoles || allowedRoles.length === 0)) {
+  // 2) Hiç prop verilmemiş → authenticated yeterli (legacy default)
+  if (!permission && !anyPermission) {
     return <Outlet />;
   }
 

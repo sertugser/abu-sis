@@ -89,12 +89,26 @@ public class PermissionService : IPermissionService
     public async Task<HashSet<string>> GetPermissionsByRoleNameAsync(string roleName, CancellationToken ct = default)
     {
         // Patch 3: Panel switcher için — sadece o role'in DB'deki permission'ları döner.
-        // SystemAdmin shortcut UYGULANMAZ; SysAdmin "Dekan paneli"ne girerse Dean'in
-        // explicit DB permission'larını görür (multi-rol kullanıcının tek-rol görünümü).
+        // Multi-rol kullanıcı (örn. SysAdmin + Dean) "Dekan paneli"ne geçerse Dean'in
+        // explicit DB permission'larını görür — kendi SysAdmin "her şey" yetkisini taşımaz.
         var cacheKey = CacheKeyForRole(roleName);
         if (_cache.TryGetValue<HashSet<string>>(cacheKey, out var cached) && cached is not null)
         {
             return cached;
+        }
+
+        // SystemAdministrator role'ünün KENDISI = tüm DB permission'ları (kod-shortcut, Karar 4).
+        // DB'de RolePermission satırı yoktur; sorulan rol SystemAdmin ise Permissions tablosunun tamamı döner.
+        // Bu sayede SysAdmin "SystemAdmin paneli"ndeyken bomboş menü görmez.
+        if (roleName == SystemAdminRole)
+        {
+            var allKeys = await _context.Permissions
+                .AsNoTracking()
+                .Select(p => p.Key)
+                .ToListAsync(ct);
+            var allSet = new HashSet<string>(allKeys, StringComparer.Ordinal);
+            _cache.Set(cacheKey, allSet, CacheTtl);
+            return allSet;
         }
 
         var role = await _context.Roles

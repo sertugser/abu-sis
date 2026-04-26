@@ -164,6 +164,12 @@ JWT'ye permission claim **eklenmez** (~640 bytes sabit). Frontend `/api/me/permi
 3. Default seed'e dahil etmek istiyorsan: `RolePermissionSeed.cs`'te ilgili rol(ler)e ekle (yeni rol-permission satırları için DB temizleme + re-seed gerekir, ya da manuel SQL INSERT)
 4. Orphan check: `bash scripts/check-permission-orphans.sh`
 
+### Frontend Route Protection (Updated 2026-04-26)
+
+`App.tsx`'teki tüm route'lar `<RoleProtectedRoute permission="menu.xxx.view">` kullanır — DB-driven, hardcoded role listesi yok. SystemAdmin shortcut `PermissionContext` üzerinden otomatik. Sprint 5'in kalan frontend kısmı 2026-04-26'da kapatıldı (bkz. `docs/superpowers/plans/2026-04-26-rbac-frontend-permission-routes.md`).
+
+Eski `<RoleProtectedRoute allowedRoles={...}>` deseni artık desteklenmiyor — yeni sayfa eklerken sadece `permission` veya `anyPermission` prop'u kullanın.
+
 ### Codemap
 Tam detay: [docs/CODEMAPS/permission-system.md](docs/CODEMAPS/permission-system.md)
 

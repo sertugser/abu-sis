@@ -249,12 +249,8 @@ public static class PermissionSeed
         // Sınıf Listeleri
         ("menu.sinif-listeleri.view",                    PermissionCategory.Menu, "Sınıf listeleri görüntüleme"),
 
-        // Dönem Kapatma İşlemleri
-        ("menu.donem-kapatma.view",                      PermissionCategory.Menu, "Dönem kapatma overview/status/preview"),
-        ("menu.donem-kapatma.lock-grades",               PermissionCategory.Menu, "Notları kilitleme"),
-        ("menu.donem-kapatma.unlock-grades",             PermissionCategory.Menu, "Not kilidini açma"),
-        ("menu.donem-kapatma.calculate-gpa",             PermissionCategory.Menu, "Toplu GPA hesaplama"),
-        ("menu.donem-kapatma.open-new-term",             PermissionCategory.Menu, "Yeni dönem açma"),
+        // Dönem Kapatma — sayfa silindi; .view AcademicProgressionController tarafından kullanılmaya devam ediyor
+        ("menu.donem-kapatma.view",                      PermissionCategory.Menu, "Sınıf atlatma simülasyonu (AcademicProgressionController)"),
 
         // Derslerim (instructor + paylaşımlı)
         ("menu.derslerim.view",                          PermissionCategory.Menu, "Derslerim sayfası (my-sections, profile, context)"),
@@ -299,8 +295,8 @@ public static class PermissionSeed
         ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
         ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
         ("menu.ders-kayit-duzenleme.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
-        ("menu.subeler-arasi-transfer.view",             PermissionCategory.Menu, "Şubeler arası öğrenci transfer sayfası"),
-        ("menu.dersler-arasi-transfer.view",             PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
+        ("menu.subeler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Şubeler arası öğrenci transfer sayfası"),
+        ("menu.dersler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
         ("menu.harf-notu-duzenleme.view",                PermissionCategory.Menu, "Harf notu düzenleme sayfası"),
 
         // ═══════════════════════════════════════════════════════════════════════════

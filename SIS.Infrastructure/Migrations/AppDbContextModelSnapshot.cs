@@ -2806,51 +2806,6 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("TermCalendarEvents");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Entities.TermClosingProgress", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("CompletedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("DepartmentId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsCompleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("StartedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Step")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TermId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TermId");
-
-                    b.HasIndex("DepartmentId", "TermId", "Step")
-                        .IsUnique();
-
-                    b.ToTable("TermClosingProgresses");
-                });
-
             modelBuilder.Entity("SIS.Domain.Entities.TimeSlot", b =>
                 {
                     b.Property<int>("Id")
@@ -4126,25 +4081,6 @@ namespace SIS.Infrastructure.Migrations
                         .HasForeignKey("TermId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Term");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.TermClosingProgress", b =>
-                {
-                    b.HasOne("SIS.Domain.Entities.Department", "Department")
-                        .WithMany()
-                        .HasForeignKey("DepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
-                        .WithMany()
-                        .HasForeignKey("TermId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Department");
 
                     b.Navigation("Term");
                 });

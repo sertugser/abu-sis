@@ -30,7 +30,9 @@ public class AdvisorController : ControllerBase
     {
         var instructorId = await GetInstructorIdAsync();
         if (instructorId == null)
-            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+            // Ogretim uyesi profili olmayan kullanicilar (orn. SystemAdmin) icin bos liste don.
+            // 401 doner isek frontend axios interceptor JWT expired sanip logout yapar.
+            return Ok(new List<PendingApprovalDto>());
 
         var result = await _registrationService.GetPendingApprovalsAsync(instructorId.Value);
         return Ok(result);
@@ -42,7 +44,8 @@ public class AdvisorController : ControllerBase
     {
         var instructorId = await GetInstructorIdAsync();
         if (instructorId == null)
-            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+            // Ogretim uyesi profili olmayan kullanicilar icin bos liste don (anonymous projection).
+            return Ok(Array.Empty<object>());
 
         var result = await (
             from student in _context.Students.AsNoTracking()
@@ -74,7 +77,8 @@ public class AdvisorController : ControllerBase
     {
         var instructorId = await GetInstructorIdAsync();
         if (instructorId == null)
-            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+            // Mutating action: 403 Forbid — semantik olarak dogru, axios logout etmez.
+            return StatusCode(403, new { error = "Bu islem icin ogretim uyesi profili gerekli." });
 
         var result = await _registrationService.ApproveStudentRegistrationsAsync(instructorId.Value, dto);
         if (!result.Success)
@@ -89,7 +93,8 @@ public class AdvisorController : ControllerBase
     {
         var instructorId = await GetInstructorIdAsync();
         if (instructorId == null)
-            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+            // Mutating action: 403 Forbid — semantik olarak dogru, axios logout etmez.
+            return StatusCode(403, new { error = "Bu islem icin ogretim uyesi profili gerekli." });
 
         var result = await _registrationService.RejectStudentRegistrationsAsync(instructorId.Value, dto);
         if (!result.Success)

@@ -34,7 +34,6 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
     public DbSet<CourseSectionApproval> CourseSectionApprovals => Set<CourseSectionApproval>();
     public DbSet<SchedulingAuditLog> SchedulingAuditLogs => Set<SchedulingAuditLog>();
-    public DbSet<TermClosingProgress> TermClosingProgresses => Set<TermClosingProgress>();
     public DbSet<TermCalendarEvent> TermCalendarEvents => Set<TermCalendarEvent>();
     public DbSet<CalendarTemplate> CalendarTemplates => Set<CalendarTemplate>();
     public DbSet<HolidayDefinition> HolidayDefinitions => Set<HolidayDefinition>();
@@ -530,22 +529,6 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.Property(d => d.PreviousSnapshotJson).HasColumnType("jsonb");
             e.HasIndex(d => new { d.AcademicYear, d.Status });
             e.HasIndex(d => d.ExpiresAt);
-        });
-
-        // ── TermClosingProgress ────────────────────────────────────────
-        builder.Entity<TermClosingProgress>(e =>
-        {
-            e.HasIndex(p => new { p.DepartmentId, p.TermId, p.Step }).IsUnique();
-
-            e.HasOne(p => p.Department)
-             .WithMany()
-             .HasForeignKey(p => p.DepartmentId)
-             .OnDelete(DeleteBehavior.Restrict);
-
-            e.HasOne(p => p.Term)
-             .WithMany()
-             .HasForeignKey(p => p.TermId)
-             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── TimeSlot ─────────────────────────────────────────────

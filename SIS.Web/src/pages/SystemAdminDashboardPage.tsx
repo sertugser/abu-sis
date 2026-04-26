@@ -18,7 +18,6 @@ import {
   LayoutGrid,
   BookOpen,
   Building2,
-  Settings,
   ClipboardList,
   Pencil,
   Check,
@@ -64,7 +63,6 @@ const ALL_QUICK_LINKS = [
   { id: 'opening',    icon: BookOpen,      title: 'Ders Açma',        to: ROUTES.COURSE_OPENING },
   { id: 'classroom',  icon: Building2,     title: 'Derslik Doluluk',   to: ROUTES.CLASSROOM_DASHBOARD },
   { id: 'classlist',  icon: ClipboardList, title: 'Sınıf Listeleri',  to: ROUTES.CLASS_LISTS },
-  { id: 'closing',    icon: Settings,      title: 'Dönem Kapatma',    to: ROUTES.TERM_CLOSING },
 ] as const;
 
 type QuickLinkId = typeof ALL_QUICK_LINKS[number]['id'];
