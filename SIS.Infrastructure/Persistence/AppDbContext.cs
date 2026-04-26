@@ -708,6 +708,12 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
               .WithMany()
               .HasForeignKey(cr => cr.AppliedElectivePoolId)
               .OnDelete(DeleteBehavior.SetNull);
+
+            // Faz 4 — Açma Nedeni snapshot (null = legacy kayıt veya reason'suz ders)
+            e2.HasOne(cr => cr.OpeningReasonSnapshot)
+              .WithMany()
+              .HasForeignKey(cr => cr.OpeningReasonIdSnapshot)
+              .OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── CourseCrossList (M:N Course ↔ Course) ───────────────

@@ -1191,6 +1191,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("MandatoryAttendance")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("OpeningReasonIdSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("RegistrationPlanId")
                         .HasColumnType("integer");
 
@@ -1208,6 +1211,8 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("AppliedElectivePoolId");
 
                     b.HasIndex("CourseSectionId");
+
+                    b.HasIndex("OpeningReasonIdSnapshot");
 
                     b.HasIndex("RegistrationPlanId");
 
@@ -3656,6 +3661,11 @@ namespace SIS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SIS.Domain.Entities.CurriculumCourseOpeningReason", "OpeningReasonSnapshot")
+                        .WithMany()
+                        .HasForeignKey("OpeningReasonIdSnapshot")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SIS.Domain.Entities.RegistrationPlan", "RegistrationPlan")
                         .WithMany("Registrations")
                         .HasForeignKey("RegistrationPlanId")
@@ -3670,6 +3680,8 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("AppliedElectivePool");
 
                     b.Navigation("CourseSection");
+
+                    b.Navigation("OpeningReasonSnapshot");
 
                     b.Navigation("RegistrationPlan");
 

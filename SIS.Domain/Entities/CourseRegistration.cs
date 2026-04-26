@@ -34,6 +34,15 @@ public class CourseRegistration
     public int? AppliedElectivePoolId { get; set; }
     public CurriculumElectivePool? AppliedElectivePool { get; set; }
 
+    /// <summary>
+    /// Faz 4 — Kayıt anında donan Açma Nedeni id'si. CurriculumCourse.OpeningReasonId'den gelir.
+    /// GPA/limit/çakışma/onay servisleri bu snapshot'tan reason → flag'leri okur — admin reason silse
+    /// veya değiştirse de geçmiş kayıtlarda id korunur. Null = bu reason ile kayıt yapılmamış (eski kayıtlar
+    /// için geriye uyumlu, hiçbir flag etkili değil).
+    /// </summary>
+    public int? OpeningReasonIdSnapshot { get; set; }
+    public CurriculumCourseOpeningReason? OpeningReasonSnapshot { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
