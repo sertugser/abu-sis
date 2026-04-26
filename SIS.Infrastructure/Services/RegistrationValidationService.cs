@@ -58,11 +58,13 @@ public class RegistrationValidationService : IRegistrationValidationService
         // Load student's existing active registrations for this term
         // Madde 9: Draft kayıtlar da AKTS sınır hesabına dahil edilir.
         // Aksi takdirde öğrenci limit üstü dersleri sepete atar, gönderide sürpriz hata yaşar.
+        // Faz 4: OpeningReasonSnapshot include — IsCreditFree, BypassMandatoryAttendance flag'leri için.
         var existingRegistrations = activeTerm == null
             ? new List<Domain.Entities.CourseRegistration>()
             : await _context.CourseRegistrations
                 .Include(cr => cr.CourseSection)
                     .ThenInclude(cs => cs.Course)
+                .Include(cr => cr.OpeningReasonSnapshot)
                 .Where(cr => cr.StudentId == studentId
                     && cr.CourseSection.TermId == activeTerm.Id
                     && (cr.Status == RegistrationStatus.Active
@@ -306,8 +308,37 @@ public class RegistrationValidationService : IRegistrationValidationService
         // === CHECK 6: ECTS Cap (FR-56 + FR-56A) ===
         // Madde 7: Mevcut kayıtların AKTS'si snapshot'tan okunur (havuz kuralı uygulanmışsa).
         // Talep edilen dersler için henüz kayıt yok, katalog değeri kullanılır (kayıt anında snapshot'a dönüşür).
-        var requestedEcts = sections.Sum(s => s.Course.Ects);
-        var existingEcts = existingRegistrations.Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
+        // Faz 4: Açma Nedeni'nde IsCreditFree=true olan dersler dönem AKTS sınırı hesabından çıkarılır.
+
+        // Mevcut kayıtlar — snapshot'taki flag okunur (donmuş)
+        var existingEcts = existingRegistrations
+            .Where(r => r.OpeningReasonSnapshot?.IsCreditFree != true)
+            .Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
+
+        // Talep edilen yeni dersler — kayıt anında flag öğrencinin müfredatındaki CurriculumCourse'dan
+        // canlı okunur (henüz snapshot yok). IsCreditFree=true olan section'ları AKTS toplamından düş.
+        var requestedSectionCourseIds = sections.Select(s => s.CourseId).Distinct().ToList();
+        var creditFreeCourseIds = new HashSet<int>();
+        if (requestedSectionCourseIds.Count > 0)
+        {
+            var mainProgramForFlag = student.StudentPrograms
+                .FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+            if (mainProgramForFlag != null)
+            {
+                creditFreeCourseIds = (await _context.CurriculumCourses
+                    .AsNoTracking()
+                    .Where(cc => cc.CurriculumId == mainProgramForFlag.CurriculumId
+                              && requestedSectionCourseIds.Contains(cc.CourseId)
+                              && cc.OpeningReason != null
+                              && cc.OpeningReason.IsCreditFree)
+                    .Select(cc => cc.CourseId)
+                    .ToListAsync()).ToHashSet();
+            }
+        }
+        var requestedEcts = sections
+            .Where(s => !creditFreeCourseIds.Contains(s.CourseId))
+            .Sum(s => s.Course.Ects);
+
         var totalEcts = requestedEcts + existingEcts;
 
         // Müfredat-özel override'ları önce dene, null ise global SystemConfig default'una düş.
