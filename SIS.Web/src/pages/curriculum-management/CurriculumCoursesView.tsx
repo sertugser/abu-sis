@@ -396,7 +396,9 @@ export default function CurriculumCoursesView({
                                 {c.isCompulsory ? 'Z' : 'S'}
                               </Badge>
                             </td>
-                            <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-right">
+                              {c.nationalCredit > 0 ? c.nationalCredit : <span className="text-muted-foreground">—</span>}
+                            </td>
                             <td className="px-3 py-2 text-right">{c.ects}</td>
                             <td className="px-3 py-2 text-right">{c.theoryHours}</td>
                             <td className="px-3 py-2 text-right text-muted-foreground">—</td>
