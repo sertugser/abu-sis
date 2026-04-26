@@ -22,10 +22,6 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   useAdminFaculties,
   useAdminDepartmentsByStructure,
   useAdminProgramsByStructure,
@@ -45,6 +41,9 @@ import AddCourseDialog from '../components/curriculum-management/AddCourseDialog
 import CourseDetailSheet from '../components/curriculum-management/CourseDetailSheet';
 import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
+import ActivateCurriculumDialog from './curriculum-management/ActivateCurriculumDialog';
+import DeleteCurriculumDialog from './curriculum-management/DeleteCurriculumDialog';
+import CopyCurriculumDialog from './curriculum-management/CopyCurriculumDialog';
 import type { CurriculumCourseItemDto, CurriculumListDto } from '../types/curriculumManagement';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/lib/constants';
@@ -86,7 +85,6 @@ export default function CurriculumManagementPage() {
 
   // Copy Dialog — müfredatı kopyala (kaynak + yeni yıl)
   const [copyTarget, setCopyTarget] = useState<{ id: number; label: string } | null>(null);
-  const [copyNewVersion, setCopyNewVersion] = useState('');
 
   // Dialog içi seçimler — filtre barından bağımsız, dialog açıldığında filtre barından default alır
   const [dialogFacultyId, setDialogFacultyId] = useState<number | undefined>();
@@ -382,15 +380,12 @@ export default function CurriculumManagementPage() {
     });
   }
 
-  function handleConfirmCopy() {
-    if (!copyTarget || !copyNewVersion.trim()) return;
+  function handleConfirmCopy(newVersion: string) {
+    if (!copyTarget || !newVersion.trim()) return;
     copyMut.mutate(
-      { sourceId: copyTarget.id, newVersion: copyNewVersion.trim() },
+      { sourceId: copyTarget.id, newVersion: newVersion.trim() },
       {
-        onSuccess: () => {
-          setCopyTarget(null);
-          setCopyNewVersion('');
-        },
+        onSuccess: () => setCopyTarget(null),
       },
     );
   }
@@ -745,7 +740,6 @@ export default function CurriculumManagementPage() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => {
                                 setCopyTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` });
-                                setCopyNewVersion('');
                               }}>
                                 <Copy className="h-4 w-4 mr-2" /> Kopyala
                               </DropdownMenuItem>
@@ -835,7 +829,6 @@ export default function CurriculumManagementPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => {
                           setCopyTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` });
-                          setCopyNewVersion('');
                         }}>
                           <Copy className="h-4 w-4 mr-2" /> Kopyala
                         </DropdownMenuItem>
@@ -1526,88 +1519,26 @@ export default function CurriculumManagementPage() {
         onClose={() => setCourseLinksTarget(null)}
       />
 
-      {/* ── Aktif Et Confirm Dialog ── */}
-      <AlertDialog open={activateTarget !== null} onOpenChange={(open) => !open && setActivateTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Müfredat aktif edilsin mi?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="font-medium">{activateTarget?.label}</span> müfredatı yeni kayıtlar için
-              varsayılan yapılacak. Aynı programın mevcut aktif müfredatı otomatik pasif olur.
-              Mevcut öğrenciler kendi müfredatlarında kalır, etkilenmez.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={activateMut.isPending}>İptal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmActivate} disabled={activateMut.isPending}>
-              {activateMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Aktif Et
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ActivateCurriculumDialog
+        target={activateTarget}
+        onCancel={() => setActivateTarget(null)}
+        onConfirm={handleConfirmActivate}
+        isPending={activateMut.isPending}
+      />
 
-      {/* ── Sil Confirm Dialog ── */}
-      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Müfredat silinsin mi?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="font-medium">{deleteTarget?.label}</span> müfredatı silinecek.
-              Bu işlem geri alınamaz. Müfredata bağlı öğrenci varsa silme işlemi reddedilir.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMut.isPending}>İptal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              disabled={deleteMut.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Sil
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteCurriculumDialog
+        target={deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleConfirmDelete}
+        isPending={deleteMut.isPending}
+      />
 
-      {/* ── Kopyala Dialog ── */}
-      <Dialog open={copyTarget !== null} onOpenChange={(open) => {
-        if (!open) { setCopyTarget(null); setCopyNewVersion(''); }
-      }}>
-        <ResizableDialogContent defaultWidth={500} minWidth={400} minHeight={220} className="flex flex-col p-0 gap-0">
-          <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
-            <DialogTitle>Müfredatı Kopyala</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 px-6 pb-3 space-y-3">
-            <div className="rounded-md border bg-muted/50 p-2 text-xs">
-              <span className="text-muted-foreground">Kaynak: </span>
-              <span className="font-medium">{copyTarget?.label}</span>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Yeni Yıl *</Label>
-              <Input
-                value={copyNewVersion}
-                onChange={e => setCopyNewVersion(e.target.value)}
-                placeholder="2025"
-                autoFocus
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Kaynak müfredatın tüm dersleri yeni versiyona kopyalanır. Yeni müfredat Pasif olarak oluşur.
-              </p>
-            </div>
-          </div>
-          <DialogFooter className="shrink-0 px-6 py-4 border-t gap-2">
-            <Button variant="outline" onClick={() => { setCopyTarget(null); setCopyNewVersion(''); }}>
-              İptal
-            </Button>
-            <Button onClick={handleConfirmCopy} disabled={copyMut.isPending || !copyNewVersion.trim()}>
-              {copyMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Kopyala
-            </Button>
-          </DialogFooter>
-        </ResizableDialogContent>
-      </Dialog>
+      <CopyCurriculumDialog
+        target={copyTarget}
+        onCancel={() => setCopyTarget(null)}
+        onConfirm={handleConfirmCopy}
+        isPending={copyMut.isPending}
+      />
     </div>
   );
 }
