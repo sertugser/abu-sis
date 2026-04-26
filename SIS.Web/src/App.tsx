@@ -237,23 +237,55 @@ export default function App() {
                       <Route path="sinif-atlatma-kurallari" element={<Navigate to="/mufredat-sinif-donem-tanimlari" replace />} />
                     </Route>
                     {/* ── Öğrenci İşlemleri (placeholder, SystemAdmin) ── */}
-                    <Route path="ogrenci-no-degistirme" element={<StudentNumberChangePage />} />
-                    <Route path="sinif-atlatma-islemleri" element={<StudentPromotionPage />} />
-                    <Route path="toplu-danisman-atama" element={<BulkAdvisorAssignmentPage />} />
-                    <Route path="toplu-staj-danisman-atama" element={<BulkInternshipAdvisorAssignmentPage />} />
-                    <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
-                    <Route path="toplu-ders-kaydi" element={<BulkCourseRegistrationPage />} />
-                    <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
-                    <Route path="subeler-arasi-ogrenci-transfer" element={<SectionTransferPage />} />
-                    <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
-                    <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
+                    <Route element={<RoleProtectedRoute permission="menu.ogrenci-no-degistirme.view" />}>
+                      <Route path="ogrenci-no-degistirme" element={<StudentNumberChangePage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.sinif-atlatma-islemleri.view" />}>
+                      <Route path="sinif-atlatma-islemleri" element={<StudentPromotionPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.toplu-danisman-atama.view" />}>
+                      <Route path="toplu-danisman-atama" element={<BulkAdvisorAssignmentPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.toplu-staj-danisman-atama.view" />}>
+                      <Route path="toplu-staj-danisman-atama" element={<BulkInternshipAdvisorAssignmentPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.toplu-mufredat-atama.view" />}>
+                      <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.toplu-ders-kaydi.view" />}>
+                      <Route path="toplu-ders-kaydi" element={<BulkCourseRegistrationPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
+                      <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.subeler-arasi-ogrenci-transfer.view" />}>
+                      <Route path="subeler-arasi-ogrenci-transfer" element={<SectionTransferPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.dersler-arasi-ogrenci-transfer.view" />}>
+                      <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.harf-notu-duzenleme.view" />}>
+                      <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
+                    </Route>
                     {/* ── Yönetim → Kullanıcı İşlemleri (placeholder, SystemAdmin) ── */}
-                    <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
-                    <Route path="kullanici-rapor-gruplari" element={<UserReportGroupsPage />} />
-                    <Route path="kullanici-grup-sinirlandirmalar" element={<UserGroupRestrictionsPage />} />
-                    <Route path="kullanici-rapor-tasarim-gruplari" element={<UserReportDesignGroupsPage />} />
-                    <Route path="kullanici-vekalet-islemleri" element={<UserDelegationPage />} />
-                    <Route path="sifre-degistir" element={<PasswordChangePage />} />
+                    <Route element={<RoleProtectedRoute permission="menu.kullanici-yetki-gruplari.view" />}>
+                      <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-gruplari.view" />}>
+                      <Route path="kullanici-rapor-gruplari" element={<UserReportGroupsPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.kullanici-grup-sinirlandirmalar.view" />}>
+                      <Route path="kullanici-grup-sinirlandirmalar" element={<UserGroupRestrictionsPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-tasarim-gruplari.view" />}>
+                      <Route path="kullanici-rapor-tasarim-gruplari" element={<UserReportDesignGroupsPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.kullanici-vekalet-islemleri.view" />}>
+                      <Route path="kullanici-vekalet-islemleri" element={<UserDelegationPage />} />
+                    </Route>
+                    <Route element={<RoleProtectedRoute permission="menu.sifre-degistir.view" />}>
+                      <Route path="sifre-degistir" element={<PasswordChangePage />} />
+                    </Route>
                     {/* ── Yönetim → Genel Ayarlar (placeholder, SystemAdmin) ── */}
                     <Route path="universite-bilgileri" element={<UniversityInfoPage />} />
                     <Route path="kurumsal-entegrasyon-tanimlari" element={<InstitutionalIntegrationPage />} />
