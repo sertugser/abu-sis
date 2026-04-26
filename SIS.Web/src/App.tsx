@@ -358,7 +358,7 @@ export default function App() {
                   {/* Dev-only test route — Karar 9: production sidebar/route YOK,
                       Phase 2'de Kullanıcı Yetki Grupları placeholder'a import edilecek */}
                   {import.meta.env.DEV && (
-                    <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator']} />}>
+                    <Route element={<RoleProtectedRoute permission="system.permission.view" />}>
                       <Route path="__dev/permission-matrix" element={
                         <div className="p-6">
                           <h1 className="text-xl font-semibold mb-4">RolePermissionMatrix (Dev Test)</h1>
