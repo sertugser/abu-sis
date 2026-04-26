@@ -121,7 +121,7 @@ JWT'ye permission claim **EKLENMEZ**. Permission listesi `/api/me/permissions` e
 
 | Component | Dosya | Açıklama |
 |-----------|-------|----------|
-| `RoleProtectedRoute` | [RoleProtectedRoute.tsx](../../SIS.Web/src/components/RoleProtectedRoute.tsx) | Transition mode: `permission` / `anyPermission` / `allowedRoles` (eski) — herhangi biri uyarsa izin |
+| `RoleProtectedRoute` | [RoleProtectedRoute.tsx](../../SIS.Web/src/components/RoleProtectedRoute.tsx) | Permission-based: `permission` / `anyPermission` prop'ları (eski `allowedRoles` 2026-04-26'da silindi). Detay aşağıda "Frontend Route Guards" bölümünde. |
 | `Sidebar` | [Sidebar.tsx](../../SIS.Web/src/components/layout/Sidebar.tsx) | `useMenu()` data layer, render kısmı (favorites injection, accordion, flyout) korundu |
 | `RolePermissionMatrix` | [admin/RolePermissionMatrix.tsx](../../SIS.Web/src/components/admin/RolePermissionMatrix.tsx) | Admin UI (sidebar'a EKLENMEDİ — Karar 9, Phase 2'de "Kullanıcı Yetki Grupları" placeholder içine import) |
 | `ForbiddenPage` | [ForbiddenPage.tsx](../../SIS.Web/src/pages/ForbiddenPage.tsx) | 403 sayfası |
@@ -133,6 +133,44 @@ JWT'ye permission claim **EKLENMEZ**. Permission listesi `/api/me/permissions` e
 ### SidebarModules.ts (slim)
 
 Sprint 3'te 7 hardcoded role array silindi (-449 satır). Sadece type'lar + helper'lar + `ICON_MAP` + `resolveIcon` kalır. Backend menü Tek Kaynak.
+
+## Frontend Route Guards (Updated 2026-04-26)
+
+**Tüm `App.tsx` route'ları permission-based çalışır:**
+
+```tsx
+<Route element={<RoleProtectedRoute permission="menu.fakulte-tanimlari.view" />}>
+  <Route path="fakulte-tanimlari" element={<FacultyDefinitionsPage />} />
+</Route>
+```
+
+**Eski hardcoded role check kaldırıldı:**
+- `RoleProtectedRoute` komponentinde sadece `permission` ve `anyPermission` prop'ları var
+- `allowedRoles` prop'u Sprint 5 geçiş döneminin kalıntısıydı, 2026-04-26'da silindi
+- Hiçbir route artık `STUDENT_ROLES`, `MANAGEMENT_ROLES`, `DEAN_ROLES` gibi hardcoded liste kullanmıyor
+- `lib/roles.ts` constants hâlâ duruyor (sidebar `getPrimaryRole`, dashboard `isManagementRole` için) ama route koruması için kullanılmıyor
+
+**Davranış:**
+1. `permission` prop'taki key kullanıcıda varsa → `<Outlet />` (sayfa render)
+2. `anyPermission` set'inden birinde varsa → `<Outlet />`
+3. Kullanıcı yetkisizse → `/forbidden` redirect
+4. Permission yüklenirken → skeleton loader (flash önlemi)
+
+**SystemAdmin shortcut:** `PermissionContext.hasPermission` her zaman true döner — DB lookup yapılmaz. Bu sayede admin UI'dan eklenen yeni bir sayfa, kod değişmeden SystemAdmin'e açılır.
+
+**Yeni route eklerken:**
+1. Permission key seç (genelde `menu.<slug>.view`)
+2. Anahtar `PermissionSeed.cs`'in `All` listesinde olmalı (yoksa ekle, restart sonrası DB'ye merge olur)
+3. Route'u sar:
+   ```tsx
+   <Route element={<RoleProtectedRoute permission="menu.<slug>.view" />}>
+     <Route path="..." element={<...Page />} />
+   </Route>
+   ```
+4. İlgili rollere yetki ata: admin UI'dan veya `RolePermissionSeed.cs`'te seed default
+5. (Eğer menu item ise) `MenuStructureSeed.cs`'e ekle, item'ın permission ile bağla
+
+**Çoklu permission gerekliyse** (nadir): `anyPermission={[...]}` kullan, OR mantığı.
 
 ## Seed (Sprint 1.4)
 
