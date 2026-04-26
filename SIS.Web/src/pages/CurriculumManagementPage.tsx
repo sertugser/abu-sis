@@ -7,12 +7,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import {
   BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Copy, Edit, GraduationCap, Layers, Loader2, MoreHorizontal, Package, Plus, Printer, Scissors,
@@ -44,11 +39,11 @@ import { CurriculumTermRulesDialog } from '../components/curriculum-management/C
 import ActivateCurriculumDialog from './curriculum-management/ActivateCurriculumDialog';
 import DeleteCurriculumDialog from './curriculum-management/DeleteCurriculumDialog';
 import CopyCurriculumDialog from './curriculum-management/CopyCurriculumDialog';
+import CurriculumFormDialog, { type CurriculumFormSubmitPayload } from './curriculum-management/CurriculumFormDialog';
 import type { CurriculumCourseItemDto, CurriculumListDto } from '../types/curriculumManagement';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/lib/constants';
 
-type CreateMode = 'empty' | 'copy';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'archived';
 type ViewMode = 'list' | 'courses';
 type YearFilter = 'all' | string; // 'all' veya "2024" gibi yıl değeri
@@ -86,32 +81,8 @@ export default function CurriculumManagementPage() {
   // Copy Dialog — müfredatı kopyala (kaynak + yeni yıl)
   const [copyTarget, setCopyTarget] = useState<{ id: number; label: string } | null>(null);
 
-  // Dialog içi seçimler — filtre barından bağımsız, dialog açıldığında filtre barından default alır
-  const [dialogFacultyId, setDialogFacultyId] = useState<number | undefined>();
-  const [dialogDepartmentId, setDialogDepartmentId] = useState<number | undefined>();
-  const [dialogProgramId, setDialogProgramId] = useState<number | undefined>();
-
   // ── Dialogs ──
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newVersion, setNewVersion] = useState('');
-  const [newName, setNewName] = useState('');
-  const [newShortName, setNewShortName] = useState('');
-  const [newEnglishName, setNewEnglishName] = useState('');
-  const [newStartDate, setNewStartDate] = useState('');
-  const [newEndDate, setNewEndDate] = useState('');
-  const [newDecisionDate, setNewDecisionDate] = useState('');
-  const [newDecisionNo, setNewDecisionNo] = useState('');
-  const [newDecisionNote, setNewDecisionNote] = useState('');
-  const [newGradingSystem, setNewGradingSystem] = useState('Sınıf Geçme');
-  const [newInternshipDuration, setNewInternshipDuration] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  // UI-only alanlar: backend henüz desteklemiyor, create request'e dahil edilmez
-  const [newStatus, setNewStatus] = useState<'active' | 'inactive'>('active');
-  const [newMufredatTipi, setNewMufredatTipi] = useState<string>('Programa Özel');
-  const [newIncludeFormation, setNewIncludeFormation] = useState(false);
-  const [newHideFromPackage, setNewHideFromPackage] = useState(false);
-  const [createMode, setCreateMode] = useState<CreateMode>('empty');
-  const [copySourceId, setCopySourceId] = useState<string>('');
   const [showAddCourse, setShowAddCourse] = useState(false);
   const [showTermRulesDialog, setShowTermRulesDialog] = useState(false);
   // Hangi müfredat için dialog açıldı (listeden dişli menüsüyle tetikleniyor)
@@ -145,10 +116,6 @@ export default function CurriculumManagementPage() {
   const { data: curricula, isLoading: loadingCurricula } = useCurriculumList({
     programId, departmentId, facultyId,
   });
-  // Dialog cascade (ayrı sorgular — filtre barındaki seçimden bağımsız)
-  const { data: dialogDepartments, isLoading: loadingDialogDepts } = useAdminDepartmentsByStructure(dialogFacultyId);
-  const { data: dialogPrograms, isLoading: loadingDialogPrograms } = useAdminProgramsByStructure(dialogDepartmentId);
-  const { data: dialogCurricula } = useCurriculumList({ programId: dialogProgramId });
   const { data: detail, isLoading: loadingDetail } = useCurriculumDetail(selectedCurriculumId);
 
   // ── Mutations ──
@@ -303,52 +270,20 @@ export default function CurriculumManagementPage() {
     setSelectedCurriculumId(null);
   }
 
-  // Dialog cascade handler'ları — filtre barından bağımsız
-  function handleDialogFacultyChange(val: string) {
-    setDialogFacultyId(Number(val));
-    setDialogDepartmentId(undefined);
-    setDialogProgramId(undefined);
-  }
-  function handleDialogDepartmentChange(val: string) {
-    setDialogDepartmentId(Number(val));
-    setDialogProgramId(undefined);
-  }
-  function handleDialogProgramChange(val: string) {
-    setDialogProgramId(Number(val));
-  }
-
   function handleOpenCreateDialog() {
-    // Filtre barındaki seçimler varsa dialog'a default olarak taşı (kolaylık için)
     setEditingCurriculumId(null);
-    setDialogFacultyId(facultyId);
-    setDialogDepartmentId(departmentId);
-    setDialogProgramId(programId);
     setShowCreateDialog(true);
   }
 
-  // Satırdaki "Düzenle" ikonundan gelen — mevcut müfredatın alanlarını forma yükle
+  // Satırdaki "Düzenle" ikonundan gelen — dialog'u edit mode'da aç
   function handleOpenEditDialog(c: CurriculumListDto) {
     setEditingCurriculumId(c.id);
-    setDialogFacultyId(undefined); // Edit modunda readonly, sayım için hydrate etmiyoruz
-    setDialogDepartmentId(undefined);
-    setDialogProgramId(c.programId);
-    setNewVersion(c.version);
-    setNewName(c.name ?? '');
-    setNewShortName('');
-    setNewEnglishName('');
-    setNewStartDate(c.startDate ? c.startDate.slice(0, 10) : '');
-    setNewEndDate(c.endDate ? c.endDate.slice(0, 10) : '');
-    setNewDecisionDate('');
-    setNewDecisionNo('');
-    setNewDecisionNote('');
-    setNewGradingSystem('Sınıf Geçme');
-    setNewInternshipDuration('');
-    setNewDescription('');
-    setNewStatus(c.isActive ? 'active' : 'inactive');
-    setNewMufredatTipi('Programa Özel');
-    setNewIncludeFormation(false);
-    setNewHideFromPackage(false);
     setShowCreateDialog(true);
+  }
+
+  function handleCloseFormDialog() {
+    setShowCreateDialog(false);
+    setEditingCurriculumId(null);
   }
 
   // "Müfredat Dersi Tanımla" — dişli menüsünden — ders listesi görünümüne geç
@@ -390,89 +325,62 @@ export default function CurriculumManagementPage() {
     );
   }
 
-  function resetCreateForm() {
-    setNewVersion('');
-    setNewName('');
-    setNewShortName('');
-    setNewEnglishName('');
-    setNewStartDate('');
-    setNewEndDate('');
-    setNewDecisionDate('');
-    setNewDecisionNo('');
-    setNewDecisionNote('');
-    setNewGradingSystem('Sınıf Geçme');
-    setNewInternshipDuration('');
-    setNewDescription('');
-    setNewStatus('active');
-    setNewMufredatTipi('Programa Özel');
-    setNewIncludeFormation(false);
-    setNewHideFromPackage(false);
-    setCreateMode('empty');
-    setCopySourceId('');
-    setDialogFacultyId(undefined);
-    setDialogDepartmentId(undefined);
-    setDialogProgramId(undefined);
-    setEditingCurriculumId(null);
-  }
-
-  function handleCreate() {
-    if (!newVersion.trim()) return;
-
-    const extraFields = {
-      name: newName.trim() || undefined,
-      shortName: newShortName.trim() || undefined,
-      englishName: newEnglishName.trim() || undefined,
-      startDate: newStartDate || undefined,
-      endDate: newEndDate || undefined,
-      decisionDate: newDecisionDate.trim() || undefined,
-      decisionNo: newDecisionNo.trim() || undefined,
-      decisionNote: newDecisionNote.trim() || undefined,
-      gradingSystem: newGradingSystem.trim() || undefined,
-      internshipDuration: newInternshipDuration ? Number(newInternshipDuration) : undefined,
-      description: newDescription.trim() || undefined,
-    };
-
-    if (editingCurriculumId !== null) {
-      // Edit mode — PUT /api/curriculum/{id}; Durumu Aktif/Pasif backend'e gönderilir
+  function handleSubmitForm(payload: CurriculumFormSubmitPayload) {
+    if (payload.mode === 'edit') {
       updateMut.mutate(
         {
-          id: editingCurriculumId,
-          version: newVersion.trim(),
-          isActive: newStatus === 'active',
-          ...extraFields,
+          id: payload.id,
+          version: payload.values.version,
+          isActive: payload.isActive,
+          name: payload.values.name,
+          shortName: payload.values.shortName,
+          englishName: payload.values.englishName,
+          startDate: payload.values.startDate,
+          endDate: payload.values.endDate,
+          decisionDate: payload.values.decisionDate,
+          decisionNo: payload.values.decisionNo,
+          decisionNote: payload.values.decisionNote,
+          gradingSystem: payload.values.gradingSystem,
+          internshipDuration: payload.values.internshipDuration,
+          description: payload.values.description,
         },
+        { onSuccess: handleCloseFormDialog },
+      );
+      return;
+    }
+
+    if (payload.mode === 'create-copy') {
+      copyMut.mutate(
+        { sourceId: payload.sourceId, newVersion: payload.values.version },
         {
-          onSuccess: () => {
-            setShowCreateDialog(false);
-            resetCreateForm();
+          onSuccess: (data) => {
+            handleCloseFormDialog();
+            setSelectedCurriculumId(data.id);
           },
         },
       );
       return;
     }
 
-    // Create mode
-    if (!dialogProgramId) return;
-
-    if (createMode === 'copy' && copySourceId) {
-      copyMut.mutate(
-        { sourceId: Number(copySourceId), newVersion: newVersion.trim() },
-        {
-          onSuccess: (data) => {
-            setShowCreateDialog(false);
-            resetCreateForm();
-            setSelectedCurriculumId(data.id);
-          },
-        },
-      );
-    } else {
-      createMut.mutate({ programId: dialogProgramId, version: newVersion.trim(), ...extraFields }, {
-        onSuccess: () => {
-          setShowCreateDialog(false);
-          resetCreateForm();
-        },
-      });
-    }
+    // create-empty
+    createMut.mutate(
+      {
+        programId: payload.programId,
+        version: payload.values.version,
+        name: payload.values.name,
+        shortName: payload.values.shortName,
+        englishName: payload.values.englishName,
+        startDate: payload.values.startDate,
+        endDate: payload.values.endDate,
+        decisionDate: payload.values.decisionDate,
+        decisionNo: payload.values.decisionNo,
+        decisionNote: payload.values.decisionNote,
+        gradingSystem: payload.values.gradingSystem,
+        internshipDuration: payload.values.internshipDuration,
+        description: payload.values.description,
+      },
+      { onSuccess: handleCloseFormDialog },
+    );
   }
 
   function handleAddCourse(courseId: number, semester: number, isCompulsory: boolean) {
@@ -487,8 +395,6 @@ export default function CurriculumManagementPage() {
     setDetailCourseId(courseId);
     setShowDetailSheet(true);
   }
-
-  const isCreatePending = createMut.isPending || copyMut.isPending;
 
   return (
     <div className="space-y-4">
@@ -1158,324 +1064,16 @@ export default function CurriculumManagementPage() {
       )}
 
       {/* ── Create / Edit Curriculum Dialog ── */}
-      <Dialog open={showCreateDialog} onOpenChange={(open) => {
-        setShowCreateDialog(open);
-        if (!open) resetCreateForm();
-      }}>
-        <ResizableDialogContent defaultWidth={750} minWidth={500} minHeight={400} className="flex flex-col p-0 gap-0">
-          <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
-            <DialogTitle>
-              {editingCurriculumId !== null ? 'Müfredat Düzenleniyor' : 'Müfredat (Yeni Ekleniyor)'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 pb-2 space-y-4">
-            {/* Yıl + Durumu */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Yıl *</Label>
-                <Input
-                  value={newVersion}
-                  onChange={e => setNewVersion(e.target.value)}
-                  placeholder="2024"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Durumu</Label>
-                <Select value={newStatus} onValueChange={(val) => setNewStatus(val as 'active' | 'inactive')}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Aktif</SelectItem>
-                    <SelectItem value="inactive">Pasif</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Fakülte / Bölüm / Program — Edit mode'da readonly info bar, Create mode'da seçilebilir dropdown'lar */}
-            {editingCurriculumId !== null && editingCurr && (
-              <div className="rounded-md border bg-muted/50 p-3 text-xs space-y-1">
-                <div className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
-                  Müfredat Bilgisi (değiştirilemez)
-                </div>
-                <div><span className="text-muted-foreground">Fakülte:</span> <span className="font-medium">{editingCurr.facultyName}</span></div>
-                <div><span className="text-muted-foreground">Bölüm:</span> <span className="font-medium">{editingCurr.departmentName}</span></div>
-                <div><span className="text-muted-foreground">Program:</span> <span className="font-medium">{editingCurr.programName}</span></div>
-              </div>
-            )}
-            {editingCurriculumId === null && (
-              <>
-            <div className="space-y-1">
-              <Label className="text-xs">Fakülte *</Label>
-              <Select
-                value={dialogFacultyId?.toString() ?? ''}
-                onValueChange={handleDialogFacultyChange}
-              >
-                <SelectTrigger className="h-9 text-sm">
-                  {loadingFaculties
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <SelectValue placeholder="Fakülte seçin" />}
-                </SelectTrigger>
-                <SelectContent>
-                  {(faculties ?? []).map(f => (
-                    <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Bölüm *</Label>
-              <Select
-                value={dialogDepartmentId?.toString() ?? ''}
-                onValueChange={handleDialogDepartmentChange}
-                disabled={!dialogFacultyId}
-              >
-                <SelectTrigger className="h-9 text-sm">
-                  {loadingDialogDepts
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <SelectValue placeholder="Bölüm seçin" />}
-                </SelectTrigger>
-                <SelectContent>
-                  {(dialogDepartments ?? []).map(d => (
-                    <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Program *</Label>
-              <Select
-                value={dialogProgramId?.toString() ?? ''}
-                onValueChange={handleDialogProgramChange}
-                disabled={!dialogDepartmentId}
-              >
-                <SelectTrigger className="h-9 text-sm">
-                  {loadingDialogPrograms
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <SelectValue placeholder="Program seçin" />}
-                </SelectTrigger>
-                <SelectContent>
-                  {(dialogPrograms ?? []).map(p => (
-                    <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-              </>
-            )}
-
-            {/* Müfredat Tipi */}
-            <div className="space-y-1">
-              <Label className="text-xs">Müfredat Tipi</Label>
-              <Select value={newMufredatTipi} onValueChange={setNewMufredatTipi}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Programa Özel">Programa Özel</SelectItem>
-                  <SelectItem value="Ortak Müfredat">Ortak Müfredat</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Müfredat Ad */}
-            <div className="space-y-1">
-              <Label className="text-xs">Müfredat Ad</Label>
-              <Input
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="Bilgisayar Müh. 2024 Müfredatı"
-              />
-            </div>
-
-            {/* Kısa Ad */}
-            <div className="space-y-1">
-              <Label className="text-xs">Kısa Ad</Label>
-              <Input
-                value={newShortName}
-                onChange={e => setNewShortName(e.target.value)}
-                placeholder="BM-2024"
-              />
-            </div>
-
-            {/* İngilizce Ad */}
-            <div className="space-y-1">
-              <Label className="text-xs">İngilizce Ad</Label>
-              <Input
-                value={newEnglishName}
-                onChange={e => setNewEnglishName(e.target.value)}
-                placeholder="Computer Eng. 2024 Curriculum"
-              />
-            </div>
-
-            {/* Başlangıç / Bitiş Tarihi */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Başlangıç Tarihi</Label>
-                <Input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Bitiş Tarihi</Label>
-                <Input type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)} />
-              </div>
-            </div>
-
-            {/* Karar Tarih / Karar No */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Karar Tarih</Label>
-                <Input
-                  value={newDecisionDate}
-                  onChange={e => setNewDecisionDate(e.target.value)}
-                  placeholder="01.01.2024"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Karar No</Label>
-                <Input
-                  value={newDecisionNo}
-                  onChange={e => setNewDecisionNo(e.target.value)}
-                  placeholder="2024/01"
-                />
-              </div>
-            </div>
-
-            {/* Karar Açıklama */}
-            <div className="space-y-1">
-              <Label className="text-xs">Karar Açıklama</Label>
-              <Input
-                value={newDecisionNote}
-                onChange={e => setNewDecisionNote(e.target.value)}
-                placeholder="Senato kararı ile kabul edilmiştir"
-              />
-            </div>
-
-            {/* Geçme Sistemi / Staj Süresi */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Geçme Sistemi</Label>
-                <Select value={newGradingSystem} onValueChange={setNewGradingSystem}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Sınıf Geçme">Sınıf Geçme</SelectItem>
-                    <SelectItem value="Ders Geçme">Ders Geçme</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Staj Süresi (gün)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={newInternshipDuration}
-                  onChange={e => setNewInternshipDuration(e.target.value)}
-                  placeholder="40"
-                />
-              </div>
-            </div>
-
-            {/* Açıklama */}
-            <div className="space-y-1">
-              <Label className="text-xs">Açıklama</Label>
-              <Textarea
-                value={newDescription}
-                onChange={e => setNewDescription(e.target.value)}
-                placeholder="Genel açıklama..."
-                rows={2}
-              />
-            </div>
-
-            {/* Checkbox'lar — UI-only, backend'e gitmez */}
-            <div className="space-y-2 pt-1">
-              <label className="flex items-start gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newIncludeFormation}
-                  onChange={e => setNewIncludeFormation(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
-                />
-                <span>Mezuniyette Formasyon Derslerini Toplam Kredi/AKTS ve Seçmeli/Zorunlu Ders Sayılarına Dahil Et</span>
-              </label>
-              <label className="flex items-start gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newHideFromPackage}
-                  onChange={e => setNewHideFromPackage(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
-                />
-                <span>Bilgi Paketinde Gösterme</span>
-              </label>
-            </div>
-
-            {/* ── Kopyalama (en altta) — dialog'da seçili programa göre, sadece Create mode ── */}
-            {editingCurriculumId === null && (dialogCurricula ?? []).length > 0 && (
-              <fieldset className="space-y-3">
-                <legend className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kopyalama</legend>
-                <div className="flex items-center gap-1 border rounded-md p-1">
-                  <button
-                    onClick={() => { setCreateMode('empty'); setCopySourceId(''); }}
-                    className={`flex-1 text-xs px-2.5 py-1.5 rounded transition-colors ${
-                      createMode === 'empty'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                    }`}
-                  >
-                    Boş oluştur
-                  </button>
-                  <button
-                    onClick={() => setCreateMode('copy')}
-                    className={`flex-1 text-xs px-2.5 py-1.5 rounded transition-colors ${
-                      createMode === 'copy'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                    }`}
-                  >
-                    Mevcut versiyondan kopyala
-                  </button>
-                </div>
-                {createMode === 'copy' && (
-                  <Select value={copySourceId} onValueChange={setCopySourceId}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Kaynak versiyon seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(dialogCurricula ?? []).map(c => (
-                        <SelectItem key={c.id} value={c.id.toString()}>
-                          {c.version} ({c.courseCount} ders, {c.totalEcts} AKTS)
-                          {c.isActive ? ' — Aktif' : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </fieldset>
-            )}
-          </div>
-          <DialogFooter className="shrink-0 px-6 py-4 border-t gap-2">
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              İptal
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={
-                isCreatePending
-                || updateMut.isPending
-                || !newVersion.trim()
-                || (editingCurriculumId === null && !dialogProgramId)
-                || (editingCurriculumId === null && createMode === 'copy' && !copySourceId)
-              }
-            >
-              {(isCreatePending || updateMut.isPending) && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {editingCurriculumId !== null
-                ? 'Kaydet'
-                : createMode === 'copy' ? 'Kopyala' : 'Oluştur'}
-            </Button>
-          </DialogFooter>
-        </ResizableDialogContent>
-      </Dialog>
+      <CurriculumFormDialog
+        open={showCreateDialog}
+        editingCurriculum={editingCurr}
+        defaultFacultyId={facultyId}
+        defaultDepartmentId={departmentId}
+        defaultProgramId={programId}
+        onClose={handleCloseFormDialog}
+        onSubmit={handleSubmitForm}
+        isSubmitting={createMut.isPending || updateMut.isPending || copyMut.isPending}
+      />
 
       {/* ── Add Course Dialog ── */}
       <AddCourseDialog
