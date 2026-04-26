@@ -153,7 +153,7 @@ export default function App() {
                     <Route path="ders-degerlendirme" element={<CourseEvaluationPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={[...ADVISOR_ROLES, ...INSTRUCTOR_ROLES]} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.danisman-ders-kisitlari.view" />}>
                     <Route path="danisman-ders-kisitlari" element={<AdvisorCourseConstraintsPage />} />
                   </Route>
 
