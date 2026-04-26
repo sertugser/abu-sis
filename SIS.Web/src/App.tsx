@@ -118,7 +118,7 @@ export default function App() {
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
                   <Route path="duyurular" element={<AnnouncementsPage />} />
 
-                  <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator', 'AdministrativeStaff']} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.akademik-takvim-yonetimi.view" />}>
                     <Route path="akademik-takvim-yonetimi" element={<AcademicCalendarAdminPage />} />
                   </Route>
 
