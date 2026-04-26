@@ -21,8 +21,9 @@ import CurriculumFormDialog, { type CurriculumFormSubmitPayload } from './curric
 import CurriculumFilterBar, { type StatusFilter, type YearFilter } from './curriculum-management/CurriculumFilterBar';
 import CurriculumListView from './curriculum-management/CurriculumListView';
 import CurriculumCoursesView from './curriculum-management/CurriculumCoursesView';
+import PromotionRulesDialog from './curriculum-management/PromotionRulesDialog';
+import { getFromYearOptionsFromEcts } from './curriculum-management/PromotionRulesPanel';
 import type { CurriculumCourseItemDto, CurriculumListDto } from '../types/curriculumManagement';
-import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/lib/constants';
 
 type ViewMode = 'list' | 'courses';
@@ -31,7 +32,6 @@ const PAGE_SIZE = 10;          // Müfredat liste sayfalama
 const COURSES_PAGE_SIZE = 15;  // Müfredat detay → ders listesi sayfalama
 
 export default function CurriculumManagementPage() {
-  const navigate = useNavigate();
   // ── Filter state ──
   const [facultyId, setFacultyId] = useState<number | undefined>();
   const [departmentId, setDepartmentId] = useState<number | undefined>();
@@ -59,6 +59,11 @@ export default function CurriculumManagementPage() {
 
   // Copy Dialog — müfredatı kopyala (kaynak + yeni yıl)
   const [copyTarget, setCopyTarget] = useState<{ id: number; label: string } | null>(null);
+
+  // Promotion Rules Dialog — sınıf atlatma kuralları (in-page modal)
+  const [promotionRulesTarget, setPromotionRulesTarget] = useState<
+    { id: number; programId: number; label: string } | null
+  >(null);
 
   // ── Dialogs ──
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -414,7 +419,7 @@ export default function CurriculumManagementPage() {
           onCopy={setCopyTarget}
           onActivate={setActivateTarget}
           onDelete={setDeleteTarget}
-          onNavigatePromotionRules={() => navigate(ROUTES.PROMOTION_RULES)}
+          onOpenPromotionRules={setPromotionRulesTarget}
         />
       )}
 
@@ -527,6 +532,17 @@ export default function CurriculumManagementPage() {
         onConfirm={handleConfirmCopy}
         isPending={copyMut.isPending}
       />
+
+      {promotionRulesTarget && (
+        <PromotionRulesDialog
+          open
+          onClose={() => setPromotionRulesTarget(null)}
+          curriculumId={promotionRulesTarget.id}
+          programId={promotionRulesTarget.programId}
+          curriculumLabel={promotionRulesTarget.label}
+          fromYearOptions={getFromYearOptionsFromEcts(undefined)}
+        />
+      )}
     </div>
   );
 }

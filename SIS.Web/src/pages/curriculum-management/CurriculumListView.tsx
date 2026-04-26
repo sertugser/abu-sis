@@ -15,6 +15,12 @@ interface RowTarget {
   label: string;
 }
 
+interface PromotionRulesTarget {
+  id: number;
+  programId: number;
+  label: string;
+}
+
 interface Props {
   hasFilter: boolean;
   isLoading: boolean;
@@ -30,7 +36,7 @@ interface Props {
   onCopy: (target: RowTarget) => void;
   onActivate: (target: RowTarget) => void;
   onDelete: (target: RowTarget) => void;
-  onNavigatePromotionRules: () => void;
+  onOpenPromotionRules: (target: PromotionRulesTarget) => void;
 }
 
 function rowLabel(c: CurriculumListDto): string {
@@ -52,7 +58,7 @@ export default function CurriculumListView({
   onCopy,
   onActivate,
   onDelete,
-  onNavigatePromotionRules,
+  onOpenPromotionRules,
 }: Props) {
   // Filtre yok — başlangıç durumu
   if (!hasFilter) {
@@ -134,8 +140,8 @@ export default function CurriculumListView({
                           <Settings className="h-4 w-4 mr-2" /> Dönem Kuralları
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={onNavigatePromotionRules}
-                          title="Müfredat Sınıf Dönem Tanımları sayfasını aç"
+                          onClick={() => onOpenPromotionRules({ id: c.id, programId: c.programId, label: rowLabel(c) })}
+                          title="Sınıf atlatma kurallarını düzenle"
                         >
                           <GraduationCap className="h-4 w-4 mr-2" /> Sınıf Atlatma Kuralları
                         </DropdownMenuItem>
