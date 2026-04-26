@@ -91,7 +91,7 @@ import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import ForbiddenPage from './pages/ForbiddenPage';
 import RolePermissionMatrix from './components/admin/RolePermissionMatrix';
-import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
+import { MANAGEMENT_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
   return (
@@ -173,7 +173,7 @@ export default function App() {
                     <Route path="ogretim-elemani-akademik-takvim" element={<AcademicCalendarPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager', 'SystemAdministrator']} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.degerlendirme-sonuclari.view" />}>
                     <Route path="degerlendirme-sonuclari" element={<EvaluationResultsPage />} />
                   </Route>
 
