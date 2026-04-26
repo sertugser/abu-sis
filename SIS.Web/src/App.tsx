@@ -157,11 +157,19 @@ export default function App() {
                     <Route path="danisman-ders-kisitlari" element={<AdvisorCourseConstraintsPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={[...INSTRUCTOR_ROLES, ...ADVISOR_ROLES, 'Dean', 'DepartmentManager']} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
                     <Route path="derslerim" element={<InstructorSectionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.not-girisi.view" />}>
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-programim.view" />}>
                     <Route path="ders-programim" element={<InstructorSchedulingPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.akademik-takvim.view" />}>
                     <Route path="ogretim-elemani-akademik-takvim" element={<AcademicCalendarPage />} />
                   </Route>
 
