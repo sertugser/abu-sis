@@ -711,17 +711,6 @@
 
 ---
 
-### Akademik Takvim Yönetimi
-
-| | |
-|---|---|
-| **Route** | `/akademik-takvim-yonetimi` |
-| **Dosya** | `SIS.Web/src/pages/AcademicCalendarAdminPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
----
-
 ### Bölüm Tanımları
 
 | | |

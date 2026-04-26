@@ -76,11 +76,10 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Fakülte Tanımları",              "/fakulte-tanimlari",             "fakulte-tanimlari",           2, "menu.fakulte-tanimlari.view"),
             BuildItem(permissions, "Bölüm Tanımları",                "/bolum-tanimlari",               "bolum-tanimlari",             3, "menu.bolum-tanimlari.view"),
             BuildItem(permissions, "Program Tanımları",              "/program-tanimlari",             "program-tanimlari",           4, "menu.program-tanimlari.view"),
-            BuildItem(permissions, "Akademik Takvim Görüntüleme",    "/akademik-takvim",               "akademik-takvim-goruntuleme", 5, "menu.akademik-takvim.view"),
-            BuildItem(permissions, "Akademik Takvim Yönetimi",       "/akademik-takvim-yonetimi",      "akademik-takvim-yonetimi",    6, "menu.akademik-takvim-yonetimi.view"),
-            BuildItem(permissions, "Takvim Oluşturucu",              "/akademik-takvim-olusturma",     "akademik-takvim-olusturma",   7, "menu.akademik-takvim-olusturma.view"),
-            BuildItem(permissions, "ÖSYM Kayıt Takvimi",             "/osym-kayit-takvimi",            "osym-kayit-takvimi",          8, "menu.osym-kayit-takvimi.view"),
-            BuildItem(permissions, "Program Kontenjan Bilgileri",    "/program-kontenjan",             "program-kontenjan",           9, "menu.program-kontenjan.view"),
+            BuildItem(permissions, "Akademik Takvim",                "/akademik-takvim",               "akademik-takvim-goruntuleme", 5, "menu.akademik-takvim.view"),
+            BuildItem(permissions, "Takvim Oluşturucu",              "/akademik-takvim-olusturma",     "akademik-takvim-olusturma",   6, "menu.akademik-takvim-olusturma.view"),
+            BuildItem(permissions, "ÖSYM Kayıt Takvimi",             "/osym-kayit-takvimi",            "osym-kayit-takvimi",          7, "menu.osym-kayit-takvimi.view"),
+            BuildItem(permissions, "Program Kontenjan Bilgileri",    "/program-kontenjan",             "program-kontenjan",           8, "menu.program-kontenjan.view"),
         };
 
         // ─── Modül 4: Danışmanlık İşlemleri (Phase 1'de boş — Karar #6) ──────────

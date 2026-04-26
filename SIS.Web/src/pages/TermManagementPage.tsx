@@ -428,9 +428,9 @@ export default function TermManagementPage() {
 
         <div className="px-4 py-3 border-t border-border bg-muted/10">
           <p className="text-sm text-muted-foreground italic">
-            Faz tarihleri ve override ayarları için →{' '}
-            <Link to={ROUTES.ACADEMIC_CALENDAR_ADMIN} className="underline text-blue-600">
-              Akademik Takvim Yönetimi
+            Akademik takvim üretimi için →{' '}
+            <Link to={ROUTES.ACADEMIC_CALENDAR_GENERATOR} className="underline text-blue-600">
+              Takvim Oluşturucu
             </Link>
           </p>
         </div>

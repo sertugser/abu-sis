@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIS.API.Authorization;
-using SIS.Application.AcademicCalendar.DTOs;
 using SIS.Application.AcademicCalendar.Services;
 
 namespace SIS.API.Controllers;
@@ -13,54 +12,6 @@ public class AcademicCalendarController : ControllerBase
     private readonly IAcademicCalendarService _svc;
 
     public AcademicCalendarController(IAcademicCalendarService svc) { _svc = svc; }
-
-    // Admin
-
-    [HttpGet("admin/academic-calendar")]
-    [Authorize]
-    [RequirePermission("menu.akademik-takvim-yonetimi.view")]
-    public async Task<IActionResult> ListTerms(CancellationToken ct)
-        => Ok(await _svc.ListTermsAsync(ct));
-
-    [HttpGet("admin/academic-calendar/{termId:int}")]
-    [Authorize]
-    [RequirePermission("menu.akademik-takvim-yonetimi.view")]
-    public async Task<IActionResult> GetByTerm(int termId, CancellationToken ct)
-    {
-        try
-        {
-            var dto = await _svc.GetByTermIdAsync(termId, ct);
-            return dto is null ? NotFound(new { message = "Akademik takvim tanımlı değil." }) : Ok(dto);
-        }
-        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
-    }
-
-    [HttpPut("admin/academic-calendar/{termId:int}")]
-    [Authorize]
-    [RequirePermission("menu.akademik-takvim-yonetimi.edit")]
-    public async Task<IActionResult> Upsert(int termId, [FromBody] UpsertAcademicCalendarDto dto, CancellationToken ct)
-    {
-        try { return Ok(await _svc.UpsertAsync(termId, dto, ct)); }
-        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
-        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
-    }
-
-    [HttpPost("admin/academic-calendar/{termId:int}/override")]
-    [Authorize]
-    [RequirePermission("menu.akademik-takvim-yonetimi.override")]
-    public async Task<IActionResult> UpdatePhaseOverride(int termId, [FromBody] UpdateCalendarPhaseOverrideDto dto, CancellationToken ct)
-    {
-        try
-        {
-            await _svc.UpdatePhaseOverrideAsync(termId, dto, ct);
-            var fresh = await _svc.GetByTermIdAsync(termId, ct);
-            return Ok(fresh);
-        }
-        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
-        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
-    }
 
     // Public (authenticated)
 

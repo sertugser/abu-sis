@@ -158,7 +158,6 @@ public static class RolePermissionSeed
                 // modülü öğrenci-merkezli). Admin için Duyurular Duyuru Yönetimi altında.
                 "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
-                "menu.akademik-takvim-yonetimi.view",
                 "menu.akademik-takvim-olusturma.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
