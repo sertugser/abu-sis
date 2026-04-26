@@ -148,10 +148,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  15, "menu.program-onayi.view"),
             BuildItem(permissions, "Sınıf Listeleri",                "/sinif-listeleri",                     "sinif-listeleri",                16, "menu.sinif-listeleri.view"),
             BuildItem(permissions, "Dönem Kapatma İşlemleri",        "/donem-kapatma",                       "donem-kapatma",                  17, "menu.donem-kapatma.view"),
-            BuildItem(permissions, "Derslerim",                      "/derslerim",                           "derslerim",                      18, "menu.derslerim.view"),
-            BuildItem(permissions, "Ders Programım",                 "/ders-programim",                      "ders-programim",                 19, "menu.ders-programim.view"),
-            BuildItem(permissions, "Not Girişi",                     "/not-girisi",                          "not-girisi",                     20, "menu.not-girisi.view"),
-            BuildItem(permissions, "Ders Kısıtları",                 "/danisman-ders-kisitlari",             "danisman-ders-kisitlari",        21, "menu.danisman-ders-kisitlari.view"),
         };
 
         // ─── Modül 7: Bölüm İşlemleri (hoca + admin için) ────────────────────────
@@ -346,6 +342,29 @@ public static class MenuStructureSeed
         personelIslemleri.Items = new List<MenuItem>
         {
             BuildItem(permissions, "Personel Listesi", "/personel-listesi", "personel-listesi", 1, "menu.personel-listesi.view"),
+        };
+
+        // ─── Modül 15: Öğretim İşlemleri (hoca/danışman/yönetici için) ───────────
+        // Patch (post-Phase 1): SystemAdmin'in görmemesi gereken hoca/danışman günlük
+        // iş sayfaları ayrı bir modülde toplandı. AllowedRolesCsv SysAdmin shortcut'ını
+        // bypass eder: admin/öğrenci/idari personel bu modülü hiç görmez.
+        var ogretimIslemleri = new MenuModule
+        {
+            Slug = "ogretim-islemleri",
+            Label = "Öğretim İşlemleri",
+            Icon = "GraduationCap",
+            SortOrder = 15,
+            AllowedRolesCsv = "Instructor,AcademicAdvisor,Dean,DepartmentManager",
+        };
+        context.MenuModules.Add(ogretimIslemleri);
+        await context.SaveChangesAsync(ct);
+
+        ogretimIslemleri.Items = new List<MenuItem>
+        {
+            BuildItem(permissions, "Derslerim",       "/derslerim",                "derslerim",                  1, "menu.derslerim.view"),
+            BuildItem(permissions, "Ders Programım",  "/ders-programim",           "ders-programim",             2, "menu.ders-programim.view"),
+            BuildItem(permissions, "Not Girişi",      "/not-girisi",               "not-girisi",                 3, "menu.not-girisi.view"),
+            BuildItem(permissions, "Ders Kısıtları",  "/danisman-ders-kisitlari",  "danisman-ders-kisitlari",    4, "menu.danisman-ders-kisitlari.view"),
         };
 
         await context.SaveChangesAsync(ct);
