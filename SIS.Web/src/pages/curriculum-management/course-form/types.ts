@@ -64,4 +64,11 @@ export interface CourseDecisionState {
   decisionNote: string;
 }
 
+// Phase 3 — İntibak (Son Aktif Ders Kodu) — curriculum-specific predecessor pointer
+export interface CourseIntibakState {
+  previousCourseId: number | null;
+  previousCourseCode: string | null;   // display-only, populated from backend
+  previousCourseName: string | null;   // display-only, populated from backend
+}
+
 export type FieldOwnership = 'shared' | 'curriculum-specific';

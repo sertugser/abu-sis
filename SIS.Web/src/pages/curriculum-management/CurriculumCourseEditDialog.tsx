@@ -18,6 +18,7 @@ import GroupSection from './course-form/GroupSection';
 import DescriptionSection from './course-form/DescriptionSection';
 import FlagsSection from './course-form/FlagsSection';
 import DecisionSection from './course-form/DecisionSection';
+import IntibakSection from './course-form/IntibakSection';
 import SideEffectWarningDialog, { type FieldChange } from './course-form/SideEffectWarningDialog';
 import type {
   CourseBasicState,
@@ -27,6 +28,7 @@ import type {
   CourseDescriptionState,
   CourseFlagsState,
   CourseDecisionState,
+  CourseIntibakState,
 } from './course-form/types';
 
 interface Props {
@@ -94,6 +96,11 @@ export default function CurriculumCourseEditDialog({
     decisionNo: '',
     decisionNote: '',
   });
+  const [intibak, setIntibak] = useState<CourseIntibakState>({
+    previousCourseId: null,
+    previousCourseCode: null,
+    previousCourseName: null,
+  });
 
   // ── Initialize on open ──
   useEffect(() => {
@@ -150,6 +157,11 @@ export default function CurriculumCourseEditDialog({
       decisionDate: curriculumCourse.decisionDate ? curriculumCourse.decisionDate.slice(0, 10) : '',
       decisionNo: curriculumCourse.decisionNo ?? '',
       decisionNote: curriculumCourse.decisionNote ?? '',
+    });
+    setIntibak({
+      previousCourseId: curriculumCourse.previousCourseId,
+      previousCourseCode: curriculumCourse.previousCourseCode,
+      previousCourseName: curriculumCourse.previousCourseName,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, courseDetail?.id, curriculumCourse.courseId]);
@@ -299,6 +311,9 @@ export default function CurriculumCourseEditDialog({
         // Phase 2 — curriculum-specific description
         curriculumDescription: curriculumSpecific.curriculumDescription,
         clearCurriculumDescription: curriculumSpecific.curriculumDescription === '',
+        // Phase 3 — İntibak (null = clear)
+        previousCourseId: intibak.previousCourseId ?? undefined,
+        clearPreviousCourse: intibak.previousCourseId === null,
       }),
     );
 
@@ -345,6 +360,12 @@ export default function CurriculumCourseEditDialog({
                 onGroupCodeChange={(g) => setCurriculumSpecific({ ...curriculumSpecific, groupCode: g })}
               />
               <DecisionSection value={decision} onChange={setDecision} />
+              <IntibakSection
+                value={intibak}
+                onChange={setIntibak}
+                currentCourseId={courseId}
+                departmentId={courseDetail?.departmentId ?? null}
+              />
               <DescriptionSection
                 value={description.description}
                 onChange={(d) => setDescription({ description: d })}

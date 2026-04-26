@@ -82,6 +82,10 @@ export interface CurriculumCourseItemDto {
   decisionNote: string | null;
   // Phase 2 — curriculum-specific description
   curriculumDescription: string | null;
+  // Phase 3 — İntibak (önceki ders)
+  previousCourseId: number | null;
+  previousCourseCode: string | null;
+  previousCourseName: string | null;
 }
 
 export interface CreateCurriculumRequest {
@@ -146,6 +150,8 @@ export interface AddCourseRequest {
   decisionNote?: string | null;
   // Phase 2 — curriculum-specific description
   curriculumDescription?: string | null;
+  // Phase 3 — İntibak
+  previousCourseId?: number | null;
 }
 
 export interface UpdateCourseRequest {
@@ -175,6 +181,9 @@ export interface UpdateCourseRequest {
   // Phase 2 — curriculum-specific description
   curriculumDescription?: string | null;
   clearCurriculumDescription?: boolean;
+  // Phase 3 — İntibak (null/undefined = no change; clearPreviousCourse=true → null)
+  previousCourseId?: number | null;
+  clearPreviousCourse?: boolean;
 }
 
 export interface CopyCurriculumRequest {
