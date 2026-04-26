@@ -177,128 +177,152 @@ export default function App() {
                     <Route path="degerlendirme-sonuclari" element={<EvaluationResultsPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_ROLES} />}>
-                    <Route element={<RoleProtectedRoute permission="menu.sinif-listeleri.view" />}>
-                      <Route path="sinif-listeleri" element={<ClassListsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.ders-programi-olusturma.view" />}>
-                      <Route path="ders-programi-olusturma" element={<FacultyPlanningPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.derslik-doluluk.view" />}>
-                      <Route path="derslik-doluluk-tablosu" element={<ClassroomManagementPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.derslik-yonetimi.view" />}>
-                      <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.donem-kapatma.view" />}>
-                      <Route path="donem-kapatma" element={<TermClosingPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.ders-acma-islemleri.view" />}>
-                      <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.ogretim-elemani-atama.view" />}>
-                      <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.kullanici-tanimlama.view" />}>
-                      <Route path="kullanici-yonetimi" element={<UserManagementPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.ogrenci-rehberi.view" />}>
-                      <Route path="ogrenci-rehberi" element={<StudentDirectoryPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.personel-listesi.view" />}>
-                      <Route path="personel-listesi" element={<InstructorDirectoryPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.akademik-donem.view" />}>
-                      <Route path="donem-yonetimi" element={<TermManagementPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.akademik-takvim-olusturma.view" />}>
-                      <Route path="akademik-takvim-olusturma" element={<AcademicCalendarGeneratorPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.fakulte-tanimlari.view" />}>
-                      <Route path="akademik-yapi" element={<Navigate to="/fakulte-tanimlari" replace />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.fakulte-tanimlari.view" />}>
-                      <Route path="fakulte-tanimlari" element={<FacultyDefinitionsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.bolum-tanimlari.view" />}>
-                      <Route path="bolum-tanimlari" element={<DepartmentDefinitionsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.program-tanimlari.view" />}>
-                      <Route path="program-tanimlari" element={<ProgramDefinitionsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.ders-katalogu.view" />}>
-                      <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.mufredat-sinif-donem.view" />}>
-                      <Route path="mufredat-sinif-donem-tanimlari" element={<MufredatSinifDonemTanimlariPage />} />
-                    </Route>
-                    {/* Eski URL → yeni URL'e redirect (γ hibrit + C rename) */}
-                    <Route element={<RoleProtectedRoute permission="menu.mufredat-sinif-donem.view" />}>
-                      <Route path="sinif-atlatma-kurallari" element={<Navigate to="/mufredat-sinif-donem-tanimlari" replace />} />
-                    </Route>
-                    {/* ── Öğrenci İşlemleri (placeholder, SystemAdmin) ── */}
-                    <Route element={<RoleProtectedRoute permission="menu.ogrenci-no-degistirme.view" />}>
-                      <Route path="ogrenci-no-degistirme" element={<StudentNumberChangePage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.sinif-atlatma-islemleri.view" />}>
-                      <Route path="sinif-atlatma-islemleri" element={<StudentPromotionPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.toplu-danisman-atama.view" />}>
-                      <Route path="toplu-danisman-atama" element={<BulkAdvisorAssignmentPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.toplu-staj-danisman-atama.view" />}>
-                      <Route path="toplu-staj-danisman-atama" element={<BulkInternshipAdvisorAssignmentPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.toplu-mufredat-atama.view" />}>
-                      <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.toplu-ders-kaydi.view" />}>
-                      <Route path="toplu-ders-kaydi" element={<BulkCourseRegistrationPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
-                      <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.subeler-arasi-ogrenci-transfer.view" />}>
-                      <Route path="subeler-arasi-ogrenci-transfer" element={<SectionTransferPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.dersler-arasi-ogrenci-transfer.view" />}>
-                      <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.harf-notu-duzenleme.view" />}>
-                      <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
-                    </Route>
-                    {/* ── Yönetim → Kullanıcı İşlemleri (placeholder, SystemAdmin) ── */}
-                    <Route element={<RoleProtectedRoute permission="menu.kullanici-yetki-gruplari.view" />}>
-                      <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-gruplari.view" />}>
-                      <Route path="kullanici-rapor-gruplari" element={<UserReportGroupsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.kullanici-grup-sinirlandirmalar.view" />}>
-                      <Route path="kullanici-grup-sinirlandirmalar" element={<UserGroupRestrictionsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-tasarim-gruplari.view" />}>
-                      <Route path="kullanici-rapor-tasarim-gruplari" element={<UserReportDesignGroupsPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.kullanici-vekalet-islemleri.view" />}>
-                      <Route path="kullanici-vekalet-islemleri" element={<UserDelegationPage />} />
-                    </Route>
-                    <Route element={<RoleProtectedRoute permission="menu.sifre-degistir.view" />}>
-                      <Route path="sifre-degistir" element={<PasswordChangePage />} />
-                    </Route>
-                    {/* ── Yönetim → Genel Ayarlar (placeholder, SystemAdmin) ── */}
+                  <Route element={<RoleProtectedRoute permission="menu.sinif-listeleri.view" />}>
+                    <Route path="sinif-listeleri" element={<ClassListsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-programi-olusturma.view" />}>
+                    <Route path="ders-programi-olusturma" element={<FacultyPlanningPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.derslik-doluluk.view" />}>
+                    <Route path="derslik-doluluk-tablosu" element={<ClassroomManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.derslik-yonetimi.view" />}>
+                    <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.donem-kapatma.view" />}>
+                    <Route path="donem-kapatma" element={<TermClosingPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-acma-islemleri.view" />}>
+                    <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ogretim-elemani-atama.view" />}>
+                    <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.kullanici-tanimlama.view" />}>
+                    <Route path="kullanici-yonetimi" element={<UserManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ogrenci-rehberi.view" />}>
+                    <Route path="ogrenci-rehberi" element={<StudentDirectoryPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.personel-listesi.view" />}>
+                    <Route path="personel-listesi" element={<InstructorDirectoryPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.akademik-donem.view" />}>
+                    <Route path="donem-yonetimi" element={<TermManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.akademik-takvim-olusturma.view" />}>
+                    <Route path="akademik-takvim-olusturma" element={<AcademicCalendarGeneratorPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.fakulte-tanimlari.view" />}>
+                    <Route path="akademik-yapi" element={<Navigate to="/fakulte-tanimlari" replace />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.fakulte-tanimlari.view" />}>
+                    <Route path="fakulte-tanimlari" element={<FacultyDefinitionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.bolum-tanimlari.view" />}>
+                    <Route path="bolum-tanimlari" element={<DepartmentDefinitionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.program-tanimlari.view" />}>
+                    <Route path="program-tanimlari" element={<ProgramDefinitionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-katalogu.view" />}>
+                    <Route path="ders-katalogu" element={<CourseCatalogAdminPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.mufredat-sinif-donem.view" />}>
+                    <Route path="mufredat-sinif-donem-tanimlari" element={<MufredatSinifDonemTanimlariPage />} />
+                  </Route>
+                  {/* Eski URL → yeni URL'e redirect (γ hibrit + C rename) */}
+                  <Route element={<RoleProtectedRoute permission="menu.mufredat-sinif-donem.view" />}>
+                    <Route path="sinif-atlatma-kurallari" element={<Navigate to="/mufredat-sinif-donem-tanimlari" replace />} />
+                  </Route>
+                  {/* ── Öğrenci İşlemleri (placeholder, SystemAdmin) ── */}
+                  <Route element={<RoleProtectedRoute permission="menu.ogrenci-no-degistirme.view" />}>
+                    <Route path="ogrenci-no-degistirme" element={<StudentNumberChangePage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.sinif-atlatma-islemleri.view" />}>
+                    <Route path="sinif-atlatma-islemleri" element={<StudentPromotionPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.toplu-danisman-atama.view" />}>
+                    <Route path="toplu-danisman-atama" element={<BulkAdvisorAssignmentPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.toplu-staj-danisman-atama.view" />}>
+                    <Route path="toplu-staj-danisman-atama" element={<BulkInternshipAdvisorAssignmentPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.toplu-mufredat-atama.view" />}>
+                    <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.toplu-ders-kaydi.view" />}>
+                    <Route path="toplu-ders-kaydi" element={<BulkCourseRegistrationPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
+                    <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.subeler-arasi-ogrenci-transfer.view" />}>
+                    <Route path="subeler-arasi-ogrenci-transfer" element={<SectionTransferPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.dersler-arasi-ogrenci-transfer.view" />}>
+                    <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.harf-notu-duzenleme.view" />}>
+                    <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
+                  </Route>
+                  {/* ── Yönetim → Kullanıcı İşlemleri (placeholder, SystemAdmin) ── */}
+                  <Route element={<RoleProtectedRoute permission="menu.kullanici-yetki-gruplari.view" />}>
+                    <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-gruplari.view" />}>
+                    <Route path="kullanici-rapor-gruplari" element={<UserReportGroupsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.kullanici-grup-sinirlandirmalar.view" />}>
+                    <Route path="kullanici-grup-sinirlandirmalar" element={<UserGroupRestrictionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-tasarim-gruplari.view" />}>
+                    <Route path="kullanici-rapor-tasarim-gruplari" element={<UserReportDesignGroupsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.kullanici-vekalet-islemleri.view" />}>
+                    <Route path="kullanici-vekalet-islemleri" element={<UserDelegationPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.sifre-degistir.view" />}>
+                    <Route path="sifre-degistir" element={<PasswordChangePage />} />
+                  </Route>
+                  {/* ── Yönetim → Genel Ayarlar (placeholder, SystemAdmin) ── */}
+                  <Route element={<RoleProtectedRoute permission="menu.universite-bilgileri.view" />}>
                     <Route path="universite-bilgileri" element={<UniversityInfoPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.kurumsal-entegrasyon-tanimlari.view" />}>
                     <Route path="kurumsal-entegrasyon-tanimlari" element={<InstitutionalIntegrationPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.belge-sinirlandirmalar.view" />}>
                     <Route path="belge-sinirlandirmalar" element={<DocumentRestrictionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.web-modul-ayarlari.view" />}>
                     <Route path="web-modul-ayarlari" element={<WebModuleSettingsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ebys-imza-yetkilileri.view" />}>
                     <Route path="ebys-imza-yetkilileri" element={<EbysSignatureAuthoritiesPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.fakulte-imza-yukleme.view" />}>
                     <Route path="fakulte-imza-yukleme-islemleri" element={<FacultySignatureUploadPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.derslik-yonetimi.view" />}>
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-programi-kisitlamalari.view" />}>
                     <Route path="ders-programi-kisitlamalari" element={<ConstraintManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.mufredat-islemleri.view" />}>
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.secmeli-ders-gruplari.view" />}>
                     <Route path="secmeli-ders-gruplari" element={<ElectiveGroupManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-veren-ogretim-uyeleri.view" />}>
                     <Route path="ders-veren-ogretim-uyeleri" element={<InstructorCoursesReportPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.donem-programi-aktarim.view" />}>
                     <Route path="donem-programi-aktarim" element={<TermProgramTransferPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.duyuru-yonetimi.view" />}>
                     <Route path="duyuru-yonetimi" element={<AnnouncementManagementPage />} />
                   </Route>
 
