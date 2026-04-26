@@ -91,7 +91,7 @@ import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import ForbiddenPage from './pages/ForbiddenPage';
 import RolePermissionMatrix from './components/admin/RolePermissionMatrix';
-import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, STUDENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
+import { INSTRUCTOR_ROLES, MANAGEMENT_ROLES, ADVISOR_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
   return (
@@ -104,7 +104,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route element={<ProtectedRoute />}>
-                <Route element={<RoleProtectedRoute allowedRoles={STUDENT_ROLES} />}>
+                <Route element={<RoleProtectedRoute permission="menu.transkript.view" />}>
                   <Route path="report/transkript" element={<TranscriptPage />} />
                 </Route>
 
