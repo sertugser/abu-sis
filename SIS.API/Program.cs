@@ -24,7 +24,6 @@ using SIS.Application.AcademicLevel.Services;
 using SIS.Infrastructure.Services.Scheduling;
 using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
-using SIS.Application.TermClosing.Services;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Application.CourseEvaluation.Services;
 using SIS.Application.Announcement.Services;
@@ -158,7 +157,6 @@ builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
-builder.Services.AddScoped<ITermClosingService, TermClosingService>();
 builder.Services.AddScoped<IExcelScheduleService, ExcelScheduleService>();
 
 // Admin services

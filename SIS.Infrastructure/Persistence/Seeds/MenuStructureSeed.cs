@@ -147,7 +147,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Ders Veren Öğretim Üyeleri",     "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
             BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  15, "menu.program-onayi.view"),
             BuildItem(permissions, "Sınıf Listeleri",                "/sinif-listeleri",                     "sinif-listeleri",                16, "menu.sinif-listeleri.view"),
-            BuildItem(permissions, "Dönem Kapatma İşlemleri",        "/donem-kapatma",                       "donem-kapatma",                  17, "menu.donem-kapatma.view"),
         };
 
         // ─── Modül 7: Bölüm İşlemleri (hoca + admin için) ────────────────────────

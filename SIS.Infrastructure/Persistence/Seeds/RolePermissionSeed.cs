@@ -360,11 +360,7 @@ public static class RolePermissionSeed
                 // ── Dönem Programı Aktarım ──
                 "menu.donem-programi-aktarim.transfer",
 
-                // ── Dönem Kapatma + Sınıf Atlatma ──
-                "menu.donem-kapatma.lock-grades",
-                "menu.donem-kapatma.unlock-grades",
-                "menu.donem-kapatma.calculate-gpa",
-                "menu.donem-kapatma.open-new-term",
+                // ── Sınıf Atlatma ──
                 "menu.sinif-atlatma-islemleri.promote",
                 "menu.sinif-atlatma-islemleri.rollback",
                 "menu.sinif-atlatma-islemleri.export",
@@ -501,11 +497,7 @@ public static class RolePermissionSeed
                 "menu.program-onayi.approve",
                 "menu.program-onayi.revoke",
 
-                // ── Dönem Kapatma + Sınıf Atlatma ──
-                "menu.donem-kapatma.lock-grades",
-                "menu.donem-kapatma.unlock-grades",
-                "menu.donem-kapatma.calculate-gpa",
-                "menu.donem-kapatma.open-new-term",
+                // ── Sınıf Atlatma ──
                 "menu.sinif-atlatma-islemleri.promote",
                 "menu.sinif-atlatma-islemleri.rollback",
                 "menu.sinif-atlatma-islemleri.export",

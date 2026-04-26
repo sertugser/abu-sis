@@ -29,7 +29,6 @@ import ClassListsPage from './pages/ClassListsPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
-import TermClosingPage from './pages/term-closing/TermClosingPage';
 
 import CourseOpeningPage from './pages/CourseOpeningPage';
 import InstructorAssignmentPage from './pages/InstructorAssignmentPage';
@@ -187,9 +186,6 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.derslik-yonetimi.view" />}>
                     <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
-                  </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.donem-kapatma.view" />}>
-                    <Route path="donem-kapatma" element={<TermClosingPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-acma-islemleri.view" />}>
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
