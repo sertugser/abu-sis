@@ -15,9 +15,11 @@ public static class CurriculumCourseOpeningReasonSeed
         New("Periodic", "Dönemsel", null, 10),
         New("Erasmus", "Erasmus", null, 20),
         New("OutOfField", "Alan Dışı", null, 30),
-        New("Internship", "Staj", null, 40),
+        // Faz 4 — Staj GPA dışı (akademik standart)
+        New("Internship", "Staj", null, 40, isExcludedFromGpa: true),
         New("LangSupport", "Y.Dil Destek", null, 50),
-        New("Hobby", "Hobi", null, 60),
+        // Faz 4 — Hobi dersleri GPA dışı (öğrencinin not ortalamasını etkilemez)
+        New("Hobby", "Hobi", null, 60, isExcludedFromGpa: true),
         New("DistanceEducation", "Uzaktan Eğitim", null, 70),
         New(
             "PeriodicTheory",
@@ -27,10 +29,11 @@ public static class CurriculumCourseOpeningReasonSeed
             bypassScheduleConflict: true,
             bypassMandatoryAttendance: true),
         New("Preparatory", "Hazırlık", null, 90),
-        New("Thesis", "Tez", null, 100),
-        New("ExpertiseField", "Uzmanlık Alan", null, 110),
-        New("Seminar", "Seminer", null, 120),
-        New("Counseling", "Danışmanlık", null, 130),
+        // Faz 4 — Tez/Uzmanlık Alan/Seminer/Danışmanlık dersleri GPA dışı (lisansüstü standart)
+        New("Thesis", "Tez", null, 100, isExcludedFromGpa: true),
+        New("ExpertiseField", "Uzmanlık Alan", null, 110, isExcludedFromGpa: true),
+        New("Seminar", "Seminer", null, 120, isExcludedFromGpa: true),
+        New("Counseling", "Danışmanlık", null, 130, isExcludedFromGpa: true),
         New("MidtermBarrier", "Vize Barajlı", null, 140),
         New("MedServiceCourses", "Tıp Servis Dersleri", null, 150),
         New("MedCommittee", "Tıp Kurul", null, 160),
