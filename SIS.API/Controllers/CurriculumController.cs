@@ -41,7 +41,16 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         int? CategoryId, string? CategoryName,
         int? OpeningReasonId, string? OpeningReasonCode, string? OpeningReasonName,
         string? GroupCode,
-        int NationalCredit);
+        int NationalCredit,
+        // Phase 2 — flags
+        bool IsMainGroupCourse, bool IsFormationCourse,
+        bool ExcludedFromCreditTotal, bool ExcludedFromTranscriptTotal,
+        bool AutoAddOnNewRegistration, bool ShowAtTakenCurriculum,
+        bool ShowInstructorAtRegistration, bool HasCustomExamCurriculum,
+        // Phase 2 — decision metadata
+        DateTime? DecisionDate, string? DecisionNo, string? DecisionNote,
+        // Phase 2 — curriculum-specific description
+        string? CurriculumDescription);
 
     public record CreateCurriculumRequest(
         int ProgramId, string Version,
@@ -65,14 +74,34 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         int CourseId, int SuggestedSemester, bool IsCompulsory,
         bool IncludeInGpa = true, bool ShowOnTranscript = true,
         int? CategoryId = null, int? OpeningReasonId = null,
-        string? GroupCode = null);
+        string? GroupCode = null,
+        // Phase 2 flags
+        bool IsMainGroupCourse = false, bool IsFormationCourse = false,
+        bool ExcludedFromCreditTotal = false, bool ExcludedFromTranscriptTotal = false,
+        bool AutoAddOnNewRegistration = false, bool ShowAtTakenCurriculum = false,
+        bool ShowInstructorAtRegistration = true, bool HasCustomExamCurriculum = false,
+        // Phase 2 decision metadata
+        DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
+        // Phase 2 description
+        string? CurriculumDescription = null);
 
     public record UpdateCourseRequest(
         int? SuggestedSemester = null, bool? IsCompulsory = null,
         bool? IncludeInGpa = null, bool? ShowOnTranscript = null,
         int? CategoryId = null, int? OpeningReasonId = null,
         string? GroupCode = null,
-        bool ClearCategory = false, bool ClearOpeningReason = false);
+        bool ClearCategory = false, bool ClearOpeningReason = false,
+        // Phase 2 flags (all bool? — null means "no change")
+        bool? IsMainGroupCourse = null, bool? IsFormationCourse = null,
+        bool? ExcludedFromCreditTotal = null, bool? ExcludedFromTranscriptTotal = null,
+        bool? AutoAddOnNewRegistration = null, bool? ShowAtTakenCurriculum = null,
+        bool? ShowInstructorAtRegistration = null, bool? HasCustomExamCurriculum = null,
+        // Phase 2 decision metadata (string? where null = no change; ClearXxx flags allow setting to null)
+        DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
+        bool ClearDecisionDate = false,
+        // Phase 2 description
+        string? CurriculumDescription = null,
+        bool ClearCurriculumDescription = false);
 
     public record CopyCurriculumRequest(string NewVersion);
 
@@ -193,7 +222,16 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
                     cc.GroupCode,
-                    cc.Course.NationalCredit ?? 0))
+                    cc.Course.NationalCredit ?? 0,
+                    // Phase 2 — flags
+                    cc.IsMainGroupCourse, cc.IsFormationCourse,
+                    cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
+                    cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
+                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    // Phase 2 — decision metadata
+                    cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
+                    // Phase 2 — curriculum-specific description
+                    cc.CurriculumDescription))
                 .ToList());
 
         return Ok(dto);
@@ -345,7 +383,14 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                 cc.OpeningReason != null ? cc.OpeningReason.Name : null,
                 cc.GroupCode,
-                cc.Course.NationalCredit ?? 0))
+                cc.Course.NationalCredit ?? 0,
+                // Phase 2
+                cc.IsMainGroupCourse, cc.IsFormationCourse,
+                cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
+                cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
+                cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
+                cc.CurriculumDescription))
             .ToListAsync(ct);
 
         return Ok(courses);
@@ -385,7 +430,22 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             ShowOnTranscript = req.ShowOnTranscript,
             CategoryId = req.CategoryId,
             OpeningReasonId = req.OpeningReasonId,
-            GroupCode = req.GroupCode
+            GroupCode = req.GroupCode,
+            // Phase 2 flags
+            IsMainGroupCourse = req.IsMainGroupCourse,
+            IsFormationCourse = req.IsFormationCourse,
+            ExcludedFromCreditTotal = req.ExcludedFromCreditTotal,
+            ExcludedFromTranscriptTotal = req.ExcludedFromTranscriptTotal,
+            AutoAddOnNewRegistration = req.AutoAddOnNewRegistration,
+            ShowAtTakenCurriculum = req.ShowAtTakenCurriculum,
+            ShowInstructorAtRegistration = req.ShowInstructorAtRegistration,
+            HasCustomExamCurriculum = req.HasCustomExamCurriculum,
+            // Phase 2 decision metadata
+            DecisionDate = req.DecisionDate,
+            DecisionNo = req.DecisionNo,
+            DecisionNote = req.DecisionNote,
+            // Phase 2 description
+            CurriculumDescription = req.CurriculumDescription,
         };
 
         context.CurriculumCourses.Add(entity);
@@ -409,7 +469,14 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             saved.OpeningReason != null ? saved.OpeningReason.Code : null,
             saved.OpeningReason != null ? saved.OpeningReason.Name : null,
             saved.GroupCode,
-            saved.Course.NationalCredit ?? 0));
+            saved.Course.NationalCredit ?? 0,
+            // Phase 2
+            saved.IsMainGroupCourse, saved.IsFormationCourse,
+            saved.ExcludedFromCreditTotal, saved.ExcludedFromTranscriptTotal,
+            saved.AutoAddOnNewRegistration, saved.ShowAtTakenCurriculum,
+            saved.ShowInstructorAtRegistration, saved.HasCustomExamCurriculum,
+            saved.DecisionDate, saved.DecisionNo, saved.DecisionNote,
+            saved.CurriculumDescription));
     }
 
     // ── PUT /api/curriculum/{id}/courses/{courseId} ──────────────────
@@ -444,6 +511,26 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
         if (req.GroupCode is not null)
             cc.GroupCode = req.GroupCode;
+
+        // Phase 2 — flags
+        if (req.IsMainGroupCourse.HasValue) cc.IsMainGroupCourse = req.IsMainGroupCourse.Value;
+        if (req.IsFormationCourse.HasValue) cc.IsFormationCourse = req.IsFormationCourse.Value;
+        if (req.ExcludedFromCreditTotal.HasValue) cc.ExcludedFromCreditTotal = req.ExcludedFromCreditTotal.Value;
+        if (req.ExcludedFromTranscriptTotal.HasValue) cc.ExcludedFromTranscriptTotal = req.ExcludedFromTranscriptTotal.Value;
+        if (req.AutoAddOnNewRegistration.HasValue) cc.AutoAddOnNewRegistration = req.AutoAddOnNewRegistration.Value;
+        if (req.ShowAtTakenCurriculum.HasValue) cc.ShowAtTakenCurriculum = req.ShowAtTakenCurriculum.Value;
+        if (req.ShowInstructorAtRegistration.HasValue) cc.ShowInstructorAtRegistration = req.ShowInstructorAtRegistration.Value;
+        if (req.HasCustomExamCurriculum.HasValue) cc.HasCustomExamCurriculum = req.HasCustomExamCurriculum.Value;
+
+        // Phase 2 — decision metadata
+        if (req.ClearDecisionDate) cc.DecisionDate = null;
+        else if (req.DecisionDate.HasValue) cc.DecisionDate = req.DecisionDate;
+        if (req.DecisionNo is not null) cc.DecisionNo = req.DecisionNo;
+        if (req.DecisionNote is not null) cc.DecisionNote = req.DecisionNote;
+
+        // Phase 2 — curriculum-specific description
+        if (req.ClearCurriculumDescription) cc.CurriculumDescription = null;
+        else if (req.CurriculumDescription is not null) cc.CurriculumDescription = req.CurriculumDescription;
 
         await context.SaveChangesAsync(ct);
 
@@ -524,7 +611,22 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 ShowOnTranscript = cc.ShowOnTranscript,
                 CategoryId = cc.CategoryId,
                 OpeningReasonId = cc.OpeningReasonId,
-                GroupCode = cc.GroupCode
+                GroupCode = cc.GroupCode,
+                // Phase 2 — flags
+                IsMainGroupCourse = cc.IsMainGroupCourse,
+                IsFormationCourse = cc.IsFormationCourse,
+                ExcludedFromCreditTotal = cc.ExcludedFromCreditTotal,
+                ExcludedFromTranscriptTotal = cc.ExcludedFromTranscriptTotal,
+                AutoAddOnNewRegistration = cc.AutoAddOnNewRegistration,
+                ShowAtTakenCurriculum = cc.ShowAtTakenCurriculum,
+                ShowInstructorAtRegistration = cc.ShowInstructorAtRegistration,
+                HasCustomExamCurriculum = cc.HasCustomExamCurriculum,
+                // Phase 2 — decision metadata
+                DecisionDate = cc.DecisionDate,
+                DecisionNo = cc.DecisionNo,
+                DecisionNote = cc.DecisionNote,
+                // Phase 2 — curriculum-specific description
+                CurriculumDescription = cc.CurriculumDescription,
             });
         }
 
@@ -572,7 +674,16 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
                     cc.GroupCode,
-                    cc.Course.NationalCredit ?? 0))
+                    cc.Course.NationalCredit ?? 0,
+                    // Phase 2 — flags
+                    cc.IsMainGroupCourse, cc.IsFormationCourse,
+                    cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
+                    cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
+                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    // Phase 2 — decision metadata
+                    cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
+                    // Phase 2 — curriculum-specific description
+                    cc.CurriculumDescription))
                 .ToList()));
     }
 

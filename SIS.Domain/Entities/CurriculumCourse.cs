@@ -20,4 +20,23 @@ public class CurriculumCourse
     public string? GroupCode { get; set; }                    // Grup Kodu (seçmeli grup)
     public int? ElectiveGroupId { get; set; }
     public ElectiveGroup? ElectiveGroup { get; set; }
+
+    // ── Phase 2 fields ─────────────────────────────────────────────────
+    // UI flags
+    public bool IsMainGroupCourse { get; set; } = false;          // Bu bir ana grup dersi
+    public bool IsFormationCourse { get; set; } = false;          // Formasyon Dersi
+    public bool ExcludedFromCreditTotal { get; set; } = false;    // Krd Top. Dışı
+    public bool ExcludedFromTranscriptTotal { get; set; } = false;// Transkript Krd/AKTS Toplama Dahil Değil
+    public bool AutoAddOnNewRegistration { get; set; } = false;   // ÖSYM Yeni Kayıtta Otomatik Ekle
+    public bool ShowAtTakenCurriculum { get; set; } = false;      // Alındığı Yerde Göster
+    public bool ShowInstructorAtRegistration { get; set; } = true;// Ders Kayıtta Öğretim Elemanı Görünsün
+    public bool HasCustomExamCurriculum { get; set; } = false;    // Derse Özel Sınav Müfredat Ata
+
+    // Karar bilgileri (senato kararı vb.)
+    public DateTime? DecisionDate { get; set; }
+    public string? DecisionNo { get; set; }
+    public string? DecisionNote { get; set; }
+
+    // Müfredata özel açıklama (Course.Description'dan ayrı)
+    public string? CurriculumDescription { get; set; }
 }

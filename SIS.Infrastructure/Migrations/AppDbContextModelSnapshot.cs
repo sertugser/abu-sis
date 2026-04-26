@@ -883,6 +883,12 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AlternativeName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ApplicationHours")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("CanBeTakenStandalone")
                         .HasColumnType("boolean");
 
@@ -936,7 +942,13 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("NationalCredit")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("OpenType")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("RequiresNoFailedLowerCourses")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowInInfoPackage")
                         .HasColumnType("boolean");
 
                     b.Property<int>("Status")
@@ -1428,14 +1440,38 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("CourseId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AutoAddOnNewRegistration")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("CategoryId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("CurriculumDescription")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DecisionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecisionNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DecisionNote")
+                        .HasColumnType("text");
 
                     b.Property<int?>("ElectiveGroupId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("ExcludedFromCreditTotal")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ExcludedFromTranscriptTotal")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("GroupCode")
                         .HasColumnType("text");
+
+                    b.Property<bool>("HasCustomExamCurriculum")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IncludeInGpa")
                         .HasColumnType("boolean");
@@ -1443,8 +1479,20 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsCompulsory")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsFormationCourse")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsMainGroupCourse")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("OpeningReasonId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ShowAtTakenCurriculum")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowInstructorAtRegistration")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("ShowOnTranscript")
                         .HasColumnType("boolean");

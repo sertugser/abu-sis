@@ -113,6 +113,11 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             course.MinEctsRequired,
             course.RequiresNoFailedLowerCourses,
             course.CanBeTakenStandalone,
+            // Phase 2 — Proliz B "Genel Bilgiler"
+            course.AlternativeName,
+            course.ShowInInfoPackage,
+            course.ApplicationHours,
+            course.OpenType,
             stats,
             chain
         );
@@ -293,7 +298,12 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             MinCreditsRequired = dto.MinCreditsRequired,
             MinEctsRequired = dto.MinEctsRequired,
             RequiresNoFailedLowerCourses = dto.RequiresNoFailedLowerCourses,
-            CanBeTakenStandalone = dto.CanBeTakenStandalone
+            CanBeTakenStandalone = dto.CanBeTakenStandalone,
+            // Phase 2 — Proliz B "Genel Bilgiler"
+            AlternativeName = dto.AlternativeName,
+            ShowInInfoPackage = dto.ShowInInfoPackage,
+            ApplicationHours = dto.ApplicationHours,
+            OpenType = dto.OpenType
         };
         db.Courses.Add(course);
         await db.SaveChangesAsync();
@@ -331,6 +341,11 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         course.MinEctsRequired = dto.MinEctsRequired;
         course.RequiresNoFailedLowerCourses = dto.RequiresNoFailedLowerCourses;
         course.CanBeTakenStandalone = dto.CanBeTakenStandalone;
+        // Phase 2 — Proliz B "Genel Bilgiler"
+        course.AlternativeName = dto.AlternativeName;
+        course.ShowInInfoPackage = dto.ShowInInfoPackage;
+        course.ApplicationHours = dto.ApplicationHours;
+        course.OpenType = dto.OpenType;
         await db.SaveChangesAsync();
         return (await GetCourseByIdAsync(id))!;
     }
