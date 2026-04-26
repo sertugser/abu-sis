@@ -332,6 +332,18 @@ public class CourseRegistrationService : ICourseRegistrationService
         registration.AppliedElectivePoolId = appliedPoolId;
         registration.OpeningReasonIdSnapshot = openingReasonIdSnapshot;
 
+        // Faz 4 — Açma Nedeni BypassMandatoryAttendance=true ise devam zorunluluğunu zorla false yap.
+        // Bu ders için OpeningReason "Dönemsel (Teorik)" gibi bypass flag'liyse, alttan tekrar bile olsa
+        // attendance zorunlu sayılmaz. Madde 7 implement edildiğinde bu override geçerli kalır.
+        if (openingReasonIdSnapshot.HasValue)
+        {
+            var bypassAttendance = await _context.CurriculumCourseOpeningReasons
+                .AsNoTracking()
+                .AnyAsync(r => r.Id == openingReasonIdSnapshot.Value && r.BypassMandatoryAttendance);
+            if (bypassAttendance)
+                registration.MandatoryAttendance = false;
+        }
+
         // === KRİTİK BÖLGE: Serializable transaction + fresh kapasite kontrolü + increment ===
         // Eş zamanlı kayıt çakışmasını önler (B1), kapasite kontrolünü atomik yapar (B3+B4).
         var useTransaction = _context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
@@ -540,6 +552,16 @@ public class CourseRegistrationService : ICourseRegistrationService
                     reg.EctsSnapshot = snapshotEcts;
                     reg.AppliedElectivePoolId = appliedPoolId;
                     reg.OpeningReasonIdSnapshot = openingReasonIdSnapshot;
+
+                    // Faz 4 — BypassMandatoryAttendance flag'i: bu ders için devam zorunluluğunu false zorla.
+                    if (openingReasonIdSnapshot.HasValue)
+                    {
+                        var bypassAttendance = await _context.CurriculumCourseOpeningReasons
+                            .AsNoTracking()
+                            .AnyAsync(r => r.Id == openingReasonIdSnapshot.Value && r.BypassMandatoryAttendance);
+                        if (bypassAttendance)
+                            reg.MandatoryAttendance = false;
+                    }
 
                     section.EnrolledCount++;
                     registrations.Add(reg);
