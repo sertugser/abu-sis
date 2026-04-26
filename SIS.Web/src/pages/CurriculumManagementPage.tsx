@@ -11,7 +11,7 @@ import {
   useCopyCurriculum,
 } from '../hooks/useCurriculumManagement';
 import AddCourseDialog from '../components/curriculum-management/AddCourseDialog';
-import CourseDetailSheet from '../components/curriculum-management/CourseDetailSheet';
+import CurriculumCourseEditDialog from './curriculum-management/CurriculumCourseEditDialog';
 import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
 import ActivateCurriculumDialog from './curriculum-management/ActivateCurriculumDialog';
@@ -491,15 +491,17 @@ export default function CurriculumManagementPage() {
         catalogRoute={ROUTES.COURSE_CATALOG_ADMIN}
       />
 
-      {/* ── Course Detail / Edit Sheet ── */}
-      <CourseDetailSheet
-        key={`${detailCourseId}-${selectedCurriculumId}`}
-        courseId={detailCourseId}
-        curriculumId={selectedCurriculumId}
-        open={showDetailSheet}
-        onOpenChange={setShowDetailSheet}
-        curriculumCourse={detailCurriculumCourse}
-      />
+      {/* ── Course Edit Dialog (Proliz B style, edit-only) ── */}
+      {detailCourseId !== null && selectedCurriculumId !== null && detailCurriculumCourse && (
+        <CurriculumCourseEditDialog
+          key={`${detailCourseId}-${selectedCurriculumId}`}
+          open={showDetailSheet}
+          onClose={() => { setShowDetailSheet(false); setDetailCourseId(null); }}
+          curriculumId={selectedCurriculumId}
+          courseId={detailCourseId}
+          curriculumCourse={detailCurriculumCourse}
+        />
+      )}
 
       {/* ── Müfredat Dönem Kuralları Dialog (Proliz tarzı, 3 panel) ── */}
       {showTermRulesDialog && termRulesTarget && (
