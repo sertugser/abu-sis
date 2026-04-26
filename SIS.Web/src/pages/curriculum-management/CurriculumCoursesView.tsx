@@ -405,7 +405,7 @@ export default function CurriculumCoursesView({
                             <td className="px-3 py-2 text-right">{c.labHours}</td>
                             <td className="px-3 py-2 text-center">{sinif}</td>
                             <td className="px-3 py-2 text-center">{donem}</td>
-                            <td className="px-3 py-2">{c.courseCategory ?? '—'}</td>
+                            <td className="px-3 py-2">{c.categoryName ?? '—'}</td>
                             <td className="px-3 py-2 text-muted-foreground">—</td>
                             <td className="px-3 py-2 text-muted-foreground">—</td>
                             <td className="px-3 py-2 text-center text-muted-foreground">—</td>

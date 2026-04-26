@@ -53,6 +53,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
     public DbSet<ElectiveGroup> ElectiveGroups => Set<ElectiveGroup>();
     public DbSet<ElectiveGroupCourse> ElectiveGroupCourses => Set<ElectiveGroupCourse>();
+    public DbSet<CurriculumCourseOpeningReason> CurriculumCourseOpeningReasons => Set<CurriculumCourseOpeningReason>();
+    public DbSet<CourseCategory> CourseCategories => Set<CourseCategory>();
     public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
     public DbSet<CurriculumTermRule> CurriculumTermRules => Set<CurriculumTermRule>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
@@ -194,6 +196,35 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(cc => cc.ElectiveGroupId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(cc => cc.OpeningReason)
+             .WithMany()
+             .HasForeignKey(cc => cc.OpeningReasonId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(cc => cc.Category)
+             .WithMany()
+             .HasForeignKey(cc => cc.CategoryId)
+             .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── CurriculumCourseOpeningReason (lookup) ───────────────
+        builder.Entity<CurriculumCourseOpeningReason>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Code).IsRequired().HasMaxLength(64);
+            e.Property(r => r.Name).IsRequired().HasMaxLength(128);
+            e.Property(r => r.Description).HasMaxLength(512);
+            e.HasIndex(r => r.Code).IsUnique();
+        });
+
+        // ── CourseCategory (lookup) ──────────────────────────────
+        builder.Entity<CourseCategory>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Code).IsRequired().HasMaxLength(64);
+            e.Property(c => c.Name).IsRequired().HasMaxLength(128);
+            e.HasIndex(c => c.Code).IsUnique();
         });
 
         // ── CoursePrerequisite (composite PK) ────────────────────

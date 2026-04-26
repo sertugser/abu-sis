@@ -38,7 +38,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         int Ects, int TheoryHours, int LabHours,
         int SuggestedSemester, bool IsCompulsory,
         bool IncludeInGpa, bool ShowOnTranscript,
-        string? CourseCategory, string? GroupCode,
+        int? CategoryId, string? CategoryName,
+        int? OpeningReasonId, string? OpeningReasonCode, string? OpeningReasonName,
+        string? GroupCode,
         int NationalCredit);
 
     public record CreateCurriculumRequest(
@@ -62,12 +64,15 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     public record AddCourseRequest(
         int CourseId, int SuggestedSemester, bool IsCompulsory,
         bool IncludeInGpa = true, bool ShowOnTranscript = true,
-        string? CourseCategory = null, string? GroupCode = null);
+        int? CategoryId = null, int? OpeningReasonId = null,
+        string? GroupCode = null);
 
     public record UpdateCourseRequest(
         int? SuggestedSemester = null, bool? IsCompulsory = null,
         bool? IncludeInGpa = null, bool? ShowOnTranscript = null,
-        string? CourseCategory = null, string? GroupCode = null);
+        int? CategoryId = null, int? OpeningReasonId = null,
+        string? GroupCode = null,
+        bool ClearCategory = false, bool ClearOpeningReason = false);
 
     public record CopyCurriculumRequest(string NewVersion);
 
@@ -148,6 +153,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .AsNoTracking()
             .Include(c => c.Program)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Category)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.OpeningReason)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
         if (curriculum is null)
@@ -181,7 +188,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                     cc.SuggestedSemester, cc.IsCompulsory,
                     cc.IncludeInGpa, cc.ShowOnTranscript,
-                    cc.CourseCategory, cc.GroupCode,
+                    cc.CategoryId, cc.Category != null ? cc.Category.Name : null,
+                    cc.OpeningReasonId,
+                    cc.OpeningReason != null ? cc.OpeningReason.Code : null,
+                    cc.OpeningReason != null ? cc.OpeningReason.Name : null,
+                    cc.GroupCode,
                     cc.Course.NationalCredit ?? 0))
                 .ToList());
 
@@ -320,6 +331,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .AsNoTracking()
             .Where(cc => cc.CurriculumId == id)
             .Include(cc => cc.Course)
+            .Include(cc => cc.Category)
+            .Include(cc => cc.OpeningReason)
             .OrderBy(cc => cc.SuggestedSemester)
             .ThenBy(cc => cc.Course.Code)
             .Select(cc => new CurriculumCourseItemDto(
@@ -327,7 +340,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                 cc.SuggestedSemester, cc.IsCompulsory,
                 cc.IncludeInGpa, cc.ShowOnTranscript,
-                cc.CourseCategory, cc.GroupCode,
+                cc.CategoryId, cc.Category != null ? cc.Category.Name : null,
+                cc.OpeningReasonId,
+                cc.OpeningReason != null ? cc.OpeningReason.Code : null,
+                cc.OpeningReason != null ? cc.OpeningReason.Name : null,
+                cc.GroupCode,
                 cc.Course.NationalCredit ?? 0))
             .ToListAsync(ct);
 
@@ -366,20 +383,33 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             IsCompulsory = req.IsCompulsory,
             IncludeInGpa = req.IncludeInGpa,
             ShowOnTranscript = req.ShowOnTranscript,
-            CourseCategory = req.CourseCategory,
+            CategoryId = req.CategoryId,
+            OpeningReasonId = req.OpeningReasonId,
             GroupCode = req.GroupCode
         };
 
         context.CurriculumCourses.Add(entity);
         await context.SaveChangesAsync(ct);
 
+        // Re-fetch to populate navigation names for the response
+        var saved = await context.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Course)
+            .Include(cc => cc.Category)
+            .Include(cc => cc.OpeningReason)
+            .FirstAsync(cc => cc.CurriculumId == id && cc.CourseId == req.CourseId, ct);
+
         return Ok(new CurriculumCourseItemDto(
-            course.Id, course.Code, course.Name,
-            course.Ects, course.TheoryHours, course.LabHours,
-            req.SuggestedSemester, req.IsCompulsory,
-            req.IncludeInGpa, req.ShowOnTranscript,
-            req.CourseCategory, req.GroupCode,
-            course.NationalCredit ?? 0));
+            saved.CourseId, saved.Course.Code, saved.Course.Name,
+            saved.Course.Ects, saved.Course.TheoryHours, saved.Course.LabHours,
+            saved.SuggestedSemester, saved.IsCompulsory,
+            saved.IncludeInGpa, saved.ShowOnTranscript,
+            saved.CategoryId, saved.Category != null ? saved.Category.Name : null,
+            saved.OpeningReasonId,
+            saved.OpeningReason != null ? saved.OpeningReason.Code : null,
+            saved.OpeningReason != null ? saved.OpeningReason.Name : null,
+            saved.GroupCode,
+            saved.Course.NationalCredit ?? 0));
     }
 
     // ── PUT /api/curriculum/{id}/courses/{courseId} ──────────────────
@@ -405,8 +435,13 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             cc.IncludeInGpa = req.IncludeInGpa.Value;
         if (req.ShowOnTranscript.HasValue)
             cc.ShowOnTranscript = req.ShowOnTranscript.Value;
-        if (req.CourseCategory is not null)
-            cc.CourseCategory = req.CourseCategory;
+
+        if (req.ClearCategory) cc.CategoryId = null;
+        else if (req.CategoryId.HasValue) cc.CategoryId = req.CategoryId;
+
+        if (req.ClearOpeningReason) cc.OpeningReasonId = null;
+        else if (req.OpeningReasonId.HasValue) cc.OpeningReasonId = req.OpeningReasonId;
+
         if (req.GroupCode is not null)
             cc.GroupCode = req.GroupCode;
 
@@ -487,8 +522,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 IsCompulsory = cc.IsCompulsory,
                 IncludeInGpa = cc.IncludeInGpa,
                 ShowOnTranscript = cc.ShowOnTranscript,
-                CourseCategory = cc.CourseCategory,
-                OpeningReason = cc.OpeningReason,
+                CategoryId = cc.CategoryId,
+                OpeningReasonId = cc.OpeningReasonId,
                 GroupCode = cc.GroupCode
             });
         }
@@ -500,6 +535,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .AsNoTracking()
             .Include(c => c.Program)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Category)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.OpeningReason)
             .FirstAsync(c => c.Id == newCurriculum.Id, ct);
 
         return Ok(new CurriculumDetailDto(
@@ -530,7 +567,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                     cc.SuggestedSemester, cc.IsCompulsory,
                     cc.IncludeInGpa, cc.ShowOnTranscript,
-                    cc.CourseCategory, cc.GroupCode,
+                    cc.CategoryId, cc.Category != null ? cc.Category.Name : null,
+                    cc.OpeningReasonId,
+                    cc.OpeningReason != null ? cc.OpeningReason.Code : null,
+                    cc.OpeningReason != null ? cc.OpeningReason.Name : null,
+                    cc.GroupCode,
                     cc.Course.NationalCredit ?? 0))
                 .ToList()));
     }

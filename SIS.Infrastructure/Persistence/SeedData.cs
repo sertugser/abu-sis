@@ -27,6 +27,10 @@ public static partial class SeedData
         await SeedEvaluationQuestionsAsync(context);
         await SeedConstraintProfilesAsync(context);
 
+        // ── Course lookups (Açma Nedeni + Ders Kategorisi) ────
+        await CurriculumCourseOpeningReasonSeed.SeedAsync(context);
+        await CourseCategorySeed.SeedAsync(context);
+
         // ── RBAC Phase 1 (Sprint 1.4) ──────────────────────────
         // Sıra önemli: Permission → MenuStructure (perm lookup gerekli) → RolePermission (perm + rol lookup)
         await PermissionSeed.SeedAsync(context);

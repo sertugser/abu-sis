@@ -60,7 +60,11 @@ export interface CurriculumCourseItemDto {
   isCompulsory: boolean;
   includeInGpa: boolean;
   showOnTranscript: boolean;
-  courseCategory: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  openingReasonId: number | null;
+  openingReasonCode: string | null;
+  openingReasonName: string | null;
   groupCode: string | null;
   nationalCredit: number;
 }
@@ -109,7 +113,8 @@ export interface AddCourseRequest {
   isCompulsory: boolean;
   includeInGpa?: boolean;
   showOnTranscript?: boolean;
-  courseCategory?: string;
+  categoryId?: number | null;
+  openingReasonId?: number | null;
   groupCode?: string;
 }
 
@@ -118,8 +123,11 @@ export interface UpdateCourseRequest {
   isCompulsory?: boolean;
   includeInGpa?: boolean;
   showOnTranscript?: boolean;
-  courseCategory?: string;
+  categoryId?: number | null;
+  openingReasonId?: number | null;
   groupCode?: string;
+  clearCategory?: boolean;
+  clearOpeningReason?: boolean;
 }
 
 export interface CopyCurriculumRequest {
