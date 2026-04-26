@@ -16,6 +16,10 @@ interface Props {
   onCurriculumSpecificChange?: (next: CurriculumSpecificState) => void;
 
   showSharedHints?: boolean;
+
+  /** When true, Course-level fields (Dil, Öğretim Şekli, Sınav Tipi, Açma Tipi) are hidden —
+   *  used in "Add Course" flow where Course already exists in catalog and these come from there. */
+  hideCourseFields?: boolean;
 }
 
 export default function ClassificationSection({
@@ -24,6 +28,7 @@ export default function ClassificationSection({
   curriculumSpecific,
   onCurriculumSpecificChange,
   showSharedHints = false,
+  hideCourseFields = false,
 }: Props) {
   const { data: openingReasons } = useOpeningReasons();
   const { data: categories } = useCourseCategories();
@@ -32,6 +37,8 @@ export default function ClassificationSection({
     <fieldset className="space-y-3">
       <legend className="text-sm font-semibold mb-2">Sınıflandırma</legend>
 
+      {!hideCourseFields && (
+      <>
       <div className="grid grid-cols-2 gap-3">
         <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
           <div className="space-y-1">
@@ -114,6 +121,8 @@ export default function ClassificationSection({
           </div>
         </SharedFieldWrapper>
       </div>
+      </>
+      )}
 
       {curriculumSpecific !== undefined && onCurriculumSpecificChange !== undefined && (
         <div className="grid grid-cols-2 gap-3">

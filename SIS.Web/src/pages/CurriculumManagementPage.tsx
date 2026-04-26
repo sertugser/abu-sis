@@ -373,10 +373,10 @@ export default function CurriculumManagementPage() {
     );
   }
 
-  function handleAddCourse(courseId: number, semester: number, isCompulsory: boolean) {
+  function handleAddCourse(req: import('../types/curriculumManagement').AddCourseRequest) {
     if (!selectedCurriculumId) return;
     addCourseMut.mutate(
-      { curriculumId: selectedCurriculumId, courseId, suggestedSemester: semester, isCompulsory },
+      { curriculumId: selectedCurriculumId, ...req },
       { onSuccess: () => setShowAddCourse(false) },
     );
   }
