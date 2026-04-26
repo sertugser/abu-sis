@@ -326,13 +326,25 @@ export default function App() {
                     <Route path="duyuru-yonetimi" element={<AnnouncementManagementPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={['SystemAdministrator']} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.system-config.view" />}>
                     <Route path="sistem-ayarlari" element={<SystemConfigPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.audit-log.view" />}>
                     <Route path="denetim-kayitlari" element={<AuditLogPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.degerlendirme-donemi-yonetimi.view" />}>
                     <Route path="degerlendirme-donemi-yonetimi" element={<EvaluationPeriodAdminPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.osym-kayit-takvimi.view" />}>
                     <Route path="osym-kayit-takvimi" element={<OsymRegistrationCalendarPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-saatleri-yonetimi.view" />}>
                     <Route path="ders-saatleri-yonetimi" element={<TimeSlotManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.subelendirme-islemleri.view" />}>
                     <Route path="subelendirme-islemleri" element={<SectioningPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.ders-kontenjan-islemleri.view" />}>
                     <Route path="ders-kontenjan-islemleri" element={<CourseQuotaPage />} />
                   </Route>
 
