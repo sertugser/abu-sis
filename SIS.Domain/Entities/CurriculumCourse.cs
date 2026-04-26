@@ -39,4 +39,11 @@ public class CurriculumCourse
 
     // Müfredata özel açıklama (Course.Description'dan ayrı)
     public string? CurriculumDescription { get; set; }
+
+    // ── Phase 3 — İntibak (Son Aktif Ders Kodu) ─────────────────────────
+    // Müfredat versiyonu değişiminde yeni dersin eski karşılığı.
+    // Tek yönlü (yeni → eski) ve müfredata özel — CourseEquivalency'den (paylaşımlı + simetrik) ayrı.
+    // Null = intibak tanımsız.
+    public int? PreviousCourseId { get; set; }
+    public Course? PreviousCourse { get; set; }
 }

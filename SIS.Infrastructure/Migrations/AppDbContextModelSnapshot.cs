@@ -1488,6 +1488,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("OpeningReasonId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PreviousCourseId")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("ShowAtTakenCurriculum")
                         .HasColumnType("boolean");
 
@@ -1509,6 +1512,8 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("ElectiveGroupId");
 
                     b.HasIndex("OpeningReasonId");
+
+                    b.HasIndex("PreviousCourseId");
 
                     b.ToTable("CurriculumCourses");
                 });
@@ -3771,6 +3776,11 @@ namespace SIS.Infrastructure.Migrations
                         .HasForeignKey("OpeningReasonId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SIS.Domain.Entities.Course", "PreviousCourse")
+                        .WithMany()
+                        .HasForeignKey("PreviousCourseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Category");
 
                     b.Navigation("Course");
@@ -3780,6 +3790,8 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("ElectiveGroup");
 
                     b.Navigation("OpeningReason");
+
+                    b.Navigation("PreviousCourse");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CurriculumElectivePool", b =>

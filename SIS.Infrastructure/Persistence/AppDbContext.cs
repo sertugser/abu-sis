@@ -206,6 +206,14 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(cc => cc.CategoryId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            // Phase 3 — İntibak (predecessor course); restrict delete to keep historical link safe
+            e.HasOne(cc => cc.PreviousCourse)
+             .WithMany()
+             .HasForeignKey(cc => cc.PreviousCourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(cc => cc.PreviousCourseId);
         });
 
         // ── CurriculumCourseOpeningReason (lookup) ───────────────

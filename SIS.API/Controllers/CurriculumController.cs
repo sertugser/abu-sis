@@ -50,7 +50,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         // Phase 2 — decision metadata
         DateTime? DecisionDate, string? DecisionNo, string? DecisionNote,
         // Phase 2 — curriculum-specific description
-        string? CurriculumDescription);
+        string? CurriculumDescription,
+        // Phase 3 — İntibak (önceki ders, müfredata özel + tek yönlü)
+        int? PreviousCourseId, string? PreviousCourseCode, string? PreviousCourseName);
 
     public record CreateCurriculumRequest(
         int ProgramId, string Version,
@@ -83,7 +85,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         // Phase 2 decision metadata
         DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
         // Phase 2 description
-        string? CurriculumDescription = null);
+        string? CurriculumDescription = null,
+        // Phase 3 — İntibak
+        int? PreviousCourseId = null);
 
     public record UpdateCourseRequest(
         int? SuggestedSemester = null, bool? IsCompulsory = null,
@@ -101,7 +105,10 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         bool ClearDecisionDate = false,
         // Phase 2 description
         string? CurriculumDescription = null,
-        bool ClearCurriculumDescription = false);
+        bool ClearCurriculumDescription = false,
+        // Phase 3 — İntibak (null = no change; ClearPreviousCourse=true → null)
+        int? PreviousCourseId = null,
+        bool ClearPreviousCourse = false);
 
     public record CopyCurriculumRequest(string NewVersion);
 
@@ -184,6 +191,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Category)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.OpeningReason)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.PreviousCourse)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
         if (curriculum is null)
@@ -231,7 +239,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     // Phase 2 — decision metadata
                     cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                     // Phase 2 — curriculum-specific description
-                    cc.CurriculumDescription))
+                    cc.CurriculumDescription,
+                    // Phase 3 — İntibak
+                    cc.PreviousCourseId,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
                 .ToList());
 
         return Ok(dto);
@@ -371,6 +383,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .Include(cc => cc.Course)
             .Include(cc => cc.Category)
             .Include(cc => cc.OpeningReason)
+            .Include(cc => cc.PreviousCourse)
             .OrderBy(cc => cc.SuggestedSemester)
             .ThenBy(cc => cc.Course.Code)
             .Select(cc => new CurriculumCourseItemDto(
@@ -390,7 +403,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
                 cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
                 cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
-                cc.CurriculumDescription))
+                cc.CurriculumDescription,
+                // Phase 3
+                cc.PreviousCourseId,
+                cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
+                cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
             .ToListAsync(ct);
 
         return Ok(courses);
@@ -420,6 +437,17 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         if (alreadyExists)
             return BadRequest(new { message = "Bu ders müfredatta zaten mevcut." });
 
+        // Phase 3 — İntibak validation
+        if (req.PreviousCourseId.HasValue)
+        {
+            if (req.PreviousCourseId.Value == req.CourseId)
+                return BadRequest(new { message = "Bir ders kendisinin önceki dersi olamaz." });
+            var prevExists = await context.Set<Domain.Entities.Course>()
+                .AnyAsync(c => c.Id == req.PreviousCourseId.Value, ct);
+            if (!prevExists)
+                return NotFound(new { message = "İntibak için seçilen önceki ders bulunamadı." });
+        }
+
         var entity = new Domain.Entities.CurriculumCourse
         {
             CurriculumId = id,
@@ -446,6 +474,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             DecisionNote = req.DecisionNote,
             // Phase 2 description
             CurriculumDescription = req.CurriculumDescription,
+            // Phase 3 — İntibak
+            PreviousCourseId = req.PreviousCourseId,
         };
 
         context.CurriculumCourses.Add(entity);
@@ -457,6 +487,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .Include(cc => cc.Course)
             .Include(cc => cc.Category)
             .Include(cc => cc.OpeningReason)
+            .Include(cc => cc.PreviousCourse)
             .FirstAsync(cc => cc.CurriculumId == id && cc.CourseId == req.CourseId, ct);
 
         return Ok(new CurriculumCourseItemDto(
@@ -476,7 +507,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             saved.AutoAddOnNewRegistration, saved.ShowAtTakenCurriculum,
             saved.ShowInstructorAtRegistration, saved.HasCustomExamCurriculum,
             saved.DecisionDate, saved.DecisionNo, saved.DecisionNote,
-            saved.CurriculumDescription));
+            saved.CurriculumDescription,
+            // Phase 3
+            saved.PreviousCourseId,
+            saved.PreviousCourse != null ? saved.PreviousCourse.Code : null,
+            saved.PreviousCourse != null ? saved.PreviousCourse.Name : null));
     }
 
     // ── PUT /api/curriculum/{id}/courses/{courseId} ──────────────────
@@ -531,6 +566,22 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         // Phase 2 — curriculum-specific description
         if (req.ClearCurriculumDescription) cc.CurriculumDescription = null;
         else if (req.CurriculumDescription is not null) cc.CurriculumDescription = req.CurriculumDescription;
+
+        // Phase 3 — İntibak (önceki ders, müfredata özel)
+        if (req.ClearPreviousCourse)
+        {
+            cc.PreviousCourseId = null;
+        }
+        else if (req.PreviousCourseId.HasValue)
+        {
+            if (req.PreviousCourseId.Value == cc.CourseId)
+                return BadRequest(new { message = "Bir ders kendisinin önceki dersi olamaz." });
+            var prevExists = await context.Set<Domain.Entities.Course>()
+                .AnyAsync(c => c.Id == req.PreviousCourseId.Value, ct);
+            if (!prevExists)
+                return NotFound(new { message = "İntibak için seçilen önceki ders bulunamadı." });
+            cc.PreviousCourseId = req.PreviousCourseId;
+        }
 
         await context.SaveChangesAsync(ct);
 
@@ -627,6 +678,8 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 DecisionNote = cc.DecisionNote,
                 // Phase 2 — curriculum-specific description
                 CurriculumDescription = cc.CurriculumDescription,
+                // Phase 3 — İntibak (preserve predecessor link in copied curriculum)
+                PreviousCourseId = cc.PreviousCourseId,
             });
         }
 
@@ -639,6 +692,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Category)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.OpeningReason)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.PreviousCourse)
             .FirstAsync(c => c.Id == newCurriculum.Id, ct);
 
         return Ok(new CurriculumDetailDto(
@@ -683,7 +737,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     // Phase 2 — decision metadata
                     cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                     // Phase 2 — curriculum-specific description
-                    cc.CurriculumDescription))
+                    cc.CurriculumDescription,
+                    // Phase 3 — İntibak
+                    cc.PreviousCourseId,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
                 .ToList()));
     }
 
