@@ -91,7 +91,6 @@ import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import ForbiddenPage from './pages/ForbiddenPage';
 import RolePermissionMatrix from './components/admin/RolePermissionMatrix';
-import { MANAGEMENT_ROLES, DEAN_ROLES } from './lib/roles';
 
 export default function App() {
   return (
@@ -348,11 +347,11 @@ export default function App() {
                     <Route path="ders-kontenjan-islemleri" element={<CourseQuotaPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={DEAN_ROLES} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.program-kontenjan.view" />}>
                     <Route path="program-kontenjan" element={<ProgramQuotaPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute allowedRoles={[...DEAN_ROLES, ...MANAGEMENT_ROLES]} />}>
+                  <Route element={<RoleProtectedRoute permission="menu.program-onayi.view" />}>
                     <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
 
