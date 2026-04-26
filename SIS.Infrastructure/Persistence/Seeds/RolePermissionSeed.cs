@@ -154,8 +154,9 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
-                // Patch: Akademik takvim + duyurular admin'lerden kaldırıldı (Genel İşlemler
+                // Patch: Duyurular admin'lerden kaldırıldı (Genel İşlemler
                 // modülü öğrenci-merkezli). Admin için Duyurular Duyuru Yönetimi altında.
+                "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
                 "menu.akademik-takvim-yonetimi.view",
                 "menu.akademik-takvim-olusturma.view",
@@ -272,7 +273,8 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
-                // Patch: akademik-takvim + duyurular admin'lerden kaldırıldı.
+                // Patch: duyurular admin'lerden kaldırıldı.
+                "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
@@ -398,7 +400,8 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
-                // Patch: akademik-takvim + duyurular admin'lerden kaldırıldı.
+                // Patch: duyurular admin'lerden kaldırıldı.
+                "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
                 "menu.program-kontenjan.view",
                 "menu.ders-katalogu.view",

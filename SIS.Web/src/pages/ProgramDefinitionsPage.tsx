@@ -1,35 +1,35 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus,
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CheckCircle2,
+  ChevronRight,
   Edit2,
-  Trash2,
+  Link2,
+  Plus,
   Search,
   SlidersHorizontal,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  ChevronRight,
-  AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  useAdminFaculties,
   useAdminDepartmentsByStructure,
+  useAdminFaculties,
   useAdminProgramsByStructure,
   useCreateProgram,
-  useUpdateProgram,
   useDeleteProgram,
+  useUpdateProgram,
   type DepartmentDto,
   type ProgramDto,
+  type ProgramUpsertDto,
 } from '../hooks/useAdminAcademicStructure';
-import {
-  ProgramFormFields,
-  DeleteConfirmDialog,
-} from '../components/academic-structure/shared';
+import { DeleteConfirmDialog, ProgramFormFields } from '../components/academic-structure/shared';
 import {
   DEGREE_LEVELS,
   EDUCATION_TYPES,
@@ -37,8 +37,6 @@ import {
   type ProgramFormState,
 } from '../components/academic-structure/shared-constants';
 import { ROUTES } from '@/lib/constants';
-
-// ── Types ────────────────────────────────────────────────────────────────────
 
 type SortKey = 'name' | 'code' | 'degreeLevel' | 'totalRequiredEcts' | 'curriculumCount';
 type SortDir = 'asc' | 'desc';
@@ -50,15 +48,34 @@ interface FilterState {
   curriculumStatus: CurriculumFilter;
 }
 
+interface ProgramDetailPanelProps {
+  program: ProgramDto;
+  faculty: string;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+interface SortHeaderProps {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+}
+
+interface SummaryCardProps {
+  label: string;
+  value: number;
+  tone: 'default' | 'warning' | 'success';
+  helper: string;
+}
+
 const EMPTY_FILTERS: FilterState = {
   degreeLevel: 'all',
   educationType: 'all',
   curriculumStatus: 'all',
 };
 
-const SELECT_CLS = 'h-8 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 shrink-0';
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const SELECT_CLS = 'h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700';
 
 function extractErrorMessage(e: unknown, fallback: string): string {
   const resp = (e as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data;
@@ -66,78 +83,112 @@ function extractErrorMessage(e: unknown, fallback: string): string {
 }
 
 function countActiveFilters(
-  f: FilterState,
+  filters: FilterState,
   facultyId: number | undefined,
   departmentId: number | undefined,
 ): number {
-  let n = 0;
-  if (facultyId !== undefined) n++;
-  if (departmentId !== undefined) n++;
-  if (f.degreeLevel !== 'all') n++;
-  if (f.educationType !== 'all') n++;
-  if (f.curriculumStatus !== 'all') n++;
-  return n;
+  let count = 0;
+  if (facultyId !== undefined) count++;
+  if (departmentId !== undefined) count++;
+  if (filters.degreeLevel !== 'all') count++;
+  if (filters.educationType !== 'all') count++;
+  if (filters.curriculumStatus !== 'all') count++;
+  return count;
 }
 
 function degreeLabel(value: string): string {
-  return DEGREE_LEVELS.find(d => d.value === value)?.label ?? value;
+  return DEGREE_LEVELS.find(item => item.value === value)?.label ?? value;
 }
 
 function educationLabel(value: string): string {
-  return EDUCATION_TYPES.find(t => t.value === value)?.label ?? value;
+  return EDUCATION_TYPES.find(item => item.value === value)?.label ?? value;
+}
+
+function buildProgramPayload(form: ProgramFormState): ProgramUpsertDto {
+  const externalSystemCode = form.externalSystemCode.trim();
+
+  return {
+    name: form.name.trim(),
+    code: form.code.trim(),
+    externalSystemCode: externalSystemCode ? externalSystemCode : null,
+    departmentId: form.departmentId,
+    degreeLevel: form.degreeLevel,
+    educationType: form.educationType,
+    maxStudyDurationSemesters: form.maxStudyDurationSemesters,
+    totalRequiredEcts: form.totalRequiredEcts,
+  };
 }
 
 function CurriculumCountBadge({ count }: { count: number }) {
   if (count === 0) {
     return (
-      <Badge className="bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-100 tabular-nums font-normal">
-        0 müfredat
+      <Badge className="border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50">
+        Müfredat yok
       </Badge>
     );
   }
-  if (count >= 3) {
-    return (
-      <Badge className="bg-blue-100 text-blue-800 border border-blue-300 hover:bg-blue-100 tabular-nums">
-        {count} müfredat
-      </Badge>
-    );
-  }
+
   return (
-    <Badge className="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-50 tabular-nums">
+    <Badge className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50">
       {count} müfredat
     </Badge>
   );
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
+function ExternalCodeBadge({ code }: { code: string | null }) {
+  if (!code) {
+    return (
+      <Badge variant="outline" className="border-slate-200 text-slate-500">
+        Tanımlı değil
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 font-mono text-emerald-700">
+      {code}
+    </Badge>
+  );
+}
+
+function SummaryCard({ label, value, tone, helper }: SummaryCardProps) {
+  const toneMap = {
+    default: 'border-slate-200 bg-white text-slate-900',
+    warning: 'border-amber-200 bg-amber-50/60 text-amber-900',
+    success: 'border-emerald-200 bg-emerald-50/60 text-emerald-900',
+  } as const;
+
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${toneMap[tone]}`}>
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
+      <p className="mt-1 text-xs text-slate-500">{helper}</p>
+    </div>
+  );
+}
 
 export default function ProgramDefinitionsPage() {
   const { data: faculties = [] } = useAdminFaculties();
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
-
-  const [facultyFilter, setFacultyFilter] = useState<number | undefined>(undefined);
-  const [departmentFilter, setDepartmentFilter] = useState<number | undefined>(undefined);
-
-  // Server narrows by department; everything else client-side
-  const { data: programs = [], isLoading } = useAdminProgramsByStructure(departmentFilter);
+  const { data: programs = [], isLoading } = useAdminProgramsByStructure(undefined);
 
   const createProgram = useCreateProgram();
   const updateProgram = useUpdateProgram();
   const deleteProgram = useDeleteProgram();
 
+  const [facultyFilter, setFacultyFilter] = useState<number | undefined>(undefined);
+  const [departmentFilter, setDepartmentFilter] = useState<number | undefined>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [editItem, setEditItem] = useState<ProgramDto | null>(null);
   const [deleteItem, setDeleteItem] = useState<ProgramDto | null>(null);
   const [detailItem, setDetailItem] = useState<ProgramDto | null>(null);
   const [form, setForm] = useState<ProgramFormState>(emptyProgramForm());
   const [formError, setFormError] = useState('');
-
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-
   const [successMessage, setSuccessMessage] = useState('');
   const [actionError, setActionError] = useState('');
 
@@ -146,89 +197,115 @@ export default function ProgramDefinitionsPage() {
   const activeFilterCount = countActiveFilters(filters, facultyFilter, departmentFilter);
   const hasAnyConstraint = search.trim().length > 0 || activeFilterCount > 0;
 
-  // Department dropdown narrows by selected faculty
   const visibleDepartments = useMemo(() => {
     if (!facultyFilter) return allDepartments;
-    return allDepartments.filter(d => d.facultyId === facultyFilter);
+    return allDepartments.filter(item => item.facultyId === facultyFilter);
   }, [allDepartments, facultyFilter]);
 
-  // Department → DepartmentDto lookup (for faculty breadcrumb in rows/details)
-  const deptById = useMemo(() => {
-    const m = new Map<number, DepartmentDto>();
-    allDepartments.forEach(d => m.set(d.id, d));
-    return m;
+  const departmentMap = useMemo(() => {
+    const map = new Map<number, DepartmentDto>();
+    allDepartments.forEach(item => map.set(item.id, item));
+    return map;
   }, [allDepartments]);
 
   const visiblePrograms = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase();
     let result = programs;
 
-    // Client-side faculty filter (backend doesn't support it)
     if (facultyFilter) {
-      const deptIds = new Set(visibleDepartments.map(d => d.id));
-      result = result.filter(p => deptIds.has(p.departmentId));
+      const departmentIds = new Set(visibleDepartments.map(item => item.id));
+      result = result.filter(item => departmentIds.has(item.departmentId));
     }
 
-    if (q) {
-      result = result.filter(p =>
-        p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q),
+    if (departmentFilter) {
+      result = result.filter(item => item.departmentId === departmentFilter);
+    }
+
+    if (query) {
+      result = result.filter(item =>
+        item.name.toLowerCase().includes(query) ||
+        item.code.toLowerCase().includes(query) ||
+        (item.externalSystemCode ?? '').toLowerCase().includes(query),
       );
     }
 
     if (filters.degreeLevel !== 'all') {
-      result = result.filter(p => p.degreeLevel === filters.degreeLevel);
-    }
-    if (filters.educationType !== 'all') {
-      result = result.filter(p => p.educationType === filters.educationType);
-    }
-    if (filters.curriculumStatus === 'has') {
-      result = result.filter(p => p.curriculumCount > 0);
-    } else if (filters.curriculumStatus === 'none') {
-      result = result.filter(p => p.curriculumCount === 0);
+      result = result.filter(item => item.degreeLevel === filters.degreeLevel);
     }
 
-    const sorted = [...result].sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'name') cmp = a.name.localeCompare(b.name, 'tr');
-      else if (sortKey === 'code') cmp = a.code.localeCompare(b.code, 'tr');
-      else if (sortKey === 'degreeLevel') cmp = a.degreeLevel.localeCompare(b.degreeLevel);
-      else if (sortKey === 'totalRequiredEcts') cmp = a.totalRequiredEcts - b.totalRequiredEcts;
-      else cmp = a.curriculumCount - b.curriculumCount;
-      return sortDir === 'asc' ? cmp : -cmp;
+    if (filters.educationType !== 'all') {
+      result = result.filter(item => item.educationType === filters.educationType);
+    }
+
+    if (filters.curriculumStatus === 'has') {
+      result = result.filter(item => item.curriculumCount > 0);
+    } else if (filters.curriculumStatus === 'none') {
+      result = result.filter(item => item.curriculumCount === 0);
+    }
+
+    return [...result].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortKey === 'name') comparison = a.name.localeCompare(b.name, 'tr');
+      else if (sortKey === 'code') comparison = a.code.localeCompare(b.code, 'tr');
+      else if (sortKey === 'degreeLevel') comparison = a.degreeLevel.localeCompare(b.degreeLevel, 'tr');
+      else if (sortKey === 'totalRequiredEcts') comparison = a.totalRequiredEcts - b.totalRequiredEcts;
+      else comparison = a.curriculumCount - b.curriculumCount;
+
+      return sortDir === 'asc' ? comparison : -comparison;
     });
-    return sorted;
-  }, [programs, facultyFilter, visibleDepartments, search, filters, sortKey, sortDir]);
+  }, [departmentFilter, facultyFilter, filters, programs, search, sortDir, sortKey, visibleDepartments]);
+
+  const summary = useMemo(() => {
+    const missingCurriculum = visiblePrograms.filter(item => item.curriculumCount === 0).length;
+    const missingExternalCode = visiblePrograms.filter(item => !item.externalSystemCode).length;
+    const fullyReady = visiblePrograms.filter(item => item.curriculumCount > 0 && item.externalSystemCode).length;
+
+    return {
+      total: visiblePrograms.length,
+      missingCurriculum,
+      missingExternalCode,
+      fullyReady,
+    };
+  }, [visiblePrograms]);
 
   function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortKey(key); setSortDir('asc'); }
+    if (sortKey === key) {
+      setSortDir(current => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setSortKey(key);
+    setSortDir('asc');
   }
 
-  function showSuccess(msg: string) {
-    setSuccessMessage(msg);
+  function showSuccess(message: string) {
+    setSuccessMessage(message);
     setTimeout(() => setSuccessMessage(''), 3000);
   }
 
   function openCreate() {
-    setForm(emptyProgramForm(departmentFilter ?? visibleDepartments[0]?.id ?? 0));
+    const fallbackDepartmentId = departmentFilter ?? visibleDepartments[0]?.id ?? allDepartments[0]?.id ?? 0;
+    setForm(emptyProgramForm(fallbackDepartmentId));
     setFormError('');
     setEditItem(null);
     setCreateOpen(true);
   }
 
-  function openEdit(p: ProgramDto) {
+  function openEdit(program: ProgramDto) {
     setForm({
-      name: p.name,
-      code: p.code,
-      departmentId: p.departmentId,
-      degreeLevel: p.degreeLevel,
-      educationType: p.educationType,
-      maxStudyDurationSemesters: p.maxStudyDurationSemesters,
-      totalRequiredEcts: p.totalRequiredEcts,
+      name: program.name,
+      code: program.code,
+      externalSystemCode: program.externalSystemCode ?? '',
+      departmentId: program.departmentId,
+      degreeLevel: program.degreeLevel,
+      educationType: program.educationType,
+      maxStudyDurationSemesters: program.maxStudyDurationSemesters,
+      totalRequiredEcts: program.totalRequiredEcts,
     });
     setFormError('');
     setCreateOpen(false);
-    setEditItem(p);
+    setEditItem(program);
   }
 
   function closeDialog() {
@@ -238,18 +315,22 @@ export default function ProgramDefinitionsPage() {
   }
 
   async function handleSubmit() {
-    if (!form.name.trim() || !form.code.trim() || !form.departmentId) {
-      setFormError('Tüm alanlar zorunludur.');
+    const payload = buildProgramPayload(form);
+
+    if (!payload.name || !payload.code || !payload.departmentId) {
+      setFormError('Program adı, kod ve bölüm alanları zorunludur.');
       return;
     }
+
     try {
       if (editItem) {
-        await updateProgram.mutateAsync({ id: editItem.id, ...form });
+        await updateProgram.mutateAsync({ id: editItem.id, ...payload });
         showSuccess('Program güncellendi.');
       } else {
-        await createProgram.mutateAsync(form);
+        await createProgram.mutateAsync(payload);
         showSuccess('Program eklendi.');
       }
+
       closeDialog();
     } catch (e: unknown) {
       setFormError(extractErrorMessage(e, 'Kaydedilemedi.'));
@@ -258,6 +339,7 @@ export default function ProgramDefinitionsPage() {
 
   async function handleDelete() {
     if (!deleteItem) return;
+
     const target = deleteItem;
     try {
       await deleteProgram.mutateAsync(target.id);
@@ -277,15 +359,15 @@ export default function ProgramDefinitionsPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {actionError && (
-        <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive flex items-start gap-2">
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <span className="shrink-0 font-semibold">Hata:</span>
           <span className="flex-1">{actionError}</span>
           <button
             type="button"
             onClick={() => setActionError('')}
-            className="shrink-0 text-destructive hover:text-destructive/80 font-bold"
+            className="shrink-0 font-bold text-destructive hover:text-destructive/80"
             aria-label="Hatayı kapat"
           >
             &times;
@@ -293,17 +375,37 @@ export default function ProgramDefinitionsPage() {
         </div>
       )}
 
-      {/* ── Merged card: toolbar + table + footer ── */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-200 bg-slate-50/40 flex-wrap">
+      <div className="grid gap-3 md:grid-cols-4">
+        <SummaryCard label="Görünen Program" value={summary.total} tone="default" helper="Mevcut filtrelerle listelenen toplam kayıt." />
+        <SummaryCard label="Müfredatı Eksik" value={summary.missingCurriculum} tone="warning" helper="Bu programlarda sonraki ders akışları eksik kalabilir." />
+        <SummaryCard label="Dış Kodu Eksik" value={summary.missingExternalCode} tone="default" helper="Şimdilik zorunlu değil, ama entegrasyon hazırlığı için tamamlanabilir." />
+        <SummaryCard label="Tam Hazır" value={summary.fullyReady} tone="success" helper="Müfredatı ve dış sistem kodu birlikte tanımlı olan programlar." />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+        <div className="flex items-start gap-3">
+          <div className="rounded-full bg-white p-2 text-slate-700">
+            <Link2 className="h-4 w-4" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-900">Program tanımı sonrası gizli kalan adımları görünür tutuyoruz.</p>
+            <p className="text-sm text-slate-600">
+              Kılavuzlardaki en büyük sorun, kullanıcıların programı ekledikten sonra neden ilerleyemediğini sonradan fark etmesiydi.
+              Bu ekranda artık müfredat eksikliği ve dış sistem kodu hazırlığı doğrudan görünüyor.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50/40 px-4 py-2">
           <div className="relative shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Ad veya kod ara..."
+              placeholder="Ad, kod veya dış sistem kodu ara..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-8 h-8 w-64 text-sm"
+              className="h-8 w-72 pl-8 text-sm"
             />
           </div>
 
@@ -316,7 +418,7 @@ export default function ProgramDefinitionsPage() {
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Filtreler
             {activeFilterCount > 0 && (
-              <Badge className="ml-0.5 h-4 px-1.5 text-[10px] bg-primary text-primary-foreground tabular-nums">
+              <Badge className="ml-0.5 h-4 bg-primary px-1.5 text-[10px] text-primary-foreground">
                 {activeFilterCount}
               </Badge>
             )}
@@ -325,7 +427,7 @@ export default function ProgramDefinitionsPage() {
           {hasAnyConstraint && (
             <button
               type="button"
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0"
+              className="shrink-0 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               onClick={clearAll}
             >
               Temizle
@@ -334,184 +436,187 @@ export default function ProgramDefinitionsPage() {
 
           <div className="flex-1" />
 
-          {successMessage && (
-            <span className="text-xs font-medium text-emerald-600 shrink-0">{successMessage}</span>
-          )}
+          {successMessage && <span className="shrink-0 text-xs font-medium text-emerald-600">{successMessage}</span>}
 
-          <Button size="sm" className="h-8 shrink-0" onClick={openCreate} disabled={visibleDepartments.length === 0}>
-            <Plus className="h-4 w-4 mr-1" /> Program Ekle
+          <Button size="sm" className="h-8 shrink-0" onClick={openCreate} disabled={allDepartments.length === 0}>
+            <Plus className="mr-1 h-4 w-4" />
+            Program Ekle
           </Button>
         </div>
 
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600">
-                <SortHeader label="Ad" active={sortKey === 'name'} dir={sortDir} onClick={() => toggleSort('name')} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600 w-28">
-                <SortHeader label="Kod" active={sortKey === 'code'} dir={sortDir} onClick={() => toggleSort('code')} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600 w-60">Fakülte / Bölüm</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600 w-36">
-                <SortHeader label="Derece" active={sortKey === 'degreeLevel'} dir={sortDir} onClick={() => toggleSort('degreeLevel')} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600 w-28">Öğretim</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600 w-24">Süre</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600 w-24">
-                <SortHeader label="AKTS" active={sortKey === 'totalRequiredEcts'} dir={sortDir} onClick={() => toggleSort('totalRequiredEcts')} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600 w-36">
-                <SortHeader label="Müfredat" active={sortKey === 'curriculumCount'} dir={sortDir} onClick={() => toggleSort('curriculumCount')} />
-              </th>
-              <th className="px-4 py-3 w-44" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Yükleniyor...</td>
+                <th className="px-4 py-3 text-left font-semibold text-slate-600">
+                  <SortHeader label="Ad" active={sortKey === 'name'} dir={sortDir} onClick={() => toggleSort('name')} />
+                </th>
+                <th className="w-28 px-4 py-3 text-left font-semibold text-slate-600">
+                  <SortHeader label="Kod" active={sortKey === 'code'} dir={sortDir} onClick={() => toggleSort('code')} />
+                </th>
+                <th className="w-40 px-4 py-3 text-left font-semibold text-slate-600">Dış Kod</th>
+                <th className="w-60 px-4 py-3 text-left font-semibold text-slate-600">Fakülte / Bölüm</th>
+                <th className="w-36 px-4 py-3 text-left font-semibold text-slate-600">
+                  <SortHeader label="Derece" active={sortKey === 'degreeLevel'} dir={sortDir} onClick={() => toggleSort('degreeLevel')} />
+                </th>
+                <th className="w-28 px-4 py-3 text-left font-semibold text-slate-600">Öğretim</th>
+                <th className="w-28 px-4 py-3 text-left font-semibold text-slate-600">Azami Süre</th>
+                <th className="w-24 px-4 py-3 text-left font-semibold text-slate-600">
+                  <SortHeader label="AKTS" active={sortKey === 'totalRequiredEcts'} dir={sortDir} onClick={() => toggleSort('totalRequiredEcts')} />
+                </th>
+                <th className="w-36 px-4 py-3 text-left font-semibold text-slate-600">
+                  <SortHeader label="Müfredat" active={sortKey === 'curriculumCount'} dir={sortDir} onClick={() => toggleSort('curriculumCount')} />
+                </th>
+                <th className="w-44 px-4 py-3" />
               </tr>
-            ) : visiblePrograms.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-4 py-14">
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <div>
-                      <p className="font-medium text-foreground">
-                        {hasAnyConstraint ? 'Kriterle eşleşen program bulunamadı.' : 'Henüz program tanımlı değil.'}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {hasAnyConstraint
-                          ? 'Arama veya filtre kriterini değiştirebilirsiniz.'
-                          : 'İlk programı ekleyerek akademik yapıyı tamamlayın.'}
-                      </p>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
+                    Yükleniyor...
+                  </td>
+                </tr>
+              ) : visiblePrograms.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-14">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {hasAnyConstraint ? 'Kriterle eşleşen program bulunamadı.' : 'Henüz program tanımlı değil.'}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {hasAnyConstraint
+                            ? 'Arama veya filtre kriterini değiştirerek yeniden deneyebilirsiniz.'
+                            : 'İlk programı ekleyerek akademik yapıyı oluşturmaya başlayın.'}
+                        </p>
+                      </div>
+                      {!hasAnyConstraint && (
+                        <Button size="sm" className="h-8" onClick={openCreate} disabled={allDepartments.length === 0}>
+                          <Plus className="mr-1 h-4 w-4" />
+                          İlk Programı Ekle
+                        </Button>
+                      )}
                     </div>
-                    {!hasAnyConstraint && (
-                      <Button size="sm" className="h-8" onClick={openCreate} disabled={visibleDepartments.length === 0}>
-                        <Plus className="h-4 w-4 mr-1" /> İlk Programı Ekle
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              visiblePrograms.map(p => {
-                const dept = deptById.get(p.departmentId);
-                const facultyName = dept?.facultyName ?? '—';
-                const isEmpty = p.curriculumCount === 0;
-                return (
-                  <tr
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setDetailItem(p)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setDetailItem(p);
-                      }
-                    }}
-                    title={`${p.name} — detayları göster`}
-                    className={`group cursor-pointer transition-colors border-l-2 focus:outline-none focus:bg-slate-50/80 ${
-                      isEmpty
-                        ? 'border-l-amber-300/70 bg-amber-50/20 hover:bg-amber-50/40'
-                        : 'border-l-transparent hover:bg-slate-50/60'
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 font-medium text-foreground">
-                        {p.name}
-                        {isEmpty && (
-                          <span title="Bu program için henüz müfredat eklenmemiş">
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        variant="outline"
-                        className="font-mono text-xs tabular-nums uppercase tracking-wide"
-                      >
-                        {p.code}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs truncate">
-                      {facultyName} / {p.departmentName}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{degreeLabel(p.degreeLevel)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{educationLabel(p.educationType)}</td>
-                    <td className="px-4 py-3 text-muted-foreground tabular-nums">{p.maxStudyDurationSemesters} dönem</td>
-                    <td className="px-4 py-3 text-muted-foreground tabular-nums">{p.totalRequiredEcts}</td>
-                    <td className="px-4 py-3">
-                      <CurriculumCountBadge count={p.curriculumCount} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div
-                        className="flex items-center gap-2 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 hover:bg-slate-200/60"
-                          title="Düzenle"
-                          onClick={() => openEdit(p)}
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <div className="w-px h-5 bg-slate-200" />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 hover:bg-destructive/10"
-                          title="Sil"
-                          onClick={() => setDeleteItem(p)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground/60 ml-1 shrink-0" />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                  </td>
+                </tr>
+              ) : (
+                visiblePrograms.map(program => {
+                  const department = departmentMap.get(program.departmentId);
+                  const facultyName = department?.facultyName ?? '—';
+                  const hasCurriculum = program.curriculumCount > 0;
 
-        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50/60 flex items-center justify-between flex-wrap gap-3">
-          <span className="text-xs text-muted-foreground tabular-nums">
+                  return (
+                    <tr
+                      key={program.id}
+                      role="button"
+                      tabIndex={0}
+                      title={`${program.name} - detayları göster`}
+                      className={`group cursor-pointer border-l-2 transition-colors focus:bg-slate-50/80 focus:outline-none ${
+                        hasCurriculum
+                          ? 'border-l-transparent hover:bg-slate-50/60'
+                          : 'border-l-amber-300/70 bg-amber-50/20 hover:bg-amber-50/40'
+                      }`}
+                      onClick={() => setDetailItem(program)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setDetailItem(program);
+                        }
+                      }}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 font-medium text-foreground">
+                          {program.name}
+                          {!hasCurriculum && (
+                            <span title="Bu program için henüz müfredat tanımlı değil.">
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className="font-mono text-xs uppercase tracking-wide">
+                          {program.code}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <ExternalCodeBadge code={program.externalSystemCode} />
+                      </td>
+                      <td className="truncate px-4 py-3 text-xs text-muted-foreground">
+                        {facultyName} / {program.departmentName}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{degreeLabel(program.degreeLevel)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{educationLabel(program.educationType)}</td>
+                      <td className="px-4 py-3 tabular-nums text-muted-foreground">{program.maxStudyDurationSemesters} dönem</td>
+                      <td className="px-4 py-3 tabular-nums text-muted-foreground">{program.totalRequiredEcts}</td>
+                      <td className="px-4 py-3">
+                        <CurriculumCountBadge count={program.curriculumCount} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div
+                          className="flex items-center justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 hover:bg-slate-200/60"
+                            title="Düzenle"
+                            onClick={() => openEdit(program)}
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                          <div className="h-5 w-px bg-slate-200" />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 hover:bg-destructive/10"
+                            title="Sil"
+                            onClick={() => setDeleteItem(program)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                          <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground/60" />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-4 py-3">
+          <span className="text-xs tabular-nums text-muted-foreground">
             {isLoading
               ? 'Yükleniyor...'
               : hasAnyConstraint
-                ? `${programs.length} programdan ${visiblePrograms.length}'i gösteriliyor`
+                ? `${programs.length} programdan ${visiblePrograms.length} kayıt gösteriliyor`
                 : `${programs.length} program`}
           </span>
-          <p className="text-sm text-muted-foreground italic">
-            Programlara bağlı müfredatları yönetmek için →{' '}
-            <Link to={ROUTES.CURRICULUM_MANAGEMENT} className="underline text-blue-600 not-italic">
+          <p className="text-sm italic text-muted-foreground">
+            Program sonrası zorunlu adım:
+            {' '}
+            <Link to={ROUTES.CURRICULUM_MANAGEMENT} className="not-italic text-blue-600 underline">
               Müfredat İşlemleri
             </Link>
           </p>
         </div>
       </div>
 
-      {/* Filter Dialog */}
       <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Filtreler</DialogTitle>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-            {/* Faculty */}
+          <div className="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Fakülte
-              </label>
+              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fakülte</label>
               <select
-                className={SELECT_CLS + ' w-full'}
+                className={`${SELECT_CLS} w-full`}
                 value={facultyFilter ?? ''}
                 onChange={e => {
                   setFacultyFilter(e.target.value ? Number(e.target.value) : undefined);
@@ -519,32 +624,34 @@ export default function ProgramDefinitionsPage() {
                 }}
               >
                 <option value="">Tüm Fakülteler</option>
-                {faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                {faculties.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Department */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Bölüm
-              </label>
+              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bölüm</label>
               <select
-                className={SELECT_CLS + ' w-full'}
+                className={`${SELECT_CLS} w-full`}
                 value={departmentFilter ?? ''}
                 onChange={e => setDepartmentFilter(e.target.value ? Number(e.target.value) : undefined)}
               >
                 <option value="">Tüm Bölümler</option>
-                {visibleDepartments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {visibleDepartments.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Degree level */}
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Derece Düzeyi
-              </label>
+              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Derece Düzeyi</label>
               <div className="flex flex-col gap-0.5 rounded-md border border-slate-200 bg-slate-50/40 p-1.5">
-                <label className="flex items-center gap-2 text-sm cursor-pointer rounded px-2 py-1 hover:bg-white">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
                   <input
                     type="radio"
                     name="degree-filter"
@@ -554,73 +661,61 @@ export default function ProgramDefinitionsPage() {
                   />
                   <span>Tümü</span>
                 </label>
-                {DEGREE_LEVELS.map(d => (
-                  <label
-                    key={d.value}
-                    className="flex items-center gap-2 text-sm cursor-pointer rounded px-2 py-1 hover:bg-white"
-                  >
+                {DEGREE_LEVELS.map(item => (
+                  <label key={item.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
                     <input
                       type="radio"
                       name="degree-filter"
-                      checked={filters.degreeLevel === d.value}
-                      onChange={() => setFilters({ ...filters, degreeLevel: d.value })}
+                      checked={filters.degreeLevel === item.value}
+                      onChange={() => setFilters({ ...filters, degreeLevel: item.value })}
                       className="accent-primary"
                     />
-                    <span>{d.label}</span>
+                    <span>{item.label}</span>
                   </label>
                 ))}
               </div>
             </div>
 
-            {/* Education type */}
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Eğitim Türü
-              </label>
+              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Eğitim Türü</label>
               <div className="flex flex-col gap-0.5 rounded-md border border-slate-200 bg-slate-50/40 p-1.5">
-                <label className="flex items-center gap-2 text-sm cursor-pointer rounded px-2 py-1 hover:bg-white">
+                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
                   <input
                     type="radio"
-                    name="edu-filter"
+                    name="education-filter"
                     checked={filters.educationType === 'all'}
                     onChange={() => setFilters({ ...filters, educationType: 'all' })}
                     className="accent-primary"
                   />
                   <span>Tümü</span>
                 </label>
-                {EDUCATION_TYPES.map(t => (
-                  <label
-                    key={t.value}
-                    className="flex items-center gap-2 text-sm cursor-pointer rounded px-2 py-1 hover:bg-white"
-                  >
+                {EDUCATION_TYPES.map(item => (
+                  <label key={item.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
                     <input
                       type="radio"
-                      name="edu-filter"
-                      checked={filters.educationType === t.value}
-                      onChange={() => setFilters({ ...filters, educationType: t.value })}
+                      name="education-filter"
+                      checked={filters.educationType === item.value}
+                      onChange={() => setFilters({ ...filters, educationType: item.value })}
                       className="accent-primary"
                     />
-                    <span>{t.label}</span>
+                    <span>{item.label}</span>
                   </label>
                 ))}
               </div>
             </div>
 
-            {/* Curriculum status — full width on sm+ */}
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Müfredat Durumu
-              </label>
+              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Müfredat Durumu</label>
               <div className="grid grid-cols-3 gap-1.5">
                 {([
                   { value: 'all', label: 'Tümü' },
                   { value: 'has', label: 'Müfredatı olan' },
                   { value: 'none', label: 'Müfredatı olmayan' },
-                ] as { value: CurriculumFilter; label: string }[]).map(opt => (
+                ] as { value: CurriculumFilter; label: string }[]).map(option => (
                   <label
-                    key={opt.value}
-                    className={`flex items-center gap-2 text-sm cursor-pointer rounded-md border px-3 py-2 transition-colors ${
-                      filters.curriculumStatus === opt.value
+                    key={option.value}
+                    className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                      filters.curriculumStatus === option.value
                         ? 'border-primary bg-primary/5'
                         : 'border-slate-200 bg-white hover:bg-slate-50'
                     }`}
@@ -628,18 +723,18 @@ export default function ProgramDefinitionsPage() {
                     <input
                       type="radio"
                       name="curriculum-filter"
-                      checked={filters.curriculumStatus === opt.value}
-                      onChange={() => setFilters({ ...filters, curriculumStatus: opt.value })}
+                      checked={filters.curriculumStatus === option.value}
+                      onChange={() => setFilters({ ...filters, curriculumStatus: option.value })}
                       className="accent-primary"
                     />
-                    <span>{opt.label}</span>
+                    <span>{option.label}</span>
                   </label>
                 ))}
               </div>
             </div>
           </div>
 
-          <DialogFooter className="sm:justify-between gap-2 border-t border-slate-200 pt-4 mt-2">
+          <DialogFooter className="mt-2 gap-2 border-t border-slate-200 pt-4 sm:justify-between">
             <Button
               variant="ghost"
               disabled={activeFilterCount === 0}
@@ -656,20 +751,24 @@ export default function ProgramDefinitionsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Create / Edit Dialog (merged) */}
-      <Dialog open={dialogOpen} onOpenChange={o => !o && closeDialog()}>
-        <DialogContent className="max-w-md">
+      <Dialog open={dialogOpen} onOpenChange={open => !open && closeDialog()}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editItem ? 'Program Düzenle' : 'Program Ekle'}</DialogTitle>
           </DialogHeader>
           <ProgramFormFields
             form={form}
-            onChange={f => { setForm(f); setFormError(''); }}
+            onChange={nextForm => {
+              setForm(nextForm);
+              setFormError('');
+            }}
             departments={editItem ? allDepartments : (visibleDepartments.length > 0 ? visibleDepartments : allDepartments)}
           />
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>İptal</Button>
+            <Button variant="outline" onClick={closeDialog}>
+              İptal
+            </Button>
             <Button onClick={handleSubmit} disabled={isSavePending}>
               {isSavePending ? 'Kaydediliyor...' : 'Kaydet'}
             </Button>
@@ -685,12 +784,12 @@ export default function ProgramDefinitionsPage() {
         isPending={deleteProgram.isPending}
       />
 
-      <Dialog open={!!detailItem} onOpenChange={o => !o && setDetailItem(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={!!detailItem} onOpenChange={open => !open && setDetailItem(null)}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           {detailItem && (
             <ProgramDetailPanel
               program={detailItem}
-              faculty={deptById.get(detailItem.departmentId)?.facultyName ?? '—'}
+              faculty={departmentMap.get(detailItem.departmentId)?.facultyName ?? '—'}
               onEdit={() => {
                 const target = detailItem;
                 setDetailItem(null);
@@ -709,160 +808,192 @@ export default function ProgramDefinitionsPage() {
   );
 }
 
-// ── Program Detail Panel ─────────────────────────────────────────────────────
-
-interface ProgramDetailPanelProps {
-  program: ProgramDto;
-  faculty: string;
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
 function ProgramDetailPanel({ program, faculty, onEdit, onDelete }: ProgramDetailPanelProps) {
-  const isEmpty = program.curriculumCount === 0;
+  const hasCurriculum = program.curriculumCount > 0;
+  const hasExternalCode = Boolean(program.externalSystemCode);
 
   return (
     <>
-      <DialogHeader className="pr-10 border-b border-slate-200 pb-4">
+      <DialogHeader className="border-b border-slate-200 pb-4 pr-10">
         <div className="flex flex-wrap items-center gap-3">
           <DialogTitle className="text-2xl">{program.name}</DialogTitle>
-          <Badge variant="outline" className="font-mono text-xs tabular-nums uppercase tracking-wide">
+          <Badge variant="outline" className="font-mono text-xs uppercase tracking-wide">
             {program.code}
           </Badge>
-          {isEmpty && (
-            <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+          {!hasCurriculum && (
+            <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
               <AlertTriangle className="h-3 w-3" />
               Müfredat tanımlı değil
             </span>
           )}
         </div>
-        <p className="text-sm text-muted-foreground mt-1">{faculty} · {program.departmentName}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {faculty} · {program.departmentName}
+        </p>
       </DialogHeader>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-5 pt-2">
-        {/* Left — General info */}
-        <section className="md:col-span-3 space-y-5">
+      <div className="grid grid-cols-1 gap-5 pt-2 md:grid-cols-5">
+        <section className="space-y-5 md:col-span-3">
           <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              Genel Bilgiler
-            </h3>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Genel Bilgiler</h3>
             <dl className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-slate-50/40">
-              <div className="flex justify-between px-3 py-2.5 text-sm">
-                <dt className="text-muted-foreground">Program Adı</dt>
-                <dd className="font-medium text-foreground text-right">{program.name}</dd>
-              </div>
-              <div className="flex justify-between px-3 py-2.5 text-sm">
-                <dt className="text-muted-foreground">Kod</dt>
-                <dd className="font-mono uppercase tracking-wide">{program.code}</dd>
-              </div>
-              <div className="flex justify-between px-3 py-2.5 text-sm">
-                <dt className="text-muted-foreground">Fakülte</dt>
-                <dd className="text-foreground text-right">{faculty}</dd>
-              </div>
-              <div className="flex justify-between px-3 py-2.5 text-sm">
-                <dt className="text-muted-foreground">Bölüm</dt>
-                <dd className="text-foreground text-right">{program.departmentName}</dd>
-              </div>
-              <div className="flex justify-between px-3 py-2.5 text-sm">
-                <dt className="text-muted-foreground">Derece Düzeyi</dt>
-                <dd className="text-foreground text-right">{degreeLabel(program.degreeLevel)}</dd>
-              </div>
-              <div className="flex justify-between px-3 py-2.5 text-sm">
-                <dt className="text-muted-foreground">Eğitim Türü</dt>
-                <dd className="text-foreground text-right">{educationLabel(program.educationType)}</dd>
-              </div>
-              <div className="flex justify-between px-3 py-2.5 text-sm">
-                <dt className="text-muted-foreground">ID</dt>
-                <dd className="font-mono tabular-nums text-muted-foreground">#{program.id}</dd>
-              </div>
+              <DetailRow label="Program Adı" value={program.name} />
+              <DetailRow label="Kod" value={<span className="font-mono uppercase tracking-wide">{program.code}</span>} />
+              <DetailRow
+                label="ÖSYM / Dış Sistem Kodu"
+                value={
+                  program.externalSystemCode ? (
+                    <span className="font-mono uppercase tracking-wide">{program.externalSystemCode}</span>
+                  ) : (
+                    <span className="text-muted-foreground">Henüz tanımlı değil</span>
+                  )
+                }
+              />
+              <DetailRow label="Fakülte" value={faculty} />
+              <DetailRow label="Bölüm" value={program.departmentName} />
+              <DetailRow label="Derece Düzeyi" value={degreeLabel(program.degreeLevel)} />
+              <DetailRow label="Eğitim Türü" value={educationLabel(program.educationType)} />
+              <DetailRow label="ID" value={<span className="font-mono text-muted-foreground">#{program.id}</span>} />
             </dl>
           </div>
         </section>
 
-        {/* Right — Stats + curriculum link */}
-        <section className="md:col-span-2 space-y-5">
+        <section className="space-y-5 md:col-span-2">
           <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              Hızlı İstatistikler
-            </h3>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hızlı İstatistikler</h3>
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                <div className="text-xs text-muted-foreground">Maks. Süre</div>
-                <div className="text-2xl font-semibold tabular-nums mt-0.5">
-                  {program.maxStudyDurationSemesters}
-                </div>
-                <div className="text-[11px] text-muted-foreground -mt-0.5">dönem</div>
+                <div className="text-xs text-muted-foreground">Azami Süre</div>
+                <div className="mt-0.5 text-2xl font-semibold tabular-nums">{program.maxStudyDurationSemesters}</div>
+                <div className="-mt-0.5 text-[11px] text-muted-foreground">dönem</div>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                 <div className="text-xs text-muted-foreground">Toplam AKTS</div>
-                <div className="text-2xl font-semibold tabular-nums mt-0.5">
-                  {program.totalRequiredEcts}
-                </div>
+                <div className="mt-0.5 text-2xl font-semibold tabular-nums">{program.totalRequiredEcts}</div>
               </div>
               <div className="col-span-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                 <div className="text-xs text-muted-foreground">Müfredat Sayısı</div>
-                <div className="text-2xl font-semibold tabular-nums mt-0.5">
-                  {program.curriculumCount}
-                </div>
+                <div className="mt-0.5 text-2xl font-semibold tabular-nums">{program.curriculumCount}</div>
               </div>
             </div>
           </div>
 
           <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              İlgili Sayfa
-            </h3>
-            {isEmpty ? (
-              <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50/30 p-3 text-sm text-amber-900">
-                Bu programa henüz müfredat eklenmemiş.{' '}
-                <Link to={ROUTES.CURRICULUM_MANAGEMENT} className="underline font-medium">
-                  Müfredat İşlemleri
-                </Link>{' '}
-                sayfasından müfredat tanımlayabilirsiniz.
-              </div>
-            ) : (
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hazırlık Durumu</h3>
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+              <ReadinessRow
+                ready={hasCurriculum}
+                label="Müfredat tanımı"
+                helper={
+                  hasCurriculum
+                    ? 'Ders ve müfredat akışlarına geçilebilir.'
+                    : 'Bu program için müfredat eklenmeden aşağı akışlar eksik kalır.'
+                }
+              />
+              <ReadinessRow
+                ready={hasExternalCode}
+                optional
+                label="Dış sistem kodu"
+                helper={
+                  hasExternalCode
+                    ? 'İlerideki entegrasyonlar için temel bilgi hazır.'
+                    : 'Şimdilik zorunlu değil, ama entegrasyon öncesi tamamlanabilir.'
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">İlgili Sayfa</h3>
+            {hasCurriculum ? (
               <Link
                 to={ROUTES.CURRICULUM_MANAGEMENT}
-                className="block rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm hover:border-slate-300 transition-colors"
+                className="block rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-slate-300"
               >
                 <p className="font-medium text-foreground">Müfredat İşlemleri →</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {program.curriculumCount} müfredatı yönet
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{program.curriculumCount} müfredatı yönet</p>
               </Link>
+            ) : (
+              <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50/30 p-3 text-sm text-amber-900">
+                Bu programa henüz müfredat eklenmemiş.
+                {' '}
+                <Link to={ROUTES.CURRICULUM_MANAGEMENT} className="font-medium underline">
+                  Müfredat İşlemleri
+                </Link>
+                {' '}
+                sayfasından devam edebilirsiniz.
+              </div>
             )}
           </div>
         </section>
       </div>
 
-      <DialogFooter className="mt-6 sm:justify-between gap-2 border-t border-slate-200 pt-4">
-        <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
-          <Trash2 className="h-4 w-4 mr-1.5" /> Sil
+      <DialogFooter className="mt-6 gap-2 border-t border-slate-200 pt-4 sm:justify-between">
+        <Button
+          variant="outline"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onDelete}
+        >
+          <Trash2 className="mr-1.5 h-4 w-4" />
+          Sil
         </Button>
         <Button onClick={onEdit}>
-          <Edit2 className="h-4 w-4 mr-1.5" /> Düzenle
+          <Edit2 className="mr-1.5 h-4 w-4" />
+          Düzenle
         </Button>
       </DialogFooter>
     </>
   );
 }
 
-// ── Sort Header Button ───────────────────────────────────────────────────────
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between gap-4 px-3 py-2.5 text-sm">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right font-medium text-foreground">{value}</dd>
+    </div>
+  );
+}
 
-interface SortHeaderProps {
+function ReadinessRow({
+  ready,
+  label,
+  helper,
+  optional = false,
+}: {
+  ready: boolean;
   label: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
+  helper: string;
+  optional?: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-slate-100 bg-slate-50/70 px-3 py-2">
+      <div className={`mt-0.5 ${ready ? 'text-emerald-600' : optional ? 'text-slate-400' : 'text-amber-600'}`}>
+        <CheckCircle2 className="h-4 w-4" />
+      </div>
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          {optional && (
+            <Badge variant="outline" className="text-[10px] uppercase tracking-wide text-slate-500">
+              İsteğe bağlı
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{helper}</p>
+      </div>
+    </div>
+  );
 }
 
 function SortHeader({ label, active, dir, onClick }: SortHeaderProps) {
   const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${active ? 'text-foreground' : ''}`}
+      className={`inline-flex items-center gap-1 transition-colors hover:text-foreground ${active ? 'text-foreground' : ''}`}
     >
       {label}
       <Icon className="h-3.5 w-3.5" />
