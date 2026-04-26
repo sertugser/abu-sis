@@ -202,11 +202,6 @@ export default function CurriculumManagementPage() {
     [detail],
   );
 
-  const totalEcts = useMemo(
-    () => detail?.courses?.reduce((s, c) => s + c.ects, 0) ?? 0,
-    [detail],
-  );
-
   // Ders listesi sayfalama (15 ders/sayfa)
   const coursesTotalPages = Math.max(1, Math.ceil(flatCourses.length / COURSES_PAGE_SIZE));
   const pagedCourses = useMemo(
@@ -919,10 +914,6 @@ export default function CurriculumManagementPage() {
                   </Select>
 
                   <span className="hidden md:inline text-muted-foreground">|</span>
-
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">
-                    {detail.courses.length} ders • {totalEcts} AKTS
-                  </span>
 
                   <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
                     <input
