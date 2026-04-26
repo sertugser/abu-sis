@@ -66,6 +66,8 @@ export default function CurriculumManagementPage() {
   const [selectedCurriculumId, setSelectedCurriculumId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [yearFilter, setYearFilter] = useState<YearFilter>('all');
+  // Anahtar kelimeyle arama — fakülte / program / müfredat adı / yıl / program kodu içinde
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   // Sayfa görünüm modu: 'list' (müfredat listesi tablosu) | 'courses' (ders listesi)
   const [view, setView] = useState<ViewMode>('list');
@@ -234,7 +236,7 @@ export default function CurriculumManagementPage() {
     return Array.from(set).sort((a, b) => b.localeCompare(a));
   }, [curricula]);
 
-  // Durum + Müfredat Yılı filtreleri birlikte uygulanır (tablo satırlarını süzer)
+  // Durum + Müfredat Yılı + Anahtar kelime filtreleri birlikte uygulanır (tablo satırlarını süzer)
   const filteredCurricula = useMemo(() => {
     if (!curricula) return [];
     let out = curricula;
@@ -242,8 +244,18 @@ export default function CurriculumManagementPage() {
     else if (statusFilter === 'inactive') out = out.filter(c => !c.isActive && c.status !== 2);
     else if (statusFilter === 'archived') out = out.filter(c => c.status === 2);
     if (yearFilter !== 'all') out = out.filter(c => c.version === yearFilter);
+    const kw = searchKeyword.trim().toLowerCase();
+    if (kw) {
+      out = out.filter(c =>
+        c.version.toLowerCase().includes(kw)
+        || c.facultyName.toLowerCase().includes(kw)
+        || c.programName.toLowerCase().includes(kw)
+        || c.programCode.toLowerCase().includes(kw)
+        || (c.name?.toLowerCase().includes(kw) ?? false),
+      );
+    }
     return out;
-  }, [curricula, statusFilter, yearFilter]);
+  }, [curricula, statusFilter, yearFilter, searchKeyword]);
 
   // Sayfalama
   const totalPages = Math.max(1, Math.ceil(filteredCurricula.length / PAGE_SIZE));
@@ -252,7 +264,7 @@ export default function CurriculumManagementPage() {
     [filteredCurricula, currentPage],
   );
   // Filtre değişince sayfa 1'e dön — adjust-state-during-render pattern
-  const currFilterKey = `${statusFilter}|${yearFilter}|${facultyId}|${departmentId}|${programId}`;
+  const currFilterKey = `${statusFilter}|${yearFilter}|${facultyId}|${departmentId}|${programId}|${searchKeyword}`;
   const [prevCurrFilterKey, setPrevCurrFilterKey] = useState(currFilterKey);
   if (prevCurrFilterKey !== currFilterKey) {
     setPrevCurrFilterKey(currFilterKey);
@@ -494,20 +506,17 @@ export default function CurriculumManagementPage() {
       {view === 'list' && (
         <Card>
           <CardContent className="pt-4 pb-4 space-y-3">
-            {/* Üst: "Müfredat İşlemleri" başlığı + Ekle */}
-            <div className="flex items-center justify-between border-b pb-2">
-              <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Müfredat İşlemleri
-              </span>
+            {/* Üst: sadece Müfredat Ekle (ince çizgi altta ayraç) */}
+            <div className="flex items-center justify-end border-b pb-2">
               <Button size="sm" className="h-9" onClick={handleOpenCreateDialog} title="Yeni müfredat ekle">
-                <Plus className="h-4 w-4 mr-1" /> Ekle
+                <Plus className="h-4 w-4 mr-1" /> Müfredat Ekle
               </Button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-2.5">
               {/* Sol: Fakülte */}
-              <div className="grid grid-cols-[70px_1fr] md:grid-cols-[90px_1fr] items-center gap-2">
-                <Label className="text-sm text-right">Fakülte</Label>
+              <div className="grid grid-cols-[65px_1fr] md:grid-cols-[80px_1fr] items-center gap-4">
+                <Label className="text-sm text-left">Fakülte</Label>
                 <Select value={facultyId?.toString() ?? ''} onValueChange={handleFacultyChange}>
                   <SelectTrigger className="h-9 text-sm">
                     {loadingFaculties
@@ -523,8 +532,8 @@ export default function CurriculumManagementPage() {
               </div>
 
               {/* Sağ: Müfredat Yılı */}
-              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-2">
-                <Label className="text-sm text-right">Müfredat Yılı</Label>
+              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-4">
+                <Label className="text-sm text-left">Müfredat Yılı</Label>
                 <Select value={yearFilter} onValueChange={val => setYearFilter(val as YearFilter)}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue />
@@ -539,8 +548,8 @@ export default function CurriculumManagementPage() {
               </div>
 
               {/* Sol: Bölüm */}
-              <div className="grid grid-cols-[70px_1fr] md:grid-cols-[90px_1fr] items-center gap-2">
-                <Label className="text-sm text-right">Bölüm</Label>
+              <div className="grid grid-cols-[65px_1fr] md:grid-cols-[80px_1fr] items-center gap-4">
+                <Label className="text-sm text-left">Bölüm</Label>
                 <Select
                   value={departmentId?.toString() ?? ''}
                   onValueChange={handleDepartmentChange}
@@ -560,8 +569,8 @@ export default function CurriculumManagementPage() {
               </div>
 
               {/* Sağ: Durum */}
-              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-2">
-                <Label className="text-sm text-right">Durum</Label>
+              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-4">
+                <Label className="text-sm text-left">Durum</Label>
                 <Select value={statusFilter} onValueChange={val => setStatusFilter(val as StatusFilter)}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue />
@@ -576,8 +585,8 @@ export default function CurriculumManagementPage() {
               </div>
 
               {/* Sol: Program */}
-              <div className="grid grid-cols-[70px_1fr] md:grid-cols-[90px_1fr] items-center gap-2">
-                <Label className="text-sm text-right">Program</Label>
+              <div className="grid grid-cols-[65px_1fr] md:grid-cols-[80px_1fr] items-center gap-4">
+                <Label className="text-sm text-left">Program</Label>
                 <Select
                   value={programId?.toString() ?? ''}
                   onValueChange={handleProgramChange}
@@ -596,19 +605,20 @@ export default function CurriculumManagementPage() {
                 </Select>
               </div>
 
-              {/* Sağ: Ara/Bul (işlevi şimdilik yok — reactive filtreler çalışır) */}
-              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-2">
-                <span />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-9 w-full text-sm"
-                  onClick={() => { /* filtreler reactive çalışır; buton Proliz uyumluluğu için burada */ }}
-                  title="Filtreler otomatik uygulanır"
-                >
-                  <Search className="h-4 w-4 mr-1" /> Ara/Bul
-                </Button>
+              {/* Sağ: Anahtar kelimeyle ara — fakülte / program / müfredat adı / yıl / program kodu içinde */}
+              <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-4">
+                <Label className="text-sm text-left">Ara</Label>
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder="Fakülte, program, müfredat, yıl..."
+                    className="h-9 text-sm pl-8"
+                    value={searchKeyword}
+                    onChange={e => setSearchKeyword(e.target.value)}
+                  />
+                </div>
               </div>
+
             </div>
           </CardContent>
         </Card>
@@ -659,14 +669,14 @@ export default function CurriculumManagementPage() {
                     <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Aktif</th>
                     <th className="px-3 py-2.5 font-medium min-w-[180px]">Fakülte</th>
                     <th className="px-3 py-2.5 font-medium min-w-[200px]">Program</th>
-                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.Kredi</th>
-                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.AKTS</th>
-                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.Ders</th>
-                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Zor.Ders</th>
-                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Seç.Ders</th>
-                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Akt.Öğr.Say</th>
-                    <th className="px-3 py-2.5 font-medium text-right whitespace-nowrap">Top.Öğr.Say</th>
-                    <th className="px-3 py-2.5 font-medium w-32 text-center">İşlem</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Top.Kredi</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Top.AKTS</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Top.Ders</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Zor.Ders</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Seç.Ders</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Akt.Öğr.Say</th>
+                    <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Top.Öğr.Say</th>
+                    <th className="px-3 py-2.5 font-medium w-20 text-center">İşlem</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -714,14 +724,14 @@ export default function CurriculumManagementPage() {
                       </td>
                       <td className="px-3 py-2">{c.facultyName}</td>
                       <td className="px-3 py-2">{c.programName}</td>
-                      <td className="px-3 py-2 text-right">{c.totalCredit}</td>
-                      <td className="px-3 py-2 text-right">{c.totalEcts}</td>
-                      <td className="px-3 py-2 text-right">{c.courseCount}</td>
-                      <td className="px-3 py-2 text-right">{c.compulsoryCount}</td>
-                      <td className="px-3 py-2 text-right">{c.electiveCount}</td>
-                      <td className="px-3 py-2 text-right">{c.activeStudentCount}</td>
-                      <td className="px-3 py-2 text-right">{c.totalStudentCount}</td>
-                      {/* Sağ 4 ikon */}
+                      <td className="px-3 py-2 text-center">{c.totalCredit}</td>
+                      <td className="px-3 py-2 text-center">{c.totalEcts}</td>
+                      <td className="px-3 py-2 text-center">{c.courseCount}</td>
+                      <td className="px-3 py-2 text-center">{c.compulsoryCount}</td>
+                      <td className="px-3 py-2 text-center">{c.electiveCount}</td>
+                      <td className="px-3 py-2 text-center">{c.activeStudentCount}</td>
+                      <td className="px-3 py-2 text-center">{c.totalStudentCount}</td>
+                      {/* Sağ aksiyonlar — Düzenle (primary) + kebab (Kopyala / Aktif Et / Sil) */}
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-0.5">
                           <Button
@@ -731,31 +741,34 @@ export default function CurriculumManagementPage() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost" size="icon" className="h-8 w-8"
-                            title="Kopyala"
-                            onClick={() => {
-                              setCopyTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` });
-                              setCopyNewVersion('');
-                            }}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon" className="h-8 w-8"
-                            title={c.isActive ? 'Zaten aktif' : 'Aktif Et'}
-                            disabled={c.isActive}
-                            onClick={() => setActivateTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` })}
-                          >
-                            <CheckCircle className={`h-4 w-4 ${c.isActive ? 'text-green-600' : ''}`} />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-                            title="Sil"
-                            onClick={() => setDeleteTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` })}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Daha fazla">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
+                                setCopyTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` });
+                                setCopyNewVersion('');
+                              }}>
+                                <Copy className="h-4 w-4 mr-2" /> Kopyala
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={c.isActive}
+                                onClick={() => setActivateTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` })}
+                              >
+                                <CheckCircle className={`h-4 w-4 mr-2 ${c.isActive ? 'text-green-600' : ''}`} />
+                                {c.isActive ? 'Zaten Aktif' : 'Aktif Et'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDeleteTarget({ id: c.id, label: `${c.version} — ${c.name ?? c.programName}` })}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" /> Sil
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
@@ -808,7 +821,7 @@ export default function CurriculumManagementPage() {
                   </span>
                   {detail?.isActive && <Badge variant="default" className="text-xs">Aktif</Badge>}
                 </div>
-                {/* Müfredat seviyesi aksiyonlar */}
+                {/* Müfredat seviyesi aksiyonlar — Düzenle (primary) + kebab (Kopyala / Aktif Et / Sil) */}
                 {detail && selectedCurr && (
                   <div className="flex items-center gap-0.5">
                     <Button
@@ -818,31 +831,34 @@ export default function CurriculumManagementPage() {
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost" size="icon" className="h-8 w-8"
-                      title="Kopyala"
-                      onClick={() => {
-                        setCopyTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` });
-                        setCopyNewVersion('');
-                      }}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon" className="h-8 w-8"
-                      title={detail.isActive ? 'Zaten aktif' : 'Aktif Et'}
-                      disabled={detail.isActive}
-                      onClick={() => setActivateTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` })}
-                    >
-                      <CheckCircle className={`h-4 w-4 ${detail.isActive ? 'text-green-600' : ''}`} />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-                      title="Sil"
-                      onClick={() => setDeleteTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` })}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Daha fazla">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => {
+                          setCopyTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` });
+                          setCopyNewVersion('');
+                        }}>
+                          <Copy className="h-4 w-4 mr-2" /> Kopyala
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={detail.isActive}
+                          onClick={() => setActivateTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` })}
+                        >
+                          <CheckCircle className={`h-4 w-4 mr-2 ${detail.isActive ? 'text-green-600' : ''}`} />
+                          {detail.isActive ? 'Zaten Aktif' : 'Aktif Et'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeleteTarget({ id: selectedCurr.id, label: `${selectedCurr.version} — ${selectedCurr.name ?? selectedCurr.programName}` })}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" /> Sil
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )}
               </div>
@@ -1200,6 +1216,7 @@ export default function CurriculumManagementPage() {
                   Müfredat Bilgisi (değiştirilemez)
                 </div>
                 <div><span className="text-muted-foreground">Fakülte:</span> <span className="font-medium">{editingCurr.facultyName}</span></div>
+                <div><span className="text-muted-foreground">Bölüm:</span> <span className="font-medium">{editingCurr.departmentName}</span></div>
                 <div><span className="text-muted-foreground">Program:</span> <span className="font-medium">{editingCurr.programName}</span></div>
               </div>
             )}

@@ -15,7 +15,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     // ── DTOs ────────────────────────────────────────────────────────
     public record CurriculumListDto(
         int Id, int ProgramId, string ProgramName, string ProgramCode,
-        string FacultyName,
+        string FacultyName, string DepartmentName,
         string Version, string? Name, DateTime? StartDate, DateTime? EndDate,
         bool IsActive, CurriculumStatus Status,
         int CourseCount, int TotalEcts, int TotalCredit,
@@ -118,6 +118,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 c.Program.Name,
                 c.Program.Code,
                 c.Program.Department.Faculty.Name,
+                c.Program.Department.Name,
                 c.Version,
                 c.Name,
                 c.StartDate,
@@ -225,7 +226,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
         return Ok(new CurriculumListDto(
             entity.Id, entity.ProgramId, program.Name, program.Code,
-            program.Department.Faculty.Name,
+            program.Department.Faculty.Name, program.Department.Name,
             entity.Version, entity.Name, entity.StartDate, entity.EndDate,
             entity.IsActive, entity.Status,
             0, 0, program.TotalRequiredEcts,

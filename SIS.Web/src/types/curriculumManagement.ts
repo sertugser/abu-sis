@@ -8,6 +8,7 @@ export interface CurriculumListDto {
   programName: string;
   programCode: string;
   facultyName: string;
+  departmentName: string;
   version: string;
   name: string | null;
   startDate: string | null;
