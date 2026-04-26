@@ -40,7 +40,8 @@ public class AdvisorConstraintController : ControllerBase
     {
         var instructorId = await GetInstructorIdAsync(cancellationToken);
         if (instructorId == null)
-            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+            // Mutating action: 403 Forbid — semantik olarak dogru, axios logout etmez.
+            return StatusCode(403, new { error = "Bu islem icin ogretim uyesi profili gerekli." });
 
         try
         {
@@ -62,7 +63,8 @@ public class AdvisorConstraintController : ControllerBase
 
         var instructorId = await GetInstructorIdAsync(cancellationToken);
         if (instructorId == null)
-            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+            // Mutating action: 403 Forbid — semantik olarak dogru, axios logout etmez.
+            return StatusCode(403, new { error = "Bu islem icin ogretim uyesi profili gerekli." });
 
         try
         {
@@ -86,7 +88,8 @@ public class AdvisorConstraintController : ControllerBase
 
         var instructorId = await GetInstructorIdAsync(cancellationToken);
         if (instructorId == null)
-            return Unauthorized(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+            // Mutating action: 403 Forbid — semantik olarak dogru, axios logout etmez.
+            return StatusCode(403, new { error = "Bu islem icin ogretim uyesi profili gerekli." });
 
         try
         {
