@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import {
   useAdminCourseDetail,
   useUpdateCourse,
+  useCourseCurriculumUsage,
 } from '../../hooks/useAdminCourseCatalog';
 import { useUpdateCurriculumCourse } from '../../hooks/useCurriculumManagement';
 import type { CurriculumCourseItemDto } from '../../types/curriculumManagement';
@@ -15,6 +16,7 @@ import ClassificationSection from './course-form/ClassificationSection';
 import CurriculumSpecificSection from './course-form/CurriculumSpecificSection';
 import GroupSection from './course-form/GroupSection';
 import DescriptionSection from './course-form/DescriptionSection';
+import SideEffectWarningDialog, { type FieldChange } from './course-form/SideEffectWarningDialog';
 import type {
   CourseBasicState,
   CourseScheduleState,
@@ -116,38 +118,96 @@ export default function CurriculumCourseEditDialog({
   const updateCurrMut = useUpdateCurriculumCourse();
   const isSaving = updateCourseMut.isPending || updateCurrMut.isPending;
 
+  // ── Side-effect warning state (Faz 1C) ──
+  const [pendingChanges, setPendingChanges] = useState<FieldChange[] | null>(null);
+  const { data: curriculumUsage = [] } = useCourseCurriculumUsage(
+    pendingChanges !== null ? courseId : null,
+  );
+
+  /** Detects which Course-table (shared) fields the user has modified. */
+  function detectSharedChanges(): FieldChange[] {
+    if (!courseDetail) return [];
+    const c: FieldChange[] = [];
+    if (basic.name !== courseDetail.name)
+      c.push({ label: 'Ders Adı', oldValue: courseDetail.name, newValue: basic.name });
+    if (basic.englishName !== (courseDetail.englishName ?? ''))
+      c.push({ label: 'İngilizce Ad', oldValue: courseDetail.englishName ?? '—', newValue: basic.englishName || '—' });
+    if (schedule.ects !== courseDetail.ects)
+      c.push({ label: 'AKTS', oldValue: String(courseDetail.ects), newValue: String(schedule.ects) });
+    if (schedule.theoryHours !== courseDetail.theoryHours)
+      c.push({ label: 'Teori Saat', oldValue: String(courseDetail.theoryHours), newValue: String(schedule.theoryHours) });
+    if (schedule.labHours !== courseDetail.labHours)
+      c.push({ label: 'Lab Saat', oldValue: String(courseDetail.labHours), newValue: String(schedule.labHours) });
+    if ((schedule.nationalCredit ?? null) !== (courseDetail.nationalCredit ?? null))
+      c.push({
+        label: 'Kredi',
+        oldValue: courseDetail.nationalCredit != null ? String(courseDetail.nationalCredit) : '—',
+        newValue: schedule.nationalCredit != null ? String(schedule.nationalCredit) : '—',
+      });
+    if (description.description !== (courseDetail.description ?? ''))
+      c.push({ label: 'Açıklama', oldValue: '(önceki)', newValue: '(yeni)' });
+    // language/teachingMethod/status/level use string-literal state (runtime strings via JsonStringEnumConverter);
+    // courseDetail typed as number but holds strings at runtime — compare as unknown.
+    if (classification.language !== (courseDetail.language as unknown as string))
+      c.push({ label: 'Dil', oldValue: String(courseDetail.language), newValue: classification.language });
+    if (classification.teachingMethod !== (courseDetail.teachingMethod as unknown as string))
+      c.push({ label: 'Öğretim Şekli', oldValue: String(courseDetail.teachingMethod), newValue: classification.teachingMethod });
+    if ((classification.examType ?? null) !== (courseDetail.examType ?? null))
+      c.push({ label: 'Sınav Değer Tipi', oldValue: courseDetail.examType ?? '—', newValue: classification.examType ?? '—' });
+    return c;
+  }
+
   async function handleSave() {
+    if (!courseDetail) return;
+
+    const sharedChanges = detectSharedChanges();
+    if (sharedChanges.length > 0) {
+      // Defer save — show confirmation dialog first
+      setPendingChanges(sharedChanges);
+      return;
+    }
+
+    // No shared changes — save curriculum-specific only (no warning needed)
+    await performSave();
+  }
+
+  /** Actually executes both Course + CurriculumCourse updates. Called either directly
+   *  (when no shared changes) or after the user confirms the side-effect dialog. */
+  async function performSave() {
     if (!courseDetail) return;
 
     const promises: Promise<unknown>[] = [];
 
-    // Course-level update (shared fields)
-    promises.push(
-      updateCourseMut.mutateAsync({
-        id: courseDetail.id,
-        code: courseDetail.code,
-        name: basic.name,
-        englishName: basic.englishName || null,
-        ects: schedule.ects,
-        theoryHours: schedule.theoryHours,
-        labHours: schedule.labHours,
-        nationalCredit: schedule.nationalCredit,
-        isNonGpa: courseDetail.isNonGpa,
-        examType: classification.examType,
-        departmentId: courseDetail.departmentId,
-        language: classification.language,
-        teachingMethod: classification.teachingMethod,
-        status: classification.status,
-        description: description.description || null,
-        level: classification.level,
-        minCreditsRequired: courseDetail.minCreditsRequired,
-        minEctsRequired: courseDetail.minEctsRequired,
-        requiresNoFailedLowerCourses: courseDetail.requiresNoFailedLowerCourses,
-        canBeTakenStandalone: courseDetail.canBeTakenStandalone,
-      }),
-    );
+    // Course-level update (shared fields) — only run if anything actually changed
+    const sharedChanges = detectSharedChanges();
+    if (sharedChanges.length > 0) {
+      promises.push(
+        updateCourseMut.mutateAsync({
+          id: courseDetail.id,
+          code: courseDetail.code,
+          name: basic.name,
+          englishName: basic.englishName || null,
+          ects: schedule.ects,
+          theoryHours: schedule.theoryHours,
+          labHours: schedule.labHours,
+          nationalCredit: schedule.nationalCredit,
+          isNonGpa: courseDetail.isNonGpa,
+          examType: classification.examType,
+          departmentId: courseDetail.departmentId,
+          language: classification.language,
+          teachingMethod: classification.teachingMethod,
+          status: classification.status,
+          description: description.description || null,
+          level: classification.level,
+          minCreditsRequired: courseDetail.minCreditsRequired,
+          minEctsRequired: courseDetail.minEctsRequired,
+          requiresNoFailedLowerCourses: courseDetail.requiresNoFailedLowerCourses,
+          canBeTakenStandalone: courseDetail.canBeTakenStandalone,
+        }),
+      );
+    }
 
-    // CurriculumCourse-level update (curriculum-specific fields)
+    // CurriculumCourse-level update (curriculum-specific fields) — always
     promises.push(
       updateCurrMut.mutateAsync({
         curriculumId,
@@ -165,6 +225,7 @@ export default function CurriculumCourseEditDialog({
     );
 
     await Promise.all(promises);
+    setPendingChanges(null);
     onSaved?.();
     onClose();
   }
@@ -220,6 +281,16 @@ export default function CurriculumCourseEditDialog({
           </Button>
         </DialogFooter>
       </ResizableDialogContent>
+
+      {/* Side-effect warning — shown when shared (Course-table) fields change */}
+      <SideEffectWarningDialog
+        open={pendingChanges !== null}
+        changes={pendingChanges ?? []}
+        curriculumUsage={curriculumUsage}
+        isSaving={isSaving}
+        onConfirm={performSave}
+        onCancel={() => setPendingChanges(null)}
+      />
     </Dialog>
   );
 }

@@ -298,3 +298,23 @@ export function useRemoveCrossList() {
     },
   });
 }
+
+// ── Curriculum usage — bu dersi kullanan müfredatların listesi (yan etki uyarısı için) ──
+export interface CourseCurriculumUsageDto {
+  curriculumId: number;
+  programName: string;
+  curriculumVersion: string;
+  isActive: boolean;
+}
+
+export function useCourseCurriculumUsage(courseId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'courses', 'curriculum-usage', courseId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CourseCurriculumUsageDto[]>(`${BASE}/${courseId}/curriculum-usage`);
+      return data;
+    },
+    enabled: courseId !== null,
+    staleTime: 60 * 1000,
+  });
+}
