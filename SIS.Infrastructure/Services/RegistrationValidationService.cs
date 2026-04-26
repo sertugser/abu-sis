@@ -305,6 +305,36 @@ public class RegistrationValidationService : IRegistrationValidationService
             }
         }
 
+        // === Faz 4 — Talep edilen yeni section'lar için Açma Nedeni flag map'i ===
+        // Kayıt anında öğrencinin müfredatındaki CurriculumCourse'dan canlı okunur (henüz snapshot yok).
+        // IsCreditFree (CHECK 6), BypassScheduleConflict (CHECK 8), BypassMandatoryAttendance (Madde 7),
+        // RequiresApproval (CourseRegistrationService) için kullanılır.
+        var requestedSectionCourseIds = sections.Select(s => s.CourseId).Distinct().ToList();
+        var requestedReasonByCourseId = new Dictionary<int, CurriculumCourseOpeningReason>();
+        if (requestedSectionCourseIds.Count > 0)
+        {
+            var mainProgramForFlag = student.StudentPrograms
+                .FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+            if (mainProgramForFlag != null)
+            {
+                var reasonHits = await _context.CurriculumCourses
+                    .AsNoTracking()
+                    .Include(cc => cc.OpeningReason)
+                    .Where(cc => cc.CurriculumId == mainProgramForFlag.CurriculumId
+                              && requestedSectionCourseIds.Contains(cc.CourseId)
+                              && cc.OpeningReason != null)
+                    .Select(cc => new { cc.CourseId, cc.OpeningReason })
+                    .ToListAsync();
+                foreach (var hit in reasonHits)
+                {
+                    if (hit.OpeningReason != null)
+                        requestedReasonByCourseId[hit.CourseId] = hit.OpeningReason;
+                }
+            }
+        }
+        bool HasFlag(int courseId, Func<CurriculumCourseOpeningReason, bool> selector) =>
+            requestedReasonByCourseId.TryGetValue(courseId, out var r) && selector(r);
+
         // === CHECK 6: ECTS Cap (FR-56 + FR-56A) ===
         // Madde 7: Mevcut kayıtların AKTS'si snapshot'tan okunur (havuz kuralı uygulanmışsa).
         // Talep edilen dersler için henüz kayıt yok, katalog değeri kullanılır (kayıt anında snapshot'a dönüşür).
@@ -315,28 +345,9 @@ public class RegistrationValidationService : IRegistrationValidationService
             .Where(r => r.OpeningReasonSnapshot?.IsCreditFree != true)
             .Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
 
-        // Talep edilen yeni dersler — kayıt anında flag öğrencinin müfredatındaki CurriculumCourse'dan
-        // canlı okunur (henüz snapshot yok). IsCreditFree=true olan section'ları AKTS toplamından düş.
-        var requestedSectionCourseIds = sections.Select(s => s.CourseId).Distinct().ToList();
-        var creditFreeCourseIds = new HashSet<int>();
-        if (requestedSectionCourseIds.Count > 0)
-        {
-            var mainProgramForFlag = student.StudentPrograms
-                .FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
-            if (mainProgramForFlag != null)
-            {
-                creditFreeCourseIds = (await _context.CurriculumCourses
-                    .AsNoTracking()
-                    .Where(cc => cc.CurriculumId == mainProgramForFlag.CurriculumId
-                              && requestedSectionCourseIds.Contains(cc.CourseId)
-                              && cc.OpeningReason != null
-                              && cc.OpeningReason.IsCreditFree)
-                    .Select(cc => cc.CourseId)
-                    .ToListAsync()).ToHashSet();
-            }
-        }
+        // Talep edilen yeni dersler — IsCreditFree=true olan section'ları AKTS toplamından düş
         var requestedEcts = sections
-            .Where(s => !creditFreeCourseIds.Contains(s.CourseId))
+            .Where(s => !HasFlag(s.CourseId, r => r.IsCreditFree))
             .Sum(s => s.Course.Ects);
 
         var totalEcts = requestedEcts + existingEcts;
@@ -474,9 +485,17 @@ public class RegistrationValidationService : IRegistrationValidationService
             var newSection = sections[i];
             var newSchedule = schedulesBySectionId.GetValueOrDefault(newSection.Id) ?? new();
 
+            // Faz 4 — Yeni dersin Açma Nedeni'nde BypassScheduleConflict=true ise tüm çakışma kontrolü atlanır
+            bool newSectionBypass = HasFlag(newSection.CourseId, r => r.BypassScheduleConflict);
+
             // Check against existing registrations
             foreach (var existing in existingRegistrations)
             {
+                // Faz 4 — Yeni veya mevcut dersten biri "BypassScheduleConflict" ise çakışma kontrolünü atla
+                bool existingBypass = existing.OpeningReasonSnapshot?.BypassScheduleConflict == true;
+                if (newSectionBypass || existingBypass)
+                    continue;
+
                 var existingSchedule = schedulesBySectionId.GetValueOrDefault(existing.CourseSectionId) ?? new();
 
                 var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, existingSchedule);
@@ -516,6 +535,12 @@ public class RegistrationValidationService : IRegistrationValidationService
             for (int j = i + 1; j < sections.Count; j++)
             {
                 var otherSection = sections[j];
+
+                // Faz 4 — İki yeni dersten biri BypassScheduleConflict ise çakışma kontrolünü atla
+                bool otherBypass = HasFlag(otherSection.CourseId, r => r.BypassScheduleConflict);
+                if (newSectionBypass || otherBypass)
+                    continue;
+
                 var otherSchedule = schedulesBySectionId.GetValueOrDefault(otherSection.Id) ?? new();
 
                 var overlapType = RegistrationRulePolicy.CheckScheduleOverlap(newSchedule, otherSchedule);
