@@ -375,7 +375,7 @@ export default function CurriculumCoursesView({
                                       })
                                     }
                                   >
-                                    <Scissors className="h-4 w-4 mr-2" /> İntibak İşlemleri
+                                    <Scissors className="h-4 w-4 mr-2" /> Eşdeğer Ders Tanımları
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>

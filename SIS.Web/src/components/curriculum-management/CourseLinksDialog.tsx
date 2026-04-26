@@ -36,7 +36,7 @@ const COPY = {
     pickerPlaceholder: 'Eklemek için ders kodu veya adı...',
   },
   equivalency: {
-    title: 'İntibak (Eşdeğer Ders) İşlemleri',
+    title: 'Eşdeğer Ders Tanımları',
     listHeader: 'Mevcut Eşdeğer Dersler',
     emptyText: 'Bu derse eşdeğer ders tanımlı değil',
     pickerLabel: 'Yeni Eşdeğer Ekle',
