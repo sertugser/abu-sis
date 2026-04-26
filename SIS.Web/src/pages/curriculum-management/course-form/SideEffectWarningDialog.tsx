@@ -48,14 +48,23 @@ export default function SideEffectWarningDialog({
             ))}
           </ul>
 
-          <p>Bu ders şu <strong>{curriculumUsage.length} müfredatta</strong> kullanılıyor:</p>
-          <ul className="rounded-md border bg-muted/30 px-3 py-2 space-y-0.5 max-h-40 overflow-y-auto">
-            {curriculumUsage.map(u => (
-              <li key={u.curriculumId} className="text-xs">
-                {u.programName} ({u.curriculumVersion}){u.isActive ? ' • Aktif' : ''}
-              </li>
-            ))}
-          </ul>
+          {curriculumUsage.length === 0 ? (
+            <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              Bu ders henüz başka bir müfredatta kullanılmıyor. Değişiklik yalnızca açılan müfredatı
+              ve gelecekte bu dersi atayacak müfredatları etkileyecek.
+            </p>
+          ) : (
+            <>
+              <p>Bu ders şu <strong>{curriculumUsage.length} müfredatta</strong> kullanılıyor:</p>
+              <ul className="rounded-md border bg-muted/30 px-3 py-2 space-y-0.5 max-h-40 overflow-y-auto">
+                {curriculumUsage.map(u => (
+                  <li key={u.curriculumId} className="text-xs">
+                    {u.programName} ({u.curriculumVersion}){u.isActive ? ' • Aktif' : ''}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           <p className="text-xs text-muted-foreground">
             Not: Geçmiş kayıtlar (snapshot) etkilenmez — sadece bu değişiklikten sonra eklenen yeni kayıtlar yeni değerleri kullanır.
