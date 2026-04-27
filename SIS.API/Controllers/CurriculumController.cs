@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -10,7 +11,7 @@ namespace SIS.API.Controllers;
 [ApiController]
 [Route("api/curriculum")]
 [Authorize]
-public class CurriculumController(AppDbContext context) : ControllerBase
+public class CurriculumController(AppDbContext context, IElectiveGroupScopeValidator scopeValidator) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
     public record CurriculumListDto(
@@ -803,20 +804,32 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [RequirePermission("menu.mufredat-islemleri.create-pool")]
     public async Task<IActionResult> CreatePool(int id, [FromBody] CreatePoolRequest req, CancellationToken ct)
     {
-        // Madde 8: Published müfredat kilit
-        var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        // Madde 8: Published müfredat kilit + scope ladder validation için Program/Department include'u
+        var curr = await context.Curricula
+            .Include(c => c.Program)
+                .ThenInclude(p => p.Department)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
         if (curr is null)
             return NotFound(new { message = "Müfredat bulunamadı." });
         if (curr.Status == Domain.Enums.CurriculumStatus.Published)
             return BadRequest(new { message = "Yayındaki müfredata havuz eklenemez. Yeni sürüm oluşturun." });
         if (curr.Status == Domain.Enums.CurriculumStatus.Archived)
             return BadRequest(new { message = "Arşiv durumundaki müfredat değiştirilemez." });
+        if (curr.Program?.Department is null)
+            return BadRequest(new { message = "Müfredata bağlı program/bölüm bilgisi yüklenemedi." });
 
         var group = await context.ElectiveGroups
             .Include(eg => eg.Courses)
             .FirstOrDefaultAsync(eg => eg.Id == req.ElectiveGroupId, ct);
         if (group is null)
             return NotFound(new { message = "Seçmeli ders grubu bulunamadı." });
+
+        // Scope ladder validation: havuz scope'u müfredatın hiyerarşisinde eşit veya daha geniş olmalı
+        var facultyId = curr.Program.Department.FacultyId;
+        var departmentId = curr.Program.DepartmentId;
+        var scopeResult = scopeValidator.CanBind(group, facultyId, departmentId);
+        if (!scopeResult.IsValid)
+            return BadRequest(new { message = scopeResult.ErrorMessage });
 
         if (req.RequiredCourseCount <= 0 && req.RequiredEcts <= 0)
             return BadRequest(new { message = "Gerekli ders sayısı veya AKTS en az biri 0'dan büyük olmalıdır." });
