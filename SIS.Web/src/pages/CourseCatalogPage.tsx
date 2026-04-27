@@ -53,6 +53,9 @@ export default function CourseCatalogPage() {
   const { data: term } = useActiveTerm();
   const { data: poolStatus = [] } = useStudentPoolStatus(student?.id ?? null);
   const [slotCandidatesTarget, setSlotCandidatesTarget] = useState<PoolProgressDto | null>(null);
+  // Faz C C4: "Üstten yarıyıl" toggle — default kapalı (Karar 5=a). Açık ise üst
+  // yarıyıl slot'ları da listelenir; kapalı ise sadece mevcut yarıyıl ve geri dönük.
+  const [showUpperSemesterPools, setShowUpperSemesterPools] = useState(false);
   const addToPlan = useAddToPlan();
   const dropCourse = useDropCourse();
   const submitRegistration = useSubmitRegistration();
@@ -325,24 +328,48 @@ export default function CourseCatalogPage() {
         </CardContent>
       </Card>
 
-      {/* ── Müfredat Slotlarım (Faz C C2) ── */}
-      {poolStatus.length > 0 && (
+      {/* ── Müfredat Slotlarım (Faz C C2 + C4) ── */}
+      {poolStatus.length > 0 && (() => {
+        const currentSemester = (student?.completedSemesters ?? 0) + 1;
+        const visiblePools = showUpperSemesterPools
+          ? poolStatus
+          : poolStatus.filter(p => p.suggestedSemesterStart <= currentSemester);
+        const hiddenUpperCount = poolStatus.length - visiblePools.length;
+
+        return (
         <Card>
           <CardContent className="px-5 py-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <Layers className="h-4 w-4 text-violet-700" />
                 <h3 className="font-semibold text-sm text-foreground">Müfredat Slotlarım</h3>
+                <Badge variant="secondary" className="text-[10px]">
+                  {visiblePools.filter(p => p.isFulfilled).length}/{visiblePools.length} doldu
+                </Badge>
               </div>
-              <Badge variant="secondary" className="text-[10px]">
-                {poolStatus.filter(p => p.isFulfilled).length}/{poolStatus.length} doldu
-              </Badge>
+              {/* Faz C C4: üstten yarıyıl toggle */}
+              {(showUpperSemesterPools || hiddenUpperCount > 0) && (
+                <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showUpperSemesterPools}
+                    onChange={e => setShowUpperSemesterPools(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-input accent-violet-600 cursor-pointer"
+                  />
+                  <span className="text-muted-foreground">
+                    Üstten yarıyıl havuzlarını göster
+                    {!showUpperSemesterPools && hiddenUpperCount > 0 && (
+                      <span className="ml-1 text-violet-700">({hiddenUpperCount} gizli)</span>
+                    )}
+                  </span>
+                </label>
+              )}
             </div>
             <p className="text-[11px] text-muted-foreground mb-3">
               Müfredatındaki seçmeli grup slot'ları. Slot'a tıklayarak o slot için aday dersleri görebilirsin.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {poolStatus.map(pool => (
+              {visiblePools.map(pool => (
                 <button
                   key={pool.poolId}
                   type="button"
@@ -377,9 +404,16 @@ export default function CourseCatalogPage() {
                 </button>
               ))}
             </div>
+            {visiblePools.length === 0 && (
+              <p className="text-xs text-muted-foreground italic text-center py-4">
+                Bu yarıyıla denk gelen aktif slot yok. Üstten yarıyıl havuzlarını
+                görmek için yukarıdaki kutuyu işaretle.
+              </p>
+            )}
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
       {/* ── Uyarılar ── */}
       {submitSuccess && (

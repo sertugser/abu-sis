@@ -1118,9 +1118,12 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
     // ── Madde 17: Öğrencinin havuz tamamlama durumu ──────────────
     // Faz C C5: SlotName eklendi — pool fulfillment satırında "TE-1: 0/1" gibi
     // slot bilgisi gösterilebilir.
+    // Faz C C4: SuggestedSemesterStart/End eklendi — frontend "üstten yarıyıl"
+    // toggle filter'ı için (öğrenci mevcut yarıyıldan sonraki slot'ları göster/gizle).
     public record PoolProgressDto(
         int PoolId, string PoolCode, string PoolName, string Subtype,
         string SlotName,
+        int SuggestedSemesterStart, int SuggestedSemesterEnd,
         int RequiredCourseCount, int CompletedCourseCount,
         int RequiredEcts, int EarnedEcts,
         int? EctsPerCourse,
@@ -1169,6 +1172,8 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 p.ElectiveGroup.Name,
                 p.ElectiveGroup.ElectiveSubtype.ToString(),
                 p.SlotName,
+                p.SuggestedSemesterStart,
+                p.SuggestedSemesterEnd,
                 p.RequiredCourseCount,
                 completedCount,
                 p.RequiredEcts,
