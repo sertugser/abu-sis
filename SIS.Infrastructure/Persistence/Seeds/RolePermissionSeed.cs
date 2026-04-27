@@ -526,6 +526,10 @@ public static class RolePermissionSeed
 
             // SystemAdministrator YOK — Karar 4: locked role, kod düzeyinde
             // RequirePermissionAttribute içinde shortcut ile tüm permission'lara açık.
+            //
+            // Faz B B3a notu: menu.secmeli-tipleri.* (view/create/edit/delete) sadece SysAdmin'e
+            // verilmiştir (Karar #1 — Dean/DepartmentManager CRUD yapamaz). SysAdmin shortcut
+            // sayesinde DB satırı gerekmiyor; diğer rollere bilinçli olarak eklenmemiştir.
         };
 
     /// <summary>

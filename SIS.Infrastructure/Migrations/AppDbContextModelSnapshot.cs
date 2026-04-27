@@ -1807,6 +1807,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("ElectiveSubtype")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ElectiveSubtypeId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("FacultyId")
                         .HasColumnType("integer");
 
@@ -1826,6 +1829,8 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("ElectiveSubtypeId");
 
                     b.HasIndex("FacultyId");
 
@@ -1848,6 +1853,56 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseId");
 
                     b.ToTable("ElectiveGroupCourses");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ElectiveSubtypeEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ForbidsDepartment")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ForbidsFaculty")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("RequiresDepartment")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequiresFaculty")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("ElectiveSubtypes", (string)null);
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.EvaluationAnswer", b =>
@@ -3906,6 +3961,11 @@ namespace SIS.Infrastructure.Migrations
                     b.HasOne("SIS.Domain.Entities.Department", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SIS.Domain.Entities.ElectiveSubtypeEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ElectiveSubtypeId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")

@@ -53,6 +53,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
     public DbSet<ElectiveGroup> ElectiveGroups => Set<ElectiveGroup>();
     public DbSet<ElectiveGroupCourse> ElectiveGroupCourses => Set<ElectiveGroupCourse>();
+    public DbSet<ElectiveSubtypeEntity> ElectiveSubtypes => Set<ElectiveSubtypeEntity>();
     public DbSet<CurriculumCourseOpeningReason> CurriculumCourseOpeningReasons => Set<CurriculumCourseOpeningReason>();
     public DbSet<CourseCategory> CourseCategories => Set<CourseCategory>();
     public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
@@ -282,6 +283,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .HasForeignKey(eg => eg.DepartmentId)
              .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(eg => eg.DepartmentId);
+
+            // Faz B B3a: DB-driven ElectiveSubtypeEntity FK (nullable — geçişte).
+            e.HasOne<ElectiveSubtypeEntity>()
+             .WithMany()
+             .HasForeignKey(eg => eg.ElectiveSubtypeId)
+             .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(eg => eg.ElectiveSubtypeId);
+        });
+
+        // ── ElectiveSubtypeEntity (DB-driven lookup) ────────────
+        builder.Entity<ElectiveSubtypeEntity>(entity =>
+        {
+            entity.ToTable("ElectiveSubtypes");
+            entity.HasIndex(s => s.Code).IsUnique();
+            entity.Property(s => s.Code).HasMaxLength(50).IsRequired();
+            entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
         });
 
         // ── ElectiveGroupCourse (composite PK) ──────────────────

@@ -30,6 +30,7 @@ public static partial class SeedData
         // ── Course lookups (Açma Nedeni + Ders Kategorisi) ────
         await CurriculumCourseOpeningReasonSeed.SeedAsync(context);
         await CourseCategorySeed.SeedAsync(context);
+        await ElectiveSubtypeSeed.SeedAsync(context);
 
         // ── RBAC Phase 1 (Sprint 1.4) ──────────────────────────
         // Sıra önemli: Permission → MenuStructure (perm lookup gerekli) → RolePermission (perm + rol lookup)

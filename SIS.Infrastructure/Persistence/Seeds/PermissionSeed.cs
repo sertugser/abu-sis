@@ -171,6 +171,12 @@ public static class PermissionSeed
         ("menu.secmeli-ders-gruplari.add-course",        PermissionCategory.Menu, "Elective gruba ders ekleme"),
         ("menu.secmeli-ders-gruplari.remove-course",     PermissionCategory.Menu, "Elective gruptan ders çıkarma"),
 
+        // Seçmeli Tipleri (Faz B B3a — DB-driven lookup, sadece SysAdmin CRUD)
+        ("menu.secmeli-tipleri.view",                    PermissionCategory.Menu, "Seçmeli tip listesi"),
+        ("menu.secmeli-tipleri.create",                  PermissionCategory.Menu, "Yeni seçmeli tip"),
+        ("menu.secmeli-tipleri.edit",                    PermissionCategory.Menu, "Seçmeli tip düzenleme"),
+        ("menu.secmeli-tipleri.delete",                  PermissionCategory.Menu, "Seçmeli tip silme (soft delete)"),
+
         // Ders Açma İşlemleri
         ("menu.ders-acma-islemleri.view",                PermissionCategory.Menu, "Ders açma listesi + curriculum/instructors lookup"),
         ("menu.ders-acma-islemleri.open",                PermissionCategory.Menu, "Tek ders açma (section)"),

@@ -8,6 +8,8 @@ public class ElectiveGroup
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public ElectiveSubtype ElectiveSubtype { get; set; }
+    // Faz B B3a: yeni DB-driven FK. B3b consuming kodu güncelleyecek; B3c eski enum'u kaldıracak.
+    public int? ElectiveSubtypeId { get; set; }
     public int? FacultyId { get; set; }
     public Faculty? Faculty { get; set; }
     public int? DepartmentId { get; set; }
