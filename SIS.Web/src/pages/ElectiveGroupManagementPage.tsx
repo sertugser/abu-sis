@@ -16,6 +16,7 @@ import {
   useElectiveGroupList,
   useCreateElectiveGroup,
 } from '../hooks/useElectiveGroups';
+import { useElectiveSubtypeList } from '../hooks/useElectiveSubtypes';
 import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
 import {
   ELECTIVE_SUBTYPE_LABELS,
@@ -28,7 +29,10 @@ import type {
 } from '../types/electiveGroup';
 import ElectiveGroupDetailSheet from '../components/elective-groups/ElectiveGroupDetailSheet';
 
-const SUBTYPES: ElectiveSubtype[] = ['UniversityElective', 'NonDepartmentElective', 'TechnicalElective'];
+// NOT (B3c-2): Filter ve tablo display hala hardcoded enum kullanır
+// (ELECTIVE_SUBTYPE_LABELS/SHORT/COLORS). Custom subtype'lı gruplar Subtype Badge'de
+// boş gözükür ve filter'a düşmez. Tam DB-driven dönüşüm B3d kapsamı.
+const FILTER_SUBTYPES: ElectiveSubtype[] = ['UniversityElective', 'NonDepartmentElective', 'TechnicalElective'];
 
 // ─── Create Dialog ─────────────────────────────────────────────────
 
@@ -40,11 +44,15 @@ interface CreateDialogProps {
 function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const [subtype, setSubtype] = useState<ElectiveSubtype>('UniversityElective');
+  const [subtypeId, setSubtypeId] = useState<number | null>(null);
   const [facultyId, setFacultyId] = useState<string>('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [description, setDescription] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Faz B B3c-2: DB-driven subtype listesi (sadece aktif tipler).
+  const { data: subtypes, isLoading: subtypesLoading } = useElectiveSubtypeList(false);
+  const selectedSubtype = subtypes?.find(s => s.id === subtypeId) ?? null;
 
   const { data: faculties } = useAdminFaculties();
   const facultyIdNum = facultyId ? Number(facultyId) : undefined;
@@ -54,7 +62,7 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
   function reset() {
     setName('');
     setCode('');
-    setSubtype('UniversityElective');
+    setSubtypeId(null);
     setFacultyId('');
     setDepartmentId('');
     setDescription('');
@@ -62,13 +70,12 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
   }
 
   function handleSubtypeChange(v: string) {
-    const next = v as ElectiveSubtype;
-    setSubtype(next);
-    // OC: faculty + department disabled and cleared
-    if (next === 'UniversityElective') {
-      setFacultyId('');
-      setDepartmentId('');
-    }
+    const nextId = Number(v);
+    setSubtypeId(nextId);
+    // ForbidsFaculty/ForbidsDepartment seçilince ilgili alanları temizle.
+    const next = subtypes?.find(s => s.id === nextId);
+    if (next?.forbidsFaculty) setFacultyId('');
+    if (next?.forbidsDepartment) setDepartmentId('');
     setValidationError(null);
   }
 
@@ -80,16 +87,29 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
   }
 
   function handleCreate() {
+    if (selectedSubtype === null) {
+      setValidationError('Tip seçilmelidir.');
+      return;
+    }
+
     const facultyIdNumLocal = facultyId ? Number(facultyId) : null;
     const departmentIdNumLocal = departmentId && departmentId !== '__all__' ? Number(departmentId) : null;
 
-    // Client-side validation
-    if (subtype === 'UniversityElective' && (facultyIdNumLocal !== null || departmentIdNumLocal !== null)) {
-      setValidationError('Üniversite Seçmeli için fakülte/bölüm seçilemez.');
+    // Flag-based client-side validation (DB-driven kuralları yansıtır).
+    if (selectedSubtype.forbidsFaculty && facultyIdNumLocal !== null) {
+      setValidationError(`${selectedSubtype.name} için fakülte seçilemez.`);
       return;
     }
-    if (subtype === 'TechnicalElective' && facultyIdNumLocal === null) {
-      setValidationError('Teknik Seçmeli için fakülte zorunlu.');
+    if (selectedSubtype.requiresFaculty && facultyIdNumLocal === null) {
+      setValidationError(`${selectedSubtype.name} için fakülte zorunlu.`);
+      return;
+    }
+    if (selectedSubtype.forbidsDepartment && departmentIdNumLocal !== null) {
+      setValidationError(`${selectedSubtype.name} için bölüm seçilemez.`);
+      return;
+    }
+    if (selectedSubtype.requiresDepartment && departmentIdNumLocal === null) {
+      setValidationError(`${selectedSubtype.name} için bölüm zorunlu.`);
       return;
     }
     if (departmentIdNumLocal !== null && facultyIdNumLocal === null) {
@@ -101,7 +121,7 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
     const req: CreateElectiveGroupRequest = {
       name: name.trim(),
       code: code.trim(),
-      electiveSubtype: subtype,
+      electiveSubtypeId: selectedSubtype.id,
       ...(facultyIdNumLocal !== null ? { facultyId: facultyIdNumLocal } : {}),
       ...(departmentIdNumLocal !== null ? { departmentId: departmentIdNumLocal } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
@@ -119,11 +139,14 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
     onOpenChange(val);
   }
 
-  const canSubmit = name.trim().length > 0 && code.trim().length > 0
-    && (subtype !== 'TechnicalElective' || facultyId.length > 0);
+  const canSubmit = name.trim().length > 0
+    && code.trim().length > 0
+    && selectedSubtype !== null
+    && (!selectedSubtype.requiresFaculty || facultyId.length > 0)
+    && (!selectedSubtype.requiresDepartment || departmentId.length > 0);
 
-  const facultyDisabled = subtype === 'UniversityElective';
-  const departmentDisabled = facultyDisabled || !facultyId;
+  const facultyDisabled = selectedSubtype?.forbidsFaculty ?? false;
+  const departmentDisabled = facultyDisabled || !facultyId || (selectedSubtype?.forbidsDepartment ?? false);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -142,23 +165,32 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
             <Input id="ceg-code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="örneğin: TE-A" />
           </div>
           <div>
-            <Label>Tür</Label>
-            <Select value={subtype} onValueChange={handleSubtypeChange}>
+            <Label>Tip</Label>
+            <Select
+              value={subtypeId !== null ? String(subtypeId) : ''}
+              onValueChange={handleSubtypeChange}
+              disabled={subtypesLoading || !subtypes || subtypes.length === 0}
+            >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={subtypesLoading ? 'Yükleniyor...' : 'Tip seçin...'} />
               </SelectTrigger>
               <SelectContent>
-                {SUBTYPES.map(s => (
-                  <SelectItem key={s} value={s}>{ELECTIVE_SUBTYPE_LABELS[s]}</SelectItem>
+                {(subtypes ?? []).map(s => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {!subtypesLoading && subtypes && subtypes.length === 0 && (
+              <p className="text-[10px] text-amber-700 mt-1">
+                Tanımlı aktif tip yok. Önce "Seçmeli Tipleri" sayfasından tip ekleyin.
+              </p>
+            )}
           </div>
 
           {!facultyDisabled && (
             <div>
               <Label>
-                Fakülte{subtype === 'TechnicalElective' ? '' : ' (opsiyonel)'}
+                Fakülte{selectedSubtype?.requiresFaculty ? '' : ' (opsiyonel)'}
               </Label>
               <Select
                 value={facultyId || '__none__'}
@@ -168,7 +200,7 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
                   <SelectValue placeholder="Fakülte seçin..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {subtype !== 'TechnicalElective' && (
+                  {!selectedSubtype?.requiresFaculty && (
                     <SelectItem value="__none__">— Seçilmedi —</SelectItem>
                   )}
                   {faculties?.map(f => (
@@ -181,7 +213,9 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
 
           {!departmentDisabled && (
             <div className="space-y-1">
-              <Label className="text-xs">Bölüm (opsiyonel)</Label>
+              <Label className="text-xs">
+                Bölüm{selectedSubtype?.requiresDepartment ? '' : ' (opsiyonel)'}
+              </Label>
               <Select
                 value={departmentId || '__all__'}
                 onValueChange={v => setDepartmentId(v === '__all__' ? '' : v)}
@@ -190,7 +224,9 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
                   <SelectValue placeholder="(Tüm fakülte)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">(Tüm fakülte)</SelectItem>
+                  {!selectedSubtype?.requiresDepartment && (
+                    <SelectItem value="__all__">(Tüm fakülte)</SelectItem>
+                  )}
                   {(departments ?? []).map(d => (
                     <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                   ))}
@@ -307,7 +343,7 @@ export default function ElectiveGroupManagementPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tümü</SelectItem>
-                {SUBTYPES.map(s => (
+                {FILTER_SUBTYPES.map(s => (
                   <SelectItem key={s} value={s}>{ELECTIVE_SUBTYPE_LABELS[s]}</SelectItem>
                 ))}
               </SelectContent>

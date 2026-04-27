@@ -31,9 +31,10 @@ export interface ElectiveGroupCourseDto {
 export interface CreateElectiveGroupRequest {
   name: string;
   code: string;
-  /** Geri-uyumluluk için zorunlu kalır (B3d'de kalkacak); FK gönderilirse FK öncelikli */
-  electiveSubtype: ElectiveSubtype;
-  electiveSubtypeId?: number;
+  /** Yeni ana alan (B3c-2'den itibaren). DB-driven ElectiveSubtypes.Id. */
+  electiveSubtypeId: number;
+  /** @deprecated B3d'de kalkacak. Backend FK öncelikli; opsiyonel kalır geçiş için. */
+  electiveSubtype?: ElectiveSubtype;
   facultyId?: number;
   departmentId?: number;
   description?: string;
