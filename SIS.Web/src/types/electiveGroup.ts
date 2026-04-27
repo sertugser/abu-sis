@@ -4,7 +4,9 @@ export interface ElectiveGroupListDto {
   id: number;
   name: string;
   code: string;
+  /** @deprecated B3d'de kalkacak — yeni kodda electiveSubtypeId kullan */
   electiveSubtype: ElectiveSubtype;
+  electiveSubtypeId: number | null;
   facultyId: number | null;
   facultyName: string | null;
   departmentId: number | null;
@@ -29,7 +31,9 @@ export interface ElectiveGroupCourseDto {
 export interface CreateElectiveGroupRequest {
   name: string;
   code: string;
+  /** Geri-uyumluluk için zorunlu kalır (B3d'de kalkacak); FK gönderilirse FK öncelikli */
   electiveSubtype: ElectiveSubtype;
+  electiveSubtypeId?: number;
   facultyId?: number;
   departmentId?: number;
   description?: string;

@@ -6,6 +6,7 @@ using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
+using SIS.Tests.TestHelpers;
 
 namespace SIS.Tests.API;
 
@@ -74,6 +75,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         });
 
         _context.SaveChanges();
+        _context.SeedElectiveSubtypeDefaults();
     }
 
     private ElectiveGroupController CreateGroupController() => new(_context);

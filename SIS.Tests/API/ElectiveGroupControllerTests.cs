@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
+using SIS.Tests.TestHelpers;
 
 namespace SIS.Tests.API;
 
@@ -45,6 +46,7 @@ public class ElectiveGroupControllerTests : IDisposable
             new Course { Id = 3, Code = "OC101", Name = "Univ Elective 1", Ects = 3 }
         );
         _context.SaveChanges();
+        _context.SeedElectiveSubtypeDefaults();
     }
 
     [Fact]

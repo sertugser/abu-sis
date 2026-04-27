@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -13,15 +14,21 @@ namespace SIS.API.Controllers;
 public class ElectiveGroupController(AppDbContext context) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
+    // Faz B B3b: ElectiveSubtype enum (deprecated) + ElectiveSubtypeId FK paralel.
+    // Frontend B3c'de FK'ya geçer; B3d'de enum kaldırılır.
     public record ElectiveGroupListDto(
-        int Id, string Name, string Code, ElectiveSubtype ElectiveSubtype,
+        int Id, string Name, string Code,
+        ElectiveSubtype ElectiveSubtype,
+        int? ElectiveSubtypeId,
         int? FacultyId, string? FacultyName,
         int? DepartmentId, string? DepartmentName,
         string? Description,
         bool IsActive, int CourseCount, DateTime CreatedAt);
 
     public record ElectiveGroupDetailDto(
-        int Id, string Name, string Code, ElectiveSubtype ElectiveSubtype,
+        int Id, string Name, string Code,
+        ElectiveSubtype ElectiveSubtype,
+        int? ElectiveSubtypeId,
         int? FacultyId, string? FacultyName,
         int? DepartmentId, string? DepartmentName,
         string? Description,
@@ -31,8 +38,11 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
     public record ElectiveGroupCourseDto(
         int CourseId, string CourseCode, string CourseName, int Ects);
 
+    // Hem deprecated enum hem yeni FK kabul edilir; FK öncelikli (varsa enum yoksayılır).
     public record CreateElectiveGroupRequest(
-        string Name, string Code, ElectiveSubtype ElectiveSubtype,
+        string Name, string Code,
+        ElectiveSubtype ElectiveSubtype,
+        int? ElectiveSubtypeId = null,
         int? FacultyId = null,
         int? DepartmentId = null,
         string? Description = null);
@@ -45,6 +55,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         bool ClearDepartment = false,
         string? Description = null,
         bool? IsActive = null);
+    // NOT: Update DTO'da ElectiveSubtype/ElectiveSubtypeId YOK — Karar #14 gereği subtype değişmez.
 
     public record AddCoursesToGroupRequest(List<int> CourseIds);
 
@@ -77,7 +88,9 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         var list = await query
             .OrderBy(eg => eg.Code)
             .Select(eg => new ElectiveGroupListDto(
-                eg.Id, eg.Name, eg.Code, eg.ElectiveSubtype,
+                eg.Id, eg.Name, eg.Code,
+                eg.ElectiveSubtype,
+                eg.ElectiveSubtypeId,
                 eg.FacultyId, eg.Faculty != null ? eg.Faculty.Name : null,
                 eg.DepartmentId, eg.Department != null ? eg.Department.Name : null,
                 eg.Description, eg.IsActive,
@@ -103,7 +116,9 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             return NotFound(new { message = "Seçmeli ders grubu bulunamadı." });
 
         var dto = new ElectiveGroupDetailDto(
-            group.Id, group.Name, group.Code, group.ElectiveSubtype,
+            group.Id, group.Name, group.Code,
+            group.ElectiveSubtype,
+            group.ElectiveSubtypeId,
             group.FacultyId, group.Faculty?.Name,
             group.DepartmentId, group.Department?.Name,
             group.Description,
@@ -122,7 +137,12 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
     [RequirePermission("menu.secmeli-ders-gruplari.create")]
     public async Task<IActionResult> Create([FromBody] CreateElectiveGroupRequest req, CancellationToken ct)
     {
-        var scopeError = ValidateScopeAndSubtype(req.ElectiveSubtype, req.FacultyId, req.DepartmentId);
+        // Faz B B3b: Subtype'ı DB'den çöz (FK öncelikli; yoksa enum integer'ı = ID).
+        // Backfill garantisi: enum 1/2/3 → seed Id 1/2/3.
+        var (subtype, subtypeError) = await ResolveSubtypeAsync(req.ElectiveSubtypeId, req.ElectiveSubtype, ct);
+        if (subtypeError != null) return subtypeError;
+
+        var scopeError = ValidateScopeAgainstSubtype(subtype!, req.FacultyId, req.DepartmentId);
         if (scopeError != null) return scopeError;
 
         var codeExists = await context.ElectiveGroups
@@ -146,11 +166,15 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
                 return BadRequest(new { message = "Bölüm bulunamadı veya seçilen fakülteye ait değil." });
         }
 
+        // Entity'ye hem enum hem FK set et: enum geri-uyumluluk için (B3d'ye kadar),
+        // FK yeni doğru kaynak. Code'dan enum'a map (1/2/3 sabit ID'ler).
+        var mappedEnum = MapSubtypeCodeToEnum(subtype!.Code, req.ElectiveSubtype);
         var entity = new Domain.Entities.ElectiveGroup
         {
             Name = req.Name,
             Code = req.Code,
-            ElectiveSubtype = req.ElectiveSubtype,
+            ElectiveSubtype = mappedEnum,
+            ElectiveSubtypeId = subtype.Id,
             FacultyId = req.FacultyId,
             DepartmentId = req.DepartmentId,
             Description = req.Description,
@@ -162,7 +186,9 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         await context.SaveChangesAsync(ct);
 
         return Ok(new ElectiveGroupListDto(
-            entity.Id, entity.Name, entity.Code, entity.ElectiveSubtype,
+            entity.Id, entity.Name, entity.Code,
+            entity.ElectiveSubtype,
+            entity.ElectiveSubtypeId,
             entity.FacultyId, null,
             entity.DepartmentId, null,
             entity.Description,
@@ -200,14 +226,20 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         if (newDepartmentId.HasValue && !newFacultyId.HasValue)
             return BadRequest(new { message = "Bölüm seçildiğinde fakülte de zorunludur." });
 
-        // OC için bölüm de yasak
-        // Subtype değişmez (Karar #14: sadece görünen ad değişebilir, kod sabit) — bu yüzden mevcut group.ElectiveSubtype okunuyor.
-        // NOT: "Teknik Seçmeli için fakülte zorunlu" ve "Üniversite Seçmeli için fakülte belirtilmemeli"
-        // kuralları bilinçli olarak Update'te uygulanmıyor — bir TE grubu fakülte temizlenince
-        // school-wide hale gelebiliyor (bkz. Update_ClearFaculty_and_ClearDepartment_makes_group_school_wide).
-        // Bu yüzden ValidateScopeAndSubtype helper'ı yerine sadece iki kuralı inline tutuyoruz.
-        if (group.ElectiveSubtype == ElectiveSubtype.UniversityElective && newDepartmentId.HasValue)
-            return BadRequest(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
+        // ForbidsDepartment flag'li tip için (örn. OC) bölüm yasak.
+        // Subtype değişmez (Karar #14) — group'un mevcut subtype'ı DB'den okunup flag kontrol edilir.
+        // NOT: RequiresFaculty ve ForbidsFaculty Update'te bilinçli olarak uygulanmıyor —
+        // bir TE grubu fakülte temizlenince school-wide hale gelebiliyor
+        // (bkz. Update_ClearFaculty_and_ClearDepartment_makes_group_school_wide).
+        // Bu yüzden sadece "ForbidsDepartment + DepartmentId.HasValue" kuralını inline tutuyoruz.
+        if (newDepartmentId.HasValue)
+        {
+            var groupSubtypeId = group.ElectiveSubtypeId ?? (int)group.ElectiveSubtype;
+            var groupSubtype = await context.ElectiveSubtypes
+                .FirstOrDefaultAsync(s => s.Id == groupSubtypeId, ct);
+            if (groupSubtype != null && groupSubtype.ForbidsDepartment)
+                return BadRequest(new { message = $"{groupSubtype.Name} için bölüm belirtilmemelidir." });
+        }
 
         // Bölüm varlığı kontrolü — bölüm verilen fakülteye ait olmalı
         if (newDepartmentId.HasValue &&
@@ -345,23 +377,65 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
     // ── Helpers ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// Scope (fakülte/bölüm) ve alt-tip kombinasyonunu doğrular. Geçersizse
-    /// uygun BadRequest döner; geçerliyse null. Create ve Update aynı kuralları
-    /// paylaşır — bu helper iki yolda da DRY uygulanabilir.
+    /// Faz B B3b: Subtype'ı DB'den çözümler. FK öncelikli; yoksa enum integer'ı = ID
+    /// (backfill garantisi: enum 1/2/3 → seed Id 1/2/3).
+    /// IsActive=false ise reddeder.
     /// </summary>
-    private static IActionResult? ValidateScopeAndSubtype(
-        ElectiveSubtype subtype,
+    private async Task<(ElectiveSubtypeEntity? Subtype, IActionResult? Error)> ResolveSubtypeAsync(
+        int? subtypeId,
+        ElectiveSubtype enumValue,
+        CancellationToken ct)
+    {
+        var lookupId = subtypeId ?? (int)enumValue;
+        if (lookupId <= 0)
+            return (null, new BadRequestObjectResult(new { message = "Seçmeli ders tipi belirtilmedi." }));
+
+        var subtype = await context.ElectiveSubtypes
+            .FirstOrDefaultAsync(s => s.Id == lookupId, ct);
+        if (subtype == null)
+            return (null, new BadRequestObjectResult(new { message = $"ID={lookupId} olan seçmeli ders tipi bulunamadı." }));
+        if (!subtype.IsActive)
+            return (null, new BadRequestObjectResult(new { message = $"'{subtype.Name}' tipi pasif durumda — yeni grup açılamaz." }));
+
+        return (subtype, null);
+    }
+
+    /// <summary>
+    /// Faz B B3b: Subtype flag'lerine göre dinamik scope doğrulaması.
+    /// Admin yeni tip eklediğinde (örn. RequiresFaculty=false) hardcoded if'ler
+    /// değil, DB'deki bool flag'ler kullanılır.
+    /// </summary>
+    private static IActionResult? ValidateScopeAgainstSubtype(
+        ElectiveSubtypeEntity subtype,
         int? facultyId,
         int? departmentId)
     {
-        if (subtype == ElectiveSubtype.TechnicalElective && !facultyId.HasValue)
-            return new BadRequestObjectResult(new { message = "Teknik Seçmeli için fakülte zorunludur." });
-        if (subtype == ElectiveSubtype.UniversityElective && facultyId.HasValue)
-            return new BadRequestObjectResult(new { message = "Üniversite Seçmeli için fakülte belirtilmemelidir." });
+        // Subtype-bağımsız invariant: bölüm seçilmişse fakülte de zorunlu.
         if (departmentId.HasValue && !facultyId.HasValue)
             return new BadRequestObjectResult(new { message = "Bölüm seçildiğinde fakülte de zorunludur." });
-        if (subtype == ElectiveSubtype.UniversityElective && departmentId.HasValue)
-            return new BadRequestObjectResult(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
+
+        if (subtype.RequiresFaculty && !facultyId.HasValue)
+            return new BadRequestObjectResult(new { message = $"{subtype.Name} için fakülte zorunludur." });
+        if (subtype.ForbidsFaculty && facultyId.HasValue)
+            return new BadRequestObjectResult(new { message = $"{subtype.Name} için fakülte belirtilmemelidir." });
+        if (subtype.RequiresDepartment && !departmentId.HasValue)
+            return new BadRequestObjectResult(new { message = $"{subtype.Name} için bölüm zorunludur." });
+        if (subtype.ForbidsDepartment && departmentId.HasValue)
+            return new BadRequestObjectResult(new { message = $"{subtype.Name} için bölüm belirtilmemelidir." });
+
         return null;
     }
+
+    /// <summary>
+    /// DB-driven Code → enum eşlemesi. Bilinen 3 default tipte enum karşılığı var;
+    /// admin'in eklediği custom tipler için fallback olarak request'teki enum kullanılır
+    /// (B3d'de enum kalkacak, bu fallback de gidecek).
+    /// </summary>
+    private static ElectiveSubtype MapSubtypeCodeToEnum(string code, ElectiveSubtype fallback) => code switch
+    {
+        "UniversityElective" => ElectiveSubtype.UniversityElective,
+        "NonDepartmentElective" => ElectiveSubtype.NonDepartmentElective,
+        "TechnicalElective" => ElectiveSubtype.TechnicalElective,
+        _ => fallback,
+    };
 }
