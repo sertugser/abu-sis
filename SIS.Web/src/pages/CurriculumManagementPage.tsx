@@ -11,6 +11,7 @@ import {
   useCopyCurriculum,
 } from '../hooks/useCurriculumManagement';
 import AddCourseDialog from '../components/curriculum-management/AddCourseDialog';
+import AddPoolDialog from '../components/curriculum-management/AddPoolDialog';
 import CurriculumCourseEditDialog from './curriculum-management/CurriculumCourseEditDialog';
 import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
@@ -68,6 +69,7 @@ export default function CurriculumManagementPage() {
   // ── Dialogs ──
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showAddCourse, setShowAddCourse] = useState(false);
+  const [showAddPool, setShowAddPool] = useState(false);
   const [showTermRulesDialog, setShowTermRulesDialog] = useState(false);
   // Hangi müfredat için dialog açıldı (listeden dişli menüsüyle tetikleniyor)
   const [termRulesTarget, setTermRulesTarget] = useState<{ id: number; label: string } | null>(null);
@@ -462,6 +464,7 @@ export default function CurriculumManagementPage() {
           onActivate={setActivateTarget}
           onDelete={setDeleteTarget}
           onAddCourse={() => setShowAddCourse(true)}
+          onAddPool={() => setShowAddPool(true)}
           onShowCourseDetail={handleShowCourseDetail}
           onOpenCourseLinks={setCourseLinksTarget}
           onRemoveCourse={(courseId) => removeCourseMut.mutate({ curriculumId: selectedCurriculumId!, courseId })}
@@ -490,6 +493,15 @@ export default function CurriculumManagementPage() {
         existingCourseIds={existingCourseIds}
         catalogRoute={ROUTES.COURSE_CATALOG_ADMIN}
       />
+
+      {/* ── Add Pool Dialog (Faz B B4) ── */}
+      {selectedCurriculumId !== null && (
+        <AddPoolDialog
+          curriculumId={selectedCurriculumId}
+          open={showAddPool}
+          onOpenChange={setShowAddPool}
+        />
+      )}
 
       {/* ── Course Edit Dialog (Proliz B style, edit-only) ── */}
       {detailCourseId !== null && selectedCurriculumId !== null && detailCurriculumCourse && (

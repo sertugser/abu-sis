@@ -195,25 +195,40 @@ export interface CurriculumElectivePoolDto {
   electiveGroupId: number;
   groupName: string;
   groupCode: string;
+  /** @deprecated B3d'de kalkacak — yeni kodda electiveSubtypeId kullan */
   electiveSubtype: string;
+  /** Faz B B3b: DB-driven ElectiveSubtypes.Id (paralel destek) */
+  electiveSubtypeId: number | null;
+  /** Faz B B1: aynı grubun farklı slot'ları (örn. TE-1, TE-2) */
+  slotName: string;
   suggestedSemesterStart: number;
   suggestedSemesterEnd: number;
   requiredCourseCount: number;
   requiredEcts: number;
+  /** Faz B B1: havuz seviyesinde AKTS override (null → ders kataloğu AKTS) */
+  ectsPerCourse: number | null;
   poolCourseCount: number;
 }
 
 export interface CreatePoolRequest {
   electiveGroupId: number;
+  /** Faz B B2: zorunlu, müfredat içinde (group, slotName) unique */
+  slotName: string;
   suggestedSemesterStart: number;
   suggestedSemesterEnd: number;
   requiredCourseCount: number;
   requiredEcts: number;
+  /** Faz B B2: opsiyonel; null → ders kataloğu AKTS'i kullanılır */
+  ectsPerCourse?: number;
 }
 
 export interface UpdatePoolRequest {
+  slotName?: string;
   suggestedSemesterStart?: number;
   suggestedSemesterEnd?: number;
   requiredCourseCount?: number;
   requiredEcts?: number;
+  ectsPerCourse?: number;
+  /** Faz B B2: explicit clear flag (partial update + explicit null) */
+  clearEctsPerCourse?: boolean;
 }

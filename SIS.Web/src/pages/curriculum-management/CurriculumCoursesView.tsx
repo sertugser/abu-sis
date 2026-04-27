@@ -70,6 +70,8 @@ interface Props {
 
   // Course-level actions
   onAddCourse: () => void;
+  /** Faz B B4: müfredata grup slotu ekle (AddPoolDialog'u açar) */
+  onAddPool: () => void;
   onShowCourseDetail: (courseId: number) => void;
   onOpenCourseLinks: (target: CourseLinksTarget) => void;
   onRemoveCourse: (courseId: number) => void;
@@ -108,6 +110,7 @@ export default function CurriculumCoursesView({
   onActivate,
   onDelete,
   onAddCourse,
+  onAddPool,
   onShowCourseDetail,
   onOpenCourseLinks,
   onRemoveCourse,
@@ -258,8 +261,7 @@ export default function CurriculumCoursesView({
                       size="sm"
                       variant="outline"
                       className="h-9 text-sm"
-                      disabled
-                      title="Yakında"
+                      onClick={onAddPool}
                     >
                       <Plus className="h-4 w-4 mr-1" /> Grup Ekle
                     </Button>
