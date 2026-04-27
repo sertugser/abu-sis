@@ -6,6 +6,8 @@ export interface PoolProgressDto {
   poolCode: string;
   poolName: string;
   subtype: string;
+  /** Faz C C5: aynı grubun farklı slot'larını ayırt etmek için (örn. TE-1, TE-2) */
+  slotName: string;
   requiredCourseCount: number;
   completedCourseCount: number;
   requiredEcts: number;
