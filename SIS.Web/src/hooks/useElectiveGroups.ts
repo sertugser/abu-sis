@@ -4,12 +4,11 @@ import type {
   CreateElectiveGroupRequest,
   UpdateElectiveGroupRequest,
   AddCoursesToGroupRequest,
-  ElectiveSubtype,
 } from '../types/electiveGroup';
 
 const KEYS = {
-  list: (subtype?: ElectiveSubtype, facultyId?: number, departmentId?: number, isActive?: boolean) =>
-    ['electiveGroups', 'list', subtype, facultyId, departmentId, isActive] as const,
+  list: (subtypeId?: number, facultyId?: number, departmentId?: number, isActive?: boolean) =>
+    ['electiveGroups', 'list', subtypeId, facultyId, departmentId, isActive] as const,
   detail: (id: number) => ['electiveGroups', 'detail', id] as const,
   courses: (id: number) => ['electiveGroups', 'courses', id] as const,
 };
@@ -18,10 +17,14 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['electiveGroups'] });
 }
 
-export function useElectiveGroupList(subtype?: ElectiveSubtype, facultyId?: number, departmentId?: number, isActive?: boolean) {
+/**
+ * Faz B B3c-3: subtypeId (FK) DB-driven filter. Eski enum filter kaldırıldı —
+ * artık custom subtype'lar da filter'a düşer.
+ */
+export function useElectiveGroupList(subtypeId?: number, facultyId?: number, departmentId?: number, isActive?: boolean) {
   return useQuery({
-    queryKey: KEYS.list(subtype, facultyId, departmentId, isActive),
-    queryFn: () => electiveGroupApi.list(subtype, facultyId, departmentId, isActive),
+    queryKey: KEYS.list(subtypeId, facultyId, departmentId, isActive),
+    queryFn: () => electiveGroupApi.list(subtypeId, facultyId, departmentId, isActive),
     staleTime: 2 * 60 * 1000,
   });
 }

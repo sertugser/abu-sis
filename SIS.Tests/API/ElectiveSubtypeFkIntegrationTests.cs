@@ -163,7 +163,7 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
         var controller = CreateController();
 
         // Act
-        var result = await controller.List(subtype: null, facultyId: null, departmentId: null, isActive: null, CancellationToken.None);
+        var result = await controller.List(subtype: null, subtypeId: null, facultyId: null, departmentId: null, isActive: null, ct: CancellationToken.None);
 
         // Assert
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;

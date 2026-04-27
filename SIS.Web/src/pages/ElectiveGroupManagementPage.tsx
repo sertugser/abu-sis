@@ -19,7 +19,6 @@ import {
 import { useElectiveSubtypeList } from '../hooks/useElectiveSubtypes';
 import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
 import {
-  ELECTIVE_SUBTYPE_LABELS,
   ELECTIVE_SUBTYPE_SHORT,
 } from '../types/electiveGroup';
 import type {
@@ -29,10 +28,9 @@ import type {
 } from '../types/electiveGroup';
 import ElectiveGroupDetailSheet from '../components/elective-groups/ElectiveGroupDetailSheet';
 
-// NOT (B3c-2): Filter ve tablo display hala hardcoded enum kullanır
-// (ELECTIVE_SUBTYPE_LABELS/SHORT/COLORS). Custom subtype'lı gruplar Subtype Badge'de
-// boş gözükür ve filter'a düşmez. Tam DB-driven dönüşüm B3d kapsamı.
-const FILTER_SUBTYPES: ElectiveSubtype[] = ['UniversityElective', 'NonDepartmentElective', 'TechnicalElective'];
+// NOT (B3c-3): Tablo Subtype Badge hâlâ hardcoded ELECTIVE_SUBTYPE_SHORT/COLORS
+// kullanır. Custom subtype'lı gruplarda badge fallback olarak kod gösterir.
+// Tam display dönüşümü Faz E kapsamı (deprecated enum kolonu drop ile birlikte).
 
 // ─── Create Dialog ─────────────────────────────────────────────────
 
@@ -282,6 +280,9 @@ function SubtypeBadge({ subtype }: { subtype: ElectiveSubtype }) {
 // ─── Main Page ─────────────────────────────────────────────────────
 
 export default function ElectiveGroupManagementPage() {
+  // Faz B B3c-3: subtypeFilter artık subtypeId ('all' veya numerik string).
+  // Custom subtype'lar da filter dropdown'a düşer; faculty/department filter
+  // subtype'tan bağımsız aktif (eski hardcoded 'TechnicalElective' check kalktı).
   const [subtypeFilter, setSubtypeFilter] = useState<string>('all');
   const [facultyFilter, setFacultyFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
@@ -292,17 +293,18 @@ export default function ElectiveGroupManagementPage() {
   const { data: faculties } = useAdminFaculties();
   const facultyFilterIdNum = facultyFilter !== 'all' ? Number(facultyFilter) : undefined;
   const { data: filterDepartments } = useAdminDepartmentsByStructure(facultyFilterIdNum);
+  // Faz B B3c-3: DB-driven subtype listesi (sadece aktif tipler — pasif tipler
+  // filter'da görünmez). useElectiveSubtypeList multi-role açık (Patch 2A).
+  const { data: filterSubtypes } = useElectiveSubtypeList(false);
 
-  const querySubtype = subtypeFilter === 'all' ? undefined : (subtypeFilter as ElectiveSubtype);
-  const queryFacultyId = subtypeFilter === 'TechnicalElective' && facultyFilter !== 'all'
-    ? Number(facultyFilter)
-    : undefined;
+  const querySubtypeId = subtypeFilter === 'all' ? undefined : Number(subtypeFilter);
+  const queryFacultyId = facultyFilter !== 'all' ? Number(facultyFilter) : undefined;
   const queryDepartmentId = queryFacultyId !== undefined && departmentFilter !== 'all'
     ? Number(departmentFilter)
     : undefined;
   const queryIsActive = statusFilter === 'all' ? undefined : statusFilter === 'active';
 
-  const { data: groups, isLoading, error } = useElectiveGroupList(querySubtype, queryFacultyId, queryDepartmentId, queryIsActive);
+  const { data: groups, isLoading, error } = useElectiveGroupList(querySubtypeId, queryFacultyId, queryDepartmentId, queryIsActive);
 
   const hasActiveFilters = subtypeFilter !== 'all' || facultyFilter !== 'all' || departmentFilter !== 'all' || statusFilter !== 'all';
 
@@ -330,21 +332,15 @@ export default function ElectiveGroupManagementPage() {
         {/* ── Toolbar: Filters + Action ── */}
         <div className="flex flex-wrap gap-3 items-end px-4 py-3 border-b border-border bg-muted/40">
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Tür</span>
-            <Select value={subtypeFilter} onValueChange={v => {
-              setSubtypeFilter(v);
-              if (v !== 'TechnicalElective') {
-                setFacultyFilter('all');
-                setDepartmentFilter('all');
-              }
-            }}>
+            <span className="text-xs text-muted-foreground">Tip</span>
+            <Select value={subtypeFilter} onValueChange={setSubtypeFilter}>
               <SelectTrigger className="w-[200px] h-9 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tümü</SelectItem>
-                {FILTER_SUBTYPES.map(s => (
-                  <SelectItem key={s} value={s}>{ELECTIVE_SUBTYPE_LABELS[s]}</SelectItem>
+                {(filterSubtypes ?? []).map(s => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -355,7 +351,6 @@ export default function ElectiveGroupManagementPage() {
             <Select
               value={facultyFilter}
               onValueChange={v => { setFacultyFilter(v); setDepartmentFilter('all'); }}
-              disabled={subtypeFilter !== 'TechnicalElective'}
             >
               <SelectTrigger className="w-[180px] h-9 bg-white">
                 <SelectValue placeholder="Tümü" />
@@ -374,7 +369,7 @@ export default function ElectiveGroupManagementPage() {
             <Select
               value={departmentFilter}
               onValueChange={setDepartmentFilter}
-              disabled={subtypeFilter !== 'TechnicalElective' || facultyFilter === 'all'}
+              disabled={facultyFilter === 'all'}
             >
               <SelectTrigger className="w-[180px] h-9 bg-white">
                 <SelectValue placeholder="Tümü" />

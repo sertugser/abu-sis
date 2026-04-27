@@ -14,9 +14,19 @@ import type {
 const BASE = '/elective-groups';
 
 export const electiveGroupApi = {
-  list: (subtype?: ElectiveSubtype, facultyId?: number, departmentId?: number, isActive?: boolean) =>
+  /**
+   * Faz B B3c-3: subtypeId (FK) paralel filter param. Backend FK öncelikli;
+   * subtype enum geri-uyum için tutuluyor.
+   */
+  list: (
+    subtypeId?: number,
+    facultyId?: number,
+    departmentId?: number,
+    isActive?: boolean,
+    subtype?: ElectiveSubtype,
+  ) =>
     apiClient.get<ElectiveGroupListDto[]>(BASE, {
-      params: { subtype, facultyId, departmentId, isActive },
+      params: { subtypeId, facultyId, departmentId, isActive, subtype },
     }).then(r => r.data),
 
   get: (id: number) =>

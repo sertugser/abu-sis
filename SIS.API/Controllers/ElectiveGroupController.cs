@@ -64,6 +64,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
     [RequirePermission("menu.secmeli-ders-gruplari.view")]
     public async Task<IActionResult> List(
         [FromQuery] ElectiveSubtype? subtype,
+        [FromQuery] int? subtypeId,
         [FromQuery] int? facultyId,
         [FromQuery] int? departmentId,
         [FromQuery] bool? isActive,
@@ -76,7 +77,11 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             .Include(eg => eg.Courses)
             .AsQueryable();
 
-        if (subtype.HasValue)
+        // Faz B B3c-3: subtypeId (FK, custom tipler için) öncelikli; subtype enum
+        // (geri-uyum) yedek. İkisi de varsa subtypeId kazanır.
+        if (subtypeId.HasValue)
+            query = query.Where(eg => eg.ElectiveSubtypeId == subtypeId.Value);
+        else if (subtype.HasValue)
             query = query.Where(eg => eg.ElectiveSubtype == subtype.Value);
         if (facultyId.HasValue)
             query = query.Where(eg => eg.FacultyId == facultyId.Value);
