@@ -205,11 +205,13 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             return BadRequest(new { message = "Bölüm seçildiğinde fakülte de zorunludur." });
 
         // OC için bölüm de yasak
+        // Subtype değişmez (Karar #14: sadece görünen ad değişebilir, kod sabit) — bu yüzden mevcut group.ElectiveSubtype okunuyor.
         if (group.ElectiveSubtype == ElectiveSubtype.UniversityElective && newDepartmentId.HasValue)
             return BadRequest(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
 
         // Bölüm varlığı kontrolü — bölüm verilen fakülteye ait olmalı
-        if (newDepartmentId.HasValue && newDepartmentId != group.DepartmentId)
+        if (newDepartmentId.HasValue &&
+            (newDepartmentId != group.DepartmentId || newFacultyId != group.FacultyId))
         {
             var deptExists = await context.Departments
                 .AnyAsync(d => d.Id == newDepartmentId.Value && d.FacultyId == newFacultyId, ct);
