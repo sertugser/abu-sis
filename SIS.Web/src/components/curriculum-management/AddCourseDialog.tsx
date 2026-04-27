@@ -12,7 +12,6 @@ import type { AddCourseRequest } from '../../types/curriculumManagement';
 import ClassificationSection from '../../pages/curriculum-management/course-form/ClassificationSection';
 import CurriculumSpecificSection from '../../pages/curriculum-management/course-form/CurriculumSpecificSection';
 import FlagsSection from '../../pages/curriculum-management/course-form/FlagsSection';
-import GroupSection from '../../pages/curriculum-management/course-form/GroupSection';
 import DecisionSection from '../../pages/curriculum-management/course-form/DecisionSection';
 import IntibakSection from '../../pages/curriculum-management/course-form/IntibakSection';
 import type {
@@ -41,7 +40,6 @@ function defaultCurriculumSpecific(): CurriculumSpecificState {
     showOnTranscript: true,
     categoryId: null,
     openingReasonId: null,
-    groupCode: '',
     curriculumDescription: '',
   };
 }
@@ -118,7 +116,6 @@ export default function AddCourseDialog({ open, onClose, onAdd, isPending, exist
       showOnTranscript: curriculumSpecific.showOnTranscript,
       categoryId: curriculumSpecific.categoryId ?? undefined,
       openingReasonId: curriculumSpecific.openingReasonId ?? undefined,
-      groupCode: curriculumSpecific.groupCode || undefined,
       // Phase 2 — flags
       isMainGroupCourse: flags.isMainGroupCourse,
       isFormationCourse: flags.isFormationCourse,
@@ -234,11 +231,6 @@ export default function AddCourseDialog({ open, onClose, onAdd, isPending, exist
             />
 
             <FlagsSection value={flags} onChange={setFlags} />
-
-            <GroupSection
-              groupCode={curriculumSpecific.groupCode}
-              onGroupCodeChange={(g) => setCurriculumSpecific({ ...curriculumSpecific, groupCode: g })}
-            />
 
             <DecisionSection value={decision} onChange={setDecision} />
 

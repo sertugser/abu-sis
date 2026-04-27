@@ -14,7 +14,6 @@ import BasicInfoSection from './course-form/BasicInfoSection';
 import ScheduleSection from './course-form/ScheduleSection';
 import ClassificationSection from './course-form/ClassificationSection';
 import CurriculumSpecificSection from './course-form/CurriculumSpecificSection';
-import GroupSection from './course-form/GroupSection';
 import DescriptionSection from './course-form/DescriptionSection';
 import FlagsSection from './course-form/FlagsSection';
 import DecisionSection from './course-form/DecisionSection';
@@ -77,7 +76,6 @@ export default function CurriculumCourseEditDialog({
     showOnTranscript: true,
     categoryId: null,
     openingReasonId: null,
-    groupCode: '',
     curriculumDescription: '',
   });
   const [description, setDescription] = useState<CourseDescriptionState>({ description: '' });
@@ -139,7 +137,6 @@ export default function CurriculumCourseEditDialog({
       showOnTranscript: curriculumCourse.showOnTranscript,
       categoryId: curriculumCourse.categoryId,
       openingReasonId: curriculumCourse.openingReasonId,
-      groupCode: curriculumCourse.groupCode ?? '',
       curriculumDescription: curriculumCourse.curriculumDescription ?? '',
     });
     setDescription({ description: courseDetail.description ?? '' });
@@ -291,7 +288,6 @@ export default function CurriculumCourseEditDialog({
         showOnTranscript: curriculumSpecific.showOnTranscript,
         categoryId: curriculumSpecific.categoryId ?? undefined,
         openingReasonId: curriculumSpecific.openingReasonId ?? undefined,
-        groupCode: curriculumSpecific.groupCode || undefined,
         clearCategory: curriculumSpecific.categoryId === null,
         clearOpeningReason: curriculumSpecific.openingReasonId === null,
         // Phase 2 — flags
@@ -355,10 +351,6 @@ export default function CurriculumCourseEditDialog({
                 onChange={setCurriculumSpecific}
               />
               <FlagsSection value={flags} onChange={setFlags} />
-              <GroupSection
-                groupCode={curriculumSpecific.groupCode}
-                onGroupCodeChange={(g) => setCurriculumSpecific({ ...curriculumSpecific, groupCode: g })}
-              />
               <DecisionSection value={decision} onChange={setDecision} />
               <IntibakSection
                 value={intibak}
