@@ -351,6 +351,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var controller = CreateCurriculumController();
         var req = new CurriculumController.CreatePoolRequest(
             ElectiveGroupId: group.Id,
+            SlotName: "TE-1",
             SuggestedSemesterStart: 5,
             SuggestedSemesterEnd: 8,
             RequiredCourseCount: 3,
@@ -365,6 +366,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
             .FirstOrDefaultAsync(p => p.CurriculumId == CurriculumId && p.ElectiveGroupId == group.Id);
         pool.Should().NotBeNull();
         pool!.RequiredCourseCount.Should().Be(3);
+        pool.SlotName.Should().Be("TE-1");
     }
 
     [Fact]
@@ -387,6 +389,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var controller = CreateCurriculumController();
         var req = new CurriculumController.CreatePoolRequest(
             ElectiveGroupId: group.Id,
+            SlotName: "TE-1",
             SuggestedSemesterStart: 5,
             SuggestedSemesterEnd: 8,
             RequiredCourseCount: 3,
@@ -419,6 +422,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var controller = CreateCurriculumController();
         var req = new CurriculumController.CreatePoolRequest(
             ElectiveGroupId: group.Id,
+            SlotName: "TE-1",
             SuggestedSemesterStart: 5,
             SuggestedSemesterEnd: 8,
             RequiredCourseCount: 3,
@@ -429,6 +433,138 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
 
         // Assert
         MessageOf(result).Should().Contain("farklı bir bölüme ait");
+    }
+
+    // ── Group 4: CreatePool SlotName validation (Faz B) ───────────────
+
+    [Fact]
+    public async Task CreatePool_with_empty_slot_name_returns_bad_request()
+    {
+        // Arrange — scope-valid (faculty match) grup; SlotName boş → reddedilmeli.
+        var group = new ElectiveGroup
+        {
+            Name = "TE Eng (empty slot test)",
+            Code = "TE-ENG-EMPTY",
+            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            FacultyId = FacultyEngId,
+            DepartmentId = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.ElectiveGroups.Add(group);
+        await _context.SaveChangesAsync();
+
+        var controller = CreateCurriculumController();
+        var req = new CurriculumController.CreatePoolRequest(
+            ElectiveGroupId: group.Id,
+            SlotName: "",
+            SuggestedSemesterStart: 5,
+            SuggestedSemesterEnd: 5,
+            RequiredCourseCount: 1,
+            RequiredEcts: 6);
+
+        // Act
+        var result = await controller.CreatePool(CurriculumId, req, CancellationToken.None);
+
+        // Assert
+        MessageOf(result).Should().Contain("Slot adı boş olamaz");
+    }
+
+    [Fact]
+    public async Task CreatePool_with_duplicate_slot_name_returns_bad_request()
+    {
+        // Arrange — aynı (curriculum, group, slotName) ikinci kez eklenmeye çalışılırsa reddedilir.
+        var group = new ElectiveGroup
+        {
+            Name = "TE Eng (dup slot test)",
+            Code = "TE-ENG-DUP",
+            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            FacultyId = FacultyEngId,
+            DepartmentId = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.ElectiveGroups.Add(group);
+        await _context.SaveChangesAsync();
+
+        // Önce TE-1 slotunu yaratıp commit et.
+        _context.CurriculumElectivePools.Add(new CurriculumElectivePool
+        {
+            CurriculumId = CurriculumId,
+            ElectiveGroupId = group.Id,
+            SlotName = "TE-1",
+            SuggestedSemesterStart = 5,
+            SuggestedSemesterEnd = 8,
+            RequiredCourseCount = 1,
+            RequiredEcts = 6,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        var controller = CreateCurriculumController();
+        var req = new CurriculumController.CreatePoolRequest(
+            ElectiveGroupId: group.Id,
+            SlotName: "TE-1",
+            SuggestedSemesterStart: 5,
+            SuggestedSemesterEnd: 8,
+            RequiredCourseCount: 1,
+            RequiredEcts: 6);
+
+        // Act
+        var result = await controller.CreatePool(CurriculumId, req, CancellationToken.None);
+
+        // Assert
+        MessageOf(result).Should().Contain("'TE-1' adlı slot bu havuza zaten bağlı");
+    }
+
+    [Fact]
+    public async Task CreatePool_with_different_slot_names_for_same_group_succeeds()
+    {
+        // Arrange — aynı grupta farklı slot adlarıyla iki havuz oluşturulabilmeli (TE-1, TE-2).
+        var group = new ElectiveGroup
+        {
+            Name = "TE Eng (multi slot)",
+            Code = "TE-ENG-MULTI",
+            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            FacultyId = FacultyEngId,
+            DepartmentId = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.ElectiveGroups.Add(group);
+        await _context.SaveChangesAsync();
+
+        var controller = CreateCurriculumController();
+
+        var req1 = new CurriculumController.CreatePoolRequest(
+            ElectiveGroupId: group.Id,
+            SlotName: "TE-1",
+            SuggestedSemesterStart: 5,
+            SuggestedSemesterEnd: 5,
+            RequiredCourseCount: 1,
+            RequiredEcts: 6);
+        var req2 = new CurriculumController.CreatePoolRequest(
+            ElectiveGroupId: group.Id,
+            SlotName: "TE-2",
+            SuggestedSemesterStart: 6,
+            SuggestedSemesterEnd: 6,
+            RequiredCourseCount: 1,
+            RequiredEcts: 6);
+
+        // Act
+        var result1 = await controller.CreatePool(CurriculumId, req1, CancellationToken.None);
+        var result2 = await controller.CreatePool(CurriculumId, req2, CancellationToken.None);
+
+        // Assert — her iki create de Ok döner ve DB'de iki kayıt olur.
+        result1.Should().BeOfType<OkObjectResult>();
+        result2.Should().BeOfType<OkObjectResult>();
+
+        var pools = await _context.CurriculumElectivePools.AsNoTracking()
+            .Where(p => p.CurriculumId == CurriculumId && p.ElectiveGroupId == group.Id)
+            .OrderBy(p => p.SlotName)
+            .ToListAsync();
+        pools.Should().HaveCount(2);
+        pools.Select(p => p.SlotName).Should().BeEquivalentTo(new[] { "TE-1", "TE-2" });
     }
 
     public void Dispose() => _context.Dispose();

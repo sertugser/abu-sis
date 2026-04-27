@@ -116,17 +116,25 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
     public record CurriculumElectivePoolDto(
         int Id, int ElectiveGroupId, string GroupName, string GroupCode,
         ElectiveSubtype ElectiveSubtype,
+        string SlotName,
         int SuggestedSemesterStart, int SuggestedSemesterEnd,
-        int RequiredCourseCount, int RequiredEcts, int PoolCourseCount);
+        int RequiredCourseCount, int RequiredEcts,
+        int? EctsPerCourse,
+        int PoolCourseCount);
 
     public record CreatePoolRequest(
         int ElectiveGroupId,
+        string SlotName,
         int SuggestedSemesterStart, int SuggestedSemesterEnd,
-        int RequiredCourseCount, int RequiredEcts);
+        int RequiredCourseCount, int RequiredEcts,
+        int? EctsPerCourse = null);
 
     public record UpdatePoolRequest(
+        string? SlotName = null,
         int? SuggestedSemesterStart = null, int? SuggestedSemesterEnd = null,
-        int? RequiredCourseCount = null, int? RequiredEcts = null);
+        int? RequiredCourseCount = null, int? RequiredEcts = null,
+        int? EctsPerCourse = null,
+        bool ClearEctsPerCourse = false);
 
     // ── GET /api/curriculum?programId=X&departmentId=Y&facultyId=Z ──
     // Filtre önceliği: programId > departmentId > facultyId (en dar olan uygulanır).
@@ -791,8 +799,10 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             .Select(p => new CurriculumElectivePoolDto(
                 p.Id, p.ElectiveGroupId, p.ElectiveGroup.Name, p.ElectiveGroup.Code,
                 p.ElectiveGroup.ElectiveSubtype,
+                p.SlotName,
                 p.SuggestedSemesterStart, p.SuggestedSemesterEnd,
                 p.RequiredCourseCount, p.RequiredEcts,
+                p.EctsPerCourse,
                 p.ElectiveGroup.Courses.Count))
             .ToListAsync(ct);
 
@@ -834,19 +844,36 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         if (req.RequiredCourseCount <= 0 && req.RequiredEcts <= 0)
             return BadRequest(new { message = "Gerekli ders sayısı veya AKTS en az biri 0'dan büyük olmalıdır." });
 
-        var alreadyExists = await context.CurriculumElectivePools
-            .AnyAsync(p => p.CurriculumId == id && p.ElectiveGroupId == req.ElectiveGroupId, ct);
-        if (alreadyExists)
-            return BadRequest(new { message = "Bu müfredatta bu seçmeli grubu zaten tanımlı." });
+        // SlotName validation
+        if (string.IsNullOrWhiteSpace(req.SlotName))
+            return BadRequest(new { message = "Slot adı boş olamaz." });
+        if (req.SlotName.Length > 50)
+            return BadRequest(new { message = "Slot adı 50 karakterden uzun olamaz." });
+
+        // EctsPerCourse non-negative
+        if (req.EctsPerCourse.HasValue && req.EctsPerCourse.Value < 0)
+            return BadRequest(new { message = "AKTS değeri negatif olamaz." });
+
+        var trimmedSlot = req.SlotName.Trim();
+
+        // SlotName uniqueness within (curriculumId, electiveGroupId)
+        var slotConflict = await context.CurriculumElectivePools
+            .AnyAsync(p => p.CurriculumId == id
+                      && p.ElectiveGroupId == req.ElectiveGroupId
+                      && p.SlotName == trimmedSlot, ct);
+        if (slotConflict)
+            return BadRequest(new { message = $"'{trimmedSlot}' adlı slot bu havuza zaten bağlı." });
 
         var entity = new Domain.Entities.CurriculumElectivePool
         {
             CurriculumId = id,
             ElectiveGroupId = req.ElectiveGroupId,
+            SlotName = trimmedSlot,
             SuggestedSemesterStart = req.SuggestedSemesterStart,
             SuggestedSemesterEnd = req.SuggestedSemesterEnd,
             RequiredCourseCount = req.RequiredCourseCount,
             RequiredEcts = req.RequiredEcts,
+            EctsPerCourse = req.EctsPerCourse,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -856,8 +883,10 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         return Ok(new CurriculumElectivePoolDto(
             entity.Id, entity.ElectiveGroupId, group.Name, group.Code,
             group.ElectiveSubtype,
+            entity.SlotName,
             entity.SuggestedSemesterStart, entity.SuggestedSemesterEnd,
             entity.RequiredCourseCount, entity.RequiredEcts,
+            entity.EctsPerCourse,
             group.Courses.Count));
     }
 
@@ -881,10 +910,42 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         if (pool is null)
             return NotFound(new { message = "Seçmeli havuz bulunamadı." });
 
+        // SlotName değişiyorsa validation + uniqueness check
+        if (req.SlotName != null && req.SlotName != pool.SlotName)
+        {
+            if (string.IsNullOrWhiteSpace(req.SlotName))
+                return BadRequest(new { message = "Slot adı boş olamaz." });
+            if (req.SlotName.Length > 50)
+                return BadRequest(new { message = "Slot adı 50 karakterden uzun olamaz." });
+
+            var trimmedSlot = req.SlotName.Trim();
+            var slotConflict = await context.CurriculumElectivePools
+                .AnyAsync(p => p.CurriculumId == pool.CurriculumId
+                          && p.ElectiveGroupId == pool.ElectiveGroupId
+                          && p.SlotName == trimmedSlot
+                          && p.Id != poolId, ct);
+            if (slotConflict)
+                return BadRequest(new { message = $"'{trimmedSlot}' adlı slot zaten mevcut." });
+
+            pool.SlotName = trimmedSlot;
+        }
+
         if (req.SuggestedSemesterStart.HasValue) pool.SuggestedSemesterStart = req.SuggestedSemesterStart.Value;
         if (req.SuggestedSemesterEnd.HasValue) pool.SuggestedSemesterEnd = req.SuggestedSemesterEnd.Value;
         if (req.RequiredCourseCount.HasValue) pool.RequiredCourseCount = req.RequiredCourseCount.Value;
         if (req.RequiredEcts.HasValue) pool.RequiredEcts = req.RequiredEcts.Value;
+
+        // EctsPerCourse: ClearEctsPerCourse=true → null; aksi halde value varsa atanır
+        if (req.ClearEctsPerCourse)
+        {
+            pool.EctsPerCourse = null;
+        }
+        else if (req.EctsPerCourse.HasValue)
+        {
+            if (req.EctsPerCourse.Value < 0)
+                return BadRequest(new { message = "AKTS değeri negatif olamaz." });
+            pool.EctsPerCourse = req.EctsPerCourse;
+        }
 
         pool.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(ct);
