@@ -15,12 +15,16 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
     // ── DTOs ────────────────────────────────────────────────────────
     public record ElectiveGroupListDto(
         int Id, string Name, string Code, ElectiveSubtype ElectiveSubtype,
-        int? FacultyId, string? FacultyName, string? Description,
+        int? FacultyId, string? FacultyName,
+        int? DepartmentId, string? DepartmentName,
+        string? Description,
         bool IsActive, int CourseCount, DateTime CreatedAt);
 
     public record ElectiveGroupDetailDto(
         int Id, string Name, string Code, ElectiveSubtype ElectiveSubtype,
-        int? FacultyId, string? FacultyName, string? Description,
+        int? FacultyId, string? FacultyName,
+        int? DepartmentId, string? DepartmentName,
+        string? Description,
         bool IsActive, DateTime CreatedAt,
         List<ElectiveGroupCourseDto> Courses);
 
@@ -29,11 +33,15 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
     public record CreateElectiveGroupRequest(
         string Name, string Code, ElectiveSubtype ElectiveSubtype,
-        int? FacultyId = null, string? Description = null);
+        int? FacultyId = null,
+        int? DepartmentId = null,
+        string? Description = null);
 
     public record UpdateElectiveGroupRequest(
         string? Name = null, string? Code = null,
-        int? FacultyId = null, string? Description = null,
+        int? FacultyId = null,
+        int? DepartmentId = null,
+        string? Description = null,
         bool? IsActive = null);
 
     public record AddCoursesToGroupRequest(List<int> CourseIds);
@@ -44,12 +52,14 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
     public async Task<IActionResult> List(
         [FromQuery] ElectiveSubtype? subtype,
         [FromQuery] int? facultyId,
+        [FromQuery] int? departmentId,
         [FromQuery] bool? isActive,
         CancellationToken ct)
     {
         var query = context.ElectiveGroups
             .AsNoTracking()
             .Include(eg => eg.Faculty)
+            .Include(eg => eg.Department)
             .Include(eg => eg.Courses)
             .AsQueryable();
 
@@ -57,6 +67,8 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             query = query.Where(eg => eg.ElectiveSubtype == subtype.Value);
         if (facultyId.HasValue)
             query = query.Where(eg => eg.FacultyId == facultyId.Value);
+        if (departmentId.HasValue)
+            query = query.Where(eg => eg.DepartmentId == departmentId.Value);
         if (isActive.HasValue)
             query = query.Where(eg => eg.IsActive == isActive.Value);
 
@@ -65,6 +77,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             .Select(eg => new ElectiveGroupListDto(
                 eg.Id, eg.Name, eg.Code, eg.ElectiveSubtype,
                 eg.FacultyId, eg.Faculty != null ? eg.Faculty.Name : null,
+                eg.DepartmentId, eg.Department != null ? eg.Department.Name : null,
                 eg.Description, eg.IsActive,
                 eg.Courses.Count, eg.CreatedAt))
             .ToListAsync(ct);
@@ -80,6 +93,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         var group = await context.ElectiveGroups
             .AsNoTracking()
             .Include(eg => eg.Faculty)
+            .Include(eg => eg.Department)
             .Include(eg => eg.Courses).ThenInclude(egc => egc.Course)
             .FirstOrDefaultAsync(eg => eg.Id == id, ct);
 
@@ -88,7 +102,9 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
         var dto = new ElectiveGroupDetailDto(
             group.Id, group.Name, group.Code, group.ElectiveSubtype,
-            group.FacultyId, group.Faculty?.Name, group.Description,
+            group.FacultyId, group.Faculty?.Name,
+            group.DepartmentId, group.Department?.Name,
+            group.Description,
             group.IsActive, group.CreatedAt,
             group.Courses
                 .OrderBy(c => c.Course.Code)
@@ -109,6 +125,14 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         if (req.ElectiveSubtype == ElectiveSubtype.UniversityElective && req.FacultyId.HasValue)
             return BadRequest(new { message = "Üniversite Seçmeli için fakülte belirtilmemelidir." });
 
+        // Bölüm seçilmişse fakülte de zorunlu
+        if (req.DepartmentId.HasValue && !req.FacultyId.HasValue)
+            return BadRequest(new { message = "Bölüm seçildiğinde fakülte de zorunludur." });
+
+        // OC için bölüm de yasak
+        if (req.ElectiveSubtype == ElectiveSubtype.UniversityElective && req.DepartmentId.HasValue)
+            return BadRequest(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
+
         var codeExists = await context.ElectiveGroups
             .AnyAsync(eg => eg.Code == req.Code, ct);
         if (codeExists)
@@ -121,12 +145,22 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
                 return NotFound(new { message = "Fakülte bulunamadı." });
         }
 
+        // Bölüm varlığı kontrolü — bölüm verilen fakülteye ait olmalı
+        if (req.DepartmentId.HasValue)
+        {
+            var deptExists = await context.Departments
+                .AnyAsync(d => d.Id == req.DepartmentId.Value && d.FacultyId == req.FacultyId, ct);
+            if (!deptExists)
+                return BadRequest(new { message = "Bölüm bulunamadı veya seçilen fakülteye ait değil." });
+        }
+
         var entity = new Domain.Entities.ElectiveGroup
         {
             Name = req.Name,
             Code = req.Code,
             ElectiveSubtype = req.ElectiveSubtype,
             FacultyId = req.FacultyId,
+            DepartmentId = req.DepartmentId,
             Description = req.Description,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
@@ -137,7 +171,9 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
         return Ok(new ElectiveGroupListDto(
             entity.Id, entity.Name, entity.Code, entity.ElectiveSubtype,
-            entity.FacultyId, null, entity.Description,
+            entity.FacultyId, null,
+            entity.DepartmentId, null,
+            entity.Description,
             entity.IsActive, 0, entity.CreatedAt));
     }
 
@@ -160,8 +196,39 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             group.Code = req.Code;
         }
 
+        // Effective values (request öncelikli, yoksa mevcut değer)
+        var newFacultyId = req.FacultyId ?? group.FacultyId;
+        var newDepartmentId = req.DepartmentId ?? group.DepartmentId;
+
+        // Bölüm seçilmişse fakülte de zorunlu
+        if (newDepartmentId.HasValue && !newFacultyId.HasValue)
+            return BadRequest(new { message = "Bölüm seçildiğinde fakülte de zorunludur." });
+
+        // OC için bölüm de yasak
+        if (group.ElectiveSubtype == ElectiveSubtype.UniversityElective && newDepartmentId.HasValue)
+            return BadRequest(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
+
+        // Bölüm varlığı kontrolü — bölüm verilen fakülteye ait olmalı
+        if (newDepartmentId.HasValue && newDepartmentId != group.DepartmentId)
+        {
+            var deptExists = await context.Departments
+                .AnyAsync(d => d.Id == newDepartmentId.Value && d.FacultyId == newFacultyId, ct);
+            if (!deptExists)
+                return BadRequest(new { message = "Bölüm bulunamadı veya seçilen fakülteye ait değil." });
+        }
+
+        // Scope değişimi varsa: mevcut müfredat bağlantısı yoksa serbest, varsa engelle (Karar #12)
+        if (newDepartmentId != group.DepartmentId || newFacultyId != group.FacultyId)
+        {
+            var hasBindings = await context.CurriculumElectivePools
+                .AnyAsync(p => p.ElectiveGroupId == id, ct);
+            if (hasBindings)
+                return BadRequest(new { message = "Bu grup mevcut müfredatlara bağlı. Scope (fakülte/bölüm) değiştirmeden önce tüm bağlantıları kaldırın." });
+        }
+
         if (req.Name is not null) group.Name = req.Name;
         if (req.FacultyId.HasValue) group.FacultyId = req.FacultyId;
+        if (req.DepartmentId.HasValue) group.DepartmentId = req.DepartmentId;
         if (req.Description is not null) group.Description = req.Description;
         if (req.IsActive.HasValue) group.IsActive = req.IsActive.Value;
 
