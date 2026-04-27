@@ -7,6 +7,8 @@ export interface ElectiveGroupListDto {
   electiveSubtype: ElectiveSubtype;
   facultyId: number | null;
   facultyName: string | null;
+  departmentId: number | null;
+  departmentName: string | null;
   description: string | null;
   isActive: boolean;
   courseCount: number;
@@ -29,6 +31,7 @@ export interface CreateElectiveGroupRequest {
   code: string;
   electiveSubtype: ElectiveSubtype;
   facultyId?: number;
+  departmentId?: number;
   description?: string;
 }
 
@@ -36,6 +39,7 @@ export interface UpdateElectiveGroupRequest {
   name?: string;
   code?: string;
   facultyId?: number;
+  departmentId?: number;
   description?: string;
   isActive?: boolean;
 }
