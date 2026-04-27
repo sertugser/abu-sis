@@ -16,9 +16,10 @@ import {
   Settings, Trash2,
 } from 'lucide-react';
 import type {
-  CurriculumCourseItemDto,
   CurriculumDetailDto,
+  CurriculumElectivePoolDto,
   CurriculumListDto,
+  CurriculumRow,
 } from '../../types/curriculumManagement';
 
 type TermTypeFilter = 'all' | 'fall' | 'spring';
@@ -52,8 +53,10 @@ interface Props {
   onTermTypeFilterChange: (val: TermTypeFilter) => void;
   onShowGroupedCoursesChange: (val: boolean) => void;
 
-  // Course list + pagination
-  pagedCourses: CurriculumCourseItemDto[];
+  // Course + pool karma liste + pagination (Faz B B5)
+  pagedRows: CurriculumRow[];
+  flatRowsCount: number;
+  /** Sadece ders sayısı (pool hariç) — alt summary bar "Listelenen Ders Say" için */
   flatCoursesCount: number;
   flatCoursesCredit: number;
   flatCoursesEcts: number;
@@ -72,6 +75,8 @@ interface Props {
   onAddCourse: () => void;
   /** Faz B B4: müfredata grup slotu ekle (AddPoolDialog'u açar) */
   onAddPool: () => void;
+  /** Faz B B5: pool satırı tıklanınca detail dialog (PoolDetailDialog) */
+  onShowPoolDetail: (pool: CurriculumElectivePoolDto) => void;
   onShowCourseDetail: (courseId: number) => void;
   onOpenCourseLinks: (target: CourseLinksTarget) => void;
   onRemoveCourse: (courseId: number) => void;
@@ -97,7 +102,8 @@ export default function CurriculumCoursesView({
   onClassFilterChange,
   onTermTypeFilterChange,
   onShowGroupedCoursesChange,
-  pagedCourses,
+  pagedRows,
+  flatRowsCount,
   flatCoursesCount,
   flatCoursesCredit,
   flatCoursesEcts,
@@ -111,6 +117,7 @@ export default function CurriculumCoursesView({
   onDelete,
   onAddCourse,
   onAddPool,
+  onShowPoolDetail,
   onShowCourseDetail,
   onOpenCourseLinks,
   onRemoveCourse,
@@ -298,12 +305,12 @@ export default function CurriculumCoursesView({
                 Veri yüklenemedi
               </CardContent>
             </Card>
-          ) : flatCoursesCount === 0 ? (
+          ) : flatRowsCount === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 {searchCode || searchName || classFilter !== null || termTypeFilter !== 'all'
-                  ? 'Filtrenizle eşleşen ders bulunamadı'
-                  : 'Henüz ders eklenmemiş'}
+                  ? 'Filtrenizle eşleşen ders veya grup slotu bulunamadı'
+                  : 'Henüz ders veya grup slotu eklenmemiş'}
               </CardContent>
             </Card>
           ) : (
@@ -332,7 +339,61 @@ export default function CurriculumCoursesView({
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedCourses.map(c => {
+                      {pagedRows.map(row => {
+                        if (row.kind === 'pool') {
+                          // ── Pool satırı (Faz B B5): soft renkli arka plan, "Grup" badge ──
+                          const p = row.pool;
+                          const startSinif = Math.ceil(p.suggestedSemesterStart / 2);
+                          const endSinif = Math.ceil(p.suggestedSemesterEnd / 2);
+                          const sinifLabel = startSinif === endSinif ? String(startSinif) : `${startSinif}-${endSinif}`;
+                          const ectsLabel = p.ectsPerCourse !== null
+                            ? `${p.requiredEcts} (${p.ectsPerCourse}/ders)`
+                            : String(p.requiredEcts);
+                          return (
+                            <tr
+                              key={`pool-${p.id}`}
+                              className="border-b bg-violet-50/40 hover:bg-violet-50 cursor-pointer transition-colors"
+                              onClick={() => onShowPoolDetail(p)}
+                            >
+                              <td className="px-2 py-2">
+                                <Layers className="h-4 w-4 text-violet-700 mx-auto" />
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap font-mono text-xs font-medium text-violet-900">
+                                {p.groupCode}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="text-violet-900 font-medium">{p.groupName}</span>
+                                <span className="text-xs text-violet-700 ml-2">· {p.slotName}</span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <Badge variant="outline" className="text-[10px] bg-violet-100 text-violet-800 border-violet-300">
+                                  Grup
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-right text-violet-900 italic">{ectsLabel}</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-center">{sinifLabel}</td>
+                              <td className="px-3 py-2 text-center text-muted-foreground">—</td>
+                              <td className="px-3 py-2">
+                                <Badge variant="outline" className="text-[10px] bg-violet-50 text-violet-700 border-violet-200">
+                                  {p.requiredCourseCount > 0 ? `${p.requiredCourseCount} ders` : 'AKTS bazlı'}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-center text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-center text-xs text-violet-700">
+                                Düzenle
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        // ── Ders satırı (mevcut davranış) ──
+                        const c = row.course;
                         const sinif = Math.ceil(c.suggestedSemester / 2);
                         const donem = c.suggestedSemester % 2 === 1 ? 'G' : 'B';
                         const courseLabel = `${c.courseCode} — ${c.courseName}`;
@@ -440,7 +501,7 @@ export default function CurriculumCoursesView({
                 {/* Pagination — ders listesi (15 ders/sayfa) */}
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-t bg-muted/20 text-sm">
                   <span className="text-muted-foreground">
-                    {flatCoursesCount} ders — Sayfa {coursesPage}/{coursesTotalPages}
+                    {flatRowsCount} satır — Sayfa {coursesPage}/{coursesTotalPages}
                   </span>
                   {coursesTotalPages > 1 && (
                     <div className="flex items-center gap-1">

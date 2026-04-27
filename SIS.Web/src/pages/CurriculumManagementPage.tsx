@@ -9,9 +9,11 @@ import {
   useAddCurriculumCourse,
   useRemoveCurriculumCourse,
   useCopyCurriculum,
+  useCurriculumPools,
 } from '../hooks/useCurriculumManagement';
 import AddCourseDialog from '../components/curriculum-management/AddCourseDialog';
 import AddPoolDialog from '../components/curriculum-management/AddPoolDialog';
+import PoolDetailDialog from '../components/curriculum-management/PoolDetailDialog';
 import CurriculumCourseEditDialog from './curriculum-management/CurriculumCourseEditDialog';
 import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
@@ -24,7 +26,12 @@ import CurriculumListView from './curriculum-management/CurriculumListView';
 import CurriculumCoursesView from './curriculum-management/CurriculumCoursesView';
 import PromotionRulesDialog from './curriculum-management/PromotionRulesDialog';
 import { getFromYearOptionsFromEcts } from './curriculum-management/PromotionRulesPanel';
-import type { CurriculumCourseItemDto, CurriculumListDto } from '../types/curriculumManagement';
+import type {
+  CurriculumCourseItemDto,
+  CurriculumElectivePoolDto,
+  CurriculumListDto,
+  CurriculumRow,
+} from '../types/curriculumManagement';
 import { ROUTES } from '@/lib/constants';
 
 type ViewMode = 'list' | 'courses';
@@ -70,6 +77,7 @@ export default function CurriculumManagementPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showAddCourse, setShowAddCourse] = useState(false);
   const [showAddPool, setShowAddPool] = useState(false);
+  const [poolDetailTarget, setPoolDetailTarget] = useState<CurriculumElectivePoolDto | null>(null);
   const [showTermRulesDialog, setShowTermRulesDialog] = useState(false);
   // Hangi müfredat için dialog açıldı (listeden dişli menüsüyle tetikleniyor)
   const [termRulesTarget, setTermRulesTarget] = useState<{ id: number; label: string } | null>(null);
@@ -110,6 +118,9 @@ export default function CurriculumManagementPage() {
   const removeCourseMut = useRemoveCurriculumCourse();
   const copyMut = useCopyCurriculum();
 
+  // Faz B B5: müfredata bağlı grup slot'ları (pool'lar)
+  const { data: poolsData } = useCurriculumPools(selectedCurriculumId);
+
   // ── Derived — düz ders listesi (grup yok) ──
   const flatCourses = useMemo(() => {
     if (!detail) return [] as CurriculumCourseItemDto[];
@@ -145,18 +156,69 @@ export default function CurriculumManagementPage() {
     );
   }, [detail, searchCode, searchName, classFilter, termTypeFilter]);
 
+  // Faz B B5: filtrelenmiş pool listesi (course filtreleriyle aynı kuralları uygular)
+  const filteredPools = useMemo(() => {
+    if (!poolsData) return [] as CurriculumElectivePoolDto[];
+    const codeLower = searchCode.trim().toLowerCase();
+    const nameLower = searchName.trim().toLowerCase();
+
+    let filtered = poolsData;
+
+    if (codeLower) {
+      filtered = filtered.filter(p => p.groupCode.toLowerCase().includes(codeLower));
+    }
+    if (nameLower) {
+      filtered = filtered.filter(p =>
+        p.groupName.toLowerCase().includes(nameLower) || p.slotName.toLowerCase().includes(nameLower),
+      );
+    }
+
+    if (classFilter !== null) {
+      const minSem = (classFilter - 1) * 2 + 1;
+      const maxSem = classFilter * 2;
+      filtered = filtered.filter(p => p.suggestedSemesterStart >= minSem && p.suggestedSemesterStart <= maxSem);
+    }
+
+    if (termTypeFilter === 'fall') {
+      filtered = filtered.filter(p => p.suggestedSemesterStart % 2 !== 0);
+    } else if (termTypeFilter === 'spring') {
+      filtered = filtered.filter(p => p.suggestedSemesterStart % 2 === 0);
+    }
+
+    return filtered;
+  }, [poolsData, searchCode, searchName, classFilter, termTypeFilter]);
+
+  // Faz B B5: course + pool karma satır listesi (yarıyıl asc, eşitlikte course'lar önce)
+  const flatRows = useMemo<CurriculumRow[]>(() => {
+    const rows: CurriculumRow[] = [
+      ...flatCourses.map(c => ({ kind: 'course' as const, course: c })),
+      ...filteredPools.map(p => ({ kind: 'pool' as const, pool: p })),
+    ];
+    return rows.sort((a, b) => {
+      const aSem = a.kind === 'course' ? a.course.suggestedSemester : a.pool.suggestedSemesterStart;
+      const bSem = b.kind === 'course' ? b.course.suggestedSemester : b.pool.suggestedSemesterStart;
+      if (aSem !== bSem) return aSem - bSem;
+      // Eşit yarıyılda önce course'lar, sonra pool'lar
+      if (a.kind !== b.kind) return a.kind === 'course' ? -1 : 1;
+      // Aynı kind içinde alfabetik
+      const aKey = a.kind === 'course' ? a.course.courseCode : `${a.pool.groupCode}-${a.pool.slotName}`;
+      const bKey = b.kind === 'course' ? b.course.courseCode : `${b.pool.groupCode}-${b.pool.slotName}`;
+      return aKey.localeCompare(bKey);
+    });
+  }, [flatCourses, filteredPools]);
+
   const existingCourseIds = useMemo(
     () => new Set(detail?.courses?.map(c => c.courseId) ?? []),
     [detail],
   );
 
-  // Ders listesi sayfalama (15 ders/sayfa)
-  const coursesTotalPages = Math.max(1, Math.ceil(flatCourses.length / COURSES_PAGE_SIZE));
-  const pagedCourses = useMemo(
-    () => flatCourses.slice((coursesPage - 1) * COURSES_PAGE_SIZE, coursesPage * COURSES_PAGE_SIZE),
-    [flatCourses, coursesPage],
+  // Ders + pool listesi sayfalama (15 satır/sayfa)
+  const coursesTotalPages = Math.max(1, Math.ceil(flatRows.length / COURSES_PAGE_SIZE));
+  const pagedRows = useMemo(
+    () => flatRows.slice((coursesPage - 1) * COURSES_PAGE_SIZE, coursesPage * COURSES_PAGE_SIZE),
+    [flatRows, coursesPage],
   );
-  // Filtre sonrası listelenen derslerin toplam kredi/AKTS değerleri (alt summary bar için)
+  // Alt summary bar — sadece course'lardan toplam (pool'lar derslerin AKTS'ini tekrar saymasın diye dışarıda)
   const flatCoursesCredit = useMemo(
     () => flatCourses.reduce((s, c) => s + (c.nationalCredit ?? 0), 0),
     [flatCourses],
@@ -451,7 +513,8 @@ export default function CurriculumManagementPage() {
           onClassFilterChange={setClassFilter}
           onTermTypeFilterChange={setTermTypeFilter}
           onShowGroupedCoursesChange={setShowGroupedCourses}
-          pagedCourses={pagedCourses}
+          pagedRows={pagedRows}
+          flatRowsCount={flatRows.length}
           flatCoursesCount={flatCourses.length}
           flatCoursesCredit={flatCoursesCredit}
           flatCoursesEcts={flatCoursesEcts}
@@ -465,6 +528,7 @@ export default function CurriculumManagementPage() {
           onDelete={setDeleteTarget}
           onAddCourse={() => setShowAddCourse(true)}
           onAddPool={() => setShowAddPool(true)}
+          onShowPoolDetail={(pool) => setPoolDetailTarget(pool)}
           onShowCourseDetail={handleShowCourseDetail}
           onOpenCourseLinks={setCourseLinksTarget}
           onRemoveCourse={(courseId) => removeCourseMut.mutate({ curriculumId: selectedCurriculumId!, courseId })}
@@ -500,6 +564,17 @@ export default function CurriculumManagementPage() {
           curriculumId={selectedCurriculumId}
           open={showAddPool}
           onOpenChange={setShowAddPool}
+        />
+      )}
+
+      {/* ── Pool Detail Dialog (Faz B B5) ── */}
+      {selectedCurriculumId !== null && poolDetailTarget !== null && (
+        <PoolDetailDialog
+          key={poolDetailTarget.id}
+          curriculumId={selectedCurriculumId}
+          pool={poolDetailTarget}
+          open={poolDetailTarget !== null}
+          onOpenChange={(o) => { if (!o) setPoolDetailTarget(null); }}
         />
       )}
 

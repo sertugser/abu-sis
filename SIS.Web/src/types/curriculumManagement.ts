@@ -232,3 +232,11 @@ export interface UpdatePoolRequest {
   /** Faz B B2: explicit clear flag (partial update + explicit null) */
   clearEctsPerCourse?: boolean;
 }
+
+/**
+ * Faz B B5: Müfredat tablosunda zorunlular + grup slot'ları karışık satırlar.
+ * Discriminated union — render tarafı `kind` üzerinden ayrıştırır.
+ */
+export type CurriculumRow =
+  | { kind: 'course'; course: CurriculumCourseItemDto }
+  | { kind: 'pool'; pool: CurriculumElectivePoolDto };
