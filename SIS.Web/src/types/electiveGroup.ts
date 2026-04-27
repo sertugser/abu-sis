@@ -40,6 +40,8 @@ export interface UpdateElectiveGroupRequest {
   code?: string;
   facultyId?: number;
   departmentId?: number;
+  clearFaculty?: boolean;
+  clearDepartment?: boolean;
   description?: string;
   isActive?: boolean;
 }

@@ -41,6 +41,8 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         string? Name = null, string? Code = null,
         int? FacultyId = null,
         int? DepartmentId = null,
+        bool ClearFaculty = false,
+        bool ClearDepartment = false,
         string? Description = null,
         bool? IsActive = null);
 
@@ -196,9 +198,13 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             group.Code = req.Code;
         }
 
-        // Effective values (request öncelikli, yoksa mevcut değer)
-        var newFacultyId = req.FacultyId ?? group.FacultyId;
-        var newDepartmentId = req.DepartmentId ?? group.DepartmentId;
+        // Guard: Fakülte temizlenirken bölüm de temizlenmelidir (dept fakülteye bağımlı).
+        if (req.ClearFaculty && !req.ClearDepartment && (req.DepartmentId.HasValue || group.DepartmentId.HasValue))
+            return BadRequest(new { message = "Fakülte temizlenirken bölüm de temizlenmelidir." });
+
+        // Effective values (clear flag öncelikli; yoksa request öncelikli; yoksa mevcut değer)
+        var newFacultyId = req.ClearFaculty ? null : (req.FacultyId ?? group.FacultyId);
+        var newDepartmentId = req.ClearDepartment ? null : (req.DepartmentId ?? group.DepartmentId);
 
         // Bölüm seçilmişse fakülte de zorunlu
         if (newDepartmentId.HasValue && !newFacultyId.HasValue)
@@ -229,8 +235,13 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         }
 
         if (req.Name is not null) group.Name = req.Name;
-        if (req.FacultyId.HasValue) group.FacultyId = req.FacultyId;
-        if (req.DepartmentId.HasValue) group.DepartmentId = req.DepartmentId;
+
+        if (req.ClearFaculty) group.FacultyId = null;
+        else if (req.FacultyId.HasValue) group.FacultyId = req.FacultyId;
+
+        if (req.ClearDepartment) group.DepartmentId = null;
+        else if (req.DepartmentId.HasValue) group.DepartmentId = req.DepartmentId;
+
         if (req.Description is not null) group.Description = req.Description;
         if (req.IsActive.HasValue) group.IsActive = req.IsActive.Value;
 

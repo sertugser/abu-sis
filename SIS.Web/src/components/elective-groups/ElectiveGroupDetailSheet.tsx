@@ -97,6 +97,12 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
     }
     setValidationError(null);
 
+    // Clear flags: if user emptied a previously-set field, send explicit clear
+    const initialFacultyId = group.facultyId ?? null;
+    const initialDepartmentId = group.departmentId ?? null;
+    const clearFaculty = initialFacultyId !== null && facultyIdNumLocal === null;
+    const clearDepartment = initialDepartmentId !== null && departmentIdNumLocal === null;
+
     const req: UpdateElectiveGroupRequest = {
       name: name.trim() || undefined,
       code: code.trim() || undefined,
@@ -104,6 +110,8 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
       isActive,
       ...(facultyIdNumLocal !== null ? { facultyId: facultyIdNumLocal } : {}),
       ...(departmentIdNumLocal !== null ? { departmentId: departmentIdNumLocal } : {}),
+      ...(clearFaculty ? { clearFaculty: true } : {}),
+      ...(clearDepartment ? { clearDepartment: true } : {}),
     };
     updateMutation.mutate({ id: groupId, ...req });
   }
