@@ -12,6 +12,7 @@ using SIS.Application.Common.Time;
 using SIS.Application.Identity.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.ElectiveGroups.Services;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.UserPreferences.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -127,6 +128,9 @@ builder.Services.AddAuthentication(options =>
 
 // Register Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Elective Groups
+builder.Services.AddScoped<IElectiveGroupScopeValidator, ElectiveGroupScopeValidator>();
 
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
