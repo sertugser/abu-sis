@@ -893,19 +893,27 @@ public partial class CalendarGeneratorService
                 c.Start.Date > classesStart.StartDate.Date
                 && c.End.Date < finalExam.StartDate.Date
                 && !OverlapsBlockingHoliday(c.Start, c.End, holidays))
-            .OrderBy(c => Math.Abs(c.Before - c.After))
-            .ThenBy(c => Math.Max(0, c.Before - c.After))
-            .ThenByDescending(c => c.After)
-            .ThenBy(c => Math.Abs((c.Start.Date - midterm.StartDate.Date).Days))
-            .FirstOrDefault();
+            .ToList();
 
-        if (candidates == null)
+        var selected = candidates
+            .Where(c => c.Before >= MidtermEarliestTeachingWeek)
+            .OrderBy(c => Math.Abs(c.Before - c.After))
+            .ThenByDescending(c => c.Before)
+            .ThenByDescending(c => c.Start)
+            .FirstOrDefault()
+            ?? candidates
+                .OrderByDescending(c => c.Before)
+                .ThenBy(c => Math.Abs(c.Before - c.After))
+                .ThenByDescending(c => c.Start)
+                .FirstOrDefault();
+
+        if (selected == null)
             return ShiftEventOffBlockingHolidays(midterm, holidays);
 
         return midterm with
         {
-            StartDate = candidates.Start,
-            EndDate = durationDays == 0 ? null : candidates.End
+            StartDate = selected.Start,
+            EndDate = durationDays == 0 ? null : selected.End
         };
     }
 

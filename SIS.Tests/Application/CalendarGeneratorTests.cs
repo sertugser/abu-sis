@@ -283,7 +283,7 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Generator_ChoosesPreviousMidtermWeek_WhenItPreservesMoreTeachingWeeksBeforeFinals()
+    public async Task Generator_ChoosesNextMidtermWeek_WhenPreviousWeekWouldSacrificePreMidtermWeeks()
     {
         await AddBlockingHolidayAsync("Ara Sınav Haftası Test Tatili", "Midterm Week Test Holiday", 11, 12);
 
@@ -306,11 +306,11 @@ public class CalendarGeneratorTests : IDisposable
         var publication = result.Events.Single(e =>
             e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_publication");
 
-        midterm.StartDate.Should().Be(Utc(2025, 11, 3));
-        midterm.EndDate.Should().Be(Utc(2025, 11, 9));
+        midterm.StartDate.Should().Be(Utc(2025, 11, 17));
+        midterm.EndDate.Should().Be(Utc(2025, 11, 23));
         ExamEventsShouldNotOverlap(result.Events, result.Holidays);
-        CountTeachingWeeksBetween(Utc(2025, 9, 21), midterm.StartDate).Should().Be(6);
-        CountTeachingWeeksBetween(midterm.EndDate!.Value, final.StartDate).Should().Be(8);
+        CountTeachingWeeksBetween(Utc(2025, 9, 21), midterm.StartDate).Should().BeGreaterThanOrEqualTo(7);
+        CountTeachingWeeksBetween(midterm.EndDate!.Value, final.StartDate).Should().Be(6);
 
         excuseApplication.StartDate.Should().BeAfter(midterm.EndDate!.Value);
         excuseExam.StartDate.Should().BeAfter(excuseApplication.StartDate);
