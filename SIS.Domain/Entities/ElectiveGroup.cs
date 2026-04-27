@@ -10,6 +10,8 @@ public class ElectiveGroup
     public ElectiveSubtype ElectiveSubtype { get; set; }
     public int? FacultyId { get; set; }
     public Faculty? Faculty { get; set; }
+    public int? DepartmentId { get; set; }
+    public Department? Department { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }

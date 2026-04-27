@@ -276,6 +276,12 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(eg => eg.FacultyId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(eg => eg.Department)
+             .WithMany()
+             .HasForeignKey(eg => eg.DepartmentId)
+             .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(eg => eg.DepartmentId);
         });
 
         // ── ElectiveGroupCourse (composite PK) ──────────────────
