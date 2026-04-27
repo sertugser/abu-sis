@@ -135,7 +135,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task Create_UniversityElective_with_DepartmentId_returns_bad_request()
+    public async Task Create_UniversityElective_with_DepartmentId_is_rejected_by_earlier_scope_guards()
     {
         // Arrange
         // Create flow'unda OC + DeptId üç kombinasyonun hepsi reddedilir:
@@ -254,6 +254,38 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
 
         // Assert
         MessageOf(result).Should().Contain("Fakülte temizlenirken bölüm de temizlenmelidir");
+    }
+
+    [Fact]
+    public async Task Update_changes_scope_when_no_bindings_exist()
+    {
+        // Arrange — fakülte scope'lu (Eng) grup, hiç müfredat bağlantısı yok.
+        var group = new ElectiveGroup
+        {
+            Name = "MUH-TE-I",
+            Code = "MUH-TE-I",
+            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            FacultyId = FacultyEngId,
+            DepartmentId = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.ElectiveGroups.Add(group);
+        await _context.SaveChangesAsync();
+
+        var controller = CreateGroupController();
+        var req = new ElectiveGroupController.UpdateElectiveGroupRequest(
+            FacultyId: FacultyEngId,
+            DepartmentId: DeptCompEngId);
+
+        // Act
+        var result = await controller.Update(group.Id, req, CancellationToken.None);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+        var reloaded = await _context.ElectiveGroups.AsNoTracking().FirstAsync(eg => eg.Id == group.Id);
+        reloaded.FacultyId.Should().Be(FacultyEngId);
+        reloaded.DepartmentId.Should().Be(DeptCompEngId);
     }
 
     [Fact]

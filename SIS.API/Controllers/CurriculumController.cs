@@ -866,6 +866,11 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
     [RequirePermission("menu.mufredat-islemleri.edit-pool")]
     public async Task<IActionResult> UpdatePool(int id, int poolId, [FromBody] UpdatePoolRequest req, CancellationToken ct)
     {
+        // NOT: UpdatePool'da scope ladder validation YOK çünkü UpdatePoolRequest ElectiveGroupId
+        // alanı içermiyor — havuz değişmez, sadece SuggestedSemester/RequiredCourseCount/Ects
+        // güncellenebilir. Eğer ileride ElectiveGroupId değiştirilebilir hale gelirse,
+        // CreatePool'daki scope check buraya da eklenmelidir.
+
         // Madde 8: Published müfredat kilit
         var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (curr is not null && curr.Status == Domain.Enums.CurriculumStatus.Published)

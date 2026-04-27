@@ -122,18 +122,8 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
     [RequirePermission("menu.secmeli-ders-gruplari.create")]
     public async Task<IActionResult> Create([FromBody] CreateElectiveGroupRequest req, CancellationToken ct)
     {
-        if (req.ElectiveSubtype == ElectiveSubtype.TechnicalElective && !req.FacultyId.HasValue)
-            return BadRequest(new { message = "Teknik Seçmeli için fakülte zorunludur." });
-        if (req.ElectiveSubtype == ElectiveSubtype.UniversityElective && req.FacultyId.HasValue)
-            return BadRequest(new { message = "Üniversite Seçmeli için fakülte belirtilmemelidir." });
-
-        // Bölüm seçilmişse fakülte de zorunlu
-        if (req.DepartmentId.HasValue && !req.FacultyId.HasValue)
-            return BadRequest(new { message = "Bölüm seçildiğinde fakülte de zorunludur." });
-
-        // OC için bölüm de yasak
-        if (req.ElectiveSubtype == ElectiveSubtype.UniversityElective && req.DepartmentId.HasValue)
-            return BadRequest(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
+        var scopeError = ValidateScopeAndSubtype(req.ElectiveSubtype, req.FacultyId, req.DepartmentId);
+        if (scopeError != null) return scopeError;
 
         var codeExists = await context.ElectiveGroups
             .AnyAsync(eg => eg.Code == req.Code, ct);
@@ -212,6 +202,10 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
         // OC için bölüm de yasak
         // Subtype değişmez (Karar #14: sadece görünen ad değişebilir, kod sabit) — bu yüzden mevcut group.ElectiveSubtype okunuyor.
+        // NOT: "Teknik Seçmeli için fakülte zorunlu" ve "Üniversite Seçmeli için fakülte belirtilmemeli"
+        // kuralları bilinçli olarak Update'te uygulanmıyor — bir TE grubu fakülte temizlenince
+        // school-wide hale gelebiliyor (bkz. Update_ClearFaculty_and_ClearDepartment_makes_group_school_wide).
+        // Bu yüzden ValidateScopeAndSubtype helper'ı yerine sadece iki kuralı inline tutuyoruz.
         if (group.ElectiveSubtype == ElectiveSubtype.UniversityElective && newDepartmentId.HasValue)
             return BadRequest(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
 
@@ -346,5 +340,28 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         await context.SaveChangesAsync(ct);
 
         return NoContent();
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Scope (fakülte/bölüm) ve alt-tip kombinasyonunu doğrular. Geçersizse
+    /// uygun BadRequest döner; geçerliyse null. Create ve Update aynı kuralları
+    /// paylaşır — bu helper iki yolda da DRY uygulanabilir.
+    /// </summary>
+    private static IActionResult? ValidateScopeAndSubtype(
+        ElectiveSubtype subtype,
+        int? facultyId,
+        int? departmentId)
+    {
+        if (subtype == ElectiveSubtype.TechnicalElective && !facultyId.HasValue)
+            return new BadRequestObjectResult(new { message = "Teknik Seçmeli için fakülte zorunludur." });
+        if (subtype == ElectiveSubtype.UniversityElective && facultyId.HasValue)
+            return new BadRequestObjectResult(new { message = "Üniversite Seçmeli için fakülte belirtilmemelidir." });
+        if (departmentId.HasValue && !facultyId.HasValue)
+            return new BadRequestObjectResult(new { message = "Bölüm seçildiğinde fakülte de zorunludur." });
+        if (subtype == ElectiveSubtype.UniversityElective && departmentId.HasValue)
+            return new BadRequestObjectResult(new { message = "Üniversite Seçmeli için bölüm belirtilmemelidir." });
+        return null;
     }
 }
