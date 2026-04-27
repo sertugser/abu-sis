@@ -18,13 +18,17 @@ import { useAddToPlan } from '../hooks/useAddToPlan';
 import { useDropCourse } from '../hooks/useDropCourse';
 import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { useStudentInfo } from '../hooks/useStudentInfo';
+import { useStudentPoolStatus, type PoolProgressDto } from '../hooks/useStudentPoolStatus';
 import { useActiveTerm } from '../hooks/useActiveTerm';
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { formatDate } from '../lib/utils';
 import { ROUTES } from '../lib/constants';
 import type { ValidationError } from '../types/registration';
 import {
   AlertCircle, AlertTriangle, BookX, Trash2, Send, CheckCircle2,
-  Loader2, RotateCcw, GraduationCap, Calendar, Clock, User,
+  CircleAlert, Layers, Loader2, RotateCcw, GraduationCap, Calendar, Clock, User,
 } from 'lucide-react';
 
 function getEctsExplanation(cgpa: number): string {
@@ -47,6 +51,8 @@ export default function CourseCatalogPage() {
   const { data: registrations } = useMyRegistrations();
   const { data: student } = useStudentInfo();
   const { data: term } = useActiveTerm();
+  const { data: poolStatus = [] } = useStudentPoolStatus(student?.id ?? null);
+  const [slotCandidatesTarget, setSlotCandidatesTarget] = useState<PoolProgressDto | null>(null);
   const addToPlan = useAddToPlan();
   const dropCourse = useDropCourse();
   const submitRegistration = useSubmitRegistration();
@@ -319,6 +325,62 @@ export default function CourseCatalogPage() {
         </CardContent>
       </Card>
 
+      {/* ── Müfredat Slotlarım (Faz C C2) ── */}
+      {poolStatus.length > 0 && (
+        <Card>
+          <CardContent className="px-5 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-violet-700" />
+                <h3 className="font-semibold text-sm text-foreground">Müfredat Slotlarım</h3>
+              </div>
+              <Badge variant="secondary" className="text-[10px]">
+                {poolStatus.filter(p => p.isFulfilled).length}/{poolStatus.length} doldu
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Müfredatındaki seçmeli grup slot'ları. Slot'a tıklayarak o slot için aday dersleri görebilirsin.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {poolStatus.map(pool => (
+                <button
+                  key={pool.poolId}
+                  type="button"
+                  onClick={() => setSlotCandidatesTarget(pool)}
+                  className={`text-left border rounded-lg p-3 transition-colors ${
+                    pool.isFulfilled
+                      ? 'border-success/40 bg-success/5 hover:bg-success/10'
+                      : 'border-border hover:bg-violet-50/40 hover:border-violet-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    {pool.isFulfilled
+                      ? <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                      : <CircleAlert className="h-4 w-4 text-amber-500 shrink-0" />
+                    }
+                    <span className="text-xs font-mono font-bold text-foreground">
+                      {pool.poolCode}
+                      {pool.slotName && (
+                        <span className="text-violet-700 font-semibold"> / {pool.slotName}</span>
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate mb-1.5">{pool.poolName}</p>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground">
+                      {pool.requiredCourseCount > 0 && `${pool.completedCourseCount}/${pool.requiredCourseCount} ders`}
+                      {pool.requiredCourseCount > 0 && pool.requiredEcts > 0 && ' · '}
+                      {pool.requiredEcts > 0 && `${pool.earnedEcts}/${pool.requiredEcts} AKTS`}
+                    </span>
+                    <span className="text-violet-700">→ adaylar</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Uyarılar ── */}
       {submitSuccess && (
         <Alert variant="success">
@@ -566,6 +628,115 @@ export default function CourseCatalogPage() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* ── Slot Aday Dersler Dialog (Faz C C2) ── */}
+      <Dialog
+        open={slotCandidatesTarget !== null}
+        onOpenChange={(o) => { if (!o) setSlotCandidatesTarget(null); }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {slotCandidatesTarget && (
+                <span>
+                  <span className="font-mono text-violet-700">{slotCandidatesTarget.poolCode} / {slotCandidatesTarget.slotName}</span>
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    — {slotCandidatesTarget.poolName}
+                  </span>
+                </span>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Bu slot için müfredatında aday olan dersler. Listedeki bir derse kayıt olduğunda
+              bu slot için sayılır.
+            </DialogDescription>
+          </DialogHeader>
+          {slotCandidatesTarget && (
+            <SlotCandidatesTable
+              pool={slotCandidatesTarget}
+              courses={(courses ?? []).filter(c =>
+                c.applicablePoolSlots.some(s => s.poolId === slotCandidatesTarget.poolId)
+              )}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ── Slot Aday Dersler Tablosu ── */
+
+function SlotCandidatesTable({
+  pool,
+  courses,
+}: {
+  pool: PoolProgressDto;
+  courses: import('../types/course').StudentCourseDto[];
+}) {
+  if (courses.length === 0) {
+    return (
+      <div className="text-center py-8 text-sm text-muted-foreground">
+        Bu slot için aday ders bulunamadı.
+        <p className="text-xs mt-1">
+          Grup boş olabilir veya öğrenci kaydı için açık dersi yok.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{courses.length} aday ders</span>
+        {pool.ectsPerCourse !== null && (
+          <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+            Bu havuzda her ders {pool.ectsPerCourse} AKTS
+          </Badge>
+        )}
+      </div>
+      <div className="overflow-y-auto max-h-[60vh] -mx-1">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-24">Kod</TableHead>
+              <TableHead>Ad</TableHead>
+              <TableHead className="text-right w-16">AKTS</TableHead>
+              <TableHead className="text-center w-24">Durum</TableHead>
+              <TableHead className="text-center w-20">Açık?</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {courses.map(c => (
+              <TableRow key={c.courseId}>
+                <TableCell className="font-mono text-xs">{c.code}</TableCell>
+                <TableCell className="text-sm">{c.name}</TableCell>
+                <TableCell className="text-right tabular-nums">{c.ects}</TableCell>
+                <TableCell className="text-center">
+                  {c.takeStatus === 'Alttan' && (
+                    <Badge variant="destructive" className="text-[10px]">Alttan</Badge>
+                  )}
+                  {c.takeStatus === 'OncedenAlindi' && (
+                    <Badge variant="secondary" className="text-[10px]">Alındı</Badge>
+                  )}
+                  {c.takeStatus === 'IlkDefa' && (
+                    <Badge variant="outline" className="text-[10px]">İlk defa</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-center">
+                  {c.sections.length > 0 ? (
+                    <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                      {c.sections.length} şube
+                    </Badge>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground italic">Açık değil</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
