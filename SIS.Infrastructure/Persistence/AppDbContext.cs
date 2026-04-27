@@ -303,7 +303,9 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── CurriculumElectivePool ──────────────────────────────
         builder.Entity<CurriculumElectivePool>(e =>
         {
-            e.HasIndex(cep => new { cep.CurriculumId, cep.ElectiveGroupId }).IsUnique();
+            e.Property(cep => cep.SlotName).HasMaxLength(50).IsRequired();
+
+            e.HasIndex(cep => new { cep.CurriculumId, cep.ElectiveGroupId, cep.SlotName }).IsUnique();
 
             e.HasOne(cep => cep.Curriculum)
              .WithMany(c => c.ElectivePools)

@@ -1612,6 +1612,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("RequiredEcts")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SlotName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<int>("SuggestedSemesterEnd")
                         .HasColumnType("integer");
 
@@ -1625,7 +1630,7 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("ElectiveGroupId");
 
-                    b.HasIndex("CurriculumId", "ElectiveGroupId")
+                    b.HasIndex("CurriculumId", "ElectiveGroupId", "SlotName")
                         .IsUnique();
 
                     b.ToTable("CurriculumElectivePools");
