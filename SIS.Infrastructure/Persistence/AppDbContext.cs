@@ -193,10 +193,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .HasForeignKey(cc => cc.CourseId)
              .OnDelete(DeleteBehavior.Restrict);
 
-            e.HasOne(cc => cc.ElectiveGroup)
-             .WithMany()
-             .HasForeignKey(cc => cc.ElectiveGroupId)
-             .OnDelete(DeleteBehavior.SetNull);
+            // Faz D D1: ElectiveGroup FK kaldırıldı (ölü FK — hiçbir code path set etmiyordu).
+            // Yeni model: pool/slot tabanlı CurriculumElectivePool (B1+).
 
             e.HasOne(cc => cc.OpeningReason)
              .WithMany()

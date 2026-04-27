@@ -17,9 +17,7 @@ public class CurriculumCourse
     public int? OpeningReasonId { get; set; }
     public CurriculumCourseOpeningReason? OpeningReason { get; set; }
 
-    public string? GroupCode { get; set; }                    // Grup Kodu (seçmeli grup)
-    public int? ElectiveGroupId { get; set; }
-    public ElectiveGroup? ElectiveGroup { get; set; }
+    public string? GroupCode { get; set; }                    // Grup Kodu (seçmeli grup) — D2'de kalkacak
 
     // ── Phase 2 fields ─────────────────────────────────────────────────
     // UI flags

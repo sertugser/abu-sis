@@ -1463,9 +1463,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("DecisionNote")
                         .HasColumnType("text");
 
-                    b.Property<int?>("ElectiveGroupId")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("ExcludedFromCreditTotal")
                         .HasColumnType("boolean");
 
@@ -1513,8 +1510,6 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("CourseId");
-
-                    b.HasIndex("ElectiveGroupId");
 
                     b.HasIndex("OpeningReasonId");
 
@@ -3843,11 +3838,6 @@ namespace SIS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("SIS.Domain.Entities.ElectiveGroup", "ElectiveGroup")
-                        .WithMany()
-                        .HasForeignKey("ElectiveGroupId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("SIS.Domain.Entities.CurriculumCourseOpeningReason", "OpeningReason")
                         .WithMany()
                         .HasForeignKey("OpeningReasonId")
@@ -3863,8 +3853,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Course");
 
                     b.Navigation("Curriculum");
-
-                    b.Navigation("ElectiveGroup");
 
                     b.Navigation("OpeningReason");
 
