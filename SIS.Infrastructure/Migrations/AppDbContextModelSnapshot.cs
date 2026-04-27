@@ -1469,9 +1469,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("ExcludedFromTranscriptTotal")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("GroupCode")
-                        .HasColumnType("text");
-
                     b.Property<bool>("HasCustomExamCurriculum")
                         .HasColumnType("boolean");
 

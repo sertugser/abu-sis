@@ -30,9 +30,8 @@ export interface CourseClassificationState {
 }
 
 // CurriculumCourse-specific (only used in CurriculumCourseEditDialog)
-// Faz B B6: groupCode form alanı kaldırıldı; backend payload'a gönderilmiyor.
-// Backend AddCourseRequest.groupCode? hâlâ optional kabul eder ama bu form göndermez.
-// Backend'den schema sökme Faz D'de.
+// Faz B B6: groupCode form alanı kaldırıldı.
+// Faz D D2: backend AddCourseRequest.groupCode + entity GroupCode tamamen söküldü.
 export interface CurriculumSpecificState {
   suggestedSemester: number;
   isCompulsory: boolean;

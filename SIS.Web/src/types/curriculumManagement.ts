@@ -65,7 +65,6 @@ export interface CurriculumCourseItemDto {
   openingReasonId: number | null;
   openingReasonCode: string | null;
   openingReasonName: string | null;
-  groupCode: string | null;
   nationalCredit: number;
   // Phase 2 — flags
   isMainGroupCourse: boolean;
@@ -134,7 +133,6 @@ export interface AddCourseRequest {
   showOnTranscript?: boolean;
   categoryId?: number | null;
   openingReasonId?: number | null;
-  groupCode?: string;
   // Phase 2 — flags
   isMainGroupCourse?: boolean;
   isFormationCourse?: boolean;
@@ -161,7 +159,6 @@ export interface UpdateCourseRequest {
   showOnTranscript?: boolean;
   categoryId?: number | null;
   openingReasonId?: number | null;
-  groupCode?: string;
   clearCategory?: boolean;
   clearOpeningReason?: boolean;
   // Phase 2 — flags (null/undefined = no change)

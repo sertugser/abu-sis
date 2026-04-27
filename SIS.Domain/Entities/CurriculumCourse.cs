@@ -17,7 +17,7 @@ public class CurriculumCourse
     public int? OpeningReasonId { get; set; }
     public CurriculumCourseOpeningReason? OpeningReason { get; set; }
 
-    public string? GroupCode { get; set; }                    // Grup Kodu (seçmeli grup) — D2'de kalkacak
+    // Faz D D2: GroupCode (string) kaldırıldı; pool/slot tabanlı CurriculumElectivePool kullan.
 
     // ── Phase 2 fields ─────────────────────────────────────────────────
     // UI flags

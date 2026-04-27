@@ -41,7 +41,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         bool IncludeInGpa, bool ShowOnTranscript,
         int? CategoryId, string? CategoryName,
         int? OpeningReasonId, string? OpeningReasonCode, string? OpeningReasonName,
-        string? GroupCode,
         int NationalCredit,
         // Phase 2 — flags
         bool IsMainGroupCourse, bool IsFormationCourse,
@@ -77,7 +76,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         int CourseId, int SuggestedSemester, bool IsCompulsory,
         bool IncludeInGpa = true, bool ShowOnTranscript = true,
         int? CategoryId = null, int? OpeningReasonId = null,
-        string? GroupCode = null,
         // Phase 2 flags
         bool IsMainGroupCourse = false, bool IsFormationCourse = false,
         bool ExcludedFromCreditTotal = false, bool ExcludedFromTranscriptTotal = false,
@@ -94,7 +92,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         int? SuggestedSemester = null, bool? IsCompulsory = null,
         bool? IncludeInGpa = null, bool? ShowOnTranscript = null,
         int? CategoryId = null, int? OpeningReasonId = null,
-        string? GroupCode = null,
         bool ClearCategory = false, bool ClearOpeningReason = false,
         // Phase 2 flags (all bool? — null means "no change")
         bool? IsMainGroupCourse = null, bool? IsFormationCourse = null,
@@ -239,7 +236,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.OpeningReasonId,
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                    cc.GroupCode,
                     cc.Course.NationalCredit ?? 0,
                     // Phase 2 — flags
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
@@ -405,7 +401,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 cc.OpeningReasonId,
                 cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                 cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                cc.GroupCode,
                 cc.Course.NationalCredit ?? 0,
                 // Phase 2
                 cc.IsMainGroupCourse, cc.IsFormationCourse,
@@ -468,7 +463,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             ShowOnTranscript = req.ShowOnTranscript,
             CategoryId = req.CategoryId,
             OpeningReasonId = req.OpeningReasonId,
-            GroupCode = req.GroupCode,
             // Phase 2 flags
             IsMainGroupCourse = req.IsMainGroupCourse,
             IsFormationCourse = req.IsFormationCourse,
@@ -509,7 +503,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             saved.OpeningReasonId,
             saved.OpeningReason != null ? saved.OpeningReason.Code : null,
             saved.OpeningReason != null ? saved.OpeningReason.Name : null,
-            saved.GroupCode,
             saved.Course.NationalCredit ?? 0,
             // Phase 2
             saved.IsMainGroupCourse, saved.IsFormationCourse,
@@ -553,9 +546,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
 
         if (req.ClearOpeningReason) cc.OpeningReasonId = null;
         else if (req.OpeningReasonId.HasValue) cc.OpeningReasonId = req.OpeningReasonId;
-
-        if (req.GroupCode is not null)
-            cc.GroupCode = req.GroupCode;
 
         // Phase 2 — flags
         if (req.IsMainGroupCourse.HasValue) cc.IsMainGroupCourse = req.IsMainGroupCourse.Value;
@@ -672,7 +662,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 ShowOnTranscript = cc.ShowOnTranscript,
                 CategoryId = cc.CategoryId,
                 OpeningReasonId = cc.OpeningReasonId,
-                GroupCode = cc.GroupCode,
                 // Phase 2 — flags
                 IsMainGroupCourse = cc.IsMainGroupCourse,
                 IsFormationCourse = cc.IsFormationCourse,
@@ -737,7 +726,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.OpeningReasonId,
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                    cc.GroupCode,
                     cc.Course.NationalCredit ?? 0,
                     // Phase 2 — flags
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
