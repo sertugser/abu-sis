@@ -1,9 +1,9 @@
 # Elective Pool System (Faz 6) — Codemap
 
-<!-- Generated: 2026-04-27 | Faz 6 refactor: 26 commits | Status: TAMAMLANDI -->
+<!-- Generated: 2026-04-28 | Faz 6 refactor: 29+ commits (A-E hepsi) | Status: TAMAMLANDI -->
 
-> **Faz 6 Elective Pool Refactor** — Seçmeli ders sistemi flat `GroupCode` etiketinden gerçek pool/slot model'ine geçti.
-> Branch: `fix/curriculum-management-page` (push'suz, 26 ardışık commit).
+> **Faz 6 Elective Pool Refactor** — Seçmeli ders sistemi flat `GroupCode` etiketinden gerçek pool/slot model'ine geçti. Faz E'de deprecated enum kolonu/dosyası tamamen söküldü.
+> Branch: `fix/curriculum-management-page` (push'suz, 29+ ardışık commit).
 > Memory: kullanıcı dotfile `project_elective_pool_refactor.md` (commit haritası + 14 davranış kararı).
 
 ## Hızlı Tanıtım
@@ -22,10 +22,10 @@
 ┌─────────────────────┐         ┌──────────────────────────┐
 │ ElectiveSubtypeEntity│        │ ElectiveGroup             │
 │  Id, Code, Name     │◄────────┤  Id, Code, Name           │
-│  RequiresFaculty    │ FK      │  ElectiveSubtypeId (FK)   │
-│  ForbidsFaculty     │         │  ElectiveSubtype (deprec) │
-│  RequiresDept       │         │  FacultyId? + DepartmentId│ ← scope ladder
-│  ForbidsDept        │         │  IsActive                 │
+│  RequiresFaculty    │ FK      │  ElectiveSubtypeId (NOT N)│
+│  ForbidsFaculty     │         │  FacultyId? + DepartmentId│ ← scope ladder
+│  RequiresDept       │         │  IsActive                 │
+│  ForbidsDept        │         │                           │
 └─────────────────────┘         └──────┬───────────────────┘
                                        │
                   ┌────────────────────┼────────────────────┐
@@ -72,11 +72,11 @@ Soft delete: Update IsActive=false. Hard delete YOK.
 
 ### ElectiveGroupController — `/api/elective-groups`
 ```
-GET    /                  → List(subtype?, subtypeId?, facultyId?, departmentId?, isActive?)
+GET    /                  → List(subtypeId?, facultyId?, departmentId?, isActive?)
                             [RequirePermission menu.secmeli-ders-gruplari.view]
-                            B3c-3: subtypeId paralel param (FK öncelikli)
+                            Faz E: sadece DB-driven subtypeId (deprecated subtype enum kalktı)
 GET    /{id}              → Get
-POST   /                  → Create — ResolveSubtypeAsync + ValidateScopeAgainstSubtype
+POST   /                  → Create — ResolveSubtypeAsync(int) + ValidateScopeAgainstSubtype
 PUT    /{id}              → Update (Code+subtype immutable; scope clear flag'li)
 DELETE /{id}              → soft delete (IsActive=false)
 GET    /{id}/courses      → ListCourses
@@ -105,11 +105,12 @@ her ders için müfredattaki aday slot listesi. Çoğul (Karar #5).
 ## Key Files
 
 ### Domain
-- [ElectiveGroup.cs](../../SIS.Domain/Entities/ElectiveGroup.cs) — entity, paralel `ElectiveSubtype` enum + `ElectiveSubtypeId` FK
-- [ElectiveSubtypeEntity.cs](../../SIS.Domain/Entities/ElectiveSubtypeEntity.cs) — DB-driven tip tablosu
+- [ElectiveGroup.cs](../../SIS.Domain/Entities/ElectiveGroup.cs) — entity, sadece `ElectiveSubtypeId` FK (NOT NULL); deprecated enum kolon Faz E'de DROP
+- [ElectiveSubtypeEntity.cs](../../SIS.Domain/Entities/ElectiveSubtypeEntity.cs) — DB-driven tip tablosu, tek kaynak
 - [CurriculumElectivePool.cs](../../SIS.Domain/Entities/CurriculumElectivePool.cs) — slot kaydı (SlotName, EctsPerCourse)
 - [ElectiveGroupCourse.cs](../../SIS.Domain/Entities/ElectiveGroupCourse.cs) — composite PK (groupId + courseId)
 - [CurriculumCourse.cs](../../SIS.Domain/Entities/CurriculumCourse.cs) — D1+D2'de `ElectiveGroupId` + `GroupCode` DROP
+- ~~SIS.Domain/Enums/ElectiveSubtype.cs~~ — Faz E'de SİLİNDİ
 
 ### Application
 - [ElectiveGroupScopeValidator.cs](../../SIS.Application/ElectiveGroups/Services/ElectiveGroupScopeValidator.cs) — scope ladder kuralı
@@ -119,7 +120,7 @@ her ders için müfredattaki aday slot listesi. Çoğul (Karar #5).
 - [AppDbContext.cs](../../SIS.Infrastructure/Persistence/AppDbContext.cs) — ElectiveGroup + ElectiveSubtypeEntity config
 - [ElectiveSubtypeSeed.cs](../../SIS.Infrastructure/Persistence/Seeds/ElectiveSubtypeSeed.cs) — TE/NDE/OC default seed (idempotent merge)
 - [MenuStructureSeed.cs](../../SIS.Infrastructure/Persistence/Seeds/MenuStructureSeed.cs) — `Ders İşlemleri > Seçmeli Tipleri` (B3c)
-- Migration'lar: `20260427103938_AddElectiveGroupDepartmentId`, `20260427142243_AddCurriculumElectivePoolSlotName`, `20260427144934_AddElectiveSubtypesTable`, `20260427200247_DropCurriculumCourseElectiveGroupId`, `20260427200835_DropCurriculumCourseGroupCode`
+- Migration'lar: `20260427103938_AddElectiveGroupDepartmentId`, `20260427142243_AddCurriculumElectivePoolSlotName`, `20260427144934_AddElectiveSubtypesTable` (+ backfill enum→ID), `20260427200247_DropCurriculumCourseElectiveGroupId`, `20260427200835_DropCurriculumCourseGroupCode`, `20260427205823_DropElectiveGroupElectiveSubtypeColumn` (Faz E)
 
 ### API
 - [ElectiveSubtypeController.cs](../../SIS.API/Controllers/ElectiveSubtypeController.cs) — DB-driven tip CRUD
@@ -142,10 +143,11 @@ her ders için müfredattaki aday slot listesi. Çoğul (Karar #5).
 - [CurriculumStatusPage.tsx](../../SIS.Web/src/pages/CurriculumStatusPage.tsx) — `/mufredat-durum` (C5 SlotName progress)
 
 ### Frontend types
-- [electiveGroup.ts](../../SIS.Web/src/types/electiveGroup.ts) — DTO + Create/Update + paralel enum/FK
-- [electiveSubtype.ts](../../SIS.Web/src/types/electiveSubtype.ts) — yeni tip DTO + Create/Update
+- [electiveGroup.ts](../../SIS.Web/src/types/electiveGroup.ts) — DTO + Create/Update (sadece electiveSubtypeId — Faz E enum/helper'ları kaldırıldı)
+- [electiveSubtype.ts](../../SIS.Web/src/types/electiveSubtype.ts) — tip DTO + Create/Update
 - [curriculumManagement.ts](../../SIS.Web/src/types/curriculumManagement.ts) — `CurriculumRow` union (course/pool), `CurriculumElectivePoolDto` (slotName + ectsPerCourse + electiveSubtypeId)
 - [course.ts](../../SIS.Web/src/types/course.ts) — `ApplicablePoolSlotDto`, `StudentCourseDto.applicablePoolSlots`
+- [lib/electiveSubtypeUtils.ts](../../SIS.Web/src/lib/electiveSubtypeUtils.ts) — Faz E: `getSubtypeColorByCode` + `findSubtypeById` (ortak display helper)
 
 ## Veri akışı: Öğrenci ders kayıt
 
@@ -221,16 +223,7 @@ her ders için müfredattaki aday slot listesi. Çoğul (Karar #5).
 | **A** | 10 commit (`d38279c..5daf4f1`) | DepartmentId scope ladder + validator + admin sayfa |
 | **B** | 11 commit (B1-B6 + B3c-3) | Pool/slot model + DB-driven subtype + UI tam |
 | **C** | 5 commit (C1-C5) | Öğrenci slot UI + warning gate + üstten toggle |
-| **D** | 3 commit (D1-D3) | Backend cleanup (ölü kolonlar drop) + dokümantasyon |
-| **E** | gelecekte | Deprecated `ElectiveSubtype` enum kolonu drop (opsiyonel) |
+| **D** | 3 commit (D1-D3) + 1 codemap | Backend cleanup (ölü kolonlar drop) + dokümantasyon |
+| **E** | 2 commit (E1+E2) + 1 doc | Deprecated `ElectiveSubtype` enum kolon + dosya + DTO/display tam temizlik |
 
-## Gelecek (Faz E — opsiyonel)
-
-6+ ay sonra stabilite kontrolüyle:
-1. `ElectiveGroup.ElectiveSubtype` enum kolonu DROP migration
-2. `SIS.Domain/Enums/ElectiveSubtype.cs` dosyası sil
-3. `CurriculumElectivePoolDto.electiveSubtype` deprecated field kaldır
-4. Frontend `ElectiveSubtype` type + `ELECTIVE_SUBTYPE_LABELS/SHORT/COLORS` helper'ları
-5. `ElectiveGroup` Subtype Badge tam DB-driven (custom subtype'lar için anlamlı display)
-
-Bilinçli olarak Faz D'de yapılmadı — B3b paralel destek pattern'i ile geriye uyumluluk korundu.
+**Refactor closed** — Faz 6 tamamlandı, gelecek faz YOK.
