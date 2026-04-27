@@ -192,10 +192,8 @@ export interface CurriculumElectivePoolDto {
   electiveGroupId: number;
   groupName: string;
   groupCode: string;
-  /** @deprecated B3d'de kalkacak — yeni kodda electiveSubtypeId kullan */
-  electiveSubtype: string;
-  /** Faz B B3b: DB-driven ElectiveSubtypes.Id (paralel destek) */
-  electiveSubtypeId: number | null;
+  /** Faz E: ElectiveSubtypes.Id (deprecated electiveSubtype enum string kalktı) */
+  electiveSubtypeId: number;
   /** Faz B B1: aynı grubun farklı slot'ları (örn. TE-1, TE-2) */
   slotName: string;
   suggestedSemesterStart: number;

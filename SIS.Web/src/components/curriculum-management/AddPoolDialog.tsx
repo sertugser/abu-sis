@@ -11,9 +11,9 @@ import {
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { useElectiveGroupList } from '../../hooks/useElectiveGroups';
+import { useElectiveSubtypeList } from '../../hooks/useElectiveSubtypes';
 import { useCreatePool } from '../../hooks/useCurriculumManagement';
-import { ELECTIVE_SUBTYPE_SHORT } from '../../types/electiveGroup';
-import type { ElectiveSubtype } from '../../types/electiveGroup';
+import { findSubtypeById } from '../../lib/electiveSubtypeUtils';
 
 interface Props {
   curriculumId: number;
@@ -32,6 +32,7 @@ export default function AddPoolDialog({ curriculumId, open, onOpenChange }: Prop
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const { data: groups, isLoading: loadingGroups } = useElectiveGroupList();
+  const { data: subtypes } = useElectiveSubtypeList(false);
   const createPool = useCreatePool();
 
   function resetForm() {
@@ -113,11 +114,14 @@ export default function AddPoolDialog({ curriculumId, open, onOpenChange }: Prop
                   : <SelectValue placeholder="Grup seçin" />}
               </SelectTrigger>
               <SelectContent>
-                {(groups ?? []).map(g => (
-                  <SelectItem key={g.id} value={g.id.toString()}>
-                    {g.name} ({g.code}) — {ELECTIVE_SUBTYPE_SHORT[g.electiveSubtype as ElectiveSubtype] ?? g.electiveSubtype}
-                  </SelectItem>
-                ))}
+                {(groups ?? []).map(g => {
+                  const subtype = findSubtypeById(subtypes, g.electiveSubtypeId);
+                  return (
+                    <SelectItem key={g.id} value={g.id.toString()}>
+                      {g.name} ({g.code}){subtype && ` — ${subtype.name}`}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>

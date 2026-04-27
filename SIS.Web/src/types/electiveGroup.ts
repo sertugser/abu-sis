@@ -1,12 +1,11 @@
-export type ElectiveSubtype = 'UniversityElective' | 'NonDepartmentElective' | 'TechnicalElective';
+// Faz E: ElectiveSubtype string union + ELECTIVE_SUBTYPE_LABELS/SHORT helper'ları kaldırıldı.
+// Display: useElectiveSubtypeList + lib/electiveSubtypeUtils kullanılır (DB-driven name + Code-based color).
 
 export interface ElectiveGroupListDto {
   id: number;
   name: string;
   code: string;
-  /** @deprecated B3d'de kalkacak — yeni kodda electiveSubtypeId kullan */
-  electiveSubtype: ElectiveSubtype;
-  electiveSubtypeId: number | null;
+  electiveSubtypeId: number;
   facultyId: number | null;
   facultyName: string | null;
   departmentId: number | null;
@@ -31,10 +30,7 @@ export interface ElectiveGroupCourseDto {
 export interface CreateElectiveGroupRequest {
   name: string;
   code: string;
-  /** Yeni ana alan (B3c-2'den itibaren). DB-driven ElectiveSubtypes.Id. */
   electiveSubtypeId: number;
-  /** @deprecated B3d'de kalkacak. Backend FK öncelikli; opsiyonel kalır geçiş için. */
-  electiveSubtype?: ElectiveSubtype;
   facultyId?: number;
   departmentId?: number;
   description?: string;
@@ -81,15 +77,3 @@ export interface CreateAccessRuleRequest {
   requiresAdvisorApproval?: boolean;
   isOpenToOwnDepartment?: boolean;
 }
-
-export const ELECTIVE_SUBTYPE_LABELS: Record<ElectiveSubtype, string> = {
-  UniversityElective: 'Üniversite Seçmeli (OC)',
-  NonDepartmentElective: 'Bölüm Dışı Seçmeli (NDE)',
-  TechnicalElective: 'Teknik Seçmeli (TE)',
-};
-
-export const ELECTIVE_SUBTYPE_SHORT: Record<ElectiveSubtype, string> = {
-  UniversityElective: 'OC',
-  NonDepartmentElective: 'NDE',
-  TechnicalElective: 'TE',
-};

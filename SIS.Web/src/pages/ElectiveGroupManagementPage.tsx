@@ -18,19 +18,13 @@ import {
 } from '../hooks/useElectiveGroups';
 import { useElectiveSubtypeList } from '../hooks/useElectiveSubtypes';
 import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
-import {
-  ELECTIVE_SUBTYPE_SHORT,
-} from '../types/electiveGroup';
 import type {
-  ElectiveSubtype,
   ElectiveGroupListDto,
   CreateElectiveGroupRequest,
 } from '../types/electiveGroup';
+import type { ElectiveSubtypeDto } from '../types/electiveSubtype';
+import { getSubtypeColorByCode, findSubtypeById } from '../lib/electiveSubtypeUtils';
 import ElectiveGroupDetailSheet from '../components/elective-groups/ElectiveGroupDetailSheet';
-
-// NOT (B3c-3): Tablo Subtype Badge hâlâ hardcoded ELECTIVE_SUBTYPE_SHORT/COLORS
-// kullanır. Custom subtype'lı gruplarda badge fallback olarak kod gösterir.
-// Tam display dönüşümü Faz E kapsamı (deprecated enum kolonu drop ile birlikte).
 
 // ─── Create Dialog ─────────────────────────────────────────────────
 
@@ -261,18 +255,23 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
   );
 }
 
-// ─── Subtype Badge ─────────────────────────────────────────────────
+// ─── Subtype Badge (Faz E: DB-driven) ──────────────────────────────
 
-const SUBTYPE_COLORS: Record<ElectiveSubtype, string> = {
-  UniversityElective: 'bg-blue-50 text-blue-700 border-blue-200',
-  NonDepartmentElective: 'bg-purple-50 text-purple-700 border-purple-200',
-  TechnicalElective: 'bg-amber-50 text-amber-700 border-amber-200',
-};
-
-function SubtypeBadge({ subtype }: { subtype: ElectiveSubtype }) {
+function SubtypeBadge({ subtype }: { subtype: ElectiveSubtypeDto | null }) {
+  if (!subtype) {
+    return (
+      <Badge variant="outline" className="text-[10px] font-medium bg-slate-50 text-slate-500 border-slate-200">
+        ?
+      </Badge>
+    );
+  }
   return (
-    <Badge variant="outline" className={`text-[10px] font-medium ${SUBTYPE_COLORS[subtype]}`}>
-      {ELECTIVE_SUBTYPE_SHORT[subtype]}
+    <Badge
+      variant="outline"
+      className={`text-[10px] font-medium ${getSubtypeColorByCode(subtype.code)}`}
+      title={subtype.name}
+    >
+      {subtype.name}
     </Badge>
   );
 }
@@ -458,7 +457,7 @@ export default function ElectiveGroupManagementPage() {
                 <td className="px-4 py-3 font-mono text-xs font-medium">{g.code}</td>
                 <td className="px-4 py-3 text-sm font-medium">{g.name}</td>
                 <td className="px-4 py-3 text-center">
-                  <SubtypeBadge subtype={g.electiveSubtype} />
+                  <SubtypeBadge subtype={findSubtypeById(filterSubtypes, g.electiveSubtypeId)} />
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
                   {g.facultyName ? (

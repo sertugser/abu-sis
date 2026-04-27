@@ -99,7 +99,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Teknik Seçmeli BLG",
             Code: "TE-BLG",
-            ElectiveSubtype: ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId: (int)ElectiveSubtype.TechnicalElective,
             FacultyId: FacultyEngId,
             DepartmentId: DeptCompEngId,
             Description: null);
@@ -112,7 +112,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var dto = ok.Value.Should().BeOfType<ElectiveGroupController.ElectiveGroupListDto>().Subject;
         dto.FacultyId.Should().Be(FacultyEngId);
         dto.DepartmentId.Should().Be(DeptCompEngId);
-        dto.ElectiveSubtype.Should().Be(ElectiveSubtype.TechnicalElective);
+        dto.ElectiveSubtypeId.Should().Be((int)ElectiveSubtype.TechnicalElective);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "NDE bölüm var fakülte yok",
             Code: "NDE-NOFAC",
-            ElectiveSubtype: ElectiveSubtype.NonDepartmentElective,
+            ElectiveSubtypeId: (int)ElectiveSubtype.NonDepartmentElective,
             FacultyId: null,
             DepartmentId: DeptCompEngId);
 
@@ -151,13 +151,13 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var reqNoFaculty = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "OC + Bölüm (no faculty)",
             Code: "OC-WITHDEPT-NF",
-            ElectiveSubtype: ElectiveSubtype.UniversityElective,
+            ElectiveSubtypeId: (int)ElectiveSubtype.UniversityElective,
             FacultyId: null,
             DepartmentId: DeptCompEngId);
         var reqWithFaculty = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "OC + Bölüm (with faculty)",
             Code: "OC-WITHDEPT-WF",
-            ElectiveSubtype: ElectiveSubtype.UniversityElective,
+            ElectiveSubtypeId: (int)ElectiveSubtype.UniversityElective,
             FacultyId: FacultyEngId,
             DepartmentId: DeptCompEngId);
 
@@ -184,7 +184,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Yanlış fakülte-bölüm",
             Code: "TE-MISMATCH",
-            ElectiveSubtype: ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId: (int)ElectiveSubtype.TechnicalElective,
             FacultyId: FacultyEngId,
             DepartmentId: DeptLawDeptId);
 

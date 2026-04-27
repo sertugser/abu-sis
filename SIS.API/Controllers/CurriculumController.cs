@@ -112,8 +112,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
 
     public record CurriculumElectivePoolDto(
         int Id, int ElectiveGroupId, string GroupName, string GroupCode,
-        ElectiveSubtype ElectiveSubtype,
-        int? ElectiveSubtypeId,
+        int ElectiveSubtypeId,
         string SlotName,
         int SuggestedSemesterStart, int SuggestedSemesterEnd,
         int RequiredCourseCount, int RequiredEcts,
@@ -787,8 +786,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             .OrderBy(p => p.SuggestedSemesterStart)
             .Select(p => new CurriculumElectivePoolDto(
                 p.Id, p.ElectiveGroupId, p.ElectiveGroup.Name, p.ElectiveGroup.Code,
-                p.ElectiveGroup.ElectiveSubtype,
-                p.ElectiveGroup.ElectiveSubtypeId,
+                p.ElectiveGroup.ElectiveSubtypeId ?? 0,
                 p.SlotName,
                 p.SuggestedSemesterStart, p.SuggestedSemesterEnd,
                 p.RequiredCourseCount, p.RequiredEcts,
@@ -865,8 +863,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
 
         return Ok(new CurriculumElectivePoolDto(
             entity.Id, entity.ElectiveGroupId, group.Name, group.Code,
-            group.ElectiveSubtype,
-            group.ElectiveSubtypeId,
+            group.ElectiveSubtypeId ?? 0,
             entity.SlotName,
             entity.SuggestedSemesterStart, entity.SuggestedSemesterEnd,
             entity.RequiredCourseCount, entity.RequiredEcts,

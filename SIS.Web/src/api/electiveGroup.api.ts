@@ -6,7 +6,6 @@ import type {
   CreateElectiveGroupRequest,
   UpdateElectiveGroupRequest,
   AddCoursesToGroupRequest,
-  ElectiveSubtype,
   CourseAccessRuleDto,
   CreateAccessRuleRequest,
 } from '../types/electiveGroup';
@@ -14,19 +13,15 @@ import type {
 const BASE = '/elective-groups';
 
 export const electiveGroupApi = {
-  /**
-   * Faz B B3c-3: subtypeId (FK) paralel filter param. Backend FK öncelikli;
-   * subtype enum geri-uyum için tutuluyor.
-   */
+  /** Faz E: subtypeId DB-driven filter (deprecated subtype enum kalktı). */
   list: (
     subtypeId?: number,
     facultyId?: number,
     departmentId?: number,
     isActive?: boolean,
-    subtype?: ElectiveSubtype,
   ) =>
     apiClient.get<ElectiveGroupListDto[]>(BASE, {
-      params: { subtypeId, facultyId, departmentId, isActive, subtype },
+      params: { subtypeId, facultyId, departmentId, isActive },
     }).then(r => r.data),
 
   get: (id: number) =>

@@ -25,7 +25,8 @@ import {
   useRemoveCourseFromGroup,
 } from '../../hooks/useElectiveGroups';
 import { useAdminFaculties, useAdminDepartmentsByStructure } from '../../hooks/useAdminAcademicStructure';
-import { ELECTIVE_SUBTYPE_LABELS } from '../../types/electiveGroup';
+import { useElectiveSubtypeList } from '../../hooks/useElectiveSubtypes';
+import { findSubtypeById, getSubtypeColorByCode } from '../../lib/electiveSubtypeUtils';
 import type { UpdateElectiveGroupRequest } from '../../types/electiveGroup';
 import AddCourseToGroupDialog from './AddCourseToGroupDialog';
 
@@ -55,6 +56,9 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
   const { data: faculties } = useAdminFaculties();
   const facultyIdNum = facultyId ? Number(facultyId) : undefined;
   const { data: departments } = useAdminDepartmentsByStructure(facultyIdNum);
+  // Faz E: DB-driven subtype lookup (eski hardcoded enum string check yerine)
+  const { data: subtypes } = useElectiveSubtypeList(false);
+  const groupSubtype = findSubtypeById(subtypes, group?.electiveSubtypeId);
 
   if (group && syncedGroupId !== group.id) {
     setName(group.name);
@@ -67,9 +71,9 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
     setSyncedGroupId(group.id);
   }
 
-  const subtype = group?.electiveSubtype;
-  const facultyDisabled = subtype === 'UniversityElective';
-  const departmentDisabled = facultyDisabled || !facultyId;
+  // Faz E: subtype flag'lerine göre dinamik (eski hardcoded 'UniversityElective' check yerine)
+  const facultyDisabled = groupSubtype?.forbidsFaculty ?? false;
+  const departmentDisabled = facultyDisabled || !facultyId || (groupSubtype?.forbidsDepartment ?? false);
 
   function handleFacultyChange(v: string) {
     setFacultyId(v);
@@ -83,13 +87,24 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
     const facultyIdNumLocal = facultyId ? Number(facultyId) : null;
     const departmentIdNumLocal = departmentId ? Number(departmentId) : null;
 
-    if (group.electiveSubtype === 'UniversityElective' && (facultyIdNumLocal !== null || departmentIdNumLocal !== null)) {
-      setValidationError('Üniversite Seçmeli için fakülte/bölüm seçilemez.');
-      return;
-    }
-    if (group.electiveSubtype === 'TechnicalElective' && facultyIdNumLocal === null) {
-      setValidationError('Teknik Seçmeli için fakülte zorunlu.');
-      return;
+    // Faz E: flag-based dinamik validation (subtype Name dinamik error mesajında)
+    if (groupSubtype) {
+      if (groupSubtype.forbidsFaculty && facultyIdNumLocal !== null) {
+        setValidationError(`${groupSubtype.name} için fakülte seçilemez.`);
+        return;
+      }
+      if (groupSubtype.requiresFaculty && facultyIdNumLocal === null) {
+        setValidationError(`${groupSubtype.name} için fakülte zorunlu.`);
+        return;
+      }
+      if (groupSubtype.forbidsDepartment && departmentIdNumLocal !== null) {
+        setValidationError(`${groupSubtype.name} için bölüm seçilemez.`);
+        return;
+      }
+      if (groupSubtype.requiresDepartment && departmentIdNumLocal === null) {
+        setValidationError(`${groupSubtype.name} için bölüm zorunlu.`);
+        return;
+      }
     }
     if (departmentIdNumLocal !== null && facultyIdNumLocal === null) {
       setValidationError('Bölüm seçildiğinde fakülte de zorunlu.');
@@ -145,9 +160,13 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
           <DialogHeader>
             <div className="flex items-center gap-3">
               <DialogTitle className="text-lg">{group?.name ?? 'Grup Detayı'}</DialogTitle>
-              {group && (
-                <Badge variant="outline" className="text-[10px] font-medium bg-blue-50 text-blue-700 border-blue-200">
-                  {ELECTIVE_SUBTYPE_LABELS[group.electiveSubtype]}
+              {group && groupSubtype && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-medium ${getSubtypeColorByCode(groupSubtype.code)}`}
+                  title={groupSubtype.name}
+                >
+                  {groupSubtype.name}
                 </Badge>
               )}
               {group && (
@@ -205,7 +224,7 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
                   {!facultyDisabled && (
                     <div>
                       <Label className="text-xs text-muted-foreground">
-                        Fakülte{subtype === 'TechnicalElective' ? '' : ' (opsiyonel)'}
+                        Fakülte{groupSubtype?.requiresFaculty ? '' : ' (opsiyonel)'}
                       </Label>
                       <Select
                         value={facultyId || '__none__'}
@@ -215,7 +234,7 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
                           <SelectValue placeholder="Fakülte seçin..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {subtype !== 'TechnicalElective' && (
+                          {!groupSubtype?.requiresFaculty && (
                             <SelectItem value="__none__">— Seçilmedi —</SelectItem>
                           )}
                           {faculties?.map(f => (

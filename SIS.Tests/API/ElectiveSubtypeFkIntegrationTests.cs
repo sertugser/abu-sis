@@ -10,14 +10,15 @@ using SIS.Tests.TestHelpers;
 namespace SIS.Tests.API;
 
 /// <summary>
-/// Faz B B3b — DB-driven <see cref="ElectiveSubtypeEntity"/> consumer testleri.
+/// Faz E — DB-driven <see cref="ElectiveSubtypeEntity"/> consumer testleri.
+/// (Faz B B3b paralel destek testleri Faz E'de obsolete oldu — DTO field'ı
+/// ve Create.ElectiveSubtype enum parametresi kalktığı için silindi.)
 /// Doğrulanan davranışlar:
-///   1) Mevcut enum-only request'ler bozulmadan çalışır (geri uyumluluk).
-///   2) Yeni FK-only request'ler çalışır.
-///   3) FK + enum birlikte gönderilirse FK öncelikli.
-///   4) DTO yanıtları hem enum hem FK içerir (paralel destek).
-///   5) Admin'in eklediği custom subtype flag'lere göre dinamik validate edilir.
-///   6) Pasif (IsActive=false) subtype reddedilir.
+///   1) Default subtype'larla Create normal akışta çalışır
+///   2) DTO sadece electiveSubtypeId döner (paralel enum field yok)
+///   3) Admin'in eklediği custom subtype flag'lere göre dinamik validate edilir
+///   4) Pasif (IsActive=false) subtype reddedilir
+///   5) Bilinmeyen FK reddedilir
 /// </summary>
 public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
 {
@@ -65,84 +66,30 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
         return bad.Value!.GetType().GetProperty("message")!.GetValue(bad.Value)!.ToString()!;
     }
 
-    // ── 1) Geri uyumluluk: enum-only Create hâlâ çalışır ───────────────
+    // ── 1) Default subtype Create normal çalışır ──────────────────────
 
     [Fact]
-    public async Task Create_with_enum_only_resolves_subtype_via_DB_and_succeeds()
+    public async Task Create_with_default_subtypeId_succeeds()
     {
-        // Arrange — sadece enum (eski frontend davranışı), FK alanı yok.
         var controller = CreateController();
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
-            Name: "Teknik Seçmeli BLG",
-            Code: "TE-BLG-OLD",
-            ElectiveSubtype: ElectiveSubtype.TechnicalElective,
-            ElectiveSubtypeId: null,
-            FacultyId: FacultyId);
-
-        // Act
-        var result = await controller.Create(req, CancellationToken.None);
-
-        // Assert
-        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
-        var dto = ok.Value.Should().BeOfType<ElectiveGroupController.ElectiveGroupListDto>().Subject;
-        dto.ElectiveSubtype.Should().Be(ElectiveSubtype.TechnicalElective);
-        dto.ElectiveSubtypeId.Should().Be((int)ElectiveSubtype.TechnicalElective);
-    }
-
-    // ── 2) Yeni FK-only Create çalışır + enum'a doğru map'lenir ────────
-
-    [Fact]
-    public async Task Create_with_FK_only_succeeds_and_maps_to_enum()
-    {
-        // Arrange — sadece FK gönder, enum default(0). Backend Code'dan enum'a map etmeli.
-        var controller = CreateController();
-        var req = new ElectiveGroupController.CreateElectiveGroupRequest(
-            Name: "OC FK-only",
-            Code: "OC-FK-ONLY",
-            ElectiveSubtype: default,
+            Name: "OC default",
+            Code: "OC-DEF",
             ElectiveSubtypeId: (int)ElectiveSubtype.UniversityElective);
 
-        // Act
         var result = await controller.Create(req, CancellationToken.None);
 
-        // Assert
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = ok.Value.Should().BeOfType<ElectiveGroupController.ElectiveGroupListDto>().Subject;
         dto.ElectiveSubtypeId.Should().Be((int)ElectiveSubtype.UniversityElective);
-        dto.ElectiveSubtype.Should().Be(ElectiveSubtype.UniversityElective);
     }
 
-    // ── 3) FK > enum precedence ───────────────────────────────────────
+    // ── 2) List DTO sadece electiveSubtypeId döner ────────────────────
 
     [Fact]
-    public async Task Create_with_both_FK_and_enum_uses_FK_when_they_differ()
+    public async Task List_dto_returns_electiveSubtypeId_only()
     {
-        // Arrange — enum=TE (faculty zorunlu) ama FK=NDE (faculty opsiyonel).
-        // FK kazanırsa NDE flag'leri uygulanır → faculty olmadan da geçmeli.
-        var controller = CreateController();
-        var req = new ElectiveGroupController.CreateElectiveGroupRequest(
-            Name: "FK precedence test",
-            Code: "FK-WINS",
-            ElectiveSubtype: ElectiveSubtype.TechnicalElective,
-            ElectiveSubtypeId: (int)ElectiveSubtype.NonDepartmentElective,
-            FacultyId: null);
-
-        // Act
-        var result = await controller.Create(req, CancellationToken.None);
-
-        // Assert
-        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
-        var dto = ok.Value.Should().BeOfType<ElectiveGroupController.ElectiveGroupListDto>().Subject;
-        dto.ElectiveSubtypeId.Should().Be((int)ElectiveSubtype.NonDepartmentElective);
-        dto.ElectiveSubtype.Should().Be(ElectiveSubtype.NonDepartmentElective);
-    }
-
-    // ── 4) DTO paralel destek ─────────────────────────────────────────
-
-    [Fact]
-    public async Task List_dto_returns_both_enum_and_FK_for_existing_groups()
-    {
-        // Arrange — manuel olarak iki grup ekle (FK set edilmiş).
+        // Arrange — manuel olarak iki grup ekle (farklı tip).
         _context.ElectiveGroups.AddRange(
             new ElectiveGroup
             {
@@ -162,25 +109,19 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
 
         var controller = CreateController();
 
-        // Act
-        var result = await controller.List(subtype: null, subtypeId: null, facultyId: null, departmentId: null, isActive: null, ct: CancellationToken.None);
+        var result = await controller.List(subtypeId: null, facultyId: null, departmentId: null, isActive: null, ct: CancellationToken.None);
 
-        // Assert
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var list = ok.Value.Should().BeAssignableTo<IEnumerable<ElectiveGroupController.ElectiveGroupListDto>>().Subject.ToList();
         list.Should().HaveCount(2);
-        list.Should().AllSatisfy(dto =>
-        {
-            dto.ElectiveSubtypeId.Should().Be((int)dto.ElectiveSubtype);
-        });
+        list.Should().AllSatisfy(dto => dto.ElectiveSubtypeId.Should().BeGreaterThan(0));
     }
 
-    // ── 5) Custom subtype: dinamik flag-based validation ──────────────
+    // ── 3) Custom subtype: dinamik flag-based validation ──────────────
 
     [Fact]
     public async Task Create_with_custom_subtype_having_all_flags_false_succeeds_without_faculty_or_department()
     {
-        // Arrange — admin yeni "Sosyal Seçmeli" tipi ekledi (tüm scope flag'leri false).
         var social = new ElectiveSubtypeEntity
         {
             Id = 100,
@@ -196,13 +137,10 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Sosyal Seçmeli I",
             Code: "SE-1",
-            ElectiveSubtype: default,
             ElectiveSubtypeId: social.Id);
 
-        // Act — faculty/dept yok, custom tip izin verir.
         var result = await controller.Create(req, CancellationToken.None);
 
-        // Assert
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = ok.Value.Should().BeOfType<ElectiveGroupController.ElectiveGroupListDto>().Subject;
         dto.ElectiveSubtypeId.Should().Be(social.Id);
@@ -213,7 +151,6 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
     [Fact]
     public async Task Create_with_custom_subtype_requiring_faculty_rejects_when_faculty_missing()
     {
-        // Arrange — admin "Mesleki Seçmeli" ekledi (RequiresFaculty=true) ve faculty atlandı.
         var prof = new ElectiveSubtypeEntity
         {
             Id = 101,
@@ -229,23 +166,19 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Mesleki I",
             Code: "PRF-1",
-            ElectiveSubtype: default,
             ElectiveSubtypeId: prof.Id,
             FacultyId: null);
 
-        // Act
         var result = await controller.Create(req, CancellationToken.None);
 
-        // Assert — dinamik mesaj custom Name'i içermeli.
         MessageOf(result).Should().Contain("Mesleki Seçmeli").And.Contain("fakülte zorunludur");
     }
 
-    // ── 6) Pasif subtype reddedilir ───────────────────────────────────
+    // ── 4) Pasif subtype reddedilir ───────────────────────────────────
 
     [Fact]
     public async Task Create_with_inactive_subtype_is_rejected()
     {
-        // Arrange — admin pasif yapmış.
         var inactive = new ElectiveSubtypeEntity
         {
             Id = 102,
@@ -259,33 +192,26 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Will fail",
             Code: "WF-1",
-            ElectiveSubtype: default,
             ElectiveSubtypeId: inactive.Id);
 
-        // Act
         var result = await controller.Create(req, CancellationToken.None);
 
-        // Assert
         MessageOf(result).Should().Contain("pasif");
     }
 
-    // ── 7) Bilinmeyen FK reddedilir ───────────────────────────────────
+    // ── 5) Bilinmeyen FK reddedilir ───────────────────────────────────
 
     [Fact]
     public async Task Create_with_unknown_subtype_id_returns_bad_request()
     {
-        // Arrange — DB'de Id=9999 yok.
         var controller = CreateController();
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Unknown FK",
             Code: "UNK-1",
-            ElectiveSubtype: default,
             ElectiveSubtypeId: 9999);
 
-        // Act
         var result = await controller.Create(req, CancellationToken.None);
 
-        // Assert
         MessageOf(result).Should().Contain("9999").And.Contain("bulunamadı");
     }
 
