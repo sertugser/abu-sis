@@ -79,3 +79,6 @@ backup_*.sql
 
 # Internal planning docs (not for repo)
 docs/superpowers/
+
+# Local analysis reports (codemap-diff, audit reports vb.)
+.reports/
