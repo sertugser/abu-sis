@@ -73,6 +73,7 @@ import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import ElectiveGroupManagementPage from './pages/ElectiveGroupManagementPage';
+import ElectiveSubtypeManagementPage from './pages/ElectiveSubtypeManagementPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
 import TermProgramTransferPage from './pages/TermProgramTransferPage';
 import CourseEvaluationPage from './pages/CourseEvaluationPage';
@@ -310,6 +311,9 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.secmeli-ders-gruplari.view" />}>
                     <Route path="secmeli-ders-gruplari" element={<ElectiveGroupManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.secmeli-tipleri.view" />}>
+                    <Route path="secmeli-tipleri" element={<ElectiveSubtypeManagementPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-veren-ogretim-uyeleri.view" />}>
                     <Route path="ders-veren-ogretim-uyeleri" element={<InstructorCoursesReportPage />} />
