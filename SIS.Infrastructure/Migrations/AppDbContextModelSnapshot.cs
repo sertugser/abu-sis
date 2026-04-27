@@ -1796,10 +1796,7 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<int>("ElectiveSubtype")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ElectiveSubtypeId")
+                    b.Property<int>("ElectiveSubtypeId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("FacultyId")
@@ -3951,7 +3948,8 @@ namespace SIS.Infrastructure.Migrations
                     b.HasOne("SIS.Domain.Entities.ElectiveSubtypeEntity", null)
                         .WithMany()
                         .HasForeignKey("ElectiveSubtypeId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
                         .WithMany()

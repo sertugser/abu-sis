@@ -55,7 +55,7 @@ public class ElectiveGroupControllerTests : IDisposable
         var group = new ElectiveGroup
         {
             Name = "Teknik Seçmeli", Code = "TE-ENG",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyId, IsActive = true, CreatedAt = DateTime.UtcNow
         };
         _context.ElectiveGroups.Add(group);
@@ -79,7 +79,7 @@ public class ElectiveGroupControllerTests : IDisposable
         var group = new ElectiveGroup
         {
             Name = "OC Pool", Code = "OC-UNI",
-            ElectiveSubtype = ElectiveSubtype.UniversityElective,
+            ElectiveSubtypeId = TestSeedExtensions.UniversityElectiveId,
             IsActive = true, CreatedAt = DateTime.UtcNow
         };
         _context.ElectiveGroups.Add(group);

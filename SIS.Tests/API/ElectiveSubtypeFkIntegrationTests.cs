@@ -75,13 +75,13 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "OC default",
             Code: "OC-DEF",
-            ElectiveSubtypeId: (int)ElectiveSubtype.UniversityElective);
+            ElectiveSubtypeId: TestSeedExtensions.UniversityElectiveId);
 
         var result = await controller.Create(req, CancellationToken.None);
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var dto = ok.Value.Should().BeOfType<ElectiveGroupController.ElectiveGroupListDto>().Subject;
-        dto.ElectiveSubtypeId.Should().Be((int)ElectiveSubtype.UniversityElective);
+        dto.ElectiveSubtypeId.Should().Be(TestSeedExtensions.UniversityElectiveId);
     }
 
     // ── 2) List DTO sadece electiveSubtypeId döner ────────────────────
@@ -94,15 +94,13 @@ public sealed class ElectiveSubtypeFkIntegrationTests : IDisposable
             new ElectiveGroup
             {
                 Name = "TE-A", Code = "TE-A",
-                ElectiveSubtype = ElectiveSubtype.TechnicalElective,
-                ElectiveSubtypeId = (int)ElectiveSubtype.TechnicalElective,
+                ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
                 FacultyId = FacultyId, IsActive = true, CreatedAt = DateTime.UtcNow,
             },
             new ElectiveGroup
             {
                 Name = "OC-A", Code = "OC-A",
-                ElectiveSubtype = ElectiveSubtype.UniversityElective,
-                ElectiveSubtypeId = (int)ElectiveSubtype.UniversityElective,
+                ElectiveSubtypeId = TestSeedExtensions.UniversityElectiveId,
                 IsActive = true, CreatedAt = DateTime.UtcNow,
             });
         await _context.SaveChangesAsync();

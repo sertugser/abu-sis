@@ -1,18 +1,19 @@
 using SIS.Domain.Entities;
-using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Tests.TestHelpers;
 
 /// <summary>
-/// Faz B B3b: In-memory test'lerde DB-driven lookup tablolarının seed'i.
-/// Production'da <see cref="SIS.Infrastructure.Persistence.Seeds.ElectiveSubtypeSeed"/>
-/// idempotent olarak çalışır; test'lerde Id'ler enum integer'larıyla eşlenir
-/// (1=UniversityElective, 2=NonDepartmentElective, 3=TechnicalElective) çünkü
-/// migration backfill bu eşlemeyi varsayar.
+/// In-memory test'lerde DB-driven lookup tablolarının seed'i.
+/// Default tip ID'leri sabit (1=OC, 2=NDE, 3=TE) — migration backfill bu eşlemeyi
+/// koruyor (Faz B B3a → Faz E sonrası da geçerli).
 /// </summary>
 internal static class TestSeedExtensions
 {
+    public const int UniversityElectiveId = 1;
+    public const int NonDepartmentElectiveId = 2;
+    public const int TechnicalElectiveId = 3;
+
     public static void SeedElectiveSubtypeDefaults(this AppDbContext context)
     {
         if (context.ElectiveSubtypes.Any()) return;
@@ -20,7 +21,7 @@ internal static class TestSeedExtensions
         context.ElectiveSubtypes.AddRange(
             new ElectiveSubtypeEntity
             {
-                Id = (int)ElectiveSubtype.UniversityElective,
+                Id = UniversityElectiveId,
                 Code = "UniversityElective", Name = "Üniversite Seçmeli",
                 RequiresFaculty = false, ForbidsFaculty = true,
                 RequiresDepartment = false, ForbidsDepartment = true,
@@ -28,7 +29,7 @@ internal static class TestSeedExtensions
             },
             new ElectiveSubtypeEntity
             {
-                Id = (int)ElectiveSubtype.NonDepartmentElective,
+                Id = NonDepartmentElectiveId,
                 Code = "NonDepartmentElective", Name = "Bölüm Dışı Seçmeli",
                 RequiresFaculty = false, ForbidsFaculty = false,
                 RequiresDepartment = false, ForbidsDepartment = false,
@@ -36,7 +37,7 @@ internal static class TestSeedExtensions
             },
             new ElectiveSubtypeEntity
             {
-                Id = (int)ElectiveSubtype.TechnicalElective,
+                Id = TechnicalElectiveId,
                 Code = "TechnicalElective", Name = "Teknik Seçmeli",
                 RequiresFaculty = true, ForbidsFaculty = false,
                 RequiresDepartment = false, ForbidsDepartment = false,

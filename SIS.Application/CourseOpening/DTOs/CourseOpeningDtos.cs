@@ -79,8 +79,6 @@ public class CurriculumCourseForOpeningDto
     public string? ElectiveGroupCode { get; set; }
     /// <summary>ElectiveGroup adı (ör. "Bölüm Dışı Seçmeli"). Null = havuza bağlı değil.</summary>
     public string? ElectiveGroupName { get; set; }
-    /// <summary>Havuz alt türü (NDE/TechnicalElective/UniversityElective/DepartmentalElective gibi).</summary>
-    public string? ElectiveSubtype { get; set; }
     /// <summary>Kaynak: "Compulsory" (zorunlu müfredat), "Elective" (tekil seçmeli), "Pool" (havuz üyesi).</summary>
     public string Source { get; set; } = "Compulsory";
 }

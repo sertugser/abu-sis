@@ -69,8 +69,6 @@ export interface CurriculumCourseForOpeningDto {
   electiveGroupCode?: string | null;
   /** Havuz adı — "Bölüm Dışı Seçmeli". */
   electiveGroupName?: string | null;
-  /** Havuz alt türü — "NDE" / "TechnicalElective" / "UniversityElective" / "DepartmentalElective". */
-  electiveSubtype?: string | null;
 }
 
 export interface InstructorOptionDto {

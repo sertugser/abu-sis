@@ -99,7 +99,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Teknik Seçmeli BLG",
             Code: "TE-BLG",
-            ElectiveSubtypeId: (int)ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId: TestSeedExtensions.TechnicalElectiveId,
             FacultyId: FacultyEngId,
             DepartmentId: DeptCompEngId,
             Description: null);
@@ -112,7 +112,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var dto = ok.Value.Should().BeOfType<ElectiveGroupController.ElectiveGroupListDto>().Subject;
         dto.FacultyId.Should().Be(FacultyEngId);
         dto.DepartmentId.Should().Be(DeptCompEngId);
-        dto.ElectiveSubtypeId.Should().Be((int)ElectiveSubtype.TechnicalElective);
+        dto.ElectiveSubtypeId.Should().Be(TestSeedExtensions.TechnicalElectiveId);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "NDE bölüm var fakülte yok",
             Code: "NDE-NOFAC",
-            ElectiveSubtypeId: (int)ElectiveSubtype.NonDepartmentElective,
+            ElectiveSubtypeId: TestSeedExtensions.NonDepartmentElectiveId,
             FacultyId: null,
             DepartmentId: DeptCompEngId);
 
@@ -151,13 +151,13 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var reqNoFaculty = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "OC + Bölüm (no faculty)",
             Code: "OC-WITHDEPT-NF",
-            ElectiveSubtypeId: (int)ElectiveSubtype.UniversityElective,
+            ElectiveSubtypeId: TestSeedExtensions.UniversityElectiveId,
             FacultyId: null,
             DepartmentId: DeptCompEngId);
         var reqWithFaculty = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "OC + Bölüm (with faculty)",
             Code: "OC-WITHDEPT-WF",
-            ElectiveSubtypeId: (int)ElectiveSubtype.UniversityElective,
+            ElectiveSubtypeId: TestSeedExtensions.UniversityElectiveId,
             FacultyId: FacultyEngId,
             DepartmentId: DeptCompEngId);
 
@@ -184,7 +184,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         var req = new ElectiveGroupController.CreateElectiveGroupRequest(
             Name: "Yanlış fakülte-bölüm",
             Code: "TE-MISMATCH",
-            ElectiveSubtypeId: (int)ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId: TestSeedExtensions.TechnicalElectiveId,
             FacultyId: FacultyEngId,
             DepartmentId: DeptLawDeptId);
 
@@ -205,7 +205,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "Eski TE",
             Code = "TE-CLEAR",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = DeptCompEngId,
             IsActive = true,
@@ -237,7 +237,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE bağımlı",
             Code = "TE-DEP-LEFTOVER",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = DeptCompEngId,
             IsActive = true,
@@ -266,7 +266,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "MUH-TE-I",
             Code = "MUH-TE-I",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,
@@ -298,7 +298,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE bağlı",
             Code = "TE-BOUND",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,
@@ -341,7 +341,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE Eng",
             Code = "TE-ENG-POOL",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,
@@ -379,7 +379,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE Hukuk",
             Code = "TE-LAW-POOL",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyLawId,
             DepartmentId = null,
             IsActive = true,
@@ -412,7 +412,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE EEM",
             Code = "TE-EEM-POOL",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = DeptElecEngId,
             IsActive = true,
@@ -447,7 +447,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE Eng (empty slot test)",
             Code = "TE-ENG-EMPTY",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,
@@ -480,7 +480,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE Eng (dup slot test)",
             Code = "TE-ENG-DUP",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,
@@ -527,7 +527,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "TE Eng (multi slot)",
             Code = "TE-ENG-MULTI",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,
@@ -579,7 +579,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "MUH-TE-I",
             Code = "MUH-TE-I",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,
@@ -616,7 +616,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         {
             Name = "MUH-TE-I",
             Code = "MUH-TE-I",
-            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            ElectiveSubtypeId = TestSeedExtensions.TechnicalElectiveId,
             FacultyId = FacultyEngId,
             DepartmentId = null,
             IsActive = true,

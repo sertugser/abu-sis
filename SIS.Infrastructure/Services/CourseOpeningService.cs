@@ -277,7 +277,6 @@ public class CourseOpeningService(
                 ElectivePoolId = pce.PoolId,
                 ElectiveGroupCode = pce.Group.Code,
                 ElectiveGroupName = pce.Group.Name,
-                ElectiveSubtype = pce.Group.ElectiveSubtype.ToString(),
                 Source = "Pool",
             };
         }

@@ -786,7 +786,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             .OrderBy(p => p.SuggestedSemesterStart)
             .Select(p => new CurriculumElectivePoolDto(
                 p.Id, p.ElectiveGroupId, p.ElectiveGroup.Name, p.ElectiveGroup.Code,
-                p.ElectiveGroup.ElectiveSubtypeId ?? 0,
+                p.ElectiveGroup.ElectiveSubtypeId,
                 p.SlotName,
                 p.SuggestedSemesterStart, p.SuggestedSemesterEnd,
                 p.RequiredCourseCount, p.RequiredEcts,
@@ -863,7 +863,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
 
         return Ok(new CurriculumElectivePoolDto(
             entity.Id, entity.ElectiveGroupId, group.Name, group.Code,
-            group.ElectiveSubtypeId ?? 0,
+            group.ElectiveSubtypeId,
             entity.SlotName,
             entity.SuggestedSemesterStart, entity.SuggestedSemesterEnd,
             entity.RequiredCourseCount, entity.RequiredEcts,
@@ -1101,12 +1101,10 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
     }
 
     // ── Madde 17: Öğrencinin havuz tamamlama durumu ──────────────
-    // Faz C C5: SlotName eklendi — pool fulfillment satırında "TE-1: 0/1" gibi
-    // slot bilgisi gösterilebilir.
-    // Faz C C4: SuggestedSemesterStart/End eklendi — frontend "üstten yarıyıl"
-    // toggle filter'ı için (öğrenci mevcut yarıyıldan sonraki slot'ları göster/gizle).
+    // Faz C C5: SlotName + Faz C C4: SuggestedSemesterStart/End eklendi.
+    // Faz E: deprecated Subtype string field kaldırıldı (frontend zaten kullanmıyordu).
     public record PoolProgressDto(
-        int PoolId, string PoolCode, string PoolName, string Subtype,
+        int PoolId, string PoolCode, string PoolName,
         string SlotName,
         int SuggestedSemesterStart, int SuggestedSemesterEnd,
         int RequiredCourseCount, int CompletedCourseCount,
@@ -1155,7 +1153,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 p.Id,
                 p.ElectiveGroup.Code,
                 p.ElectiveGroup.Name,
-                p.ElectiveGroup.ElectiveSubtype.ToString(),
                 p.SlotName,
                 p.SuggestedSemesterStart,
                 p.SuggestedSemesterEnd,

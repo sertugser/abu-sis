@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Domain.Entities;
-using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -86,7 +85,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             .OrderBy(eg => eg.Code)
             .Select(eg => new ElectiveGroupListDto(
                 eg.Id, eg.Name, eg.Code,
-                eg.ElectiveSubtypeId ?? 0,
+                eg.ElectiveSubtypeId,
                 eg.FacultyId, eg.Faculty != null ? eg.Faculty.Name : null,
                 eg.DepartmentId, eg.Department != null ? eg.Department.Name : null,
                 eg.Description, eg.IsActive,
@@ -113,7 +112,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
         var dto = new ElectiveGroupDetailDto(
             group.Id, group.Name, group.Code,
-            group.ElectiveSubtypeId ?? 0,
+            group.ElectiveSubtypeId,
             group.FacultyId, group.Faculty?.Name,
             group.DepartmentId, group.Department?.Name,
             group.Description,
@@ -160,14 +159,11 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
                 return BadRequest(new { message = "Bölüm bulunamadı veya seçilen fakülteye ait değil." });
         }
 
-        // Faz E geçiş: entity hâlâ ElectiveSubtype enum kolonuna sahip (E2'de drop).
-        // Geçiş süresince Code → enum mapping (Code bilinmeyense default NDE).
         var entity = new Domain.Entities.ElectiveGroup
         {
             Name = req.Name,
             Code = req.Code,
-            ElectiveSubtype = MapSubtypeCodeToEnum(subtype!.Code),
-            ElectiveSubtypeId = subtype.Id,
+            ElectiveSubtypeId = subtype!.Id,
             FacultyId = req.FacultyId,
             DepartmentId = req.DepartmentId,
             Description = req.Description,
@@ -180,7 +176,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
 
         return Ok(new ElectiveGroupListDto(
             entity.Id, entity.Name, entity.Code,
-            entity.ElectiveSubtypeId ?? 0,
+            entity.ElectiveSubtypeId,
             entity.FacultyId, null,
             entity.DepartmentId, null,
             entity.Description,
@@ -226,9 +222,8 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         // Bu yüzden sadece "ForbidsDepartment + DepartmentId.HasValue" kuralını inline tutuyoruz.
         if (newDepartmentId.HasValue)
         {
-            var groupSubtypeId = group.ElectiveSubtypeId ?? (int)group.ElectiveSubtype;
             var groupSubtype = await context.ElectiveSubtypes
-                .FirstOrDefaultAsync(s => s.Id == groupSubtypeId, ct);
+                .FirstOrDefaultAsync(s => s.Id == group.ElectiveSubtypeId, ct);
             if (groupSubtype != null && groupSubtype.ForbidsDepartment)
                 return BadRequest(new { message = $"{groupSubtype.Name} için bölüm belirtilmemelidir." });
         }
@@ -415,16 +410,4 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         return null;
     }
 
-    /// <summary>
-    /// Faz E geçiş: Code → enum eşlemesi (entity ElectiveSubtype kolon E2'de drop edilene
-    /// kadar geçici olarak set edilmek zorunda — DB NOT NULL). Custom subtype Code'u için
-    /// default NDE atanır; bu değer sadece geçiş süresinde okunur, E2 sonrası anlamı yok.
-    /// </summary>
-    private static ElectiveSubtype MapSubtypeCodeToEnum(string code) => code switch
-    {
-        "UniversityElective" => ElectiveSubtype.UniversityElective,
-        "NonDepartmentElective" => ElectiveSubtype.NonDepartmentElective,
-        "TechnicalElective" => ElectiveSubtype.TechnicalElective,
-        _ => ElectiveSubtype.NonDepartmentElective,
-    };
 }
