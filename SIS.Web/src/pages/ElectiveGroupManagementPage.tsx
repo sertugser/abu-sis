@@ -16,7 +16,7 @@ import {
   useElectiveGroupList,
   useCreateElectiveGroup,
 } from '../hooks/useElectiveGroups';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
 import {
   ELECTIVE_SUBTYPE_LABELS,
   ELECTIVE_SUBTYPE_SHORT,
@@ -42,9 +42,13 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
   const [code, setCode] = useState('');
   const [subtype, setSubtype] = useState<ElectiveSubtype>('UniversityElective');
   const [facultyId, setFacultyId] = useState<string>('');
+  const [departmentId, setDepartmentId] = useState<string>('');
   const [description, setDescription] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const { data: faculties } = useAdminFaculties();
+  const facultyIdNum = facultyId ? Number(facultyId) : undefined;
+  const { data: departments } = useAdminDepartmentsByStructure(facultyIdNum);
   const createMutation = useCreateElectiveGroup();
 
   function reset() {
@@ -52,15 +56,54 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
     setCode('');
     setSubtype('UniversityElective');
     setFacultyId('');
+    setDepartmentId('');
     setDescription('');
+    setValidationError(null);
+  }
+
+  function handleSubtypeChange(v: string) {
+    const next = v as ElectiveSubtype;
+    setSubtype(next);
+    // OC: faculty + department disabled and cleared
+    if (next === 'UniversityElective') {
+      setFacultyId('');
+      setDepartmentId('');
+    }
+    setValidationError(null);
+  }
+
+  function handleFacultyChange(v: string) {
+    setFacultyId(v);
+    // changing faculty resets department to avoid orphan
+    setDepartmentId('');
+    setValidationError(null);
   }
 
   function handleCreate() {
+    const facultyIdNumLocal = facultyId ? Number(facultyId) : null;
+    const departmentIdNumLocal = departmentId && departmentId !== '__all__' ? Number(departmentId) : null;
+
+    // Client-side validation
+    if (subtype === 'UniversityElective' && (facultyIdNumLocal !== null || departmentIdNumLocal !== null)) {
+      setValidationError('Üniversite Seçmeli için fakülte/bölüm seçilemez.');
+      return;
+    }
+    if (subtype === 'TechnicalElective' && facultyIdNumLocal === null) {
+      setValidationError('Teknik Seçmeli için fakülte zorunlu.');
+      return;
+    }
+    if (departmentIdNumLocal !== null && facultyIdNumLocal === null) {
+      setValidationError('Bölüm seçildiğinde fakülte de zorunlu.');
+      return;
+    }
+    setValidationError(null);
+
     const req: CreateElectiveGroupRequest = {
       name: name.trim(),
       code: code.trim(),
       electiveSubtype: subtype,
-      ...(subtype === 'TechnicalElective' && facultyId ? { facultyId: Number(facultyId) } : {}),
+      ...(facultyIdNumLocal !== null ? { facultyId: facultyIdNumLocal } : {}),
+      ...(departmentIdNumLocal !== null ? { departmentId: departmentIdNumLocal } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
     };
     createMutation.mutate(req, {
@@ -78,6 +121,9 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
 
   const canSubmit = name.trim().length > 0 && code.trim().length > 0
     && (subtype !== 'TechnicalElective' || facultyId.length > 0);
+
+  const facultyDisabled = subtype === 'UniversityElective';
+  const departmentDisabled = facultyDisabled || !facultyId;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -97,7 +143,7 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
           </div>
           <div>
             <Label>Tür</Label>
-            <Select value={subtype} onValueChange={v => setSubtype(v as ElectiveSubtype)}>
+            <Select value={subtype} onValueChange={handleSubtypeChange}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -109,19 +155,50 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
             </Select>
           </div>
 
-          {subtype === 'TechnicalElective' && (
+          {!facultyDisabled && (
             <div>
-              <Label>Fakülte</Label>
-              <Select value={facultyId} onValueChange={setFacultyId}>
+              <Label>
+                Fakülte{subtype === 'TechnicalElective' ? '' : ' (opsiyonel)'}
+              </Label>
+              <Select
+                value={facultyId || '__none__'}
+                onValueChange={v => handleFacultyChange(v === '__none__' ? '' : v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Fakülte seçin..." />
                 </SelectTrigger>
                 <SelectContent>
+                  {subtype !== 'TechnicalElective' && (
+                    <SelectItem value="__none__">— Seçilmedi —</SelectItem>
+                  )}
                   {faculties?.map(f => (
                     <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {!departmentDisabled && (
+            <div className="space-y-1">
+              <Label className="text-xs">Bölüm (opsiyonel)</Label>
+              <Select
+                value={departmentId || '__all__'}
+                onValueChange={v => setDepartmentId(v === '__all__' ? '' : v)}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="(Tüm fakülte)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">(Tüm fakülte)</SelectItem>
+                  {(departments ?? []).map(d => (
+                    <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Boş bırakırsanız fakültenin tüm bölümleri kullanabilir.
+              </p>
             </div>
           )}
 
@@ -131,7 +208,10 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
           </div>
         </div>
 
-        {createMutation.isError && (
+        {validationError && (
+          <p className="text-xs text-destructive mt-1">{validationError}</p>
+        )}
+        {createMutation.isError && !validationError && (
           <p className="text-xs text-destructive mt-1">Grup oluşturulamadı.</p>
         )}
 
@@ -168,25 +248,32 @@ function SubtypeBadge({ subtype }: { subtype: ElectiveSubtype }) {
 export default function ElectiveGroupManagementPage() {
   const [subtypeFilter, setSubtypeFilter] = useState<string>('all');
   const [facultyFilter, setFacultyFilter] = useState<string>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
 
   const { data: faculties } = useAdminFaculties();
+  const facultyFilterIdNum = facultyFilter !== 'all' ? Number(facultyFilter) : undefined;
+  const { data: filterDepartments } = useAdminDepartmentsByStructure(facultyFilterIdNum);
 
   const querySubtype = subtypeFilter === 'all' ? undefined : (subtypeFilter as ElectiveSubtype);
   const queryFacultyId = subtypeFilter === 'TechnicalElective' && facultyFilter !== 'all'
     ? Number(facultyFilter)
     : undefined;
+  const queryDepartmentId = queryFacultyId !== undefined && departmentFilter !== 'all'
+    ? Number(departmentFilter)
+    : undefined;
   const queryIsActive = statusFilter === 'all' ? undefined : statusFilter === 'active';
 
-  const { data: groups, isLoading, error } = useElectiveGroupList(querySubtype, queryFacultyId, queryIsActive);
+  const { data: groups, isLoading, error } = useElectiveGroupList(querySubtype, queryFacultyId, queryDepartmentId, queryIsActive);
 
-  const hasActiveFilters = subtypeFilter !== 'all' || facultyFilter !== 'all' || statusFilter !== 'all';
+  const hasActiveFilters = subtypeFilter !== 'all' || facultyFilter !== 'all' || departmentFilter !== 'all' || statusFilter !== 'all';
 
   function resetFilters() {
     setSubtypeFilter('all');
     setFacultyFilter('all');
+    setDepartmentFilter('all');
     setStatusFilter('all');
   }
 
@@ -208,7 +295,13 @@ export default function ElectiveGroupManagementPage() {
         <div className="flex flex-wrap gap-3 items-end px-4 py-3 border-b border-border bg-muted/40">
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">Tür</span>
-            <Select value={subtypeFilter} onValueChange={v => { setSubtypeFilter(v); if (v !== 'TechnicalElective') setFacultyFilter('all'); }}>
+            <Select value={subtypeFilter} onValueChange={v => {
+              setSubtypeFilter(v);
+              if (v !== 'TechnicalElective') {
+                setFacultyFilter('all');
+                setDepartmentFilter('all');
+              }
+            }}>
               <SelectTrigger className="w-[200px] h-9 bg-white">
                 <SelectValue />
               </SelectTrigger>
@@ -225,7 +318,7 @@ export default function ElectiveGroupManagementPage() {
             <span className="text-xs text-muted-foreground">Fakülte</span>
             <Select
               value={facultyFilter}
-              onValueChange={setFacultyFilter}
+              onValueChange={v => { setFacultyFilter(v); setDepartmentFilter('all'); }}
               disabled={subtypeFilter !== 'TechnicalElective'}
             >
               <SelectTrigger className="w-[180px] h-9 bg-white">
@@ -235,6 +328,25 @@ export default function ElectiveGroupManagementPage() {
                 <SelectItem value="all">Tümü</SelectItem>
                 {faculties?.map(f => (
                   <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Bölüm</span>
+            <Select
+              value={departmentFilter}
+              onValueChange={setDepartmentFilter}
+              disabled={subtypeFilter !== 'TechnicalElective' || facultyFilter === 'all'}
+            >
+              <SelectTrigger className="w-[180px] h-9 bg-white">
+                <SelectValue placeholder="Tümü" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tümü</SelectItem>
+                {(filterDepartments ?? []).map(d => (
+                  <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -274,7 +386,7 @@ export default function ElectiveGroupManagementPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-28">Kod</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Grup Adı</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Tür</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-44">Fakülte</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-56">Kapsam</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-16">Ders</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Durum</th>
             </tr>
@@ -317,7 +429,18 @@ export default function ElectiveGroupManagementPage() {
                 <td className="px-4 py-3 text-center">
                   <SubtypeBadge subtype={g.electiveSubtype} />
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">{g.facultyName ?? '—'}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground">
+                  {g.facultyName ? (
+                    <>
+                      <span>Fakülte: <span className="text-foreground">{g.facultyName}</span></span>
+                      {g.departmentName && (
+                        <> · <span>Bölüm: <span className="text-foreground">{g.departmentName}</span></span></>
+                      )}
+                    </>
+                  ) : (
+                    <span>Okul-geneli</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-center text-sm">{g.courseCount}</td>
                 <td className="px-4 py-3 text-center">
                   <Badge

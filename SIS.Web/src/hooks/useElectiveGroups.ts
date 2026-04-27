@@ -8,8 +8,8 @@ import type {
 } from '../types/electiveGroup';
 
 const KEYS = {
-  list: (subtype?: ElectiveSubtype, facultyId?: number, isActive?: boolean) =>
-    ['electiveGroups', 'list', subtype, facultyId, isActive] as const,
+  list: (subtype?: ElectiveSubtype, facultyId?: number, departmentId?: number, isActive?: boolean) =>
+    ['electiveGroups', 'list', subtype, facultyId, departmentId, isActive] as const,
   detail: (id: number) => ['electiveGroups', 'detail', id] as const,
   courses: (id: number) => ['electiveGroups', 'courses', id] as const,
 };
@@ -18,10 +18,10 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['electiveGroups'] });
 }
 
-export function useElectiveGroupList(subtype?: ElectiveSubtype, facultyId?: number, isActive?: boolean) {
+export function useElectiveGroupList(subtype?: ElectiveSubtype, facultyId?: number, departmentId?: number, isActive?: boolean) {
   return useQuery({
-    queryKey: KEYS.list(subtype, facultyId, isActive),
-    queryFn: () => electiveGroupApi.list(subtype, facultyId, isActive),
+    queryKey: KEYS.list(subtype, facultyId, departmentId, isActive),
+    queryFn: () => electiveGroupApi.list(subtype, facultyId, departmentId, isActive),
     staleTime: 2 * 60 * 1000,
   });
 }

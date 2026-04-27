@@ -7,6 +7,9 @@ import {
   Dialog, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -21,6 +24,7 @@ import {
   useDeleteElectiveGroup,
   useRemoveCourseFromGroup,
 } from '../../hooks/useElectiveGroups';
+import { useAdminFaculties, useAdminDepartmentsByStructure } from '../../hooks/useAdminAcademicStructure';
 import { ELECTIVE_SUBTYPE_LABELS } from '../../types/electiveGroup';
 import type { UpdateElectiveGroupRequest } from '../../types/electiveGroup';
 import AddCourseToGroupDialog from './AddCourseToGroupDialog';
@@ -40,26 +44,66 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [facultyId, setFacultyId] = useState<string>('');
+  const [departmentId, setDepartmentId] = useState<string>('');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [courseToRemove, setCourseToRemove] = useState<{ id: number; code: string } | null>(null);
   const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(false);
   const [syncedGroupId, setSyncedGroupId] = useState<number | null>(null);
+
+  const { data: faculties } = useAdminFaculties();
+  const facultyIdNum = facultyId ? Number(facultyId) : undefined;
+  const { data: departments } = useAdminDepartmentsByStructure(facultyIdNum);
 
   if (group && syncedGroupId !== group.id) {
     setName(group.name);
     setCode(group.code);
     setDescription(group.description ?? '');
     setIsActive(group.isActive);
+    setFacultyId(group.facultyId !== null ? String(group.facultyId) : '');
+    setDepartmentId(group.departmentId !== null ? String(group.departmentId) : '');
+    setValidationError(null);
     setSyncedGroupId(group.id);
   }
 
+  const subtype = group?.electiveSubtype;
+  const facultyDisabled = subtype === 'UniversityElective';
+  const departmentDisabled = facultyDisabled || !facultyId;
+
+  function handleFacultyChange(v: string) {
+    setFacultyId(v);
+    setDepartmentId('');
+    setValidationError(null);
+  }
+
   function handleSave() {
-    if (!groupId) return;
+    if (!groupId || !group) return;
+
+    const facultyIdNumLocal = facultyId ? Number(facultyId) : null;
+    const departmentIdNumLocal = departmentId ? Number(departmentId) : null;
+
+    if (group.electiveSubtype === 'UniversityElective' && (facultyIdNumLocal !== null || departmentIdNumLocal !== null)) {
+      setValidationError('Üniversite Seçmeli için fakülte/bölüm seçilemez.');
+      return;
+    }
+    if (group.electiveSubtype === 'TechnicalElective' && facultyIdNumLocal === null) {
+      setValidationError('Teknik Seçmeli için fakülte zorunlu.');
+      return;
+    }
+    if (departmentIdNumLocal !== null && facultyIdNumLocal === null) {
+      setValidationError('Bölüm seçildiğinde fakülte de zorunlu.');
+      return;
+    }
+    setValidationError(null);
+
     const req: UpdateElectiveGroupRequest = {
       name: name.trim() || undefined,
       code: code.trim() || undefined,
       description: description.trim() || undefined,
       isActive,
+      ...(facultyIdNumLocal !== null ? { facultyId: facultyIdNumLocal } : {}),
+      ...(departmentIdNumLocal !== null ? { departmentId: departmentIdNumLocal } : {}),
     };
     updateMutation.mutate({ id: groupId, ...req });
   }
@@ -105,7 +149,17 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
               )}
             </div>
             <DialogDescription>
-              {group ? `${group.code} · ${group.courses.length} ders · ${totalEcts} AKTS` : ''}
+              {group ? (
+                <>
+                  {group.code} · {group.courses.length} ders · {totalEcts} AKTS
+                  {group.facultyName && (
+                    <> · Fakülte: <span className="text-foreground">{group.facultyName}</span></>
+                  )}
+                  {group.departmentName && (
+                    <> · Bölüm: <span className="text-foreground">{group.departmentName}</span></>
+                  )}
+                </>
+              ) : ''}
             </DialogDescription>
           </DialogHeader>
 
@@ -139,6 +193,54 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
                     <Label htmlFor="eg-desc" className="text-xs text-muted-foreground">Açıklama</Label>
                     <Textarea id="eg-desc" value={description} onChange={e => setDescription(e.target.value)} rows={2} />
                   </div>
+
+                  {!facultyDisabled && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Fakülte{subtype === 'TechnicalElective' ? '' : ' (opsiyonel)'}
+                      </Label>
+                      <Select
+                        value={facultyId || '__none__'}
+                        onValueChange={v => handleFacultyChange(v === '__none__' ? '' : v)}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Fakülte seçin..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subtype !== 'TechnicalElective' && (
+                            <SelectItem value="__none__">— Seçilmedi —</SelectItem>
+                          )}
+                          {faculties?.map(f => (
+                            <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {!departmentDisabled && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Bölüm (opsiyonel)</Label>
+                      <Select
+                        value={departmentId || '__all__'}
+                        onValueChange={v => setDepartmentId(v === '__all__' ? '' : v)}
+                      >
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="(Tüm fakülte)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">(Tüm fakülte)</SelectItem>
+                          {(departments ?? []).map(d => (
+                            <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        Boş bırakırsanız fakültenin tüm bölümleri kullanabilir.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-3">
                     <Switch id="eg-active" checked={isActive} onCheckedChange={setIsActive} />
                     <Label htmlFor="eg-active" className="text-sm">
@@ -150,8 +252,9 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
                     {updateMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
                     Kaydet
                   </Button>
-                  {updateMutation.isSuccess && <p className="text-xs text-emerald-600 text-center">Kaydedildi.</p>}
-                  {updateMutation.isError && <p className="text-xs text-destructive text-center">Hata oluştu.</p>}
+                  {validationError && <p className="text-xs text-destructive text-center">{validationError}</p>}
+                  {updateMutation.isSuccess && !validationError && <p className="text-xs text-emerald-600 text-center">Kaydedildi.</p>}
+                  {updateMutation.isError && !validationError && <p className="text-xs text-destructive text-center">Hata oluştu.</p>}
 
                   <div className="pt-2 border-t">
                     <Button

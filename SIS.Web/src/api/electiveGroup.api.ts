@@ -14,9 +14,9 @@ import type {
 const BASE = '/elective-groups';
 
 export const electiveGroupApi = {
-  list: (subtype?: ElectiveSubtype, facultyId?: number, isActive?: boolean) =>
+  list: (subtype?: ElectiveSubtype, facultyId?: number, departmentId?: number, isActive?: boolean) =>
     apiClient.get<ElectiveGroupListDto[]>(BASE, {
-      params: { subtype, facultyId, isActive },
+      params: { subtype, facultyId, departmentId, isActive },
     }).then(r => r.data),
 
   get: (id: number) =>
