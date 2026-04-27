@@ -844,31 +844,24 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         if (req.RequiredCourseCount <= 0 && req.RequiredEcts <= 0)
             return BadRequest(new { message = "Gerekli ders sayısı veya AKTS en az biri 0'dan büyük olmalıdır." });
 
-        // SlotName validation
-        if (string.IsNullOrWhiteSpace(req.SlotName))
-            return BadRequest(new { message = "Slot adı boş olamaz." });
-        if (req.SlotName.Length > 50)
-            return BadRequest(new { message = "Slot adı 50 karakterden uzun olamaz." });
+        // SlotName validation + uniqueness via shared helper
+        var (trimmedSlot, slotError) = await ValidateAndResolveSlotNameAsync(
+            curriculumId: id,
+            electiveGroupId: req.ElectiveGroupId,
+            slotName: req.SlotName,
+            excludePoolId: null,
+            ct: ct);
+        if (slotError != null) return slotError;
 
         // EctsPerCourse non-negative
         if (req.EctsPerCourse.HasValue && req.EctsPerCourse.Value < 0)
             return BadRequest(new { message = "AKTS değeri negatif olamaz." });
 
-        var trimmedSlot = req.SlotName.Trim();
-
-        // SlotName uniqueness within (curriculumId, electiveGroupId)
-        var slotConflict = await context.CurriculumElectivePools
-            .AnyAsync(p => p.CurriculumId == id
-                      && p.ElectiveGroupId == req.ElectiveGroupId
-                      && p.SlotName == trimmedSlot, ct);
-        if (slotConflict)
-            return BadRequest(new { message = $"'{trimmedSlot}' adlı slot bu havuza zaten bağlı." });
-
         var entity = new Domain.Entities.CurriculumElectivePool
         {
             CurriculumId = id,
             ElectiveGroupId = req.ElectiveGroupId,
-            SlotName = trimmedSlot,
+            SlotName = trimmedSlot!,
             SuggestedSemesterStart = req.SuggestedSemesterStart,
             SuggestedSemesterEnd = req.SuggestedSemesterEnd,
             RequiredCourseCount = req.RequiredCourseCount,
@@ -911,23 +904,16 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             return NotFound(new { message = "Seçmeli havuz bulunamadı." });
 
         // SlotName değişiyorsa validation + uniqueness check
-        if (req.SlotName != null && req.SlotName != pool.SlotName)
+        if (req.SlotName != null && req.SlotName.Trim() != pool.SlotName)
         {
-            if (string.IsNullOrWhiteSpace(req.SlotName))
-                return BadRequest(new { message = "Slot adı boş olamaz." });
-            if (req.SlotName.Length > 50)
-                return BadRequest(new { message = "Slot adı 50 karakterden uzun olamaz." });
-
-            var trimmedSlot = req.SlotName.Trim();
-            var slotConflict = await context.CurriculumElectivePools
-                .AnyAsync(p => p.CurriculumId == pool.CurriculumId
-                          && p.ElectiveGroupId == pool.ElectiveGroupId
-                          && p.SlotName == trimmedSlot
-                          && p.Id != poolId, ct);
-            if (slotConflict)
-                return BadRequest(new { message = $"'{trimmedSlot}' adlı slot zaten mevcut." });
-
-            pool.SlotName = trimmedSlot;
+            var (newSlot, slotError) = await ValidateAndResolveSlotNameAsync(
+                curriculumId: pool.CurriculumId,
+                electiveGroupId: pool.ElectiveGroupId,
+                slotName: req.SlotName,
+                excludePoolId: poolId,
+                ct: ct);
+            if (slotError != null) return slotError;
+            pool.SlotName = newSlot!;
         }
 
         if (req.SuggestedSemesterStart.HasValue) pool.SuggestedSemesterStart = req.SuggestedSemesterStart.Value;
@@ -1185,5 +1171,36 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         }).ToList();
 
         return Ok(result);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Slot adı doğrulaması + (curriculumId, electiveGroupId, slotName) uniqueness kontrolü.
+    /// Geçerliyse trimmed slot adını döner. Geçersizse BadRequestObjectResult döner.
+    /// </summary>
+    /// <param name="excludePoolId">Update senaryosunda kendi kaydını dışla (Create için null).</param>
+    private async Task<(string? Trimmed, IActionResult? Error)> ValidateAndResolveSlotNameAsync(
+        int curriculumId,
+        int electiveGroupId,
+        string? slotName,
+        int? excludePoolId,
+        CancellationToken ct)
+    {
+        var trimmed = slotName?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmed))
+            return (null, new BadRequestObjectResult(new { message = "Slot adı boş olamaz." }));
+        if (trimmed.Length > 50)
+            return (null, new BadRequestObjectResult(new { message = "Slot adı 50 karakterden uzun olamaz." }));
+
+        var conflict = await context.CurriculumElectivePools
+            .AnyAsync(p => p.CurriculumId == curriculumId
+                      && p.ElectiveGroupId == electiveGroupId
+                      && p.SlotName == trimmed
+                      && (excludePoolId == null || p.Id != excludePoolId.Value), ct);
+        if (conflict)
+            return (null, new BadRequestObjectResult(new { message = $"'{trimmed}' adlı slot bu havuza zaten bağlı." }));
+
+        return (trimmed, null);
     }
 }

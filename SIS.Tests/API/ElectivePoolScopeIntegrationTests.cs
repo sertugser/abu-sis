@@ -567,5 +567,90 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
         pools.Select(p => p.SlotName).Should().BeEquivalentTo(new[] { "TE-1", "TE-2" });
     }
 
+    // ── Group 5: EctsPerCourse round-trip (Faz B follow-ups) ──────────
+
+    [Fact]
+    public async Task CreatePool_with_EctsPerCourse_persists_value()
+    {
+        // Arrange — scope-valid (faculty match) grup; EctsPerCourse=3 ile create.
+        var group = new ElectiveGroup
+        {
+            Name = "MUH-TE-I",
+            Code = "MUH-TE-I",
+            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            FacultyId = FacultyEngId,
+            DepartmentId = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.ElectiveGroups.Add(group);
+        await _context.SaveChangesAsync();
+
+        var controller = CreateCurriculumController();
+        var req = new CurriculumController.CreatePoolRequest(
+            ElectiveGroupId: group.Id,
+            SlotName: "TE-1",
+            SuggestedSemesterStart: 5,
+            SuggestedSemesterEnd: 5,
+            RequiredCourseCount: 1,
+            RequiredEcts: 6,
+            EctsPerCourse: 3);
+
+        // Act
+        var result = await controller.CreatePool(CurriculumId, req, CancellationToken.None);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+        var pool = await _context.CurriculumElectivePools.AsNoTracking()
+            .FirstAsync(p => p.CurriculumId == CurriculumId && p.SlotName == "TE-1");
+        pool.EctsPerCourse.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task UpdatePool_with_ClearEctsPerCourse_sets_field_to_null()
+    {
+        // Arrange — EctsPerCourse=5 olan mevcut havuz; ClearEctsPerCourse=true ile null'a çek.
+        var group = new ElectiveGroup
+        {
+            Name = "MUH-TE-I",
+            Code = "MUH-TE-I",
+            ElectiveSubtype = ElectiveSubtype.TechnicalElective,
+            FacultyId = FacultyEngId,
+            DepartmentId = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.ElectiveGroups.Add(group);
+        await _context.SaveChangesAsync();
+
+        var pool = new CurriculumElectivePool
+        {
+            CurriculumId = CurriculumId,
+            ElectiveGroupId = group.Id,
+            SlotName = "TE-1",
+            SuggestedSemesterStart = 5,
+            SuggestedSemesterEnd = 5,
+            RequiredCourseCount = 1,
+            RequiredEcts = 6,
+            EctsPerCourse = 5,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.CurriculumElectivePools.Add(pool);
+        await _context.SaveChangesAsync();
+
+        var controller = CreateCurriculumController();
+        var req = new CurriculumController.UpdatePoolRequest(
+            ClearEctsPerCourse: true);
+
+        // Act
+        var result = await controller.UpdatePool(CurriculumId, pool.Id, req, CancellationToken.None);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+        var reloaded = await _context.CurriculumElectivePools.AsNoTracking()
+            .FirstAsync(p => p.Id == pool.Id);
+        reloaded.EctsPerCourse.Should().BeNull();
+    }
+
     public void Dispose() => _context.Dispose();
 }
