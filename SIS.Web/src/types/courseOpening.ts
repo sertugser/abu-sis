@@ -136,6 +136,13 @@ export interface PreviousTermCourseDto {
   instructorName: string | null;
   instructorId: number | null;
   alreadyOpened: boolean;
+  totalEnrolled: number;
+  predictedDemand: number | null;
+  sourceInternalQuota: number | null;
+  sourceExternalQuota: number | null;
+  sourceAccessibleDepartmentIds: number[] | null;
+  hasCrossLists: boolean;
+  hasSchedule: boolean;
 }
 
 export interface TransferCourseItem {
@@ -143,6 +150,11 @@ export interface TransferCourseItem {
   sectionCount?: number;
   capacityPerSection?: number;
   instructorId?: number | null;
+  internalQuota?: number | null;
+  externalQuota?: number | null;
+  accessibleDepartmentIds?: number[] | null;
+  includeCrossLists?: boolean;
+  includeSchedule?: boolean;
 }
 
 export interface TransferFromTermRequest {
@@ -159,6 +171,7 @@ export interface TransferCourseResultItem {
   success: boolean;
   error?: string;
   sectionsCreated: number;
+  warnings: string[];
 }
 
 export interface TransferFromTermResultDto {
@@ -166,6 +179,11 @@ export interface TransferFromTermResultDto {
   failedCount: number;
   totalSectionsCreated: number;
   results: TransferCourseResultItem[];
+}
+
+export interface TransferDefaultsDto {
+  defaultCapacityPerSection: number;
+  maxSectionsPerCourse: number;
 }
 
 // ── Instructor Workload ──

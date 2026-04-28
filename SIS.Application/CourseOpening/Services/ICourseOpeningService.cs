@@ -14,7 +14,7 @@ public interface ICourseOpeningService
     Task<CloseAllSectionsResultDto> CloseAllSectionsAsync(int courseId, int termId, CancellationToken cancellationToken = default);
     Task ReactivateSectionAsync(int sectionId, CancellationToken cancellationToken = default);
     Task<BulkAssignInstructorResultDto> BulkAssignInstructorAsync(int departmentId, int termId, BulkAssignInstructorRequest request, CancellationToken cancellationToken = default);
-    Task<List<PreviousTermCourseDto>> GetPreviousTermCoursesAsync(int departmentId, int sourceTermId, int targetTermId, CancellationToken cancellationToken = default);
+    Task<List<PreviousTermCourseDto>> GetPreviousTermCoursesAsync(int departmentId, int sourceTermId, int targetTermId, int? programId = null, int? classLevel = null, CancellationToken cancellationToken = default);
     Task<TransferFromTermResultDto> TransferFromTermAsync(TransferFromTermRequest request, CancellationToken cancellationToken = default);
     Task<List<ExternalCourseDto>> GetExternalCoursesAsync(int departmentId, int termId, CancellationToken cancellationToken = default);
 }

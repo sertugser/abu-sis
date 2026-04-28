@@ -191,7 +191,14 @@ public record PreviousTermCourseDto(
     int Ects, int SuggestedSemester, bool IsCompulsory,
     int SectionCount, int TotalCapacity,
     string? InstructorName, int? InstructorId,
-    bool AlreadyOpened);
+    bool AlreadyOpened,
+    int TotalEnrolled,
+    int? PredictedDemand,
+    int? SourceInternalQuota,
+    int? SourceExternalQuota,
+    List<int>? SourceAccessibleDepartmentIds,
+    bool HasCrossLists,
+    bool HasSchedule);
 
 public class TransferCourseItem
 {
@@ -199,6 +206,11 @@ public class TransferCourseItem
     public int? SectionCount { get; set; }
     public int? CapacityPerSection { get; set; }
     public int? InstructorId { get; set; }
+    public int? InternalQuota { get; set; }
+    public int? ExternalQuota { get; set; }
+    public List<int>? AccessibleDepartmentIds { get; set; }
+    public bool IncludeCrossLists { get; set; }
+    public bool IncludeSchedule { get; set; }
 }
 
 public class TransferFromTermRequest
@@ -225,6 +237,7 @@ public class TransferCourseResultItem
     public bool Success { get; set; }
     public string? Error { get; set; }
     public int SectionsCreated { get; set; }
+    public List<string> Warnings { get; set; } = [];
 }
 
 public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);

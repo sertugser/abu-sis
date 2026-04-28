@@ -72,6 +72,8 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         ["Attendance.TermWeekCount"] = (1, 52),
         ["Attendance.TheoryAbsenceLimitPercent"] = (0, 100),
         ["Attendance.LabAbsenceLimitPercent"] = (0, 100),
+        ["CourseOpening.DefaultCapacityPerSection"] = (1, 1000),
+        ["CourseOpening.MaxSectionsPerCourse"] = (1, 50),
     };
 
     private static readonly HashSet<string> TimeKeys = new(StringComparer.OrdinalIgnoreCase)

@@ -75,7 +75,7 @@ import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import ElectiveGroupManagementPage from './pages/ElectiveGroupManagementPage';
 import ElectiveSubtypeManagementPage from './pages/ElectiveSubtypeManagementPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
-import TermProgramTransferPage from './pages/TermProgramTransferPage';
+import TermProgramTransferPage from './pages/term-program-transfer';
 import CourseEvaluationPage from './pages/CourseEvaluationPage';
 import EvaluationResultsPage from './pages/EvaluationResultsPage';
 import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';

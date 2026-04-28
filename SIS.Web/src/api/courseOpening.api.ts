@@ -14,6 +14,7 @@ import type {
   PreviousTermCourseDto,
   TransferFromTermRequest,
   TransferFromTermResultDto,
+  TransferDefaultsDto,
 } from '../types/courseOpening';
 
 export async function getOpenedCourses(departmentId: number, termId: number): Promise<OpenedCourseListDto> {
@@ -82,19 +83,36 @@ export async function bulkAssignInstructor(
   return data;
 }
 
+export interface PreviousTermCoursesFilter {
+  programId?: number | null;
+  classLevel?: number | null;
+}
+
 export async function getPreviousTermCourses(
   departmentId: number,
   sourceTermId: number,
   targetTermId: number,
+  filter?: PreviousTermCoursesFilter,
 ): Promise<PreviousTermCourseDto[]> {
   const { data } = await apiClient.get<PreviousTermCourseDto[]>('/course-opening/previous-term-courses', {
-    params: { departmentId, sourceTermId, targetTermId },
+    params: {
+      departmentId,
+      sourceTermId,
+      targetTermId,
+      programId: filter?.programId ?? undefined,
+      classLevel: filter?.classLevel ?? undefined,
+    },
   });
   return data;
 }
 
 export async function transferFromTerm(request: TransferFromTermRequest): Promise<TransferFromTermResultDto> {
   const { data } = await apiClient.post<TransferFromTermResultDto>('/course-opening/transfer-from-term', request);
+  return data;
+}
+
+export async function getTransferDefaults(): Promise<TransferDefaultsDto> {
+  const { data } = await apiClient.get<TransferDefaultsDto>('/course-opening/transfer-defaults');
   return data;
 }
 

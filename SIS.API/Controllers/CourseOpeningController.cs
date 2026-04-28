@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
 using SIS.Domain.Enums;
@@ -10,13 +11,19 @@ using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
+public sealed record TransferDefaultsDto(int DefaultCapacityPerSection, int MaxSectionsPerCourse);
+
 [ApiController]
 [Route("api/course-opening")]
 [Authorize]
-public class CourseOpeningController(ICourseOpeningService courseOpeningService, AppDbContext context) : ControllerBase
+public class CourseOpeningController(
+    ICourseOpeningService courseOpeningService,
+    AppDbContext context,
+    ISystemConfigProvider systemConfig) : ControllerBase
 {
     private readonly ICourseOpeningService _courseOpeningService = courseOpeningService;
     private readonly AppDbContext _context = context;
+    private readonly ISystemConfigProvider _systemConfig = systemConfig;
 
     [HttpGet("list")]
     [RequirePermission("menu.ders-acma-islemleri.view")]
@@ -255,12 +262,18 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     [HttpGet("previous-term-courses")]
     [RequirePermission("menu.donem-programi-aktarim.view")]
     public async Task<IActionResult> GetPreviousTermCourses(
-        [FromQuery] int departmentId, [FromQuery] int sourceTermId, [FromQuery] int targetTermId, CancellationToken ct)
+        [FromQuery] int departmentId,
+        [FromQuery] int sourceTermId,
+        [FromQuery] int targetTermId,
+        [FromQuery] int? programId,
+        [FromQuery] int? classLevel,
+        CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetPreviousTermCoursesAsync(departmentId, sourceTermId, targetTermId, ct);
+        var result = await _courseOpeningService.GetPreviousTermCoursesAsync(
+            departmentId, sourceTermId, targetTermId, programId, classLevel, ct);
         return Ok(result);
     }
 
@@ -273,6 +286,15 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         var result = await _courseOpeningService.TransferFromTermAsync(request, ct);
         return Ok(result);
+    }
+
+    [HttpGet("transfer-defaults")]
+    [RequirePermission("menu.donem-programi-aktarim.view")]
+    public async Task<IActionResult> GetTransferDefaults(CancellationToken ct)
+    {
+        var defaultCapacity = await _systemConfig.GetIntAsync("CourseOpening.DefaultCapacityPerSection", 40, ct);
+        var maxSections = await _systemConfig.GetIntAsync("CourseOpening.MaxSectionsPerCourse", 20, ct);
+        return Ok(new TransferDefaultsDto(defaultCapacity, maxSections));
     }
 
     [HttpGet("external-courses")]
