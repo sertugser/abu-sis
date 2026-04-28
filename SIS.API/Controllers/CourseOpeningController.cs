@@ -6,7 +6,6 @@ using SIS.API.Authorization;
 using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
-using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -17,13 +16,21 @@ public sealed record TransferDefaultsDto(int DefaultCapacityPerSection, int MaxS
 [Route("api/course-opening")]
 [Authorize]
 public class CourseOpeningController(
-    ICourseOpeningService courseOpeningService,
+    ICourseSectionLifecycleService lifecycleService,
+    ICourseOpeningQueryService queryService,
+    IInstructorAssignmentService instructorAssignmentService,
+    ITermCourseTransferService transferService,
     AppDbContext context,
     ISystemConfigProvider systemConfig) : ControllerBase
 {
-    private readonly ICourseOpeningService _courseOpeningService = courseOpeningService;
+    private readonly ICourseSectionLifecycleService _lifecycleService = lifecycleService;
+    private readonly ICourseOpeningQueryService _queryService = queryService;
+    private readonly IInstructorAssignmentService _instructorAssignmentService = instructorAssignmentService;
+    private readonly ITermCourseTransferService _transferService = transferService;
     private readonly AppDbContext _context = context;
     private readonly ISystemConfigProvider _systemConfig = systemConfig;
+
+    // ── Listeleme / Lookup ───────────────────────────────────────────────
 
     [HttpGet("list")]
     [RequirePermission("menu.ders-acma-islemleri.view")]
@@ -32,7 +39,7 @@ public class CourseOpeningController(
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetOpenedCoursesAsync(departmentId, termId, ct);
+        var result = await _queryService.GetOpenedCoursesAsync(departmentId, termId, ct);
         return Ok(result);
     }
 
@@ -43,7 +50,7 @@ public class CourseOpeningController(
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, showAll, ct);
+        var result = await _queryService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, showAll, ct);
         return Ok(result);
     }
 
@@ -54,9 +61,22 @@ public class CourseOpeningController(
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetDepartmentInstructorsAsync(departmentId, termId, ct);
+        var result = await _queryService.GetDepartmentInstructorsAsync(departmentId, termId, ct);
         return Ok(result);
     }
+
+    [HttpGet("external-courses")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
+    public async Task<IActionResult> GetExternalCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _queryService.GetExternalCoursesAsync(departmentId, termId, ct);
+        return Ok(result);
+    }
+
+    // ── Section Yaşam Döngüsü ────────────────────────────────────────────
 
     [HttpPost("open")]
     [RequirePermission("menu.ders-acma-islemleri.open")]
@@ -67,7 +87,7 @@ public class CourseOpeningController(
 
         try
         {
-            var result = await _courseOpeningService.OpenCourseAsync(departmentId, termId, request, ct);
+            var result = await _lifecycleService.OpenCourseAsync(departmentId, termId, request, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -83,7 +103,7 @@ public class CourseOpeningController(
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.BulkOpenCoursesAsync(departmentId, termId, request, ct);
+        var result = await _lifecycleService.BulkOpenCoursesAsync(departmentId, termId, request, ct);
         return Ok(result);
     }
 
@@ -93,7 +113,6 @@ public class CourseOpeningController(
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
-        // Verify department access via section's course
         var section = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
@@ -105,7 +124,7 @@ public class CourseOpeningController(
 
         try
         {
-            var result = await _courseOpeningService.UpdateSectionAsync(request, ct);
+            var result = await _lifecycleService.UpdateSectionAsync(request, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -131,7 +150,7 @@ public class CourseOpeningController(
 
         try
         {
-            await _courseOpeningService.CloseSectionAsync(id, ct);
+            await _lifecycleService.CloseSectionAsync(id, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -153,7 +172,7 @@ public class CourseOpeningController(
 
         try
         {
-            var result = await _courseOpeningService.CloseAllSectionsAsync(courseId, termId, ct);
+            var result = await _lifecycleService.CloseAllSectionsAsync(courseId, termId, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -179,7 +198,7 @@ public class CourseOpeningController(
 
         try
         {
-            await _courseOpeningService.ReactivateSectionAsync(id, ct);
+            await _lifecycleService.ReactivateSectionAsync(id, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -187,6 +206,8 @@ public class CourseOpeningController(
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    // ── Hoca Atama ───────────────────────────────────────────────────────
 
     [HttpPost("bulk-assign-instructor")]
     [RequirePermission("menu.ogretim-elemani-atama.bulk-assign")]
@@ -197,7 +218,7 @@ public class CourseOpeningController(
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.BulkAssignInstructorAsync(departmentId, termId, request, ct);
+        var result = await _instructorAssignmentService.BulkAssignInstructorAsync(departmentId, termId, request, ct);
         return Ok(result);
     }
 
@@ -217,7 +238,6 @@ public class CourseOpeningController(
         if (!await HasDepartmentAccessAsync(userId, instructor.DepartmentId, ct))
             return Forbid();
 
-        // Get instructor's user name
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == instructor.UserId, ct);
@@ -226,7 +246,6 @@ public class CourseOpeningController(
             ? $"{instructor.Title} {user.FirstName} {user.LastName}"
             : $"{instructor.Title} (#{instructor.Id})";
 
-        // Get assigned sections for this term
         var sections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
@@ -259,6 +278,8 @@ public class CourseOpeningController(
         });
     }
 
+    // ── Geçmiş Dönemden Aktarım (Ders Aç (Hareket)) ──────────────────────
+
     [HttpGet("previous-term-courses")]
     [RequirePermission("menu.donem-programi-aktarim.view")]
     public async Task<IActionResult> GetPreviousTermCourses(
@@ -272,7 +293,7 @@ public class CourseOpeningController(
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetPreviousTermCoursesAsync(
+        var result = await _transferService.GetPreviousTermCoursesAsync(
             departmentId, sourceTermId, targetTermId, programId, classLevel, ct);
         return Ok(result);
     }
@@ -284,7 +305,7 @@ public class CourseOpeningController(
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, request.DepartmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.TransferFromTermAsync(request, ct);
+        var result = await _transferService.TransferFromTermAsync(request, ct);
         return Ok(result);
     }
 
@@ -297,16 +318,7 @@ public class CourseOpeningController(
         return Ok(new TransferDefaultsDto(defaultCapacity, maxSections));
     }
 
-    [HttpGet("external-courses")]
-    [RequirePermission("menu.ders-acma-islemleri.view")]
-    public async Task<IActionResult> GetExternalCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
-    {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
-
-        var result = await _courseOpeningService.GetExternalCoursesAsync(departmentId, termId, ct);
-        return Ok(result);
-    }
+    // ── Helpers ──────────────────────────────────────────────────────────
 
     private bool TryGetUserId(out int userId)
     {
@@ -329,7 +341,6 @@ public class CourseOpeningController(
 
         if (instructor == null) return false;
 
-        // Dean: kendi fakültesindeki tüm bölümlere erişebilir
         if (roles.Contains("Dean"))
         {
             var department = await _context.Departments.AsNoTracking()
@@ -337,7 +348,6 @@ public class CourseOpeningController(
             return department != null && department.FacultyId == instructor.Department.FacultyId;
         }
 
-        // DepartmentManager: sadece kendi bölümü
         if (roles.Contains("DepartmentManager"))
             return instructor.DepartmentId == departmentId;
 
