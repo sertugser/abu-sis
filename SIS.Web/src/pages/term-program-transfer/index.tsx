@@ -17,12 +17,19 @@ import type {
   TransferFromTermResultDto,
   TransferCourseItem,
 } from '../../types/courseOpening';
-import type { CourseOverride, FilterType } from './types';
+import type { CourseOverride } from './types';
 import { TransferFilterBar } from './components/TransferFilterBar';
-import { TransferActionToolbar } from './components/TransferActionToolbar';
+import { SourcePanelHeader } from './components/SourcePanelHeader';
 import { TransferTable } from './components/TransferTable';
 import { TransferConfirmDialog } from './components/TransferConfirmDialog';
 import { TransferResultBanner } from './components/TransferResultBanner';
+import { TargetTermPanel } from './components/TargetTermPanel';
+import { RowEditSheet } from './components/RowEditSheet';
+import { SectionDetailDialog } from './components/SectionDetailDialog';
+import { SectionEditDialog } from './components/SectionEditDialog';
+import { DeleteSectionDialog } from './components/DeleteSectionDialog';
+import { AddSectionDialog } from './components/AddSectionDialog';
+import type { OpenedCourseSectionDto } from '../../types/courseOpening';
 
 export default function TermProgramTransferPage() {
   const contextQuery = useAcademicOperationsContext();
@@ -38,10 +45,15 @@ export default function TermProgramTransferPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [transferResult, setTransferResult] = useState<TransferFromTermResultDto | null>(null);
   const [overrides, setOverrides] = useState<Record<number, CourseOverride>>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [searchCode, setSearchCode] = useState('');
+  const [searchName, setSearchName] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [includeSchedule, setIncludeSchedule] = useState(false);
+  const [editingCourseId, setEditingCourseId] = useState<number | null>(null);
+  const [detailSection, setDetailSection] = useState<OpenedCourseSectionDto | null>(null);
+  const [editSection, setEditSection] = useState<OpenedCourseSectionDto | null>(null);
+  const [addSectionFor, setAddSectionFor] = useState<OpenedCourseSectionDto | null>(null);
+  const [deleteSection, setDeleteSection] = useState<OpenedCourseSectionDto | null>(null);
 
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const targetTermId = activeTerm?.id ?? null;
@@ -67,19 +79,16 @@ export default function TermProgramTransferPage() {
 
   const filteredCourses = useMemo(() => {
     let result = courses;
-    if (filterType === 'compulsory') result = result.filter((c) => c.isCompulsory);
-    if (filterType === 'elective') result = result.filter((c) => !c.isCompulsory);
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter(
-        (c) =>
-          c.courseCode.toLowerCase().includes(q) ||
-          c.courseName.toLowerCase().includes(q) ||
-          (c.instructorName && c.instructorName.toLowerCase().includes(q)),
-      );
+    if (searchCode.trim()) {
+      const q = searchCode.trim().toLowerCase();
+      result = result.filter((c) => c.courseCode.toLowerCase().includes(q));
+    }
+    if (searchName.trim()) {
+      const q = searchName.trim().toLowerCase();
+      result = result.filter((c) => c.courseName.toLowerCase().includes(q));
     }
     return result;
-  }, [courses, filterType, searchQuery]);
+  }, [courses, searchCode, searchName]);
 
   const fallbackCapacity = defaults?.defaultCapacityPerSection ?? 40;
   const maxSections = defaults?.maxSectionsPerCourse ?? 20;
@@ -127,6 +136,8 @@ export default function TermProgramTransferPage() {
   };
 
   const selectedCourses = courses.filter((c) => selectedIds.has(c.courseId));
+  const totalCredits = selectedCourses.reduce((sum, c) => sum + c.credits, 0);
+  const totalEcts = selectedCourses.reduce((sum, c) => sum + c.ects, 0);
 
   const handleTransfer = async () => {
     if (!deptId || !sourceTermId || !targetTermId || selectedIds.size === 0) return;
@@ -162,7 +173,8 @@ export default function TermProgramTransferPage() {
     setSelectedIds(new Set());
     setTransferResult(null);
     setOverrides({});
-    setSearchQuery('');
+    setSearchCode('');
+    setSearchName('');
   };
 
   const changeDept = (deptId: number) => {
@@ -185,71 +197,35 @@ export default function TermProgramTransferPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <TransferFilterBar
-        departments={departments}
-        selectedDeptId={deptId}
-        onDeptChange={changeDept}
-        sourceTerms={sourceTerms}
-        sourceTermId={sourceTermId}
-        onSourceChange={changeSource}
-        programs={programs}
-        programId={programId}
-        onProgramChange={setProgramId}
-        classLevel={classLevel}
-        onClassLevelChange={setClassLevel}
-        activeTermName={activeTerm?.name ?? null}
-        termStatus={termStatus}
-        isTermSuitable={isTermSuitable}
-        totalCount={courses.length}
-        transferableCount={transferable.length}
-      />
+    <div className="space-y-3">
+      <TransferFilterBar termStatus={termStatus} isTermSuitable={isTermSuitable} />
 
       {transferResult && <TransferResultBanner result={transferResult} />}
 
-      {!sourceTermId ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="py-16 text-center">
-              <Copy className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Kaynak dönem seçin</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">
-                Kopyalanacak dersleri görmek için bir önceki dönem seçin.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : coursesQuery.isLoading ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="py-16 text-center text-muted-foreground text-sm">Yükleniyor...</div>
-          </CardContent>
-        </Card>
-      ) : courses.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="py-16 text-center">
-              <AlertCircle className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Ders bulunamadı</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">
-                {selectedSourceTerm?.name} döneminde bu bölüme ait açılmış ders yok.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <TransferActionToolbar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            filterType={filterType}
-            onFilterChange={setFilterType}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+        {/* SOL: Kaynak (Referans) panel — kendi filtreleri ve aksiyonları */}
+        <Card className="overflow-hidden">
+          <SourcePanelHeader
+            departments={departments}
+            departmentId={deptId}
+            onDepartmentChange={changeDept}
+            sourceTerms={sourceTerms}
+            sourceTermId={sourceTermId}
+            onSourceChange={changeSource}
+            programs={programs}
+            programId={programId}
+            onProgramChange={setProgramId}
+            classLevel={classLevel}
+            onClassLevelChange={setClassLevel}
+            searchCode={searchCode}
+            onSearchCodeChange={setSearchCode}
+            searchName={searchName}
+            onSearchNameChange={setSearchName}
             selectedCount={selectedIds.size}
-            onSelectAll={() => setSelectedIds(new Set(transferable.map((c) => c.courseId)))}
-            onSelectCompulsory={() =>
-              setSelectedIds(new Set(transferable.filter((c) => c.isCompulsory).map((c) => c.courseId)))
-            }
-            onClearSelection={() => setSelectedIds(new Set())}
+            totalCount={courses.length}
+            transferableCount={transferable.length}
+            totalCredits={totalCredits}
+            totalEcts={totalEcts}
             includeSchedule={includeSchedule}
             onIncludeScheduleChange={setIncludeSchedule}
             onTransferClick={() => setShowConfirmDialog(true)}
@@ -257,17 +233,49 @@ export default function TermProgramTransferPage() {
             canTransfer={Boolean(targetTermId) && isTermSuitable}
           />
 
-          <TransferTable
-            courses={filteredCourses}
-            selectedIds={selectedIds}
-            onToggle={toggle}
-            getOverride={getOverride}
-            onUpdateOverride={updateOverride}
-            instructors={instructors}
-            maxSections={maxSections}
-          />
-        </>
-      )}
+          <CardContent className="p-0">
+            {!sourceTermId ? (
+              <div className="py-12 text-center">
+                <Copy className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Kaynak dönem seçin</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">
+                  Üstteki filtreden bir önceki dönemi seçin.
+                </p>
+              </div>
+            ) : coursesQuery.isLoading ? (
+              <div className="py-12 text-center text-xs text-muted-foreground">Yükleniyor...</div>
+            ) : courses.length === 0 ? (
+              <div className="py-12 text-center">
+                <AlertCircle className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Ders bulunamadı</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">
+                  {selectedSourceTerm?.name} döneminde bu bölüme ait açılmış ders yok.
+                </p>
+              </div>
+            ) : (
+              <TransferTable
+                courses={filteredCourses}
+                selectedIds={selectedIds}
+                onToggle={toggle}
+                onEdit={(c) => setEditingCourseId(c.courseId)}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* SAĞ: Hedef dönem — bağımsız filtreler, satır seçince aksiyon barı */}
+        <TargetTermPanel
+          departments={departments}
+          defaultDepartmentId={deptId}
+          defaultTermId={targetTermId}
+          defaultProgramId={programId}
+          availableTerms={allTerms ?? []}
+          onDetail={setDetailSection}
+          onEdit={setEditSection}
+          onAddSection={setAddSectionFor}
+          onDelete={setDeleteSection}
+        />
+      </div>
 
       <TransferConfirmDialog
         open={showConfirmDialog}
@@ -276,6 +284,47 @@ export default function TermProgramTransferPage() {
         getOverride={getOverride}
         instructors={instructors}
         onConfirm={handleTransfer}
+      />
+
+      <RowEditSheet
+        course={editingCourseId != null ? (courses.find((c) => c.courseId === editingCourseId) ?? null) : null}
+        override={editingCourseId != null ? getOverride(courses.find((c) => c.courseId === editingCourseId)!) : null}
+        instructors={instructors}
+        maxSections={maxSections}
+        open={editingCourseId != null}
+        onOpenChange={(open) => !open && setEditingCourseId(null)}
+        onUpdate={(field, value) => {
+          if (editingCourseId != null) updateOverride(editingCourseId, field, value);
+        }}
+      />
+
+      {/* Sağ panel aksiyon dialogları */}
+      <SectionDetailDialog
+        section={detailSection}
+        open={detailSection != null}
+        onOpenChange={(o) => !o && setDetailSection(null)}
+      />
+      <SectionEditDialog
+        section={editSection}
+        departmentId={deptId ?? 0}
+        termId={targetTermId ?? 0}
+        instructors={instructors}
+        open={editSection != null}
+        onOpenChange={(o) => !o && setEditSection(null)}
+      />
+      <AddSectionDialog
+        section={addSectionFor}
+        departmentId={deptId ?? 0}
+        termId={targetTermId ?? 0}
+        open={addSectionFor != null}
+        onOpenChange={(o) => !o && setAddSectionFor(null)}
+      />
+      <DeleteSectionDialog
+        section={deleteSection}
+        departmentId={deptId ?? 0}
+        termId={targetTermId ?? 0}
+        open={deleteSection != null}
+        onOpenChange={(o) => !o && setDeleteSection(null)}
       />
     </div>
   );

@@ -188,7 +188,7 @@ public class AssignedSectionDto
 
 public record PreviousTermCourseDto(
     int CourseId, string CourseCode, string CourseName,
-    int Ects, int SuggestedSemester, bool IsCompulsory,
+    int Ects, int Credits, int SuggestedSemester, bool IsCompulsory,
     int SectionCount, int TotalCapacity,
     string? InstructorName, int? InstructorId,
     bool AlreadyOpened,

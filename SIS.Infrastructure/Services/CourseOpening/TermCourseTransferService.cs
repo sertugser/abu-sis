@@ -127,6 +127,7 @@ public class TermCourseTransferService(
                     CourseCode: first.Course.Code,
                     CourseName: first.Course.Name,
                     Ects: first.Course.Ects,
+                    Credits: first.Course.TheoryHours + first.Course.LabHours,
                     SuggestedSemester: currInfo?.Semester ?? 0,
                     IsCompulsory: currInfo?.IsCompulsory ?? false,
                     SectionCount: sectionCount,

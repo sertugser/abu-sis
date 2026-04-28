@@ -129,6 +129,7 @@ export interface PreviousTermCourseDto {
   courseCode: string;
   courseName: string;
   ects: number;
+  credits: number;
   suggestedSemester: number;
   isCompulsory: boolean;
   sectionCount: number;
