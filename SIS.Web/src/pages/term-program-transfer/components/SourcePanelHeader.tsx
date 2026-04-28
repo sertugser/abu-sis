@@ -1,4 +1,4 @@
-import { CalendarClock, BookOpen } from 'lucide-react';
+import { CalendarClock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -51,6 +51,9 @@ interface SourcePanelHeaderProps {
   includeSchedule: boolean;
   onIncludeScheduleChange: (v: boolean) => void;
 
+  /** Aktar butonunda gösterilecek hedef bölüm adı (kısaltılmış). */
+  targetDepartmentLabel: string | null;
+
   onTransferClick: () => void;
   isPending: boolean;
   canTransfer: boolean;
@@ -79,6 +82,7 @@ export function SourcePanelHeader({
   totalEcts,
   includeSchedule,
   onIncludeScheduleChange,
+  targetDepartmentLabel,
   onTransferClick,
   isPending,
   canTransfer,
@@ -87,7 +91,6 @@ export function SourcePanelHeader({
     <div className="border-b bg-muted/30">
       {/* Başlık */}
       <div className="px-4 py-2.5 flex items-center gap-2 border-b border-border/40">
-        <BookOpen className="h-4 w-4 text-primary" />
         <h3 className="text-base font-semibold">Referans Alınacak Dersler</h3>
         {sourceTermId != null && totalCount > 0 && (
           <span className="text-xs text-muted-foreground ml-auto">
@@ -219,8 +222,13 @@ export function SourcePanelHeader({
           className="h-8 text-sm px-4"
           onClick={onTransferClick}
           disabled={selectedCount === 0 || isPending || !canTransfer}
+          title={targetDepartmentLabel ? `${targetDepartmentLabel} bölümüne aktarılır` : undefined}
         >
-          {isPending ? '...' : `Aktar (${selectedCount})`}
+          {isPending
+            ? '...'
+            : targetDepartmentLabel
+              ? `Aktar (${selectedCount}) → ${targetDepartmentLabel}`
+              : `Aktar (${selectedCount})`}
         </Button>
       </div>
     </div>

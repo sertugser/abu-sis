@@ -228,6 +228,7 @@ export default function TermProgramTransferPage() {
             totalEcts={totalEcts}
             includeSchedule={includeSchedule}
             onIncludeScheduleChange={setIncludeSchedule}
+            targetDepartmentLabel={departments.find((d) => d.departmentId === deptId)?.departmentName ?? null}
             onTransferClick={() => setShowConfirmDialog(true)}
             isPending={transferMutation.isPending}
             canTransfer={Boolean(targetTermId) && isTermSuitable}
@@ -263,12 +264,14 @@ export default function TermProgramTransferPage() {
           </CardContent>
         </Card>
 
-        {/* SAĞ: Hedef dönem — bağımsız filtreler, satır seçince aksiyon barı */}
+        {/* SAĞ: Hedef dönem — Bölüm+Program sol ile çift yönlü, dönem/sınıf/arama bağımsız */}
         <TargetTermPanel
           departments={departments}
-          defaultDepartmentId={deptId}
+          departmentId={deptId}
+          onDepartmentChange={changeDept}
+          programId={programId}
+          onProgramChange={setProgramId}
           defaultTermId={targetTermId}
-          defaultProgramId={programId}
           availableTerms={allTerms ?? []}
           onDetail={setDetailSection}
           onEdit={setEditSection}
@@ -283,6 +286,8 @@ export default function TermProgramTransferPage() {
         selectedCourses={selectedCourses}
         getOverride={getOverride}
         instructors={instructors}
+        targetDepartmentName={departments.find((d) => d.departmentId === deptId)?.departmentName ?? null}
+        targetTermName={activeTerm?.name ?? null}
         onConfirm={handleTransfer}
       />
 

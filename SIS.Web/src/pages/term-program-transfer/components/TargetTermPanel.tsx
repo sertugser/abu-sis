@@ -23,9 +23,14 @@ interface TermOption {
 
 interface TargetTermPanelProps {
   departments: DepartmentOption[];
-  defaultDepartmentId: number | null;
+  /** Bölüm — sol panel ile ÇİFT YÖNLÜ sync (kullanıcı kararı: ortak state). */
+  departmentId: number | null;
+  onDepartmentChange: (id: number) => void;
+  /** Program — sol panel ile ÇİFT YÖNLÜ sync. */
+  programId: number | null;
+  onProgramChange: (id: number | null) => void;
+  /** Hedef dönem — bağımsız (sağ panel kendi içinde tutuyor). */
   defaultTermId: number | null;
-  defaultProgramId: number | null;
   availableTerms: TermOption[];
   onDetail: (section: OpenedCourseSectionDto) => void;
   onEdit: (section: OpenedCourseSectionDto) => void;
@@ -35,34 +40,28 @@ interface TargetTermPanelProps {
 
 export function TargetTermPanel({
   departments,
-  defaultDepartmentId,
+  departmentId,
+  onDepartmentChange,
+  programId,
+  onProgramChange,
   defaultTermId,
-  defaultProgramId,
   availableTerms,
   onDetail,
   onEdit,
   onAddSection,
   onDelete,
 }: TargetTermPanelProps) {
-  const [departmentId, setDepartmentId] = useState<number | null>(defaultDepartmentId);
+  // Bölüm/Program: parent kontrolünde (çift yönlü sync sol panel ile)
+  // Dönem/Sınıf/Arama: bu panele özel
   const [termId, setTermId] = useState<number | null>(defaultTermId);
-  const [programId, setProgramId] = useState<number | null>(defaultProgramId);
   const [classLevel, setClassLevel] = useState<number | null>(null);
   const [searchCode, setSearchCode] = useState('');
   const [searchName, setSearchName] = useState('');
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (defaultDepartmentId !== null) setDepartmentId(defaultDepartmentId);
-  }, [defaultDepartmentId]);
-
-  useEffect(() => {
     if (defaultTermId !== null) setTermId(defaultTermId);
   }, [defaultTermId]);
-
-  useEffect(() => {
-    setProgramId(defaultProgramId);
-  }, [defaultProgramId]);
 
   const { data, isLoading } = useOpenedCourses(departmentId, termId);
   const programsQuery = useAdminProgramsByStructure(departmentId ?? undefined);
@@ -99,7 +98,6 @@ export function TargetTermPanel({
       {/* Başlık + Filtreler */}
       <div className="border-b bg-muted/30">
         <div className="px-4 py-2.5 flex items-center gap-2 border-b border-border/40">
-          <Inbox className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-base font-semibold">Hedef Dönemde Açılmış Dersler</h3>
           {filtered.length > 0 && (
             <span className="text-xs text-muted-foreground ml-auto">{filtered.length} şube</span>
@@ -125,7 +123,7 @@ export function TargetTermPanel({
           <FilterRow label="Bölüm">
             <Select
               value={departmentId == null ? '' : String(departmentId)}
-              onValueChange={(v) => setDepartmentId(Number(v))}
+              onValueChange={(v) => onDepartmentChange(Number(v))}
               disabled={departments.length === 0}
             >
               <SelectTrigger className="h-9 text-sm">
@@ -142,7 +140,7 @@ export function TargetTermPanel({
           </FilterRow>
 
           <FilterRow label="Program">
-            <Select value={programId == null ? 'all' : String(programId)} onValueChange={(v) => setProgramId(v === 'all' ? null : Number(v))}>
+            <Select value={programId == null ? 'all' : String(programId)} onValueChange={(v) => onProgramChange(v === 'all' ? null : Number(v))}>
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Tüm programlar" />
               </SelectTrigger>

@@ -17,6 +17,10 @@ interface TransferConfirmDialogProps {
   selectedCourses: PreviousTermCourseDto[];
   getOverride: (course: PreviousTermCourseDto) => CourseOverride;
   instructors: InstructorOptionDto[];
+  /** Hedef bölüm adı — kullanıcının nereye aktardığı net görsün diye. */
+  targetDepartmentName: string | null;
+  /** Hedef dönem adı — kullanıcının hangi döneme aktardığı net görsün diye. */
+  targetTermName: string | null;
   onConfirm: () => void;
 }
 
@@ -26,6 +30,8 @@ export function TransferConfirmDialog({
   selectedCourses,
   getOverride,
   instructors,
+  targetDepartmentName,
+  targetTermName,
   onConfirm,
 }: TransferConfirmDialogProps) {
   const totalSections = selectedCourses.reduce((sum, c) => sum + getOverride(c).sectionCount, 0);
@@ -37,8 +43,18 @@ export function TransferConfirmDialog({
           <AlertDialogTitle>Aktarımı Onayla</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 p-3 bg-muted/30 rounded-md text-sm">
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Hedef Bölüm</div>
+                  <div className="font-medium">{targetDepartmentName ?? '—'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Hedef Dönem</div>
+                  <div className="font-medium">{targetTermName ?? '—'}</div>
+                </div>
+              </div>
               <p>
-                Aşağıdaki <strong>{selectedCourses.length} ders</strong> hedef döneme aktarılacak:
+                Aşağıdaki <strong>{selectedCourses.length} ders</strong> bu bölüme aktarılacak:
               </p>
               <div className="max-h-48 overflow-y-auto space-y-1 border rounded-md p-2 bg-muted/30">
                 {selectedCourses.map((c) => {
