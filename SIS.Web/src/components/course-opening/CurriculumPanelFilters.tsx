@@ -1,23 +1,7 @@
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { cn } from '@/lib/utils';
 import type { AccessibleDepartment } from '../../types/academicOperations';
 import type { FacultyDto, DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
 import { AcademicHierarchyFilter } from './AcademicHierarchyFilter';
-
-const CLASS_YEARS: { value: number | null; label: string }[] = [
-  { value: null, label: 'Tümü' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 4, label: '4' },
-];
-
-const SEMESTERS: { value: 'fall' | 'spring' | null; label: string }[] = [
-  { value: null, label: 'Tümü' },
-  { value: 'fall', label: 'Güz' },
-  { value: 'spring', label: 'Bahar' },
-];
 
 export interface CurriculumPanelFiltersProps {
   faculties: FacultyDto[];
@@ -36,8 +20,8 @@ export interface CurriculumPanelFiltersProps {
 
   classYear: number | null;
   onClassYearChange: (year: number | null) => void;
-  semester: 'fall' | 'spring' | null;
-  onSemesterChange: (s: 'fall' | 'spring' | null) => void;
+  semester: 'fall' | 'spring' | 'summer' | null;
+  onSemesterChange: (s: 'fall' | 'spring' | 'summer' | null) => void;
 
   includeUnmapped: boolean;
   onIncludeUnmappedChange: (v: boolean) => void;
@@ -48,91 +32,88 @@ export interface CurriculumPanelFiltersProps {
   onNameSearchChange: (v: string) => void;
 }
 
+const SELECT_CLASS =
+  'h-7 rounded-md border border-gray-200 bg-white px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none';
+
 export function CurriculumPanelFilters(props: CurriculumPanelFiltersProps) {
   return (
-    <div className="space-y-2 px-3 py-2 bg-blue-50/40 border-b">
-      <AcademicHierarchyFilter
-        faculties={props.faculties}
-        structureDepartments={props.structureDepartments}
-        accessibleDepartments={props.accessibleDepartments}
-        programs={props.programs}
-        facultyId={props.facultyId}
-        onFacultyChange={props.onFacultyChange}
-        deptId={props.deptId}
-        onDeptChange={props.onDeptChange}
-        programId={props.programId}
-        onProgramChange={props.onProgramChange}
-        curriculumId={props.curriculumId}
-        onCurriculumChange={props.onCurriculumChange}
-        showCurriculum
-      />
-
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-16">Dönem</span>
-          <div className="flex rounded-lg bg-gray-100 p-0.5 gap-0.5">
-            {SEMESTERS.map((s) => (
-              <button
-                key={s.label}
-                onClick={() => props.onSemesterChange(s.value)}
-                className={cn(
-                  'h-6 px-2.5 text-[11px] rounded-md font-medium transition-colors whitespace-nowrap',
-                  props.semester === s.value
-                    ? 'bg-white shadow-sm text-gray-900'
-                    : 'text-gray-500 hover:text-gray-700',
-                )}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-12">Sınıf</span>
-          <div className="flex rounded-lg bg-gray-100 p-0.5 gap-0.5">
-            {CLASS_YEARS.map((y) => (
-              <button
-                key={y.label}
-                onClick={() => props.onClassYearChange(y.value)}
-                className={cn(
-                  'h-6 px-2.5 text-[11px] rounded-md font-medium transition-colors',
-                  props.classYear === y.value
-                    ? 'bg-white shadow-sm text-gray-900'
-                    : 'text-gray-500 hover:text-gray-700',
-                )}
-              >
-                {y.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <Checkbox
-            checked={props.includeUnmapped}
-            onCheckedChange={(v) => props.onIncludeUnmappedChange(v === true)}
-          />
-          <span className="text-xs text-gray-700">İntibakı Yapılmayanlar</span>
-        </label>
+    <div className="border-b border-gray-200">
+      {/* Proliz tarzı başlık çubuğu */}
+      <div className="bg-slate-600 text-white text-center text-xs font-semibold py-1.5 tracking-wide">
+        Referans Alınacak Müfredat Dersleri
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-16">Ders Kod</span>
+      {/* 2-sütun grid: label | input */}
+      <div className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1.5 px-3 py-2.5 bg-slate-50/60">
+        <AcademicHierarchyFilter
+          faculties={props.faculties}
+          structureDepartments={props.structureDepartments}
+          accessibleDepartments={props.accessibleDepartments}
+          programs={props.programs}
+          facultyId={props.facultyId}
+          onFacultyChange={props.onFacultyChange}
+          deptId={props.deptId}
+          onDeptChange={props.onDeptChange}
+          programId={props.programId}
+          onProgramChange={props.onProgramChange}
+          curriculumId={props.curriculumId}
+          onCurriculumChange={props.onCurriculumChange}
+          showCurriculum
+        />
+
+        <span className="text-xs font-semibold text-gray-600 self-center">Dönem/Sınıf</span>
+        <div className="flex items-center gap-2">
+          <select
+            className={SELECT_CLASS + ' min-w-[80px]'}
+            value={props.semester ?? ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              props.onSemesterChange(
+                v === 'fall' ? 'fall' : v === 'spring' ? 'spring' : v === 'summer' ? 'summer' : null,
+              );
+            }}
+          >
+            <option value="">Seç</option>
+            <option value="fall">Güz</option>
+            <option value="spring">Bahar</option>
+            <option value="summer">Yaz</option>
+          </select>
+          <span className="text-xs text-gray-400 select-none">/</span>
+          <select
+            className={SELECT_CLASS + ' min-w-[80px]'}
+            value={props.classYear ?? ''}
+            onChange={(e) => props.onClassYearChange(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Tümü</option>
+            <option value="1">1. Sınıf</option>
+            <option value="2">2. Sınıf</option>
+            <option value="3">3. Sınıf</option>
+            <option value="4">4. Sınıf</option>
+          </select>
+          <label className="flex items-center gap-1.5 cursor-pointer ml-auto">
+            <input
+              type="checkbox"
+              checked={props.includeUnmapped}
+              onChange={(e) => props.onIncludeUnmappedChange(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-1 focus:ring-blue-300 cursor-pointer"
+            />
+            <span className="text-xs text-gray-700 select-none">İntibakı Yapılmayanlar</span>
+          </label>
+        </div>
+
+        <span className="text-xs font-semibold text-gray-600 self-center">Ders Kod</span>
+        <div className="flex items-center gap-2">
           <Input
             value={props.codeSearch}
             onChange={(e) => props.onCodeSearchChange(e.target.value)}
             className="h-7 w-32 text-xs rounded-md"
             placeholder="örn. BLG101"
           />
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-14">Ders Ad</span>
+          <span className="text-xs font-semibold text-gray-600 ml-2">Ders Ad</span>
           <Input
             value={props.nameSearch}
             onChange={(e) => props.onNameSearchChange(e.target.value)}
-            className="h-7 flex-1 min-w-[140px] text-xs rounded-md"
+            className="h-7 flex-1 text-xs rounded-md"
             placeholder="ders adıyla ara..."
           />
         </div>

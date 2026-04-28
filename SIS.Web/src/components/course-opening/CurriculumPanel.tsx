@@ -1,29 +1,33 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, Plus, Search } from 'lucide-react';
-import type { CurriculumCourseForOpeningDto } from '../../types/courseOpening';
-import type { CourseDemandForecastDto } from '../../types/forecast';
+import { Filter, Plus, Search, Sparkles } from 'lucide-react';
+import type {
+  CurriculumCourseForOpeningDto,
+  PoolSlotForOpeningDto,
+} from '../../types/courseOpening';
 import { CurriculumCourseRow } from './CurriculumCourseRow';
+import { PoolSlotRow } from './PoolSlotRow';
 
 interface Props {
   courses: CurriculumCourseForOpeningDto[] | undefined;
+  poolSlots: PoolSlotForOpeningDto[] | undefined;
   isLoading: boolean;
-  forecastMap: Map<number, CourseDemandForecastDto>;
 
   // Parent'tan gelen filtreler (CurriculumPanelFilters'tan)
   classYear: number | null;
-  semester: 'fall' | 'spring' | null;
+  // 'summer' seçilirse parite filtresi uygulanmaz (yaz okulunda tüm yarıyıllardan ders alınabilir)
+  semester: 'fall' | 'spring' | 'summer' | null;
   codeSearch: string;
   nameSearch: string;
 
   selectedIds: Set<number>;
   onToggleSelect: (courseId: number) => void;
   onOpenSelected: () => void;
+  onOpenFiltered: (courseIds: number[]) => void;
   onOpenCourseDetail: (course: CurriculumCourseForOpeningDto) => void;
+  onOpenPoolSlot: (slot: PoolSlotForOpeningDto) => void;
 
   // Filtre alanı parent'tan render edilir (üst kısma yerleştirilir)
   filtersSlot?: ReactNode;
@@ -31,19 +35,17 @@ interface Props {
   freeDialogDisabled?: boolean;
 }
 
-function getSemesterLabel(semester: number) {
-  if (semester === 0) return 'Diğer Dersler';
-  const year = Math.ceil(semester / 2);
-  const isFall = semester % 2 === 1;
-  return `${year}. Sınıf ${isFall ? 'Güz' : 'Bahar'}`;
-}
+const HEADER_GRID =
+  'grid grid-cols-[28px_100px_1fr_32px_48px_52px_40px_80px_32px] items-center gap-2 px-3 py-2';
 
-type TabView = 'all' | 'compulsory' | 'pools' | 'singleElective';
+type ListItem =
+  | { kind: 'course'; data: CurriculumCourseForOpeningDto; sortSemester: number; sortKey: string }
+  | { kind: 'slot'; data: PoolSlotForOpeningDto; sortSemester: number; sortKey: string };
 
 export function CurriculumPanel({
   courses,
+  poolSlots,
   isLoading,
-  forecastMap,
   classYear,
   semester,
   codeSearch,
@@ -51,73 +53,94 @@ export function CurriculumPanel({
   selectedIds,
   onToggleSelect,
   onOpenSelected,
+  onOpenFiltered,
   onOpenCourseDetail,
+  onOpenPoolSlot,
   filtersSlot,
   onOpenFreeCourseDialog,
   freeDialogDisabled = false,
 }: Props) {
-  const [collapsedSemesters, setCollapsedSemesters] = useState<Set<number>>(new Set());
-  const [tabView, setTabView] = useState<TabView>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const [showBottomShadow, setShowBottomShadow] = useState(true);
 
+  // Zorunlu + tekil seçmeli dersler (havuz üyeleri ayrı slot satırı olarak gösterilir)
   const filteredCourses = useMemo(() => {
     if (!courses) return [];
     const code = codeSearch.trim().toLowerCase();
     const name = nameSearch.trim().toLowerCase();
-    return courses.filter(c => {
-      // Sınıf filtresi (parent'tan)
+    return courses.filter((c) => {
+      // Havuz üyelerini ana listeye dahil etme — slot satırı tıklanınca modal'da gösterilir
+      if (c.source === 'Pool') return false;
+
+      // Sınıf filtresi
       if (classYear !== null) {
         const courseYear = c.suggestedSemester > 0 ? Math.ceil(c.suggestedSemester / 2) : null;
         if (courseYear !== classYear) return false;
       }
-      // Dönem filtresi (Bahar/Güz)
-      if (semester !== null && c.suggestedSemester > 0) {
-        const isFall = c.suggestedSemester % 2 === 1;
-        if (semester === 'fall' && !isFall) return false;
-        if (semester === 'spring' && isFall) return false;
+      // Dönem filtresi (Güz/Bahar parite). Summer → filtre yok.
+      if (semester === 'fall' || semester === 'spring') {
+        if (c.suggestedSemester > 0) {
+          const isFall = c.suggestedSemester % 2 === 1;
+          if (semester === 'fall' && !isFall) return false;
+          if (semester === 'spring' && isFall) return false;
+        }
       }
-      // Tab filtresi (3 sekmeli görünüm)
-      if (tabView === 'compulsory' && !c.isCompulsory) return false;
-      if (tabView === 'pools' && c.source !== 'Pool') return false;
-      if (tabView === 'singleElective' && (c.source === 'Pool' || c.isCompulsory)) return false;
-      // Ders kod / ad araması (parent'tan)
+      // Ders kod / ad araması
       if (code && !c.courseCode.toLowerCase().includes(code)) return false;
       if (name && !c.courseName.toLowerCase().includes(name)) return false;
       return true;
     });
-  }, [courses, classYear, semester, tabView, codeSearch, nameSearch]);
+  }, [courses, classYear, semester, codeSearch, nameSearch]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<number, CurriculumCourseForOpeningDto[]>();
-    for (const c of filteredCourses) {
-      const sem = c.suggestedSemester || 0;
-      if (!map.has(sem)) map.set(sem, []);
-      map.get(sem)!.push(c);
-    }
-    return [...map.entries()].sort((a, b) => a[0] - b[0]);
-  }, [filteredCourses]);
-
-  const counts = useMemo(() => {
-    if (!courses) return { all: 0, compulsory: 0, pools: 0, singleElective: 0 };
-    let all = 0, compulsory = 0, pools = 0, singleElective = 0;
-    for (const c of courses) {
-      all++;
-      if (c.isCompulsory) compulsory++;
-      else if (c.source === 'Pool') pools++;
-      else singleElective++;
-    }
-    return { all, compulsory, pools, singleElective };
-  }, [courses]);
-
-  const toggleCollapse = (sem: number) => {
-    setCollapsedSemesters(prev => {
-      const next = new Set(prev);
-      if (next.has(sem)) next.delete(sem); else next.add(sem);
-      return next;
+  // Pool slot'larını da aynı sınıf/dönem/arama filtrelerine sok
+  const filteredSlots = useMemo(() => {
+    if (!poolSlots) return [];
+    const code = codeSearch.trim().toLowerCase();
+    const name = nameSearch.trim().toLowerCase();
+    return poolSlots.filter((s) => {
+      if (classYear !== null) {
+        const slotYear = s.suggestedSemesterStart > 0 ? Math.ceil(s.suggestedSemesterStart / 2) : null;
+        if (slotYear !== classYear) return false;
+      }
+      if (semester === 'fall' || semester === 'spring') {
+        if (s.suggestedSemesterStart > 0) {
+          const isFall = s.suggestedSemesterStart % 2 === 1;
+          if (semester === 'fall' && !isFall) return false;
+          if (semester === 'spring' && isFall) return false;
+        }
+      }
+      // Slot adı veya grup adı ile arama
+      if (code && !s.slotName.toLowerCase().includes(code)) return false;
+      if (name && !s.electiveGroupName.toLowerCase().includes(name)) return false;
+      return true;
     });
-  };
+  }, [poolSlots, classYear, semester, codeSearch, nameSearch]);
+
+  // Birleşik ve sıralı liste — yarıyıl + (slotlar sonda) + ders kodu/slot adı
+  const items = useMemo<ListItem[]>(() => {
+    const arr: ListItem[] = [];
+    for (const c of filteredCourses) {
+      arr.push({
+        kind: 'course',
+        data: c,
+        sortSemester: c.suggestedSemester || 0,
+        sortKey: c.courseCode,
+      });
+    }
+    for (const s of filteredSlots) {
+      arr.push({
+        kind: 'slot',
+        data: s,
+        sortSemester: s.suggestedSemesterStart || 0,
+        sortKey: `~~${s.slotName}`, // tilde ile aynı yarıyıl içinde slot'lar derslerden sonra
+      });
+    }
+    return arr.sort((a, b) => {
+      if (a.sortSemester !== b.sortSemester) return a.sortSemester - b.sortSemester;
+      return a.sortKey.localeCompare(b.sortKey);
+    });
+  }, [filteredCourses, filteredSlots]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -127,146 +150,131 @@ export function CurriculumPanel({
   };
 
   const selectableCount = selectedIds.size;
+  // Görünen filteredCourses içinde açılabilir olanların ID'leri ("Filtrelenenleri Aç" için)
+  const openableFilteredIds = useMemo(
+    () => filteredCourses.filter((c) => c.canOpen && !c.alreadyOpened).map((c) => c.courseId),
+    [filteredCourses],
+  );
 
   return (
     <div className="flex flex-col min-h-0 h-full overflow-hidden">
-      {/* Filtreler — parent'tan render edilen filter bar (Fakülte/Bölüm/Program/Müfredat/Sınıf/Dönem/...) */}
+      {/* Filtreler — parent'tan render edilen filter bar */}
       {filtersSlot && <div className="shrink-0">{filtersSlot}</div>}
 
-      {/* Başlık + tip sekmesi — fixed */}
-      <div className="shrink-0 bg-white border-b px-4 py-2 space-y-2 z-10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-sm text-gray-800">Referans Alınacak Müfredat Dersleri</h2>
-            <Badge variant="secondary" className="text-xs rounded-full">{filteredCourses.length}</Badge>
-          </div>
-        </div>
-        {/* 4 kategorili sekme — Tümü / Zorunlu / Havuzlar / Tekil Seçmeli */}
-        <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-gray-50/50">
-          {([
-            { key: 'all', label: 'Tümü', count: counts.all },
-            { key: 'compulsory', label: 'Zorunlu', count: counts.compulsory },
-            { key: 'pools', label: 'Havuzlar', count: counts.pools },
-            { key: 'singleElective', label: 'Seçmeli', count: counts.singleElective },
-          ] as const).map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setTabView(tab.key)}
-              className={cn(
-                'flex-1 px-2 py-1 text-xs rounded-md transition-colors inline-flex items-center justify-center gap-1',
-                tabView === tab.key
-                  ? 'bg-white text-gray-900 shadow-sm border'
-                  : 'text-gray-600 hover:text-gray-900'
-              )}
-            >
-              {tab.label}
-              <span className="text-[10px] text-gray-400 tabular-nums">({tab.count})</span>
-            </button>
-          ))}
-        </div>
+      {/* Tablo başlığı — Proliz tarzı kolon başlıkları */}
+      <div
+        className={cn(
+          HEADER_GRID,
+          'shrink-0 bg-slate-100 border-b border-gray-200 text-xs font-semibold text-gray-700 uppercase tracking-wide',
+        )}
+      >
+        <span />
+        <span className="text-left">Kod</span>
+        <span className="text-left">Ders Adı</span>
+        <span className="text-center" title="Zorunlu (Z) / Seçmeli (S)">Z/S</span>
+        <span className="text-center" title="Kredi">KRD</span>
+        <span className="text-center">AKTS</span>
+        <span className="text-center" title="Sınıf">Snf</span>
+        <span className="text-center">Grup</span>
+        <span />
       </div>
 
       {/* Scrollable content */}
       <div className="relative flex-1 min-h-0">
-        {/* Top scroll shadow */}
-        <div className={cn(
-          'absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-black/[0.06] to-transparent z-[5] pointer-events-none transition-opacity',
-          showTopShadow ? 'opacity-100' : 'opacity-0',
-        )} />
-
         <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="h-full overflow-y-auto overscroll-contain"
-        >
+          className={cn(
+            'absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-black/[0.06] to-transparent z-[5] pointer-events-none transition-opacity',
+            showTopShadow ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+
+        <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto overscroll-contain">
           {isLoading ? (
-            <div className="p-4 space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-7 rounded" />
+              ))}
             </div>
-          ) : grouped.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-gray-400">
               <Search className="h-8 w-8 mb-2" />
               <p className="text-sm">Eşleşen ders bulunamadı.</p>
             </div>
           ) : (
-            grouped.map(([semester, semCourses]) => {
-              const isCollapsed = collapsedSemesters.has(semester);
-              const openedCount = semCourses.filter(c => c.alreadyOpened).length;
-              return (
-                <Collapsible key={semester} open={!isCollapsed} onOpenChange={() => toggleCollapse(semester)}>
-                  <CollapsibleTrigger asChild>
-                    <button className="w-full flex items-center justify-between bg-gray-50/80 px-4 py-2 border-b hover:bg-gray-100/80 transition-colors">
-                      <div className="flex items-center gap-2">
-                        {isCollapsed
-                          ? <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
-                          : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
-                        }
-                        <span className="text-xs font-semibold text-gray-700">
-                          {getSemesterLabel(semester)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 tabular-nums">{openedCount}/{semCourses.length}</span>
-                        <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full transition-all"
-                            style={{ width: `${semCourses.length > 0 ? (openedCount / semCourses.length) * 100 : 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    {semCourses.map(course => (
-                      <CurriculumCourseRow
-                        key={course.courseId}
-                        course={course}
-                        forecast={forecastMap.get(course.courseId)}
-                        selected={selectedIds.has(course.courseId)}
-                        onToggle={onToggleSelect}
-                        onOpenDetail={onOpenCourseDetail}
-                      />
-                    ))}
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            })
+            items.map((item) =>
+              item.kind === 'course' ? (
+                <CurriculumCourseRow
+                  key={`c-${item.data.courseId}`}
+                  course={item.data}
+                  selected={selectedIds.has(item.data.courseId)}
+                  onToggle={onToggleSelect}
+                  onOpenDetail={onOpenCourseDetail}
+                />
+              ) : (
+                <PoolSlotRow key={`s-${item.data.poolId}`} slot={item.data} onOpen={onOpenPoolSlot} />
+              ),
+            )
           )}
         </div>
 
-        {/* Bottom scroll shadow */}
-        <div className={cn(
-          'absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-black/[0.06] to-transparent z-[5] pointer-events-none transition-opacity',
-          showBottomShadow ? 'opacity-100' : 'opacity-0',
-        )} />
+        <div
+          className={cn(
+            'absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-black/[0.06] to-transparent z-[5] pointer-events-none transition-opacity',
+            showBottomShadow ? 'opacity-100' : 'opacity-0',
+          )}
+        />
       </div>
 
-      {/* Bottom action bar — fixed */}
-      <div className={cn(
-        'shrink-0 border-t px-4 py-2.5 flex items-center justify-between gap-2 transition-colors z-10',
-        selectableCount > 0 ? 'bg-blue-50 border-blue-200' : 'bg-white',
-      )}>
-        <span className={cn('text-xs', selectableCount > 0 ? 'text-blue-700 font-medium' : 'text-gray-500')}>
-          <strong>{selectableCount}</strong> ders seçili
-        </span>
-        <div className="flex items-center gap-2">
-          {onOpenFreeCourseDialog && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="rounded-lg gap-1.5 h-8"
-              onClick={onOpenFreeCourseDialog}
-              disabled={freeDialogDisabled}
-              title={freeDialogDisabled ? 'Aktif dönem gerekli' : 'Müfredatta olmayan bir dersi serbest aç'}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Serbest Ders Aç
-            </Button>
+      {/* Bottom action bar — Proliz tarzı geniş butonlar (h-14) */}
+      <div
+        className={cn(
+          'shrink-0 h-14 border-t px-3 flex items-center gap-2 transition-colors z-10',
+          selectableCount > 0 ? 'bg-blue-50 border-blue-200' : 'bg-white',
+        )}
+      >
+        <Button
+          variant="default"
+          disabled={selectableCount === 0}
+          className="h-9 px-3 gap-1.5 rounded-md"
+          onClick={onOpenSelected}
+        >
+          <Plus className="h-4 w-4" />
+          Seçilenleri Aç
+          {selectableCount > 0 && (
+            <span className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums">
+              {selectableCount}
+            </span>
           )}
-          <Button size="sm" disabled={selectableCount === 0} className="rounded-lg gap-1.5" onClick={onOpenSelected}>
-            Seçilenleri Aç
+        </Button>
+
+        <Button
+          variant="outline"
+          disabled={openableFilteredIds.length === 0}
+          className="h-9 px-3 gap-1.5 rounded-md"
+          onClick={() => onOpenFiltered(openableFilteredIds)}
+          title="Bu listede görülen ve açılabilir tüm dersleri tek seferde aç"
+        >
+          <Filter className="h-4 w-4" />
+          Filtrelenenleri Aç
+          {openableFilteredIds.length > 0 && (
+            <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-700">
+              {openableFilteredIds.length}
+            </span>
+          )}
+        </Button>
+
+        {onOpenFreeCourseDialog && (
+          <Button
+            variant="outline"
+            className="h-9 px-3 gap-1.5 rounded-md ml-auto"
+            onClick={onOpenFreeCourseDialog}
+            disabled={freeDialogDisabled}
+            title={freeDialogDisabled ? 'Aktif dönem gerekli' : 'Müfredatta olmayan bir dersi serbest aç'}
+          >
+            <Sparkles className="h-4 w-4" />
+            Serbest Ders Aç
           </Button>
-        </div>
+        )}
       </div>
     </div>
   );

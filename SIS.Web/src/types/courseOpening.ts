@@ -1,5 +1,37 @@
 // ── Response Types ──
 
+export interface PoolSlotForOpeningDto {
+  poolId: number;
+  slotName: string;
+  electiveGroupId: number;
+  electiveGroupName: string;
+  /** ElectiveSubtype.Code — TE / NDE / OC / custom; renk için kullanılır. */
+  subtypeCode: string;
+  subtypeName: string;
+  suggestedSemesterStart: number;
+  suggestedSemesterEnd: number;
+  /** Havuz override AKTS. Null ise her aday dersin kendi katalog AKTS'si geçerli. */
+  ectsPerCourse: number | null;
+  candidateCount: number;
+  /** Aday dersler arasında verilen termId'de en az 1 aktif şubeye sahip olanların sayısı. */
+  openedCandidateCount: number;
+}
+
+export interface PoolCandidateDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  theoryHours: number;
+  labHours: number;
+  nationalCredit: number | null;
+  ects: number;
+  alreadyOpened: boolean;
+  existingSectionCount: number;
+  canOpen: boolean;
+  blockReason: 'TermNotInPlanning' | 'NotOwner' | 'CourseUnassigned' | null;
+}
+
+
 export interface OpenedCourseSectionDto {
   sectionId: number;
   sectionNumber: number;
@@ -46,6 +78,7 @@ export interface CurriculumCourseForOpeningDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
+  nationalCredit?: number | null;
   ects: number;
   suggestedSemester: number;
   isCompulsory: boolean;

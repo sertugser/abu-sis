@@ -15,6 +15,8 @@ import type {
   TransferFromTermRequest,
   TransferFromTermResultDto,
   TransferDefaultsDto,
+  PoolSlotForOpeningDto,
+  PoolCandidateDto,
 } from '../types/courseOpening';
 
 export async function getOpenedCourses(departmentId: number, termId: number): Promise<OpenedCourseListDto> {
@@ -43,6 +45,20 @@ export async function getCurriculumCoursesForOpening(
   };
   if (options.curriculumId != null) params.curriculumId = options.curriculumId;
   const { data } = await apiClient.get<CurriculumCourseForOpeningDto[]>('/course-opening/curriculum-courses', { params });
+  return data;
+}
+
+export async function getPoolSlotsForOpening(curriculumId: number, termId: number): Promise<PoolSlotForOpeningDto[]> {
+  const { data } = await apiClient.get<PoolSlotForOpeningDto[]>('/course-opening/pool-slots', {
+    params: { curriculumId, termId },
+  });
+  return data;
+}
+
+export async function getPoolCandidates(poolId: number, termId: number): Promise<PoolCandidateDto[]> {
+  const { data } = await apiClient.get<PoolCandidateDto[]>('/course-opening/pool-candidates', {
+    params: { poolId, termId },
+  });
   return data;
 }
 

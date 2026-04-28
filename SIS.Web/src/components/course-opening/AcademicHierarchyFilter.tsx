@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { useCurriculumList } from '../../hooks/useCurriculumManagement';
 import type { AccessibleDepartment } from '../../types/academicOperations';
 import type { FacultyDto, DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
@@ -22,9 +22,15 @@ export interface AcademicHierarchyFilterProps {
 }
 
 const SELECT_CLASS =
-  'h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none min-w-[140px]';
-const LABEL_CLASS = 'text-xs font-semibold text-gray-500 whitespace-nowrap w-16';
+  'h-7 w-full rounded-md border border-gray-200 bg-white px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none';
+const LABEL_CLASS = 'text-xs font-semibold text-gray-600 self-center';
 
+/**
+ * Akademik hiyerarşi filtreleri (Fakülte → Bölüm → Program → [Müfredat]).
+ * Parent grid container `grid-cols-[80px_1fr]` üzerinde fragment olarak render eder
+ * — her satır 2 grid hücresi (label + select) kullanır, böylece her iki panel arası
+ * mükemmel hizalama sağlanır.
+ */
 export function AcademicHierarchyFilter({
   faculties,
   structureDepartments,
@@ -47,9 +53,7 @@ export function AcademicHierarchyFilter({
 
   const visibleFaculties = useMemo(() => {
     const facultyIds = new Set(
-      structureDepartments
-        .filter((sd) => accessibleDeptIds.has(sd.id))
-        .map((sd) => sd.facultyId),
+      structureDepartments.filter((sd) => accessibleDeptIds.has(sd.id)).map((sd) => sd.facultyId),
     );
     return faculties.filter((f) => facultyIds.has(f.id));
   }, [faculties, structureDepartments, accessibleDeptIds]);
@@ -66,86 +70,75 @@ export function AcademicHierarchyFilter({
     return programs.filter((p) => p.departmentId === deptId);
   }, [programs, deptId]);
 
-  // Müfredat dropdown — sadece program seçilince ve gösterilmesi istenirse
   const curriculumQuery = useCurriculumList(
     showCurriculum && programId != null ? { programId } : undefined,
   );
   const curriculumOptions = useMemo(() => curriculumQuery.data ?? [], [curriculumQuery.data]);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex items-center gap-1.5">
-        <span className={LABEL_CLASS}>Fakülte</span>
-        <select
-          className={SELECT_CLASS}
-          value={facultyId ?? ''}
-          onChange={(e) => {
-            const v = e.target.value ? Number(e.target.value) : null;
-            onFacultyChange(v);
-            // Bölüm/Program bu fakülteye uymuyorsa sıfırla
-            if (v != null) {
-              const okDept = visibleDepartments.find((d) => d.facultyId === v);
-              if (!okDept || okDept.id !== deptId) {
-                onDeptChange(null);
-                onProgramChange(null);
-                onCurriculumChange?.(null);
-              }
+    <Fragment>
+      <span className={LABEL_CLASS}>Fakülte</span>
+      <select
+        className={SELECT_CLASS}
+        value={facultyId ?? ''}
+        onChange={(e) => {
+          const v = e.target.value ? Number(e.target.value) : null;
+          onFacultyChange(v);
+          if (v != null) {
+            const okDept = visibleDepartments.find((d) => d.facultyId === v);
+            if (!okDept || okDept.id !== deptId) {
+              onDeptChange(null);
+              onProgramChange(null);
+              onCurriculumChange?.(null);
             }
-          }}
-        >
-          <option value="">Tümü</option>
-          {visibleFaculties.map((f) => (
-            <option key={f.id} value={f.id}>{f.name}</option>
-          ))}
-        </select>
-      </div>
+          }
+        }}
+      >
+        <option value="">Tümü</option>
+        {visibleFaculties.map((f) => (
+          <option key={f.id} value={f.id}>{f.name}</option>
+        ))}
+      </select>
 
-      <div className="flex items-center gap-1.5">
-        <span className={LABEL_CLASS}>Bölüm</span>
-        <select
-          className={SELECT_CLASS}
-          value={deptId ?? ''}
-          onChange={(e) => {
-            const v = e.target.value ? Number(e.target.value) : null;
-            onDeptChange(v);
-            // Program/Müfredat bu bölüme uymuyorsa sıfırla
-            onProgramChange(null);
-            onCurriculumChange?.(null);
-          }}
-        >
-          <option value="">Seçiniz</option>
-          {visibleDepartments.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.code} — {d.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      <span className={LABEL_CLASS}>Bölüm</span>
+      <select
+        className={SELECT_CLASS}
+        value={deptId ?? ''}
+        onChange={(e) => {
+          const v = e.target.value ? Number(e.target.value) : null;
+          onDeptChange(v);
+          onProgramChange(null);
+          onCurriculumChange?.(null);
+        }}
+      >
+        <option value="">Seçiniz</option>
+        {visibleDepartments.map((d) => (
+          <option key={d.id} value={d.id}>{d.code} — {d.name}</option>
+        ))}
+      </select>
 
-      <div className="flex items-center gap-1.5">
-        <span className={LABEL_CLASS}>Program</span>
-        <select
-          className={SELECT_CLASS}
-          value={programId ?? ''}
-          onChange={(e) => {
-            const v = e.target.value ? Number(e.target.value) : null;
-            onProgramChange(v);
-            onCurriculumChange?.(null);
-          }}
-          disabled={deptId == null}
-        >
-          <option value="">{deptId == null ? 'Önce bölüm' : 'Seçiniz'}</option>
-          {visiblePrograms.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-      </div>
+      <span className={LABEL_CLASS}>Program</span>
+      <select
+        className={SELECT_CLASS}
+        value={programId ?? ''}
+        onChange={(e) => {
+          const v = e.target.value ? Number(e.target.value) : null;
+          onProgramChange(v);
+          onCurriculumChange?.(null);
+        }}
+        disabled={deptId == null}
+      >
+        <option value="">{deptId == null ? 'Önce bölüm' : 'Seçiniz'}</option>
+        {visiblePrograms.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
 
       {showCurriculum && (
-        <div className="flex items-center gap-1.5">
+        <Fragment>
           <span className={LABEL_CLASS}>Müfredat</span>
           <select
-            className={SELECT_CLASS + ' min-w-[260px]'}
+            className={SELECT_CLASS}
             value={curriculumId ?? ''}
             onChange={(e) => onCurriculumChange?.(e.target.value ? Number(e.target.value) : null)}
             disabled={programId == null || curriculumQuery.isLoading}
@@ -153,13 +146,12 @@ export function AcademicHierarchyFilter({
             <option value="">{programId == null ? 'Önce program' : 'Seçiniz'}</option>
             {curriculumOptions.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.version ? `(${c.version}) ` : ''}
-                {c.name ?? `Müfredat #${c.id}`}
+                {c.version ? `(${c.version}) ` : ''}{c.name ?? `Müfredat #${c.id}`}
               </option>
             ))}
           </select>
-        </div>
+        </Fragment>
       )}
-    </div>
+    </Fragment>
   );
 }

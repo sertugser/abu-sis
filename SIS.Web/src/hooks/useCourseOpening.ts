@@ -5,6 +5,8 @@ import {
   getDepartmentInstructors,
   getInstructorWorkload,
   getExternalCourses,
+  getPoolSlotsForOpening,
+  getPoolCandidates,
   openCourse,
   bulkOpenCourses,
   updateOpenedSection,
@@ -45,6 +47,24 @@ export function useCurriculumCoursesForOpening(
     queryFn: () => getCurriculumCoursesForOpening(departmentId!, termId!, { showAll, curriculumId, includeUnmapped }),
     enabled: departmentId !== null && termId !== null,
     staleTime: 60 * 1000,
+  });
+}
+
+export function usePoolSlotsForOpening(curriculumId: number | null, termId: number | null) {
+  return useQuery({
+    queryKey: ['courseOpening', 'poolSlots', curriculumId, termId],
+    queryFn: () => getPoolSlotsForOpening(curriculumId!, termId!),
+    enabled: curriculumId !== null && termId !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function usePoolCandidates(poolId: number | null, termId: number | null) {
+  return useQuery({
+    queryKey: ['courseOpening', 'poolCandidates', poolId, termId],
+    queryFn: () => getPoolCandidates(poolId!, termId!),
+    enabled: poolId !== null && termId !== null,
+    staleTime: 30 * 1000,
   });
 }
 

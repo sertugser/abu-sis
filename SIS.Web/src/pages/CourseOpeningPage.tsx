@@ -9,6 +9,7 @@ import { OpenedCoursesPanel } from '../components/course-opening/OpenedCoursesPa
 import { OpenedCoursesPanelFilters } from '../components/course-opening/OpenedCoursesPanelFilters';
 import { FreeCourseOpenDialog } from '../components/course-opening/FreeCourseOpenDialog';
 import { ExternalCoursesDrawer } from '../components/course-opening/ExternalCoursesDrawer';
+import { PoolCandidatesDialog } from '../components/course-opening/PoolCandidatesDialog';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminTerms } from '../hooks/useAdminTerms';
@@ -23,6 +24,7 @@ import {
   useCloseAllSections,
   useReactivateSection,
   useCurriculumCoursesForOpening,
+  usePoolSlotsForOpening,
   useDepartmentInstructors,
   useExternalCourses,
   useInstructorWorkload,
@@ -32,7 +34,7 @@ import {
 } from '../hooks/useCourseOpening';
 import { useDepartmentForecast } from '../hooks/useForecast';
 import type { CourseDemandForecastDto } from '../types/forecast';
-import type { CurriculumCourseForOpeningDto } from '../types/courseOpening';
+import type { CurriculumCourseForOpeningDto, PoolSlotForOpeningDto } from '../types/courseOpening';
 
 export default function CourseOpeningPage() {
   const contextQuery = useAcademicOperationsContext();
@@ -50,7 +52,7 @@ export default function CourseOpeningPage() {
 
   // ─── Sol panel filtreleri ────────────────────────────────────
   const [sourceClassYear, setSourceClassYear] = useState<number | null>(null);
-  const [sourceSemester, setSourceSemester] = useState<'fall' | 'spring' | null>(null);
+  const [sourceSemester, setSourceSemester] = useState<'fall' | 'spring' | 'summer' | null>(null);
   const [includeUnmapped, setIncludeUnmapped] = useState(false);
   const [sourceCodeSearch, setSourceCodeSearch] = useState('');
   const [sourceNameSearch, setSourceNameSearch] = useState('');
@@ -67,6 +69,7 @@ export default function CourseOpeningPage() {
   const [detailCourse, setDetailCourse] = useState<CurriculumCourseForOpeningDto | null>(null);
   const [freeCourseDialogOpen, setFreeCourseDialogOpen] = useState(false);
   const [externalDrawerOpen, setExternalDrawerOpen] = useState(false);
+  const [activePoolSlot, setActivePoolSlot] = useState<PoolSlotForOpeningDto | null>(null);
 
   // İlk açılışta erişilebilir ilk bölümü ve aktif dönemi varsayılan seç
   useEffect(() => {
@@ -99,6 +102,7 @@ export default function CourseOpeningPage() {
     curriculumId,
     includeUnmapped,
   );
+  const poolSlotsQuery = usePoolSlotsForOpening(curriculumId, targetTermId);
   const { data: forecastData } = useDepartmentForecast(deptId);
   const instructorsQuery = useDepartmentInstructors(deptId);
   const workloadQuery = useInstructorWorkload(selectedInstructorId, targetTermId);
@@ -192,6 +196,24 @@ export default function CourseOpeningPage() {
     );
   }, [deptId, targetTermId, selectedIds, curriculumQuery.data, bulkMutation]);
 
+  const handleOpenFiltered = useCallback(
+    (courseIds: number[]) => {
+      if (!deptId || !targetTermId || courseIds.length === 0) return;
+      const courses = curriculumQuery.data ?? [];
+      bulkMutation.mutate({
+        courses: courseIds.map((courseId) => {
+          const c = courses.find((x) => x.courseId === courseId);
+          return {
+            courseId,
+            sectionCount: c?.recommendedSectionCount ?? 1,
+            capacityPerSection: c?.recommendedCapacity ?? 40,
+          };
+        }),
+      });
+    },
+    [deptId, targetTermId, curriculumQuery.data, bulkMutation],
+  );
+
   const handleUpdateSection = useCallback(
     (
       sectionId: number,
@@ -279,8 +301,8 @@ export default function CourseOpeningPage() {
       >
         <CurriculumPanel
           courses={curriculumQuery.data}
-          isLoading={curriculumQuery.isLoading}
-          forecastMap={forecastMap}
+          poolSlots={poolSlotsQuery.data}
+          isLoading={curriculumQuery.isLoading || poolSlotsQuery.isLoading}
           classYear={sourceClassYear}
           semester={sourceSemester}
           codeSearch={sourceCodeSearch}
@@ -288,7 +310,9 @@ export default function CourseOpeningPage() {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onOpenSelected={handleOpenSelected}
+          onOpenFiltered={handleOpenFiltered}
           onOpenCourseDetail={setDetailCourse}
+          onOpenPoolSlot={setActivePoolSlot}
           filtersSlot={
             <CurriculumPanelFilters
               faculties={faculties ?? []}
@@ -397,6 +421,15 @@ export default function CourseOpeningPage() {
         onOpenChange={setExternalDrawerOpen}
         externalCourses={externalCoursesQuery.data}
         departmentName={accessibleDepartments.find((d) => d.departmentId === deptId)?.departmentName}
+      />
+
+      <PoolCandidatesDialog
+        slot={activePoolSlot}
+        termId={targetTermId}
+        open={activePoolSlot !== null}
+        onOpenChange={(o) => !o && setActivePoolSlot(null)}
+        onBulkOpen={(req) => bulkMutation.mutateAsync(req)}
+        isOpening={bulkMutation.isPending}
       />
     </div>
   );

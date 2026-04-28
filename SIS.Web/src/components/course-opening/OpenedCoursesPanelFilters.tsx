@@ -1,18 +1,9 @@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import type { AccessibleDepartment } from '../../types/academicOperations';
 import type { FacultyDto, DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
 import type { TermSummaryDto } from '../../types/term';
 import { AcademicHierarchyFilter } from './AcademicHierarchyFilter';
-
-const CLASS_YEARS: { value: number | null; label: string }[] = [
-  { value: null, label: 'Tümü' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 4, label: '4' },
-];
 
 export interface OpenedCoursesPanelFiltersProps {
   faculties: FacultyDto[];
@@ -42,14 +33,22 @@ export interface OpenedCoursesPanelFiltersProps {
   isHistoricalTerm?: boolean;
 }
 
+const SELECT_CLASS =
+  'h-7 rounded-md border border-gray-200 bg-white px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none';
+
 export function OpenedCoursesPanelFilters(props: OpenedCoursesPanelFiltersProps) {
   return (
-    <div className="space-y-2 px-3 py-2 bg-emerald-50/40 border-b">
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-16">Dönem</span>
+    <div className="border-b border-gray-200">
+      {/* Proliz tarzı başlık çubuğu */}
+      <div className="bg-slate-600 text-white text-center text-xs font-semibold py-1.5 tracking-wide">
+        Açılan Dersler
+      </div>
+
+      <div className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1.5 px-3 py-2.5 bg-slate-50/60">
+        <span className="text-xs font-semibold text-gray-600 self-center">Dönem</span>
+        <div className="flex items-center gap-2">
           <select
-            className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none min-w-[160px]"
+            className="h-7 flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none"
             value={props.termId ?? ''}
             onChange={(e) => props.onTermChange(e.target.value ? Number(e.target.value) : null)}
           >
@@ -59,64 +58,51 @@ export function OpenedCoursesPanelFilters(props: OpenedCoursesPanelFiltersProps)
             ))}
           </select>
           {props.isHistoricalTerm && (
-            <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300 bg-amber-50">
+            <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300 bg-amber-50 whitespace-nowrap">
               Geçmiş — sadece görüntüleme
             </Badge>
           )}
         </div>
-      </div>
 
-      <AcademicHierarchyFilter
-        faculties={props.faculties}
-        structureDepartments={props.structureDepartments}
-        accessibleDepartments={props.accessibleDepartments}
-        programs={props.programs}
-        facultyId={props.facultyId}
-        onFacultyChange={props.onFacultyChange}
-        deptId={props.deptId}
-        onDeptChange={props.onDeptChange}
-        programId={props.programId}
-        onProgramChange={props.onProgramChange}
-      />
+        <AcademicHierarchyFilter
+          faculties={props.faculties}
+          structureDepartments={props.structureDepartments}
+          accessibleDepartments={props.accessibleDepartments}
+          programs={props.programs}
+          facultyId={props.facultyId}
+          onFacultyChange={props.onFacultyChange}
+          deptId={props.deptId}
+          onDeptChange={props.onDeptChange}
+          programId={props.programId}
+          onProgramChange={props.onProgramChange}
+        />
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-12">Sınıf</span>
-          <div className="flex rounded-lg bg-gray-100 p-0.5 gap-0.5">
-            {CLASS_YEARS.map((y) => (
-              <button
-                key={y.label}
-                onClick={() => props.onClassYearChange(y.value)}
-                className={cn(
-                  'h-6 px-2.5 text-[11px] rounded-md font-medium transition-colors',
-                  props.classYear === y.value
-                    ? 'bg-white shadow-sm text-gray-900'
-                    : 'text-gray-500 hover:text-gray-700',
-                )}
-              >
-                {y.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+        <span className="text-xs font-semibold text-gray-600 self-center">Sınıf</span>
+        <select
+          className={SELECT_CLASS + ' w-fit min-w-[100px]'}
+          value={props.classYear ?? ''}
+          onChange={(e) => props.onClassYearChange(e.target.value ? Number(e.target.value) : null)}
+        >
+          <option value="">Tümü</option>
+          <option value="1">1. Sınıf</option>
+          <option value="2">2. Sınıf</option>
+          <option value="3">3. Sınıf</option>
+          <option value="4">4. Sınıf</option>
+        </select>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-16">Ders Kod</span>
+        <span className="text-xs font-semibold text-gray-600 self-center">Ders Kod</span>
+        <div className="flex items-center gap-2">
           <Input
             value={props.codeSearch}
             onChange={(e) => props.onCodeSearchChange(e.target.value)}
             className="h-7 w-32 text-xs rounded-md"
             placeholder="örn. BLG101"
           />
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap w-14">Ders Ad</span>
+          <span className="text-xs font-semibold text-gray-600 ml-2">Ders Ad</span>
           <Input
             value={props.nameSearch}
             onChange={(e) => props.onNameSearchChange(e.target.value)}
-            className="h-7 flex-1 min-w-[140px] text-xs rounded-md"
+            className="h-7 flex-1 text-xs rounded-md"
             placeholder="ders adıyla ara..."
           />
         </div>

@@ -82,6 +82,50 @@ public class CourseOpeningController(
         return Ok(result);
     }
 
+    [HttpGet("pool-slots")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
+    public async Task<IActionResult> GetPoolSlots(
+        [FromQuery] int curriculumId,
+        [FromQuery] int termId,
+        CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        // Müfredat hangi bölüme ait — yetki kontrolü
+        var curriculumDeptId = await _context.Curricula
+            .AsNoTracking()
+            .Where(c => c.Id == curriculumId)
+            .Select(c => (int?)c.Program.DepartmentId)
+            .FirstOrDefaultAsync(ct);
+        if (curriculumDeptId == null) return NotFound();
+        if (!await HasDepartmentAccessAsync(userId, curriculumDeptId.Value, ct)) return Forbid();
+
+        var result = await _queryService.GetPoolSlotsForOpeningAsync(curriculumId, termId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("pool-candidates")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
+    public async Task<IActionResult> GetPoolCandidates(
+        [FromQuery] int poolId,
+        [FromQuery] int termId,
+        CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        // Pool hangi müfredata, müfredat hangi bölüme — yetki kontrolü
+        var poolDeptId = await _context.CurriculumElectivePools
+            .AsNoTracking()
+            .Where(p => p.Id == poolId)
+            .Select(p => (int?)p.Curriculum.Program.DepartmentId)
+            .FirstOrDefaultAsync(ct);
+        if (poolDeptId == null) return NotFound();
+        if (!await HasDepartmentAccessAsync(userId, poolDeptId.Value, ct)) return Forbid();
+
+        var result = await _queryService.GetPoolCandidatesAsync(poolId, termId, ct);
+        return Ok(result);
+    }
+
     [HttpGet("external-courses")]
     [RequirePermission("menu.ders-acma-islemleri.view")]
     public async Task<IActionResult> GetExternalCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)

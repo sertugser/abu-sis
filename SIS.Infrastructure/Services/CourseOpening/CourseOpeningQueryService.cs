@@ -211,6 +211,7 @@ public class CourseOpeningQueryService(
                 CourseName = first.Course.Name,
                 TheoryHours = first.Course.TheoryHours,
                 LabHours = first.Course.LabHours,
+                NationalCredit = first.Course.NationalCredit,
                 Ects = first.Course.Ects,
                 SuggestedSemester = first.SuggestedSemester,
                 IsCompulsory = first.IsCompulsory,
@@ -254,6 +255,7 @@ public class CourseOpeningQueryService(
                 CourseName = pce.Course.Name,
                 TheoryHours = pce.Course.TheoryHours,
                 LabHours = pce.Course.LabHours,
+                NationalCredit = pce.Course.NationalCredit,
                 Ects = pce.Course.Ects,
                 SuggestedSemester = pce.PoolStart,
                 IsCompulsory = false,
@@ -397,6 +399,113 @@ public class CourseOpeningQueryService(
                     TotalCapacity = g.Sum(s => s.Capacity),
                     TotalEnrolled = g.Sum(s => s.EnrolledCount),
                     PredictedDemand = forecast?.TotalPredictedDemand ?? 0,
+                };
+            })
+            .OrderBy(d => d.CourseCode)
+            .ToList();
+    }
+
+    public async Task<List<PoolSlotForOpeningDto>> GetPoolSlotsForOpeningAsync(int curriculumId, int termId, CancellationToken ct = default)
+    {
+        var pools = await _context.CurriculumElectivePools
+            .AsNoTracking()
+            .Include(p => p.ElectiveGroup).ThenInclude(g => g.Courses)
+            .Where(p => p.CurriculumId == curriculumId)
+            .OrderBy(p => p.SuggestedSemesterStart).ThenBy(p => p.SlotName)
+            .ToListAsync(ct);
+
+        if (pools.Count == 0) return [];
+
+        // ElectiveGroup → ElectiveSubtype navigation property yok; FK üzerinden ayrı dictionary lookup
+        var subtypeIds = pools.Select(p => p.ElectiveGroup.ElectiveSubtypeId).Distinct().ToList();
+        var subtypes = await _context.ElectiveSubtypes
+            .AsNoTracking()
+            .Where(s => subtypeIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+
+        var allCandidateCourseIds = pools
+            .SelectMany(p => p.ElectiveGroup.Courses.Select(egc => egc.CourseId))
+            .Distinct()
+            .ToList();
+
+        var openedCourseIds = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.TermId == termId
+                && cs.Status == CourseSectionStatus.Active
+                && allCandidateCourseIds.Contains(cs.CourseId))
+            .Select(cs => cs.CourseId)
+            .Distinct()
+            .ToListAsync(ct);
+        var openedSet = openedCourseIds.ToHashSet();
+
+        return pools.Select(p =>
+        {
+            var candidateIds = p.ElectiveGroup.Courses.Select(egc => egc.CourseId).ToList();
+            subtypes.TryGetValue(p.ElectiveGroup.ElectiveSubtypeId, out var subtype);
+            return new PoolSlotForOpeningDto
+            {
+                PoolId = p.Id,
+                SlotName = p.SlotName ?? "",
+                ElectiveGroupId = p.ElectiveGroupId,
+                ElectiveGroupName = p.ElectiveGroup.Name,
+                SubtypeCode = subtype?.Code ?? "",
+                SubtypeName = subtype?.Name ?? "",
+                SuggestedSemesterStart = p.SuggestedSemesterStart,
+                SuggestedSemesterEnd = p.SuggestedSemesterEnd,
+                EctsPerCourse = p.EctsPerCourse,
+                CandidateCount = candidateIds.Count,
+                OpenedCandidateCount = candidateIds.Count(cid => openedSet.Contains(cid)),
+            };
+        }).ToList();
+    }
+
+    public async Task<List<PoolCandidateDto>> GetPoolCandidatesAsync(int poolId, int termId, CancellationToken ct = default)
+    {
+        var pool = await _context.CurriculumElectivePools
+            .AsNoTracking()
+            .Include(p => p.ElectiveGroup).ThenInclude(g => g.Courses).ThenInclude(egc => egc.Course)
+            .FirstOrDefaultAsync(p => p.Id == poolId, ct);
+
+        if (pool == null) return [];
+
+        var ownerDeptId = await _context.Curricula
+            .AsNoTracking()
+            .Where(c => c.Id == pool.CurriculumId)
+            .Select(c => c.Program.DepartmentId)
+            .FirstOrDefaultAsync(ct);
+
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct);
+        var isTermInPlanning = term != null && !term.IsCancelled;
+
+        var candidateCourseIds = pool.ElectiveGroup.Courses.Select(egc => egc.CourseId).ToList();
+        var existingSectionCounts = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && candidateCourseIds.Contains(cs.CourseId))
+            .GroupBy(cs => cs.CourseId)
+            .Select(g => new { CourseId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.CourseId, x => x.Count, ct);
+
+        return pool.ElectiveGroup.Courses
+            .Select(egc => egc.Course)
+            .Select(c =>
+            {
+                existingSectionCounts.TryGetValue(c.Id, out var sectionCount);
+                var hasOwner = c.DepartmentId.HasValue;
+                var isOwner = hasOwner && c.DepartmentId == ownerDeptId;
+                var blockReason = ResolveBlockReason(isTermInPlanning, hasOwner, isOwner);
+                return new PoolCandidateDto
+                {
+                    CourseId = c.Id,
+                    CourseCode = c.Code,
+                    CourseName = c.Name,
+                    TheoryHours = c.TheoryHours,
+                    LabHours = c.LabHours,
+                    NationalCredit = c.NationalCredit,
+                    Ects = c.Ects,
+                    AlreadyOpened = sectionCount > 0,
+                    ExistingSectionCount = sectionCount,
+                    CanOpen = blockReason == null,
+                    BlockReason = blockReason,
                 };
             })
             .OrderBy(d => d.CourseCode)

@@ -46,6 +46,7 @@ public class CurriculumCourseForOpeningDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
+    public int? NationalCredit { get; set; }
     public int Ects { get; set; }
     public int SuggestedSemester { get; set; }
     public bool IsCompulsory { get; set; }
@@ -81,6 +82,47 @@ public class CurriculumCourseForOpeningDto
     public string? ElectiveGroupName { get; set; }
     /// <summary>Kaynak: "Compulsory" (zorunlu müfredat), "Elective" (tekil seçmeli), "Pool" (havuz üyesi).</summary>
     public string Source { get; set; } = "Compulsory";
+}
+
+/// <summary>
+/// Havuz slot satırı (ders açma sayfası için). Müfredattaki bir CurriculumElectivePool kaydını,
+/// içindeki aday ders sayısı + termId'de açılmış kaç tanesi olduğu özetiyle birlikte döner.
+/// </summary>
+public class PoolSlotForOpeningDto
+{
+    public int PoolId { get; set; }
+    public string SlotName { get; set; } = "";
+    public int ElectiveGroupId { get; set; }
+    public string ElectiveGroupName { get; set; } = "";
+    /// <summary>ElectiveSubtype.Code — TE/NDE/OC veya custom. Frontend renk için kullanır.</summary>
+    public string SubtypeCode { get; set; } = "";
+    public string SubtypeName { get; set; } = "";
+    public int SuggestedSemesterStart { get; set; }
+    public int SuggestedSemesterEnd { get; set; }
+    /// <summary>Havuz override AKTS — null ise her aday dersin kendi katalog AKTS'si geçerli.</summary>
+    public int? EctsPerCourse { get; set; }
+    public int CandidateCount { get; set; }
+    /// <summary>Aday dersler arasında verilen termId'de en az 1 aktif şubeye sahip olanların sayısı.</summary>
+    public int OpenedCandidateCount { get; set; }
+}
+
+/// <summary>
+/// Havuz aday dersi (modal için). Bir derin liste olmadığı için minimum alanları içerir.
+/// </summary>
+public class PoolCandidateDto
+{
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int TheoryHours { get; set; }
+    public int LabHours { get; set; }
+    public int? NationalCredit { get; set; }
+    public int Ects { get; set; }
+    public bool AlreadyOpened { get; set; }
+    public int ExistingSectionCount { get; set; }
+    public bool CanOpen { get; set; }
+    /// <summary>CanOpen=false ise sebep: TermNotInPlanning | NotOwner | CourseUnassigned. Null = açılabilir.</summary>
+    public string? BlockReason { get; set; }
 }
 
 public class CrossDepartmentDemandDto
