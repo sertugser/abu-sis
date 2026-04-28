@@ -177,7 +177,7 @@ public static class PermissionSeed
         ("menu.secmeli-tipleri.edit",                    PermissionCategory.Menu, "Seçmeli tip düzenleme"),
         ("menu.secmeli-tipleri.delete",                  PermissionCategory.Menu, "Seçmeli tip silme (soft delete)"),
 
-        // Ders Açma İşlemleri
+        // Ders Aç (Müfredat)
         ("menu.ders-acma-islemleri.view",                PermissionCategory.Menu, "Ders açma listesi + curriculum/instructors lookup"),
         ("menu.ders-acma-islemleri.open",                PermissionCategory.Menu, "Tek ders açma (section)"),
         ("menu.ders-acma-islemleri.bulk-open",           PermissionCategory.Menu, "Toplu ders açma"),

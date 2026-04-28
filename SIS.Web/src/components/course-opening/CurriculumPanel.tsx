@@ -1,11 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Search } from 'lucide-react';
 import type { CurriculumCourseForOpeningDto } from '../../types/courseOpening';
 import type { CourseDemandForecastDto } from '../../types/forecast';
 import { CurriculumCourseRow } from './CurriculumCourseRow';
@@ -14,12 +13,22 @@ interface Props {
   courses: CurriculumCourseForOpeningDto[] | undefined;
   isLoading: boolean;
   forecastMap: Map<number, CourseDemandForecastDto>;
-  semesterFilter: number | null;
-  typeFilter: 'all' | 'compulsory' | 'elective';
+
+  // Parent'tan gelen filtreler (CurriculumPanelFilters'tan)
+  classYear: number | null;
+  semester: 'fall' | 'spring' | null;
+  codeSearch: string;
+  nameSearch: string;
+
   selectedIds: Set<number>;
   onToggleSelect: (courseId: number) => void;
   onOpenSelected: () => void;
   onOpenCourseDetail: (course: CurriculumCourseForOpeningDto) => void;
+
+  // Filtre alanı parent'tan render edilir (üst kısma yerleştirilir)
+  filtersSlot?: ReactNode;
+  onOpenFreeCourseDialog?: () => void;
+  freeDialogDisabled?: boolean;
 }
 
 function getSemesterLabel(semester: number) {
@@ -35,14 +44,18 @@ export function CurriculumPanel({
   courses,
   isLoading,
   forecastMap,
-  semesterFilter,
-  typeFilter,
+  classYear,
+  semester,
+  codeSearch,
+  nameSearch,
   selectedIds,
   onToggleSelect,
   onOpenSelected,
   onOpenCourseDetail,
+  filtersSlot,
+  onOpenFreeCourseDialog,
+  freeDialogDisabled = false,
 }: Props) {
-  const [search, setSearch] = useState('');
   const [collapsedSemesters, setCollapsedSemesters] = useState<Set<number>>(new Set());
   const [tabView, setTabView] = useState<TabView>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -51,21 +64,30 @@ export function CurriculumPanel({
 
   const filteredCourses = useMemo(() => {
     if (!courses) return [];
+    const code = codeSearch.trim().toLowerCase();
+    const name = nameSearch.trim().toLowerCase();
     return courses.filter(c => {
-      if (semesterFilter !== null && c.suggestedSemester !== semesterFilter) return false;
-      if (typeFilter === 'compulsory' && !c.isCompulsory) return false;
-      if (typeFilter === 'elective' && c.isCompulsory) return false;
+      // Sınıf filtresi (parent'tan)
+      if (classYear !== null) {
+        const courseYear = c.suggestedSemester > 0 ? Math.ceil(c.suggestedSemester / 2) : null;
+        if (courseYear !== classYear) return false;
+      }
+      // Dönem filtresi (Bahar/Güz)
+      if (semester !== null && c.suggestedSemester > 0) {
+        const isFall = c.suggestedSemester % 2 === 1;
+        if (semester === 'fall' && !isFall) return false;
+        if (semester === 'spring' && isFall) return false;
+      }
       // Tab filtresi (3 sekmeli görünüm)
       if (tabView === 'compulsory' && !c.isCompulsory) return false;
       if (tabView === 'pools' && c.source !== 'Pool') return false;
       if (tabView === 'singleElective' && (c.source === 'Pool' || c.isCompulsory)) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        if (!c.courseCode.toLowerCase().includes(q) && !c.courseName.toLowerCase().includes(q)) return false;
-      }
+      // Ders kod / ad araması (parent'tan)
+      if (code && !c.courseCode.toLowerCase().includes(code)) return false;
+      if (name && !c.courseName.toLowerCase().includes(name)) return false;
       return true;
     });
-  }, [courses, semesterFilter, typeFilter, tabView, search]);
+  }, [courses, classYear, semester, tabView, codeSearch, nameSearch]);
 
   const grouped = useMemo(() => {
     const map = new Map<number, CurriculumCourseForOpeningDto[]>();
@@ -108,15 +130,18 @@ export function CurriculumPanel({
 
   return (
     <div className="flex flex-col min-h-0 h-full overflow-hidden">
-      {/* Header — fixed */}
-      <div className="shrink-0 bg-white border-b px-4 py-3 space-y-2.5 z-10">
+      {/* Filtreler — parent'tan render edilen filter bar (Fakülte/Bölüm/Program/Müfredat/Sınıf/Dönem/...) */}
+      {filtersSlot && <div className="shrink-0">{filtersSlot}</div>}
+
+      {/* Başlık + tip sekmesi — fixed */}
+      <div className="shrink-0 bg-white border-b px-4 py-2 space-y-2 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-sm text-gray-800">Müfredat Dersleri</h2>
+            <h2 className="font-semibold text-sm text-gray-800">Referans Alınacak Müfredat Dersleri</h2>
             <Badge variant="secondary" className="text-xs rounded-full">{filteredCourses.length}</Badge>
           </div>
         </div>
-        {/* Madde 1: 3 kategorili sekme — Tümü / Zorunlu / Havuzlar / Tekil Seçmeli */}
+        {/* 4 kategorili sekme — Tümü / Zorunlu / Havuzlar / Tekil Seçmeli */}
         <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-gray-50/50">
           {([
             { key: 'all', label: 'Tümü', count: counts.all },
@@ -138,15 +163,6 @@ export function CurriculumPanel({
               <span className="text-[10px] text-gray-400 tabular-nums">({tab.count})</span>
             </button>
           ))}
-        </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-          <Input
-            placeholder="Ders kodu veya adı ile ara..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs rounded-lg"
-          />
         </div>
       </div>
 
@@ -227,15 +243,30 @@ export function CurriculumPanel({
 
       {/* Bottom action bar — fixed */}
       <div className={cn(
-        'shrink-0 border-t px-4 py-2.5 flex items-center justify-between transition-colors z-10',
+        'shrink-0 border-t px-4 py-2.5 flex items-center justify-between gap-2 transition-colors z-10',
         selectableCount > 0 ? 'bg-blue-50 border-blue-200' : 'bg-white',
       )}>
         <span className={cn('text-xs', selectableCount > 0 ? 'text-blue-700 font-medium' : 'text-gray-500')}>
           <strong>{selectableCount}</strong> ders seçili
         </span>
-        <Button size="sm" disabled={selectableCount === 0} className="rounded-lg gap-1.5" onClick={onOpenSelected}>
-          Seçilenleri Aç
-        </Button>
+        <div className="flex items-center gap-2">
+          {onOpenFreeCourseDialog && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-lg gap-1.5 h-8"
+              onClick={onOpenFreeCourseDialog}
+              disabled={freeDialogDisabled}
+              title={freeDialogDisabled ? 'Aktif dönem gerekli' : 'Müfredatta olmayan bir dersi serbest aç'}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Serbest Ders Aç
+            </Button>
+          )}
+          <Button size="sm" disabled={selectableCount === 0} className="rounded-lg gap-1.5" onClick={onOpenSelected}>
+            Seçilenleri Aç
+          </Button>
+        </div>
       </div>
     </div>
   );

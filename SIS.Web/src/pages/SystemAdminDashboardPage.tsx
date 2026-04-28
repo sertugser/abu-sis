@@ -60,7 +60,7 @@ const ALL_QUICK_LINKS = [
   { id: 'terms',      icon: CalendarDays,  title: 'Dönem Yönetimi',   to: ROUTES.TERM_MANAGEMENT },
   { id: 'structure',  icon: Layers,        title: 'Fakülte Tanımları', to: ROUTES.FACULTY_DEFINITIONS },
   { id: 'catalog',    icon: LayoutGrid,    title: 'Ders Kataloğu',    to: ROUTES.COURSE_CATALOG_ADMIN },
-  { id: 'opening',    icon: BookOpen,      title: 'Ders Açma',        to: ROUTES.COURSE_OPENING },
+  { id: 'opening',    icon: BookOpen,      title: 'Ders Aç (Müfredat)', to: ROUTES.COURSE_OPENING },
   { id: 'classroom',  icon: Building2,     title: 'Derslik Doluluk',   to: ROUTES.CLASSROOM_DASHBOARD },
   { id: 'classlist',  icon: ClipboardList, title: 'Sınıf Listeleri',  to: ROUTES.CLASS_LISTS },
 ] as const;

@@ -24,10 +24,25 @@ export async function getOpenedCourses(departmentId: number, termId: number): Pr
   return data;
 }
 
-export async function getCurriculumCoursesForOpening(departmentId: number, termId: number, showAll = false): Promise<CurriculumCourseForOpeningDto[]> {
-  const { data } = await apiClient.get<CurriculumCourseForOpeningDto[]>('/course-opening/curriculum-courses', {
-    params: { departmentId, termId, showAll },
-  });
+export interface CurriculumCoursesQueryOptions {
+  showAll?: boolean;
+  curriculumId?: number | null;
+  includeUnmapped?: boolean;
+}
+
+export async function getCurriculumCoursesForOpening(
+  departmentId: number,
+  termId: number,
+  options: CurriculumCoursesQueryOptions = {},
+): Promise<CurriculumCourseForOpeningDto[]> {
+  const params: Record<string, unknown> = {
+    departmentId,
+    termId,
+    showAll: options.showAll ?? false,
+    includeUnmapped: options.includeUnmapped ?? false,
+  };
+  if (options.curriculumId != null) params.curriculumId = options.curriculumId;
+  const { data } = await apiClient.get<CurriculumCourseForOpeningDto[]>('/course-opening/curriculum-courses', { params });
   return data;
 }
 

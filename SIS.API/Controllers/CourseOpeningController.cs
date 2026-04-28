@@ -45,12 +45,29 @@ public class CourseOpeningController(
 
     [HttpGet("curriculum-courses")]
     [RequirePermission("menu.ders-acma-islemleri.view")]
-    public async Task<IActionResult> GetCurriculumCoursesForOpening([FromQuery] int departmentId, [FromQuery] int termId, [FromQuery] bool showAll = false, CancellationToken ct = default)
+    public async Task<IActionResult> GetCurriculumCoursesForOpening(
+        [FromQuery] int departmentId,
+        [FromQuery] int termId,
+        [FromQuery] bool showAll = false,
+        [FromQuery] int? curriculumId = null,
+        [FromQuery] bool includeUnmapped = false,
+        CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _queryService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, showAll, ct);
+        // curriculumId verilmişse müfredatın bölüm sahipliğini doğrula (yetki kaçağı önlemi)
+        if (curriculumId.HasValue)
+        {
+            var curriculumDeptId = await _context.Curricula
+                .AsNoTracking()
+                .Where(c => c.Id == curriculumId.Value)
+                .Select(c => (int?)c.Program.DepartmentId)
+                .FirstOrDefaultAsync(ct);
+            if (curriculumDeptId != departmentId) return Forbid();
+        }
+
+        var result = await _queryService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, showAll, curriculumId, includeUnmapped, ct);
         return Ok(result);
     }
 

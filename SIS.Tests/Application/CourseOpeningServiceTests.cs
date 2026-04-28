@@ -209,7 +209,7 @@ public class CourseOpeningServiceTests
 
         var service = CreateQueryService(context, forecastServiceMock.Object);
 
-        var result = await service.GetCurriculumCoursesForOpeningAsync(DepartmentId, TermId, false, CancellationToken.None);
+        var result = await service.GetCurriculumCoursesForOpeningAsync(DepartmentId, TermId, false, null, false, CancellationToken.None);
 
         var dto = result.Should().ContainSingle().Subject;
         dto.PredictedDemand.Should().Be(24);

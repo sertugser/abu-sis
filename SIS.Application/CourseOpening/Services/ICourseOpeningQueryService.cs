@@ -9,7 +9,7 @@ namespace SIS.Application.CourseOpening.Services;
 public interface ICourseOpeningQueryService
 {
     Task<OpenedCourseListDto> GetOpenedCoursesAsync(int departmentId, int termId, CancellationToken cancellationToken = default);
-    Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, CancellationToken cancellationToken = default);
+    Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, int? curriculumId = null, bool includeUnmapped = false, CancellationToken cancellationToken = default);
     Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, int? termId = null, CancellationToken cancellationToken = default);
     Task<List<ExternalCourseDto>> GetExternalCoursesAsync(int departmentId, int termId, CancellationToken cancellationToken = default);
 }

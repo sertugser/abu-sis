@@ -28,6 +28,13 @@ public class CourseRegistration
     public int? EctsSnapshot { get; set; }
 
     /// <summary>
+    /// Kayıt anında donan ulusal kredi (NationalCredit) değeri. EctsSnapshot ile aynı grandfathering mantığı:
+    /// transkript / YÖKSİS raporu burada okur, dersin katalog kredisi sonradan değişse bile geçmiş kayıtlar etkilenmez.
+    /// Null ise dersin katalog NationalCredit değeri kullanılır (snapshot pattern'i öncesi kayıtlar için geriye uyumlu).
+    /// </summary>
+    public int? CreditSnapshot { get; set; }
+
+    /// <summary>
     /// Bu kayıt hangi CurriculumElectivePool'a karşılık geliyor (null = zorunlu veya tekil seçmeli).
     /// Havuz tamamlama kontrolü ve mezuniyet denetimi için kullanılır.
     /// </summary>

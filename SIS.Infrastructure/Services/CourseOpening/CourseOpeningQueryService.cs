@@ -123,20 +123,30 @@ public class CourseOpeningQueryService(
         };
     }
 
-    public async Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, CancellationToken ct = default)
+    public async Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, int? curriculumId = null, bool includeUnmapped = false, CancellationToken ct = default)
     {
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct);
         var semesterParity = term?.TermType == TermType.Spring ? 0 : 1;
 
-        var curriculumCourses = await _context.CurriculumCourses
+        // curriculumId verilmişse o müfredata daralt; yoksa bölümün tüm aktif müfredatlarını birleştir (geriye uyumluluk)
+        var curriculumCoursesQuery = _context.CurriculumCourses
             .AsNoTracking()
             .Include(cc => cc.Course)
             .Where(cc => cc.Curriculum.IsActive && cc.Curriculum.Program.DepartmentId == departmentId)
-            .Where(cc => showAll || term == null || term.TermType == TermType.Summer || cc.SuggestedSemester % 2 == semesterParity)
+            .Where(cc => showAll || term == null || term.TermType == TermType.Summer || cc.SuggestedSemester % 2 == semesterParity);
+
+        if (curriculumId.HasValue)
+            curriculumCoursesQuery = curriculumCoursesQuery.Where(cc => cc.CurriculumId == curriculumId.Value);
+
+        // İntibakı Yapılmayanlar = bu müfredat satırı için PreviousCourseId tanımlanmamış (eski müfredattan yeni müfredata bağ kurulmamış)
+        if (includeUnmapped)
+            curriculumCoursesQuery = curriculumCoursesQuery.Where(cc => cc.PreviousCourseId == null);
+
+        var curriculumCourses = await curriculumCoursesQuery
             .OrderBy(cc => cc.SuggestedSemester).ThenBy(cc => cc.Course.Code)
             .ToListAsync(ct);
 
-        var pools = await _context.CurriculumElectivePools
+        var poolsQuery = _context.CurriculumElectivePools
             .AsNoTracking()
             .Include(p => p.ElectiveGroup)
                 .ThenInclude(g => g.Courses)
@@ -146,8 +156,12 @@ public class CourseOpeningQueryService(
                      || term == null
                      || term.TermType == TermType.Summer
                      || (p.SuggestedSemesterEnd - p.SuggestedSemesterStart) >= 1
-                     || p.SuggestedSemesterStart % 2 == semesterParity)
-            .ToListAsync(ct);
+                     || p.SuggestedSemesterStart % 2 == semesterParity);
+
+        if (curriculumId.HasValue)
+            poolsQuery = poolsQuery.Where(p => p.CurriculumId == curriculumId.Value);
+
+        var pools = await poolsQuery.ToListAsync(ct);
 
         var poolCourseEntries = pools
             .SelectMany(p => p.ElectiveGroup.Courses.Select(egc => new

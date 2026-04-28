@@ -1179,6 +1179,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("CreditSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("EctsSnapshot")
                         .HasColumnType("integer");
 

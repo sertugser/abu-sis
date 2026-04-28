@@ -135,7 +135,7 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Müfredat İşlemleri",             "/mufredat-islemleri",                  "mufredat-islemleri",             2,  "menu.mufredat-islemleri.view"),
             BuildItem(permissions, "Müfredat Sınıf Dönem Tanımları", "/mufredat-sinif-donem-tanimlari",      "mufredat-sinif-donem",           3,  "menu.mufredat-sinif-donem.view"),
             BuildItem(permissions, "Seçmeli Ders Grupları",          "/secmeli-ders-gruplari",               "secmeli-ders-gruplari",          4,  "menu.secmeli-ders-gruplari.view"),
-            BuildItem(permissions, "Ders Açma İşlemleri",            "/ders-acma-islemleri",                 "ders-acma-islemleri",            5,  "menu.ders-acma-islemleri.view"),
+            BuildItem(permissions, "Ders Aç (Müfredat)",             "/ders-acma-islemleri",                 "ders-acma-islemleri",            5,  "menu.ders-acma-islemleri.view"),
             BuildItem(permissions, "Ders Aç (Hareket)",              "/donem-programi-aktarim",              "donem-programi-aktarim",         6,  "menu.donem-programi-aktarim.view"),
             BuildItem(permissions, "Seçmeli Tipleri",                "/secmeli-tipleri",                     "secmeli-tipleri",                7,  "menu.secmeli-tipleri.view"),
             BuildItem(permissions, "Şubelendirme İşlemleri",         "/subelendirme-islemleri",              "subelendirme-islemleri",         8,  "menu.subelendirme-islemleri.view"),
