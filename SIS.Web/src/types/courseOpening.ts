@@ -172,6 +172,7 @@ export interface TransferCourseResultItem {
   error?: string;
   sectionsCreated: number;
   warnings: string[];
+  incidentId?: string;
 }
 
 export interface TransferFromTermResultDto {

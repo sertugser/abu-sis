@@ -238,6 +238,11 @@ public class TransferCourseResultItem
     public string? Error { get; set; }
     public int SectionsCreated { get; set; }
     public List<string> Warnings { get; set; } = [];
+    /// <summary>
+    /// Beklenmeyen exception için olay tanımlayıcısı (Guid kısa formu).
+    /// Loga aynı id ile düşer; admin sorun bildirildiğinde bu id ile arar.
+    /// </summary>
+    public string? IncidentId { get; set; }
 }
 
 public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);

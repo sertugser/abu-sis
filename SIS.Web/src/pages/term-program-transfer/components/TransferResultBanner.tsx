@@ -28,11 +28,19 @@ export function TransferResultBanner({ result }: TransferResultBannerProps) {
           .map((r) => (
             <div key={`fail-${r.courseId}`} className="flex items-start gap-1.5 text-sm mt-1 text-destructive">
               <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              <span>
+              <span className="flex flex-wrap items-center gap-1.5">
                 <strong>
                   {r.courseCode} — {r.courseName}:
-                </strong>{' '}
-                {r.error}
+                </strong>
+                <span>{r.error}</span>
+                {r.incidentId && (
+                  <code
+                    className="text-[10px] font-mono bg-destructive/10 border border-destructive/30 rounded px-1.5 py-0.5"
+                    title="Sistem yöneticisine bildirirken bu olay numarasını paylaşın. Sunucu loglarında aynı numara ile bulunur."
+                  >
+                    Olay: {r.incidentId}
+                  </code>
+                )}
               </span>
             </div>
           ))}

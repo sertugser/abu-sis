@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
@@ -19,7 +20,8 @@ public class TermCourseTransferService(
     IEnrollmentForecastService forecastService,
     ISystemConfigProvider systemConfig,
     ICourseSectionLifecycleService lifecycleService,
-    CourseOpeningHelpers helpers) : ITermCourseTransferService
+    CourseOpeningHelpers helpers,
+    ILogger<TermCourseTransferService> logger) : ITermCourseTransferService
 {
     private const int DefaultCapacityFallback = 40;
     private const string DefaultCapacityKey = "CourseOpening.DefaultCapacityPerSection";
@@ -29,6 +31,7 @@ public class TermCourseTransferService(
     private readonly ISystemConfigProvider _systemConfig = systemConfig;
     private readonly ICourseSectionLifecycleService _lifecycleService = lifecycleService;
     private readonly CourseOpeningHelpers _helpers = helpers;
+    private readonly ILogger<TermCourseTransferService> _logger = logger;
 
     public async Task<List<PreviousTermCourseDto>> GetPreviousTermCoursesAsync(
         int departmentId, int sourceTermId, int targetTermId,
@@ -261,6 +264,10 @@ public class TermCourseTransferService(
             }
             catch (Exception ex)
             {
+                var incidentId = Guid.NewGuid().ToString("N")[..8];
+                _logger.LogError(ex,
+                    "Transfer beklenmeyen hata. IncidentId={IncidentId} CourseId={CourseId} SourceTerm={SourceTermId} TargetTerm={TargetTermId}",
+                    incidentId, courseId, request.SourceTermId, request.TargetTermId);
                 result.FailedCount++;
                 result.Results.Add(new TransferCourseResultItem
                 {
@@ -269,6 +276,7 @@ public class TermCourseTransferService(
                     CourseName = first.Course.Name,
                     Success = false,
                     Error = $"Beklenmeyen hata: {ex.GetType().Name}. Sistem yöneticisine başvurun.",
+                    IncidentId = incidentId,
                 });
             }
         }
