@@ -494,7 +494,7 @@ public class CourseOpeningServiceTests
     {
         _ = forecastService; // Lifecycle servisi forecast kullanmıyor; parametre query yardımcı testleri için tutuldu
         var cacheInvalidator = Mock.Of<IEnrollmentForecastCacheInvalidator>();
-        var systemConfig = Mock.Of<ISystemConfigProvider>();
+        var systemConfig = new FakeSystemConfigProvider();
         var helpers = new CourseOpeningHelpers(context);
         return new CourseSectionLifecycleService(context, cacheInvalidator, systemConfig, helpers);
     }
@@ -504,5 +504,15 @@ public class CourseOpeningServiceTests
         forecastService ??= Mock.Of<IEnrollmentForecastService>();
         var helpers = new CourseOpeningHelpers(context);
         return new CourseOpeningQueryService(context, forecastService, helpers);
+    }
+
+    /// <summary>Mock.Of default 0 döner ve fallback'i ezer; bu fake fallback'i doğru iletir.</summary>
+    private sealed class FakeSystemConfigProvider : ISystemConfigProvider
+    {
+        public Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public Task<string> GetStringAsync(string key, string fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public void InvalidateCache(string key) { }
     }
 }
