@@ -15,9 +15,18 @@ interface SectionRowProps {
   isInPlan: boolean;
   isCourseRegistered: boolean;
   prerequisitesMet: boolean;
+  registrationActionsOpen: boolean;
 }
 
-export default function SectionRow({ section, onAddToPlan, isAdding, isInPlan, isCourseRegistered, prerequisitesMet }: SectionRowProps) {
+export default function SectionRow({
+  section,
+  onAddToPlan,
+  isAdding,
+  isInPlan,
+  isCourseRegistered,
+  prerequisitesMet,
+  registrationActionsOpen,
+}: SectionRowProps) {
   const isFull = section.availableSeats <= 0;
   const [detailOpen, setDetailOpen] = useState(false);
   const { data: detail, isLoading: detailLoading } = useSectionDetail(detailOpen ? section.sectionId : null);
@@ -62,6 +71,11 @@ export default function SectionRow({ section, onAddToPlan, isAdding, isInPlan, i
               <Badge variant="destructive" className="gap-1">
                 <Ban className="h-3 w-3" />
                 Dolu
+              </Badge>
+            ) : !registrationActionsOpen ? (
+              <Badge variant="secondary" className="gap-1">
+                <Ban className="h-3 w-3" />
+                Kayıt kapalı
               </Badge>
             ) : (
               <Button size="sm" onClick={() => onAddToPlan(section.sectionId)} disabled={isAdding} className="gap-1.5">

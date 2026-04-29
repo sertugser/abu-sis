@@ -50,6 +50,7 @@ export interface SectionStudent {
   firstName: string;
   lastName: string;
   email: string;
+  phoneNumber: string;
   status: string;
   grade: string | null;
 }

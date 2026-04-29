@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.Common.Time;
@@ -16,24 +17,35 @@ public class CourseRegistrationService : ICourseRegistrationService
     private readonly ISystemConfigProvider _config;
     private readonly IAdvisorConstraintService? _advisorConstraintService;
     private readonly IDateTimeProvider _clock;
+    private readonly IWebModuleSettingsProvider _webSettings;
+    private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
 
     public CourseRegistrationService(
         AppDbContext context,
         IRegistrationValidationService validationService,
         IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
-        IAdvisorConstraintService? advisorConstraintService = null)
+        IAdvisorConstraintService? advisorConstraintService = null,
+        IWebModuleSettingsProvider? webSettings = null)
     {
         _context = context;
         _validationService = validationService;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
         _advisorConstraintService = advisorConstraintService;
+        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
     }
 
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
     {
         var response = new RegistrationResponseDto();
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
+            return response;
+        }
 
         var section = await _context.CourseSections
             .Include(cs => cs.Course)
@@ -403,6 +415,13 @@ public class CourseRegistrationService : ICourseRegistrationService
     public async Task<RegistrationResponseDto> SubmitRegistrationAsync(int studentId, RegistrationSubmitDto dto)
     {
         var response = new RegistrationResponseDto();
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
+            return response;
+        }
 
         // Validate the registration
         var validationResult = await _validationService.ValidateRegistrationAsync(studentId, dto.CourseSectionIds);
@@ -942,6 +961,13 @@ public class CourseRegistrationService : ICourseRegistrationService
     public async Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId)
     {
         var response = new RegistrationResponseDto();
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
+            return response;
+        }
 
         var registration = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
@@ -1616,6 +1642,59 @@ public class CourseRegistrationService : ICourseRegistrationService
             return 0;
 
         return (int)Math.Ceiling(totalHours * limitPercent / 100m);
+    }
+
+    private async Task<ValidationResultDto?> ValidateStudentRegistrationWebModuleAsync()
+    {
+        var enabled = await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", true);
+        if (!enabled)
+        {
+            return CreateWebModuleError(
+                "WebModuleDisabled",
+                "Ders kayıt işlemleri web modül ayarlarından kapatılmıştır.");
+        }
+
+        var openAt = await _webSettings.GetTimeAsync("StudentPanel", "CourseRegistrationOpenAt", TimeOnly.MinValue);
+        if (openAt > TimeOnly.MinValue)
+        {
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(_clock.UtcNow, TurkeyTimeZone);
+            if (TimeOnly.FromDateTime(localNow) < openAt)
+            {
+                return CreateWebModuleError(
+                    "WebModuleOpenAt",
+                    $"Ders kayıt işlemleri bugün saat {openAt.ToString("HH:mm", CultureInfo.InvariantCulture)} itibarıyla açılacaktır.");
+            }
+        }
+
+        return null;
+    }
+
+    private static ValidationResultDto CreateWebModuleError(string rule, string message)
+    {
+        return new ValidationResultDto
+        {
+            IsValid = false,
+            Errors = new List<ValidationError>
+            {
+                new() { Rule = rule, Message = message }
+            }
+        };
+    }
+
+    private static TimeZoneInfo ResolveTurkeyTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.Local;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return TimeZoneInfo.Local;
+        }
     }
 
     private async Task<ValidationResultDto> EvaluateAdvisorConstraintsAsync(
