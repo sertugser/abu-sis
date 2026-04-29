@@ -196,24 +196,6 @@ export default function CourseOpeningPage() {
     );
   }, [deptId, targetTermId, selectedIds, curriculumQuery.data, bulkMutation]);
 
-  const handleOpenFiltered = useCallback(
-    (courseIds: number[]) => {
-      if (!deptId || !targetTermId || courseIds.length === 0) return;
-      const courses = curriculumQuery.data ?? [];
-      bulkMutation.mutate({
-        courses: courseIds.map((courseId) => {
-          const c = courses.find((x) => x.courseId === courseId);
-          return {
-            courseId,
-            sectionCount: c?.recommendedSectionCount ?? 1,
-            capacityPerSection: c?.recommendedCapacity ?? 40,
-          };
-        }),
-      });
-    },
-    [deptId, targetTermId, curriculumQuery.data, bulkMutation],
-  );
-
   const handleUpdateSection = useCallback(
     (
       sectionId: number,
@@ -310,7 +292,6 @@ export default function CourseOpeningPage() {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onOpenSelected={handleOpenSelected}
-          onOpenFiltered={handleOpenFiltered}
           onOpenCourseDetail={setDetailCourse}
           onOpenPoolSlot={setActivePoolSlot}
           filtersSlot={

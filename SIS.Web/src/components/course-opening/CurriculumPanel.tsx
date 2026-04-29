@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Filter, Plus, Search, Sparkles } from 'lucide-react';
+import { Plus, Search, Sparkles } from 'lucide-react';
 import type {
   CurriculumCourseForOpeningDto,
   PoolSlotForOpeningDto,
@@ -25,7 +25,6 @@ interface Props {
   selectedIds: Set<number>;
   onToggleSelect: (courseId: number) => void;
   onOpenSelected: () => void;
-  onOpenFiltered: (courseIds: number[]) => void;
   onOpenCourseDetail: (course: CurriculumCourseForOpeningDto) => void;
   onOpenPoolSlot: (slot: PoolSlotForOpeningDto) => void;
 
@@ -53,7 +52,6 @@ export function CurriculumPanel({
   selectedIds,
   onToggleSelect,
   onOpenSelected,
-  onOpenFiltered,
   onOpenCourseDetail,
   onOpenPoolSlot,
   filtersSlot,
@@ -150,11 +148,6 @@ export function CurriculumPanel({
   };
 
   const selectableCount = selectedIds.size;
-  // Görünen filteredCourses içinde açılabilir olanların ID'leri ("Filtrelenenleri Aç" için)
-  const openableFilteredIds = useMemo(
-    () => filteredCourses.filter((c) => c.canOpen && !c.alreadyOpened).map((c) => c.courseId),
-    [filteredCourses],
-  );
 
   return (
     <div className="flex flex-col min-h-0 h-full overflow-hidden">
@@ -243,22 +236,6 @@ export function CurriculumPanel({
           {selectableCount > 0 && (
             <span className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums">
               {selectableCount}
-            </span>
-          )}
-        </Button>
-
-        <Button
-          variant="outline"
-          disabled={openableFilteredIds.length === 0}
-          className="h-9 px-3 gap-1.5 rounded-md"
-          onClick={() => onOpenFiltered(openableFilteredIds)}
-          title="Bu listede görülen ve açılabilir tüm dersleri tek seferde aç"
-        >
-          <Filter className="h-4 w-4" />
-          Filtrelenenleri Aç
-          {openableFilteredIds.length > 0 && (
-            <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-700">
-              {openableFilteredIds.length}
             </span>
           )}
         </Button>
