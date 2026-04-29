@@ -129,9 +129,9 @@ her ders için müfredattaki aday slot listesi. Çoğul (Karar #5).
 - [CourseController.cs](../../SIS.API/Controllers/CourseController.cs) — student-catalog (Lines ~133-365)
 
 ### Frontend (admin)
-- [ElectiveSubtypeManagementPage.tsx](../../SIS.Web/src/pages/ElectiveSubtypeManagementPage.tsx) — `/secmeli-tipleri` yeni sayfa
+- [ElectiveSubtypeManagementPage.tsx](../../SIS.Web/src/pages/ElectiveSubtypeManagementPage.tsx) — `/secmeli-yapilandirma/tipler` yeni sayfa
 - [ElectiveSubtypeFormDialog.tsx](../../SIS.Web/src/components/elective-subtype/ElectiveSubtypeFormDialog.tsx) — create/edit ortak form (Code lock + flag Switch grid)
-- [ElectiveGroupManagementPage.tsx](../../SIS.Web/src/pages/ElectiveGroupManagementPage.tsx) — `/secmeli-ders-gruplari` (B3c-2 + B3c-3 DB-driven dropdown'lar)
+- [ElectiveGroupManagementPage.tsx](../../SIS.Web/src/pages/ElectiveGroupManagementPage.tsx) — `/secmeli-yapilandirma/gruplar` (B3c-2 + B3c-3 DB-driven dropdown'lar)
 - [CurriculumManagementPage.tsx](../../SIS.Web/src/pages/CurriculumManagementPage.tsx) — `/mufredat-islemleri` (B4 AddPoolDialog + B5 PoolDetailDialog mount)
 - [CurriculumCoursesView.tsx](../../SIS.Web/src/pages/curriculum-management/CurriculumCoursesView.tsx) — B5 mixed row tablo (course + pool karışık)
 - [AddPoolDialog.tsx](../../SIS.Web/src/components/curriculum-management/AddPoolDialog.tsx) — slot ekleme (SlotName + EctsPerCourse)

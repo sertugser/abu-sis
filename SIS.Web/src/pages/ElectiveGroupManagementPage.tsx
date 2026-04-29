@@ -268,7 +268,7 @@ function SubtypeBadge({ subtype }: { subtype: ElectiveSubtypeDto | null }) {
   return (
     <Badge
       variant="outline"
-      className={`text-[10px] font-medium ${getSubtypeColorByCode(subtype.code)}`}
+      className={`text-[10px] font-medium whitespace-nowrap ${getSubtypeColorByCode(subtype.code)}`}
       title={subtype.name}
     >
       {subtype.name}
@@ -415,7 +415,7 @@ export default function ElectiveGroupManagementPage() {
             <tr>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-28">Kod</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Grup Adı</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Tür</th>
+              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-32">Tip</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-56">Kapsam</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-16">Ders</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Durum</th>
@@ -468,7 +468,7 @@ export default function ElectiveGroupManagementPage() {
                       )}
                     </>
                   ) : (
-                    <span>Okul-geneli</span>
+                    <span>Okul geneli</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-center text-sm">{g.courseCount}</td>
