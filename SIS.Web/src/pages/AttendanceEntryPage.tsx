@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
@@ -14,6 +15,7 @@ import {
   Search,
   Timer,
   Users,
+  X,
   XCircle,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -313,7 +315,11 @@ export default function AttendanceEntryPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <Tabs
+      value={activePage}
+      onValueChange={value => setActivePage(value as 'entry' | 'history')}
+      className="flex flex-col gap-4"
+    >
       <Card className="border-border shadow-sm">
         <CardContent className="p-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
@@ -402,14 +408,21 @@ export default function AttendanceEntryPage() {
           </div>
 
           {selectedSection && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline">{selectedSection.courseCode}</Badge>
-              <Badge variant="outline">Şube {selectedSection.sectionNumber ?? selectedSection.sectionId}</Badge>
-              <Badge variant="outline">{selectedWeekNumber}. Hafta</Badge>
-              {currentWeekNumber && <Badge variant="secondary">Güncel hafta: {currentWeekNumber}</Badge>}
-              <WeekStateBadge week={selectedMatrixWeek} />
-              <span>{selectedSection.courseName}</span>
-              <span>{selectedSection.activeStudents} öğrenci</span>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{selectedSection.courseName}</span>
+                <Badge variant="outline">{selectedSection.activeStudents} öğrenci</Badge>
+              </div>
+              <TabsList>
+                <TabsTrigger value="entry" className="gap-2">
+                  <FileCheck2 className="h-4 w-4" />
+                  Yoklama Girişi
+                </TabsTrigger>
+                <TabsTrigger value="history" className="gap-2">
+                  <ClipboardList className="h-4 w-4" />
+                  Geçmiş Yoklamalar
+                </TabsTrigger>
+              </TabsList>
             </div>
           )}
         </CardContent>
@@ -423,22 +436,7 @@ export default function AttendanceEntryPage() {
       )}
 
       {selectedSection && (
-        <Tabs
-          value={activePage}
-          onValueChange={value => setActivePage(value as 'entry' | 'history')}
-          className="space-y-4"
-        >
-          <TabsList>
-            <TabsTrigger value="entry" className="gap-2">
-              <FileCheck2 className="h-4 w-4" />
-              Yoklama Girişi
-            </TabsTrigger>
-            <TabsTrigger value="history" className="gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Geçmiş Yoklamalar
-            </TabsTrigger>
-          </TabsList>
-
+        <>
           <TabsContent value="entry" className="mt-0 space-y-4">
             {!session && !matrixLoading && (
               <Alert>
@@ -612,20 +610,18 @@ export default function AttendanceEntryPage() {
               }}
               isLoading={matrixLoading}
             />
-          </TabsContent>
-        </Tabs>
+        </TabsContent>
+        </>
       )}
-    </div>
+    </Tabs>
   );
 }
 
 function AttendanceHistoryPanel({
   weeks,
-  selectedWeek,
   students,
   searchTerm,
   onSearchTermChange,
-  onWeekChange,
   onEditWeek,
   isLoading,
 }: {
@@ -638,6 +634,13 @@ function AttendanceHistoryPanel({
   onEditWeek: (weekNumber: number) => void;
   isLoading: boolean;
 }) {
+  const [absentPanelWeek, setAbsentPanelWeek] = useState<number | null>(null);
+
+  const sortedWeeks = useMemo(
+    () => [...weeks].sort((a, b) => a.weekNumber - b.weekNumber),
+    [weeks]
+  );
+
   const filteredStudents = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return students;
@@ -660,16 +663,39 @@ function AttendanceHistoryPanel({
     { present: 0, absent: 0, late: 0, excused: 0 }
   );
 
+  // Compute absent students per week for the popup
+  const absentStudentsForWeek = useMemo(() => {
+    if (absentPanelWeek === null) return [];
+    return students.filter(student => {
+      const weekData = student.weeks?.[absentPanelWeek];
+      return !weekData || weekData.status === 'Absent';
+    });
+  }, [absentPanelWeek, students]);
+
+  // Compute per-student absent count across all history weeks
+  const studentAbsentCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    students.forEach(student => {
+      let absentCount = 0;
+      sortedWeeks.forEach(week => {
+        const weekData = student.weeks?.[week.weekNumber];
+        if (weekData?.status === 'Absent') absentCount++;
+      });
+      counts[student.studentId] = absentCount;
+    });
+    return counts;
+  }, [students, sortedWeeks]);
+
   if (isLoading) {
     return (
-      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-        <Skeleton className="h-80 rounded-xl" />
+      <div className="space-y-4">
+        <Skeleton className="h-12 rounded-xl" />
         <Skeleton className="h-80 rounded-xl" />
       </div>
     );
   }
 
-  if (weeks.length === 0 || !selectedWeek) {
+  if (weeks.length === 0) {
     return (
       <Alert>
         <ClipboardList className="h-4 w-4" />
@@ -678,100 +704,34 @@ function AttendanceHistoryPanel({
     );
   }
 
-  const selectedRecordCount = getWeekRecordCount(selectedWeek);
-
   return (
-    <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-      <Card>
-        <CardHeader className="p-4 pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CalendarDays className="h-4 w-4" />
-            Geçmiş Oturumlar
-          </CardTitle>
-          <CardDescription>
-            {weeks.length} oturum, {totals.present + totals.absent + totals.late + totals.excused} kayıt
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 p-4 pt-0">
-          {weeks.map(week => {
-            const isSelected = week.weekNumber === selectedWeek.weekNumber;
-
-            return (
-              <button
-                key={week.weekNumber}
-                type="button"
-                onClick={() => onWeekChange(week.weekNumber)}
-                className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                  isSelected
-                    ? 'border-sky-300 bg-sky-50 text-sky-950'
-                    : 'border-border bg-background hover:bg-muted/50'
-                }`}
-              >
-                <span className="flex items-start justify-between gap-3">
-                  <span className="min-w-0">
-                    <span className="block font-medium">{week.weekNumber}. Hafta</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {week.sessionDate ? formatDisplayDate(week.sessionDate) : 'Tarih yok'}
-                    </span>
-                  </span>
-                  <WeekStateMini week={week} showEmpty />
-                </span>
-                {week.topic && (
-                  <span className="mt-2 block truncate text-xs text-muted-foreground">{week.topic}</span>
-                )}
-                <span className="mt-3 grid grid-cols-4 gap-1 text-center text-[11px]">
-                  <span className="rounded bg-emerald-50 px-1.5 py-1 text-emerald-700">{week.presentCount} var</span>
-                  <span className="rounded bg-red-50 px-1.5 py-1 text-red-700">{week.absentCount} yok</span>
-                  <span className="rounded bg-amber-50 px-1.5 py-1 text-amber-700">{week.lateCount} geç</span>
-                  <span className="rounded bg-sky-50 px-1.5 py-1 text-sky-700">{week.excusedCount} maz.</span>
-                </span>
-              </button>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      <Card>
+    <div className="relative flex gap-4">
+      {/* Main matrix table */}
+      <Card className={`flex-1 min-w-0 transition-all ${absentPanelWeek !== null ? 'lg:mr-[340px]' : ''}`}>
         <CardContent className="p-0">
           <div className="flex flex-col gap-3 border-b bg-muted/20 p-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{selectedWeek.weekNumber}. Hafta</Badge>
-                {selectedWeek.sessionDate && <Badge variant="outline">{formatDisplayDate(selectedWeek.sessionDate)}</Badge>}
-                <WeekStateBadge week={selectedWeek} />
-                <Badge variant="outline">{selectedRecordCount} kayıt</Badge>
-              </div>
-              <div>
-                <h2 className="truncate text-base font-semibold text-foreground">
-                  {selectedWeek.topic || 'Konu girilmedi'}
-                </h2>
-                <p className="text-sm text-muted-foreground">{students.length} öğrenci</p>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarDays className="h-4 w-4" />
+                Geçmiş Yoklama Matrisi
+              </CardTitle>
+              <Badge variant="secondary">{sortedWeeks.length} hafta</Badge>
+              <Badge variant="outline">{students.length} öğrenci</Badge>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700" variant="outline">
-                {selectedWeek.presentCount} var
+                {totals.present} var
               </Badge>
               <Badge className="border-red-200 bg-red-50 text-red-700" variant="outline">
-                {selectedWeek.absentCount} yok
+                {totals.absent} yok
               </Badge>
               <Badge className="border-amber-200 bg-amber-50 text-amber-700" variant="outline">
-                {selectedWeek.lateCount} geç
+                {totals.late} geç
               </Badge>
               <Badge className="border-sky-200 bg-sky-50 text-sky-700" variant="outline">
-                {selectedWeek.excusedCount} mazeretli
+                {totals.excused} mazeretli
               </Badge>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onEditWeek(selectedWeek.weekNumber)}
-                className="gap-2"
-              >
-                <Pencil className="h-4 w-4" />
-                Düzenle
-              </Button>
             </div>
           </div>
 
@@ -788,34 +748,78 @@ function AttendanceHistoryPanel({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Öğrenci</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Durum</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Kaynak</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Kayıt Zamanı</th>
+                  <th className="sticky left-0 z-20 min-w-52 bg-muted/30 px-4 py-3 text-left font-medium text-muted-foreground">
+                    Öğrenci
+                  </th>
+                  {sortedWeeks.map(week => (
+                    <th
+                      key={week.weekNumber}
+                      className="min-w-20 px-2 py-3 text-center font-medium text-muted-foreground"
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-xs">{week.weekNumber}. H</span>
+                        {week.sessionDate && (
+                          <span className="text-[10px] text-muted-foreground/70">
+                            {new Date(week.sessionDate).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })}
+                          </span>
+                        )}
+                        {week.absentCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setAbsentPanelWeek(
+                              absentPanelWeek === week.weekNumber ? null : week.weekNumber
+                            )}
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer ${
+                              absentPanelWeek === week.weekNumber
+                                ? 'bg-red-200 text-red-800 border border-red-300'
+                                : 'bg-red-50 text-red-600 hover:bg-red-100'
+                            }`}
+                            title="Devamsız öğrencileri görüntüle"
+                          >
+                            {week.absentCount} yok
+                          </button>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                  <th className="min-w-20 px-2 py-3 text-center font-medium text-muted-foreground">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                      <span className="text-[10px]">Devamsız</span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredStudents.map(student => {
-                  const record = student.weeks?.[selectedWeek.weekNumber];
-
+                  const absentCount = studentAbsentCounts[student.studentId] ?? 0;
                   return (
                     <tr key={student.studentId} className="border-b last:border-0 hover:bg-muted/20">
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{student.firstName} {student.lastName}</div>
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          <span className="font-mono">{student.studentNumber}</span>
-                          <span>{student.email}</span>
-                        </div>
+                      <td className="sticky left-0 z-10 bg-card px-4 py-2">
+                        <div className="font-medium text-sm">{student.firstName} {student.lastName}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">{student.studentNumber}</div>
                       </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={record?.status} source={record?.source} />
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatAttendanceSource(record?.source)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {record?.submittedAt ? formatDisplayDateTime(record.submittedAt) : '-'}
+                      {sortedWeeks.map(week => {
+                        const weekData = student.weeks?.[week.weekNumber];
+                        return (
+                          <td key={week.weekNumber} className="px-2 py-2 text-center align-middle">
+                            <HistoryStatusDot status={weekData?.status} />
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-2 text-center align-middle">
+                        {absentCount > 0 ? (
+                          <span className="inline-flex items-center justify-center rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-semibold min-w-6 h-6 px-1.5">
+                            {absentCount}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center justify-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold min-w-6 h-6 px-1.5">
+                            0
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -829,8 +833,74 @@ function AttendanceHistoryPanel({
           )}
         </CardContent>
       </Card>
+
+      {/* Absent students slide-over panel */}
+      {absentPanelWeek !== null && (
+        <div className="lg:absolute lg:right-0 lg:top-0 lg:bottom-0 lg:w-[330px] z-30">
+          <Card className="h-full border-red-200 shadow-lg">
+            <CardHeader className="p-3 pb-2 border-b bg-red-50/50">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-sm text-red-800">
+                  <XCircle className="h-4 w-4" />
+                  {absentPanelWeek}. Hafta — Devamsızlar
+                </CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAbsentPanelWeek(null)}
+                  className="h-7 w-7 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <CardDescription className="text-xs">
+                {absentStudentsForWeek.length} öğrenci devamsız
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              {absentStudentsForWeek.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">Devamsız öğrenci yok.</div>
+              ) : (
+                <div className="divide-y">
+                  {absentStudentsForWeek.map((student, idx) => (
+                    <div key={student.studentId} className="flex items-center gap-3 px-3 py-2 hover:bg-red-50/30">
+                      <span className="flex items-center justify-center rounded-full bg-red-100 text-red-700 text-[10px] font-bold min-w-5 h-5">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{student.firstName} {student.lastName}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">{student.studentNumber}</div>
+                      </div>
+                      <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[10px] shrink-0">
+                        {studentAbsentCounts[student.studentId] ?? 0} toplam
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
+}
+
+function HistoryStatusDot({ status }: { status?: AttendanceStatus | null }) {
+  if (!status) {
+    return <span className="inline-block h-3 w-3 rounded-full bg-slate-200" title="Kayıt yok" />;
+  }
+
+  const config: Record<AttendanceStatus, { bg: string; title: string }> = {
+    Present: { bg: 'bg-emerald-500', title: 'Var' },
+    Absent: { bg: 'bg-red-500', title: 'Yok' },
+    Late: { bg: 'bg-amber-500', title: 'Geç' },
+    Excused: { bg: 'bg-sky-500', title: 'Mazeretli' },
+  };
+
+  const { bg, title } = config[status];
+  return <span className={`inline-block h-3 w-3 rounded-full ${bg}`} title={title} />;
 }
 
 function WeekSelectTriggerLabel({

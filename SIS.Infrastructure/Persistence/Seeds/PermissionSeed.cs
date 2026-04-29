@@ -250,8 +250,8 @@ public static class PermissionSeed
         // Derslerim (instructor + paylaşımlı)
         ("menu.derslerim.view",                          PermissionCategory.Menu, "Derslerim sayfası (my-sections, profile, context)"),
 
-        // Yoklama Girişi
-        ("menu.yoklama-girisi.view",                      PermissionCategory.Menu, "Yoklama girişi sayfası ve QR yoklama yönetimi"),
+        // Yoklama Yönetimi
+        ("menu.yoklama-girisi.view",                      PermissionCategory.Menu, "Yoklama yönetimi sayfası, geçmiş yoklamalar ve QR yoklama yönetimi"),
 
         // Ders Programım
         ("menu.ders-programim.view",                     PermissionCategory.Menu, "Ders programım görüntüleme"),
