@@ -104,6 +104,7 @@ public class AttendanceMatrixWeekDto
     public int WeekNumber { get; set; }
     public int? SessionId { get; set; }
     public DateTime? SessionDate { get; set; }
+    public DateTime? SuggestedSessionDate { get; set; }
     public string Topic { get; set; } = string.Empty;
     public int PresentCount { get; set; }
     public int AbsentCount { get; set; }

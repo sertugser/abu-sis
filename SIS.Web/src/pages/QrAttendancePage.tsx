@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Clock, QrCode } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,6 +19,15 @@ export default function QrAttendancePage() {
   const [lastName, setLastName] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const remainingMs = data?.expiresAt ? Math.max(0, new Date(data.expiresAt).getTime() - now) : 0;
+  const isFormActive = Boolean(data?.isActive && (!data.expiresAt || remainingMs > 0));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -75,13 +84,13 @@ export default function QrAttendancePage() {
             <CardContent className="space-y-4 p-5">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={data.isActive ? 'success' : 'secondary'}>
-                    {data.isActive ? 'Aktif' : 'Kapalı'}
+                  <Badge variant={isFormActive ? 'success' : 'secondary'}>
+                    {isFormActive ? 'Aktif' : 'Kapalı'}
                   </Badge>
                   {data.expiresAt && (
                     <Badge variant="outline" className="gap-1.5">
                       <Clock className="h-3.5 w-3.5" />
-                      {new Date(data.expiresAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                      {isFormActive ? formatRemaining(remainingMs) : 'Süre doldu'}
                     </Badge>
                   )}
                 </div>
@@ -92,10 +101,12 @@ export default function QrAttendancePage() {
                 </div>
               </div>
 
-              {!data.isActive ? (
+              {!isFormActive ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{data.message}</AlertDescription>
+                  <AlertDescription>
+                    {data.expiresAt && remainingMs === 0 ? 'Yoklama formu kapalı veya süresi dolmuş.' : data.message}
+                  </AlertDescription>
                 </Alert>
               ) : isSuccess ? (
                 <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
@@ -153,4 +164,11 @@ export default function QrAttendancePage() {
       </div>
     </div>
   );
+}
+
+function formatRemaining(ms: number) {
+  const seconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
 }

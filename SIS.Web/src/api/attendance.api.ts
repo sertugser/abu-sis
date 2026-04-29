@@ -85,6 +85,7 @@ export interface AttendanceMatrixWeek {
   weekNumber: number;
   sessionId: number | null;
   sessionDate: string | null;
+  suggestedSessionDate: string | null;
   topic: string;
   presentCount: number;
   absentCount: number;

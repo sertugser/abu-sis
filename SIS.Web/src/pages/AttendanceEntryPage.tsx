@@ -102,6 +102,7 @@ export default function AttendanceEntryPage() {
   const selectedSection = sectionsData?.sections.find(section => section.sectionId === selectedSectionId) ?? null;
   const selectedMatrixWeek = matrix?.weeks.find(week => week.weekNumber === selectedWeekNumber) ?? null;
   const currentWeekNumber = matrix?.currentWeekNumber ?? null;
+  const selectedWeekDisplayDate = selectedMatrixWeek?.sessionDate ?? selectedMatrixWeek?.suggestedSessionDate ?? null;
   const weekNumbers = matrix?.weeks.length
     ? matrix.weeks.map(week => week.weekNumber)
     : FALLBACK_WEEK_NUMBERS;
@@ -172,16 +173,13 @@ export default function AttendanceEntryPage() {
     setStatuses({});
     setDirtyStudentIds(new Set());
     setTopic(selectedMatrixWeek?.topic ?? '');
-    setSessionDate(
-      selectedMatrixWeek?.sessionDate
-        ? formatDateInput(new Date(selectedMatrixWeek.sessionDate))
-        : formatDateInput(new Date())
-    );
+    setSessionDate(getDefaultWeekDateInput(selectedMatrixWeek));
   }, [
     selectedSectionId,
     selectedWeekNumber,
     selectedMatrixWeek?.sessionId,
     selectedMatrixWeek?.sessionDate,
+    selectedMatrixWeek?.suggestedSessionDate,
     selectedMatrixWeek?.topic,
   ]);
 
@@ -466,8 +464,8 @@ export default function AttendanceEntryPage() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        {selectedMatrixWeek?.sessionDate && (
-                          <Badge variant="outline">{formatDisplayDate(selectedMatrixWeek.sessionDate)}</Badge>
+                        {selectedWeekDisplayDate && (
+                          <Badge variant="outline">{formatDisplayDate(selectedWeekDisplayDate)}</Badge>
                         )}
                         <Button
                           type="button"
@@ -766,6 +764,14 @@ function AttendanceHistoryPanel({
                             {new Date(week.sessionDate).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })}
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => onEditWeek(week.weekNumber)}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+                          title="Haftayı düzenle"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
                         {week.absentCount > 0 && (
                           <button
                             type="button"
@@ -954,20 +960,6 @@ function WeekSelectOption({
       </span>
     </span>
   );
-}
-
-function WeekStateBadge({ week }: { week?: AttendanceMatrixWeek | null }) {
-  const state = getWeekState(week);
-
-  if (state === 'taken') {
-    return <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700" variant="outline">Yoklama alındı</Badge>;
-  }
-
-  if (state === 'opened') {
-    return <Badge className="border-sky-200 bg-sky-50 text-sky-700" variant="outline">Oturum açıldı</Badge>;
-  }
-
-  return <Badge variant="secondary">Yoklama alınmadı</Badge>;
 }
 
 function WeekStateMini({
@@ -1228,7 +1220,7 @@ function QrPanel({
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={onOpenQr} disabled={isOpening} className="gap-2">
               <QrCode className="h-4 w-4" />
-              {isQrActive ? 'Süreyi Yenile' : session.token ? 'Sayacı Başlat' : 'QR Oluştur ve Başlat'}
+              {isQrActive ? 'Yeni QR Oluştur' : session.qrExpiresAt ? 'Yeni QR Oluştur ve Başlat' : 'QR Oluştur ve Başlat'}
             </Button>
             <Button type="button" variant="outline" onClick={onCloseQr} disabled={!session.isQrOpen || isClosing}>
               QR Kapat
@@ -1278,6 +1270,11 @@ function QrSvg({ value }: { value: string }) {
   );
 }
 
+function getDefaultWeekDateInput(week?: AttendanceMatrixWeek | null) {
+  const value = week?.sessionDate ?? week?.suggestedSessionDate;
+  return value ? formatDateInput(new Date(value)) : formatDateInput(new Date());
+}
+
 function formatDateInput(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1287,19 +1284,6 @@ function formatDateInput(date: Date) {
 
 function formatDisplayDate(value: string) {
   return new Date(value).toLocaleDateString('tr-TR');
-}
-
-function formatDisplayDateTime(value: string) {
-  return new Date(value).toLocaleString('tr-TR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-}
-
-function formatAttendanceSource(source?: AttendanceEntrySource | null) {
-  if (source === 'Manual') return 'Manuel';
-  if (source === 'Qr') return 'QR';
-  return '-';
 }
 
 function formatRemaining(ms: number) {

@@ -163,11 +163,26 @@ public class AttendanceController : ControllerBase
         if (session == null)
             return NotFound(new { error = "Yoklama oturumu bulunamadi." });
 
+        var now = DateTime.UtcNow;
         var minutes = Math.Clamp(request.DurationMinutes, 1, 1440);
-        session.Token = string.IsNullOrWhiteSpace(session.Token) ? Guid.NewGuid().ToString("N") : session.Token;
+        var previousQrSessions = await _context.AttendanceSessions
+            .Where(other => other.Id != session.Id
+                && other.CourseSectionId == session.CourseSectionId
+                && other.WeekNumber == session.WeekNumber
+                && other.IsQrOpen)
+            .ToListAsync();
+
+        foreach (var previousQrSession in previousQrSessions)
+        {
+            previousQrSession.IsQrOpen = false;
+            previousQrSession.QrExpiresAt = now;
+            previousQrSession.UpdatedAt = now;
+        }
+
+        session.Token = Guid.NewGuid().ToString("N");
         session.IsQrOpen = true;
-        session.QrExpiresAt = DateTime.UtcNow.AddMinutes(minutes);
-        session.UpdatedAt = DateTime.UtcNow;
+        session.QrExpiresAt = now.AddMinutes(minutes);
+        session.UpdatedAt = now;
         await _context.SaveChangesAsync();
 
         return Ok(await BuildSessionDtoAsync(session.Id));
@@ -450,6 +465,19 @@ public class AttendanceController : ControllerBase
         var sessionsByWeek = sessions
             .GroupBy(session => session.WeekNumber)
             .ToDictionary(group => group.Key, group => group.First());
+        var scheduledSlotRows = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(schedule => schedule.CourseSectionId == sectionId)
+            .Select(schedule => new
+            {
+                schedule.TimeSlot.DayOfWeek,
+                schedule.TimeSlot.StartTime,
+                schedule.TimeSlot.SlotOrder
+            })
+            .ToListAsync();
+        var scheduledSlots = scheduledSlotRows
+            .Select(slot => new SectionScheduleSlot(slot.DayOfWeek, slot.StartTime, slot.SlotOrder))
+            .ToList();
 
         return new AttendanceMatrixDto
         {
@@ -470,6 +498,7 @@ public class AttendanceController : ControllerBase
                         WeekNumber = weekNumber,
                         SessionId = session?.Id,
                         SessionDate = session?.SessionDate,
+                        SuggestedSessionDate = CalculateSuggestedSessionDate(section.Term, weekNumber, scheduledSlots),
                         Topic = session?.Topic ?? string.Empty,
                         PresentCount = weekRecords.Count(record => record.Status == AttendanceStatus.Present),
                         AbsentCount = weekRecords.Count(record => record.Status == AttendanceStatus.Absent),
@@ -537,6 +566,33 @@ public class AttendanceController : ControllerBase
         return Math.Clamp(weekNumber, 1, Math.Max(1, weekCount));
     }
 
+    private static DateTime? CalculateSuggestedSessionDate(
+        AcademicTerm term,
+        int weekNumber,
+        IReadOnlyCollection<SectionScheduleSlot> scheduledSlots)
+    {
+        if (scheduledSlots.Count == 0)
+            return null;
+
+        var weekStart = DateTime.SpecifyKind(term.EffectiveStart, DateTimeKind.Utc).Date
+            .AddDays((Math.Max(1, weekNumber) - 1) * 7);
+        var selectedSlot = scheduledSlots
+            .Select(slot => new
+            {
+                Slot = slot,
+                DayOffset = DaysUntil(weekStart.DayOfWeek, slot.DayOfWeek)
+            })
+            .OrderBy(item => item.DayOffset)
+            .ThenBy(item => item.Slot.StartTime)
+            .ThenBy(item => item.Slot.SlotOrder)
+            .First();
+
+        return DateTime.SpecifyKind(weekStart.AddDays(selectedSlot.DayOffset), DateTimeKind.Utc);
+    }
+
+    private static int DaysUntil(DayOfWeek from, DayOfWeek to) =>
+        ((int)to - (int)from + 7) % 7;
+
     private async Task<int> GetAttendanceWeekCountAsync()
     {
         var value = await _context.SystemConfigs
@@ -582,4 +638,6 @@ public class AttendanceController : ControllerBase
 
         return builder.ToString().Normalize(NormalizationForm.FormC);
     }
+
+    private sealed record SectionScheduleSlot(DayOfWeek DayOfWeek, TimeOnly StartTime, int SlotOrder);
 }
