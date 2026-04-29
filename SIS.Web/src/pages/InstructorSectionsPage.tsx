@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { ROUTES } from '@/lib/constants';
 import { useInstructorSections, useSectionStudents } from '../hooks/useInstructorSections';
-import { BookOpen, Users, Mail, ClipboardEdit, Calendar, Search } from 'lucide-react';
+import { BookOpen, Users, Mail, ClipboardEdit, Calendar, Search, ClipboardCheck } from 'lucide-react';
 
 export default function InstructorSectionsPage() {
   const { data, isLoading } = useInstructorSections();
@@ -153,6 +153,15 @@ export default function InstructorSectionsPage() {
                             >
                               <Calendar className="h-3.5 w-3.5" />
                               Program
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`${ROUTES.ATTENDANCE_ENTRY}?sectionId=${section.sectionId}`)}
+                              className="text-xs gap-1.5"
+                            >
+                              <ClipboardCheck className="h-3.5 w-3.5" />
+                              Yoklama
                             </Button>
                             <Button
                               size="sm"

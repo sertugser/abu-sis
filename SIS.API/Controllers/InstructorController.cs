@@ -96,6 +96,7 @@ public class InstructorController : ControllerBase
         var result = sections.Select(s => new
         {
             SectionId = s.Id,
+            SectionNumber = s.SectionNumber,
             CourseCode = s.Course.Code,
             CourseName = s.Course.Name,
             Ects = s.Course.Ects,
