@@ -29,6 +29,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   Scheduling: 'Zamanlama',
   Schedule: 'Ders Programı',
   Attendance: 'Devamsızlık',
+  Security: 'Güvenlik',
+  Localization: 'Dil ve Yerelleştirme',
   General: 'Genel',
 };
 

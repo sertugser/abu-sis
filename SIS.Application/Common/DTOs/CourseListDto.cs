@@ -87,4 +87,7 @@ public class ActiveTermDto
     public bool IsAddDropOpen { get; set; }
     public string Status { get; set; } = string.Empty;
     public bool HasAcademicCalendar { get; set; }
+    public bool StudentRegistrationEnabled { get; set; } = true;
+    public string? StudentRegistrationOpenAt { get; set; }
+    public string? StudentRegistrationMessage { get; set; }
 }

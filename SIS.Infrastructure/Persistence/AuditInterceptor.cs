@@ -24,6 +24,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         nameof(CourseRegistration),
         nameof(Student),
         nameof(SystemConfig),
+        nameof(WebModuleSetting),
         nameof(FacultyScheduleApproval),
         nameof(PromotionRule),
         nameof(RegistrationPlan),

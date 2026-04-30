@@ -84,6 +84,9 @@ export default function CourseCatalogPage() {
 
   const isFinalized = confirmedItems.length > 0 && planItems.length === 0;
   const hasAdvisorApproval = confirmedItems.every(r => r.status === 'Active');
+  const registrationActionsOpen = Boolean(term?.isRegistrationOpen || term?.isAddDropOpen);
+  const registrationClosedMessage = term?.studentRegistrationMessage
+    ?? 'Kayıt dönemi şu anda kapalıdır. Dersler görüntülenebilir ancak plana eklenemez.';
 
   const statusCounts = useMemo(() => {
     if (!courses) return { alttan: 0, new_: 0, taken: 0, total: 0 };
@@ -115,10 +118,22 @@ export default function CourseCatalogPage() {
   const alttanCourses = useMemo(() => courses?.filter(c => c.takeStatus === 'Alttan') || [], [courses]);
 
   const handleAddToPlan = (sectionId: number) => {
+    if (!registrationActionsOpen) {
+      setValidationErrors([{ rule: 'RegistrationClosed', message: registrationClosedMessage }]);
+      setValidationWarnings([]);
+      return;
+    }
+
     addToPlan.mutate(sectionId);
   };
 
   const handleRemove = (registrationId: number) => {
+    if (!registrationActionsOpen) {
+      setValidationErrors([{ rule: 'RegistrationClosed', message: registrationClosedMessage }]);
+      setValidationWarnings([]);
+      return;
+    }
+
     dropCourse.mutate(registrationId);
   };
 
@@ -126,6 +141,11 @@ export default function CourseCatalogPage() {
     setValidationErrors([]);
     setValidationWarnings([]);
     setSubmitSuccess(false);
+    if (!registrationActionsOpen) {
+      setValidationErrors([{ rule: 'RegistrationClosed', message: registrationClosedMessage }]);
+      return;
+    }
+
     const sectionIds = planItems.map(r => r.courseSectionId);
     submitRegistration.mutate(sectionIds, {
       onSuccess: (data) => {
@@ -425,10 +445,10 @@ export default function CourseCatalogPage() {
       {(validationErrors.length > 0 || validationWarnings.length > 0) && (
         <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
       )}
-      {!term?.isRegistrationOpen && !term?.isAddDropOpen && (
+      {!registrationActionsOpen && (
         <Alert variant="warning">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>Kayıt dönemi şu anda kapalıdır. Dersler görüntülenebilir ancak plana eklenemez.</AlertDescription>
+          <AlertDescription>{registrationClosedMessage}</AlertDescription>
         </Alert>
       )}
       {addToPlan.error && (
@@ -531,7 +551,7 @@ export default function CourseCatalogPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleRemove(item.registrationId)}
-                            disabled={dropCourse.isPending}
+                            disabled={dropCourse.isPending || !registrationActionsOpen}
                             className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -550,7 +570,7 @@ export default function CourseCatalogPage() {
                 <Button
                   size="lg"
                   onClick={handleSubmit}
-                  disabled={submitRegistration.isPending}
+                  disabled={submitRegistration.isPending || !registrationActionsOpen}
                   className="gap-2 rounded-xl bg-[#003366] hover:bg-[#002244]"
                 >
                   {submitRegistration.isPending ? (
@@ -649,6 +669,7 @@ export default function CourseCatalogPage() {
               onAddToPlan={handleAddToPlan}
               isAdding={addToPlan.isPending}
               registeredSectionIds={registeredSectionIds}
+              registrationActionsOpen={registrationActionsOpen}
             />
           ))
         ) : (

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Announcement.DTOs;
 using SIS.Application.Announcement.Services;
+using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -10,10 +11,12 @@ namespace SIS.Infrastructure.Services.Announcement;
 public class InternalAnnouncementService : IInternalAnnouncementService
 {
     private readonly AppDbContext _context;
+    private readonly IWebModuleSettingsProvider _webSettings;
 
-    public InternalAnnouncementService(AppDbContext context)
+    public InternalAnnouncementService(AppDbContext context, IWebModuleSettingsProvider? webSettings = null)
     {
         _context = context;
+        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
     }
 
     public async Task<List<AnnouncementListDto>> GetActiveForUserAsync(
@@ -48,12 +51,23 @@ public class InternalAnnouncementService : IInternalAnnouncementService
                 && userDepartmentId.HasValue
                 && a.TargetDepartmentId == userDepartmentId));
 
-        query = query
-            .OrderByDescending(a => a.IsPinned)
-            .ThenByDescending(a => a.CreatedAt);
+        var pinnedFirst = await _webSettings.GetBoolAsync("Announcements", "PinnedAnnouncementsFirst", true, ct);
+        query = pinnedFirst
+            ? query.OrderByDescending(a => a.IsPinned).ThenByDescending(a => a.CreatedAt)
+            : query.OrderByDescending(a => a.CreatedAt);
 
-        if (maxResults.HasValue && maxResults.Value > 0)
-            query = query.Take(maxResults.Value);
+        var effectiveMaxResults = maxResults;
+        if (isStudent && maxResults.HasValue)
+        {
+            effectiveMaxResults = await _webSettings.GetIntAsync(
+                "Announcements",
+                "StudentTopCount",
+                maxResults.Value,
+                ct);
+        }
+
+        if (effectiveMaxResults.HasValue && effectiveMaxResults.Value > 0)
+            query = query.Take(effectiveMaxResults.Value);
 
         var items = await query.ToListAsync(ct);
         return items.Select(MapToList).ToList();

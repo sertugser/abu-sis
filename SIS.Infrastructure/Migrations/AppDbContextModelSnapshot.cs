@@ -3090,6 +3090,57 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("UserPreferences");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.WebModuleSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("EffectiveFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EffectiveTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ModuleKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModuleKey", "Key")
+                        .IsUnique();
+
+                    b.ToTable("WebModuleSettings");
+                });
+
             modelBuilder.Entity("SIS.Domain.Identity.MenuItem", b =>
                 {
                     b.Property<int>("Id")

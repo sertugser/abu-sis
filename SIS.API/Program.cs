@@ -71,7 +71,10 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.CustomSchemaIds(type => type.FullName?.Replace('+', '.') ?? type.Name);
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
@@ -183,6 +186,7 @@ builder.Services.AddScoped<IOsymRegistrationCalendarService, OsymRegistrationCal
 builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
+builder.Services.AddScoped<IWebModuleSettingsProvider, WebModuleSettingsProvider>();
 
 // RBAC (Phase 1)
 builder.Services.AddScoped<IPermissionService, PermissionService>();

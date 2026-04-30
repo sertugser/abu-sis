@@ -46,6 +46,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<RegistrationPlan> RegistrationPlans => Set<RegistrationPlan>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
+    public DbSet<WebModuleSetting> WebModuleSettings => Set<WebModuleSetting>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
@@ -769,6 +770,14 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         {
             e.HasIndex(sc => sc.Key).IsUnique();
             e.Property(sc => sc.RowVersion)
+             .IsRowVersion();
+        });
+
+        // ── WebModuleSetting ─────────────────────────────────────
+        builder.Entity<WebModuleSetting>(e =>
+        {
+            e.HasIndex(wms => new { wms.ModuleKey, wms.Key }).IsUnique();
+            e.Property(wms => wms.RowVersion)
              .IsRowVersion();
         });
 
