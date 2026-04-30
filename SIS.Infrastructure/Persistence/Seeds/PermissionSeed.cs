@@ -63,11 +63,6 @@ public static class PermissionSeed
         ("menu.program-tanimlari.edit",                  PermissionCategory.Menu, "Program düzenleme"),
         ("menu.program-tanimlari.delete",                PermissionCategory.Menu, "Program silme"),
 
-        // Akademik Takvim Yönetimi (admin CRUD)
-        ("menu.akademik-takvim-yonetimi.view",           PermissionCategory.Menu, "Akademik takvim yönetim sayfası görüntüleme"),
-        ("menu.akademik-takvim-yonetimi.edit",           PermissionCategory.Menu, "Akademik takvim güncelleme (upsert)"),
-        ("menu.akademik-takvim-yonetimi.override",       PermissionCategory.Menu, "Akademik takvim faz override"),
-
         // Takvim Oluşturucu
         ("menu.akademik-takvim-olusturma.view",          PermissionCategory.Menu, "Takvim oluşturucu görüntüleme"),
         ("menu.akademik-takvim-olusturma.edit",          PermissionCategory.Menu, "Şablon/holiday/draft düzenleme"),

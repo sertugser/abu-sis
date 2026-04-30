@@ -24,12 +24,13 @@ export function emptyDepartmentForm(facultyId = 0): DepartmentFormState { return
 
 export interface ProgramFormState {
   name: string; code: string; departmentId: number;
+  externalSystemCode: string;
   degreeLevel: string; educationType: string;
   maxStudyDurationSemesters: number; totalRequiredEcts: number;
 }
 export function emptyProgramForm(departmentId = 0): ProgramFormState {
   return {
-    name: '', code: '', departmentId,
+    name: '', code: '', externalSystemCode: '', departmentId,
     degreeLevel: 'Bachelor', educationType: 'Semester',
     maxStudyDurationSemesters: 8, totalRequiredEcts: 240,
   };

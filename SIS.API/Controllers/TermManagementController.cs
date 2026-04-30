@@ -79,6 +79,4 @@ public class TermManagementController : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
-
-    // Phase override moved to AcademicCalendarController (POST /api/admin/academic-calendar/{id}/override)
 }

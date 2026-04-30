@@ -146,6 +146,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<AcademicProgram>(e =>
         {
             e.HasIndex(p => p.Code).IsUnique();
+            e.HasIndex(p => p.ExternalSystemCode)
+                .IsUnique()
+                .HasFilter("\"ExternalSystemCode\" IS NOT NULL");
+            e.Property(p => p.ExternalSystemCode).HasMaxLength(30);
 
             e.HasOne(p => p.Department)
              .WithMany(d => d.Programs)

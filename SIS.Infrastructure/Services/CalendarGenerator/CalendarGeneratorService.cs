@@ -62,10 +62,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
             }
         }
 
-        events = ApplyHolidayOverflowShifts(events, holidays);
-        events = ApplyRegularSemesterSequenceRules(events, holidays);
-        events = ApplyDependentExamScheduling(events, holidays);
-        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = NormalizeCalendarEvents(events, holidays);
         events = AlignClassesEndToWeekday(events);
         events.AddRange(BuildHolidayEvents(request.AcademicYear, holidays, termStarts, request.IncludeSummer));
         events = events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList();
@@ -162,10 +159,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, draftEventId, oldStart, oldEnd, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
-        events = ApplyHolidayOverflowShifts(events, holidays);
-        events = ApplyRegularSemesterSequenceRules(events, holidays);
-        events = ApplyDependentExamScheduling(events, holidays);
-        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = NormalizeCalendarEvents(events, holidays);
         events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
         {
@@ -209,10 +203,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, request.DraftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
-        events = ApplyHolidayOverflowShifts(events, holidays);
-        events = ApplyRegularSemesterSequenceRules(events, holidays);
-        events = ApplyDependentExamScheduling(events, holidays);
-        events = ApplyHolidayOverflowShifts(events, holidays);
+        events = NormalizeCalendarEvents(events, holidays);
         events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
         {

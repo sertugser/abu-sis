@@ -178,6 +178,10 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("EducationType")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ExternalSystemCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<int>("MaxStudyDurationSemesters")
                         .HasColumnType("integer");
 
@@ -197,6 +201,10 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("ExternalSystemCode")
+                        .IsUnique()
+                        .HasFilter("\"ExternalSystemCode\" IS NOT NULL");
 
                     b.ToTable("AcademicPrograms");
                 });
