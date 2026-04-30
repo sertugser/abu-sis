@@ -133,6 +133,38 @@ Dean grubunda akademik-islemler: sadece Program Kontenjan Bilgileri (dean endpoi
 
 Eski gruplar ("Dönem Yönetimi", "Akademik Yapı", "Fakülte / Bölüm / Program" tek sayfa) silindi.
 
+## Elective Pool Refactor (Faz 6 — TAMAMLANDI 2026-04-27/28)
+
+Seçmeli ders sistemi flat `GroupCode` etiketinden gerçek pool/slot model'ine geçti.
+Branch `fix/curriculum-management-page` üzerinde 29+ ardışık commit, push'suz.
+Tam commit haritası + 14 davranış kararı için: kullanıcı memory dosyası
+`project_elective_pool_refactor.md`.
+
+### Mimari (TL;DR)
+- **`ElectiveGroup`** (havuz tanımı, ders listesi) — UI: "Seçmeli Ders Grubu". DepartmentId scope ladder (okul/fakülte/bölüm). FK `ElectiveSubtypeId` (NOT NULL, DB-driven tip; deprecated enum kolon Faz E'de söküldü).
+- **`CurriculumElectivePool`** (müfredata bağlanma slot kaydı) — UI: "Grup". `SlotName` (TE-1, TE-2…), `EctsPerCourse` override. Unique `(CurriculumId, ElectiveGroupId, SlotName)`.
+- **`ElectiveSubtypeEntity`** (TE/NDE/OC + custom tipler) — tek kaynak. DB-driven CRUD admin sayfası `/secmeli-yapilandirma/tipler`. Code immutable, Name + 4 scope flag editable. Frontend display `lib/electiveSubtypeUtils` (Code-based renk + name lookup).
+- **`ApplicablePoolSlotDto`** — öğrencinin `student-catalog` cevabında her ders için aday olduğu slot listesi.
+
+### Ana sayfalar
+- Admin müfredat detayı (`/mufredat-islemleri` → ders listesi): ders satırları + grup slot satırları aynı tabloda karışık (Proliz tarzı). "+ Grup Ekle" butonu AddPoolDialog açar; pool satırına tıklama PoolDetailDialog (inline edit + aday liste + sil onayı).
+- Admin seçmeli tipleri (`/secmeli-yapilandirma/tipler`): SysAdmin yeni tip ekler/düzenler. List endpoint multi-role (Patch 2A — read-only lookup).
+- Öğrenci ders kayıt (`/ders-kayit`): üstte "Müfredat Slotlarım" kartları (CourseCatalogPage), slot tıklayınca aday dersler dialog'u. "Üstten yarıyıl havuzları" toggle (default kapalı).
+- Öğrenci kayıt planı (`/ders-kayit-plani`): submit'te eksik slot warning AlertDialog.
+- Öğrenci müfredat durumu (`/mufredat-durum`): pool fulfillment kartları SlotName ile.
+
+### Kritik kararlar (memory'de tam liste)
+- **#1** Submit gate yumuşak (warning, danışman süzer)
+- **#5** Bir ders birden fazla pool'a aday olabilir (`applicablePoolSlots` çoğul)
+- **#13** Grup oluşturma yetkisi: SysAdmin + Dean + Bölüm Başkanı
+- **#14** ElectiveSubtype Code immutable, sadece Name editable
+
+### Faz E (TAMAMLANDI 2026-04-28)
+Deprecated `ElectiveGroup.ElectiveSubtype` enum kolonu DROP migration uygulandı. `SIS.Domain/Enums/ElectiveSubtype.cs` dosyası silindi. Frontend `ELECTIVE_SUBTYPE_LABELS/SHORT/COLORS` helper'ları kaldırıldı, display tamamen `lib/electiveSubtypeUtils` üzerinden DB-driven (custom subtype'lar için doğru name + Code-based renk fallback). Refactor closed.
+
+### Faz 6 Post — UI Birleştirme (TAMAMLANDI 2026-04-29)
+İki ayrı sidebar item ("Seçmeli Ders Grupları" + "Seçmeli Tipleri") tek sayfada tab'lara birleştirildi: `/secmeli-yapilandirma/{gruplar|tipler}`. Mevcut sayfalar (`ElectiveGroupManagementPage`, `ElectiveSubtypeManagementPage`) içerik olarak korunuyor; wrapper `ElectiveConfigurationPage` permission-gated tab visibility ve tek-tab edge-case'ini handle ediyor. Yeni meta-permission `menu.secmeli-yapilandirma.view` 3 role'e seed edildi (SysAdmin/Dean/DepartmentManager). Eski permission key'leri (`menu.secmeli-ders-gruplari.*`, `menu.secmeli-tipleri.*`) korundu — API guard'ları ve tab visibility için hâlâ kullanılıyor. Eski route'lar `<Navigate>` ile redirect oluyor. SQL migration: `scripts/2026-04-29-secmeli-yapilandirma-merge.sql`.
+
 ## RBAC (Phase 1 — DB-driven Permissions, tag: `rbac-phase1-mvp`)
 
 Yetki sistemi DB-driven, admin UI'dan deployment'sız değişebilir. Tüm controller'lar `[RequirePermission("...")]` ile korunur (eski `[Authorize(Roles=...)]` kalkmıştır).

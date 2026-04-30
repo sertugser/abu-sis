@@ -161,6 +161,7 @@ public static class RolePermissionSeed
                 "menu.akademik-takvim-olusturma.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
+                "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
                 "menu.ders-programi-olusturma.view",
@@ -276,6 +277,7 @@ public static class RolePermissionSeed
                 "menu.duyurular-admin.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
+                "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
                 "menu.ders-programi-kisitlamalari.view",
@@ -403,6 +405,7 @@ public static class RolePermissionSeed
                 "menu.program-kontenjan.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
+                "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
                 "menu.ders-programi-kisitlamalari.view",
@@ -526,6 +529,10 @@ public static class RolePermissionSeed
 
             // SystemAdministrator YOK — Karar 4: locked role, kod düzeyinde
             // RequirePermissionAttribute içinde shortcut ile tüm permission'lara açık.
+            //
+            // Faz B B3a notu: menu.secmeli-tipleri.* (view/create/edit/delete) sadece SysAdmin'e
+            // verilmiştir (Karar #1 — Dean/DepartmentManager CRUD yapamaz). SysAdmin shortcut
+            // sayesinde DB satırı gerekmiyor; diğer rollere bilinçli olarak eklenmemiştir.
         };
 
     /// <summary>

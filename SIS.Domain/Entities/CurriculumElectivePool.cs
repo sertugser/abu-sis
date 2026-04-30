@@ -7,6 +7,13 @@ public class CurriculumElectivePool
     public Curriculum Curriculum { get; set; } = null!;
     public int ElectiveGroupId { get; set; }
     public ElectiveGroup ElectiveGroup { get; set; } = null!;
+
+    /// <summary>
+    /// Aynı havuzun aynı müfredata farklı slotlar olarak bağlanmasını sağlar.
+    /// Örn: "TE-1", "TE-2", "OC-1". (CurriculumId, ElectiveGroupId, SlotName) unique.
+    /// </summary>
+    public string SlotName { get; set; } = string.Empty;
+
     public int SuggestedSemesterStart { get; set; }
     public int SuggestedSemesterEnd { get; set; }
     public int RequiredCourseCount { get; set; }

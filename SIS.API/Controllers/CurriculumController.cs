@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -10,12 +11,12 @@ namespace SIS.API.Controllers;
 [ApiController]
 [Route("api/curriculum")]
 [Authorize]
-public class CurriculumController(AppDbContext context) : ControllerBase
+public class CurriculumController(AppDbContext context, IElectiveGroupScopeValidator scopeValidator) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
     public record CurriculumListDto(
         int Id, int ProgramId, string ProgramName, string ProgramCode,
-        string FacultyName,
+        string FacultyName, string DepartmentName,
         string Version, string? Name, DateTime? StartDate, DateTime? EndDate,
         bool IsActive, CurriculumStatus Status,
         int CourseCount, int TotalEcts, int TotalCredit,
@@ -38,7 +39,20 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         int Ects, int TheoryHours, int LabHours,
         int SuggestedSemester, bool IsCompulsory,
         bool IncludeInGpa, bool ShowOnTranscript,
-        string? CourseCategory, string? GroupCode);
+        int? CategoryId, string? CategoryName,
+        int? OpeningReasonId, string? OpeningReasonCode, string? OpeningReasonName,
+        int NationalCredit,
+        // Phase 2 — flags
+        bool IsMainGroupCourse, bool IsFormationCourse,
+        bool ExcludedFromCreditTotal, bool ExcludedFromTranscriptTotal,
+        bool AutoAddOnNewRegistration, bool ShowAtTakenCurriculum,
+        bool ShowInstructorAtRegistration, bool HasCustomExamCurriculum,
+        // Phase 2 — decision metadata
+        DateTime? DecisionDate, string? DecisionNo, string? DecisionNote,
+        // Phase 2 — curriculum-specific description
+        string? CurriculumDescription,
+        // Phase 3 — İntibak (önceki ders, müfredata özel + tek yönlü)
+        int? PreviousCourseId, string? PreviousCourseCode, string? PreviousCourseName);
 
     public record CreateCurriculumRequest(
         int ProgramId, string Version,
@@ -61,29 +75,63 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     public record AddCourseRequest(
         int CourseId, int SuggestedSemester, bool IsCompulsory,
         bool IncludeInGpa = true, bool ShowOnTranscript = true,
-        string? CourseCategory = null, string? GroupCode = null);
+        int? CategoryId = null, int? OpeningReasonId = null,
+        // Phase 2 flags
+        bool IsMainGroupCourse = false, bool IsFormationCourse = false,
+        bool ExcludedFromCreditTotal = false, bool ExcludedFromTranscriptTotal = false,
+        bool AutoAddOnNewRegistration = false, bool ShowAtTakenCurriculum = false,
+        bool ShowInstructorAtRegistration = true, bool HasCustomExamCurriculum = false,
+        // Phase 2 decision metadata
+        DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
+        // Phase 2 description
+        string? CurriculumDescription = null,
+        // Phase 3 — İntibak
+        int? PreviousCourseId = null);
 
     public record UpdateCourseRequest(
         int? SuggestedSemester = null, bool? IsCompulsory = null,
         bool? IncludeInGpa = null, bool? ShowOnTranscript = null,
-        string? CourseCategory = null, string? GroupCode = null);
+        int? CategoryId = null, int? OpeningReasonId = null,
+        bool ClearCategory = false, bool ClearOpeningReason = false,
+        // Phase 2 flags (all bool? — null means "no change")
+        bool? IsMainGroupCourse = null, bool? IsFormationCourse = null,
+        bool? ExcludedFromCreditTotal = null, bool? ExcludedFromTranscriptTotal = null,
+        bool? AutoAddOnNewRegistration = null, bool? ShowAtTakenCurriculum = null,
+        bool? ShowInstructorAtRegistration = null, bool? HasCustomExamCurriculum = null,
+        // Phase 2 decision metadata (string? where null = no change; ClearXxx flags allow setting to null)
+        DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
+        bool ClearDecisionDate = false,
+        // Phase 2 description
+        string? CurriculumDescription = null,
+        bool ClearCurriculumDescription = false,
+        // Phase 3 — İntibak (null = no change; ClearPreviousCourse=true → null)
+        int? PreviousCourseId = null,
+        bool ClearPreviousCourse = false);
 
     public record CopyCurriculumRequest(string NewVersion);
 
     public record CurriculumElectivePoolDto(
         int Id, int ElectiveGroupId, string GroupName, string GroupCode,
-        ElectiveSubtype ElectiveSubtype,
+        int ElectiveSubtypeId,
+        string SlotName,
         int SuggestedSemesterStart, int SuggestedSemesterEnd,
-        int RequiredCourseCount, int RequiredEcts, int PoolCourseCount);
+        int RequiredCourseCount, int RequiredEcts,
+        int? EctsPerCourse,
+        int PoolCourseCount);
 
     public record CreatePoolRequest(
         int ElectiveGroupId,
+        string SlotName,
         int SuggestedSemesterStart, int SuggestedSemesterEnd,
-        int RequiredCourseCount, int RequiredEcts);
+        int RequiredCourseCount, int RequiredEcts,
+        int? EctsPerCourse = null);
 
     public record UpdatePoolRequest(
+        string? SlotName = null,
         int? SuggestedSemesterStart = null, int? SuggestedSemesterEnd = null,
-        int? RequiredCourseCount = null, int? RequiredEcts = null);
+        int? RequiredCourseCount = null, int? RequiredEcts = null,
+        int? EctsPerCourse = null,
+        bool ClearEctsPerCourse = false);
 
     // ── GET /api/curriculum?programId=X&departmentId=Y&facultyId=Z ──
     // Filtre önceliği: programId > departmentId > facultyId (en dar olan uygulanır).
@@ -118,6 +166,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 c.Program.Name,
                 c.Program.Code,
                 c.Program.Department.Faculty.Name,
+                c.Program.Department.Name,
                 c.Version,
                 c.Name,
                 c.StartDate,
@@ -126,7 +175,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 c.Status,
                 c.CurriculumCourses.Count,
                 c.CurriculumCourses.Sum(cc => cc.Course.Ects),
-                c.Program.TotalRequiredEcts,
+                c.CurriculumCourses.Sum(cc => cc.Course.NationalCredit ?? 0),
                 c.CurriculumCourses.Count(cc => cc.IsCompulsory),
                 c.CurriculumCourses.Count(cc => !cc.IsCompulsory),
                 context.StudentPrograms.Count(sp => sp.CurriculumId == c.Id && sp.IsActive),
@@ -146,6 +195,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .AsNoTracking()
             .Include(c => c.Program)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Category)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.OpeningReason)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.PreviousCourse)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
         if (curriculum is null)
@@ -179,7 +231,24 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                     cc.SuggestedSemester, cc.IsCompulsory,
                     cc.IncludeInGpa, cc.ShowOnTranscript,
-                    cc.CourseCategory, cc.GroupCode))
+                    cc.CategoryId, cc.Category != null ? cc.Category.Name : null,
+                    cc.OpeningReasonId,
+                    cc.OpeningReason != null ? cc.OpeningReason.Code : null,
+                    cc.OpeningReason != null ? cc.OpeningReason.Name : null,
+                    cc.Course.NationalCredit ?? 0,
+                    // Phase 2 — flags
+                    cc.IsMainGroupCourse, cc.IsFormationCourse,
+                    cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
+                    cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
+                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    // Phase 2 — decision metadata
+                    cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
+                    // Phase 2 — curriculum-specific description
+                    cc.CurriculumDescription,
+                    // Phase 3 — İntibak
+                    cc.PreviousCourseId,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
                 .ToList());
 
         return Ok(dto);
@@ -225,7 +294,7 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
         return Ok(new CurriculumListDto(
             entity.Id, entity.ProgramId, program.Name, program.Code,
-            program.Department.Faculty.Name,
+            program.Department.Faculty.Name, program.Department.Name,
             entity.Version, entity.Name, entity.StartDate, entity.EndDate,
             entity.IsActive, entity.Status,
             0, 0, program.TotalRequiredEcts,
@@ -317,6 +386,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .AsNoTracking()
             .Where(cc => cc.CurriculumId == id)
             .Include(cc => cc.Course)
+            .Include(cc => cc.Category)
+            .Include(cc => cc.OpeningReason)
+            .Include(cc => cc.PreviousCourse)
             .OrderBy(cc => cc.SuggestedSemester)
             .ThenBy(cc => cc.Course.Code)
             .Select(cc => new CurriculumCourseItemDto(
@@ -324,7 +396,22 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                 cc.SuggestedSemester, cc.IsCompulsory,
                 cc.IncludeInGpa, cc.ShowOnTranscript,
-                cc.CourseCategory, cc.GroupCode))
+                cc.CategoryId, cc.Category != null ? cc.Category.Name : null,
+                cc.OpeningReasonId,
+                cc.OpeningReason != null ? cc.OpeningReason.Code : null,
+                cc.OpeningReason != null ? cc.OpeningReason.Name : null,
+                cc.Course.NationalCredit ?? 0,
+                // Phase 2
+                cc.IsMainGroupCourse, cc.IsFormationCourse,
+                cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
+                cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
+                cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
+                cc.CurriculumDescription,
+                // Phase 3
+                cc.PreviousCourseId,
+                cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
+                cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
             .ToListAsync(ct);
 
         return Ok(courses);
@@ -354,6 +441,17 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         if (alreadyExists)
             return BadRequest(new { message = "Bu ders müfredatta zaten mevcut." });
 
+        // Phase 3 — İntibak validation
+        if (req.PreviousCourseId.HasValue)
+        {
+            if (req.PreviousCourseId.Value == req.CourseId)
+                return BadRequest(new { message = "Bir ders kendisinin önceki dersi olamaz." });
+            var prevExists = await context.Set<Domain.Entities.Course>()
+                .AnyAsync(c => c.Id == req.PreviousCourseId.Value, ct);
+            if (!prevExists)
+                return NotFound(new { message = "İntibak için seçilen önceki ders bulunamadı." });
+        }
+
         var entity = new Domain.Entities.CurriculumCourse
         {
             CurriculumId = id,
@@ -362,19 +460,60 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             IsCompulsory = req.IsCompulsory,
             IncludeInGpa = req.IncludeInGpa,
             ShowOnTranscript = req.ShowOnTranscript,
-            CourseCategory = req.CourseCategory,
-            GroupCode = req.GroupCode
+            CategoryId = req.CategoryId,
+            OpeningReasonId = req.OpeningReasonId,
+            // Phase 2 flags
+            IsMainGroupCourse = req.IsMainGroupCourse,
+            IsFormationCourse = req.IsFormationCourse,
+            ExcludedFromCreditTotal = req.ExcludedFromCreditTotal,
+            ExcludedFromTranscriptTotal = req.ExcludedFromTranscriptTotal,
+            AutoAddOnNewRegistration = req.AutoAddOnNewRegistration,
+            ShowAtTakenCurriculum = req.ShowAtTakenCurriculum,
+            ShowInstructorAtRegistration = req.ShowInstructorAtRegistration,
+            HasCustomExamCurriculum = req.HasCustomExamCurriculum,
+            // Phase 2 decision metadata
+            DecisionDate = req.DecisionDate,
+            DecisionNo = req.DecisionNo,
+            DecisionNote = req.DecisionNote,
+            // Phase 2 description
+            CurriculumDescription = req.CurriculumDescription,
+            // Phase 3 — İntibak
+            PreviousCourseId = req.PreviousCourseId,
         };
 
         context.CurriculumCourses.Add(entity);
         await context.SaveChangesAsync(ct);
 
+        // Re-fetch to populate navigation names for the response
+        var saved = await context.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Course)
+            .Include(cc => cc.Category)
+            .Include(cc => cc.OpeningReason)
+            .Include(cc => cc.PreviousCourse)
+            .FirstAsync(cc => cc.CurriculumId == id && cc.CourseId == req.CourseId, ct);
+
         return Ok(new CurriculumCourseItemDto(
-            course.Id, course.Code, course.Name,
-            course.Ects, course.TheoryHours, course.LabHours,
-            req.SuggestedSemester, req.IsCompulsory,
-            req.IncludeInGpa, req.ShowOnTranscript,
-            req.CourseCategory, req.GroupCode));
+            saved.CourseId, saved.Course.Code, saved.Course.Name,
+            saved.Course.Ects, saved.Course.TheoryHours, saved.Course.LabHours,
+            saved.SuggestedSemester, saved.IsCompulsory,
+            saved.IncludeInGpa, saved.ShowOnTranscript,
+            saved.CategoryId, saved.Category != null ? saved.Category.Name : null,
+            saved.OpeningReasonId,
+            saved.OpeningReason != null ? saved.OpeningReason.Code : null,
+            saved.OpeningReason != null ? saved.OpeningReason.Name : null,
+            saved.Course.NationalCredit ?? 0,
+            // Phase 2
+            saved.IsMainGroupCourse, saved.IsFormationCourse,
+            saved.ExcludedFromCreditTotal, saved.ExcludedFromTranscriptTotal,
+            saved.AutoAddOnNewRegistration, saved.ShowAtTakenCurriculum,
+            saved.ShowInstructorAtRegistration, saved.HasCustomExamCurriculum,
+            saved.DecisionDate, saved.DecisionNo, saved.DecisionNote,
+            saved.CurriculumDescription,
+            // Phase 3
+            saved.PreviousCourseId,
+            saved.PreviousCourse != null ? saved.PreviousCourse.Code : null,
+            saved.PreviousCourse != null ? saved.PreviousCourse.Name : null));
     }
 
     // ── PUT /api/curriculum/{id}/courses/{courseId} ──────────────────
@@ -400,10 +539,48 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             cc.IncludeInGpa = req.IncludeInGpa.Value;
         if (req.ShowOnTranscript.HasValue)
             cc.ShowOnTranscript = req.ShowOnTranscript.Value;
-        if (req.CourseCategory is not null)
-            cc.CourseCategory = req.CourseCategory;
-        if (req.GroupCode is not null)
-            cc.GroupCode = req.GroupCode;
+
+        if (req.ClearCategory) cc.CategoryId = null;
+        else if (req.CategoryId.HasValue) cc.CategoryId = req.CategoryId;
+
+        if (req.ClearOpeningReason) cc.OpeningReasonId = null;
+        else if (req.OpeningReasonId.HasValue) cc.OpeningReasonId = req.OpeningReasonId;
+
+        // Phase 2 — flags
+        if (req.IsMainGroupCourse.HasValue) cc.IsMainGroupCourse = req.IsMainGroupCourse.Value;
+        if (req.IsFormationCourse.HasValue) cc.IsFormationCourse = req.IsFormationCourse.Value;
+        if (req.ExcludedFromCreditTotal.HasValue) cc.ExcludedFromCreditTotal = req.ExcludedFromCreditTotal.Value;
+        if (req.ExcludedFromTranscriptTotal.HasValue) cc.ExcludedFromTranscriptTotal = req.ExcludedFromTranscriptTotal.Value;
+        if (req.AutoAddOnNewRegistration.HasValue) cc.AutoAddOnNewRegistration = req.AutoAddOnNewRegistration.Value;
+        if (req.ShowAtTakenCurriculum.HasValue) cc.ShowAtTakenCurriculum = req.ShowAtTakenCurriculum.Value;
+        if (req.ShowInstructorAtRegistration.HasValue) cc.ShowInstructorAtRegistration = req.ShowInstructorAtRegistration.Value;
+        if (req.HasCustomExamCurriculum.HasValue) cc.HasCustomExamCurriculum = req.HasCustomExamCurriculum.Value;
+
+        // Phase 2 — decision metadata
+        if (req.ClearDecisionDate) cc.DecisionDate = null;
+        else if (req.DecisionDate.HasValue) cc.DecisionDate = req.DecisionDate;
+        if (req.DecisionNo is not null) cc.DecisionNo = req.DecisionNo;
+        if (req.DecisionNote is not null) cc.DecisionNote = req.DecisionNote;
+
+        // Phase 2 — curriculum-specific description
+        if (req.ClearCurriculumDescription) cc.CurriculumDescription = null;
+        else if (req.CurriculumDescription is not null) cc.CurriculumDescription = req.CurriculumDescription;
+
+        // Phase 3 — İntibak (önceki ders, müfredata özel)
+        if (req.ClearPreviousCourse)
+        {
+            cc.PreviousCourseId = null;
+        }
+        else if (req.PreviousCourseId.HasValue)
+        {
+            if (req.PreviousCourseId.Value == cc.CourseId)
+                return BadRequest(new { message = "Bir ders kendisinin önceki dersi olamaz." });
+            var prevExists = await context.Set<Domain.Entities.Course>()
+                .AnyAsync(c => c.Id == req.PreviousCourseId.Value, ct);
+            if (!prevExists)
+                return NotFound(new { message = "İntibak için seçilen önceki ders bulunamadı." });
+            cc.PreviousCourseId = req.PreviousCourseId;
+        }
 
         await context.SaveChangesAsync(ct);
 
@@ -482,9 +659,25 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 IsCompulsory = cc.IsCompulsory,
                 IncludeInGpa = cc.IncludeInGpa,
                 ShowOnTranscript = cc.ShowOnTranscript,
-                CourseCategory = cc.CourseCategory,
-                OpeningReason = cc.OpeningReason,
-                GroupCode = cc.GroupCode
+                CategoryId = cc.CategoryId,
+                OpeningReasonId = cc.OpeningReasonId,
+                // Phase 2 — flags
+                IsMainGroupCourse = cc.IsMainGroupCourse,
+                IsFormationCourse = cc.IsFormationCourse,
+                ExcludedFromCreditTotal = cc.ExcludedFromCreditTotal,
+                ExcludedFromTranscriptTotal = cc.ExcludedFromTranscriptTotal,
+                AutoAddOnNewRegistration = cc.AutoAddOnNewRegistration,
+                ShowAtTakenCurriculum = cc.ShowAtTakenCurriculum,
+                ShowInstructorAtRegistration = cc.ShowInstructorAtRegistration,
+                HasCustomExamCurriculum = cc.HasCustomExamCurriculum,
+                // Phase 2 — decision metadata
+                DecisionDate = cc.DecisionDate,
+                DecisionNo = cc.DecisionNo,
+                DecisionNote = cc.DecisionNote,
+                // Phase 2 — curriculum-specific description
+                CurriculumDescription = cc.CurriculumDescription,
+                // Phase 3 — İntibak (preserve predecessor link in copied curriculum)
+                PreviousCourseId = cc.PreviousCourseId,
             });
         }
 
@@ -495,6 +688,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .AsNoTracking()
             .Include(c => c.Program)
             .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Course)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.Category)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.OpeningReason)
+            .Include(c => c.CurriculumCourses).ThenInclude(cc => cc.PreviousCourse)
             .FirstAsync(c => c.Id == newCurriculum.Id, ct);
 
         return Ok(new CurriculumDetailDto(
@@ -525,7 +721,24 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                     cc.Course.Ects, cc.Course.TheoryHours, cc.Course.LabHours,
                     cc.SuggestedSemester, cc.IsCompulsory,
                     cc.IncludeInGpa, cc.ShowOnTranscript,
-                    cc.CourseCategory, cc.GroupCode))
+                    cc.CategoryId, cc.Category != null ? cc.Category.Name : null,
+                    cc.OpeningReasonId,
+                    cc.OpeningReason != null ? cc.OpeningReason.Code : null,
+                    cc.OpeningReason != null ? cc.OpeningReason.Name : null,
+                    cc.Course.NationalCredit ?? 0,
+                    // Phase 2 — flags
+                    cc.IsMainGroupCourse, cc.IsFormationCourse,
+                    cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
+                    cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
+                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    // Phase 2 — decision metadata
+                    cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
+                    // Phase 2 — curriculum-specific description
+                    cc.CurriculumDescription,
+                    // Phase 3 — İntibak
+                    cc.PreviousCourseId,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
+                    cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
                 .ToList()));
     }
 
@@ -573,9 +786,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
             .OrderBy(p => p.SuggestedSemesterStart)
             .Select(p => new CurriculumElectivePoolDto(
                 p.Id, p.ElectiveGroupId, p.ElectiveGroup.Name, p.ElectiveGroup.Code,
-                p.ElectiveGroup.ElectiveSubtype,
+                p.ElectiveGroup.ElectiveSubtypeId,
+                p.SlotName,
                 p.SuggestedSemesterStart, p.SuggestedSemesterEnd,
                 p.RequiredCourseCount, p.RequiredEcts,
+                p.EctsPerCourse,
                 p.ElectiveGroup.Courses.Count))
             .ToListAsync(ct);
 
@@ -587,14 +802,19 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [RequirePermission("menu.mufredat-islemleri.create-pool")]
     public async Task<IActionResult> CreatePool(int id, [FromBody] CreatePoolRequest req, CancellationToken ct)
     {
-        // Madde 8: Published müfredat kilit
-        var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        // Madde 8: Published müfredat kilit + scope ladder validation için Program/Department include'u
+        var curr = await context.Curricula
+            .Include(c => c.Program)
+                .ThenInclude(p => p.Department)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
         if (curr is null)
             return NotFound(new { message = "Müfredat bulunamadı." });
         if (curr.Status == Domain.Enums.CurriculumStatus.Published)
             return BadRequest(new { message = "Yayındaki müfredata havuz eklenemez. Yeni sürüm oluşturun." });
         if (curr.Status == Domain.Enums.CurriculumStatus.Archived)
             return BadRequest(new { message = "Arşiv durumundaki müfredat değiştirilemez." });
+        if (curr.Program?.Department is null)
+            return BadRequest(new { message = "Müfredata bağlı program/bölüm bilgisi yüklenemedi." });
 
         var group = await context.ElectiveGroups
             .Include(eg => eg.Courses)
@@ -602,22 +822,39 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         if (group is null)
             return NotFound(new { message = "Seçmeli ders grubu bulunamadı." });
 
+        // Scope ladder validation: havuz scope'u müfredatın hiyerarşisinde eşit veya daha geniş olmalı
+        var facultyId = curr.Program.Department.FacultyId;
+        var departmentId = curr.Program.DepartmentId;
+        var scopeResult = scopeValidator.CanBind(group, facultyId, departmentId);
+        if (!scopeResult.IsValid)
+            return BadRequest(new { message = scopeResult.ErrorMessage });
+
         if (req.RequiredCourseCount <= 0 && req.RequiredEcts <= 0)
             return BadRequest(new { message = "Gerekli ders sayısı veya AKTS en az biri 0'dan büyük olmalıdır." });
 
-        var alreadyExists = await context.CurriculumElectivePools
-            .AnyAsync(p => p.CurriculumId == id && p.ElectiveGroupId == req.ElectiveGroupId, ct);
-        if (alreadyExists)
-            return BadRequest(new { message = "Bu müfredatta bu seçmeli grubu zaten tanımlı." });
+        // SlotName validation + uniqueness via shared helper
+        var (trimmedSlot, slotError) = await ValidateAndResolveSlotNameAsync(
+            curriculumId: id,
+            electiveGroupId: req.ElectiveGroupId,
+            slotName: req.SlotName,
+            excludePoolId: null,
+            ct: ct);
+        if (slotError != null) return slotError;
+
+        // EctsPerCourse non-negative
+        if (req.EctsPerCourse.HasValue && req.EctsPerCourse.Value < 0)
+            return BadRequest(new { message = "AKTS değeri negatif olamaz." });
 
         var entity = new Domain.Entities.CurriculumElectivePool
         {
             CurriculumId = id,
             ElectiveGroupId = req.ElectiveGroupId,
+            SlotName = trimmedSlot!,
             SuggestedSemesterStart = req.SuggestedSemesterStart,
             SuggestedSemesterEnd = req.SuggestedSemesterEnd,
             RequiredCourseCount = req.RequiredCourseCount,
             RequiredEcts = req.RequiredEcts,
+            EctsPerCourse = req.EctsPerCourse,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -626,9 +863,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
 
         return Ok(new CurriculumElectivePoolDto(
             entity.Id, entity.ElectiveGroupId, group.Name, group.Code,
-            group.ElectiveSubtype,
+            group.ElectiveSubtypeId,
+            entity.SlotName,
             entity.SuggestedSemesterStart, entity.SuggestedSemesterEnd,
             entity.RequiredCourseCount, entity.RequiredEcts,
+            entity.EctsPerCourse,
             group.Courses.Count));
     }
 
@@ -637,6 +876,11 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     [RequirePermission("menu.mufredat-islemleri.edit-pool")]
     public async Task<IActionResult> UpdatePool(int id, int poolId, [FromBody] UpdatePoolRequest req, CancellationToken ct)
     {
+        // NOT: UpdatePool'da scope ladder validation YOK çünkü UpdatePoolRequest ElectiveGroupId
+        // alanı içermiyor — havuz değişmez, sadece SuggestedSemester/RequiredCourseCount/Ects
+        // güncellenebilir. Eğer ileride ElectiveGroupId değiştirilebilir hale gelirse,
+        // CreatePool'daki scope check buraya da eklenmelidir.
+
         // Madde 8: Published müfredat kilit
         var curr = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (curr is not null && curr.Status == Domain.Enums.CurriculumStatus.Published)
@@ -647,10 +891,35 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         if (pool is null)
             return NotFound(new { message = "Seçmeli havuz bulunamadı." });
 
+        // SlotName değişiyorsa validation + uniqueness check
+        if (req.SlotName != null && req.SlotName.Trim() != pool.SlotName)
+        {
+            var (newSlot, slotError) = await ValidateAndResolveSlotNameAsync(
+                curriculumId: pool.CurriculumId,
+                electiveGroupId: pool.ElectiveGroupId,
+                slotName: req.SlotName,
+                excludePoolId: poolId,
+                ct: ct);
+            if (slotError != null) return slotError;
+            pool.SlotName = newSlot!;
+        }
+
         if (req.SuggestedSemesterStart.HasValue) pool.SuggestedSemesterStart = req.SuggestedSemesterStart.Value;
         if (req.SuggestedSemesterEnd.HasValue) pool.SuggestedSemesterEnd = req.SuggestedSemesterEnd.Value;
         if (req.RequiredCourseCount.HasValue) pool.RequiredCourseCount = req.RequiredCourseCount.Value;
         if (req.RequiredEcts.HasValue) pool.RequiredEcts = req.RequiredEcts.Value;
+
+        // EctsPerCourse: ClearEctsPerCourse=true → null; aksi halde value varsa atanır
+        if (req.ClearEctsPerCourse)
+        {
+            pool.EctsPerCourse = null;
+        }
+        else if (req.EctsPerCourse.HasValue)
+        {
+            if (req.EctsPerCourse.Value < 0)
+                return BadRequest(new { message = "AKTS değeri negatif olamaz." });
+            pool.EctsPerCourse = req.EctsPerCourse;
+        }
 
         pool.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(ct);
@@ -832,8 +1101,12 @@ public class CurriculumController(AppDbContext context) : ControllerBase
     }
 
     // ── Madde 17: Öğrencinin havuz tamamlama durumu ──────────────
+    // Faz C C5: SlotName + Faz C C4: SuggestedSemesterStart/End eklendi.
+    // Faz E: deprecated Subtype string field kaldırıldı (frontend zaten kullanmıyordu).
     public record PoolProgressDto(
-        int PoolId, string PoolCode, string PoolName, string Subtype,
+        int PoolId, string PoolCode, string PoolName,
+        string SlotName,
+        int SuggestedSemesterStart, int SuggestedSemesterEnd,
         int RequiredCourseCount, int CompletedCourseCount,
         int RequiredEcts, int EarnedEcts,
         int? EctsPerCourse,
@@ -880,7 +1153,9 @@ public class CurriculumController(AppDbContext context) : ControllerBase
                 p.Id,
                 p.ElectiveGroup.Code,
                 p.ElectiveGroup.Name,
-                p.ElectiveGroup.ElectiveSubtype.ToString(),
+                p.SlotName,
+                p.SuggestedSemesterStart,
+                p.SuggestedSemesterEnd,
                 p.RequiredCourseCount,
                 completedCount,
                 p.RequiredEcts,
@@ -890,5 +1165,36 @@ public class CurriculumController(AppDbContext context) : ControllerBase
         }).ToList();
 
         return Ok(result);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Slot adı doğrulaması + (curriculumId, electiveGroupId, slotName) uniqueness kontrolü.
+    /// Geçerliyse trimmed slot adını döner. Geçersizse BadRequestObjectResult döner.
+    /// </summary>
+    /// <param name="excludePoolId">Update senaryosunda kendi kaydını dışla (Create için null).</param>
+    private async Task<(string? Trimmed, IActionResult? Error)> ValidateAndResolveSlotNameAsync(
+        int curriculumId,
+        int electiveGroupId,
+        string? slotName,
+        int? excludePoolId,
+        CancellationToken ct)
+    {
+        var trimmed = slotName?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmed))
+            return (null, new BadRequestObjectResult(new { message = "Slot adı boş olamaz." }));
+        if (trimmed.Length > 50)
+            return (null, new BadRequestObjectResult(new { message = "Slot adı 50 karakterden uzun olamaz." }));
+
+        var conflict = await context.CurriculumElectivePools
+            .AnyAsync(p => p.CurriculumId == curriculumId
+                      && p.ElectiveGroupId == electiveGroupId
+                      && p.SlotName == trimmed
+                      && (excludePoolId == null || p.Id != excludePoolId.Value), ct);
+        if (conflict)
+            return (null, new BadRequestObjectResult(new { message = $"'{trimmed}' adlı slot bu havuza zaten bağlı." }));
+
+        return (trimmed, null);
     }
 }

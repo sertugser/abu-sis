@@ -28,11 +28,27 @@ public class CourseRegistration
     public int? EctsSnapshot { get; set; }
 
     /// <summary>
+    /// Kayıt anında donan ulusal kredi (NationalCredit) değeri. EctsSnapshot ile aynı grandfathering mantığı:
+    /// transkript / YÖKSİS raporu burada okur, dersin katalog kredisi sonradan değişse bile geçmiş kayıtlar etkilenmez.
+    /// Null ise dersin katalog NationalCredit değeri kullanılır (snapshot pattern'i öncesi kayıtlar için geriye uyumlu).
+    /// </summary>
+    public int? CreditSnapshot { get; set; }
+
+    /// <summary>
     /// Bu kayıt hangi CurriculumElectivePool'a karşılık geliyor (null = zorunlu veya tekil seçmeli).
     /// Havuz tamamlama kontrolü ve mezuniyet denetimi için kullanılır.
     /// </summary>
     public int? AppliedElectivePoolId { get; set; }
     public CurriculumElectivePool? AppliedElectivePool { get; set; }
+
+    /// <summary>
+    /// Faz 4 — Kayıt anında donan Açma Nedeni id'si. CurriculumCourse.OpeningReasonId'den gelir.
+    /// GPA/limit/çakışma/onay servisleri bu snapshot'tan reason → flag'leri okur — admin reason silse
+    /// veya değiştirse de geçmiş kayıtlarda id korunur. Null = bu reason ile kayıt yapılmamış (eski kayıtlar
+    /// için geriye uyumlu, hiçbir flag etkili değil).
+    /// </summary>
+    public int? OpeningReasonIdSnapshot { get; set; }
+    public CurriculumCourseOpeningReason? OpeningReasonSnapshot { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

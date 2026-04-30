@@ -1,5 +1,37 @@
 // ── Response Types ──
 
+export interface PoolSlotForOpeningDto {
+  poolId: number;
+  slotName: string;
+  electiveGroupId: number;
+  electiveGroupName: string;
+  /** ElectiveSubtype.Code — TE / NDE / OC / custom; renk için kullanılır. */
+  subtypeCode: string;
+  subtypeName: string;
+  suggestedSemesterStart: number;
+  suggestedSemesterEnd: number;
+  /** Havuz override AKTS. Null ise her aday dersin kendi katalog AKTS'si geçerli. */
+  ectsPerCourse: number | null;
+  candidateCount: number;
+  /** Aday dersler arasında verilen termId'de en az 1 aktif şubeye sahip olanların sayısı. */
+  openedCandidateCount: number;
+}
+
+export interface PoolCandidateDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  theoryHours: number;
+  labHours: number;
+  nationalCredit: number | null;
+  ects: number;
+  alreadyOpened: boolean;
+  existingSectionCount: number;
+  canOpen: boolean;
+  blockReason: 'TermNotInPlanning' | 'NotOwner' | 'CourseUnassigned' | null;
+}
+
+
 export interface OpenedCourseSectionDto {
   sectionId: number;
   sectionNumber: number;
@@ -46,6 +78,7 @@ export interface CurriculumCourseForOpeningDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
+  nationalCredit?: number | null;
   ects: number;
   suggestedSemester: number;
   isCompulsory: boolean;
@@ -69,8 +102,6 @@ export interface CurriculumCourseForOpeningDto {
   electiveGroupCode?: string | null;
   /** Havuz adı — "Bölüm Dışı Seçmeli". */
   electiveGroupName?: string | null;
-  /** Havuz alt türü — "NDE" / "TechnicalElective" / "UniversityElective" / "DepartmentalElective". */
-  electiveSubtype?: string | null;
 }
 
 export interface InstructorOptionDto {
@@ -131,6 +162,7 @@ export interface PreviousTermCourseDto {
   courseCode: string;
   courseName: string;
   ects: number;
+  credits: number;
   suggestedSemester: number;
   isCompulsory: boolean;
   sectionCount: number;
@@ -138,6 +170,13 @@ export interface PreviousTermCourseDto {
   instructorName: string | null;
   instructorId: number | null;
   alreadyOpened: boolean;
+  totalEnrolled: number;
+  predictedDemand: number | null;
+  sourceInternalQuota: number | null;
+  sourceExternalQuota: number | null;
+  sourceAccessibleDepartmentIds: number[] | null;
+  hasCrossLists: boolean;
+  hasSchedule: boolean;
 }
 
 export interface TransferCourseItem {
@@ -145,6 +184,11 @@ export interface TransferCourseItem {
   sectionCount?: number;
   capacityPerSection?: number;
   instructorId?: number | null;
+  internalQuota?: number | null;
+  externalQuota?: number | null;
+  accessibleDepartmentIds?: number[] | null;
+  includeCrossLists?: boolean;
+  includeSchedule?: boolean;
 }
 
 export interface TransferFromTermRequest {
@@ -161,6 +205,8 @@ export interface TransferCourseResultItem {
   success: boolean;
   error?: string;
   sectionsCreated: number;
+  warnings: string[];
+  incidentId?: string;
 }
 
 export interface TransferFromTermResultDto {
@@ -168,6 +214,11 @@ export interface TransferFromTermResultDto {
   failedCount: number;
   totalSectionsCreated: number;
   results: TransferCourseResultItem[];
+}
+
+export interface TransferDefaultsDto {
+  defaultCapacityPerSection: number;
+  maxSectionsPerCourse: number;
 }
 
 // ── Instructor Workload ──

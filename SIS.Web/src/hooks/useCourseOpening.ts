@@ -5,6 +5,8 @@ import {
   getDepartmentInstructors,
   getInstructorWorkload,
   getExternalCourses,
+  getPoolSlotsForOpening,
+  getPoolCandidates,
   openCourse,
   bulkOpenCourses,
   updateOpenedSection,
@@ -14,6 +16,7 @@ import {
   bulkAssignInstructor,
   getPreviousTermCourses,
   transferFromTerm,
+  getTransferDefaults,
 } from '../api/courseOpening.api';
 import { QUERY_KEYS } from '../lib/constants';
 import type { OpenCourseRequest, BulkOpenCoursesRequest, UpdateOpenedSectionRequest, BulkAssignInstructorRequest, TransferFromTermRequest } from '../types/courseOpening';
@@ -27,12 +30,41 @@ export function useOpenedCourses(departmentId: number | null, termId: number | n
   });
 }
 
-export function useCurriculumCoursesForOpening(departmentId: number | null, termId: number | null, showAll = false) {
+export function useCurriculumCoursesForOpening(
+  departmentId: number | null,
+  termId: number | null,
+  showAll = false,
+  curriculumId: number | null = null,
+  includeUnmapped = false,
+) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.curriculumCoursesForOpening(departmentId ?? 0, termId ?? 0), showAll],
-    queryFn: () => getCurriculumCoursesForOpening(departmentId!, termId!, showAll),
+    queryKey: [
+      ...QUERY_KEYS.curriculumCoursesForOpening(departmentId ?? 0, termId ?? 0),
+      showAll,
+      curriculumId,
+      includeUnmapped,
+    ],
+    queryFn: () => getCurriculumCoursesForOpening(departmentId!, termId!, { showAll, curriculumId, includeUnmapped }),
     enabled: departmentId !== null && termId !== null,
     staleTime: 60 * 1000,
+  });
+}
+
+export function usePoolSlotsForOpening(curriculumId: number | null, termId: number | null) {
+  return useQuery({
+    queryKey: ['courseOpening', 'poolSlots', curriculumId, termId],
+    queryFn: () => getPoolSlotsForOpening(curriculumId!, termId!),
+    enabled: curriculumId !== null && termId !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function usePoolCandidates(poolId: number | null, termId: number | null) {
+  return useQuery({
+    queryKey: ['courseOpening', 'poolCandidates', poolId, termId],
+    queryFn: () => getPoolCandidates(poolId!, termId!),
+    enabled: poolId !== null && termId !== null,
+    staleTime: 30 * 1000,
   });
 }
 
@@ -120,10 +152,23 @@ export function usePreviousTermCourses(
   departmentId: number | null,
   sourceTermId: number | null,
   targetTermId: number | null,
+  filter?: { programId?: number | null; classLevel?: number | null },
 ) {
   return useQuery({
-    queryKey: ['courseOpening', 'previousTerm', departmentId, sourceTermId, targetTermId],
-    queryFn: () => getPreviousTermCourses(departmentId!, sourceTermId!, targetTermId!),
+    queryKey: [
+      'courseOpening',
+      'previousTerm',
+      departmentId,
+      sourceTermId,
+      targetTermId,
+      filter?.programId ?? null,
+      filter?.classLevel ?? null,
+    ],
+    queryFn: () =>
+      getPreviousTermCourses(departmentId!, sourceTermId!, targetTermId!, {
+        programId: filter?.programId,
+        classLevel: filter?.classLevel,
+      }),
     enabled: departmentId !== null && sourceTermId !== null && targetTermId !== null,
     staleTime: 60 * 1000,
   });
@@ -138,6 +183,14 @@ export function useTransferFromTerm(departmentId: number, targetTermId: number) 
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, targetTermId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
     },
+  });
+}
+
+export function useTransferDefaults() {
+  return useQuery({
+    queryKey: ['courseOpening', 'transferDefaults'],
+    queryFn: getTransferDefaults,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

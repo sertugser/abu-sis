@@ -326,10 +326,24 @@ public class CourseRegistrationService : ICourseRegistrationService
                 && cr.CourseSection.CourseId == section.CourseId
                 && RegistrationRulePolicy.IsPassedGrade(cr.Grade));
 
-        // Madde 6 tamamlama: AKTS snapshot + havuz atamasını çöz ve kayıt satırına yaz
-        var (snapshotEcts, appliedPoolId) = await ResolveEctsSnapshotAsync(studentId, section.CourseId);
+        // Madde 6 tamamlama: AKTS + kredi snapshot + havuz ataması + (Faz 4) Açma Nedeni id snapshot
+        var (snapshotEcts, snapshotCredit, appliedPoolId, openingReasonIdSnapshot) = await ResolveCourseSnapshotsAsync(studentId, section.CourseId);
         registration.EctsSnapshot = snapshotEcts;
+        registration.CreditSnapshot = snapshotCredit;
         registration.AppliedElectivePoolId = appliedPoolId;
+        registration.OpeningReasonIdSnapshot = openingReasonIdSnapshot;
+
+        // Faz 4 — Açma Nedeni BypassMandatoryAttendance=true ise devam zorunluluğunu zorla false yap.
+        // Bu ders için OpeningReason "Dönemsel (Teorik)" gibi bypass flag'liyse, alttan tekrar bile olsa
+        // attendance zorunlu sayılmaz. Madde 7 implement edildiğinde bu override geçerli kalır.
+        if (openingReasonIdSnapshot.HasValue)
+        {
+            var bypassAttendance = await _context.CurriculumCourseOpeningReasons
+                .AsNoTracking()
+                .AnyAsync(r => r.Id == openingReasonIdSnapshot.Value && r.BypassMandatoryAttendance);
+            if (bypassAttendance)
+                registration.MandatoryAttendance = false;
+        }
 
         // === KRİTİK BÖLGE: Serializable transaction + fresh kapasite kontrolü + increment ===
         // Eş zamanlı kayıt çakışmasını önler (B1), kapasite kontrolünü atomik yapar (B3+B4).
@@ -534,10 +548,22 @@ public class CourseRegistrationService : ICourseRegistrationService
                         _context.CourseRegistrations.Add(reg);
                     }
 
-                    // Madde 6 tamamlama: AKTS snapshot + havuz atamasını burada da çöz
-                    var (snapshotEcts, appliedPoolId) = await ResolveEctsSnapshotAsync(studentId, section.CourseId);
+                    // Madde 6 tamamlama: AKTS + kredi snapshot + havuz ataması + (Faz 4) Açma Nedeni id snapshot
+                    var (snapshotEcts, snapshotCredit, appliedPoolId, openingReasonIdSnapshot) = await ResolveCourseSnapshotsAsync(studentId, section.CourseId);
                     reg.EctsSnapshot = snapshotEcts;
+                    reg.CreditSnapshot = snapshotCredit;
                     reg.AppliedElectivePoolId = appliedPoolId;
+                    reg.OpeningReasonIdSnapshot = openingReasonIdSnapshot;
+
+                    // Faz 4 — BypassMandatoryAttendance flag'i: bu ders için devam zorunluluğunu false zorla.
+                    if (openingReasonIdSnapshot.HasValue)
+                    {
+                        var bypassAttendance = await _context.CurriculumCourseOpeningReasons
+                            .AsNoTracking()
+                            .AnyAsync(r => r.Id == openingReasonIdSnapshot.Value && r.BypassMandatoryAttendance);
+                        if (bypassAttendance)
+                            reg.MandatoryAttendance = false;
+                    }
 
                     section.EnrolledCount++;
                     registrations.Add(reg);
@@ -1684,12 +1710,14 @@ public class CourseRegistrationService : ICourseRegistrationService
     };
 
     /// <summary>
-    /// Bir dersin öğrencinin müfredatındaki AKTS değerini ve (varsa) hangi havuza sayılacağını çözer.
-    /// Zorunlu/tekil seçmeli → katalog AKTS, havuz üyesi → havuzun EctsPerCourse (null ise katalog),
-    /// müfredat dışı → katalog AKTS + null havuz.
-    /// Kayıt anında bu değer EctsSnapshot ve AppliedElectivePoolId alanlarına donar.
+    /// Bir dersin öğrencinin müfredatındaki AKTS + ulusal kredi değerini, (varsa) hangi havuza sayılacağını,
+    /// ve (Faz 4) müfredat satırına atanmış Açma Nedeni id'sini çözer.
+    /// Zorunlu/tekil seçmeli → katalog AKTS + katalog kredi + null havuz + müfredat satırının OpeningReasonId'si,
+    /// havuz üyesi → havuzun EctsPerCourse (varsa) + katalog kredi + havuz id + null reason,
+    /// müfredat dışı → katalog AKTS + katalog kredi + null havuz + null reason.
+    /// Kayıt anında bu dört değer EctsSnapshot, CreditSnapshot, AppliedElectivePoolId, OpeningReasonIdSnapshot alanlarına donar.
     /// </summary>
-    private async Task<(int? ectsSnapshot, int? appliedPoolId)> ResolveEctsSnapshotAsync(
+    private async Task<(int? ectsSnapshot, int? creditSnapshot, int? appliedPoolId, int? openingReasonIdSnapshot)> ResolveCourseSnapshotsAsync(
         int studentId, int courseId, CancellationToken ct = default)
     {
         var activeProgram = await _context.StudentPrograms
@@ -1700,15 +1728,18 @@ public class CourseRegistrationService : ICourseRegistrationService
         var catalogCourse = await _context.Courses.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == courseId, ct);
         var catalogEcts = catalogCourse?.Ects ?? 0;
+        var catalogCredit = catalogCourse?.NationalCredit;
 
         if (activeProgram == null)
-            return (catalogEcts, null);
+            return (catalogEcts, catalogCredit, null, null);
 
         // 1) Direkt müfredat ataması (zorunlu veya tekil seçmeli)
-        var directExists = await _context.CurriculumCourses.AsNoTracking()
-            .AnyAsync(cc => cc.CurriculumId == activeProgram.CurriculumId && cc.CourseId == courseId, ct);
-        if (directExists)
-            return (catalogEcts, null);
+        var direct = await _context.CurriculumCourses.AsNoTracking()
+            .Where(cc => cc.CurriculumId == activeProgram.CurriculumId && cc.CourseId == courseId)
+            .Select(cc => new { cc.OpeningReasonId })
+            .FirstOrDefaultAsync(ct);
+        if (direct != null)
+            return (catalogEcts, catalogCredit, null, direct.OpeningReasonId);
 
         // 2) Müfredatın havuzlarından birinde mi?
         var poolHit = await _context.CurriculumElectivePools.AsNoTracking()
@@ -1719,10 +1750,10 @@ public class CourseRegistrationService : ICourseRegistrationService
         if (poolHit != null)
         {
             var ects = poolHit.EctsPerCourse ?? catalogEcts;
-            return (ects, poolHit.Id);
+            return (ects, catalogCredit, poolHit.Id, null);
         }
 
-        // 3) Müfredat dışı (warning olarak raporlanmıştı) — katalog AKTS
-        return (catalogEcts, null);
+        // 3) Müfredat dışı (warning olarak raporlanmıştı) — katalog AKTS + katalog kredi
+        return (catalogEcts, catalogCredit, null, null);
     }
 }

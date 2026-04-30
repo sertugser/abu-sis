@@ -72,9 +72,9 @@ import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
-import ElectiveGroupManagementPage from './pages/ElectiveGroupManagementPage';
+import ElectiveConfigurationPage from './pages/ElectiveConfigurationPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
-import TermProgramTransferPage from './pages/TermProgramTransferPage';
+import TermProgramTransferPage from './pages/term-program-transfer';
 import CourseEvaluationPage from './pages/CourseEvaluationPage';
 import EvaluationResultsPage from './pages/EvaluationResultsPage';
 import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
@@ -308,9 +308,13 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-islemleri.view" />}>
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.secmeli-ders-gruplari.view" />}>
-                    <Route path="secmeli-ders-gruplari" element={<ElectiveGroupManagementPage />} />
+                  <Route element={<RoleProtectedRoute permission="menu.secmeli-yapilandirma.view" />}>
+                    <Route path="secmeli-yapilandirma" element={<Navigate to="/secmeli-yapilandirma/gruplar" replace />} />
+                    <Route path="secmeli-yapilandirma/:tab" element={<ElectiveConfigurationPage />} />
                   </Route>
+                  {/* Backward-compat redirects (eski deep-link/bookmark) */}
+                  <Route path="secmeli-ders-gruplari" element={<Navigate to="/secmeli-yapilandirma/gruplar" replace />} />
+                  <Route path="secmeli-tipleri" element={<Navigate to="/secmeli-yapilandirma/tipler" replace />} />
                   <Route element={<RoleProtectedRoute permission="menu.ders-veren-ogretim-uyeleri.view" />}>
                     <Route path="ders-veren-ogretim-uyeleri" element={<InstructorCoursesReportPage />} />
                   </Route>
