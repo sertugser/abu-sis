@@ -1,9 +1,10 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, requiresPasswordChange } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -18,6 +19,10 @@ export default function ProtectedRoute() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (requiresPasswordChange && location.pathname !== '/sifre-degistir') {
+    return <Navigate to="/sifre-degistir" replace />;
   }
 
   return <Outlet />;

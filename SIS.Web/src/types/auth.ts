@@ -8,6 +8,9 @@ export interface AuthResponse {
   token: string;
   expiresAt: string;
   roles: string[];
+  requiresPasswordChange: boolean;
+  passwordExpiresAt?: string | null;
+  defaultLanguage: string;
   error?: string;
 }
 
@@ -16,4 +19,19 @@ export interface User {
   name: string;
   email: string;
   roles: string[];
+}
+
+export interface PublicRuntimeSettings {
+  defaultLanguage: string;
+}
+
+export interface SessionRuntimeSettings {
+  defaultLanguage: string;
+  requiresPasswordChange: boolean;
+  passwordExpiresAt?: string | null;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }

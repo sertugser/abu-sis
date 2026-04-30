@@ -5,11 +5,13 @@ using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.Common.DTOs;
+using SIS.Application.Common.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 
 namespace SIS.API.Controllers;
 
@@ -21,12 +23,21 @@ public class StudentController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly IAcademicCalendarRuleService _calendarRuleService;
+    private readonly ISystemConfigProvider _configProvider;
+    private readonly IWebModuleSettingsProvider _webModuleSettingsProvider;
 
-    public StudentController(AppDbContext context, IGpaCalculationService gpaCalculationService, IAcademicCalendarRuleService calendarRuleService)
+    public StudentController(
+        AppDbContext context,
+        IGpaCalculationService gpaCalculationService,
+        IAcademicCalendarRuleService calendarRuleService,
+        ISystemConfigProvider configProvider,
+        IWebModuleSettingsProvider? webModuleSettingsProvider = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _calendarRuleService = calendarRuleService;
+        _configProvider = configProvider;
+        _webModuleSettingsProvider = webModuleSettingsProvider ?? new NullWebModuleSettingsProvider();
     }
 
     /// <summary>
@@ -71,9 +82,7 @@ public class StudentController : ControllerBase
             classYear = Math.Clamp(elapsedYears - frozenYears, 1, maxYears);
         }
 
-        // ECTS limit based on CGPA
-        var ectsLimit = student.Cgpa >= 2.50m ? 48 :
-                        student.Cgpa >= 2.00m ? 42 : 30;
+        var ectsLimit = await _configProvider.GetRegistrationEctsLimitAsync(student.Cgpa);
 
         // Advisor info
         string? advisorName = null;
@@ -628,8 +637,25 @@ public class StudentController : ControllerBase
     /// </summary>
     [HttpGet("transcript")]
     [RequirePermission("menu.transkript.view")]
-    public async Task<IActionResult> GetTranscript()
+    public async Task<IActionResult> GetTranscript([FromQuery] bool forDocument = false, CancellationToken ct = default)
     {
+        if (forDocument)
+        {
+            var documentRequestsEnabled = await _webModuleSettingsProvider.GetBoolAsync(
+                "StudentPanel",
+                "DocumentRequestEnabled",
+                true,
+                ct);
+            if (!documentRequestsEnabled)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    code = "DocumentRequestDisabled",
+                    error = "Belge talebi islemleri su anda kapali.",
+                });
+            }
+        }
+
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
@@ -640,14 +666,14 @@ public class StudentController : ControllerBase
                     .ThenInclude(p => p.Department)
                         .ThenInclude(d => d.Faculty)
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
 
         if (student == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
 
         var user = await _context.Users
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == userId);
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
         if (user == null)
             return NotFound(new { error = "Kullanici bilgisi bulunamadi." });
@@ -666,7 +692,7 @@ public class StudentController : ControllerBase
                 && cr.Grade != null
                 && cr.Status != RegistrationStatus.Draft
                 && cr.Status != RegistrationStatus.Dropped)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var transcriptGradeVisibility = await BuildGradeVisibilityMapAsync(registrations.Select(r => r.CourseSection.TermId));
         registrations = registrations
@@ -687,7 +713,7 @@ public class StudentController : ControllerBase
             : (await _context.CourseEquivalencies
                 .AsNoTracking()
                 .Where(equivalency => courseIds.Contains(equivalency.CourseId))
-                .ToListAsync())
+                .ToListAsync(ct))
                 .GroupBy(equivalency => equivalency.CourseId)
                 .ToDictionary(
                     group => group.Key,

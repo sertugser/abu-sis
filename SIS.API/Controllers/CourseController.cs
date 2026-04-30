@@ -440,9 +440,10 @@ public class CourseController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
 
-        var registrationControl = await GetStudentRegistrationControlAsync();
         var baseRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow);
         var baseAddDropOpen = term.IsAddDropOpen(_clock.UtcNow);
+        var webModuleRegistrationWindowOpen = await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", false);
+        var registrationControl = await GetStudentRegistrationControlAsync(baseRegistrationOpen || baseAddDropOpen || webModuleRegistrationWindowOpen);
 
         var dto = new ActiveTermDto
         {
@@ -454,7 +455,7 @@ public class CourseController : ControllerBase
             RegistrationEnd = term.AcademicCalendar?.RegistrationEnd ?? term.TermStart,
             AddDropStart = term.AcademicCalendar?.AddDropStart ?? term.TermStart,
             AddDropEnd = term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
-            IsRegistrationOpen = baseRegistrationOpen && registrationControl.IsOpen,
+            IsRegistrationOpen = (baseRegistrationOpen || webModuleRegistrationWindowOpen) && registrationControl.IsOpen,
             IsAddDropOpen = baseAddDropOpen && registrationControl.IsOpen,
             Status = term.GetStatus(_clock.UtcNow).ToString(),
             HasAcademicCalendar = term.AcademicCalendar != null,
@@ -466,9 +467,12 @@ public class CourseController : ControllerBase
         return Ok(dto);
     }
 
-    private async Task<StudentRegistrationControl> GetStudentRegistrationControlAsync()
+    private async Task<StudentRegistrationControl> GetStudentRegistrationControlAsync(bool registrationPhaseOpen)
     {
         var enabled = await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", true);
+        if (!registrationPhaseOpen)
+            return new StudentRegistrationControl(enabled, false, null, null);
+
         if (!enabled)
             return new StudentRegistrationControl(false, false, null, "Ders kayıt işlemleri web modül ayarlarından kapatılmıştır.");
 

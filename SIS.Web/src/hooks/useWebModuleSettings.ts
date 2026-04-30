@@ -33,6 +33,11 @@ export function useUpdateWebModuleSetting() {
     ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.webModuleSettings });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentInfo });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.myRegistrations });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentCatalog });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive });
       qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },
   });
@@ -45,6 +50,11 @@ export function useImportWebModuleSettings() {
     mutationFn: (payload: unknown) => importWebModuleSettings(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.webModuleSettings });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentInfo });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.myRegistrations });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentCatalog });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive });
       qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },
   });

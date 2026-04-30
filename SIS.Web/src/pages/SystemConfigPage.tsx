@@ -190,7 +190,6 @@ export default function SystemConfigPage() {
                 <TableRow>
                   <TableHead>Ayar</TableHead>
                   <TableHead>Değer</TableHead>
-                  <TableHead className="w-20">Tip</TableHead>
                   <TableHead className="w-32 text-right">İşlem</TableHead>
                 </TableRow>
               </TableHeader>
@@ -357,16 +356,10 @@ function ConfigRow({
     <>
       <TableRow>
         <TableCell>
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium leading-tight">{config.description || config.key}</p>
-            <p className="font-mono text-[11px] text-muted-foreground">{config.key}</p>
-          </div>
+          <p className="text-sm font-medium leading-tight">{config.description || config.key}</p>
         </TableCell>
         <TableCell>
           {editing ? renderEditInput() : renderDisplayValue()}
-        </TableCell>
-        <TableCell>
-          <Badge variant="secondary" className="text-[10px]">{config.dataType}</Badge>
         </TableCell>
         <TableCell>
           {editing ? (

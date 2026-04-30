@@ -6,6 +6,7 @@ using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Common.Services;
 using SIS.Domain.Enums;
+using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -39,13 +40,6 @@ public class CourseRegistrationService : ICourseRegistrationService
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
 
         var section = await _context.CourseSections
             .Include(cs => cs.Course)
@@ -84,7 +78,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                 };
                 return response;
             }
-            if (!term.IsRegistrationOpen(_clock.UtcNow) && !term.IsAddDropOpen(_clock.UtcNow))
+            if (!await IsStudentRegistrationPhaseOpenAsync(term))
             {
                 response.Success = false;
                 response.ValidationResult = new ValidationResultDto
@@ -97,6 +91,14 @@ public class CourseRegistrationService : ICourseRegistrationService
                 };
                 return response;
             }
+        }
+
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
+            return response;
         }
 
         // Kapasite kontrolü: kontenjan dolu mu?
@@ -415,13 +417,6 @@ public class CourseRegistrationService : ICourseRegistrationService
     public async Task<RegistrationResponseDto> SubmitRegistrationAsync(int studentId, RegistrationSubmitDto dto)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
 
         // Validate the registration
         var validationResult = await _validationService.ValidateRegistrationAsync(studentId, dto.CourseSectionIds);
@@ -430,6 +425,14 @@ public class CourseRegistrationService : ICourseRegistrationService
         {
             response.Success = false;
             response.ValidationResult = validationResult;
+            return response;
+        }
+
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
             return response;
         }
 
@@ -961,13 +964,6 @@ public class CourseRegistrationService : ICourseRegistrationService
     public async Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
 
         var registration = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
@@ -993,7 +989,7 @@ public class CourseRegistrationService : ICourseRegistrationService
 
         // Guard: dönem AddDrop aşamasında olmalı
         var dropTerm = registration.CourseSection.Term;
-        if (!dropTerm.IsAddDropOpen(_clock.UtcNow) && !dropTerm.IsRegistrationOpen(_clock.UtcNow))
+        if (!await IsStudentRegistrationPhaseOpenAsync(dropTerm))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -1004,6 +1000,14 @@ public class CourseRegistrationService : ICourseRegistrationService
                     new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir." }
                 }
             };
+            return response;
+        }
+
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
             return response;
         }
 
@@ -1241,10 +1245,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         if (mainProg?.Program != null)
         {
             var isAssociate = mainProg.Program.DegreeLevel == DegreeLevel.Associate;
-            var maxWithdrawalsKey = isAssociate
-                ? "Withdrawal.MaxCount.Associate"
-                : "Withdrawal.MaxCount.Undergraduate";
-            int maxWithdrawals = await _config.GetIntAsync(maxWithdrawalsKey, isAssociate ? 3 : 6);
+            int maxWithdrawals = await _config.GetMaxWithdrawalCountAsync(mainProg.Program.DegreeLevel);
             if (student.WithdrawalCount >= maxWithdrawals)
             {
                 errors.Add(new ValidationError
@@ -1427,7 +1428,7 @@ public class CourseRegistrationService : ICourseRegistrationService
                     IsScholarshipStudent = student.IsScholarshipStudent,
                     Registrations = regItems,
                     TotalEcts = regItems.Sum(r => r.Ects),
-                    EctsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa),
+                    EctsLimit = 0,
                     SubmittedAt = g.Max(r => r.UpdatedAt ?? r.CreatedAt)
                 };
             })
@@ -1438,6 +1439,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         foreach (var dto in result)
         {
             var student = studentDict[dto.StudentId];
+            dto.EctsLimit = await _config.GetRegistrationEctsLimitAsync(student.Cgpa);
 
             // Plan durumu
             var plan = await _context.RegistrationPlans
@@ -1524,7 +1526,7 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // Guard: dönem RegistrationOpen veya AddDrop olmalı
-        if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
+        if (!await IsStudentRegistrationPhaseOpenAsync(activeTerm))
         {
             return new ApprovalResponseDto
             {
@@ -1667,6 +1669,14 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         return null;
+    }
+
+    private async Task<bool> IsStudentRegistrationPhaseOpenAsync(AcademicTerm term)
+    {
+        if (term.IsRegistrationOpen(_clock.UtcNow) || term.IsAddDropOpen(_clock.UtcNow))
+            return true;
+
+        return await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", false);
     }
 
     private static ValidationResultDto CreateWebModuleError(string rule, string message)

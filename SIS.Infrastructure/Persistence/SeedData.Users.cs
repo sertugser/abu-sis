@@ -276,7 +276,8 @@ public static partial class SeedData
                 Email = email,
                 FirstName = firstName,
                 LastName = lastName,
-                EmailConfirmed = true
+                EmailConfirmed = true,
+                PasswordChangedAtUtc = DateTime.UtcNow,
             };
             var result = await userManager.CreateAsync(user, password);
             if (!result.Succeeded)

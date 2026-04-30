@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Identity.DTOs;
 using SIS.Application.Identity.Services;
 using SIS.Domain.Identity;
@@ -12,15 +13,18 @@ public class MenuService : IMenuService
     private readonly AppDbContext _context;
     private readonly IPermissionService _permissionService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IWebModuleSettingsProvider _webModuleSettingsProvider;
 
     public MenuService(
         AppDbContext context,
         IPermissionService permissionService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IWebModuleSettingsProvider webModuleSettingsProvider)
     {
         _context = context;
         _permissionService = permissionService;
         _userManager = userManager;
+        _webModuleSettingsProvider = webModuleSettingsProvider;
     }
 
     public async Task<List<MenuModuleDto>> GetUserMenuAsync(int userId, string? activeRole = null, CancellationToken ct = default)
@@ -61,12 +65,14 @@ public class MenuService : IMenuService
             .OrderBy(m => m.SortOrder)
             .ToListAsync(ct);
 
+        var hiddenMenuItemSlugs = await GetHiddenMenuItemSlugsAsync(ct);
+
         // Top-level (ParentId == null) modüllerden başla, recursive map et
         return allModules
             .Where(m => m.ParentId == null)
             .Where(m => IsModuleAllowedForRoles(m, filterRoles))
             .OrderBy(m => m.SortOrder)
-            .Select(m => MapToDto(m, permissions, allModules, filterRoles))
+            .Select(m => MapToDto(m, permissions, allModules, filterRoles, hiddenMenuItemSlugs))
             .Where(IsNonEmpty)
             .ToList();
     }
@@ -87,7 +93,8 @@ public class MenuService : IMenuService
         MenuModule module,
         HashSet<string> permissions,
         List<MenuModule> allModules,
-        HashSet<string> userRoles)
+        HashSet<string> userRoles,
+        HashSet<string> hiddenMenuItemSlugs)
     {
         return new MenuModuleDto
         {
@@ -98,6 +105,7 @@ public class MenuService : IMenuService
             SortOrder = module.SortOrder,
             Items = module.Items
                 // Item'a bağlı permission'lardan EN AZ BIRI user'da varsa (OR mantığı)
+                .Where(i => !hiddenMenuItemSlugs.Contains(i.Slug))
                 .Where(i => i.MenuItemPermissions.Any(mip =>
                     mip.Permission != null && permissions.Contains(mip.Permission.Key)))
                 .OrderBy(i => i.SortOrder)
@@ -115,10 +123,37 @@ public class MenuService : IMenuService
                 .Where(c => c.ParentId == module.Id)
                 .Where(c => IsModuleAllowedForRoles(c, userRoles))
                 .OrderBy(c => c.SortOrder)
-                .Select(c => MapToDto(c, permissions, allModules, userRoles))
+                .Select(c => MapToDto(c, permissions, allModules, userRoles, hiddenMenuItemSlugs))
                 .Where(IsNonEmpty)
                 .ToList(),
         };
+    }
+
+    private async Task<HashSet<string>> GetHiddenMenuItemSlugsAsync(CancellationToken ct)
+    {
+        var hiddenMenuItemSlugs = new HashSet<string>(StringComparer.Ordinal);
+
+        var documentRequestsEnabled = await _webModuleSettingsProvider.GetBoolAsync(
+            "StudentPanel",
+            "DocumentRequestEnabled",
+            true,
+            ct);
+        if (!documentRequestsEnabled)
+            hiddenMenuItemSlugs.Add("transkript");
+
+        var documentWorkflowEnabled = await _webModuleSettingsProvider.GetBoolAsync(
+            "StaffPanel",
+            "DocumentWorkflowEnabled",
+            true,
+            ct);
+        if (!documentWorkflowEnabled)
+        {
+            hiddenMenuItemSlugs.Add("belge-sinirlandirmalar");
+            hiddenMenuItemSlugs.Add("ebys-imza-yetkilileri");
+            hiddenMenuItemSlugs.Add("fakulte-imza-yukleme");
+        }
+
+        return hiddenMenuItemSlugs;
     }
 
     /// <summary>

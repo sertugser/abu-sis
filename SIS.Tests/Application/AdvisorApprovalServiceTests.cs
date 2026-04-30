@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using SIS.Application.Common.Time;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -313,6 +315,34 @@ public class AdvisorApprovalServiceTests : IDisposable
         var result = await _service.GetPendingApprovalsAsync(AdvisorInstructorId);
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetPendingApprovals_UsesConfiguredEctsLimit()
+    {
+        var course = AddCourse(1, "CENG101", "Intro to CS", 6);
+        var section = AddSection(1, course.Id, 40);
+        AddRegistration(1, StudentId, section.Id, RegistrationStatus.PendingAdvisorApproval);
+
+        var configMock = new Mock<ISystemConfigProvider>(MockBehavior.Strict);
+        configMock
+            .Setup(service => service.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(30);
+        configMock
+            .Setup(service => service.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(42);
+        configMock
+            .Setup(service => service.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(60);
+
+        var clock = new FakeClock();
+        var validationService = new RegistrationValidationService(_context, clock, configMock.Object);
+        var service = new CourseRegistrationService(_context, validationService, clock, configMock.Object);
+
+        var result = await service.GetPendingApprovalsAsync(AdvisorInstructorId);
+
+        result.Should().HaveCount(1);
+        result[0].EctsLimit.Should().Be(60);
     }
 
     [Fact]

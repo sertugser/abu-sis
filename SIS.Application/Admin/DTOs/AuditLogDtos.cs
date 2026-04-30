@@ -7,6 +7,8 @@ public record AuditLogSummaryDto(
     string Action,
     string EntityType,
     string? EntityId,
+    string? OldValue,
+    string? NewValue,
     DateTime Timestamp,
     string? IpAddress);
 

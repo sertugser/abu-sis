@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Domain.Entities;
@@ -76,6 +78,53 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             warning.Rule == "AdvisorConstraintWarning"
             && warning.Message.Contains("CENG202"));
         result.Registrations.Should().ContainSingle(r => r.Status == RegistrationStatus.PendingAdvisorApproval.ToString());
+    }
+
+    [Fact]
+    public async Task SubmitRegistration_WhenAcademicCalendarClosedButWebWindowActive_ReturnsOpenAtMessage()
+    {
+        var closedNow = new DateTime(2026, 2, 16, 4, 0, 0, DateTimeKind.Utc);
+        var course = AddCourse(102, "CENG203", "Databases");
+        var section = AddSection(1002, course.Id);
+
+        var term = _context.AcademicTerms.Include(t => t.AcademicCalendar).Single(t => t.Id == ActiveTermId);
+        term.TermStart = closedNow.AddDays(-30);
+        term.TermEnd = closedNow.AddDays(30);
+        term.AcademicCalendar!.RegistrationStart = closedNow.AddDays(-10);
+        term.AcademicCalendar.RegistrationEnd = closedNow.AddDays(-5);
+        _context.SaveChanges();
+
+        var clock = new FakeClock { UtcNow = closedNow };
+        var webSettingsMock = new Mock<IWebModuleSettingsProvider>(MockBehavior.Strict);
+        webSettingsMock
+            .Setup(service => service.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        webSettingsMock
+            .Setup(service => service.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        webSettingsMock
+            .Setup(service => service.GetTimeAsync("StudentPanel", "CourseRegistrationOpenAt", TimeOnly.MinValue, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimeOnly(9, 0));
+
+        var validationService = new RegistrationValidationService(_context, clock, webSettings: webSettingsMock.Object);
+        var constraintService = new AdvisorConstraintService(_context);
+        var service = new CourseRegistrationService(
+            _context,
+            validationService,
+            clock,
+            advisorConstraintService: constraintService,
+            webSettings: webSettingsMock.Object);
+
+        var result = await service.SubmitRegistrationAsync(StudentId, new RegistrationSubmitDto
+        {
+            CourseSectionIds = [section.Id]
+        });
+
+        result.Success.Should().BeFalse();
+        result.ValidationResult.Should().NotBeNull();
+        result.ValidationResult!.Errors.Should().Contain(error =>
+            error.Rule == "WebModuleOpenAt"
+            && error.Message.Contains("09:00"));
     }
 
     private void SeedBaseData()

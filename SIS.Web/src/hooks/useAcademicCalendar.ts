@@ -129,6 +129,7 @@ export function useUpsertAcademicCalendar(termId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.adminAcademicCalendar(termId) });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.adminAcademicCalendarTerms });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(termId) });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.academicCalendarTerms });
@@ -146,6 +147,7 @@ export function useUpdateCalendarPhaseOverride(termId: number) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.adminAcademicCalendar(termId) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(termId) });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive });
     }

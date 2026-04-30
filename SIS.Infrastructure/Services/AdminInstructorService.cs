@@ -120,7 +120,8 @@ public class AdminInstructorService : IAdminInstructorService
             Email = email,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            PasswordChangedAtUtc = DateTime.UtcNow,
         };
 
         var result = await _userManager.CreateAsync(user, dto.Password);

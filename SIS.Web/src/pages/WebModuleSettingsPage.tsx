@@ -49,6 +49,14 @@ type Notice = {
   message: string;
 };
 
+type PendingWebModuleSettingPayload = {
+  value: string;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  effectiveFromInput: string;
+  effectiveToInput: string;
+};
+
 function toDateTimeInputValue(value: string | null) {
   if (!value) return '';
   const date = new Date(value);
@@ -291,7 +299,6 @@ function ModuleSettingsCard({
                   <TableHead>Ayar</TableHead>
                   <TableHead>Değer</TableHead>
                   <TableHead className="w-56">Geçerlilik</TableHead>
-                  <TableHead className="w-20">Tip</TableHead>
                   <TableHead className="w-32 text-right">İşlem</TableHead>
                 </TableRow>
               </TableHeader>
@@ -326,8 +333,11 @@ function WebModuleSettingRow({
   const [value, setValue] = useState(setting.value);
   const [effectiveFrom, setEffectiveFrom] = useState(toDateTimeInputValue(setting.effectiveFrom));
   const [effectiveTo, setEffectiveTo] = useState(toDateTimeInputValue(setting.effectiveTo));
+  const effectiveFromInputRef = useRef<HTMLInputElement | null>(null);
+  const effectiveToInputRef = useRef<HTMLInputElement | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<PendingWebModuleSettingPayload | null>(null);
   const updateMutation = useUpdateWebModuleSetting();
 
   useEffect(() => {
@@ -346,22 +356,44 @@ function WebModuleSettingRow({
   const label = `${MODULE_LABELS[setting.moduleKey] ?? setting.moduleKey}.${setting.key}`;
 
   function buildPayload() {
+    const effectiveFromValue = effectiveFromInputRef.current?.value ?? effectiveFrom;
+    const effectiveToValue = effectiveToInputRef.current?.value ?? effectiveTo;
+
     return {
       value,
-      effectiveFrom: fromDateTimeInputValue(effectiveFrom),
-      effectiveTo: fromDateTimeInputValue(effectiveTo),
+      effectiveFrom: fromDateTimeInputValue(effectiveFromValue),
+      effectiveTo: fromDateTimeInputValue(effectiveToValue),
+    };
+  }
+
+  function buildPendingPayload(): PendingWebModuleSettingPayload {
+    const payload = buildPayload();
+    return {
+      ...payload,
+      effectiveFromInput: effectiveFromInputRef.current?.value ?? effectiveFrom,
+      effectiveToInput: effectiveToInputRef.current?.value ?? effectiveTo,
     };
   }
 
   function doSave() {
+    const payload = pendingPayload ?? buildPendingPayload();
     setErrorMessage(null);
     updateMutation.mutate(
-      { id: setting.id, payload: buildPayload() },
+      {
+        id: setting.id,
+        payload: {
+          value: payload.value,
+          effectiveFrom: payload.effectiveFrom,
+          effectiveTo: payload.effectiveTo,
+        },
+      },
       {
         onSuccess: updatedSetting => {
           setValue(updatedSetting.value);
           setEffectiveFrom(toDateTimeInputValue(updatedSetting.effectiveFrom));
           setEffectiveTo(toDateTimeInputValue(updatedSetting.effectiveTo));
+          setPendingPayload(null);
+          setConfirmOpen(false);
           setEditing(false);
           onNotice({ type: 'success', message: `${setting.key} güncellendi.` });
         },
@@ -373,8 +405,8 @@ function WebModuleSettingRow({
   }
 
   function handleSave() {
-    const nextPayload = buildPayload();
-    const unchanged = value === setting.value
+    const nextPayload = buildPendingPayload();
+    const unchanged = nextPayload.value === setting.value
       && nextPayload.effectiveFrom === setting.effectiveFrom
       && nextPayload.effectiveTo === setting.effectiveTo;
 
@@ -383,6 +415,7 @@ function WebModuleSettingRow({
       return;
     }
 
+    setPendingPayload(nextPayload);
     setConfirmOpen(true);
   }
 
@@ -391,7 +424,22 @@ function WebModuleSettingRow({
     setEffectiveFrom(toDateTimeInputValue(setting.effectiveFrom));
     setEffectiveTo(toDateTimeInputValue(setting.effectiveTo));
     setErrorMessage(null);
+    setPendingPayload(null);
     setEditing(false);
+  }
+
+  function handleConfirmOpenChange(nextOpen: boolean) {
+    setConfirmOpen(nextOpen);
+
+    if (nextOpen || !pendingPayload) {
+      return;
+    }
+
+    setValue(pendingPayload.value);
+    setEffectiveFrom(pendingPayload.effectiveFromInput);
+    setEffectiveTo(pendingPayload.effectiveToInput);
+    setEditing(true);
+    setPendingPayload(null);
   }
 
   function renderEditInput() {
@@ -479,12 +527,14 @@ function WebModuleSettingRow({
       return (
         <div className="grid gap-2">
           <Input
+            ref={effectiveFromInputRef}
             type="datetime-local"
             className="h-8 text-xs"
             value={effectiveFrom}
             onChange={e => setEffectiveFrom(e.target.value)}
           />
           <Input
+            ref={effectiveToInputRef}
             type="datetime-local"
             className="h-8 text-xs"
             value={effectiveTo}
@@ -510,16 +560,10 @@ function WebModuleSettingRow({
     <>
       <TableRow>
         <TableCell>
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium leading-tight">{setting.description || setting.key}</p>
-            <p className="font-mono text-[11px] text-muted-foreground">{compositeKey}</p>
-          </div>
+          <p className="text-sm font-medium leading-tight">{setting.description || setting.key}</p>
         </TableCell>
         <TableCell>{editing ? renderEditInput() : renderDisplayValue()}</TableCell>
         <TableCell>{renderEffectiveRange()}</TableCell>
-        <TableCell>
-          <Badge variant="secondary" className="text-[10px]">{setting.dataType}</Badge>
-        </TableCell>
         <TableCell>
           {editing ? (
             <div className="flex justify-end gap-1">
@@ -547,15 +591,21 @@ function WebModuleSettingRow({
         </TableCell>
       </TableRow>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialog open={confirmOpen} onOpenChange={handleConfirmOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Ayar değişikliğini onayla</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div>
+              <div className="space-y-2">
                 <span className="font-mono text-xs">{compositeKey}</span> değerini{' '}
                 <span className="font-semibold">{setting.value}</span> &rarr;{' '}
-                <span className="font-semibold">{value}</span> olarak değiştirmek istediğinize emin misiniz?
+                <span className="font-semibold">{pendingPayload?.value ?? value}</span> olarak değiştirmek istediğinize emin misiniz?
+                <div className="text-xs text-muted-foreground">
+                  Geçerlilik: {formatEffectiveDate(setting.effectiveFrom)} - {formatEffectiveDate(setting.effectiveTo)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Yeni geçerlilik: {formatEffectiveDate(pendingPayload?.effectiveFrom ?? null)} - {formatEffectiveDate(pendingPayload?.effectiveTo ?? null)}
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

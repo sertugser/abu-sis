@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Auth.DTOs;
 using SIS.Application.Auth.Services;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 
 namespace SIS.API.Controllers;
 
@@ -15,15 +17,23 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly AppDbContext _context;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly PasswordRotationService _passwordRotationService;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    public AuthController(IAuthService authService, AppDbContext context)
+    public AuthController(
+        IAuthService authService,
+        AppDbContext context,
+        UserManager<ApplicationUser> userManager,
+        PasswordRotationService passwordRotationService)
     {
         _authService = authService;
         _context = context;
+        _userManager = userManager;
+        _passwordRotationService = passwordRotationService;
     }
 
     [HttpPost("login")]
@@ -76,5 +86,42 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync(ct);
 
         return Ok(result);
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { error = "Istek govdesi gecerli degil." });
+
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { error = "Kullanici kimligi bulunamadi." });
+
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+            return Unauthorized(new { error = "Kullanici bulunamadi." });
+
+        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+        {
+            return BadRequest(new
+            {
+                error = string.Join(", ", result.Errors.Select(error => error.Description))
+            });
+        }
+
+        _passwordRotationService.MarkPasswordChanged(user);
+        var updateResult = await _userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+        {
+            return BadRequest(new
+            {
+                error = string.Join(", ", updateResult.Errors.Select(error => error.Description))
+            });
+        }
+
+        return NoContent();
     }
 }

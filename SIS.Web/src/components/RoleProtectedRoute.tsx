@@ -1,5 +1,8 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { usePermissions } from '../context/PermissionContext';
+import { useActiveRole } from '../context/ActiveRoleContext';
+import { flattenModuleItems } from './layout/SidebarModules';
+import { useMenu } from '../hooks/useMenu';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface RoleProtectedRouteProps {
@@ -7,6 +10,8 @@ interface RoleProtectedRouteProps {
   permission?: string;
   /** En az birine sahip olunca yeterli (OR mantığı). SystemAdmin → true. */
   anyPermission?: readonly string[];
+  /** İlgili route backend menüsünden feature-flag ile gizlenmişse erişim verme. */
+  menuSlug?: string;
 }
 
 /**
@@ -24,11 +29,14 @@ interface RoleProtectedRouteProps {
 export default function RoleProtectedRoute({
   permission,
   anyPermission,
+  menuSlug,
 }: RoleProtectedRouteProps) {
   const { hasPermission, hasAnyPermission, isLoading } = usePermissions();
+  const { activeRole } = useActiveRole();
+  const { data: modules = [], isLoading: isMenuLoading } = useMenu(activeRole);
 
   // Permission verilerini bekle (ilk login flash'ını önlemek için)
-  if (isLoading) {
+  if (isLoading || (menuSlug && isMenuLoading)) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
         <Skeleton className="h-8 w-48" />
@@ -36,16 +44,20 @@ export default function RoleProtectedRoute({
     );
   }
 
+  const isMenuSlugVisible = !menuSlug || modules.some(module =>
+    flattenModuleItems(module).some(item => item.slug === menuSlug),
+  );
+
   // 1) Permission check
-  if (permission && hasPermission(permission)) {
+  if (permission && hasPermission(permission) && isMenuSlugVisible) {
     return <Outlet />;
   }
-  if (anyPermission && hasAnyPermission(anyPermission)) {
+  if (anyPermission && hasAnyPermission(anyPermission) && isMenuSlugVisible) {
     return <Outlet />;
   }
 
   // 2) Hiç prop verilmemiş → authenticated yeterli (legacy default)
-  if (!permission && !anyPermission) {
+  if (!permission && !anyPermission && isMenuSlugVisible) {
     return <Outlet />;
   }
 

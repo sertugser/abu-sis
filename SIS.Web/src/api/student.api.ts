@@ -18,8 +18,10 @@ export async function getTermGpaHistory(): Promise<StudentTermGpaDto[]> {
   return response.data;
 }
 
-export async function getStudentTranscript(): Promise<StudentTranscriptDto> {
-  const response = await apiClient.get<StudentTranscriptDto>('/student/transcript');
+export async function getStudentTranscript(options?: { forDocument?: boolean }): Promise<StudentTranscriptDto> {
+  const response = await apiClient.get<StudentTranscriptDto>('/student/transcript', {
+    params: options?.forDocument ? { forDocument: true } : undefined,
+  });
   return response.data;
 }
 

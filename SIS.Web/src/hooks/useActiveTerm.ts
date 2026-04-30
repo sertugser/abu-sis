@@ -6,6 +6,8 @@ export function useActiveTerm() {
   return useQuery({
     queryKey: QUERY_KEYS.activeTerm,
     queryFn: getActiveTerm,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
   });
 }

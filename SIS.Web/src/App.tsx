@@ -102,7 +102,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route element={<ProtectedRoute />}>
-                <Route element={<RoleProtectedRoute permission="menu.transkript.view" />}>
+                <Route element={<RoleProtectedRoute permission="menu.transkript.view" menuSlug="transkript" />}>
                   <Route path="report/transkript" element={<TranscriptPage />} />
                 </Route>
 
@@ -287,16 +287,16 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.kurumsal-entegrasyon-tanimlari.view" />}>
                     <Route path="kurumsal-entegrasyon-tanimlari" element={<InstitutionalIntegrationPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.belge-sinirlandirmalar.view" />}>
+                  <Route element={<RoleProtectedRoute permission="menu.belge-sinirlandirmalar.view" menuSlug="belge-sinirlandirmalar" />}>
                     <Route path="belge-sinirlandirmalar" element={<DocumentRestrictionsPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.web-modul-ayarlari.view" />}>
                     <Route path="web-modul-ayarlari" element={<WebModuleSettingsPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.ebys-imza-yetkilileri.view" />}>
+                  <Route element={<RoleProtectedRoute permission="menu.ebys-imza-yetkilileri.view" menuSlug="ebys-imza-yetkilileri" />}>
                     <Route path="ebys-imza-yetkilileri" element={<EbysSignatureAuthoritiesPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.fakulte-imza-yukleme.view" />}>
+                  <Route element={<RoleProtectedRoute permission="menu.fakulte-imza-yukleme.view" menuSlug="fakulte-imza-yukleme" />}>
                     <Route path="fakulte-imza-yukleme-islemleri" element={<FacultySignatureUploadPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.derslik-yonetimi.view" />}>

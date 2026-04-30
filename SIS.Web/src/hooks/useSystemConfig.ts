@@ -23,9 +23,7 @@ export function useUpdateSystemConfig() {
   return useMutation({
     mutationFn: ({ id, value }: { id: number; value: string }) => updateSystemConfig(id, value),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
-      qc.invalidateQueries({ queryKey: ['studentAttendanceStatus'] });
-      qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
+      invalidateRuntimeConfigQueries(qc);
     },
   });
 }
@@ -36,9 +34,20 @@ export function useImportSystemConfigs() {
   return useMutation({
     mutationFn: (payload: unknown) => importSystemConfigs(payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
-      qc.invalidateQueries({ queryKey: ['studentAttendanceStatus'] });
-      qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
+      invalidateRuntimeConfigQueries(qc);
     },
   });
+}
+
+function invalidateRuntimeConfigQueries(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.studentInfo });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.studentCatalog });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.myRegistrations });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.advisorStudents });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+  qc.invalidateQueries({ queryKey: ['eligibility'] });
+  qc.invalidateQueries({ queryKey: ['recommendation'] });
+  qc.invalidateQueries({ queryKey: ['studentAttendanceStatus'] });
+  qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
 }

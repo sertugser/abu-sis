@@ -412,10 +412,7 @@ public class StudentEligibilityService : IStudentEligibilityService
         var snapshots = new List<EligibilityStudentSnapshot>();
         var cgpaCache = new Dictionary<int, decimal>();
 
-        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30, cancellationToken);
-        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42, cancellationToken);
-        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48, cancellationToken);
-        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m, cancellationToken);
+        var retentionThreshold = await _config.GetRetentionThresholdAsync(cancellationToken);
 
         foreach (var student in students)
         {
@@ -428,7 +425,7 @@ public class StudentEligibilityService : IStudentEligibilityService
                 .GetValueOrDefault(student.Id, new List<CourseRegistration>());
 
             var cgpa = await GetCgpaAsync(student, cgpaCache);
-            var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
+            var ectsLimit = await _config.GetRegistrationEctsLimitAsync(cgpa, cancellationToken);
             var completedSemesters = Math.Max(0, student.CompletedSemesters);
             var currentSemester = completedSemesters + 1;
 

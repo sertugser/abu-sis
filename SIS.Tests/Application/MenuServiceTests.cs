@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using SIS.Application.Common.Services;
 using SIS.Application.Identity.Services;
 using SIS.Domain.Identity;
 using SIS.Infrastructure.Persistence;
@@ -28,17 +29,34 @@ public class MenuServiceTests
         return mgr;
     }
 
-    private static MenuService CreateService(AppDbContext ctx, HashSet<string> userPerms, IList<string>? userRoles = null)
+    private static MenuService CreateService(
+        AppDbContext ctx,
+        HashSet<string> userPerms,
+        IList<string>? userRoles = null,
+        bool documentRequestEnabled = true,
+        bool documentWorkflowEnabled = true)
     {
         var permSvc = new Mock<IPermissionService>();
         permSvc.Setup(p => p.GetUserPermissionsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(userPerms);
         var userMgr = CreateUserManagerMock(userRoles);
-        return new MenuService(ctx, permSvc.Object, userMgr.Object);
+        var webSettings = new Mock<IWebModuleSettingsProvider>();
+        webSettings
+            .Setup(service => service.GetBoolAsync("StudentPanel", "DocumentRequestEnabled", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(documentRequestEnabled);
+        webSettings
+            .Setup(service => service.GetBoolAsync("StaffPanel", "DocumentWorkflowEnabled", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(documentWorkflowEnabled);
+        return new MenuService(ctx, permSvc.Object, userMgr.Object, webSettings.Object);
     }
 
     private static (MenuModule mod, MenuItem item, Permission perm) AddSimpleModuleWithItem(
-        AppDbContext ctx, string label, string route, string permKey, int sortOrder = 1)
+        AppDbContext ctx,
+        string label,
+        string route,
+        string permKey,
+        int sortOrder = 1,
+        string? slug = null)
     {
         var perm = new Permission { Key = permKey };
         ctx.Permissions.Add(perm);
@@ -53,7 +71,7 @@ public class MenuServiceTests
             ModuleId = mod.Id,
             Label = label,
             Route = route,
-            Slug = route.TrimStart('/'),
+            Slug = slug ?? route.TrimStart('/'),
             SortOrder = 1,
             MenuItemPermissions = new List<MenuItemPermission>
             {
@@ -249,5 +267,38 @@ public class MenuServiceTests
 
         var menu = await svc.GetUserMenuAsync(1);
         menu.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task GetUserMenuAsync_HidesTranscriptItem_WhenStudentDocumentRequestsDisabled()
+    {
+        using var ctx = CreateContext();
+        AddSimpleModuleWithItem(ctx, "Transkript", "/report/transkript", "menu.transkript.view", 1, slug: "transkript");
+
+        var svc = CreateService(
+            ctx,
+            new HashSet<string> { "menu.transkript.view" },
+            documentRequestEnabled: false);
+
+        var menu = await svc.GetUserMenuAsync(1);
+
+        menu.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetUserMenuAsync_HidesDocumentWorkflowItems_WhenStaffWorkflowDisabled()
+    {
+        using var ctx = CreateContext();
+        AddSimpleModuleWithItem(ctx, "Belge Sınırlandırmalar", "/belge-sinirlandirmalar", "menu.belge-sinirlandirmalar.view", 1);
+        AddSimpleModuleWithItem(ctx, "EBYS İmza Yetkilileri", "/ebys-imza-yetkilileri", "menu.ebys-imza-yetkilileri.view", 2);
+
+        var svc = CreateService(
+            ctx,
+            new HashSet<string> { "menu.belge-sinirlandirmalar.view", "menu.ebys-imza-yetkilileri.view" },
+            documentWorkflowEnabled: false);
+
+        var menu = await svc.GetUserMenuAsync(1);
+
+        menu.Should().BeEmpty();
     }
 }

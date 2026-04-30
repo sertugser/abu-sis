@@ -175,7 +175,8 @@ public class AdminStudentService : IAdminStudentService
             Email = email,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            PasswordChangedAtUtc = DateTime.UtcNow,
         };
 
         var createResult = await _userManager.CreateAsync(user, dto.Password);

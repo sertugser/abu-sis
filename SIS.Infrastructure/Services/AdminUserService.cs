@@ -161,6 +161,12 @@ public class AdminUserService : IAdminUserService
         if (!result.Succeeded)
             throw new InvalidOperationException(
                 string.Join(", ", result.Errors.Select(e => e.Description)));
+
+        user.PasswordChangedAtUtc = DateTime.UtcNow;
+        var updateResult = await _userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+            throw new InvalidOperationException(
+                string.Join(", ", updateResult.Errors.Select(e => e.Description)));
     }
 
     public async Task SetUserStatusAsync(int id, bool isActive)

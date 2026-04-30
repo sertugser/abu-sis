@@ -178,6 +178,7 @@ builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddScoped<IWebModuleSettingsProvider, WebModuleSettingsProvider>();
+builder.Services.AddScoped<PasswordRotationService>();
 
 // RBAC (Phase 1)
 builder.Services.AddScoped<IPermissionService, PermissionService>();
@@ -203,6 +204,7 @@ app.UseMiddleware<SIS.API.Middleware.ErrorLoggingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
+app.UseMiddleware<SIS.API.Middleware.PasswordRotationMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();

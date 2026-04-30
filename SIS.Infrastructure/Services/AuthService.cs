@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using SIS.Application.Auth.DTOs;
 using SIS.Application.Auth.Services;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -14,11 +15,19 @@ public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
+    private readonly ISystemConfigProvider _configProvider;
+    private readonly PasswordRotationService _passwordRotationService;
 
-    public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration)
+    public AuthService(
+        UserManager<ApplicationUser> userManager,
+        IConfiguration configuration,
+        ISystemConfigProvider configProvider,
+        PasswordRotationService passwordRotationService)
     {
         _userManager = userManager;
         _configuration = configuration;
+        _configProvider = configProvider;
+        _passwordRotationService = passwordRotationService;
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto loginDto)
@@ -80,6 +89,8 @@ public class AuthService : IAuthService
 
         var jwtSettings = _configuration.GetSection("Jwt");
         var expiresInMinutes = double.Parse(jwtSettings["ExpiresInMinutes"]!);
+        var passwordRotation = await _passwordRotationService.GetStatusAsync(user);
+        var defaultLanguage = await _configProvider.GetStringAsync("Localization.DefaultLanguage", "tr-TR");
 
         // 8. Return AuthResponseDto
         return new AuthResponseDto
@@ -87,7 +98,10 @@ public class AuthService : IAuthService
             Success = true,
             Token = token,
             ExpiresAt = DateTime.UtcNow.AddMinutes(expiresInMinutes),
-            Roles = roles.ToArray()
+            Roles = roles.ToArray(),
+            RequiresPasswordChange = passwordRotation.RequiresPasswordChange,
+            PasswordExpiresAt = passwordRotation.PasswordExpiresAtUtc,
+            DefaultLanguage = defaultLanguage,
         };
     }
 
@@ -150,13 +164,18 @@ public class AuthService : IAuthService
             var roles = await _userManager.GetRolesAsync(user);
             var newToken = GenerateJwtToken(user, roles);
             var expiresInMinutes = double.Parse(jwtSettings["ExpiresInMinutes"]!);
+            var passwordRotation = await _passwordRotationService.GetStatusAsync(user);
+            var defaultLanguage = await _configProvider.GetStringAsync("Localization.DefaultLanguage", "tr-TR");
 
             return new AuthResponseDto
             {
                 Success = true,
                 Token = newToken,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(expiresInMinutes),
-                Roles = roles.ToArray()
+                Roles = roles.ToArray(),
+                RequiresPasswordChange = passwordRotation.RequiresPasswordChange,
+                PasswordExpiresAt = passwordRotation.PasswordExpiresAtUtc,
+                DefaultLanguage = defaultLanguage,
             };
         }
         catch

@@ -92,7 +92,7 @@ const summaryValueStyle: CSSProperties = {
 
 export default function TranscriptPage() {
   const navigate = useNavigate();
-  const transcriptQuery = useStudentTranscript();
+  const transcriptQuery = useStudentTranscript({ forDocument: true });
 
   useEffect(() => {
     const previousTitle = document.title;

@@ -340,6 +340,8 @@ public class AuditLogController(AppDbContext context) : ControllerBase
             log.Action,
             log.EntityType,
             log.EntityId,
+            log.OldValue,
+            log.NewValue,
             log.Timestamp,
             log.IpAddress);
     }

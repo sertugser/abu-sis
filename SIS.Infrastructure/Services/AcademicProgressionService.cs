@@ -95,7 +95,7 @@ public class AcademicProgressionService : IAcademicProgressionService
             ? "DRY RUN — degisiklikler uygulanmadi, sadece simulasyon."
             : "GERCEK CALISTIRMA — degisiklikler veritabanina yazildi.");
 
-        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m, cancellationToken);
+        var retentionThreshold = await _config.GetRetentionThresholdAsync(cancellationToken);
 
         // Batch CGPA hesaplama — N+1 query yerine tek sorgu
         var cgpaMap = await _gpaCalculationService.BatchCalculateCgpaAsync(studentIds);

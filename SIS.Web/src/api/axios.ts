@@ -27,6 +27,18 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('sis_roles');
       window.location.href = '/login';
     }
+
+    if (error.response?.status === 403 && error.response?.data?.code === 'PasswordExpired') {
+      localStorage.setItem('sis_password_rotation_required', 'true');
+      if (error.response.data.passwordExpiresAt) {
+        localStorage.setItem('sis_password_rotation_expires_at', error.response.data.passwordExpiresAt);
+      }
+
+      if (window.location.pathname !== '/sifre-degistir') {
+        window.location.href = '/sifre-degistir';
+      }
+    }
+
     return Promise.reject(error);
   }
 );

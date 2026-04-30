@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/axios';
+import { getPublicRuntimeSettings } from '../api/auth.api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showContact, setShowContact] = useState(false);
   const [lang, setLang] = useState<'tr' | 'en'>('tr');
+  const [hasManualLanguageOverride, setHasManualLanguageOverride] = useState(false);
   const [announcements, setAnnouncements] = useState<{ title: string; date: string; url: string }[]>([]);
 
   useEffect(() => {
@@ -23,6 +25,31 @@ export default function LoginPage() {
       .then(res => setAnnouncements(res.data))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    getPublicRuntimeSettings()
+      .then(({ defaultLanguage }) => {
+        if (isDisposed) {
+          return;
+        }
+
+        document.documentElement.lang = defaultLanguage;
+        if (!hasManualLanguageOverride) {
+          setLang(defaultLanguage.toLowerCase().startsWith('en') ? 'en' : 'tr');
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [hasManualLanguageOverride]);
+
+  useEffect(() => {
+    document.documentElement.lang = lang === 'en' ? 'en-US' : 'tr-TR';
+  }, [lang]);
 
   const t = {
     tr: {
@@ -176,7 +203,10 @@ export default function LoginPage() {
           <div className="w-px h-4 bg-border mx-1" />
           <button
             type="button"
-            onClick={() => setLang(lang === 'tr' ? 'en' : 'tr')}
+            onClick={() => {
+              setHasManualLanguageOverride(true);
+              setLang(lang === 'tr' ? 'en' : 'tr');
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
           >
             <Globe className="h-4 w-4" />

@@ -14,12 +14,18 @@ public class RegistrationValidationService : IRegistrationValidationService
     private readonly AppDbContext _context;
     private readonly ISystemConfigProvider _config;
     private readonly IDateTimeProvider _clock;
+    private readonly IWebModuleSettingsProvider _webSettings;
 
-    public RegistrationValidationService(AppDbContext context, IDateTimeProvider clock, ISystemConfigProvider? config = null)
+    public RegistrationValidationService(
+        AppDbContext context,
+        IDateTimeProvider clock,
+        ISystemConfigProvider? config = null,
+        IWebModuleSettingsProvider? webSettings = null)
     {
         _context = context;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
+        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
     }
 
     public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
@@ -50,7 +56,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             .ToListAsync();
 
         // Load active term
-        var now = DateTime.UtcNow;
+        var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
@@ -106,7 +112,7 @@ public class RegistrationValidationService : IRegistrationValidationService
                 Message = "Aktif akademik donem bulunamadi."
             });
         }
-        else if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
+        else if (!await IsStudentRegistrationPhaseOpenAsync(activeTerm))
         {
             errors.Add(new ValidationError
             {
@@ -321,12 +327,10 @@ public class RegistrationValidationService : IRegistrationValidationService
                 .FirstOrDefaultAsync(c => c.Id == mainProgramForEcts.CurriculumId);
         }
 
-        var ectsLimitBelow200 = curriculumForEcts?.EctsLimitBelow200
-            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
-        var ectsLimit200To249 = curriculumForEcts?.EctsLimit200To249
-            ?? await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
-        var ectsLimitAbove250 = curriculumForEcts?.EctsLimitAbove250
-            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
+        var defaultThresholds = await _config.GetRegistrationEctsThresholdsAsync();
+        var ectsLimitBelow200 = curriculumForEcts?.EctsLimitBelow200 ?? defaultThresholds.Below200;
+        var ectsLimit200To249 = curriculumForEcts?.EctsLimit200To249 ?? defaultThresholds.From200To249;
+        var ectsLimitAbove250 = curriculumForEcts?.EctsLimitAbove250 ?? defaultThresholds.Above250;
         var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
 
         if (totalEcts > ectsLimit)
@@ -373,7 +377,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         }
 
         // === CHECK 7: CGPA Restriction (FR-56B) ===
-        var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m);
+        var retentionThreshold = await _config.GetRetentionThresholdAsync();
         if (RegistrationRulePolicy.HasLowCgpaRestriction(student.Cgpa, student.CompletedSemesters, retentionThreshold))
         {
             var studentProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
@@ -519,6 +523,14 @@ public class RegistrationValidationService : IRegistrationValidationService
         result.IsValid = !errors.Any(e => e.Rule != "ScheduleConflict_NeedsApproval");
         result.Errors = errors;
         return result;
+    }
+
+    private async Task<bool> IsStudentRegistrationPhaseOpenAsync(AcademicTerm term)
+    {
+        if (term.IsRegistrationOpen(_clock.UtcNow) || term.IsAddDropOpen(_clock.UtcNow))
+            return true;
+
+        return await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", false);
     }
 
 }
