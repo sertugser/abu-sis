@@ -115,7 +115,7 @@ export default function ClassroomManagementAdminPage() {
     }
   };
 
-  const all = classrooms ?? [];
+  const all = useMemo(() => classrooms ?? [], [classrooms]);
 
   const typeCounts = useMemo(() => {
     return all.reduce((acc, c) => {

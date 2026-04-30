@@ -144,60 +144,58 @@ export default function AttendanceEntryPage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    if (!matrix?.weeks.length) return;
-
+  // Matrix yüklenince/değişince doğru week'i seç — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  if (matrix?.weeks.length) {
     const preferredWeekNumber = !manualWeekSelection && matrix.currentWeekNumber
       ? matrix.currentWeekNumber
       : selectedWeekNumber;
 
-    if (matrix.weeks.some(week => week.weekNumber === preferredWeekNumber)) {
-      if (preferredWeekNumber !== selectedWeekNumber) {
-        setSelectedWeekNumber(preferredWeekNumber);
-      }
-      return;
+    const targetWeekNumber = matrix.weeks.some(week => week.weekNumber === preferredWeekNumber)
+      ? preferredWeekNumber
+      : (matrix.currentWeekNumber ?? matrix.weeks[0].weekNumber);
+
+    if (targetWeekNumber !== selectedWeekNumber) {
+      setSelectedWeekNumber(targetWeekNumber);
     }
+  }
 
-    setSelectedWeekNumber(matrix.currentWeekNumber ?? matrix.weeks[0].weekNumber);
-  }, [manualWeekSelection, matrix?.currentWeekNumber, matrix?.weeks, selectedWeekNumber]);
-
-  useEffect(() => {
+  // Section/week değişince session-bazlı state'leri reset et — adjust-state-during-render
+  const sectionWeekKey = `${selectedSectionId ?? 'none'}-${selectedWeekNumber}-${selectedMatrixWeek?.sessionId ?? 'none'}`;
+  const [prevSectionWeekKey, setPrevSectionWeekKey] = useState(sectionWeekKey);
+  if (sectionWeekKey !== prevSectionWeekKey) {
+    setPrevSectionWeekKey(sectionWeekKey);
     if (!selectedSectionId) {
       setSessionId(null);
       setStatuses({});
       setDirtyStudentIds(new Set());
-      return;
+    } else {
+      setSessionId(selectedMatrixWeek?.sessionId ?? null);
+      setStatuses({});
+      setDirtyStudentIds(new Set());
+      setTopic(selectedMatrixWeek?.topic ?? '');
+      setSessionDate(getDefaultWeekDateInput(selectedMatrixWeek));
     }
+  }
 
-    setSessionId(selectedMatrixWeek?.sessionId ?? null);
-    setStatuses({});
-    setDirtyStudentIds(new Set());
-    setTopic(selectedMatrixWeek?.topic ?? '');
-    setSessionDate(getDefaultWeekDateInput(selectedMatrixWeek));
-  }, [
-    selectedSectionId,
-    selectedWeekNumber,
-    selectedMatrixWeek?.sessionId,
-    selectedMatrixWeek?.sessionDate,
-    selectedMatrixWeek?.suggestedSessionDate,
-    selectedMatrixWeek?.topic,
-  ]);
-
-  useEffect(() => {
-    if (!session) return;
-
-    setTopic(session.topic);
-    setSessionDate(formatDateInput(new Date(session.sessionDate)));
-    setStatuses(previous => {
-      const next: Record<number, EditableStatus> = {};
-      session.students.forEach(student => {
-        next[student.studentId] = dirtyStudentIds.has(student.studentId)
-          ? previous[student.studentId] ?? student.status ?? ''
-          : student.status ?? '';
+  // Session yüklenince form alanlarını hydrate et — adjust-state-during-render
+  const [prevSessionRef, setPrevSessionRef] = useState(session);
+  if (session !== prevSessionRef) {
+    setPrevSessionRef(session);
+    if (session) {
+      setTopic(session.topic);
+      setSessionDate(formatDateInput(new Date(session.sessionDate)));
+      setStatuses(previous => {
+        const next: Record<number, EditableStatus> = {};
+        session.students.forEach(student => {
+          next[student.studentId] = dirtyStudentIds.has(student.studentId)
+            ? previous[student.studentId] ?? student.status ?? ''
+            : student.status ?? '';
+        });
+        return next;
       });
-      return next;
-    });
-  }, [session, dirtyStudentIds]);
+    }
+  }
 
   if (sectionsLoading) {
     return (

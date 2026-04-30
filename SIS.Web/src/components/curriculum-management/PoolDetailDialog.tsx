@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,13 +52,17 @@ export default function PoolDetailDialog({ curriculumId, pool, open, onOpenChang
   const updateMutation = useUpdatePool();
   const deleteMutation = useDeletePool();
 
-  // Pool prop değişince formu yeniden yükle (farklı pool seçildi).
-  useEffect(() => {
+  // Pool prop değişince formu yeniden yükle — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const trackKey = open ? `${pool.id}` : 'closed';
+  const [prevTrackKey, setPrevTrackKey] = useState(trackKey);
+  if (trackKey !== prevTrackKey) {
+    setPrevTrackKey(trackKey);
     if (open) {
       setForm(poolToForm(pool));
       setValidationError(null);
     }
-  }, [open, pool]);
+  }
 
   const ectsCleared = form.ectsPerCourse.trim() === '' && pool.ectsPerCourse !== null;
 

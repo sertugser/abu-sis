@@ -25,7 +25,7 @@ import CurriculumFilterBar, { type StatusFilter, type YearFilter } from './curri
 import CurriculumListView from './curriculum-management/CurriculumListView';
 import CurriculumCoursesView from './curriculum-management/CurriculumCoursesView';
 import PromotionRulesDialog from './curriculum-management/PromotionRulesDialog';
-import { getFromYearOptionsFromEcts } from './curriculum-management/PromotionRulesPanel';
+import { getFromYearOptionsFromEcts } from './curriculum-management/promotionRulesUtils';
 import type {
   CurriculumCourseItemDto,
   CurriculumElectivePoolDto,

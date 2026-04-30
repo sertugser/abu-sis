@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { AccessPolicyPopover } from './AccessPolicyPopover';
@@ -108,14 +108,17 @@ export function CourseManagementDialog({
     [sections, selectedSectionId],
   );
 
-  // Dialog her açılışta liste moduna dön
-  useEffect(() => {
+  // Dialog her açılışta liste moduna dön — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setMode('list');
       setDuplicateSourceNumber(null);
       setSelectedSectionId((prev) => prev != null && sections.some((s) => s.sectionId === prev) ? prev : null);
     }
-  }, [open, sections]);
+  }
 
   const startAdd = () => {
     setFormCap('40');

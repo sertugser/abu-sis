@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Inbox, Eye, Pencil, Plus, Users, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -59,9 +59,13 @@ export function TargetTermPanel({
   const [searchName, setSearchName] = useState('');
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
 
-  useEffect(() => {
+  // defaultTermId değişince termId'yi senkronla — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const [prevDefaultTermId, setPrevDefaultTermId] = useState(defaultTermId);
+  if (defaultTermId !== prevDefaultTermId) {
+    setPrevDefaultTermId(defaultTermId);
     if (defaultTermId !== null) setTermId(defaultTermId);
-  }, [defaultTermId]);
+  }
 
   const { data, isLoading } = useOpenedCourses(departmentId, termId);
   const programsQuery = useAdminProgramsByStructure(departmentId ?? undefined);

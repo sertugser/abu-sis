@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -55,25 +55,30 @@ export default function ElectiveSubtypeFormDialog({
   const updateMutation = useUpdateElectiveSubtype();
   const mutation = mode === 'create' ? createMutation : updateMutation;
 
-  // Edit modunda dialog açılınca mevcut tipi forma yükle.
-  useEffect(() => {
-    if (!open) return;
-    if (mode === 'edit' && subtype) {
-      setForm({
-        code: subtype.code,
-        name: subtype.name,
-        requiresFaculty: subtype.requiresFaculty,
-        forbidsFaculty: subtype.forbidsFaculty,
-        requiresDepartment: subtype.requiresDepartment,
-        forbidsDepartment: subtype.forbidsDepartment,
-        sortOrder: subtype.sortOrder,
-        isActive: subtype.isActive,
-      });
-    } else if (mode === 'create') {
-      setForm(EMPTY);
+  // Edit modunda dialog açılınca mevcut tipi forma yükle — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const trackKey = open ? `${mode}-${subtype?.id ?? 'none'}` : 'closed';
+  const [prevTrackKey, setPrevTrackKey] = useState(trackKey);
+  if (trackKey !== prevTrackKey) {
+    setPrevTrackKey(trackKey);
+    if (open) {
+      if (mode === 'edit' && subtype) {
+        setForm({
+          code: subtype.code,
+          name: subtype.name,
+          requiresFaculty: subtype.requiresFaculty,
+          forbidsFaculty: subtype.forbidsFaculty,
+          requiresDepartment: subtype.requiresDepartment,
+          forbidsDepartment: subtype.forbidsDepartment,
+          sortOrder: subtype.sortOrder,
+          isActive: subtype.isActive,
+        });
+      } else if (mode === 'create') {
+        setForm(EMPTY);
+      }
+      setValidationError(null);
     }
-    setValidationError(null);
-  }, [open, mode, subtype]);
+  }
 
   // Karar #14: flag değişimi mevcut grupları etkilemez ama yeni grup
   // oluşturma validation'ını değiştirir — kullanıcıya bilgi.

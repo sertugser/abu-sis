@@ -42,7 +42,10 @@ export default function CourseOpeningPage() {
   const { data: allTerms } = useAdminTerms();
   const { data: faculties } = useAdminFaculties();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
-  const accessibleDepartments = contextQuery.data?.accessibleDepartments ?? [];
+  const accessibleDepartments = useMemo(
+    () => contextQuery.data?.accessibleDepartments ?? [],
+    [contextQuery.data?.accessibleDepartments],
+  );
 
   // ─── Akademik hiyerarşi (her iki panel paylaşır) ─────────────
   const [facultyId, setFacultyId] = useState<number | null>(null);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,10 +16,14 @@ interface Props {
 export default function CopyCurriculumDialog({ target, onCancel, onConfirm, isPending }: Props) {
   const [newVersion, setNewVersion] = useState('');
 
-  // Dialog kapanınca form alanını sıfırla
-  useEffect(() => {
+  // Dialog kapanınca form alanını sıfırla — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const [prevTargetId, setPrevTargetId] = useState(target?.id ?? null);
+  const currentTargetId = target?.id ?? null;
+  if (currentTargetId !== prevTargetId) {
+    setPrevTargetId(currentTargetId);
     if (target === null) setNewVersion('');
-  }, [target]);
+  }
 
   function handleConfirm() {
     if (!newVersion.trim()) return;

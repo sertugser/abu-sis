@@ -26,7 +26,8 @@ import type {
   CurriculumTermRuleType,
 } from '../types/curriculumTermRule';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
-import PromotionRulesPanel, { getFromYearOptionsFromEcts } from './curriculum-management/PromotionRulesPanel';
+import PromotionRulesPanel from './curriculum-management/PromotionRulesPanel';
+import { getFromYearOptionsFromEcts } from './curriculum-management/promotionRulesUtils';
 
 export default function MufredatSinifDonemTanimlariPage() {
   // ── Cascade state ──

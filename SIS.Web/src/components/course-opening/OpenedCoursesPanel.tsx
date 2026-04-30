@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -65,7 +64,7 @@ export function OpenedCoursesPanel({
   nameSearch,
   onUpdateSection,
   onCloseSection,
-  onCloseAllSections,
+  onCloseAllSections: _onCloseAllSections,
   onReactivateSection,
   onAddSection,
   updatePending,
@@ -79,19 +78,14 @@ export function OpenedCoursesPanel({
   onOpenExternalDrawer,
   readOnly = false,
 }: Props) {
-  const [sortField, setSortField] = useState<SortField>('code');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortField, _setSortField] = useState<SortField>('code');
+  const [sortDir, _setSortDir] = useState<SortDir>('asc');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [managementDialogOpen, setManagementDialogOpen] = useState(false);
   const [managementCourseId, setManagementCourseId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const [showBottomShadow, setShowBottomShadow] = useState(true);
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortField(field); setSortDir('asc'); }
-  };
 
   const courseGroups: CourseGroup[] = useMemo(() => {
     if (!sections) return [];

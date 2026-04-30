@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,7 +26,12 @@ export function SectionEditDialog({ section, departmentId, termId, instructors, 
 
   const mutation = useUpdateOpenedSection(departmentId, termId);
 
-  useEffect(() => {
+  // Section değişince formu hydrate et — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const sectionKey = section?.sectionId ?? null;
+  const [prevSectionKey, setPrevSectionKey] = useState(sectionKey);
+  if (sectionKey !== prevSectionKey) {
+    setPrevSectionKey(sectionKey);
     if (section) {
       setCapacity(section.capacity);
       setInternalQuota(section.internalQuota ?? null);
@@ -34,7 +39,7 @@ export function SectionEditDialog({ section, departmentId, termId, instructors, 
       setInstructorId(section.instructorId ?? null);
       setError(null);
     }
-  }, [section]);
+  }
 
   if (!section) return null;
 
