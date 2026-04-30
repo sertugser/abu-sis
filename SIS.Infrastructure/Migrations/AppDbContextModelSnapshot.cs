@@ -363,6 +363,104 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("ApprovalSteps");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.AttendanceRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendanceSessionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CourseRegistrationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("QrSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseRegistrationId");
+
+                    b.HasIndex("StudentId");
+
+                    b.HasIndex("AttendanceSessionId", "StudentId")
+                        .IsUnique();
+
+                    b.ToTable("AttendanceRecords");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AttendanceSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("InstructorId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsQrOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("QrExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("SessionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Topic")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("WeekNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstructorId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("CourseSectionId", "WeekNumber")
+                        .IsUnique();
+
+                    b.ToTable("AttendanceSessions");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<int>("Id")
@@ -3507,6 +3605,52 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Request");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.AttendanceRecord", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AttendanceSession", "AttendanceSession")
+                        .WithMany("Records")
+                        .HasForeignKey("AttendanceSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.CourseRegistration", "CourseRegistration")
+                        .WithMany()
+                        .HasForeignKey("CourseRegistrationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Student", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AttendanceSession");
+
+                    b.Navigation("CourseRegistration");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AttendanceSession", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
+                        .WithMany()
+                        .HasForeignKey("CourseSectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Instructor", "Instructor")
+                        .WithMany()
+                        .HasForeignKey("InstructorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CourseSection");
+
+                    b.Navigation("Instructor");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ClassroomTermAssignment", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
@@ -4485,6 +4629,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("AcademicCalendar");
 
                     b.Navigation("CalendarEvents");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AttendanceSession", b =>
+                {
+                    b.Navigation("Records");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintDefinition", b =>

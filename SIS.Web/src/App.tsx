@@ -23,6 +23,8 @@ import AcademicCalendarPage from './pages/AcademicCalendarPage';
 import AcademicCalendarGeneratorPage from './pages/AcademicCalendarGeneratorPage';
 import { OsymRegistrationCalendarAccessGate, ProgramQuotaAccessGate } from './components/AcademicOperationsRouteGates';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
+import AttendanceEntryPage from './pages/AttendanceEntryPage';
+import QrAttendancePage from './pages/QrAttendancePage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
 import ClassListsPage from './pages/ClassListsPage';
@@ -99,6 +101,7 @@ export default function App() {
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/yoklama/qr/:token" element={<QrAttendancePage />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<RoleProtectedRoute permission="menu.transkript.view" />}>
                   <Route path="report/transkript" element={<TranscriptPage />} />
@@ -151,6 +154,9 @@ export default function App() {
 
                   <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
                     <Route path="derslerim" element={<InstructorSectionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.yoklama-girisi.view" />}>
+                    <Route path="yoklama-girisi" element={<AttendanceEntryPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />

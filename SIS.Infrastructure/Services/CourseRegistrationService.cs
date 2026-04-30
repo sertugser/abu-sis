@@ -872,6 +872,18 @@ public class CourseRegistrationService : ICourseRegistrationService
             .ThenBy(cr => cr.CourseSection.SectionNumber)
             .ToListAsync();
 
+        var registrationIds = registrations.Select(registration => registration.Id).ToList();
+        var attendanceRecords = registrationIds.Count == 0
+            ? new List<SIS.Domain.Entities.AttendanceRecord>()
+            : await _context.AttendanceRecords
+                .AsNoTracking()
+                .Where(record => registrationIds.Contains(record.CourseRegistrationId))
+                .ToListAsync();
+
+        var attendanceByRegistration = attendanceRecords
+            .GroupBy(record => record.CourseRegistrationId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
         return new StudentAttendanceStatusDto
         {
             TermId = selectedTerm.TermId,
@@ -890,6 +902,11 @@ public class CourseRegistrationService : ICourseRegistrationService
                 var course = registration.CourseSection.Course;
                 var theoryTotalHours = weekCount * Math.Max(0, course.TheoryHours);
                 var labTotalHours = weekCount * Math.Max(0, course.LabHours);
+                var recordsForRegistration = attendanceByRegistration.GetValueOrDefault(registration.Id) ?? [];
+                var absentSessions = recordsForRegistration.Count(record => record.Status == AttendanceStatus.Absent);
+                var theoryAbsenceHours = absentSessions * Math.Max(0, course.TheoryHours);
+                var labAbsenceHours = absentSessions * Math.Max(0, course.LabHours);
+                var totalAbsenceHours = theoryAbsenceHours + labAbsenceHours;
                 var isInStudentProgram = curriculumMap.TryGetValue(course.Id, out var suggestedSemester);
                 var programName = isInStudentProgram && !string.IsNullOrWhiteSpace(activeProgramName)
                     ? activeProgramName
@@ -909,15 +926,17 @@ public class CourseRegistrationService : ICourseRegistrationService
                     TheoryHours = course.TheoryHours,
                     LabHours = course.LabHours,
                     MandatoryAttendance = registration.MandatoryAttendance,
-                    AttendanceEntered = false,
-                    TheoryAbsenceHours = null,
-                    LabAbsenceHours = null,
-                    TotalAbsenceHours = null,
+                    AttendanceEntered = recordsForRegistration.Count > 0,
+                    TheoryAbsenceHours = recordsForRegistration.Count > 0 ? theoryAbsenceHours : null,
+                    LabAbsenceHours = recordsForRegistration.Count > 0 ? labAbsenceHours : null,
+                    TotalAbsenceHours = recordsForRegistration.Count > 0 ? totalAbsenceHours : null,
                     TotalTheoryHours = theoryTotalHours,
                     TotalLabHours = labTotalHours,
                     TheoryAbsenceLimitHours = CalculateLimitHours(theoryTotalHours, theoryLimitPercent),
                     LabAbsenceLimitHours = CalculateLimitHours(labTotalHours, labLimitPercent),
-                    AttendanceStatusLabel = "Yoklama Girişi Yapılmamış"
+                    AttendanceStatusLabel = recordsForRegistration.Count > 0
+                        ? $"{totalAbsenceHours} Saat"
+                        : "Yoklama Girişi Yapılmamış"
                 };
             }).ToList()
         };

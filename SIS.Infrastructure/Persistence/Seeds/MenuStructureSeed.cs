@@ -362,8 +362,9 @@ public static class MenuStructureSeed
         {
             BuildItem(permissions, "Derslerim",       "/derslerim",                "derslerim",                  1, "menu.derslerim.view"),
             BuildItem(permissions, "Ders Programım",  "/ders-programim",           "ders-programim",             2, "menu.ders-programim.view"),
-            BuildItem(permissions, "Not Girişi",      "/not-girisi",               "not-girisi",                 3, "menu.not-girisi.view"),
-            BuildItem(permissions, "Ders Kısıtları",  "/danisman-ders-kisitlari",  "danisman-ders-kisitlari",    4, "menu.danisman-ders-kisitlari.view"),
+            BuildItem(permissions, "Yoklama Yönetimi", "/yoklama-girisi",          "yoklama-girisi",             3, "menu.yoklama-girisi.view"),
+            BuildItem(permissions, "Not Girişi",      "/not-girisi",               "not-girisi",                 4, "menu.not-girisi.view"),
+            BuildItem(permissions, "Ders Kısıtları",  "/danisman-ders-kisitlari",  "danisman-ders-kisitlari",    5, "menu.danisman-ders-kisitlari.view"),
         };
 
         await context.SaveChangesAsync(ct);

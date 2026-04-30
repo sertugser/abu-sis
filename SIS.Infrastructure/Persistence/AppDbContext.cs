@@ -23,6 +23,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CourseEquivalency> CourseEquivalencies => Set<CourseEquivalency>();
     public DbSet<CourseSection> CourseSections => Set<CourseSection>();
     public DbSet<CourseRegistration> CourseRegistrations => Set<CourseRegistration>();
+    public DbSet<AttendanceSession> AttendanceSessions => Set<AttendanceSession>();
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
@@ -429,6 +431,46 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
 
             e.Property(cs => cs.RowVersion)
              .IsRowVersion();
+        });
+
+        builder.Entity<AttendanceSession>(e =>
+        {
+            e.HasIndex(s => s.Token).IsUnique();
+            e.HasIndex(s => new { s.CourseSectionId, s.WeekNumber }).IsUnique();
+            e.Property(s => s.Token).HasMaxLength(64);
+            e.Property(s => s.Topic).HasMaxLength(200);
+
+            e.HasOne(s => s.CourseSection)
+             .WithMany()
+             .HasForeignKey(s => s.CourseSectionId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(s => s.Instructor)
+             .WithMany()
+             .HasForeignKey(s => s.InstructorId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AttendanceRecord>(e =>
+        {
+            e.HasIndex(r => new { r.AttendanceSessionId, r.StudentId }).IsUnique();
+            e.HasIndex(r => r.CourseRegistrationId);
+            e.HasIndex(r => r.StudentId);
+
+            e.HasOne(r => r.AttendanceSession)
+             .WithMany(s => s.Records)
+             .HasForeignKey(r => r.AttendanceSessionId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.CourseRegistration)
+             .WithMany()
+             .HasForeignKey(r => r.CourseRegistrationId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.Student)
+             .WithMany()
+             .HasForeignKey(r => r.StudentId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── CourseRegistration ───────────────────────────────────
