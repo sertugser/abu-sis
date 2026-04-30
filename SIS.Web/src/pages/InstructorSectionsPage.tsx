@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { ROUTES } from '@/lib/constants';
 import { useInstructorSections, useSectionStudents } from '../hooks/useInstructorSections';
-import { BookOpen, Users, Mail, ClipboardEdit, Calendar, Search } from 'lucide-react';
+import { BookOpen, Users, Mail, Phone, ClipboardEdit, Calendar, Search, ClipboardCheck } from 'lucide-react';
 
 export default function InstructorSectionsPage() {
   const { data, isLoading } = useInstructorSections();
@@ -157,6 +157,15 @@ export default function InstructorSectionsPage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              onClick={() => navigate(`${ROUTES.ATTENDANCE_ENTRY}?sectionId=${section.sectionId}`)}
+                              className="text-xs gap-1.5"
+                            >
+                              <ClipboardCheck className="h-3.5 w-3.5" />
+                              Yoklama
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
                               onClick={() => navigate(`${ROUTES.GRADE_ENTRY}/${section.sectionId}`)}
                               className="text-xs gap-1.5"
                             >
@@ -203,10 +212,11 @@ function StudentListDialog({
   const [search, setSearch] = useState('');
 
   const students = studentData?.students ?? [];
+  const showPhoneColumn = students.some(student => Boolean(student.phoneNumber));
   const filtered = students.filter(s => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    return `${s.studentNumber} ${s.firstName} ${s.lastName} ${s.email}`.toLowerCase().includes(q);
+    return `${s.studentNumber} ${s.firstName} ${s.lastName} ${s.email} ${s.phoneNumber}`.toLowerCase().includes(q);
   });
 
   return (
@@ -247,6 +257,9 @@ function StudentListDialog({
                     <th className="pb-2 pt-1 font-medium text-muted-foreground">Öğrenci No</th>
                     <th className="pb-2 pt-1 font-medium text-muted-foreground">Ad Soyad</th>
                     <th className="pb-2 pt-1 font-medium text-muted-foreground">E-posta</th>
+                    {showPhoneColumn && (
+                      <th className="pb-2 pt-1 font-medium text-muted-foreground">Telefon</th>
+                    )}
                     <th className="pb-2 pt-1 font-medium text-muted-foreground">Durum</th>
                     <th className="pb-2 pt-1 font-medium text-muted-foreground">Not</th>
                   </tr>
@@ -263,6 +276,18 @@ function StudentListDialog({
                           {student.email}
                         </a>
                       </td>
+                      {showPhoneColumn && (
+                        <td className="py-2.5">
+                          {student.phoneNumber ? (
+                            <a href={`tel:${student.phoneNumber}`} className="text-primary hover:underline inline-flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {student.phoneNumber}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-2.5">
                         <Badge variant={student.status === 'Active' ? 'success' : 'secondary'} className="text-xs">
                           {student.status === 'Active' ? 'Aktif' : student.status}

@@ -15,6 +15,7 @@ public record DepartmentDto(
 
 public record ProgramDto(
     int Id, string Name, string Code,
+    string? ExternalSystemCode,
     int DepartmentId, string DepartmentName,
     string DegreeLevel, string EducationType,
     int MaxStudyDurationSemesters, int TotalRequiredEcts,
@@ -29,6 +30,7 @@ public record UpdateDepartmentDto(string Name, string Code, int FacultyId);
 
 public record CreateProgramDto(
     string Name, string Code,
+    string? ExternalSystemCode,
     int DepartmentId,
     string DegreeLevel,
     string EducationType,
@@ -37,6 +39,7 @@ public record CreateProgramDto(
 );
 public record UpdateProgramDto(
     string Name, string Code,
+    string? ExternalSystemCode,
     int DepartmentId,
     string DegreeLevel,
     string EducationType,

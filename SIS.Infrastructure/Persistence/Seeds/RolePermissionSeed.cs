@@ -80,6 +80,7 @@ public static class RolePermissionSeed
                 "menu.akademik-takvim.view",
                 "menu.duyurular.view",
                 "menu.derslerim.view",
+                "menu.yoklama-girisi.view",
                 "menu.ders-programim.view",
                 "menu.not-girisi.view",
                 "menu.danisman-ders-kisitlari.view",
@@ -125,6 +126,7 @@ public static class RolePermissionSeed
                 "menu.duyurular.view",
                 "menu.danisman-ders-kisitlari.view",
                 "menu.derslerim.view",
+                "menu.yoklama-girisi.view",
                 "menu.ders-programim.view",
                 "menu.sinif-listeleri.view",
                 "menu.ders-kayit-duzenleme.view",
@@ -154,13 +156,14 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
-                // Patch: Akademik takvim + duyurular admin'lerden kaldırıldı (Genel İşlemler
+                // Patch: Duyurular admin'lerden kaldırıldı (Genel İşlemler
                 // modülü öğrenci-merkezli). Admin için Duyurular Duyuru Yönetimi altında.
+                "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
-                "menu.akademik-takvim-yonetimi.view",
                 "menu.akademik-takvim-olusturma.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
+                "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
                 "menu.ders-programi-olusturma.view",
@@ -272,10 +275,12 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
-                // Patch: akademik-takvim + duyurular admin'lerden kaldırıldı.
+                // Patch: duyurular admin'lerden kaldırıldı.
+                "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
+                "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
                 "menu.ders-programi-kisitlamalari.view",
@@ -285,6 +290,7 @@ public static class RolePermissionSeed
                 "menu.sinif-listeleri.view",
                 "menu.donem-kapatma.view",
                 "menu.derslerim.view",
+                "menu.yoklama-girisi.view",
                 "menu.ders-programim.view",
                 "menu.not-girisi.view",
                 "menu.ders-programi-olusturma.view",
@@ -398,11 +404,13 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
-                // Patch: akademik-takvim + duyurular admin'lerden kaldırıldı.
+                // Patch: duyurular admin'lerden kaldırıldı.
+                "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
                 "menu.program-kontenjan.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
+                "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
                 "menu.ders-programi-kisitlamalari.view",
@@ -415,6 +423,7 @@ public static class RolePermissionSeed
                 "menu.sinif-listeleri.view",
                 "menu.donem-kapatma.view",
                 "menu.derslerim.view",
+                "menu.yoklama-girisi.view",
                 "menu.ders-programim.view",
                 "menu.not-girisi.view",
                 "menu.degerlendirme-sonuclari.view",
@@ -526,6 +535,10 @@ public static class RolePermissionSeed
 
             // SystemAdministrator YOK — Karar 4: locked role, kod düzeyinde
             // RequirePermissionAttribute içinde shortcut ile tüm permission'lara açık.
+            //
+            // Faz B B3a notu: menu.secmeli-tipleri.* (view/create/edit/delete) sadece SysAdmin'e
+            // verilmiştir (Karar #1 — Dean/DepartmentManager CRUD yapamaz). SysAdmin shortcut
+            // sayesinde DB satırı gerekmiyor; diğer rollere bilinçli olarak eklenmemiştir.
         };
 
     /// <summary>

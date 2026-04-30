@@ -28,6 +28,7 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         ["Registration.EctsLimit.Cgpa200To249"] = (0, 60),
         ["Registration.EctsLimit.CgpaAbove250"] = (0, 60),
         ["Audit.RetentionDays"] = (30, 3650),
+        ["Security.PasswordRotationMonths"] = (1, 24),
         ["GPA.RetentionThreshold"] = (0, 4),
         ["Withdrawal.MaxCount.Undergraduate"] = (0, 20),
         ["Withdrawal.MaxCount.Associate"] = (0, 20),
@@ -72,6 +73,8 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         ["Attendance.TermWeekCount"] = (1, 52),
         ["Attendance.TheoryAbsenceLimitPercent"] = (0, 100),
         ["Attendance.LabAbsenceLimitPercent"] = (0, 100),
+        ["CourseOpening.DefaultCapacityPerSection"] = (1, 1000),
+        ["CourseOpening.MaxSectionsPerCourse"] = (1, 50),
     };
 
     private static readonly HashSet<string> TimeKeys = new(StringComparer.OrdinalIgnoreCase)

@@ -35,6 +35,9 @@ artifacts/
 project.assets.json
 project.nuget.cache
 *.csproj.nuget.*
+.dotnet-cli/
+.dotnet-cli */
+.tmp_pypdf/
 
 # ASP.NET Core secrets / environment-specific
 appsettings.Development.json
@@ -61,6 +64,9 @@ SIS.Web/dist/
 SIS.Web/dist-ssr/
 *.local
 
+# Vite dev server cache (auto-generated; nerede oluşursa oluşsun)
+**/.vite/
+
 # Claude Code settings (contains local session data)
 .claude/
 
@@ -79,3 +85,6 @@ backup_*.sql
 
 # Internal planning docs (not for repo)
 docs/superpowers/
+
+# Local analysis reports (codemap-diff, audit reports vb.)
+.reports/

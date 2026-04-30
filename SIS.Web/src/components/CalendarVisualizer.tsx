@@ -59,6 +59,8 @@ export interface CalendarVisualizerProps {
   events: VisualizerEvent[];
   compact?: boolean;
   multiMonth?: boolean;
+  inlineYearView?: boolean;
+  filterableLegend?: boolean;
   /** Academic year start (e.g. 2025 for 2025-2026). When provided, the year view shows Sep of this year through Aug of the next. */
   academicYearStart?: number;
 }
@@ -232,21 +234,35 @@ function buildAcademicYearMonths(events: VisualizerEvent[], fallbackAnchor: View
   return Array.from({ length: 12 }, (_, index) => addMonths(start, index));
 }
 
-export function CalendarVisualizer({ events, compact = false, multiMonth = false, academicYearStart: explicitAcademicYearStart }: CalendarVisualizerProps) {
+export function CalendarVisualizer({
+  events,
+  compact = false,
+  multiMonth = false,
+  inlineYearView = false,
+  filterableLegend = false,
+  academicYearStart: explicitAcademicYearStart,
+}: CalendarVisualizerProps) {
   const initialMonth = useMemo<ViewMonth>(() => ({ y: TODAY.getFullYear(), m: TODAY.getMonth() }), []);
   const [vm, setVm] = useState<ViewMonth>(initialMonth);
   const [showYearView, setShowYearView] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<CalendarEventCategory | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const monthRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const lastEventSignatureRef = useRef<string | null>(null);
   const programmaticScrollRef = useRef(false);
   const scrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const allMonths = useMemo(() => buildMonthRange(events, initialMonth), [events, initialMonth]);
+  const visibleEvents = useMemo(
+    () => activeCategory
+      ? events.filter(event => calendarEventCategory(event.eventType, event.title, event.templateItemKey) === activeCategory)
+      : events,
+    [activeCategory, events],
+  );
+  const allMonths = useMemo(() => buildMonthRange(visibleEvents, initialMonth), [visibleEvents, initialMonth]);
   const academicYearMonths = useMemo(() => buildAcademicYearMonths(events, vm, explicitAcademicYearStart), [events, vm, explicitAcademicYearStart]);
   const eventSignature = useMemo(
-    () => events.map(event => `${event.id}:${event.startDate}:${event.endDate}:${event.isChangedPreview ? '1' : '0'}`).join('|'),
-    [events],
+    () => visibleEvents.map(event => `${event.id}:${event.startDate}:${event.endDate}:${event.isChangedPreview ? '1' : '0'}`).join('|'),
+    [visibleEvents],
   );
 
   useEffect(() => {
@@ -293,9 +309,9 @@ export function CalendarVisualizer({ events, compact = false, multiMonth = false
   }, []);
 
   const viewMonths = useMemo(() => {
-    if (!multiMonth || events.length === 0) return [{ y: vm.y, m: vm.m }];
+    if (!multiMonth || visibleEvents.length === 0) return [{ y: vm.y, m: vm.m }];
     return allMonths;
-  }, [allMonths, events.length, multiMonth, vm]);
+  }, [allMonths, visibleEvents.length, multiMonth, vm]);
 
   const scrollToMonth = useCallback((month: ViewMonth) => {
     if (multiMonth) programmaticScrollRef.current = true;
@@ -358,7 +374,7 @@ export function CalendarVisualizer({ events, compact = false, multiMonth = false
   function renderYearMonth(y: number, m: number) {
     const weeks = buildGrid(y, m);
     const weekData = weeks.map(w => {
-      const bars = weekBars(w, events);
+      const bars = weekBars(w, visibleEvents);
       return { bars, maxLane: bars.reduce((mx, b) => Math.max(mx, b.lane), -1) + 1 };
     });
 
@@ -458,7 +474,7 @@ export function CalendarVisualizer({ events, compact = false, multiMonth = false
   function renderMonth(y: number, m: number) {
     const weeks = buildGrid(y, m);
     const weekData = weeks.map(w => {
-      const bars = weekBars(w, events);
+      const bars = weekBars(w, visibleEvents);
       return { bars, maxLane: bars.reduce((mx, b) => Math.max(mx, b.lane), -1) + 1 };
     });
 
@@ -584,6 +600,89 @@ export function CalendarVisualizer({ events, compact = false, multiMonth = false
     );
   }
 
+  function renderLegend(prefix: string, iconClass = 'h-3 w-4', textClass = 'text-[10px] font-semibold text-gray-500') {
+    return (
+      <>
+        {(Object.entries(CAT_STYLE) as [CalendarEventCategory, typeof CAT_STYLE[CalendarEventCategory]][]).map(([category, s]) => {
+          const selected = activeCategory === category;
+          const content = (
+            <>
+              <div className={cn(iconClass, 'rounded-sm border-l-[3px]', s.bg, s.border)} />
+              <span className={cn(textClass, selected && 'text-[#003366]')}>{s.label}</span>
+            </>
+          );
+
+          if (!filterableLegend) {
+            return (
+              <div key={`${prefix}-${s.label}`} className="flex items-center gap-1.5">
+                {content}
+              </div>
+            );
+          }
+
+          return (
+            <button
+              key={`${prefix}-${s.label}`}
+              type="button"
+              aria-pressed={selected}
+              title={selected ? 'Filtreyi kaldır' : `${s.label} etkinliklerini göster`}
+              onClick={() => setActiveCategory(current => current === category ? null : category)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full border px-2 py-1 transition',
+                selected
+                  ? 'border-[#003366]/40 bg-[#003366]/10 shadow-sm'
+                  : 'border-transparent hover:border-gray-200 hover:bg-white',
+              )}
+            >
+              {content}
+            </button>
+          );
+        })}
+        {filterableLegend && activeCategory && (
+          <button
+            type="button"
+            onClick={() => setActiveCategory(null)}
+            className="rounded-full border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-500 transition hover:bg-white hover:text-[#003366]"
+          >
+            Tümünü göster
+          </button>
+        )}
+      </>
+    );
+  }
+
+  function renderInlineYearView() {
+    const firstMonth = academicYearMonths[0];
+    const lastMonth = academicYearMonths[11];
+
+    return (
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Akademik yıl</p>
+            <h2 className="text-xl font-bold text-[#003366] sm:text-2xl">
+              {firstMonth && MONTH_NAMES[firstMonth.m]} {firstMonth?.y}
+              {' - '}
+              {lastMonth && MONTH_NAMES[lastMonth.m]} {lastMonth?.y}
+            </h2>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {renderLegend('inline-year-legend')}
+            </div>
+          </div>
+        </div>
+        <div className="bg-slate-50 p-2">
+          <div className="grid min-h-0 gap-2 lg:grid-cols-4">
+            {academicYearMonths.map(month => renderYearMonth(month.y, month.m))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (inlineYearView) {
+    return renderInlineYearView();
+  }
+
   return (
     <div className={cn('space-y-3', multiMonth && 'flex flex-col max-h-[70vh]')}>
       <div className={cn(multiMonth && 'sticky top-0 z-10 bg-white pb-1')}>
@@ -629,12 +728,7 @@ export function CalendarVisualizer({ events, compact = false, multiMonth = false
       </div>
 
       <div className="flex flex-wrap gap-2 px-1 border-t border-gray-100 pt-2">
-        {(Object.entries(CAT_STYLE) as [CalendarEventCategory, typeof CAT_STYLE[CalendarEventCategory]][]).map(([, s]) => (
-          <div key={s.label} className="flex items-center gap-1.5">
-            <div className={cn('w-4 h-3 rounded-sm border-l-[3px]', s.bg, s.border)} />
-            <span className="text-[11px] text-gray-500 font-medium">{s.label}</span>
-          </div>
-        ))}
+        {renderLegend('month-legend', 'w-4 h-3', 'text-[11px] text-gray-500 font-medium')}
       </div>
 
       {showYearView && (
@@ -649,12 +743,7 @@ export function CalendarVisualizer({ events, compact = false, multiMonth = false
                   {academicYearMonths[11] && MONTH_NAMES[academicYearMonths[11].m]} {academicYearMonths[11]?.y}
                 </h2>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {(Object.entries(CAT_STYLE) as [CalendarEventCategory, typeof CAT_STYLE[CalendarEventCategory]][]).map(([, s]) => (
-                    <div key={`year-legend-${s.label}`} className="flex items-center gap-1.5">
-                      <div className={cn('h-3 w-4 rounded-sm border-l-[3px]', s.bg, s.border)} />
-                      <span className="text-[10px] font-semibold text-gray-500">{s.label}</span>
-                    </div>
-                  ))}
+                  {renderLegend('year-legend')}
                 </div>
               </div>
               <button

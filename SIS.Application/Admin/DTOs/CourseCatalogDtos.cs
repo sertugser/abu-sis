@@ -28,6 +28,11 @@ public record CourseDetailDto(
     int? MinEctsRequired,
     bool RequiresNoFailedLowerCourses,
     bool CanBeTakenStandalone,
+    // Phase 2 — Proliz B "Genel Bilgiler"
+    string? AlternativeName,
+    bool ShowInInfoPackage,
+    int? ApplicationHours,
+    CourseOpenType? OpenType,
     CourseStatsDto? Stats = null,
     List<PrerequisiteChainNodeDto>? PrerequisiteChain = null
 );
@@ -52,7 +57,12 @@ public record CreateCourseDto(
     int? MinCreditsRequired = null,
     int? MinEctsRequired = null,
     bool RequiresNoFailedLowerCourses = false,
-    bool CanBeTakenStandalone = false
+    bool CanBeTakenStandalone = false,
+    // Phase 2 — Proliz B "Genel Bilgiler"
+    string? AlternativeName = null,
+    bool ShowInInfoPackage = true,
+    int? ApplicationHours = null,
+    CourseOpenType? OpenType = null
 );
 
 public record UpdateCourseDto(
@@ -67,7 +77,12 @@ public record UpdateCourseDto(
     int? MinCreditsRequired = null,
     int? MinEctsRequired = null,
     bool RequiresNoFailedLowerCourses = false,
-    bool CanBeTakenStandalone = false
+    bool CanBeTakenStandalone = false,
+    // Phase 2 — Proliz B "Genel Bilgiler"
+    string? AlternativeName = null,
+    bool ShowInInfoPackage = true,
+    int? ApplicationHours = null,
+    CourseOpenType? OpenType = null
 );
 
 public record CourseStatsDto(

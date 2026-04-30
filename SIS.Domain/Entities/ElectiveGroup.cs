@@ -1,15 +1,16 @@
 namespace SIS.Domain.Entities;
 
-using SIS.Domain.Enums;
-
 public class ElectiveGroup
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
-    public ElectiveSubtype ElectiveSubtype { get; set; }
+    // Faz E: deprecated ElectiveSubtype enum kolon kaldırıldı; sadece DB-driven FK.
+    public int ElectiveSubtypeId { get; set; }
     public int? FacultyId { get; set; }
     public Faculty? Faculty { get; set; }
+    public int? DepartmentId { get; set; }
+    public Department? Department { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }

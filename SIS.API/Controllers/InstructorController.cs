@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -18,11 +19,16 @@ public class InstructorController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly ISchedulingService _schedulingService;
+    private readonly IWebModuleSettingsProvider _webSettings;
 
-    public InstructorController(AppDbContext context, ISchedulingService schedulingService)
+    public InstructorController(
+        AppDbContext context,
+        ISchedulingService schedulingService,
+        IWebModuleSettingsProvider? webSettings = null)
     {
         _context = context;
         _schedulingService = schedulingService;
+        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
     }
 
     /// <summary>
@@ -96,6 +102,7 @@ public class InstructorController : ControllerBase
         var result = sections.Select(s => new
         {
             SectionId = s.Id,
+            SectionNumber = s.SectionNumber,
             CourseCode = s.Course.Code,
             CourseName = s.Course.Name,
             Ects = s.Course.Ects,
@@ -183,6 +190,7 @@ public class InstructorController : ControllerBase
         var userMap = await _context.Users
             .Where(u => studentUserIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id);
+        var showStudentPhone = await _webSettings.GetBoolAsync("InstructorPanel", "ShowStudentPhone", false);
 
         var students = registrations.Select(r =>
         {
@@ -194,6 +202,7 @@ public class InstructorController : ControllerBase
                 FirstName = user?.FirstName ?? "",
                 LastName = user?.LastName ?? "",
                 Email = user?.Email ?? "",
+                PhoneNumber = showStudentPhone ? user?.PhoneNumber ?? "" : "",
                 Status = r.Status.ToString(),
                 Grade = r.Grade?.ToString()
             };

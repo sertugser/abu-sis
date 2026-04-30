@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.Common.DTOs;
+using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -18,11 +20,14 @@ public class CourseController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IDateTimeProvider _clock;
+    private readonly IWebModuleSettingsProvider _webSettings;
+    private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
 
-    public CourseController(AppDbContext context, IDateTimeProvider clock)
+    public CourseController(AppDbContext context, IDateTimeProvider clock, IWebModuleSettingsProvider? webSettings = null)
     {
         _context = context;
         _clock = clock;
+        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
     }
 
     /// <summary>
@@ -167,6 +172,38 @@ public class CourseController : ControllerBase
         var curriculumCourseIds = curriculumCourses.Select(cc => cc.CourseId).ToHashSet();
         var compulsoryMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.IsCompulsory);
         var semesterMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.SuggestedSemester);
+
+        // Faz C C1: Müfredata bağlı pool slot'ları + her course'un aday olduğu slot'lar.
+        // ElectiveGroupCourse üzerinden CourseId → Pool[] mapping kurulur. Bir ders
+        // Karar #5 gereği birden fazla grupta olabilir → çoğul liste.
+        var curriculumPools = await _context.CurriculumElectivePools
+            .AsNoTracking()
+            .Where(p => p.CurriculumId == activeProgram.CurriculumId)
+            .Include(p => p.ElectiveGroup)
+                .ThenInclude(eg => eg.Courses)
+            .ToListAsync();
+
+        var courseToPoolSlots = new Dictionary<int, List<SIS.Application.Common.DTOs.ApplicablePoolSlotDto>>();
+        foreach (var pool in curriculumPools)
+        {
+            var slot = new SIS.Application.Common.DTOs.ApplicablePoolSlotDto
+            {
+                PoolId = pool.Id,
+                SlotName = pool.SlotName,
+                GroupCode = pool.ElectiveGroup.Code,
+                GroupName = pool.ElectiveGroup.Name,
+                EctsPerCourse = pool.EctsPerCourse,
+            };
+            foreach (var groupCourse in pool.ElectiveGroup.Courses)
+            {
+                if (!courseToPoolSlots.TryGetValue(groupCourse.CourseId, out var list))
+                {
+                    list = new List<SIS.Application.Common.DTOs.ApplicablePoolSlotDto>();
+                    courseToPoolSlots[groupCourse.CourseId] = list;
+                }
+                list.Add(slot);
+            }
+        }
 
         // 4. Student's ALL past registrations (excluding plan drafts and dropped)
         var pastRegistrations = await _context.CourseRegistrations
@@ -341,6 +378,9 @@ public class CourseController : ControllerBase
                     PrerequisitesMet = prereqsMet,
                     PreviousGrade = previousGrade,
                     CurriculumType = curriculumType,
+                    ApplicablePoolSlots = courseToPoolSlots.TryGetValue(cid, out var slots)
+                        ? slots
+                        : new List<SIS.Application.Common.DTOs.ApplicablePoolSlotDto>(),
                     Sections = g.Select(s => new SectionDto
                     {
                         SectionId = s.Id,
@@ -435,6 +475,10 @@ public class CourseController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
 
+        var registrationControl = await GetStudentRegistrationControlAsync();
+        var baseRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow);
+        var baseAddDropOpen = term.IsAddDropOpen(_clock.UtcNow);
+
         var dto = new ActiveTermDto
         {
             Id = term.Id,
@@ -445,13 +489,59 @@ public class CourseController : ControllerBase
             RegistrationEnd = term.AcademicCalendar?.RegistrationEnd ?? term.TermStart,
             AddDropStart = term.AcademicCalendar?.AddDropStart ?? term.TermStart,
             AddDropEnd = term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
-            IsRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow),
-            IsAddDropOpen = term.IsAddDropOpen(_clock.UtcNow),
+            IsRegistrationOpen = baseRegistrationOpen && registrationControl.IsOpen,
+            IsAddDropOpen = baseAddDropOpen && registrationControl.IsOpen,
             Status = term.GetStatus(_clock.UtcNow).ToString(),
-            HasAcademicCalendar = term.AcademicCalendar != null
+            HasAcademicCalendar = term.AcademicCalendar != null,
+            StudentRegistrationEnabled = registrationControl.IsEnabled,
+            StudentRegistrationOpenAt = registrationControl.OpenAt?.ToString("HH:mm", CultureInfo.InvariantCulture),
+            StudentRegistrationMessage = registrationControl.Message
         };
 
         return Ok(dto);
     }
+
+    private async Task<StudentRegistrationControl> GetStudentRegistrationControlAsync()
+    {
+        var enabled = await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", true);
+        if (!enabled)
+            return new StudentRegistrationControl(false, false, null, "Ders kayıt işlemleri web modül ayarlarından kapatılmıştır.");
+
+        var openAt = await _webSettings.GetTimeAsync("StudentPanel", "CourseRegistrationOpenAt", TimeOnly.MinValue);
+        if (openAt > TimeOnly.MinValue)
+        {
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(_clock.UtcNow, TurkeyTimeZone);
+            if (TimeOnly.FromDateTime(localNow) < openAt)
+            {
+                return new StudentRegistrationControl(
+                    true,
+                    false,
+                    openAt,
+                    $"Ders kayıt işlemleri bugün saat {openAt.ToString("HH:mm", CultureInfo.InvariantCulture)} itibarıyla açılacaktır.");
+            }
+
+            return new StudentRegistrationControl(true, true, openAt, null);
+        }
+
+        return new StudentRegistrationControl(true, true, null, null);
+    }
+
+    private static TimeZoneInfo ResolveTurkeyTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.Local;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return TimeZoneInfo.Local;
+        }
+    }
+
+    private sealed record StudentRegistrationControl(bool IsEnabled, bool IsOpen, TimeOnly? OpenAt, string? Message);
 
 }

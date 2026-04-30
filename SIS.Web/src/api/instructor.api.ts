@@ -13,6 +13,7 @@ export interface InstructorProfile {
 
 export interface InstructorSection {
   sectionId: number;
+  sectionNumber: number;
   courseCode: string;
   courseName: string;
   ects: number;
@@ -50,6 +51,7 @@ export interface SectionStudent {
   firstName: string;
   lastName: string;
   email: string;
+  phoneNumber: string;
   status: string;
   grade: string | null;
 }

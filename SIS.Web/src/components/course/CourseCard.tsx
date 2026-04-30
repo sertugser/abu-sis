@@ -11,9 +11,16 @@ interface CourseCardProps {
   onAddToPlan: (sectionId: number) => void;
   isAdding: boolean;
   registeredSectionIds: number[];
+  registrationActionsOpen: boolean;
 }
 
-export default function CourseCard({ course, onAddToPlan, isAdding, registeredSectionIds }: CourseCardProps) {
+export default function CourseCard({
+  course,
+  onAddToPlan,
+  isAdding,
+  registeredSectionIds,
+  registrationActionsOpen,
+}: CourseCardProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const courseHasRegistration = course.sections.some(s => registeredSectionIds.includes(s.sectionId));
@@ -113,6 +120,7 @@ export default function CourseCard({ course, onAddToPlan, isAdding, registeredSe
                 isInPlan={registeredSectionIds.includes(section.sectionId)}
                 isCourseRegistered={courseHasRegistration && !registeredSectionIds.includes(section.sectionId)}
                 prerequisitesMet={course.prerequisitesMet}
+                registrationActionsOpen={registrationActionsOpen}
               />
             ))}
           </div>

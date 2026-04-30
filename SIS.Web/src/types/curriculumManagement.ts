@@ -8,6 +8,7 @@ export interface CurriculumListDto {
   programName: string;
   programCode: string;
   facultyName: string;
+  departmentName: string;
   version: string;
   name: string | null;
   startDate: string | null;
@@ -59,8 +60,31 @@ export interface CurriculumCourseItemDto {
   isCompulsory: boolean;
   includeInGpa: boolean;
   showOnTranscript: boolean;
-  courseCategory: string | null;
-  groupCode: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  openingReasonId: number | null;
+  openingReasonCode: string | null;
+  openingReasonName: string | null;
+  nationalCredit: number;
+  // Phase 2 — flags
+  isMainGroupCourse: boolean;
+  isFormationCourse: boolean;
+  excludedFromCreditTotal: boolean;
+  excludedFromTranscriptTotal: boolean;
+  autoAddOnNewRegistration: boolean;
+  showAtTakenCurriculum: boolean;
+  showInstructorAtRegistration: boolean;
+  hasCustomExamCurriculum: boolean;
+  // Phase 2 — decision metadata
+  decisionDate: string | null;
+  decisionNo: string | null;
+  decisionNote: string | null;
+  // Phase 2 — curriculum-specific description
+  curriculumDescription: string | null;
+  // Phase 3 — İntibak (önceki ders)
+  previousCourseId: number | null;
+  previousCourseCode: string | null;
+  previousCourseName: string | null;
 }
 
 export interface CreateCurriculumRequest {
@@ -107,8 +131,25 @@ export interface AddCourseRequest {
   isCompulsory: boolean;
   includeInGpa?: boolean;
   showOnTranscript?: boolean;
-  courseCategory?: string;
-  groupCode?: string;
+  categoryId?: number | null;
+  openingReasonId?: number | null;
+  // Phase 2 — flags
+  isMainGroupCourse?: boolean;
+  isFormationCourse?: boolean;
+  excludedFromCreditTotal?: boolean;
+  excludedFromTranscriptTotal?: boolean;
+  autoAddOnNewRegistration?: boolean;
+  showAtTakenCurriculum?: boolean;
+  showInstructorAtRegistration?: boolean;
+  hasCustomExamCurriculum?: boolean;
+  // Phase 2 — decision metadata
+  decisionDate?: string | null;
+  decisionNo?: string | null;
+  decisionNote?: string | null;
+  // Phase 2 — curriculum-specific description
+  curriculumDescription?: string | null;
+  // Phase 3 — İntibak
+  previousCourseId?: number | null;
 }
 
 export interface UpdateCourseRequest {
@@ -116,8 +157,30 @@ export interface UpdateCourseRequest {
   isCompulsory?: boolean;
   includeInGpa?: boolean;
   showOnTranscript?: boolean;
-  courseCategory?: string;
-  groupCode?: string;
+  categoryId?: number | null;
+  openingReasonId?: number | null;
+  clearCategory?: boolean;
+  clearOpeningReason?: boolean;
+  // Phase 2 — flags (null/undefined = no change)
+  isMainGroupCourse?: boolean;
+  isFormationCourse?: boolean;
+  excludedFromCreditTotal?: boolean;
+  excludedFromTranscriptTotal?: boolean;
+  autoAddOnNewRegistration?: boolean;
+  showAtTakenCurriculum?: boolean;
+  showInstructorAtRegistration?: boolean;
+  hasCustomExamCurriculum?: boolean;
+  // Phase 2 — decision metadata
+  decisionDate?: string | null;
+  decisionNo?: string | null;
+  decisionNote?: string | null;
+  clearDecisionDate?: boolean;
+  // Phase 2 — curriculum-specific description
+  curriculumDescription?: string | null;
+  clearCurriculumDescription?: boolean;
+  // Phase 3 — İntibak (null/undefined = no change; clearPreviousCourse=true → null)
+  previousCourseId?: number | null;
+  clearPreviousCourse?: boolean;
 }
 
 export interface CopyCurriculumRequest {
@@ -129,25 +192,46 @@ export interface CurriculumElectivePoolDto {
   electiveGroupId: number;
   groupName: string;
   groupCode: string;
-  electiveSubtype: string;
+  /** Faz E: ElectiveSubtypes.Id (deprecated electiveSubtype enum string kalktı) */
+  electiveSubtypeId: number;
+  /** Faz B B1: aynı grubun farklı slot'ları (örn. TE-1, TE-2) */
+  slotName: string;
   suggestedSemesterStart: number;
   suggestedSemesterEnd: number;
   requiredCourseCount: number;
   requiredEcts: number;
+  /** Faz B B1: havuz seviyesinde AKTS override (null → ders kataloğu AKTS) */
+  ectsPerCourse: number | null;
   poolCourseCount: number;
 }
 
 export interface CreatePoolRequest {
   electiveGroupId: number;
+  /** Faz B B2: zorunlu, müfredat içinde (group, slotName) unique */
+  slotName: string;
   suggestedSemesterStart: number;
   suggestedSemesterEnd: number;
   requiredCourseCount: number;
   requiredEcts: number;
+  /** Faz B B2: opsiyonel; null → ders kataloğu AKTS'i kullanılır */
+  ectsPerCourse?: number;
 }
 
 export interface UpdatePoolRequest {
+  slotName?: string;
   suggestedSemesterStart?: number;
   suggestedSemesterEnd?: number;
   requiredCourseCount?: number;
   requiredEcts?: number;
+  ectsPerCourse?: number;
+  /** Faz B B2: explicit clear flag (partial update + explicit null) */
+  clearEctsPerCourse?: boolean;
 }
+
+/**
+ * Faz B B5: Müfredat tablosunda zorunlular + grup slot'ları karışık satırlar.
+ * Discriminated union — render tarafı `kind` üzerinden ayrıştırır.
+ */
+export type CurriculumRow =
+  | { kind: 'course'; course: CurriculumCourseItemDto }
+  | { kind: 'pool'; pool: CurriculumElectivePoolDto };

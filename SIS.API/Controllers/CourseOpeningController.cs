@@ -3,20 +3,34 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
-using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
+public sealed record TransferDefaultsDto(int DefaultCapacityPerSection, int MaxSectionsPerCourse);
+
 [ApiController]
 [Route("api/course-opening")]
 [Authorize]
-public class CourseOpeningController(ICourseOpeningService courseOpeningService, AppDbContext context) : ControllerBase
+public class CourseOpeningController(
+    ICourseSectionLifecycleService lifecycleService,
+    ICourseOpeningQueryService queryService,
+    IInstructorAssignmentService instructorAssignmentService,
+    ITermCourseTransferService transferService,
+    AppDbContext context,
+    ISystemConfigProvider systemConfig) : ControllerBase
 {
-    private readonly ICourseOpeningService _courseOpeningService = courseOpeningService;
+    private readonly ICourseSectionLifecycleService _lifecycleService = lifecycleService;
+    private readonly ICourseOpeningQueryService _queryService = queryService;
+    private readonly IInstructorAssignmentService _instructorAssignmentService = instructorAssignmentService;
+    private readonly ITermCourseTransferService _transferService = transferService;
     private readonly AppDbContext _context = context;
+    private readonly ISystemConfigProvider _systemConfig = systemConfig;
+
+    // ── Listeleme / Lookup ───────────────────────────────────────────────
 
     [HttpGet("list")]
     [RequirePermission("menu.ders-acma-islemleri.view")]
@@ -25,18 +39,35 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetOpenedCoursesAsync(departmentId, termId, ct);
+        var result = await _queryService.GetOpenedCoursesAsync(departmentId, termId, ct);
         return Ok(result);
     }
 
     [HttpGet("curriculum-courses")]
     [RequirePermission("menu.ders-acma-islemleri.view")]
-    public async Task<IActionResult> GetCurriculumCoursesForOpening([FromQuery] int departmentId, [FromQuery] int termId, [FromQuery] bool showAll = false, CancellationToken ct = default)
+    public async Task<IActionResult> GetCurriculumCoursesForOpening(
+        [FromQuery] int departmentId,
+        [FromQuery] int termId,
+        [FromQuery] bool showAll = false,
+        [FromQuery] int? curriculumId = null,
+        [FromQuery] bool includeUnmapped = false,
+        CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, showAll, ct);
+        // curriculumId verilmişse müfredatın bölüm sahipliğini doğrula (yetki kaçağı önlemi)
+        if (curriculumId.HasValue)
+        {
+            var curriculumDeptId = await _context.Curricula
+                .AsNoTracking()
+                .Where(c => c.Id == curriculumId.Value)
+                .Select(c => (int?)c.Program.DepartmentId)
+                .FirstOrDefaultAsync(ct);
+            if (curriculumDeptId != departmentId) return Forbid();
+        }
+
+        var result = await _queryService.GetCurriculumCoursesForOpeningAsync(departmentId, termId, showAll, curriculumId, includeUnmapped, ct);
         return Ok(result);
     }
 
@@ -47,9 +78,66 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetDepartmentInstructorsAsync(departmentId, termId, ct);
+        var result = await _queryService.GetDepartmentInstructorsAsync(departmentId, termId, ct);
         return Ok(result);
     }
+
+    [HttpGet("pool-slots")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
+    public async Task<IActionResult> GetPoolSlots(
+        [FromQuery] int curriculumId,
+        [FromQuery] int termId,
+        CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        // Müfredat hangi bölüme ait — yetki kontrolü
+        var curriculumDeptId = await _context.Curricula
+            .AsNoTracking()
+            .Where(c => c.Id == curriculumId)
+            .Select(c => (int?)c.Program.DepartmentId)
+            .FirstOrDefaultAsync(ct);
+        if (curriculumDeptId == null) return NotFound();
+        if (!await HasDepartmentAccessAsync(userId, curriculumDeptId.Value, ct)) return Forbid();
+
+        var result = await _queryService.GetPoolSlotsForOpeningAsync(curriculumId, termId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("pool-candidates")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
+    public async Task<IActionResult> GetPoolCandidates(
+        [FromQuery] int poolId,
+        [FromQuery] int termId,
+        CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        // Pool hangi müfredata, müfredat hangi bölüme — yetki kontrolü
+        var poolDeptId = await _context.CurriculumElectivePools
+            .AsNoTracking()
+            .Where(p => p.Id == poolId)
+            .Select(p => (int?)p.Curriculum.Program.DepartmentId)
+            .FirstOrDefaultAsync(ct);
+        if (poolDeptId == null) return NotFound();
+        if (!await HasDepartmentAccessAsync(userId, poolDeptId.Value, ct)) return Forbid();
+
+        var result = await _queryService.GetPoolCandidatesAsync(poolId, termId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("external-courses")]
+    [RequirePermission("menu.ders-acma-islemleri.view")]
+    public async Task<IActionResult> GetExternalCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
+
+        var result = await _queryService.GetExternalCoursesAsync(departmentId, termId, ct);
+        return Ok(result);
+    }
+
+    // ── Section Yaşam Döngüsü ────────────────────────────────────────────
 
     [HttpPost("open")]
     [RequirePermission("menu.ders-acma-islemleri.open")]
@@ -60,7 +148,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         try
         {
-            var result = await _courseOpeningService.OpenCourseAsync(departmentId, termId, request, ct);
+            var result = await _lifecycleService.OpenCourseAsync(departmentId, termId, request, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -76,7 +164,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.BulkOpenCoursesAsync(departmentId, termId, request, ct);
+        var result = await _lifecycleService.BulkOpenCoursesAsync(departmentId, termId, request, ct);
         return Ok(result);
     }
 
@@ -86,7 +174,6 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
-        // Verify department access via section's course
         var section = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
@@ -98,7 +185,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         try
         {
-            var result = await _courseOpeningService.UpdateSectionAsync(request, ct);
+            var result = await _lifecycleService.UpdateSectionAsync(request, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -124,7 +211,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         try
         {
-            await _courseOpeningService.CloseSectionAsync(id, ct);
+            await _lifecycleService.CloseSectionAsync(id, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -146,7 +233,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         try
         {
-            var result = await _courseOpeningService.CloseAllSectionsAsync(courseId, termId, ct);
+            var result = await _lifecycleService.CloseAllSectionsAsync(courseId, termId, ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -172,7 +259,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         try
         {
-            await _courseOpeningService.ReactivateSectionAsync(id, ct);
+            await _lifecycleService.ReactivateSectionAsync(id, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -180,6 +267,8 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    // ── Hoca Atama ───────────────────────────────────────────────────────
 
     [HttpPost("bulk-assign-instructor")]
     [RequirePermission("menu.ogretim-elemani-atama.bulk-assign")]
@@ -190,7 +279,7 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.BulkAssignInstructorAsync(departmentId, termId, request, ct);
+        var result = await _instructorAssignmentService.BulkAssignInstructorAsync(departmentId, termId, request, ct);
         return Ok(result);
     }
 
@@ -210,7 +299,6 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!await HasDepartmentAccessAsync(userId, instructor.DepartmentId, ct))
             return Forbid();
 
-        // Get instructor's user name
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == instructor.UserId, ct);
@@ -219,7 +307,6 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
             ? $"{instructor.Title} {user.FirstName} {user.LastName}"
             : $"{instructor.Title} (#{instructor.Id})";
 
-        // Get assigned sections for this term
         var sections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
@@ -252,15 +339,23 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         });
     }
 
+    // ── Geçmiş Dönemden Aktarım (Ders Aç (Hareket)) ──────────────────────
+
     [HttpGet("previous-term-courses")]
     [RequirePermission("menu.donem-programi-aktarim.view")]
     public async Task<IActionResult> GetPreviousTermCourses(
-        [FromQuery] int departmentId, [FromQuery] int sourceTermId, [FromQuery] int targetTermId, CancellationToken ct)
+        [FromQuery] int departmentId,
+        [FromQuery] int sourceTermId,
+        [FromQuery] int targetTermId,
+        [FromQuery] int? programId,
+        [FromQuery] int? classLevel,
+        CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.GetPreviousTermCoursesAsync(departmentId, sourceTermId, targetTermId, ct);
+        var result = await _transferService.GetPreviousTermCoursesAsync(
+            departmentId, sourceTermId, targetTermId, programId, classLevel, ct);
         return Ok(result);
     }
 
@@ -271,20 +366,20 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasDepartmentAccessAsync(userId, request.DepartmentId, ct)) return Forbid();
 
-        var result = await _courseOpeningService.TransferFromTermAsync(request, ct);
+        var result = await _transferService.TransferFromTermAsync(request, ct);
         return Ok(result);
     }
 
-    [HttpGet("external-courses")]
-    [RequirePermission("menu.ders-acma-islemleri.view")]
-    public async Task<IActionResult> GetExternalCourses([FromQuery] int departmentId, [FromQuery] int termId, CancellationToken ct)
+    [HttpGet("transfer-defaults")]
+    [RequirePermission("menu.donem-programi-aktarim.view")]
+    public async Task<IActionResult> GetTransferDefaults(CancellationToken ct)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
-
-        var result = await _courseOpeningService.GetExternalCoursesAsync(departmentId, termId, ct);
-        return Ok(result);
+        var defaultCapacity = await _systemConfig.GetIntAsync("CourseOpening.DefaultCapacityPerSection", 40, ct);
+        var maxSections = await _systemConfig.GetIntAsync("CourseOpening.MaxSectionsPerCourse", 20, ct);
+        return Ok(new TransferDefaultsDto(defaultCapacity, maxSections));
     }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
 
     private bool TryGetUserId(out int userId)
     {
@@ -307,7 +402,6 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
 
         if (instructor == null) return false;
 
-        // Dean: kendi fakültesindeki tüm bölümlere erişebilir
         if (roles.Contains("Dean"))
         {
             var department = await _context.Departments.AsNoTracking()
@@ -315,7 +409,6 @@ public class CourseOpeningController(ICourseOpeningService courseOpeningService,
             return department != null && department.FacultyId == instructor.Department.FacultyId;
         }
 
-        // DepartmentManager: sadece kendi bölümü
         if (roles.Contains("DepartmentManager"))
             return instructor.DepartmentId == departmentId;
 

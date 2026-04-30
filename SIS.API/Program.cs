@@ -12,6 +12,7 @@ using SIS.Application.Common.Time;
 using SIS.Application.Identity.Services;
 using SIS.Application.Auth.Services;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.ElectiveGroups.Services;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.UserPreferences.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -70,7 +71,10 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.CustomSchemaIds(type => type.FullName?.Replace('+', '.') ?? type.Name);
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
@@ -128,6 +132,9 @@ builder.Services.AddAuthentication(options =>
 // Register Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// Elective Groups
+builder.Services.AddScoped<IElectiveGroupScopeValidator, ElectiveGroupScopeValidator>();
+
 // Register Course Registration services
 builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidationService>();
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
@@ -156,7 +163,12 @@ builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
-builder.Services.AddScoped<ICourseOpeningService, CourseOpeningService>();
+// Faz 3.C: Eski monolitik CourseOpeningService 4 ayrı servise + 1 helper'a bölündü
+builder.Services.AddScoped<SIS.Infrastructure.Services.CourseOpening.CourseOpeningHelpers>();
+builder.Services.AddScoped<ICourseSectionLifecycleService, SIS.Infrastructure.Services.CourseOpening.CourseSectionLifecycleService>();
+builder.Services.AddScoped<ICourseOpeningQueryService, SIS.Infrastructure.Services.CourseOpening.CourseOpeningQueryService>();
+builder.Services.AddScoped<IInstructorAssignmentService, SIS.Infrastructure.Services.CourseOpening.InstructorAssignmentService>();
+builder.Services.AddScoped<ITermCourseTransferService, SIS.Infrastructure.Services.CourseOpening.TermCourseTransferService>();
 builder.Services.AddScoped<IExcelScheduleService, ExcelScheduleService>();
 
 // Admin services
@@ -174,6 +186,7 @@ builder.Services.AddScoped<IOsymRegistrationCalendarService, OsymRegistrationCal
 builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
+builder.Services.AddScoped<IWebModuleSettingsProvider, WebModuleSettingsProvider>();
 
 // RBAC (Phase 1)
 builder.Services.AddScoped<IPermissionService, PermissionService>();

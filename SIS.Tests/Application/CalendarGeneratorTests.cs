@@ -263,23 +263,7 @@ public class CalendarGeneratorTests : IDisposable
     [Fact]
     public async Task Generator_ShiftsExcuseExam_WhenItWouldOverlap_BlockingHoliday()
     {
-        await _templateService.UpsertHolidayDefinitionAsync(
-            id: null,
-            new UpsertHolidayDefinitionDto(
-                "Test Tatili",
-                "Test Holiday",
-                HolidayType.Fixed,
-                FixedMonth: 11,
-                FixedDay: 12,
-                HijriMonth: null,
-                HijriDay: null,
-                DurationDays: 1,
-                IsHalfDayStart: false,
-                IsOfficialHoliday: true,
-                BlocksAcademicEvents: true,
-                Source: "Test",
-                Overrides: [],
-                IsActive: true));
+        await AddBlockingHolidayAsync("Test Tatili", "Test Holiday", 11, 12);
 
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
             "2025-2026",
@@ -296,6 +280,113 @@ public class CalendarGeneratorTests : IDisposable
         excuseExam.StartDate.Should().BeOnOrAfter(Utc(2025, 11, 13));
         excuseExamEnd.Should().BeOnOrAfter(excuseExam.StartDate);
         excuseExamEnd.Date.Should().NotBe(Utc(2025, 11, 12).Date);
+    }
+
+    [Fact]
+    public async Task Generator_ChoosesNextMidtermWeek_WhenPreviousWeekWouldSacrificePreMidtermWeeks()
+    {
+        await AddBlockingHolidayAsync("Ara Sınav Haftası Test Tatili", "Midterm Week Test Holiday", 11, 12);
+
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var midterm = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_exam");
+        var final = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "final_exam");
+        var excuseApplication = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_excuse_application");
+        var excuseExam = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_excuse_exam");
+        var publication = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_publication");
+
+        midterm.StartDate.Should().Be(Utc(2025, 11, 17));
+        midterm.EndDate.Should().Be(Utc(2025, 11, 23));
+        ExamEventsShouldNotOverlap(result.Events, result.Holidays);
+        CountTeachingWeeksBetween(Utc(2025, 9, 21), midterm.StartDate).Should().BeGreaterThanOrEqualTo(7);
+        CountTeachingWeeksBetween(midterm.EndDate!.Value, final.StartDate).Should().Be(6);
+
+        excuseApplication.StartDate.Should().BeAfter(midterm.EndDate!.Value);
+        excuseExam.StartDate.Should().BeAfter(excuseApplication.StartDate);
+        publication.StartDate.Should().BeAfter(excuseExam.EndDate ?? excuseExam.StartDate);
+        result.Warnings.Should().NotContain(w => w.Code == "CHRONOLOGY");
+    }
+
+    [Fact]
+    public async Task Generator_ChoosesNextMidtermWeek_WhenItBestBalancesTeachingWeeks()
+    {
+        await AddBlockingHolidayAsync("Erken Vize Haftası Test Tatili", "Early Midterm Week Test Holiday", 11, 5);
+
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints:
+            [
+                new CalendarConstraintInputDto(
+                    CalendarConstraintType.Pin,
+                    CalendarEventType.MidtermExam,
+                    "MAIN",
+                    """{"startDate":"2025-11-03T00:00:00Z","endDate":"2025-11-09T00:00:00Z","templateItemKey":"midterm_exam","semester":"Fall"}""",
+                    IsHard: true,
+                    Priority: 1,
+                    Description: "Ara sinavi erken haftaya sabitle")
+            ],
+            TemplateDurationOverrides: null));
+
+        var midterm = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_exam");
+        var final = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "final_exam");
+
+        midterm.StartDate.Should().Be(Utc(2025, 11, 10));
+        midterm.EndDate.Should().Be(Utc(2025, 11, 16));
+        ExamEventsShouldNotOverlap(result.Events, result.Holidays);
+        CountTeachingWeeksBetween(Utc(2025, 9, 21), midterm.StartDate).Should().Be(7);
+        CountTeachingWeeksBetween(midterm.EndDate!.Value, final.StartDate).Should().Be(7);
+        result.Warnings.Should().NotContain(w => w.Code == "CHRONOLOGY");
+    }
+
+    [Fact]
+    public async Task Generator_ShiftsFinalWeek_AndDependentDates_WhenSingleDayHolidayFallsInsideExamWeek()
+    {
+        await AddBlockingHolidayAsync("Final Haftası Test Tatili", "Final Week Test Holiday", 1, 6);
+
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var final = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "final_exam");
+        var finalPublication = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "final_publication");
+        var makeupApplication = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "makeup_application");
+        var makeupExam = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "makeup_exam");
+        var makeupPublication = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "makeup_publication");
+
+        final.StartDate.Should().Be(Utc(2026, 1, 12));
+        final.EndDate.Should().Be(Utc(2026, 1, 25));
+        ExamEventsShouldNotOverlap(result.Events, result.Holidays);
+
+        finalPublication.StartDate.Should().BeAfter(final.EndDate!.Value);
+        makeupApplication.StartDate.Should().BeBefore(makeupExam.StartDate);
+        makeupExam.StartDate.Should().BeAfter(finalPublication.StartDate);
+        makeupPublication.StartDate.Should().BeAfter(makeupExam.EndDate ?? makeupExam.StartDate);
+        result.Warnings.Should().NotContain(w => w.Code == "CHRONOLOGY");
     }
 
     [Fact]
@@ -886,6 +977,66 @@ public class CalendarGeneratorTests : IDisposable
 
         before.Should().BeFalse();
         onDate.Should().BeTrue();
+    }
+
+    private async Task AddBlockingHolidayAsync(string name, string englishName, int month, int day)
+    {
+        await _templateService.UpsertHolidayDefinitionAsync(
+            id: null,
+            new UpsertHolidayDefinitionDto(
+                name,
+                englishName,
+                HolidayType.Fixed,
+                FixedMonth: month,
+                FixedDay: day,
+                HijriMonth: null,
+                HijriDay: null,
+                DurationDays: 1,
+                IsHalfDayStart: false,
+                IsOfficialHoliday: true,
+                BlocksAcademicEvents: true,
+                Source: "Test",
+                Overrides: [],
+                IsActive: true));
+    }
+
+    private static void ExamEventsShouldNotOverlap(
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var blockingHolidays = holidays.Where(h => h.BlocksAcademicEvents).ToList();
+        var examTypes = new[]
+        {
+            CalendarEventType.MidtermExam,
+            CalendarEventType.FinalExam,
+            CalendarEventType.MakeupExam,
+            CalendarEventType.PrepSchoolExam,
+            CalendarEventType.SummerSchoolExam
+        };
+
+        events
+            .Where(e => examTypes.Contains(e.EventType))
+            .Should()
+            .OnlyContain(e => blockingHolidays.All(h =>
+                (e.EndDate ?? e.StartDate).Date < h.StartDate.Date || e.StartDate.Date > h.EndDate.Date));
+    }
+
+    private static int CountTeachingWeeksBetween(DateTime fromExclusive, DateTime toExclusive)
+    {
+        var count = 0;
+        for (var weekStart = MondayOnOrAfter(fromExclusive.AddDays(1)); weekStart < toExclusive.Date; weekStart = weekStart.AddDays(7))
+            count++;
+
+        return count;
+    }
+
+    private static DateTime MondayOnOrAfter(DateTime date)
+    {
+        var current = date.Date;
+        while (current.DayOfWeek != DayOfWeek.Monday)
+            current = current.AddDays(1);
+
+        return Utc(current.Year, current.Month, current.Day);
     }
 
     public void Dispose()

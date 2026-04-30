@@ -36,7 +36,21 @@ export interface StudentCourseDto {
   previousGrade: string | null;
   /** Zorunlu / Secmeli / MufredatDisi */
   curriculumType: 'Zorunlu' | 'Secmeli' | 'MufredatDisi';
+  /**
+   * Faz C C1: Bu ders öğrencinin müfredatındaki hangi grup slot(lar)ına aday?
+   * Bir ders Karar #5 gereği birden fazla grupta yer alabilir.
+   * Boş liste = ders herhangi bir slot'a aday değil.
+   */
+  applicablePoolSlots: ApplicablePoolSlotDto[];
   sections: SectionDto[];
+}
+
+export interface ApplicablePoolSlotDto {
+  poolId: number;
+  slotName: string;
+  groupCode: string;
+  groupName: string;
+  ectsPerCourse: number | null;
 }
 
 export interface SectionDetailDto {
@@ -62,4 +76,7 @@ export interface ActiveTermDto {
   isAddDropOpen: boolean;
   status: string;
   hasAcademicCalendar: boolean;
+  studentRegistrationEnabled: boolean;
+  studentRegistrationOpenAt: string | null;
+  studentRegistrationMessage: string | null;
 }

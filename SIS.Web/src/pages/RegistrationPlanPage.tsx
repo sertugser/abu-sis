@@ -11,18 +11,26 @@ import { useMyRegistrations } from '../hooks/useMyRegistrations';
 import { useDropCourse } from '../hooks/useDropCourse';
 import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { useStudentInfo } from '../hooks/useStudentInfo';
+import { useStudentPoolStatus } from '../hooks/useStudentPoolStatus';
 import type { ValidationError } from '../types/registration';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Trash2, Send, CheckCircle2, ClipboardList, BookOpen, Loader2 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function RegistrationPlanPage() {
   const { data: registrations, isLoading } = useMyRegistrations();
   const { data: student } = useStudentInfo();
+  const { data: poolStatus = [] } = useStudentPoolStatus(student?.id ?? null);
   const dropCourse = useDropCourse();
   const submitRegistration = useSubmitRegistration();
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [validationWarnings, setValidationWarnings] = useState<ValidationError[]>([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  // Faz C C3: yumuşak warning gate — eksik slot varsa onay dialog'u
+  const [emptySlotsConfirmOpen, setEmptySlotsConfirmOpen] = useState(false);
 
   const planItems = registrations?.filter(r => r.status === 'Draft' || r.status === 'Rejected') || [];
   const rejectedItems = registrations?.filter(r => r.status === 'Rejected') || [];
@@ -31,11 +39,15 @@ export default function RegistrationPlanPage() {
   const ectsLimit = student?.ectsLimit ?? 30;
   const ectsPercent = Math.min((totalEcts / ectsLimit) * 100, 100);
 
+  // Eksik (boş) slot'lar — fulfillment durumuna göre
+  const emptySlots = poolStatus.filter(p => !p.isFulfilled);
+
   const handleRemove = (registrationId: number) => {
     dropCourse.mutate(registrationId);
   };
 
-  const handleSubmit = () => {
+  // Asıl submit logic — dialog onayından sonra veya direkt çağrılır
+  const performSubmit = () => {
     setValidationErrors([]);
     setValidationWarnings([]);
     setSubmitSuccess(false);
@@ -56,6 +68,21 @@ export default function RegistrationPlanPage() {
         setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Kayit sirasinda bir hata olustu.' }]);
       },
     });
+  };
+
+  const handleSubmit = () => {
+    // Karar 4=b: yumuşak gate — eksik slot varsa onay dialogu, yoksa direkt submit.
+    // Karar #1: bloke YOK — danışman süzer; sadece bilgilendirme.
+    if (emptySlots.length > 0) {
+      setEmptySlotsConfirmOpen(true);
+      return;
+    }
+    performSubmit();
+  };
+
+  const handleConfirmSubmitDespiteEmptySlots = () => {
+    setEmptySlotsConfirmOpen(false);
+    performSubmit();
   };
 
   if (isLoading) {
@@ -177,6 +204,42 @@ export default function RegistrationPlanPage() {
           </Button>
         </div>
       )}
+
+      {/* ── Eksik slot onay dialog (Faz C C3) ── */}
+      <AlertDialog open={emptySlotsConfirmOpen} onOpenChange={setEmptySlotsConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eksik müfredat slotları var</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                Aşağıdaki seçmeli grup slotları için yeterli ders seçmediniz. Yine de
+                kaydı gönderebilirsiniz; eksiklikler danışmanınızla görüşülerek
+                değerlendirilecektir.
+              </span>
+              <span className="block max-h-40 overflow-y-auto rounded-md bg-muted/40 p-2 text-xs space-y-0.5">
+                {emptySlots.map(p => (
+                  <span key={p.poolId} className="block">
+                    <span className="font-mono font-semibold">{p.poolCode}</span>
+                    {p.slotName && <span className="text-violet-700"> / {p.slotName}</span>}
+                    <span className="text-muted-foreground">
+                      {' — '}
+                      {p.requiredCourseCount > 0 && `${p.completedCourseCount}/${p.requiredCourseCount} ders`}
+                      {p.requiredCourseCount > 0 && p.requiredEcts > 0 && ', '}
+                      {p.requiredEcts > 0 && `${p.earnedEcts}/${p.requiredEcts} AKTS`}
+                    </span>
+                  </span>
+                ))}
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSubmitDespiteEmptySlots}>
+              Yine de gönder
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

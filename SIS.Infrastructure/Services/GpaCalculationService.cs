@@ -203,6 +203,7 @@ public class GpaCalculationService : IGpaCalculationService
                 .ThenInclude(cs => cs.Course)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Term)
+            .Include(cr => cr.OpeningReasonSnapshot) // Faz 4 — IsExcludedFromGpa flag için
             .Where(cr => cr.Grade != null
                 && cr.Status != RegistrationStatus.Draft
                 && cr.Status != RegistrationStatus.Dropped);
@@ -324,6 +325,12 @@ public class GpaCalculationService : IGpaCalculationService
 
             var point = GradePointMap.GetPoint(grade);
             if (point == null)
+                continue;
+
+            // Faz 4 — Açma Nedeni snapshot'unda IsExcludedFromGpa=true ise dersi GPA hesabı dışı tut.
+            // Hobi/Tez/Staj/Seminer/Uzmanlık Alan/Danışmanlık dersleri akademik standart gereği
+            // not ortalamasına dahil edilmez. Eski kayıtlarda snapshot null → mevcut davranış sürer.
+            if (registration.OpeningReasonSnapshot?.IsExcludedFromGpa == true)
                 continue;
 
             // Madde 7: Kayıt anında donan AKTS değeri önceliklidir; yoksa dersin katalog değeri

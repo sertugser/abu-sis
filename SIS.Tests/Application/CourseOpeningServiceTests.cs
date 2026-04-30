@@ -1,13 +1,14 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.EnrollmentForecast.DTOs;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
-using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.CourseOpening;
 
 namespace SIS.Tests.Application;
 
@@ -206,9 +207,9 @@ public class CourseOpeningServiceTests
                 }
             });
 
-        var service = CreateService(context, forecastServiceMock.Object);
+        var service = CreateQueryService(context, forecastServiceMock.Object);
 
-        var result = await service.GetCurriculumCoursesForOpeningAsync(DepartmentId, TermId, false, CancellationToken.None);
+        var result = await service.GetCurriculumCoursesForOpeningAsync(DepartmentId, TermId, false, null, false, CancellationToken.None);
 
         var dto = result.Should().ContainSingle().Subject;
         dto.PredictedDemand.Should().Be(24);
@@ -485,10 +486,33 @@ public class CourseOpeningServiceTests
         context.SaveChanges();
     }
 
-    private static CourseOpeningService CreateService(AppDbContext context, IEnrollmentForecastService? forecastService = null)
+    // Faz 3.C sonrası: tek monolitik CourseOpeningService 4 ayrı servise bölündü.
+    // Test'lerde çoğu metod LifecycleService'tedir; sadece GetCurriculumCoursesForOpeningAsync
+    // QueryService'tedir. CreateService default olarak Lifecycle döner (geriye dönük uyum).
+
+    private static CourseSectionLifecycleService CreateService(AppDbContext context, IEnrollmentForecastService? forecastService = null)
+    {
+        _ = forecastService; // Lifecycle servisi forecast kullanmıyor; parametre query yardımcı testleri için tutuldu
+        var cacheInvalidator = Mock.Of<IEnrollmentForecastCacheInvalidator>();
+        var systemConfig = new FakeSystemConfigProvider();
+        var helpers = new CourseOpeningHelpers(context);
+        return new CourseSectionLifecycleService(context, cacheInvalidator, systemConfig, helpers);
+    }
+
+    private static CourseOpeningQueryService CreateQueryService(AppDbContext context, IEnrollmentForecastService? forecastService = null)
     {
         forecastService ??= Mock.Of<IEnrollmentForecastService>();
-        var cacheInvalidator = Mock.Of<IEnrollmentForecastCacheInvalidator>();
-        return new CourseOpeningService(context, forecastService, cacheInvalidator);
+        var helpers = new CourseOpeningHelpers(context);
+        return new CourseOpeningQueryService(context, forecastService, helpers);
+    }
+
+    /// <summary>Mock.Of default 0 döner ve fallback'i ezer; bu fake fallback'i doğru iletir.</summary>
+    private sealed class FakeSystemConfigProvider : ISystemConfigProvider
+    {
+        public Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public Task<string> GetStringAsync(string key, string fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public void InvalidateCache(string key) { }
     }
 }

@@ -63,11 +63,6 @@ public static class PermissionSeed
         ("menu.program-tanimlari.edit",                  PermissionCategory.Menu, "Program düzenleme"),
         ("menu.program-tanimlari.delete",                PermissionCategory.Menu, "Program silme"),
 
-        // Akademik Takvim Yönetimi (admin CRUD)
-        ("menu.akademik-takvim-yonetimi.view",           PermissionCategory.Menu, "Akademik takvim yönetim sayfası görüntüleme"),
-        ("menu.akademik-takvim-yonetimi.edit",           PermissionCategory.Menu, "Akademik takvim güncelleme (upsert)"),
-        ("menu.akademik-takvim-yonetimi.override",       PermissionCategory.Menu, "Akademik takvim faz override"),
-
         // Takvim Oluşturucu
         ("menu.akademik-takvim-olusturma.view",          PermissionCategory.Menu, "Takvim oluşturucu görüntüleme"),
         ("menu.akademik-takvim-olusturma.edit",          PermissionCategory.Menu, "Şablon/holiday/draft düzenleme"),
@@ -171,7 +166,16 @@ public static class PermissionSeed
         ("menu.secmeli-ders-gruplari.add-course",        PermissionCategory.Menu, "Elective gruba ders ekleme"),
         ("menu.secmeli-ders-gruplari.remove-course",     PermissionCategory.Menu, "Elective gruptan ders çıkarma"),
 
-        // Ders Açma İşlemleri
+        // Seçmeli Ders Yapılandırması (meta-permission — birleşik sayfa erişimi)
+        ("menu.secmeli-yapilandirma.view",               PermissionCategory.Menu, "Seçmeli ders yapılandırma sayfası (Gruplar + Tipler tab wrapper)"),
+
+        // Seçmeli Tipleri (Faz B B3a — DB-driven lookup, sadece SysAdmin CRUD)
+        ("menu.secmeli-tipleri.view",                    PermissionCategory.Menu, "Seçmeli tip listesi"),
+        ("menu.secmeli-tipleri.create",                  PermissionCategory.Menu, "Yeni seçmeli tip"),
+        ("menu.secmeli-tipleri.edit",                    PermissionCategory.Menu, "Seçmeli tip düzenleme"),
+        ("menu.secmeli-tipleri.delete",                  PermissionCategory.Menu, "Seçmeli tip silme (soft delete)"),
+
+        // Ders Aç (Müfredat)
         ("menu.ders-acma-islemleri.view",                PermissionCategory.Menu, "Ders açma listesi + curriculum/instructors lookup"),
         ("menu.ders-acma-islemleri.open",                PermissionCategory.Menu, "Tek ders açma (section)"),
         ("menu.ders-acma-islemleri.bulk-open",           PermissionCategory.Menu, "Toplu ders açma"),
@@ -254,6 +258,9 @@ public static class PermissionSeed
 
         // Derslerim (instructor + paylaşımlı)
         ("menu.derslerim.view",                          PermissionCategory.Menu, "Derslerim sayfası (my-sections, profile, context)"),
+
+        // Yoklama Yönetimi
+        ("menu.yoklama-girisi.view",                      PermissionCategory.Menu, "Yoklama yönetimi sayfası, geçmiş yoklamalar ve QR yoklama yönetimi"),
 
         // Ders Programım
         ("menu.ders-programim.view",                     PermissionCategory.Menu, "Ders programım görüntüleme"),
@@ -361,6 +368,9 @@ public static class PermissionSeed
         ("menu.kurumsal-entegrasyon-tanimlari.view",     PermissionCategory.Menu, "Kurumsal entegrasyon tanımları sayfası"),
         ("menu.belge-sinirlandirmalar.view",             PermissionCategory.Menu, "Belge sınırlandırmalar sayfası"),
         ("menu.web-modul-ayarlari.view",                 PermissionCategory.Menu, "Web modül ayarları sayfası"),
+        ("menu.web-modul-ayarlari.edit",                 PermissionCategory.Menu, "Web modül ayarları düzenleme"),
+        ("menu.web-modul-ayarlari.export",               PermissionCategory.Menu, "Web modül ayarları export"),
+        ("menu.web-modul-ayarlari.import",               PermissionCategory.Menu, "Web modül ayarları import"),
         ("menu.system-config.view",                      PermissionCategory.Menu, "Sistem konfigürasyonu görüntüleme"),
         ("menu.system-config.edit",                      PermissionCategory.Menu, "Sistem konfigürasyonu düzenleme"),
         ("menu.system-config.export",                    PermissionCategory.Menu, "Sistem konfigürasyonu export"),

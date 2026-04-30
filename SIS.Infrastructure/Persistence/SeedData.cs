@@ -22,10 +22,16 @@ public static partial class SeedData
         // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı
         // SystemConfig önce seed edilmeli: TimeSlot generate'i Schedule.* anahtarlarını okuyor (özellikle FaceToFaceCutoffTime + WeekendOnlineOnly için AllowedMode damgalama)
         await SeedSystemConfigAsync(context);
+        await SeedWebModuleSettingsAsync(context);
         await SeedTimeSlotsAsync(context);
         await SeedConstraintDefinitionsAsync(context);
         await SeedEvaluationQuestionsAsync(context);
         await SeedConstraintProfilesAsync(context);
+
+        // ── Course lookups (Açma Nedeni + Ders Kategorisi) ────
+        await CurriculumCourseOpeningReasonSeed.SeedAsync(context);
+        await CourseCategorySeed.SeedAsync(context);
+        await ElectiveSubtypeSeed.SeedAsync(context);
 
         // ── RBAC Phase 1 (Sprint 1.4) ──────────────────────────
         // Sıra önemli: Permission → MenuStructure (perm lookup gerekli) → RolePermission (perm + rol lookup)

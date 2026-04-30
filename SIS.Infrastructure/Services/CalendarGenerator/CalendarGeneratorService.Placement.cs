@@ -63,7 +63,7 @@ public partial class CalendarGeneratorService
             warnings.Add(new("PROHIBITION_SHIFT", "Warning", $"{item.Title} {prohibitionText} ({FormatDateRange(prohibited.Value.Start, prohibited.Value.End)}) nedeniyle {delta} gün kaydırıldı. Yeni tarih: {FormatDateRange(start, end)}.", EventId(academicYear, semester, item.Key)));
         }
 
-        if (item.AvoidHolidayConflict && IsCriticalEvent(item.EventType))
+        if (item.AvoidHolidayConflict && IsCriticalEvent(item.EventType) && !RequiresSequenceAwareHolidayPlacement(item.EventType))
         {
             var attempts = 0;
             var shiftReasons = new List<string>();
