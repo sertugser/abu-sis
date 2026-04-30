@@ -54,6 +54,7 @@ export interface OpenedCourseSectionDto {
   isActive: boolean;
   departmentId: number | null;
   departmentName: string | null;
+  crossListGroupId: number | null;
 }
 
 export interface OpenedCourseListDto {
