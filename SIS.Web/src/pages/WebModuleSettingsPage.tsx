@@ -340,14 +340,6 @@ function WebModuleSettingRow({
   const [pendingPayload, setPendingPayload] = useState<PendingWebModuleSettingPayload | null>(null);
   const updateMutation = useUpdateWebModuleSetting();
 
-  useEffect(() => {
-    if (!editing) {
-      setValue(setting.value);
-      setEffectiveFrom(toDateTimeInputValue(setting.effectiveFrom));
-      setEffectiveTo(toDateTimeInputValue(setting.effectiveTo));
-    }
-  }, [editing, setting.effectiveFrom, setting.effectiveTo, setting.value]);
-
   const compositeKey = `${setting.moduleKey}.${setting.key}`;
   const limit = limits?.[compositeKey];
   const limitHint = limit
@@ -420,12 +412,23 @@ function WebModuleSettingRow({
   }
 
   function handleCancel() {
-    setValue(setting.value);
-    setEffectiveFrom(toDateTimeInputValue(setting.effectiveFrom));
-    setEffectiveTo(toDateTimeInputValue(setting.effectiveTo));
+    resetDraftFromSetting();
     setErrorMessage(null);
     setPendingPayload(null);
     setEditing(false);
+  }
+
+  function resetDraftFromSetting() {
+    setValue(setting.value);
+    setEffectiveFrom(toDateTimeInputValue(setting.effectiveFrom));
+    setEffectiveTo(toDateTimeInputValue(setting.effectiveTo));
+  }
+
+  function handleStartEditing() {
+    resetDraftFromSetting();
+    setErrorMessage(null);
+    setPendingPayload(null);
+    setEditing(true);
   }
 
   function handleConfirmOpenChange(nextOpen: boolean) {
@@ -583,7 +586,7 @@ function WebModuleSettingRow({
                 currentEffectiveFrom={setting.effectiveFrom}
                 currentEffectiveTo={setting.effectiveTo}
               />
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(true)}>
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleStartEditing}>
                 <Pencil className="h-4 w-4" />
               </Button>
             </div>
