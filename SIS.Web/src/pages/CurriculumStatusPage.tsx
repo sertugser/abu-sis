@@ -127,7 +127,12 @@ export default function CurriculumStatusPage() {
                           ? <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
                           : <CircleAlert className="h-4 w-4 text-amber-500 shrink-0" />
                         }
-                        <span className="text-xs font-mono font-bold text-foreground">{pool.poolCode}</span>
+                        <span className="text-xs font-mono font-bold text-foreground">
+                          {pool.poolCode}
+                          {pool.slotName && (
+                            <span className="text-violet-700 font-semibold"> / {pool.slotName}</span>
+                          )}
+                        </span>
                         <span className="text-xs text-muted-foreground truncate">{pool.poolName}</span>
                       </div>
                       {pool.requiredCourseCount > 0 && (

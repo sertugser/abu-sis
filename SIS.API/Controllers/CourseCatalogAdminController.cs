@@ -11,6 +11,9 @@ namespace SIS.API.Controllers;
 
 public record CrossListItemDto(int CourseId, string Code, string Name, int Ects);
 
+public record CourseCurriculumUsageDto(
+    int CurriculumId, string ProgramName, string CurriculumVersion, bool IsActive);
+
 [ApiController]
 [Route("api/admin/courses")]
 [Authorize]
@@ -98,6 +101,26 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
         try { return Ok(await service.UpdateCoursePrereqRulesAsync(id, dto)); }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    // ── Curriculum usage — bu dersi kullanan müfredatların listesi (yan etki uyarısı için) ──
+    [HttpGet("{id:int}/curriculum-usage")]
+    [RequirePermission("menu.mufredat-islemleri.view")]
+    public async Task<IActionResult> GetCurriculumUsage(int id, CancellationToken ct)
+    {
+        var rows = await db.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => cc.CourseId == id)
+            .Select(cc => new CourseCurriculumUsageDto(
+                cc.CurriculumId,
+                cc.Curriculum.Program.Name,
+                cc.Curriculum.Version,
+                cc.Curriculum.IsActive))
+            .OrderByDescending(r => r.IsActive)
+            .ThenBy(r => r.ProgramName)
+            .ThenBy(r => r.CurriculumVersion)
+            .ToListAsync(ct);
+        return Ok(rows);
     }
 
     // ── Madde 14: Cross-Listing CRUD ─────────────────────────────────

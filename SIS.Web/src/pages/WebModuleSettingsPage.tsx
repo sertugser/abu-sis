@@ -340,6 +340,18 @@ function WebModuleSettingRow({
   const [pendingPayload, setPendingPayload] = useState<PendingWebModuleSettingPayload | null>(null);
   const updateMutation = useUpdateWebModuleSetting();
 
+  // editing/setting değişince form alanlarını senkronla — adjust-state-during-render
+  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
+  const syncKey = `${editing}-${setting.value}-${setting.effectiveFrom ?? ''}-${setting.effectiveTo ?? ''}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (syncKey !== prevSyncKey) {
+    setPrevSyncKey(syncKey);
+    if (!editing) {
+      setValue(setting.value);
+      setEffectiveFrom(toDateTimeInputValue(setting.effectiveFrom));
+      setEffectiveTo(toDateTimeInputValue(setting.effectiveTo));
+    }
+  }
   const compositeKey = `${setting.moduleKey}.${setting.key}`;
   const limit = limits?.[compositeKey];
   const limitHint = limit

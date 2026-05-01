@@ -77,6 +77,12 @@ function emptyCourseForm(): CreateCourseDto {
     minEctsRequired: null,
     requiresNoFailedLowerCourses: false,
     canBeTakenStandalone: false,
+    // Phase 2 — Proliz B "Genel Bilgiler" (defaults; not yet surfaced in catalog admin form,
+    // but pass-through prevents data loss on save when set via curriculum-side dialog)
+    alternativeName: null,
+    showInInfoPackage: true,
+    applicationHours: null,
+    openType: null,
   };
 }
 
@@ -206,11 +212,33 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
             disabled={disabled}
           />
         </div>
+        <div className="space-y-1 mt-3">
+          <Label className="text-xs">Diğer Adı</Label>
+          <Input
+            value={form.alternativeName ?? ''}
+            onChange={e => onChange({ ...form, alternativeName: e.target.value || null })}
+            placeholder="Alternatif ders adı"
+            disabled={disabled}
+          />
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <input
+            type="checkbox"
+            id="showInInfoPackage"
+            checked={form.showInInfoPackage ?? true}
+            onChange={e => onChange({ ...form, showInInfoPackage: e.target.checked })}
+            disabled={disabled}
+            className="h-4 w-4 rounded border-border accent-primary"
+          />
+          <label htmlFor="showInInfoPackage" className="text-sm text-muted-foreground cursor-pointer select-none">
+            Bilgi Paketinde Göster
+          </label>
+        </div>
       </FieldSection>
 
       {/* Kredi & Saat */}
       <FieldSection title="Kredi &amp; Saat">
-        <div className="grid grid-cols-4 gap-3 mt-2">
+        <div className="grid grid-cols-5 gap-3 mt-2">
           <div className="space-y-1">
             <Label className="text-xs">AKTS</Label>
             <Input
@@ -246,6 +274,16 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
               value={form.labHours}
               onChange={e => onChange({ ...form, labHours: Number(e.target.value) })}
               disabled={disabled}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Uygulama Saati</Label>
+            <Input
+              type="number" min={0} max={10}
+              value={form.applicationHours ?? ''}
+              onChange={e => onChange({ ...form, applicationHours: e.target.value ? Number(e.target.value) : null })}
+              disabled={disabled}
+              placeholder="—"
             />
           </div>
         </div>
@@ -311,19 +349,35 @@ function CourseFormFields({ form, onChange, departments, disabled = false }: Cou
               disabled={disabled}
             />
           </div>
-          <div className="flex items-center gap-2 pt-5">
-            <input
-              type="checkbox"
-              id="isNonGpa"
-              checked={form.isNonGpa}
-              onChange={e => onChange({ ...form, isNonGpa: e.target.checked })}
+          <div className="space-y-1">
+            <Label className="text-xs">Açma Tipi</Label>
+            <NativeSelect
+              value={form.openType ?? '__none__'}
+              onChange={v => onChange({
+                ...form,
+                openType: v === '__none__' ? null : (v as 'Standart' | 'Closed' | 'PendingApproval'),
+              })}
               disabled={disabled}
-              className="h-4 w-4 rounded border-border accent-primary"
-            />
-            <label htmlFor="isNonGpa" className="text-sm text-muted-foreground cursor-pointer select-none">
-              Non-GPA (Ortalamasız)
-            </label>
+            >
+              <option value="__none__">— Standart (varsayılan) —</option>
+              <option value="Standart">Standart</option>
+              <option value="Closed">Kapatıldı</option>
+              <option value="PendingApproval">Açık (Onay Bekleniyor)</option>
+            </NativeSelect>
           </div>
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <input
+            type="checkbox"
+            id="isNonGpa"
+            checked={form.isNonGpa}
+            onChange={e => onChange({ ...form, isNonGpa: e.target.checked })}
+            disabled={disabled}
+            className="h-4 w-4 rounded border-border accent-primary"
+          />
+          <label htmlFor="isNonGpa" className="text-sm text-muted-foreground cursor-pointer select-none">
+            Non-GPA (Ortalamasız)
+          </label>
         </div>
       </FieldSection>
 
@@ -448,6 +502,11 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
       minEctsRequired: detail.minEctsRequired,
       requiresNoFailedLowerCourses: detail.requiresNoFailedLowerCourses,
       canBeTakenStandalone: detail.canBeTakenStandalone,
+      // Phase 2 pass-through: preserve values set from curriculum-side dialog
+      alternativeName: detail.alternativeName,
+      showInInfoPackage: detail.showInInfoPackage,
+      applicationHours: detail.applicationHours,
+      openType: detail.openType,
     };
   }, [detail]);
 

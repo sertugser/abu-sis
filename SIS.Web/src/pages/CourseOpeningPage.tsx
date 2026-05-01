@@ -1,22 +1,30 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, Plus } from 'lucide-react';
-import { CourseFilterBar } from '../components/course-opening/CourseFilterBar';
+import { AlertCircle } from 'lucide-react';
 import { CurriculumPanel } from '../components/course-opening/CurriculumPanel';
+import { CurriculumPanelFilters } from '../components/course-opening/CurriculumPanelFilters';
 import { CourseDetailModal } from '../components/course-opening/CourseDetailModal';
 import { OpenedCoursesPanel } from '../components/course-opening/OpenedCoursesPanel';
+import { OpenedCoursesPanelFilters } from '../components/course-opening/OpenedCoursesPanelFilters';
 import { FreeCourseOpenDialog } from '../components/course-opening/FreeCourseOpenDialog';
+import { ExternalCoursesDrawer } from '../components/course-opening/ExternalCoursesDrawer';
+import { PoolCandidatesDialog } from '../components/course-opening/PoolCandidatesDialog';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
+import { useAdminTerms } from '../hooks/useAdminTerms';
+import {
+  useAdminFaculties,
+  useAdminDepartmentsByStructure,
+  useAdminProgramsByStructure,
+} from '../hooks/useAdminAcademicStructure';
 import {
   useBulkOpenCourses,
   useCloseSection,
   useCloseAllSections,
   useReactivateSection,
   useCurriculumCoursesForOpening,
+  usePoolSlotsForOpening,
   useDepartmentInstructors,
   useExternalCourses,
   useInstructorWorkload,
@@ -26,39 +34,89 @@ import {
 } from '../hooks/useCourseOpening';
 import { useDepartmentForecast } from '../hooks/useForecast';
 import type { CourseDemandForecastDto } from '../types/forecast';
-import type { CurriculumCourseForOpeningDto } from '../types/courseOpening';
+import type { CurriculumCourseForOpeningDto, PoolSlotForOpeningDto } from '../types/courseOpening';
 
 export default function CourseOpeningPage() {
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
+  const { data: allTerms } = useAdminTerms();
   const { data: faculties } = useAdminFaculties();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
-  const departments = contextQuery.data?.accessibleDepartments ?? [];
-  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
-  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
-  const [semesterFilter, setSemesterFilter] = useState<number | null>(null);
-  const [typeFilter, setTypeFilter] = useState<'all' | 'compulsory' | 'elective'>('all');
+  const accessibleDepartments = useMemo(
+    () => contextQuery.data?.accessibleDepartments ?? [],
+    [contextQuery.data?.accessibleDepartments],
+  );
+
+  // ─── Akademik hiyerarşi (her iki panel paylaşır) ─────────────
+  const [facultyId, setFacultyId] = useState<number | null>(null);
+  const [deptId, setDeptId] = useState<number | null>(null);
+  const [programId, setProgramId] = useState<number | null>(null);
+  const [curriculumId, setCurriculumId] = useState<number | null>(null);
+
+  // ─── Sol panel filtreleri ────────────────────────────────────
+  const [sourceClassYear, setSourceClassYear] = useState<number | null>(null);
+  const [sourceSemester, setSourceSemester] = useState<'fall' | 'spring' | 'summer' | null>(null);
+  const [includeUnmapped, setIncludeUnmapped] = useState(false);
+  const [sourceCodeSearch, setSourceCodeSearch] = useState('');
+  const [sourceNameSearch, setSourceNameSearch] = useState('');
+
+  // ─── Sağ panel filtreleri ────────────────────────────────────
+  const [targetTermId, setTargetTermId] = useState<number | null>(null);
+  const [targetClassYear, setTargetClassYear] = useState<number | null>(null);
+  const [targetCodeSearch, setTargetCodeSearch] = useState('');
+  const [targetNameSearch, setTargetNameSearch] = useState('');
+
+  // ─── Diğer state ─────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedInstructorId, setSelectedInstructorId] = useState<number | null>(null);
   const [detailCourse, setDetailCourse] = useState<CurriculumCourseForOpeningDto | null>(null);
   const [freeCourseDialogOpen, setFreeCourseDialogOpen] = useState(false);
+  const [externalDrawerOpen, setExternalDrawerOpen] = useState(false);
+  const [activePoolSlot, setActivePoolSlot] = useState<PoolSlotForOpeningDto | null>(null);
 
-  const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
-  const termId = activeTerm?.id ?? null;
+  // İlk açılışta erişilebilir ilk bölümü ve aktif dönemi varsayılan seç
+  useEffect(() => {
+    if (deptId == null && accessibleDepartments.length > 0) {
+      setDeptId(accessibleDepartments[0].departmentId);
+    }
+  }, [accessibleDepartments, deptId]);
 
-  const openedQuery = useOpenedCourses(deptId, termId);
-  const curriculumQuery = useCurriculumCoursesForOpening(deptId, termId, true);
+  useEffect(() => {
+    if (targetTermId == null && activeTerm?.id) {
+      setTargetTermId(activeTerm.id);
+    }
+  }, [activeTerm?.id, targetTermId]);
+
+  // Bölüm seçilince fakülteyi de senkronize et
+  useEffect(() => {
+    if (deptId != null && facultyId == null && structureDepartments) {
+      const sd = structureDepartments.find((d) => d.id === deptId);
+      if (sd) setFacultyId(sd.facultyId);
+    }
+  }, [deptId, facultyId, structureDepartments]);
+
+  const { data: programs } = useAdminProgramsByStructure(deptId ?? undefined);
+
+  const openedQuery = useOpenedCourses(deptId, targetTermId);
+  const curriculumQuery = useCurriculumCoursesForOpening(
+    deptId,
+    targetTermId,
+    true, // showAll — sınıf/dönem filtresi frontend'de
+    curriculumId,
+    includeUnmapped,
+  );
+  const poolSlotsQuery = usePoolSlotsForOpening(curriculumId, targetTermId);
   const { data: forecastData } = useDepartmentForecast(deptId);
   const instructorsQuery = useDepartmentInstructors(deptId);
-  const workloadQuery = useInstructorWorkload(selectedInstructorId, termId);
-  const externalCoursesQuery = useExternalCourses(deptId, termId);
+  const workloadQuery = useInstructorWorkload(selectedInstructorId, targetTermId);
+  const externalCoursesQuery = useExternalCourses(deptId, targetTermId);
 
-  const openMutation = useOpenCourse(deptId ?? 0, termId ?? 0);
-  const bulkMutation = useBulkOpenCourses(deptId ?? 0, termId ?? 0);
-  const updateMutation = useUpdateOpenedSection(deptId ?? 0, termId ?? 0);
-  const closeMutation = useCloseSection(deptId ?? 0, termId ?? 0);
-  const closeAllMutation = useCloseAllSections(deptId ?? 0, termId ?? 0);
-  const reactivateMutation = useReactivateSection(deptId ?? 0, termId ?? 0);
+  const openMutation = useOpenCourse(deptId ?? 0, targetTermId ?? 0);
+  const bulkMutation = useBulkOpenCourses(deptId ?? 0, targetTermId ?? 0);
+  const updateMutation = useUpdateOpenedSection(deptId ?? 0, targetTermId ?? 0);
+  const closeMutation = useCloseSection(deptId ?? 0, targetTermId ?? 0);
+  const closeAllMutation = useCloseAllSections(deptId ?? 0, targetTermId ?? 0);
+  const reactivateMutation = useReactivateSection(deptId ?? 0, targetTermId ?? 0);
 
   const forecastMap = useMemo(() => {
     const map = new Map<number, CourseDemandForecastDto>();
@@ -68,106 +126,131 @@ export default function CourseOpeningPage() {
     return map;
   }, [forecastData]);
 
-  const stats = useMemo(() => {
-    const courses = curriculumQuery.data ?? [];
-    const sections = openedQuery.data?.sections ?? [];
-    const openedCourseIds = new Set(sections.map(s => s.courseId));
-    return {
-      curriculumCount: courses.length,
-      openedCourseCount: openedCourseIds.size,
-      openedSectionCount: sections.length,
-      pendingCount: courses.filter(c => !c.alreadyOpened && c.canOpen).length,
-      totalCapacity: sections.reduce((s, sec) => s + sec.capacity, 0),
-      totalDemand: forecastData?.totalPredictedDemand ?? 0,
-    };
-  }, [curriculumQuery.data, openedQuery.data, forecastData]);
-
-  const handleFacultyChange = useCallback((facultyId: number | null) => {
-    setSelectedFacultyId(facultyId);
-    // Reset department when faculty changes
-    setSelectedDeptId(null);
-  }, []);
+  // Hedef dönem aktif mi? (geçmiş veya iptal edilmişse read-only)
+  const targetTerm = useMemo(
+    () => (allTerms ?? []).find((t) => t.id === targetTermId) ?? null,
+    [allTerms, targetTermId],
+  );
+  const isTargetTermHistorical = useMemo(() => {
+    if (!targetTerm) return false;
+    return targetTerm.status !== 'Active';
+  }, [targetTerm]);
+  const targetTermIsCancelled = targetTerm?.status === 'Cancelled';
 
   const toggleSelect = useCallback((courseId: number) => {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(courseId)) next.delete(courseId); else next.add(courseId);
+      if (next.has(courseId)) next.delete(courseId);
+      else next.add(courseId);
       return next;
     });
   }, []);
 
   const handleOpenSelected = useCallback(async () => {
-    if (!deptId || !termId || selectedIds.size === 0) return;
+    if (!deptId || !targetTermId || selectedIds.size === 0) return;
     const courses = curriculumQuery.data ?? [];
 
-    // Madde 14: Seçilen derslerin herhangi biri cross-list'liyse onay sor
     let includeCrossLists = false;
     try {
       const { default: apiClient } = await import('../api/axios');
       const crossListChecks = await Promise.all(
-        [...selectedIds].map(async cid => {
+        [...selectedIds].map(async (cid) => {
           try {
             const res = await apiClient.get<Array<{ code: string }>>(`/admin/courses/${cid}/cross-lists`);
             return { courseId: cid, links: res.data };
           } catch {
             return { courseId: cid, links: [] };
           }
-        })
+        }),
       );
-      const withLinks = crossListChecks.filter(x => x.links.length > 0);
+      const withLinks = crossListChecks.filter((x) => x.links.length > 0);
       if (withLinks.length > 0) {
         const details = withLinks
-          .map(x => {
-            const code = courses.find(c => c.courseId === x.courseId)?.courseCode ?? `#${x.courseId}`;
-            const linked = x.links.map(l => l.code).join(', ');
+          .map((x) => {
+            const code = courses.find((c) => c.courseId === x.courseId)?.courseCode ?? `#${x.courseId}`;
+            const linked = x.links.map((l) => l.code).join(', ');
             return `${code} ↔ ${linked}`;
           })
           .join('\n');
         includeCrossLists = window.confirm(
           `Seçilen derslerin bazıları cross-list eşlemeli:\n\n${details}\n\n` +
-          `Cross-list'li dersler için paralel şubeler de otomatik açılsın mı?\n\n` +
-          `Evet: Aynı hoca/kapasite ile her iki kod için de şube açılır (ortak grup).\n` +
-          `Hayır: Sadece seçtiğiniz dersler açılır.`
+            `Cross-list'li dersler için paralel şubeler de otomatik açılsın mı?\n\n` +
+            `Evet: Aynı hoca/kapasite ile her iki kod için de şube açılır (ortak grup).\n` +
+            `Hayır: Sadece seçtiğiniz dersler açılır.`,
         );
       }
-    } catch { /* network/permission errors → default false */ }
+    } catch {
+      /* network/permission errors → default false */
+    }
 
-    bulkMutation.mutate({
-      courses: [...selectedIds].map(courseId => {
-        const c = courses.find(x => x.courseId === courseId);
-        return {
-          courseId,
-          sectionCount: c?.recommendedSectionCount ?? 1,
-          capacityPerSection: c?.recommendedCapacity ?? 40,
-          includeCrossLists,
-        };
-      }),
-    }, { onSuccess: () => setSelectedIds(new Set()) });
-  }, [deptId, termId, selectedIds, curriculumQuery.data, bulkMutation]);
+    bulkMutation.mutate(
+      {
+        courses: [...selectedIds].map((courseId) => {
+          const c = courses.find((x) => x.courseId === courseId);
+          return {
+            courseId,
+            sectionCount: c?.recommendedSectionCount ?? 1,
+            capacityPerSection: c?.recommendedCapacity ?? 40,
+            includeCrossLists,
+          };
+        }),
+      },
+      { onSuccess: () => setSelectedIds(new Set()) },
+    );
+  }, [deptId, targetTermId, selectedIds, curriculumQuery.data, bulkMutation]);
 
   const handleUpdateSection = useCallback(
-    (sectionId: number, capacity: number, instructorId: number | undefined, internalQuota?: number | null, externalQuota?: number | null) =>
-      updateMutation.mutate({ sectionId, capacity, instructorId, internalQuota, externalQuota }), [updateMutation]);
+    (
+      sectionId: number,
+      capacity: number,
+      instructorId: number | undefined,
+      internalQuota?: number | null,
+      externalQuota?: number | null,
+    ) => updateMutation.mutate({ sectionId, capacity, instructorId, internalQuota, externalQuota }),
+    [updateMutation],
+  );
 
-  const handleCloseSection = useCallback(
-    (sectionId: number) => closeMutation.mutate(sectionId), [closeMutation]);
-
+  const handleCloseSection = useCallback((sectionId: number) => closeMutation.mutate(sectionId), [closeMutation]);
   const handleCloseAllSections = useCallback(
-    (courseId: number) => closeAllMutation.mutateAsync(courseId), [closeAllMutation]);
-
+    (courseId: number) => closeAllMutation.mutateAsync(courseId),
+    [closeAllMutation],
+  );
   const handleReactivateSection = useCallback(
-    (sectionId: number) => reactivateMutation.mutateAsync(sectionId), [reactivateMutation]);
-
+    (sectionId: number) => reactivateMutation.mutateAsync(sectionId),
+    [reactivateMutation],
+  );
   const handleAddSection = useCallback(
-    (courseId: number, capacity: number, instructorId: number | undefined, internalQuota?: number, externalQuota?: number) => {
-      if (deptId && termId) openMutation.mutate({ courseId, sectionCount: 1, capacityPerSection: capacity, instructorId, internalQuota, externalQuota });
-    }, [deptId, termId, openMutation]);
+    (
+      courseId: number,
+      capacity: number,
+      instructorId: number | undefined,
+      internalQuota?: number,
+      externalQuota?: number,
+    ) => {
+      if (deptId && targetTermId)
+        openMutation.mutate({
+          courseId,
+          sectionCount: 1,
+          capacityPerSection: capacity,
+          instructorId,
+          internalQuota,
+          externalQuota,
+        });
+    },
+    [deptId, targetTermId, openMutation],
+  );
 
   const exportCsv = useCallback(() => {
     const secs = openedQuery.data?.sections ?? [];
     if (!secs.length) return;
-    const csv = 'Ders Kodu,Ders Adı,Şube,Kontenjan,Kayıtlı,Hoca\n' +
-      secs.map(s => `${s.courseCode},"${s.courseName}",${s.sectionNumber},${s.capacity},${s.enrolledCount},"${s.instructorName ?? ''}"`).join('\n');
+    const csv =
+      'Ders Kodu,Ders Adı,Şube,Kontenjan,Kayıtlı,Hoca\n' +
+      secs
+        .map(
+          (s) =>
+            `${s.courseCode},"${s.courseName}",${s.sectionNumber},${s.capacity},${s.enrolledCount},"${s.instructorName ?? ''}"`,
+        )
+        .join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     Object.assign(document.createElement('a'), { href: url, download: 'acilan-dersler.csv' }).click();
     URL.revokeObjectURL(url);
@@ -184,80 +267,75 @@ export default function CourseOpeningPage() {
       </Alert>
     );
   }
-  if (!termId) {
-    return (
-      <Alert>
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Aktif dönem bulunamadı</AlertTitle>
-        <AlertDescription>Aktif bir akademik dönem tanımlanmamış.</AlertDescription>
-      </Alert>
-    );
-  }
-
-  const termIsCancelled = !!activeTerm && activeTerm.status === 'Cancelled';
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
-      {termIsCancelled && (
+      {targetTermIsCancelled && (
         <Alert variant="destructive" className="mb-3 shrink-0">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>
-            {activeTerm?.name} dönemi iptal edilmiş
-          </AlertTitle>
+          <AlertTitle>{targetTerm?.name} dönemi iptal edilmiş</AlertTitle>
           <AlertDescription>
             İptal edilmiş dönemde yeni ders veya şube açma işlemi yapılamaz.
-            Dönemi Akademik Dönem Tanımları sayfasından tekrar aktif hale getirin.
           </AlertDescription>
         </Alert>
       )}
-      <div className="shrink-0 pb-3 flex items-stretch gap-2">
-        <div className="flex-1 min-w-0">
-          <CourseFilterBar
-            departments={departments}
-            faculties={faculties ?? []}
-            structureDepartments={structureDepartments ?? []}
-            selectedFacultyId={selectedFacultyId}
-            onFacultyChange={handleFacultyChange}
-            selectedDeptId={deptId}
-            onDeptChange={setSelectedDeptId}
-            semesterFilter={semesterFilter}
-            onSemesterChange={setSemesterFilter}
-            typeFilter={typeFilter}
-            onTypeChange={setTypeFilter}
-            stats={stats}
-          />
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0 h-auto gap-1.5"
-          onClick={() => setFreeCourseDialogOpen(true)}
-          disabled={!deptId || termIsCancelled}
-          title={termIsCancelled ? 'Dönem iptal edilmiş' : 'Müfredatta olmayan bir dersi serbest aç'}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Serbest Ders Aç
-        </Button>
-      </div>
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] rounded-xl border border-gray-200 shadow-sm bg-white" style={{ overflow: 'hidden' }}>
+
+      <div
+        className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] rounded-xl border border-gray-200 shadow-sm bg-white"
+        style={{ overflow: 'hidden' }}
+      >
         <CurriculumPanel
           courses={curriculumQuery.data}
-          isLoading={curriculumQuery.isLoading}
-          forecastMap={forecastMap}
-          semesterFilter={semesterFilter}
-          typeFilter={typeFilter}
+          poolSlots={poolSlotsQuery.data}
+          isLoading={curriculumQuery.isLoading || poolSlotsQuery.isLoading}
+          classYear={sourceClassYear}
+          semester={sourceSemester}
+          codeSearch={sourceCodeSearch}
+          nameSearch={sourceNameSearch}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onOpenSelected={handleOpenSelected}
           onOpenCourseDetail={setDetailCourse}
+          onOpenPoolSlot={setActivePoolSlot}
+          filtersSlot={
+            <CurriculumPanelFilters
+              faculties={faculties ?? []}
+              structureDepartments={structureDepartments ?? []}
+              accessibleDepartments={accessibleDepartments}
+              programs={programs ?? []}
+              facultyId={facultyId}
+              onFacultyChange={setFacultyId}
+              deptId={deptId}
+              onDeptChange={setDeptId}
+              programId={programId}
+              onProgramChange={setProgramId}
+              curriculumId={curriculumId}
+              onCurriculumChange={setCurriculumId}
+              classYear={sourceClassYear}
+              onClassYearChange={setSourceClassYear}
+              semester={sourceSemester}
+              onSemesterChange={setSourceSemester}
+              includeUnmapped={includeUnmapped}
+              onIncludeUnmappedChange={setIncludeUnmapped}
+              codeSearch={sourceCodeSearch}
+              onCodeSearchChange={setSourceCodeSearch}
+              nameSearch={sourceNameSearch}
+              onNameSearchChange={setSourceNameSearch}
+            />
+          }
+          onOpenFreeCourseDialog={() => setFreeCourseDialogOpen(true)}
+          freeDialogDisabled={!deptId || !targetTermId || isTargetTermHistorical}
         />
         <div className="bg-gray-200 w-px hidden lg:block" />
         <OpenedCoursesPanel
           sections={openedQuery.data?.sections}
           isLoading={openedQuery.isLoading}
-          termId={termId}
+          termId={targetTermId ?? 0}
           forecastMap={forecastMap}
           instructors={instructorsQuery.data ?? []}
+          classYear={targetClassYear}
+          codeSearch={targetCodeSearch}
+          nameSearch={targetNameSearch}
           onUpdateSection={handleUpdateSection}
           onCloseSection={handleCloseSection}
           onCloseAllSections={handleCloseAllSections}
@@ -270,8 +348,35 @@ export default function CourseOpeningPage() {
           onInstructorSelect={setSelectedInstructorId}
           onExportCsv={exportCsv}
           externalCourses={externalCoursesQuery.data}
+          onOpenExternalDrawer={() => setExternalDrawerOpen(true)}
+          readOnly={isTargetTermHistorical}
+          filtersSlot={
+            <OpenedCoursesPanelFilters
+              faculties={faculties ?? []}
+              structureDepartments={structureDepartments ?? []}
+              accessibleDepartments={accessibleDepartments}
+              programs={programs ?? []}
+              facultyId={facultyId}
+              onFacultyChange={setFacultyId}
+              deptId={deptId}
+              onDeptChange={setDeptId}
+              programId={programId}
+              onProgramChange={setProgramId}
+              termId={targetTermId}
+              onTermChange={setTargetTermId}
+              availableTerms={allTerms ?? []}
+              classYear={targetClassYear}
+              onClassYearChange={setTargetClassYear}
+              codeSearch={targetCodeSearch}
+              onCodeSearchChange={setTargetCodeSearch}
+              nameSearch={targetNameSearch}
+              onNameSearchChange={setTargetNameSearch}
+              isHistoricalTerm={isTargetTermHistorical}
+            />
+          }
         />
       </div>
+
       {detailCourse && (
         <CourseDetailModal
           open={!!detailCourse}
@@ -287,13 +392,29 @@ export default function CourseOpeningPage() {
           isOpening={openMutation.isPending}
         />
       )}
-      {freeCourseDialogOpen && deptId && termId && (
+      {freeCourseDialogOpen && deptId && targetTermId && (
         <FreeCourseOpenDialog
           departmentId={deptId}
-          termId={termId}
+          termId={targetTermId}
           onClose={() => setFreeCourseDialogOpen(false)}
         />
       )}
+
+      <ExternalCoursesDrawer
+        open={externalDrawerOpen}
+        onOpenChange={setExternalDrawerOpen}
+        externalCourses={externalCoursesQuery.data}
+        departmentName={accessibleDepartments.find((d) => d.departmentId === deptId)?.departmentName}
+      />
+
+      <PoolCandidatesDialog
+        slot={activePoolSlot}
+        termId={targetTermId}
+        open={activePoolSlot !== null}
+        onOpenChange={(o) => !o && setActivePoolSlot(null)}
+        onBulkOpen={(req) => bulkMutation.mutateAsync(req)}
+        isOpening={bulkMutation.isPending}
+      />
     </div>
   );
 }

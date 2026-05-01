@@ -7,6 +7,7 @@ public class AcademicProgram
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
+    public string? ExternalSystemCode { get; set; }
     public int DepartmentId { get; set; }
     public Department Department { get; set; } = null!;
     public DegreeLevel DegreeLevel { get; set; }

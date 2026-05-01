@@ -420,24 +420,46 @@
 | **Roller** | departmentManager, dean, systemAdmin |
 | **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (3):**
-- `useElectiveGroupList()`
+**Veri kancaları (4):**
+- `useElectiveGroupList(subtypeId, facultyId, departmentId, isActive)` (B3c-3 — DB-driven filter)
 - `useCreateElectiveGroup()`
-- `useAdminFaculties()`
+- `useElectiveSubtypeList(false)` (B3c-2/B3c-3 — DB-driven tip dropdown)
+- `useAdminFaculties()` + `useAdminDepartmentsByStructure()`
 
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
+**Faz 6 değişiklikleri:**
+- B3c-2: Create dialog'da subtype dropdown DB-driven
+- B3c-3: Filter dropdown da DB-driven; eski hardcoded TE/NDE/OC kalktı; subtype'tan bağımsız faculty filter aktif
+
+---
+
+### Seçmeli Tipleri
+
+> **Faz B B3c — yeni sayfa (2026-04-27)**
+
+| | |
+|---|---|
+| **Route** | `/secmeli-tipleri` |
+| **Dosya** | `SIS.Web/src/pages/ElectiveSubtypeManagementPage.tsx` |
+| **Roller** | systemAdmin (yalnızca CRUD); list endpoint multi-role lookup |
+| **Modal sayısı** | 1 (Dialog: 1 — create/edit ortak form) |
+| **Sidebar** | Ders İşlemleri > Seçmeli Tipleri (SortOrder=5) |
+
+**Veri kancaları (3):**
+- `useElectiveSubtypeList(includeInactive)`
+- `useCreateElectiveSubtype()`
+- `useUpdateElectiveSubtype()` (soft delete via IsActive=false)
+
+**API endpoint'leri (3):**
+- `GET /elective-subtypes?includeInactive=...` — multi-role
+- `POST /elective-subtypes` — `menu.secmeli-tipleri.create` (SysAdmin)
+- `PUT /elective-subtypes/{id}` — `menu.secmeli-tipleri.edit` (SysAdmin)
+
+**Davranış:**
+- Code immutable (Karar #14) — Edit modunda lock icon ile readonly
+- Türkçe ad + 4 scope flag (RequiresFaculty/ForbidsFaculty/RequiresDepartment/ForbidsDepartment) + SortOrder + IsActive editable
+- Client-side validation: çelişki engellenir (RequiresX + ForbidsX aynı anda olamaz)
+- Flag değişikliği uyarı banner'ı: "Mevcut gruplar etkilenmez, yeni grup validation'ı değişir"
+- Hard delete YOK — soft delete (IsActive=false toggle)
 
 ---
 
@@ -708,17 +730,6 @@
 **Sekmeler (2):**
 - `list`
 - `grid`
-
----
-
-### Akademik Takvim Yönetimi
-
-| | |
-|---|---|
-| **Route** | `/akademik-takvim-yonetimi` |
-| **Dosya** | `SIS.Web/src/pages/AcademicCalendarAdminPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
 
 ---
 

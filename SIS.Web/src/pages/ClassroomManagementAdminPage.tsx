@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,27 +9,25 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { AlertCircle, Edit2, Plus, Trash2, Building2, Users, Layers } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertCircle, BarChart3, Building2, Edit2, MoreHorizontal,
+  Plus, Search, Trash2,
+} from 'lucide-react';
 import { useClassrooms, useCreateClassroom, useUpdateClassroom, useDeleteClassroom } from '../hooks/useClassrooms';
 import type { ClassroomDto, CreateClassroomDto } from '../api/classroom.api';
-
-const CLASSROOM_TYPES = ['Lecture', 'Lab', 'Computer', 'Seminar', 'Amphitheater'] as const;
-
-const TYPE_LABELS: Record<string, string> = {
-  Lecture: 'Normal Sınıf',
-  Lab: 'Laboratuvar',
-  Computer: 'Bilgisayar Lab',
-  Seminar: 'Seminer',
-  Amphitheater: 'Amfi',
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  Lecture: 'bg-blue-100 text-blue-800 border-blue-200',
-  Lab: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  Computer: 'bg-violet-100 text-violet-800 border-violet-200',
-  Seminar: 'bg-amber-100 text-amber-800 border-amber-200',
-  Amphitheater: 'bg-rose-100 text-rose-800 border-rose-200',
-};
+import ClassroomAnalyticsSheet from '../components/classroom/ClassroomAnalyticsSheet';
+import {
+  CLASSROOM_TYPE_CODES,
+  getClassroomTypeLabel,
+  getClassroomTypeBadgeClass,
+} from '../lib/classroomTypeUtils';
 
 const emptyForm: CreateClassroomDto = {
   name: '',
@@ -39,12 +37,26 @@ const emptyForm: CreateClassroomDto = {
   type: 'Lecture',
 };
 
+function formatLocation(buildingName: string | null | undefined, floor: number | null | undefined): string {
+  const building = buildingName?.trim();
+  const hasFloor = floor !== null && floor !== undefined;
+  const floorLabel = hasFloor ? (floor === 0 ? 'Zemin Kat' : `Kat ${floor}`) : null;
+
+  if (building && floorLabel) return `${building} · ${floorLabel}`;
+  if (building) return building;
+  if (floorLabel) return floorLabel;
+  return '—';
+}
+
 export default function ClassroomManagementAdminPage() {
-  const [filterType, setFilterType] = useState<string | undefined>();
-  const { data: classrooms, isLoading, isError } = useClassrooms(filterType);
+  const { data: classrooms, isLoading, isError } = useClassrooms();
   const createMutation = useCreateClassroom();
   const updateMutation = useUpdateClassroom();
   const deleteMutation = useDeleteClassroom();
+
+  const [filterType, setFilterType] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -103,84 +115,79 @@ export default function ClassroomManagementAdminPage() {
     }
   };
 
-  // Stats
-  const all = classrooms ?? [];
-  const totalCapacity = all.reduce((sum, c) => sum + c.capacity, 0);
-  const avgCapacity = all.length > 0 ? Math.round(totalCapacity / all.length) : 0;
-  const typeGroups = all.reduce((acc, c) => {
-    acc[c.type] = (acc[c.type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const all = useMemo(() => classrooms ?? [], [classrooms]);
+
+  const typeCounts = useMemo(() => {
+    return all.reduce((acc, c) => {
+      acc[c.type] = (acc[c.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [all]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return all.filter(c => {
+      if (filterType !== 'all' && c.type !== filterType) return false;
+      if (q) {
+        const haystack = `${c.name} ${c.buildingName ?? ''}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [all, filterType, searchQuery]);
+
+  const isFiltered = filterType !== 'all' || searchQuery.trim().length > 0;
 
   return (
-    <div className="space-y-5">
-      {/* Summary cards */}
-      {!isLoading && !isError && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-blue-50 p-2 rounded-lg">
-              <Building2 className="h-4 w-4 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{all.length}</p>
-              <p className="text-[11px] text-muted-foreground">Toplam Derslik</p>
-            </div>
-          </div>
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-emerald-50 p-2 rounded-lg">
-              <Users className="h-4 w-4 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{totalCapacity}</p>
-              <p className="text-[11px] text-muted-foreground">Toplam Kapasite</p>
-            </div>
-          </div>
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-amber-50 p-2 rounded-lg">
-              <Layers className="h-4 w-4 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{avgCapacity}</p>
-              <p className="text-[11px] text-muted-foreground">Ort. Kapasite</p>
-            </div>
-          </div>
-          <div className="bg-white border rounded-xl p-4 flex items-center gap-3">
-            <div className="bg-violet-50 p-2 rounded-lg">
-              <Layers className="h-4 w-4 text-violet-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{all.length > 0 ? Math.min(...all.map(c => c.capacity)) : 0}<span className="text-sm font-normal text-muted-foreground"> – {all.length > 0 ? Math.max(...all.map(c => c.capacity)) : 0}</span></p>
-              <p className="text-[11px] text-muted-foreground">Kapasite Aralığı</p>
-            </div>
-          </div>
+    <div className="space-y-4">
+      {/* Compact toolbar: count · filter · search · analiz · yeni */}
+      <div className="flex flex-wrap items-center gap-2 bg-white border rounded-xl px-3 py-2">
+        <div className="flex items-center gap-2 pr-3 mr-1 border-r">
+          <Building2 className="h-4 w-4 text-[#003366]" />
+          <span className="text-sm font-semibold tabular-nums">
+            {isFiltered ? `${filtered.length} / ${all.length}` : all.length}
+          </span>
+          <span className="text-xs text-muted-foreground">derslik</span>
         </div>
-      )}
 
-      {/* Filter + Action */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setFilterType(undefined)}
-            className={`px-3 py-1.5 text-xs rounded-full border transition ${!filterType ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-          >
-            Tümü ({all.length})
-          </button>
-          {CLASSROOM_TYPES.map(t => {
-            const count = typeGroups[t] || 0;
-            return (
-              <button
-                key={t}
-                onClick={() => setFilterType(filterType === t ? undefined : t)}
-                className={`px-3 py-1.5 text-xs rounded-full border transition ${filterType === t ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-              >
-                {TYPE_LABELS[t]} {count > 0 && `(${count})`}
-              </button>
-            );
-          })}
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="h-8 w-[180px] text-xs">
+            <SelectValue placeholder="Tüm Tipler" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tüm Tipler ({all.length})</SelectItem>
+            {CLASSROOM_TYPE_CODES.map(t => (
+              <SelectItem key={t} value={t}>
+                {getClassroomTypeLabel(t)} ({typeCounts[t] || 0})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="relative flex-1 min-w-[160px] max-w-[280px]">
+          <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Derslik adı veya bina ara..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="h-8 pl-8 text-xs"
+          />
         </div>
-        <Button onClick={openCreate} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Yeni Derslik
-        </Button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAnalyticsOpen(true)}
+            className="gap-1.5 h-8"
+            disabled={all.length === 0}
+          >
+            <BarChart3 className="h-4 w-4" /> Analiz
+          </Button>
+          <Button onClick={openCreate} size="sm" className="gap-1.5 h-8">
+            <Plus className="h-4 w-4" /> Yeni Derslik
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
@@ -199,50 +206,76 @@ export default function ClassroomManagementAdminPage() {
             <Plus className="h-4 w-4 mr-1" /> İlk Dersliği Ekle
           </Button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 bg-white border rounded-xl">
+          <Search className="h-10 w-10 mx-auto text-gray-300 mb-3" />
+          <p className="text-sm text-muted-foreground">Filtrelere uyan derslik bulunamadı.</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-3"
+            onClick={() => { setFilterType('all'); setSearchQuery(''); }}
+          >
+            Filtreleri Temizle
+          </Button>
+        </div>
       ) : (
         <div className="bg-white border rounded-xl overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50/50">
                 <TableHead className="font-semibold">Derslik Adı</TableHead>
-                <TableHead className="font-semibold">Bina</TableHead>
-                <TableHead className="font-semibold text-center">Kat</TableHead>
-                <TableHead className="font-semibold text-center">Kapasite</TableHead>
-                <TableHead className="font-semibold">Tip</TableHead>
-                <TableHead className="font-semibold text-right w-24">İşlem</TableHead>
+                <TableHead className="font-semibold">Konum</TableHead>
+                <TableHead className="font-semibold text-center w-32">Kapasite</TableHead>
+                <TableHead className="font-semibold">Derslik Tipi</TableHead>
+                <TableHead className="font-semibold text-right w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {all.map(c => (
-                <TableRow key={c.id} className="group hover:bg-gray-50/50">
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.buildingName || '—'}</TableCell>
-                  <TableCell className="text-center font-mono text-muted-foreground">{c.floor || '—'}</TableCell>
-                  <TableCell className="text-center">
-                    <span className="font-mono font-semibold">{c.capacity}</span>
-                    <span className="text-xs text-muted-foreground ml-1">kişi</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className={`text-xs px-2.5 py-1 rounded-full border ${TYPE_COLORS[c.type] || 'bg-gray-100'}`}>
-                      {TYPE_LABELS[c.type] || c.type}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(c)}>
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="icon" variant="ghost"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={() => confirmDelete(c)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filtered.map(c => {
+                const location = formatLocation(c.buildingName, c.floor);
+                return (
+                  <TableRow key={c.id} className="group hover:bg-gray-50/50">
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{location}</TableCell>
+                    <TableCell className="text-center">
+                      <span className="font-mono font-semibold">{c.capacity}</span>
+                      <span className="text-xs text-muted-foreground ml-1">kişi</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`text-xs px-2.5 py-1 rounded-full border ${getClassroomTypeBadgeClass(c.type)}`}>
+                        {getClassroomTypeLabel(c.type)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                            aria-label={`${c.name} işlemleri`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem onClick={() => openEdit(c)}>
+                            <Edit2 className="h-3.5 w-3.5 mr-2" /> Düzenle
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => confirmDelete(c)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Sil
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -297,8 +330,8 @@ export default function ClassroomManagementAdminPage() {
                   value={form.type}
                   onChange={e => setForm({ ...form, type: e.target.value })}
                 >
-                  {CLASSROOM_TYPES.map(t => (
-                    <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+                  {CLASSROOM_TYPE_CODES.map(t => (
+                    <option key={t} value={t}>{getClassroomTypeLabel(t)}</option>
                   ))}
                 </select>
               </div>
@@ -339,6 +372,13 @@ export default function ClassroomManagementAdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Analytics sheet */}
+      <ClassroomAnalyticsSheet
+        open={analyticsOpen}
+        onOpenChange={setAnalyticsOpen}
+        classrooms={all}
+      />
     </div>
   );
 }

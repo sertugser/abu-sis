@@ -18,6 +18,10 @@ public class Course
     public int Ects { get; set; }
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
+    public int? ApplicationHours { get; set; }              // Uygulama Saati (Phase 2 — distinct from LabHours)
+    public string? AlternativeName { get; set; }            // Diğer Adı (Phase 2)
+    public bool ShowInInfoPackage { get; set; } = true;     // Bilgi Paketinde Gösterme (Phase 2)
+    public CourseOpenType? OpenType { get; set; }           // Açma Tipi (Phase 2)
     public ClassroomType? TheoryClassroomType { get; set; }
     public ClassroomType? LabClassroomType { get; set; }
     public bool IsNonGpa { get; set; }                      // true = S/U graded

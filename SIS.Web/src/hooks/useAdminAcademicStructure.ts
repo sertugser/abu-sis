@@ -17,10 +17,22 @@ export interface DepartmentDto {
 }
 export interface ProgramDto {
   id: number; name: string; code: string;
+  externalSystemCode: string | null;
   departmentId: number; departmentName: string;
   degreeLevel: string; educationType: string;
   maxStudyDurationSemesters: number; totalRequiredEcts: number;
   curriculumCount: number;
+}
+
+export interface ProgramUpsertDto {
+  name: string;
+  code: string;
+  externalSystemCode: string | null;
+  departmentId: number;
+  degreeLevel: string;
+  educationType: string;
+  maxStudyDurationSemesters: number;
+  totalRequiredEcts: number;
 }
 
 export function useAdminFaculties() {
@@ -121,7 +133,7 @@ export function useDeleteDepartment() {
 export function useCreateProgram() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (dto: Omit<ProgramDto, 'id' | 'departmentName' | 'facultyName' | 'curriculumCount'>) => {
+    mutationFn: async (dto: ProgramUpsertDto) => {
       const { data } = await apiClient.post<ProgramDto>(`${BASE}/programs`, dto);
       return data;
     },
@@ -132,7 +144,7 @@ export function useCreateProgram() {
 export function useUpdateProgram() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...dto }: { id: number } & Omit<ProgramDto, 'id' | 'departmentName' | 'facultyName' | 'curriculumCount'>) => {
+    mutationFn: async ({ id, ...dto }: { id: number } & ProgramUpsertDto) => {
       const { data } = await apiClient.put<ProgramDto>(`${BASE}/programs/${id}`, dto);
       return data;
     },

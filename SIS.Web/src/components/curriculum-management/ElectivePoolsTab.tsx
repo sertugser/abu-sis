@@ -11,8 +11,8 @@ import {
   useUpdatePool,
   useDeletePool,
 } from '../../hooks/useCurriculumManagement';
-import { ELECTIVE_SUBTYPE_SHORT } from '../../types/electiveGroup';
-import type { ElectiveSubtype } from '../../types/electiveGroup';
+import { useElectiveSubtypeList } from '../../hooks/useElectiveSubtypes';
+import { findSubtypeById } from '../../lib/electiveSubtypeUtils';
 import type { CurriculumElectivePoolDto } from '../../types/curriculumManagement';
 import AddPoolDialog from './AddPoolDialog';
 
@@ -22,6 +22,7 @@ interface Props {
 
 export default function ElectivePoolsTab({ curriculumId }: Props) {
   const { data: pools, isLoading } = useCurriculumPools(curriculumId);
+  const { data: subtypes } = useElectiveSubtypeList(false);
   const updatePool = useUpdatePool();
   const deletePool = useDeletePool();
 
@@ -93,6 +94,7 @@ export default function ElectivePoolsTab({ curriculumId }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {pools.map(pool => {
           const isEditing = editingPoolId === pool.id;
+          const poolSubtype = findSubtypeById(subtypes, pool.electiveSubtypeId);
 
           return (
             <Card key={pool.id} className="relative">
@@ -103,9 +105,11 @@ export default function ElectivePoolsTab({ curriculumId }: Props) {
                     <p className="font-semibold text-sm leading-tight">{pool.groupName}</p>
                     <p className="text-xs text-muted-foreground font-mono">{pool.groupCode}</p>
                   </div>
-                  <Badge variant="outline" className="text-xs shrink-0">
-                    {ELECTIVE_SUBTYPE_SHORT[pool.electiveSubtype as ElectiveSubtype] ?? pool.electiveSubtype}
-                  </Badge>
+                  {poolSubtype && (
+                    <Badge variant="outline" className="text-xs shrink-0" title={poolSubtype.name}>
+                      {poolSubtype.name}
+                    </Badge>
+                  )}
                 </div>
 
                 {isEditing ? (

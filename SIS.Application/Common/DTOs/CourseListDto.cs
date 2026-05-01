@@ -49,7 +49,28 @@ public class StudentCourseDto
     /// <summary>Mufredattaki konumu: Zorunlu / Secmeli / MufredatDisi</summary>
     public string CurriculumType { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Faz C C1: Bu ders öğrencinin müfredatındaki hangi grup slot(lar)ına aday?
+    /// Bir ders Karar #5 gereği birden fazla grupta yer alabilir; her aday slot
+    /// inline döner. Boş liste = ders herhangi bir slot'a aday değil (zorunlu veya
+    /// müfredat dışı).
+    /// </summary>
+    public List<ApplicablePoolSlotDto> ApplicablePoolSlots { get; set; } = new();
+
     public List<SectionDto> Sections { get; set; } = new();
+}
+
+/// <summary>
+/// Faz C C1: Bir dersin öğrencinin müfredatında aday olduğu pool slot'unun özeti.
+/// Frontend slot-bazlı ders kayıt UI'ı için kullanır.
+/// </summary>
+public class ApplicablePoolSlotDto
+{
+    public int PoolId { get; set; }
+    public string SlotName { get; set; } = string.Empty;
+    public string GroupCode { get; set; } = string.Empty;
+    public string GroupName { get; set; } = string.Empty;
+    public int? EctsPerCourse { get; set; }
 }
 
 public class ActiveTermDto

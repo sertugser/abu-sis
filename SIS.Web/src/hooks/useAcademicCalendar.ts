@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { QUERY_KEYS } from '../lib/constants';
 import apiClient from '../api/axios';
 
@@ -103,7 +108,7 @@ export function useAdminCalendarTerms() {
     queryFn: async () => {
       const { data } = await apiClient.get<AcademicCalendarTermSummaryDto[]>(ADMIN);
       return data;
-    }
+    },
   });
 }
 
@@ -115,7 +120,7 @@ export function useAdminAcademicCalendar(termId: number | undefined) {
       return data;
     },
     enabled: !!termId,
-    retry: false
+    retry: false,
   });
 }
 
@@ -133,7 +138,7 @@ export function useUpsertAcademicCalendar(termId: number) {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(termId) });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.academicCalendarTerms });
-    }
+    },
   });
 }
 
@@ -142,7 +147,9 @@ export function useUpdateCalendarPhaseOverride(termId: number) {
   return useMutation({
     mutationFn: async (dto: UpdateCalendarPhaseOverrideDto) => {
       const { data } = await apiClient.post<AcademicCalendarDto>(
-        `${ADMIN}/${termId}/override`, dto);
+        `${ADMIN}/${termId}/override`,
+        dto,
+      );
       return data;
     },
     onSuccess: () => {
@@ -150,7 +157,7 @@ export function useUpdateCalendarPhaseOverride(termId: number) {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(termId) });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive });
-    }
+    },
   });
 }
 
@@ -163,7 +170,7 @@ export function useActiveStudentCalendar() {
       const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/active`);
       return data;
     },
-    retry: false
+    retry: false,
   });
 }
 
@@ -174,7 +181,19 @@ export function useStudentCalendar(termId: number | null | undefined) {
       const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`);
       return data;
     },
-    enabled: !!termId
+    enabled: !!termId,
+  });
+}
+
+export function useAcademicYearCalendars(termIds: number[]) {
+  return useQueries({
+    queries: termIds.map(termId => ({
+      queryKey: QUERY_KEYS.studentAcademicCalendar(termId),
+      queryFn: async () => {
+        const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`);
+        return data;
+      },
+    })),
   });
 }
 
@@ -184,6 +203,6 @@ export function useAcademicCalendarTerms() {
     queryFn: async () => {
       const { data } = await apiClient.get<AcademicCalendarTermSummaryDto[]>(`${PUBLIC}/terms`);
       return data;
-    }
+    },
   });
 }

@@ -64,6 +64,8 @@ export interface PrerequisiteChainNodeDto {
   prerequisites: PrerequisiteChainNodeDto[];
 }
 
+export type CourseOpenTypeValue = 'Standart' | 'Closed' | 'PendingApproval';
+
 export interface CourseDetailDto {
   id: number;
   code: string;
@@ -90,6 +92,11 @@ export interface CourseDetailDto {
   minEctsRequired: number | null;
   requiresNoFailedLowerCourses: boolean;
   canBeTakenStandalone: boolean;
+  // Phase 2 — Proliz B "Genel Bilgiler"
+  alternativeName: string | null;
+  showInInfoPackage: boolean;
+  applicationHours: number | null;
+  openType: CourseOpenTypeValue | null;
   stats: CourseStatsDto | null;
   prerequisiteChain: PrerequisiteChainNodeDto[] | null;
 }
@@ -124,6 +131,11 @@ export interface CreateCourseDto {
   minEctsRequired?: number | null;
   requiresNoFailedLowerCourses?: boolean;
   canBeTakenStandalone?: boolean;
+  // Phase 2 — Proliz B "Genel Bilgiler"
+  alternativeName?: string | null;
+  showInInfoPackage?: boolean;
+  applicationHours?: number | null;
+  openType?: CourseOpenTypeValue | null;
 }
 
 export function useAdminCourses(filter?: CourseFilterParams) {
@@ -296,5 +308,25 @@ export function useRemoveCrossList() {
       qc.invalidateQueries({ queryKey: ['admin', 'courses', 'cross-lists', courseId] });
       qc.invalidateQueries({ queryKey: ['admin', 'courses', 'cross-lists', linkedCourseId] });
     },
+  });
+}
+
+// ── Curriculum usage — bu dersi kullanan müfredatların listesi (yan etki uyarısı için) ──
+export interface CourseCurriculumUsageDto {
+  curriculumId: number;
+  programName: string;
+  curriculumVersion: string;
+  isActive: boolean;
+}
+
+export function useCourseCurriculumUsage(courseId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'courses', 'curriculum-usage', courseId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CourseCurriculumUsageDto[]>(`${BASE}/${courseId}/curriculum-usage`);
+      return data;
+    },
+    enabled: courseId !== null,
+    staleTime: 60 * 1000,
   });
 }

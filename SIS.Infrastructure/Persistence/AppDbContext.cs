@@ -23,6 +23,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CourseEquivalency> CourseEquivalencies => Set<CourseEquivalency>();
     public DbSet<CourseSection> CourseSections => Set<CourseSection>();
     public DbSet<CourseRegistration> CourseRegistrations => Set<CourseRegistration>();
+    public DbSet<AttendanceSession> AttendanceSessions => Set<AttendanceSession>();
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
@@ -54,6 +56,9 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
     public DbSet<ElectiveGroup> ElectiveGroups => Set<ElectiveGroup>();
     public DbSet<ElectiveGroupCourse> ElectiveGroupCourses => Set<ElectiveGroupCourse>();
+    public DbSet<ElectiveSubtypeEntity> ElectiveSubtypes => Set<ElectiveSubtypeEntity>();
+    public DbSet<CurriculumCourseOpeningReason> CurriculumCourseOpeningReasons => Set<CurriculumCourseOpeningReason>();
+    public DbSet<CourseCategory> CourseCategories => Set<CourseCategory>();
     public DbSet<CurriculumElectivePool> CurriculumElectivePools => Set<CurriculumElectivePool>();
     public DbSet<CurriculumTermRule> CurriculumTermRules => Set<CurriculumTermRule>();
     public DbSet<CourseAccessRule> CourseAccessRules => Set<CourseAccessRule>();
@@ -143,6 +148,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<AcademicProgram>(e =>
         {
             e.HasIndex(p => p.Code).IsUnique();
+            e.HasIndex(p => p.ExternalSystemCode)
+                .IsUnique()
+                .HasFilter("\"ExternalSystemCode\" IS NOT NULL");
+            e.Property(p => p.ExternalSystemCode).HasMaxLength(30);
 
             e.HasOne(p => p.Department)
              .WithMany(d => d.Programs)
@@ -191,10 +200,45 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .HasForeignKey(cc => cc.CourseId)
              .OnDelete(DeleteBehavior.Restrict);
 
-            e.HasOne(cc => cc.ElectiveGroup)
+            // Faz D D1: ElectiveGroup FK kaldırıldı (ölü FK — hiçbir code path set etmiyordu).
+            // Yeni model: pool/slot tabanlı CurriculumElectivePool (B1+).
+
+            e.HasOne(cc => cc.OpeningReason)
              .WithMany()
-             .HasForeignKey(cc => cc.ElectiveGroupId)
+             .HasForeignKey(cc => cc.OpeningReasonId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(cc => cc.Category)
+             .WithMany()
+             .HasForeignKey(cc => cc.CategoryId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            // Phase 3 — İntibak (predecessor course); restrict delete to keep historical link safe
+            e.HasOne(cc => cc.PreviousCourse)
+             .WithMany()
+             .HasForeignKey(cc => cc.PreviousCourseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(cc => cc.PreviousCourseId);
+        });
+
+        // ── CurriculumCourseOpeningReason (lookup) ───────────────
+        builder.Entity<CurriculumCourseOpeningReason>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Code).IsRequired().HasMaxLength(64);
+            e.Property(r => r.Name).IsRequired().HasMaxLength(128);
+            e.Property(r => r.Description).HasMaxLength(512);
+            e.HasIndex(r => r.Code).IsUnique();
+        });
+
+        // ── CourseCategory (lookup) ──────────────────────────────
+        builder.Entity<CourseCategory>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Code).IsRequired().HasMaxLength(64);
+            e.Property(c => c.Name).IsRequired().HasMaxLength(128);
+            e.HasIndex(c => c.Code).IsUnique();
         });
 
         // ── CoursePrerequisite (composite PK) ────────────────────
@@ -238,6 +282,28 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(eg => eg.FacultyId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(eg => eg.Department)
+             .WithMany()
+             .HasForeignKey(eg => eg.DepartmentId)
+             .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(eg => eg.DepartmentId);
+
+            // Faz B B3a: DB-driven ElectiveSubtypeEntity FK (nullable — geçişte).
+            e.HasOne<ElectiveSubtypeEntity>()
+             .WithMany()
+             .HasForeignKey(eg => eg.ElectiveSubtypeId)
+             .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(eg => eg.ElectiveSubtypeId);
+        });
+
+        // ── ElectiveSubtypeEntity (DB-driven lookup) ────────────
+        builder.Entity<ElectiveSubtypeEntity>(entity =>
+        {
+            entity.ToTable("ElectiveSubtypes");
+            entity.HasIndex(s => s.Code).IsUnique();
+            entity.Property(s => s.Code).HasMaxLength(50).IsRequired();
+            entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
         });
 
         // ── ElectiveGroupCourse (composite PK) ──────────────────
@@ -259,7 +325,9 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── CurriculumElectivePool ──────────────────────────────
         builder.Entity<CurriculumElectivePool>(e =>
         {
-            e.HasIndex(cep => new { cep.CurriculumId, cep.ElectiveGroupId }).IsUnique();
+            e.Property(cep => cep.SlotName).HasMaxLength(50).IsRequired();
+
+            e.HasIndex(cep => new { cep.CurriculumId, cep.ElectiveGroupId, cep.SlotName }).IsUnique();
 
             e.HasOne(cep => cep.Curriculum)
              .WithMany(c => c.ElectivePools)
@@ -363,6 +431,46 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
 
             e.Property(cs => cs.RowVersion)
              .IsRowVersion();
+        });
+
+        builder.Entity<AttendanceSession>(e =>
+        {
+            e.HasIndex(s => s.Token).IsUnique();
+            e.HasIndex(s => new { s.CourseSectionId, s.WeekNumber }).IsUnique();
+            e.Property(s => s.Token).HasMaxLength(64);
+            e.Property(s => s.Topic).HasMaxLength(200);
+
+            e.HasOne(s => s.CourseSection)
+             .WithMany()
+             .HasForeignKey(s => s.CourseSectionId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(s => s.Instructor)
+             .WithMany()
+             .HasForeignKey(s => s.InstructorId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AttendanceRecord>(e =>
+        {
+            e.HasIndex(r => new { r.AttendanceSessionId, r.StudentId }).IsUnique();
+            e.HasIndex(r => r.CourseRegistrationId);
+            e.HasIndex(r => r.StudentId);
+
+            e.HasOne(r => r.AttendanceSession)
+             .WithMany(s => s.Records)
+             .HasForeignKey(r => r.AttendanceSessionId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.CourseRegistration)
+             .WithMany()
+             .HasForeignKey(r => r.CourseRegistrationId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.Student)
+             .WithMany()
+             .HasForeignKey(r => r.StudentId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── CourseRegistration ───────────────────────────────────
@@ -669,6 +777,12 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e2.HasOne(cr => cr.AppliedElectivePool)
               .WithMany()
               .HasForeignKey(cr => cr.AppliedElectivePoolId)
+              .OnDelete(DeleteBehavior.SetNull);
+
+            // Faz 4 — Açma Nedeni snapshot (null = legacy kayıt veya reason'suz ders)
+            e2.HasOne(cr => cr.OpeningReasonSnapshot)
+              .WithMany()
+              .HasForeignKey(cr => cr.OpeningReasonIdSnapshot)
               .OnDelete(DeleteBehavior.SetNull);
         });
 

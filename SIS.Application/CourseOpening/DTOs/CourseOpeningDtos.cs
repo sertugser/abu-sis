@@ -46,6 +46,7 @@ public class CurriculumCourseForOpeningDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
+    public int? NationalCredit { get; set; }
     public int Ects { get; set; }
     public int SuggestedSemester { get; set; }
     public bool IsCompulsory { get; set; }
@@ -79,10 +80,49 @@ public class CurriculumCourseForOpeningDto
     public string? ElectiveGroupCode { get; set; }
     /// <summary>ElectiveGroup adı (ör. "Bölüm Dışı Seçmeli"). Null = havuza bağlı değil.</summary>
     public string? ElectiveGroupName { get; set; }
-    /// <summary>Havuz alt türü (NDE/TechnicalElective/UniversityElective/DepartmentalElective gibi).</summary>
-    public string? ElectiveSubtype { get; set; }
     /// <summary>Kaynak: "Compulsory" (zorunlu müfredat), "Elective" (tekil seçmeli), "Pool" (havuz üyesi).</summary>
     public string Source { get; set; } = "Compulsory";
+}
+
+/// <summary>
+/// Havuz slot satırı (ders açma sayfası için). Müfredattaki bir CurriculumElectivePool kaydını,
+/// içindeki aday ders sayısı + termId'de açılmış kaç tanesi olduğu özetiyle birlikte döner.
+/// </summary>
+public class PoolSlotForOpeningDto
+{
+    public int PoolId { get; set; }
+    public string SlotName { get; set; } = "";
+    public int ElectiveGroupId { get; set; }
+    public string ElectiveGroupName { get; set; } = "";
+    /// <summary>ElectiveSubtype.Code — TE/NDE/OC veya custom. Frontend renk için kullanır.</summary>
+    public string SubtypeCode { get; set; } = "";
+    public string SubtypeName { get; set; } = "";
+    public int SuggestedSemesterStart { get; set; }
+    public int SuggestedSemesterEnd { get; set; }
+    /// <summary>Havuz override AKTS — null ise her aday dersin kendi katalog AKTS'si geçerli.</summary>
+    public int? EctsPerCourse { get; set; }
+    public int CandidateCount { get; set; }
+    /// <summary>Aday dersler arasında verilen termId'de en az 1 aktif şubeye sahip olanların sayısı.</summary>
+    public int OpenedCandidateCount { get; set; }
+}
+
+/// <summary>
+/// Havuz aday dersi (modal için). Bir derin liste olmadığı için minimum alanları içerir.
+/// </summary>
+public class PoolCandidateDto
+{
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int TheoryHours { get; set; }
+    public int LabHours { get; set; }
+    public int? NationalCredit { get; set; }
+    public int Ects { get; set; }
+    public bool AlreadyOpened { get; set; }
+    public int ExistingSectionCount { get; set; }
+    public bool CanOpen { get; set; }
+    /// <summary>CanOpen=false ise sebep: TermNotInPlanning | NotOwner | CourseUnassigned. Null = açılabilir.</summary>
+    public string? BlockReason { get; set; }
 }
 
 public class CrossDepartmentDemandDto
@@ -190,10 +230,17 @@ public class AssignedSectionDto
 
 public record PreviousTermCourseDto(
     int CourseId, string CourseCode, string CourseName,
-    int Ects, int SuggestedSemester, bool IsCompulsory,
+    int Ects, int Credits, int SuggestedSemester, bool IsCompulsory,
     int SectionCount, int TotalCapacity,
     string? InstructorName, int? InstructorId,
-    bool AlreadyOpened);
+    bool AlreadyOpened,
+    int TotalEnrolled,
+    int? PredictedDemand,
+    int? SourceInternalQuota,
+    int? SourceExternalQuota,
+    List<int>? SourceAccessibleDepartmentIds,
+    bool HasCrossLists,
+    bool HasSchedule);
 
 public class TransferCourseItem
 {
@@ -201,6 +248,11 @@ public class TransferCourseItem
     public int? SectionCount { get; set; }
     public int? CapacityPerSection { get; set; }
     public int? InstructorId { get; set; }
+    public int? InternalQuota { get; set; }
+    public int? ExternalQuota { get; set; }
+    public List<int>? AccessibleDepartmentIds { get; set; }
+    public bool IncludeCrossLists { get; set; }
+    public bool IncludeSchedule { get; set; }
 }
 
 public class TransferFromTermRequest
@@ -227,6 +279,12 @@ public class TransferCourseResultItem
     public bool Success { get; set; }
     public string? Error { get; set; }
     public int SectionsCreated { get; set; }
+    public List<string> Warnings { get; set; } = [];
+    /// <summary>
+    /// Beklenmeyen exception için olay tanımlayıcısı (Guid kısa formu).
+    /// Loga aynı id ile düşer; admin sorun bildirildiğinde bu id ile arar.
+    /// </summary>
+    public string? IncidentId { get; set; }
 }
 
 public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);

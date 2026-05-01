@@ -28,7 +28,7 @@ import { useAdminUsers } from '../hooks/useAdminUsers';
 import { useAdminStudents } from '../hooks/useAdminStudents';
 import { useAdminInstructors } from '../hooks/useAdminInstructors';
 import { useAdminTerms } from '../hooks/useAdminTerms';
-import { useActiveStudentCalendar, useAdminCalendarTerms } from '../hooks/useAcademicCalendar';
+import { useAcademicCalendarTerms, useActiveStudentCalendar } from '../hooks/useAcademicCalendar';
 import { ROUTES } from '../lib/constants';
 import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
@@ -60,7 +60,7 @@ const ALL_QUICK_LINKS = [
   { id: 'terms',      icon: CalendarDays,  title: 'Dönem Yönetimi',   to: ROUTES.TERM_MANAGEMENT },
   { id: 'structure',  icon: Layers,        title: 'Fakülte Tanımları', to: ROUTES.FACULTY_DEFINITIONS },
   { id: 'catalog',    icon: LayoutGrid,    title: 'Ders Kataloğu',    to: ROUTES.COURSE_CATALOG_ADMIN },
-  { id: 'opening',    icon: BookOpen,      title: 'Ders Açma',        to: ROUTES.COURSE_OPENING },
+  { id: 'opening',    icon: BookOpen,      title: 'Ders Aç (Müfredat)', to: ROUTES.COURSE_OPENING },
   { id: 'classroom',  icon: Building2,     title: 'Derslik Doluluk',   to: ROUTES.CLASSROOM_DASHBOARD },
   { id: 'classlist',  icon: ClipboardList, title: 'Sınıf Listeleri',  to: ROUTES.CLASS_LISTS },
 ] as const;
@@ -210,10 +210,10 @@ function RegistrationStatusCard({
           </div>
         )}
         <Link
-          to={ROUTES.ACADEMIC_CALENDAR_ADMIN}
+          to={ROUTES.ACADEMIC_CALENDAR_GENERATOR}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
-          Tarihleri Düzenle <ArrowRight className="h-3.5 w-3.5" />
+          Takvim Oluşturucu <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </CardContent>
     </Card>
@@ -291,10 +291,10 @@ function AddDropStatusCard({
           </div>
         )}
         <Link
-          to={ROUTES.ACADEMIC_CALENDAR_ADMIN}
+          to={ROUTES.ACADEMIC_CALENDAR_GENERATOR}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
-          Tarihleri Düzenle <ArrowRight className="h-3.5 w-3.5" />
+          Takvim Oluşturucu <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </CardContent>
     </Card>
@@ -462,7 +462,7 @@ export default function SystemAdminDashboardPage() {
   const { data: instructors, isLoading: instructorsLoading } = useAdminInstructors({});
   const { data: terms = [], isLoading: termsLoading } = useAdminTerms();
   const { data: activeCalendar, isLoading: calendarLoading } = useActiveStudentCalendar();
-  const { data: calendarTerms } = useAdminCalendarTerms();
+  const { data: calendarTerms } = useAcademicCalendarTerms();
 
   const activeTerm = terms.find(t => t.isActive);
   const activeTermNoCalendar = calendarTerms?.find(t => t.isActive && !t.isCancelled && !t.hasCalendar);
@@ -499,8 +499,8 @@ export default function SystemAdminDashboardPage() {
             <p className="text-sm text-amber-800 mt-1">
               <strong>{activeTermNoCalendar.termName}</strong> dönemi aktif ama kayıt/ekle-bırak/not girişi tarihleri tanımlanmamış. Öğrenciler kayıt yapamaz, notlar girilemez.
             </p>
-            <Link to={ROUTES.ACADEMIC_CALENDAR_ADMIN} className="text-sm text-amber-900 underline mt-2 inline-block">
-              Akademik Takvim Yönetimi'ne git →
+            <Link to={ROUTES.ACADEMIC_CALENDAR_GENERATOR} className="text-sm text-amber-900 underline mt-2 inline-block">
+              Takvim Oluşturucu'ya git →
             </Link>
           </div>
         </div>

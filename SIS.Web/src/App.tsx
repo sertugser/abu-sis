@@ -20,9 +20,11 @@ import TermGpaPage from './pages/TermGpaPage';
 import TranscriptPage from './pages/TranscriptPage';
 import TranscriptScenarioPage from './pages/TranscriptScenarioPage';
 import AcademicCalendarPage from './pages/AcademicCalendarPage';
-import AcademicCalendarAdminPage from './pages/AcademicCalendarAdminPage';
 import AcademicCalendarGeneratorPage from './pages/AcademicCalendarGeneratorPage';
+import { OsymRegistrationCalendarAccessGate, ProgramQuotaAccessGate } from './components/AcademicOperationsRouteGates';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
+import AttendanceEntryPage from './pages/AttendanceEntryPage';
+import QrAttendancePage from './pages/QrAttendancePage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
 import ClassListsPage from './pages/ClassListsPage';
@@ -72,17 +74,15 @@ import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
-import ElectiveGroupManagementPage from './pages/ElectiveGroupManagementPage';
+import ElectiveConfigurationPage from './pages/ElectiveConfigurationPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
-import TermProgramTransferPage from './pages/TermProgramTransferPage';
+import TermProgramTransferPage from './pages/term-program-transfer';
 import CourseEvaluationPage from './pages/CourseEvaluationPage';
 import EvaluationResultsPage from './pages/EvaluationResultsPage';
 import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
-import OsymRegistrationCalendarPage from './pages/OsymRegistrationCalendarPage';
 import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
-import ProgramQuotaPage from './pages/ProgramQuotaPage';
 import SectioningPage from './pages/SectioningPage';
 import CourseQuotaPage from './pages/CourseQuotaPage';
 import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
@@ -101,6 +101,7 @@ export default function App() {
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/yoklama/qr/:token" element={<QrAttendancePage />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<RoleProtectedRoute permission="menu.transkript.view" menuSlug="transkript" />}>
                   <Route path="report/transkript" element={<TranscriptPage />} />
@@ -115,10 +116,6 @@ export default function App() {
                   {/* Herkesin erişebildiği sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
                   <Route path="duyurular" element={<AnnouncementsPage />} />
-
-                  <Route element={<RoleProtectedRoute permission="menu.akademik-takvim-yonetimi.view" />}>
-                    <Route path="akademik-takvim-yonetimi" element={<AcademicCalendarAdminPage />} />
-                  </Route>
 
                   <Route element={<RoleProtectedRoute permission="menu.ders-kayit.view" />}>
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
@@ -157,6 +154,9 @@ export default function App() {
 
                   <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
                     <Route path="derslerim" element={<InstructorSectionsPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.yoklama-girisi.view" />}>
+                    <Route path="yoklama-girisi" element={<AttendanceEntryPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
                     <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
@@ -308,9 +308,13 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-islemleri.view" />}>
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.secmeli-ders-gruplari.view" />}>
-                    <Route path="secmeli-ders-gruplari" element={<ElectiveGroupManagementPage />} />
+                  <Route element={<RoleProtectedRoute permission="menu.secmeli-yapilandirma.view" />}>
+                    <Route path="secmeli-yapilandirma" element={<Navigate to="/secmeli-yapilandirma/gruplar" replace />} />
+                    <Route path="secmeli-yapilandirma/:tab" element={<ElectiveConfigurationPage />} />
                   </Route>
+                  {/* Backward-compat redirects (eski deep-link/bookmark) */}
+                  <Route path="secmeli-ders-gruplari" element={<Navigate to="/secmeli-yapilandirma/gruplar" replace />} />
+                  <Route path="secmeli-tipleri" element={<Navigate to="/secmeli-yapilandirma/tipler" replace />} />
                   <Route element={<RoleProtectedRoute permission="menu.ders-veren-ogretim-uyeleri.view" />}>
                     <Route path="ders-veren-ogretim-uyeleri" element={<InstructorCoursesReportPage />} />
                   </Route>
@@ -331,7 +335,7 @@ export default function App() {
                     <Route path="degerlendirme-donemi-yonetimi" element={<EvaluationPeriodAdminPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.osym-kayit-takvimi.view" />}>
-                    <Route path="osym-kayit-takvimi" element={<OsymRegistrationCalendarPage />} />
+                    <Route path="osym-kayit-takvimi" element={<OsymRegistrationCalendarAccessGate />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-saatleri-yonetimi.view" />}>
                     <Route path="ders-saatleri-yonetimi" element={<TimeSlotManagementPage />} />
@@ -344,7 +348,7 @@ export default function App() {
                   </Route>
 
                   <Route element={<RoleProtectedRoute permission="menu.program-kontenjan.view" />}>
-                    <Route path="program-kontenjan" element={<ProgramQuotaPage />} />
+                    <Route path="program-kontenjan" element={<ProgramQuotaAccessGate />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute permission="menu.program-onayi.view" />}>
