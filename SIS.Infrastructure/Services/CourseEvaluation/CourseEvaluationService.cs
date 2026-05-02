@@ -110,12 +110,36 @@ public class CourseEvaluationService : ICourseEvaluationService
 
     public async Task<List<EvaluationQuestionDto>> GetActiveQuestionsAsync(CancellationToken ct = default)
     {
+        // Use the active period's snapshot if available; otherwise fall back to live active questions.
+        var activePeriod = await GetOpenPeriodEntityAsync(ct);
+
+        if (activePeriod != null)
+        {
+            var snapshotIds = await _context.EvaluationPeriodQuestions
+                .AsNoTracking()
+                .Where(pq => pq.EvaluationPeriodId == activePeriod.Id)
+                .Select(pq => pq.EvaluationQuestionId)
+                .ToListAsync(ct);
+
+            if (snapshotIds.Count > 0)
+            {
+                return await _context.EvaluationQuestions
+                    .AsNoTracking()
+                    .Where(q => snapshotIds.Contains(q.Id))
+                    .OrderBy(q => q.Category)
+                    .ThenBy(q => q.SortOrder)
+                    .Select(q => new EvaluationQuestionDto(q.Id, q.Text, q.QuestionType, q.Category, q.SortOrder, q.IsActive, q.IsDeleted))
+                    .ToListAsync(ct);
+            }
+        }
+
+        // Fallback: live active questions (also handles no active period)
         return await _context.EvaluationQuestions
             .AsNoTracking()
-            .Where(q => q.IsActive)
+            .Where(q => q.IsActive && !q.IsDeleted)
             .OrderBy(q => q.Category)
             .ThenBy(q => q.SortOrder)
-            .Select(q => new EvaluationQuestionDto(q.Id, q.Text, q.QuestionType, q.Category, q.SortOrder, q.IsActive))
+            .Select(q => new EvaluationQuestionDto(q.Id, q.Text, q.QuestionType, q.Category, q.SortOrder, q.IsActive, q.IsDeleted))
             .ToListAsync(ct);
     }
 
@@ -160,9 +184,26 @@ public class CourseEvaluationService : ICourseEvaluationService
             return (false, "Bu dersi daha once degerlendirdiniz.");
 
         var questionIds = dto.Answers.Select(a => a.QuestionId).ToList();
-        var questions = await _context.EvaluationQuestions
-            .Where(q => questionIds.Contains(q.Id) && q.IsActive)
+
+        // Validate against period snapshot, falling back to live active questions
+        var snapshotIds = await _context.EvaluationPeriodQuestions
+            .Where(pq => pq.EvaluationPeriodId == activePeriod.Id)
+            .Select(pq => pq.EvaluationQuestionId)
             .ToListAsync(ct);
+
+        List<EvaluationQuestion> questions;
+        if (snapshotIds.Count > 0)
+        {
+            questions = await _context.EvaluationQuestions
+                .Where(q => snapshotIds.Contains(q.Id) && questionIds.Contains(q.Id))
+                .ToListAsync(ct);
+        }
+        else
+        {
+            questions = await _context.EvaluationQuestions
+                .Where(q => questionIds.Contains(q.Id) && q.IsActive && !q.IsDeleted)
+                .ToListAsync(ct);
+        }
 
         if (questions.Count != questionIds.Distinct().Count())
             return (false, "Gecersiz soru icerigi.");
@@ -327,9 +368,6 @@ public class CourseEvaluationService : ICourseEvaluationService
         if (term == null)
             return null;
 
-        // NOT: cs.IsActive filtresi kaldırıldı.
-        // Geçmiş/arşivlenmiş dönemlerde sections IsActive=false olur; değerlendirme
-        // sonuçları o dönemler için de erişilebilir olmalı (salt-okunur tarihsel kayıt).
         var sections = await _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
@@ -427,26 +465,48 @@ public class CourseEvaluationService : ICourseEvaluationService
         var existing = await _context.EvaluationPeriods
             .FirstOrDefaultAsync(p => p.TermId == termId, ct);
 
+        EvaluationPeriod period;
         if (existing != null)
         {
             existing.Status = EvaluationPeriodStatus.Open;
             existing.ClosesAt = closesAt;
             existing.OpenedAt = DateTime.UtcNow;
             existing.OpenedBy = openedBy;
+            period = existing;
+        }
+        else
+        {
+            period = new EvaluationPeriod
+            {
+                TermId = termId,
+                Status = EvaluationPeriodStatus.Open,
+                OpenedAt = DateTime.UtcNow,
+                ClosesAt = closesAt,
+                OpenedBy = openedBy
+            };
+            _context.EvaluationPeriods.Add(period);
             await _context.SaveChangesAsync(ct);
-            return new EvaluationPeriodDto(existing.Id, existing.TermId, term.Name, existing.OpenedAt, existing.ClosesAt, existing.Status, true);
         }
 
-        var period = new EvaluationPeriod
-        {
-            TermId = termId,
-            Status = EvaluationPeriodStatus.Open,
-            OpenedAt = DateTime.UtcNow,
-            ClosesAt = closesAt,
-            OpenedBy = openedBy
-        };
+        // Snapshot current active questions for this period (replaces any prior snapshot)
+        var oldSnapshot = await _context.EvaluationPeriodQuestions
+            .Where(pq => pq.EvaluationPeriodId == period.Id)
+            .ToListAsync(ct);
+        if (oldSnapshot.Count > 0)
+            _context.EvaluationPeriodQuestions.RemoveRange(oldSnapshot);
 
-        _context.EvaluationPeriods.Add(period);
+        var activeQuestionIds = await _context.EvaluationQuestions
+            .Where(q => q.IsActive && !q.IsDeleted)
+            .Select(q => q.Id)
+            .ToListAsync(ct);
+
+        _context.EvaluationPeriodQuestions.AddRange(
+            activeQuestionIds.Select(qId => new EvaluationPeriodQuestion
+            {
+                EvaluationPeriodId = period.Id,
+                EvaluationQuestionId = qId
+            }));
+
         await _context.SaveChangesAsync(ct);
 
         return new EvaluationPeriodDto(period.Id, period.TermId, term.Name, period.OpenedAt, period.ClosesAt, period.Status, true);
@@ -469,9 +529,10 @@ public class CourseEvaluationService : ICourseEvaluationService
     {
         return await _context.EvaluationQuestions
             .AsNoTracking()
-            .OrderBy(q => q.Category)
+            .OrderBy(q => q.IsDeleted)
+            .ThenBy(q => q.Category)
             .ThenBy(q => q.SortOrder)
-            .Select(q => new EvaluationQuestionDto(q.Id, q.Text, q.QuestionType, q.Category, q.SortOrder, q.IsActive))
+            .Select(q => new EvaluationQuestionDto(q.Id, q.Text, q.QuestionType, q.Category, q.SortOrder, q.IsActive, q.IsDeleted))
             .ToListAsync(ct);
     }
 
@@ -483,12 +544,13 @@ public class CourseEvaluationService : ICourseEvaluationService
             QuestionType = dto.QuestionType,
             Category = dto.Category,
             SortOrder = dto.SortOrder,
-            IsActive = true
+            IsActive = true,
+            IsDeleted = false
         };
         _context.EvaluationQuestions.Add(question);
         await _context.SaveChangesAsync(ct);
 
-        return new EvaluationQuestionDto(question.Id, question.Text, question.QuestionType, question.Category, question.SortOrder, question.IsActive);
+        return new EvaluationQuestionDto(question.Id, question.Text, question.QuestionType, question.Category, question.SortOrder, question.IsActive, question.IsDeleted);
     }
 
     public async Task<EvaluationQuestionDto?> UpdateQuestionAsync(int id, UpdateEvaluationQuestionDto dto, CancellationToken ct = default)
@@ -503,15 +565,168 @@ public class CourseEvaluationService : ICourseEvaluationService
         question.IsActive = dto.IsActive;
         await _context.SaveChangesAsync(ct);
 
-        return new EvaluationQuestionDto(question.Id, question.Text, question.QuestionType, question.Category, question.SortOrder, question.IsActive);
+        return new EvaluationQuestionDto(question.Id, question.Text, question.QuestionType, question.Category, question.SortOrder, question.IsActive, question.IsDeleted);
     }
 
+    // Soft delete: marks IsDeleted=true and IsActive=false; answers are preserved.
     public async Task<bool> DeleteQuestionAsync(int id, CancellationToken ct = default)
     {
         var question = await _context.EvaluationQuestions.FirstOrDefaultAsync(q => q.Id == id, ct);
         if (question == null) return false;
 
+        question.IsDeleted = true;
         question.IsActive = false;
+        await _context.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<DepartmentExportDataDto?> GetDepartmentExportDataAsync(int departmentId, int? termId, CancellationToken ct = default)
+    {
+        var department = await _context.Departments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == departmentId, ct);
+        if (department == null) return null;
+
+        var now = DateTime.UtcNow;
+        var term = termId.HasValue
+            ? await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId.Value, ct)
+            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, ct);
+        if (term == null) return null;
+
+        // Load all sections for this department/term
+        var sections = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .Include(cs => cs.Instructor)
+            .Where(cs => cs.TermId == term.Id && cs.Course.DepartmentId == departmentId)
+            .ToListAsync(ct);
+
+        if (sections.Count == 0)
+            return new DepartmentExportDataDto(
+                department.Name, term.Name, 0, 0, 0m, null,
+                new List<SectionExportRowDto>(), new List<ExportQuestionHeaderDto>());
+
+        var sectionIds = sections.Select(s => s.Id).ToList();
+
+        // Response counts per section
+        var responseCounts = await _context.EvaluationResponses
+            .AsNoTracking()
+            .Where(r => sectionIds.Contains(r.CourseSectionId))
+            .GroupBy(r => r.CourseSectionId)
+            .Select(g => new { SectionId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SectionId, x => x.Count, ct);
+
+        // Per-section per-question average ratings in one batch query
+        // Note: no .Include() here — EF Core cannot translate Include + GroupBy together
+        var ratingQuestionIds = await _context.EvaluationQuestions
+            .AsNoTracking()
+            .Where(q => q.QuestionType == EvaluationQuestionType.Rating)
+            .Select(q => q.Id)
+            .ToListAsync(ct);
+
+        var questionAverages = await _context.EvaluationAnswers
+            .AsNoTracking()
+            .Where(a => sectionIds.Contains(a.Response.CourseSectionId)
+                && ratingQuestionIds.Contains(a.QuestionId)
+                && a.RatingValue.HasValue)
+            .GroupBy(a => new { a.Response.CourseSectionId, a.QuestionId })
+            .Select(g => new
+            {
+                g.Key.CourseSectionId,
+                g.Key.QuestionId,
+                Average = g.Average(a => (double)a.RatingValue!.Value)
+            })
+            .ToListAsync(ct);
+
+        // Ordered list of rating questions that appear in results
+        var questionIds = questionAverages.Select(x => x.QuestionId).Distinct().ToList();
+        var questions = await _context.EvaluationQuestions
+            .AsNoTracking()
+            .Where(q => questionIds.Contains(q.Id) && q.QuestionType == EvaluationQuestionType.Rating)
+            .OrderBy(q => q.Category)
+            .ThenBy(q => q.SortOrder)
+            .Select(q => new ExportQuestionHeaderDto(q.Id, q.Text, q.Category))
+            .ToListAsync(ct);
+
+        // Build lookup: sectionId → questionId → average
+        var avgLookup = questionAverages
+            .GroupBy(x => x.CourseSectionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.ToDictionary(x => x.QuestionId, x => (decimal)Math.Round(x.Average, 2)));
+
+        // Instructor names
+        var instructorUserIds = sections
+            .Where(s => s.Instructor != null)
+            .Select(s => s.Instructor!.UserId)
+            .Distinct().ToList();
+        var instructorNames = await _context.Users
+            .AsNoTracking()
+            .Where(u => instructorUserIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FirstName, u.LastName })
+            .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim(), ct);
+
+        var rows = sections.Select(s =>
+        {
+            var responseCount = responseCounts.GetValueOrDefault(s.Id, 0);
+            var enrolled = s.EnrolledCount > 0 ? s.EnrolledCount : 1;
+            var rate = responseCount == 0 ? 0m : Math.Round((decimal)responseCount / enrolled * 100m, 1);
+            var isVisible = responseCount >= MinResponsesForVisibility;
+
+            var sectionAvgs = avgLookup.GetValueOrDefault(s.Id);
+            var overallAvg = sectionAvgs != null && sectionAvgs.Any()
+                ? (decimal?)Math.Round((decimal)sectionAvgs.Values.Average(), 2)
+                : null;
+
+            var qAvgs = questions.Select(q =>
+                sectionAvgs != null && sectionAvgs.TryGetValue(q.QuestionId, out var a) ? (decimal?)a : null
+            ).ToList();
+
+            var instructorName = s.Instructor != null
+                && instructorNames.TryGetValue(s.Instructor.UserId, out var n)
+                ? $"{s.Instructor.Title} {n}".Trim()
+                : "Atanmamış";
+
+            return new SectionExportRowDto(
+                s.Course.Code,
+                s.Course.Name,
+                instructorName,
+                responseCount,
+                s.EnrolledCount,
+                rate,
+                isVisible ? overallAvg : null,
+                isVisible,
+                qAvgs);
+        })
+        .OrderBy(r => r.CourseCode)
+        .ToList();
+
+        var totalEnrolled = sections.Sum(s => s.EnrolledCount);
+        var totalResponded = rows.Sum(r => r.ResponseCount);
+        var overallRate = totalEnrolled == 0 ? 0m : Math.Round((decimal)totalResponded / totalEnrolled * 100m, 1);
+        var visibleAvgs = rows.Where(r => r.IsVisible && r.AverageRating.HasValue).ToList();
+        var overallAverage = visibleAvgs.Any()
+            ? (decimal?)Math.Round(visibleAvgs.Average(r => r.AverageRating!.Value), 2)
+            : null;
+
+        return new DepartmentExportDataDto(
+            department.Name,
+            term.Name,
+            sections.Count,
+            rows.Count(r => r.ResponseCount > 0),
+            overallRate,
+            overallAverage,
+            rows,
+            questions);
+    }
+
+    // Restore: clears IsDeleted. Question stays inactive until admin explicitly activates it.
+    public async Task<bool> RestoreQuestionAsync(int id, CancellationToken ct = default)
+    {
+        var question = await _context.EvaluationQuestions.FirstOrDefaultAsync(q => q.Id == id && q.IsDeleted, ct);
+        if (question == null) return false;
+
+        question.IsDeleted = false;
         await _context.SaveChangesAsync(ct);
         return true;
     }

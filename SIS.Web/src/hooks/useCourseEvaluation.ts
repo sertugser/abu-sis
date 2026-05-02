@@ -3,6 +3,7 @@ import {
   closePeriod,
   createQuestion,
   deleteQuestion,
+  exportDepartmentResults,
   getActivePeriod,
   getActiveQuestions,
   getAllQuestions,
@@ -10,6 +11,7 @@ import {
   getMyEvaluableCourses,
   getSectionResults,
   openPeriod,
+  restoreQuestion,
   submitEvaluation,
   updateQuestion,
 } from '../api/courseEvaluation.api';
@@ -139,5 +141,23 @@ export function useDeleteEvaluationQuestion() {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.evaluationAllQuestions });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.evaluationActiveQuestions });
     },
+  });
+}
+
+export function useRestoreEvaluationQuestion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => restoreQuestion(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.evaluationAllQuestions });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.evaluationActiveQuestions });
+    },
+  });
+}
+
+export function useExportDepartmentEvaluationResults() {
+  return useMutation({
+    mutationFn: ({ departmentId, termId }: { departmentId: number; termId?: number | null }) =>
+      exportDepartmentResults(departmentId, termId),
   });
 }

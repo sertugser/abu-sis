@@ -8,7 +8,8 @@ public record EvaluationQuestionDto(
     EvaluationQuestionType QuestionType,
     EvaluationQuestionCategory Category,
     int SortOrder,
-    bool IsActive);
+    bool IsActive,
+    bool IsDeleted);
 
 public record CreateEvaluationQuestionDto(
     string Text,

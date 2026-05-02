@@ -12,7 +12,7 @@ import {
 import { Megaphone, Search } from 'lucide-react';
 import AnnouncementCard from '../components/announcements/AnnouncementCard';
 import { useActiveAnnouncements, useAnnouncementDetail } from '../hooks/useAnnouncements';
-import { ANNOUNCEMENT_AUDIENCE_LABELS } from '../types/announcements';
+import { getAudienceBadgeLabel } from '../types/announcements';
 import { formatDate } from '../lib/utils';
 
 export default function AnnouncementsPage() {
@@ -88,9 +88,7 @@ function AnnouncementDetailDialog({ id, onClose }: { id: number | null; onClose:
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="outline">
-                {data.targetAudience === 'Department' && data.targetDepartmentName
-                  ? data.targetDepartmentName
-                  : ANNOUNCEMENT_AUDIENCE_LABELS[data.targetAudience]}
+                {getAudienceBadgeLabel(data)}
               </Badge>
               <span>{formatDate(data.startsAt)}</span>
               <span>·</span>

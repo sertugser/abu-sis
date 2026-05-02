@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Pin, Megaphone, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useActiveAnnouncements, useAnnouncementDetail } from '../../hooks/useAnnouncements';
-import { ANNOUNCEMENT_AUDIENCE_LABELS } from '../../types/announcements';
+import { getAudienceBadgeLabel } from '../../types/announcements';
 import { ROUTES } from '../../lib/constants';
 import {
   Dialog,
@@ -61,10 +61,8 @@ export default function DashboardAnnouncementWidget({ max = 5 }: DashboardAnnoun
                     {a.isPinned && <Pin className="h-3 w-3 text-amber-500 shrink-0" />}
                     <span className="text-sm font-medium truncate">{a.title}</span>
                   </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    {a.targetAudience === 'Department' && a.targetDepartmentName
-                      ? a.targetDepartmentName
-                      : ANNOUNCEMENT_AUDIENCE_LABELS[a.targetAudience]}
+                  <Badge variant="outline" className="shrink-0 text-[10px] max-w-[120px] truncate">
+                    {getAudienceBadgeLabel(a)}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground line-clamp-1 mt-1">{a.contentPreview}</p>
@@ -96,9 +94,7 @@ function AnnouncementViewDialog({ id, onClose }: { id: number | null; onClose: (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="outline">
-                {data.targetAudience === 'Department' && data.targetDepartmentName
-                  ? data.targetDepartmentName
-                  : ANNOUNCEMENT_AUDIENCE_LABELS[data.targetAudience]}
+                {getAudienceBadgeLabel(data)}
               </Badge>
               <span>{formatDate(data.startsAt)}</span>
               <span>·</span>

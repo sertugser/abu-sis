@@ -66,6 +66,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
     public DbSet<EvaluationPeriod> EvaluationPeriods => Set<EvaluationPeriod>();
     public DbSet<EvaluationQuestion> EvaluationQuestions => Set<EvaluationQuestion>();
+    public DbSet<EvaluationPeriodQuestion> EvaluationPeriodQuestions => Set<EvaluationPeriodQuestion>();
     public DbSet<EvaluationResponse> EvaluationResponses => Set<EvaluationResponse>();
     public DbSet<EvaluationAnswer> EvaluationAnswers => Set<EvaluationAnswer>();
     public DbSet<InternalAnnouncement> InternalAnnouncements => Set<InternalAnnouncement>();
@@ -1018,6 +1019,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(q => new { q.Category, q.SortOrder });
         });
 
+        // ── EvaluationPeriodQuestion (snapshot join) ─────────────
+        builder.Entity<EvaluationPeriodQuestion>(e =>
+        {
+            e.HasKey(pq => new { pq.EvaluationPeriodId, pq.EvaluationQuestionId });
+
+            e.HasOne(pq => pq.Period)
+             .WithMany()
+             .HasForeignKey(pq => pq.EvaluationPeriodId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(pq => pq.Question)
+             .WithMany()
+             .HasForeignKey(pq => pq.EvaluationQuestionId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
         // ── EvaluationResponse ───────────────────────────────────
         builder.Entity<EvaluationResponse>(e =>
         {
@@ -1071,6 +1088,16 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasOne(a => a.TargetDepartment)
              .WithMany()
              .HasForeignKey(a => a.TargetDepartmentId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.TargetFaculty)
+             .WithMany()
+             .HasForeignKey(a => a.TargetFacultyId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.TargetSection)
+             .WithMany()
+             .HasForeignKey(a => a.TargetSectionId)
              .OnDelete(DeleteBehavior.SetNull);
         });
 
