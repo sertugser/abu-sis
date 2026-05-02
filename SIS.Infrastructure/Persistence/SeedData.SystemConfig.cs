@@ -34,42 +34,18 @@ public static partial class SeedData
             new() { Key = "Withdrawal.MaxCount.Undergraduate", Value = "6", Category = "Registration", DataType = "int", Description = "Lisans öğrencileri için toplam çekilme hakkı" },
             new() { Key = "Withdrawal.MaxCount.Associate", Value = "3", Category = "Registration", DataType = "int", Description = "Önlisans öğrencileri için toplam çekilme hakkı" },
 
-            // ── YÖK Unvan → MaxWeeklyHours ───────────────────────
-            new() { Key = "Instructor.MaxWeeklyHours.Professor", Value = "12", Category = "Scheduling", DataType = "int", Description = "Profesör max haftalık ders saati" },
-            new() { Key = "Instructor.MaxWeeklyHours.AssociateProfessor", Value = "16", Category = "Scheduling", DataType = "int", Description = "Doçent max haftalık ders saati" },
-            new() { Key = "Instructor.MaxWeeklyHours.AssistantProfessor", Value = "20", Category = "Scheduling", DataType = "int", Description = "Dr. Öğr. Üyesi max haftalık ders saati" },
-            new() { Key = "Instructor.MaxWeeklyHours.Lecturer", Value = "24", Category = "Scheduling", DataType = "int", Description = "Öğretim Görevlisi max haftalık ders saati" },
-
             // ── Derslik Eşikleri ──────────────────────────────────
             new() { Key = "Classroom.AmphiThreshold", Value = "100", Category = "Scheduling", DataType = "int", Description = "Bu sayıdan fazla kontenjan → Amfi zorunlu" },
             new() { Key = "Classroom.OccupancyTarget.Min", Value = "60", Category = "Scheduling", DataType = "int", Description = "Derslik doluluk oranı alt hedefi (%)" },
             new() { Key = "Classroom.OccupancyTarget.Max", Value = "85", Category = "Scheduling", DataType = "int", Description = "Derslik doluluk oranı üst hedefi (%)" },
 
-            // ── Soft Constraint Kontrolleri ───────────────────────
-            new() { Key = "SoftConstraint.S1.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S1: Derslik doluluk oranı kontrolü aktif/pasif" },
-            new() { Key = "SoftConstraint.S2.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S2: Hoca günlük yoğunluk dengesi kontrolü aktif/pasif" },
+            // ── Soft Constraint Parametreleri ─────────────────────
+            // Aç/kapat (S*.Enabled) ve ağırlık (Weight.S*) artık ConstraintDefinition tablosundan
+            // okunuyor — eski SystemConfig key'leri çift-kanal sorununu önlemek için kaldırıldı.
             new() { Key = "SoftConstraint.S2.MaxDailyHours", Value = "6", Category = "Scheduling", DataType = "int", Description = "S2: Bir hocanın günlük max ders saati" },
-            new() { Key = "SoftConstraint.S3.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S3: Slot dağılım dengesi kontrolü aktif/pasif" },
             new() { Key = "SoftConstraint.S3.MaxSectionsPerSlot", Value = "5", Category = "Scheduling", DataType = "int", Description = "S3: Bir slot'ta max section sayısı (prime-time yığılma önleme)" },
-            new() { Key = "SoftConstraint.S4.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S4: Cross-department sık birlikte alınan ders çakışma uyarısı aktif/pasif" },
             new() { Key = "SoftConstraint.S4.MinCoPairThreshold", Value = "20", Category = "Scheduling", DataType = "int", Description = "S4: Birlikte alınan ders çifti minimum öğrenci eşiği" },
-            new() { Key = "SoftConstraint.S5.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S5: Öğle arası koruması (soft mod) aktif/pasif" },
-            new() { Key = "SoftConstraint.S7.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S7: Öğrenci ders arası boşluk kontrolü aktif/pasif" },
             new() { Key = "SoftConstraint.S7.MaxGapSlots", Value = "3", Category = "Scheduling", DataType = "int", Description = "S7: Max ardışık boş slot sayısı" },
-            new() { Key = "SoftConstraint.S8.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S8: Hoca gün sayısı minimizasyonu aktif/pasif" },
-            new() { Key = "SoftConstraint.S9.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S9: Erken sabah/geç akşam cezası aktif/pasif" },
-            new() { Key = "SoftConstraint.S12.Enabled", Value = "true", Category = "Scheduling", DataType = "bool", Description = "S12: Hafta içi dengeli dağılım aktif/pasif" },
-
-            // ── Soft Constraint Ağırlıkları ──────────────────────
-            new() { Key = "SoftConstraint.Weight.S1", Value = "3", Category = "Scheduling", DataType = "decimal", Description = "S1 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S2", Value = "2", Category = "Scheduling", DataType = "decimal", Description = "S2 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S3", Value = "2", Category = "Scheduling", DataType = "decimal", Description = "S3 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S4", Value = "3", Category = "Scheduling", DataType = "decimal", Description = "S4 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S5", Value = "2", Category = "Scheduling", DataType = "decimal", Description = "S5 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S7", Value = "2", Category = "Scheduling", DataType = "decimal", Description = "S7 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S8", Value = "1", Category = "Scheduling", DataType = "decimal", Description = "S8 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S9", Value = "1", Category = "Scheduling", DataType = "decimal", Description = "S9 ağırlığı" },
-            new() { Key = "SoftConstraint.Weight.S12", Value = "1", Category = "Scheduling", DataType = "decimal", Description = "S12 ağırlığı" },
 
             // ── Scheduling Algoritma Parametreleri ───────────────
             new() { Key = "Scheduling.MaxBacktrackingDepth", Value = "3", Category = "Scheduling", DataType = "int", Description = "Backtracking max derinlik" },
@@ -85,6 +61,11 @@ public static partial class SeedData
             new() { Key = "Schedule.SA.RelocateWeight", Value = "50", Category = "Scheduling", DataType = "int", Description = "SA relocate hamlesi ağırlığı" },
             new() { Key = "Schedule.SA.SwapWeight", Value = "35", Category = "Scheduling", DataType = "int", Description = "SA swap hamlesi ağırlığı" },
             new() { Key = "Schedule.SA.ChainWeight", Value = "15", Category = "Scheduling", DataType = "int", Description = "SA chain-relocate hamlesi ağırlığı" },
+
+            // ── LNS (Large Neighborhood Search) Parametreleri ─────
+            new() { Key = "Schedule.LNS.MaxIterations", Value = "100", Category = "Scheduling", DataType = "int", Description = "LNS algoritması max iterasyon sayısı" },
+            new() { Key = "Schedule.LNS.TimeoutSeconds", Value = "30", Category = "Scheduling", DataType = "int", Description = "LNS zaman aşımı (saniye)" },
+            new() { Key = "Schedule.LNS.DestroySize", Value = "8", Category = "Scheduling", DataType = "int", Description = "LNS bir iterasyonda yıkılan section sayısı" },
 
             // ── MRV (Minimum Remaining Values) Ağırlıkları ────────
             new() { Key = "Schedule.MRV.ClassroomWeight", Value = "3", Category = "Scheduling", DataType = "int", Description = "MRV: derslik kısıtı ağırlığı" },

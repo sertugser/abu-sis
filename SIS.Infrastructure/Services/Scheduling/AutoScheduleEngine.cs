@@ -177,7 +177,13 @@ public sealed class AutoScheduleEngine
             .Where(cp => cp.IsCorequisite)
             .ToListAsync(ct);
 
-        var s4Enabled = await _configProvider.GetBoolAsync("SoftConstraint.S4.Enabled", true, ct);
+        // S4 enabled durumu ConstraintDefinition.IsEnabled'dan okunuyor (tek otorite).
+        // Disabled ise CoEnrollmentPairs DB sorgusunu atlıyoruz — performans optimizasyonu.
+        var s4Enabled = await _context.ConstraintDefinitions
+            .AsNoTracking()
+            .Where(d => d.Code == "S4")
+            .Select(d => (bool?)d.IsEnabled)
+            .FirstOrDefaultAsync(ct) ?? true;
         var s4Threshold = await _configProvider.GetIntAsync("SoftConstraint.S4.MinCoPairThreshold", 20, ct);
         var coEnrollmentPairs = s4Enabled
             ? await LoadCoEnrollmentPairsAsync(request.TermId, s4Threshold, ct)
@@ -698,23 +704,25 @@ public sealed class AutoScheduleEngine
             BreakDurationMinutes = GetInt(config, "Schedule.BreakDurationMinutes", 5),
             AmphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100),
             TheoryLabSplitThreshold = GetInt(config, "Schedule.TheoryLabSplitThreshold", 4),
-            S1Enabled = GetBool(config, "SoftConstraint.S1.Enabled", true),
+            // Soft kısıt aç/kapat: tek otorite ConstraintDefinition.IsEnabled (state.IsDisabled).
+            // SystemConfig'den okunmuyor; defansif amaçla true.
+            S1Enabled = true,
             S1MinOccupancy = GetInt(config, "Classroom.OccupancyTarget.Min", 60),
             S1MaxOccupancy = GetInt(config, "Classroom.OccupancyTarget.Max", 85),
-            S2Enabled = GetBool(config, "SoftConstraint.S2.Enabled", true),
+            S2Enabled = true,
             S2MaxDailyHours = GetInt(config, "SoftConstraint.S2.MaxDailyHours", 6),
-            S3Enabled = GetBool(config, "SoftConstraint.S3.Enabled", true),
+            S3Enabled = true,
             S3MaxSectionsPerSlot = GetInt(config, "SoftConstraint.S3.MaxSectionsPerSlot", 5),
-            S4Enabled = GetBool(config, "SoftConstraint.S4.Enabled", true),
+            S4Enabled = true,
             S4MinCoPairThreshold = GetInt(config, "SoftConstraint.S4.MinCoPairThreshold", 20),
-            S5Enabled = GetBool(config, "SoftConstraint.S5.Enabled", true),
-            S7Enabled = GetBool(config, "SoftConstraint.S7.Enabled", true),
+            S5Enabled = true,
+            S7Enabled = true,
             S7MaxGapSlots = GetInt(config, "SoftConstraint.S7.MaxGapSlots", 3),
-            S8Enabled = GetBool(config, "SoftConstraint.S8.Enabled", true),
-            S9Enabled = GetBool(config, "SoftConstraint.S9.Enabled", true),
+            S8Enabled = true,
+            S9Enabled = true,
             S9MorningStart = s9MorningStart,
             S9EveningStart = s9EveningStart,
-            S12Enabled = GetBool(config, "SoftConstraint.S12.Enabled", true),
+            S12Enabled = true,
             S12MaxImbalancePercent = GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20),
             AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
             CurriculumConflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var mode) ? mode : "curriculum",
