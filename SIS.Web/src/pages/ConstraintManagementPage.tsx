@@ -356,6 +356,15 @@ export default function ConstraintManagementPage() {
         </Alert>
       )}
 
+      {isAdmin && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
+          <strong>Bu sayfada</strong> otomatik ders programlama motorunun uyduğu kuralları yönetiyorsun.
+          Her kısıdı aç/kapat veya zorunluluğunu (zorunlu/tercihli) değiştir.
+          Tercihli kısıtların ağırlığını da ayarlayabilirsin.
+          {' '}<strong>Algoritma Parametreleri</strong> sekmesinde motorun çalışma şeklini etkileyen değerler var.
+        </div>
+      )}
+
       {/* Term selector + actions */}
       {isAdmin && terms && terms.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
@@ -374,26 +383,50 @@ export default function ConstraintManagementPage() {
 
           <div className="w-px self-stretch bg-gray-200 mx-1" />
 
-          <ProfileSelector onApplied={setProfileToast} />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span><ProfileSelector onApplied={setProfileToast} /></span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Hazır kısıt setleri (örn. &ldquo;Yaz Okulu&rdquo;, &ldquo;Yoğun Dönem&rdquo;).
+              Seçtiğin profil tüm 27 kısıdın aç/kapat ve ağırlık ayarlarını tek tıkla uygular.
+            </TooltipContent>
+          </Tooltip>
 
           <div className="w-px self-stretch bg-gray-200 mx-1" />
 
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-            onClick={() => setSimulationOpen(true)}
-          >
-            <FlaskConical className="h-3.5 w-3.5" />
-            Simülasyon
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                onClick={() => setSimulationOpen(true)}
+              >
+                <FlaskConical className="h-3.5 w-3.5" />
+                Simülasyon
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              &ldquo;Bu kısıdın ağırlığını değiştirsem ne olur?&rdquo; testi.
+              Gerçek programa dokunmadan kısıt değişikliğinin sonucunu yan-yana gösterir.
+            </TooltipContent>
+          </Tooltip>
 
-          <Link
-            to="/ders-programi-skor-analizi"
-            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Skor Analizi
-          </Link>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                to="/ders-programi-skor-analizi"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Skor Analizi
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Mevcut programın sağlığı: en sorunlu kısıtlar, gün/saat ısı haritası,
+              zaman içinde toplam ihlal trendi. Salt-okunur, kısıt düzenlemez.
+            </TooltipContent>
+          </Tooltip>
         </div>
       )}
 
