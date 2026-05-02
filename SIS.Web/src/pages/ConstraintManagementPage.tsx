@@ -33,6 +33,7 @@ import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPane
 import ProfileSelector from '../components/constraint/ProfileSelector';
 import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDashboard';
 import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
+import AlgorithmParametersPanel from '../components/constraint/AlgorithmParametersPanel';
 import ApprovalPanel from '../components/constraint/ApprovalPanel';
 import SimulationDrawer from '../components/constraint/SimulationDrawer';
 import { useTrendData, useHeatmap, useBottlenecks, useTakeSnapshot } from '../hooks/useConstraintAnalytics';
@@ -416,6 +417,11 @@ export default function ConstraintManagementPage() {
           <TabsTrigger value="soft">
             Tercihli ({softCount})
           </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="algorithm">
+              Algoritma Parametreleri
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {(['all', 'hard', 'soft'] as const).map(tab => (
@@ -430,6 +436,12 @@ export default function ConstraintManagementPage() {
             ))}
           </TabsContent>
         ))}
+
+        {isAdmin && (
+          <TabsContent value="algorithm" className="mt-3">
+            <AlgorithmParametersPanel />
+          </TabsContent>
+        )}
       </Tabs>
 
       {items.length === 0 && (
