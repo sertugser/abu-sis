@@ -13,10 +13,23 @@ export interface SchedulingAlgorithmConfigLimits {
   [key: string]: { min: number | null; max: number | null };
 }
 
+export interface SchedulingAlgorithmConfigGroupDto {
+  category: string;
+  displayName: string;
+  description: string | null;
+  badgeClass: string | null;
+  sortOrder: number;
+}
+
 const BASE = '/admin/scheduling-algorithm-config';
 
 export async function getSchedulingAlgorithmConfigs(): Promise<SchedulingAlgorithmConfigDto[]> {
   const { data } = await apiClient.get<SchedulingAlgorithmConfigDto[]>(BASE);
+  return data;
+}
+
+export async function getSchedulingAlgorithmConfigGroups(): Promise<SchedulingAlgorithmConfigGroupDto[]> {
+  const { data } = await apiClient.get<SchedulingAlgorithmConfigGroupDto[]>(`${BASE}/groups`);
   return data;
 }
 

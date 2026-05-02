@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './components/ui/global-toast';
 import { ActiveRoleProvider } from './context/ActiveRoleContext';
 import { PermissionProvider } from './context/PermissionContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -99,6 +100,7 @@ export default function App() {
         <PermissionProvider>
           <ActiveRoleProvider>
             <TooltipProvider delayDuration={300}>
+            <ToastProvider>
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -375,6 +377,7 @@ export default function App() {
               </Route>
             </Routes>
             </BrowserRouter>
+            </ToastProvider>
             </TooltipProvider>
           </ActiveRoleProvider>
         </PermissionProvider>

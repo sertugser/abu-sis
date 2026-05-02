@@ -10,6 +10,7 @@ namespace SIS.API.Controllers;
 
 public record SchedulingAlgorithmConfigDto(int Id, string Key, string Value, string? Description, string Category, string DataType);
 public record UpdateSchedulingAlgorithmConfigDto(string Value);
+public record SchedulingAlgorithmConfigGroupDto(string Category, string DisplayName, string? Description, string? BadgeClass, int SortOrder);
 
 /// <summary>
 /// Otomatik programlama algoritmasını etkileyen ayarlar (SA, MRV, LNS, kısıt eşikleri).
@@ -73,6 +74,18 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
             .ToListAsync(ct);
 
         return Ok(configs);
+    }
+
+    [HttpGet("groups")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
+    public async Task<IActionResult> GetGroups(CancellationToken ct)
+    {
+        var groups = await _context.SchedulingAlgorithmConfigGroups.AsNoTracking()
+            .OrderBy(g => g.SortOrder)
+            .Select(g => new SchedulingAlgorithmConfigGroupDto(g.Category, g.DisplayName, g.Description, g.BadgeClass, g.SortOrder))
+            .ToListAsync(ct);
+
+        return Ok(groups);
     }
 
     [HttpGet("{id:int}")]

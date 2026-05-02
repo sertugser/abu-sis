@@ -49,6 +49,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<SchedulingAlgorithmConfig> SchedulingAlgorithmConfigs => Set<SchedulingAlgorithmConfig>();
+    public DbSet<SchedulingAlgorithmConfigGroup> SchedulingAlgorithmConfigGroups => Set<SchedulingAlgorithmConfigGroup>();
     public DbSet<WebModuleSetting> WebModuleSettings => Set<WebModuleSetting>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
@@ -826,6 +827,12 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(sc => sc.Key).IsUnique();
             e.Property(sc => sc.RowVersion)
              .IsRowVersion();
+        });
+
+        // ── SchedulingAlgorithmConfigGroup ──────────────────────
+        builder.Entity<SchedulingAlgorithmConfigGroup>(e =>
+        {
+            e.HasIndex(g => g.Category).IsUnique();
         });
 
         // ── WebModuleSetting ─────────────────────────────────────

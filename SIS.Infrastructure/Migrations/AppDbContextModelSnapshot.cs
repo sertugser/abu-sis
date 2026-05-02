@@ -2823,6 +2823,39 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("SchedulingAlgorithmConfigs");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.SchedulingAlgorithmConfigGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BadgeClass")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category")
+                        .IsUnique();
+
+                    b.ToTable("SchedulingAlgorithmConfigGroups");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.SchedulingAuditLog", b =>
                 {
                     b.Property<int>("Id")

@@ -1,44 +1,67 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { AlertCircle, Check, ChevronDown, ChevronUp, Clock, Pencil, Sparkles, X } from 'lucide-react';
+import { AlertCircle, Pencil } from 'lucide-react';
 import type {
   SchedulingAlgorithmConfigDto,
+  SchedulingAlgorithmConfigGroupDto,
   SchedulingAlgorithmConfigLimits,
 } from '../../api/schedulingAlgorithmConfig.api';
 import {
+  useSchedulingAlgorithmConfigGroups,
   useSchedulingAlgorithmConfigLimits,
   useSchedulingAlgorithmConfigs,
   useUpdateSchedulingAlgorithmConfig,
 } from '../../hooks/useSchedulingAlgorithmConfig';
 import { getErrorMessage } from '../../lib/errorMessage';
-import { ALGORITHM_GROUPS, ESSENTIAL_PARAMETER_KEYS, ESSENTIAL_PARAMETER_KEY_SET } from './algorithmParameters.constants';
+import { useToast } from '@/components/ui/global-toast';
 
-type Notice = { type: 'success' | 'error'; message: string };
+const FALLBACK_BADGE_CLASS = 'bg-slate-100 text-slate-800 border-slate-200';
+const FALLBACK_GROUP_TITLE = 'Diğer Algoritma Ayarları';
 
 export default function AlgorithmParametersPanel() {
-  const { data: configs, isLoading, isError } = useSchedulingAlgorithmConfigs();
+  const { data: configs, isLoading: configsLoading, isError: configsError } = useSchedulingAlgorithmConfigs();
+  const { data: groups, isLoading: groupsLoading, isError: groupsError } = useSchedulingAlgorithmConfigGroups();
   const { data: limits } = useSchedulingAlgorithmConfigLimits();
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), notice.type === 'error' ? 8000 : 4000);
-    return () => clearTimeout(t);
-  }, [notice]);
+  const groupsByCategory = useMemo(() => {
+    const map = new Map<string, SchedulingAlgorithmConfigGroupDto>();
+    for (const g of groups ?? []) map.set(g.category, g);
+    return map;
+  }, [groups]);
 
-  if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
-  if (isError) {
+  // Configs DB'deki category alanını kullanıyor; backend'in döndürdüğü grup metadatasıyla eşleşiyor.
+  // Sıralama sortOrder'a göre — backend'in tek sözü. Tanımsız kategoriler en sona düşer.
+  const flatRows = useMemo(() => {
+    if (!configs) return [];
+    return [...configs]
+      .map(config => {
+        const group = groupsByCategory.get(config.category);
+        return {
+          config,
+          groupTitle: group?.displayName ?? FALLBACK_GROUP_TITLE,
+          badgeClass: group?.badgeClass ?? FALLBACK_BADGE_CLASS,
+          sortOrder: group?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+        };
+      })
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.config.key.localeCompare(b.config.key);
+      });
+  }, [configs, groupsByCategory]);
+
+  if (configsLoading || groupsLoading) return <Skeleton className="h-96 rounded-xl" />;
+  if (configsError || groupsError) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -47,277 +70,250 @@ export default function AlgorithmParametersPanel() {
     );
   }
 
-  const byKey = new Map((configs ?? []).map(c => [c.key, c]));
-
   return (
-    <div className="space-y-4">
-      {notice && (
-        <Alert variant={notice.type === 'error' ? 'destructive' : undefined} className="py-2">
-          {notice.type === 'error' ? <AlertCircle className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-          <AlertDescription>{notice.message}</AlertDescription>
-        </Alert>
-      )}
-
-      <Alert className="py-2">
-        <Clock className="h-4 w-4" />
-        <AlertDescription className="text-xs">
-          Saat slotlarının yüz-yüze / online davranışı (H17 kısıtını etkiler){' '}
-          <Link to="/ders-saatleri-yonetimi" className="font-medium underline underline-offset-2">
-            Ders Saatleri Yönetimi
-          </Link>
-          {' '}sayfasından düzenleniyor.
-        </AlertDescription>
-      </Alert>
-
-      {/* ── Sık Ayarlanan ── */}
-      <Card className="border-amber-200 bg-amber-50/30">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            <span>Sık Ayarlanan</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              ({ESSENTIAL_PARAMETER_KEYS.filter(k => byKey.has(k)).length} ayar)
-            </span>
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Günlük yönetimde en çok değiştirilen ayarlar. İleri ayarlar için aşağıdaki bölümü açın.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Parametre</TableHead>
-                <TableHead className="w-56">Değer</TableHead>
-                <TableHead className="w-20">Tip</TableHead>
-                <TableHead className="w-20 text-right">İşlem</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ESSENTIAL_PARAMETER_KEYS
-                .map(k => byKey.get(k))
-                .filter((c): c is SchedulingAlgorithmConfigDto => c !== undefined)
-                .map(config => (
+    <div className="space-y-3">
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table className="min-w-[800px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-56 text-sm">Grup</TableHead>
+                  <TableHead className="text-sm">Parametre</TableHead>
+                  <TableHead className="w-44 text-sm">Değer</TableHead>
+                  <TableHead className="w-24 text-right text-sm">Düzenle</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {flatRows.map(({ config, groupTitle, badgeClass }) => (
                   <ParameterRow
                     key={config.id}
                     config={config}
+                    groupTitle={groupTitle}
+                    badgeClass={badgeClass}
                     limits={limits}
-                    onNotice={setNotice}
                   />
                 ))}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
-
-      {/* ── İleri Ayarlar (toggle) ── */}
-      <Button
-        variant="outline"
-        className="w-full justify-between"
-        onClick={() => setAdvancedOpen(o => !o)}
-      >
-        <span className="flex items-center gap-2">
-          <span className="font-medium">İleri Ayarlar</span>
-          <Badge variant="secondary" className="text-[10px]">
-            {ALGORITHM_GROUPS.flatMap(g => g.keys).filter(k => !ESSENTIAL_PARAMETER_KEY_SET.has(k)).length} ayar
-          </Badge>
-        </span>
-        {advancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-      </Button>
-
-      {advancedOpen && ALGORITHM_GROUPS.map(group => {
-        const items = group.keys
-          .filter(k => !ESSENTIAL_PARAMETER_KEY_SET.has(k))
-          .map(k => byKey.get(k))
-          .filter((c): c is SchedulingAlgorithmConfigDto => c !== undefined);
-
-        if (items.length === 0) return null;
-
-        return (
-          <Card key={group.title}>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Badge variant="outline">{group.title}</Badge>
-                <span className="text-xs font-normal text-muted-foreground">
-                  {items.length} ayar
-                </span>
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">{group.description}</p>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Parametre</TableHead>
-                    <TableHead className="w-56">Değer</TableHead>
-                    <TableHead className="w-20">Tip</TableHead>
-                    <TableHead className="w-20 text-right">İşlem</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map(config => (
-                    <ParameterRow
-                      key={config.id}
-                      config={config}
-                      limits={limits}
-                      onNotice={setNotice}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        );
-      })}
     </div>
   );
 }
 
+
 interface ParameterRowProps {
   config: SchedulingAlgorithmConfigDto;
+  groupTitle: string;
+  badgeClass: string;
   limits?: SchedulingAlgorithmConfigLimits;
-  onNotice: (n: Notice) => void;
 }
 
-function ParameterRow({ config, limits, onNotice }: ParameterRowProps) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(config.value);
+function ParameterRow({ config, groupTitle, badgeClass, limits }: ParameterRowProps) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const isBool = config.dataType === 'bool';
+
+  function renderDisplayValue() {
+    if (isBool) {
+      const checked = config.value === 'true' || config.value === '1';
+      const cls = checked
+        ? 'bg-green-600 text-white border-green-600 dark:bg-green-700 dark:border-green-700'
+        : 'bg-gray-400 text-white border-gray-400 dark:bg-gray-600 dark:border-gray-600';
+      return (
+        <Badge variant="outline" className={`text-xs ${cls}`}>
+          {checked ? 'Evet' : 'Hayır'}
+        </Badge>
+      );
+    }
+    return <span className="text-base font-medium">{config.value}</span>;
+  }
+
+  return (
+    <TableRow>
+      <TableCell className="w-56">
+        <Badge variant="outline" className={`text-xs ${badgeClass}`}>{groupTitle}</Badge>
+      </TableCell>
+      <TableCell>
+        <p className="text-base leading-snug">{config.description || config.key}</p>
+      </TableCell>
+      <TableCell>{renderDisplayValue()}</TableCell>
+      <TableCell>
+        <div className="flex justify-end">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={() => setDialogOpen(true)}
+            aria-label="Düzenle"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        </div>
+        <ParameterEditDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          config={config}
+          limits={limits}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// HH:mm formatı bekleyen time key'leri (algoritma sekmesinde sadece bu ikisi).
+const TIME_VALUE_KEYS = new Set<string>([
+  'Schedule.LunchBreakStart',
+  'Schedule.LunchBreakEnd',
+]);
+
+interface ParameterEditDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  config: SchedulingAlgorithmConfigDto;
+  limits?: SchedulingAlgorithmConfigLimits;
+}
+
+function ParameterEditDialog({ open, onOpenChange, config, limits }: ParameterEditDialogProps) {
+  const [draft, setDraft] = useState(config.value);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const updateMutation = useUpdateSchedulingAlgorithmConfig();
+  const toast = useToast();
 
   useEffect(() => {
-    if (!editing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resyncing input with props when exiting edit mode; intentional
-      setValue(config.value);
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resync from props on open
+      setDraft(config.value);
+      setErrorMessage(null);
     }
-  }, [config.value, editing]);
+  }, [open, config.value]);
 
+  const isBool = config.dataType === 'bool';
+  const isNumeric = config.dataType === 'int' || config.dataType === 'decimal';
+  const isTime = TIME_VALUE_KEYS.has(config.key);
   const limit = limits?.[config.key];
-  const limitHint = limit
-    ? `Min: ${limit.min ?? '—'}, Max: ${limit.max ?? '—'}`
-    : null;
 
   function handleSave() {
-    if (value === config.value) {
-      setEditing(false);
+    if (draft === config.value) {
+      onOpenChange(false);
       return;
     }
     setErrorMessage(null);
     updateMutation.mutate(
-      { id: config.id, value },
+      { id: config.id, value: draft },
       {
-        onSuccess: updated => {
-          setValue(updated.value);
-          setEditing(false);
-          onNotice({ type: 'success', message: `${config.key} güncellendi.` });
+        onSuccess: () => {
+          toast.showSuccess('Ayar uygulandı', `${config.description ?? config.key} güncellendi.`);
+          onOpenChange(false);
         },
-        onError: error => {
-          setErrorMessage(getErrorMessage(error, 'Ayar kaydedilemedi.'));
+        onError: (error) => {
+          const msg = getErrorMessage(error, 'Ayar kaydedilemedi.');
+          setErrorMessage(msg);
+          toast.showError('Ayar kaydedilemedi', msg);
         },
       },
     );
   }
 
-  function handleCancel() {
-    setValue(config.value);
-    setErrorMessage(null);
-    setEditing(false);
-  }
-
-  const isNumeric = config.dataType === 'int' || config.dataType === 'decimal';
-  const isBool = config.dataType === 'bool';
-
-  function renderEditValue() {
+  function renderInput() {
     if (isBool) {
-      const checked = value === 'true' || value === '1' || value === 'yes' || value === 'on';
+      const checked = draft === 'true' || draft === '1' || draft === 'yes' || draft === 'on';
       return (
-        <div className="flex items-center gap-2">
-          <Switch checked={checked} onCheckedChange={c => setValue(c ? 'true' : 'false')} />
-          <span className="text-xs text-muted-foreground">{checked ? 'Aktif' : 'Pasif'}</span>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant={checked ? 'default' : 'outline'}
+            className={checked ? '' : 'opacity-70'}
+            onClick={() => setDraft('true')}
+          >
+            Evet
+          </Button>
+          <Button
+            type="button"
+            variant={!checked ? 'default' : 'outline'}
+            className={!checked ? '' : 'opacity-70'}
+            onClick={() => setDraft('false')}
+          >
+            Hayır
+          </Button>
         </div>
+      );
+    }
+    if (isTime) {
+      return (
+        <Input
+          type="time"
+          value={draft.length >= 5 ? draft.substring(0, 5) : draft}
+          onChange={(e) => setDraft(e.target.value)}
+          autoFocus
+        />
+      );
+    }
+    if (isNumeric) {
+      return (
+        <Input
+          type="number"
+          value={draft}
+          step={config.dataType === 'decimal' ? '0.01' : '1'}
+          min={limit?.min ?? undefined}
+          max={limit?.max ?? undefined}
+          onChange={(e) => setDraft(e.target.value)}
+          autoFocus
+        />
       );
     }
     return (
       <Input
-        type={isNumeric ? 'number' : 'text'}
-        className="h-8 w-48 text-sm"
-        value={value}
-        step={config.dataType === 'decimal' ? '0.01' : '1'}
-        onChange={e => setValue(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') handleSave();
-          if (e.key === 'Escape') handleCancel();
-        }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
         autoFocus
       />
     );
   }
 
-  function renderDisplayValue() {
-    if (isBool) {
-      const checked = config.value === 'true' || config.value === '1';
-      return (
-        <Badge variant={checked ? 'default' : 'secondary'} className="text-[10px]">
-          {checked ? 'Aktif' : 'Pasif'}
-        </Badge>
-      );
-    }
-    return <span className="text-sm font-medium">{config.value}</span>;
-  }
-
   return (
-    <TableRow>
-      <TableCell>
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium leading-tight">{config.description || config.key}</p>
-          <p className="font-mono text-[11px] text-muted-foreground">{config.key}</p>
-        </div>
-      </TableCell>
-      <TableCell>
-        {editing ? (
-          <div className="space-y-1">
-            {renderEditValue()}
-            {limitHint && !isBool && <p className="text-[10px] text-muted-foreground">{limitHint}</p>}
-            {errorMessage && (
-              <p className="max-w-md text-[11px] text-red-600">{errorMessage}</p>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Ayarı Düzenle</DialogTitle>
+          {config.description && (
+            <DialogDescription>{config.description}</DialogDescription>
+          )}
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
+            <p className="text-xs text-muted-foreground">
+              Mevcut değer: <strong className="text-foreground">{config.value}</strong>
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Yeni Değer
+            </label>
+            {renderInput()}
+            {isNumeric && limit && (
+              <p className="text-[11px] text-muted-foreground">
+                İzin verilen aralık: {limit.min ?? '—'} – {limit.max ?? '—'}
+              </p>
             )}
           </div>
-        ) : (
-          renderDisplayValue()
-        )}
-      </TableCell>
-      <TableCell>
-        <Badge variant="secondary" className="text-[10px]">{config.dataType}</Badge>
-      </TableCell>
-      <TableCell>
-        {editing ? (
-          <div className="flex justify-end gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={handleSave}
-              disabled={updateMutation.isPending}
-            >
-              <Check className="h-4 w-4 text-green-600" />
-            </Button>
-            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancel}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex justify-end">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={() => setEditing(true)}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-      </TableCell>
-    </TableRow>
+
+          {errorMessage && (
+            <p className="text-xs text-red-600">{errorMessage}</p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
+          <Button onClick={handleSave} disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? 'Kaydediliyor…' : 'Kaydet'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
