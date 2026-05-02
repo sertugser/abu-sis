@@ -43,12 +43,33 @@ export const ALGORITHM_GROUPS: AlgorithmGroup[] = [
     ],
   },
   {
-    title: 'Diğer Parametreler',
+    title: 'Diğer Algoritma Ayarları',
     description: 'Genel scheduling motoru ayarları.',
     keys: [
       'Scheduling.MaxBacktrackingDepth',
       'Schedule.TheoryLabSplitThreshold',
       'Schedule.SplittableBlockTypes',
+    ],
+  },
+  {
+    title: 'Hard Kısıt Eşikleri',
+    description: 'Zorunlu kısıtların eşik / mod değerleri (H4, H13, H15).',
+    keys: [
+      'Schedule.LunchBreak.IsHard',
+      'Schedule.MaxConsecutiveHours',
+      'Classroom.AmphiThreshold',
+    ],
+  },
+  {
+    title: 'Soft Kısıt Eşikleri',
+    description: 'Tercihli kısıtların eşik değerleri (S1, S2, S3, S4, S7).',
+    keys: [
+      'Classroom.OccupancyTarget.Min',
+      'Classroom.OccupancyTarget.Max',
+      'SoftConstraint.S2.MaxDailyHours',
+      'SoftConstraint.S3.MaxSectionsPerSlot',
+      'SoftConstraint.S4.MinCoPairThreshold',
+      'SoftConstraint.S7.MaxGapSlots',
     ],
   },
 ];

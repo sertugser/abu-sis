@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -159,6 +160,45 @@ function ParameterRow({ config, limits, onNotice }: ParameterRowProps) {
   }
 
   const isNumeric = config.dataType === 'int' || config.dataType === 'decimal';
+  const isBool = config.dataType === 'bool';
+
+  function renderEditValue() {
+    if (isBool) {
+      const checked = value === 'true' || value === '1' || value === 'yes' || value === 'on';
+      return (
+        <div className="flex items-center gap-2">
+          <Switch checked={checked} onCheckedChange={c => setValue(c ? 'true' : 'false')} />
+          <span className="text-xs text-muted-foreground">{checked ? 'Aktif' : 'Pasif'}</span>
+        </div>
+      );
+    }
+    return (
+      <Input
+        type={isNumeric ? 'number' : 'text'}
+        className="h-8 w-48 text-sm"
+        value={value}
+        step={config.dataType === 'decimal' ? '0.01' : '1'}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') handleSave();
+          if (e.key === 'Escape') handleCancel();
+        }}
+        autoFocus
+      />
+    );
+  }
+
+  function renderDisplayValue() {
+    if (isBool) {
+      const checked = config.value === 'true' || config.value === '1';
+      return (
+        <Badge variant={checked ? 'default' : 'secondary'} className="text-[10px]">
+          {checked ? 'Aktif' : 'Pasif'}
+        </Badge>
+      );
+    }
+    return <span className="text-sm font-medium">{config.value}</span>;
+  }
 
   return (
     <TableRow>
@@ -171,25 +211,14 @@ function ParameterRow({ config, limits, onNotice }: ParameterRowProps) {
       <TableCell>
         {editing ? (
           <div className="space-y-1">
-            <Input
-              type={isNumeric ? 'number' : 'text'}
-              className="h-8 w-48 text-sm"
-              value={value}
-              step={config.dataType === 'decimal' ? '0.01' : '1'}
-              onChange={e => setValue(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleSave();
-                if (e.key === 'Escape') handleCancel();
-              }}
-              autoFocus
-            />
-            {limitHint && <p className="text-[10px] text-muted-foreground">{limitHint}</p>}
+            {renderEditValue()}
+            {limitHint && !isBool && <p className="text-[10px] text-muted-foreground">{limitHint}</p>}
             {errorMessage && (
               <p className="max-w-md text-[11px] text-red-600">{errorMessage}</p>
             )}
           </div>
         ) : (
-          <span className="text-sm font-medium">{config.value}</span>
+          renderDisplayValue()
         )}
       </TableCell>
       <TableCell>
