@@ -438,6 +438,8 @@ public abstract class SchedulingTestBase : IDisposable
         "SoftConstraint.S4.MinCoPairThreshold",
         "SoftConstraint.S7.MaxGapSlots",
         "Schedule.LunchBreak.IsHard",
+        "Schedule.LunchBreakStart",
+        "Schedule.LunchBreakEnd",
         "Schedule.MaxConsecutiveHours",
         "Scheduling.MaxBacktrackingDepth",
         "Schedule.TheoryLabSplitThreshold",

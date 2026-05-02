@@ -32,12 +32,15 @@ public static partial class SeedData
     public static async Task<List<TimeSlot>> GenerateTimeSlotsFromConfigAsync(AppDbContext context, int termId)
     {
         var configs = await context.SystemConfigs.ToDictionaryAsync(c => c.Key, c => c.Value);
+        // LunchBreakStart/End algoritma factory de okuduğu için SchedulingAlgorithmConfigs tablosuna
+        // taşındı; tek otorite oradadır. Diğer grid key'leri SystemConfigs'ta kalmaya devam ediyor.
+        var algorithmConfigs = await context.SchedulingAlgorithmConfigs.ToDictionaryAsync(c => c.Key, c => c.Value);
 
         var slotDuration = GetConfigInt(configs, "Schedule.SlotDurationMinutes", 50);
         var breakMinutes = GetConfigInt(configs, "Schedule.BreakBetweenSlotsMinutes", 5);
         var morningStart = GetConfigTime(configs, "Schedule.MorningStartTime", new TimeOnly(9, 0));
-        var lunchStart = GetConfigTime(configs, "Schedule.LunchBreakStart", new TimeOnly(11, 40));
-        var lunchEnd = GetConfigTime(configs, "Schedule.LunchBreakEnd", new TimeOnly(12, 20));
+        var lunchStart = GetConfigTime(algorithmConfigs, "Schedule.LunchBreakStart", new TimeOnly(11, 40));
+        var lunchEnd = GetConfigTime(algorithmConfigs, "Schedule.LunchBreakEnd", new TimeOnly(12, 20));
         var afternoonEnd = GetConfigTime(configs, "Schedule.AfternoonEndTime", new TimeOnly(18, 30));
         var eveningStart = GetConfigTime(configs, "Schedule.EveningStartTime", new TimeOnly(20, 10));
         var eveningSlotCount = GetConfigInt(configs, "Schedule.EveningSlotCount", 2);

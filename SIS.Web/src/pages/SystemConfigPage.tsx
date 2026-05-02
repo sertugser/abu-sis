@@ -22,6 +22,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { downloadBlob } from '../lib/download';
 import { getErrorMessage } from '../lib/errorMessage';
 import type { SystemConfigDto, ConfigLimits } from '../api/systemConfig.api';
+import { TIMESLOT_GRID_SETTING_KEYS } from '../lib/timeSlotGridConfig';
 
 const CATEGORY_LABELS: Record<string, string> = {
   Registration: 'Kayıt Kuralları',
@@ -106,9 +107,11 @@ export default function SystemConfigPage() {
   }
 
   const searchLower = debouncedSearch.toLowerCase();
-  // Algoritma parametreleri ayrı bir tabloya (SchedulingAlgorithmConfigs) taşındı,
-  // SystemConfig'de zaten yok — burada filtreleme gerekmiyor.
-  const filtered = (configs ?? []).filter(c => {
+  // TimeSlot grid (Schedule.SlotDurationMinutes vs.) şablon ayarları artık
+  // /ders-saatleri-yonetimi sayfasından yönetiliyor — burada gizliyoruz.
+  // (Algoritma key'leri zaten farklı tabloda olduğu için listede gözükmüyor.)
+  const visible = (configs ?? []).filter(c => !TIMESLOT_GRID_SETTING_KEYS.has(c.key));
+  const filtered = visible.filter(c => {
     if (!searchLower) return true;
     return (
       c.key.toLowerCase().includes(searchLower)

@@ -24,6 +24,13 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
     private readonly AppDbContext _context = context;
     private readonly ISystemConfigProvider _configProvider = configProvider;
 
+    // HH:mm formatında saat değeri bekleyen string key'ler.
+    private static readonly HashSet<string> TimeKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Schedule.LunchBreakStart",
+        "Schedule.LunchBreakEnd",
+    };
+
     private static readonly Dictionary<string, (decimal? Min, decimal? Max)> NumericLimits = new(StringComparer.OrdinalIgnoreCase)
     {
         // Hard / Soft thresholds
@@ -192,6 +199,14 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
                 {
                     error = "Metin değerleri en fazla 500 karakter olabilir.";
                     return false;
+                }
+                if (TimeKeys.Contains(key))
+                {
+                    if (!TimeOnly.TryParseExact(rawValue.Trim(), "HH:mm", CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _))
+                    {
+                        error = "Saat değeri HH:mm formatında girilmelidir (ör. 11:40, 12:20).";
+                        return false;
+                    }
                 }
                 normalizedValue = rawValue.Trim();
                 return true;

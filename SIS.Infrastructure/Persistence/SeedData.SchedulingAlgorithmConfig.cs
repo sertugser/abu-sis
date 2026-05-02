@@ -16,6 +16,8 @@ public static partial class SeedData
             // ── Hard Kısıt Eşikleri ──────────────────────────────
             new() { Key = "Classroom.AmphiThreshold", Value = "100", Category = "HardThreshold", DataType = "int", Description = "Bu sayıdan fazla kontenjan → Amfi zorunlu (H4)" },
             new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "Öğle arası hard constraint mi (H13) soft constraint mi (S5)" },
+            new() { Key = "Schedule.LunchBreakStart", Value = "11:40", Category = "HardThreshold", DataType = "string", Description = "Öğle arası başlangıç saati (H13/S5 evaluator penceresi)" },
+            new() { Key = "Schedule.LunchBreakEnd", Value = "12:20", Category = "HardThreshold", DataType = "string", Description = "Öğle arası bitiş saati (H13/S5 evaluator penceresi)" },
             new() { Key = "Schedule.MaxConsecutiveHours", Value = "4", Category = "HardThreshold", DataType = "int", Description = "Hocanın aralıksız max ardışık ders saati (H15)" },
 
             // ── Soft Kısıt Eşikleri ──────────────────────────────

@@ -56,6 +56,8 @@ export const ALGORITHM_GROUPS: AlgorithmGroup[] = [
     description: 'Zorunlu kısıtların eşik / mod değerleri (H4, H13, H15).',
     keys: [
       'Schedule.LunchBreak.IsHard',
+      'Schedule.LunchBreakStart',
+      'Schedule.LunchBreakEnd',
       'Schedule.MaxConsecutiveHours',
       'Classroom.AmphiThreshold',
     ],
