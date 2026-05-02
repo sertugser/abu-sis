@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -295,6 +294,7 @@ export default function ConstraintManagementPage() {
 
   const [profileToast, setProfileToast] = useState<string | null>(null);
   const [simulationOpen, setSimulationOpen] = useState(false);
+  const [view, setView] = useState<'all' | 'hard' | 'soft' | 'algorithm'>('all');
 
   useEffect(() => {
     if (!profileToast) return;
@@ -354,15 +354,6 @@ export default function ConstraintManagementPage() {
           <CheckCircle2 className="h-4 w-4" />
           <AlertDescription className="text-xs">{profileToast}</AlertDescription>
         </Alert>
-      )}
-
-      {isAdmin && (
-        <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
-          <strong>Bu sayfada</strong> otomatik ders programlama motorunun uyduğu kuralları yönetiyorsun.
-          Her kısıdı aç/kapat veya zorunluluğunu (zorunlu/tercihli) değiştir.
-          Tercihli kısıtların ağırlığını da ayarlayabilirsin.
-          {' '}<strong>Algoritma Parametreleri</strong> sekmesinde motorun çalışma şeklini etkileyen değerler var.
-        </div>
       )}
 
       {/* Term selector + actions */}
@@ -433,41 +424,34 @@ export default function ConstraintManagementPage() {
       {/* Pending approval requests */}
       <ApprovalPanel />
 
-      <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">Tümü ({items.length})</TabsTrigger>
-          <TabsTrigger value="hard">
-            Zorunlu ({hardCount})
-          </TabsTrigger>
-          <TabsTrigger value="soft">
-            Tercihli ({softCount})
-          </TabsTrigger>
-          {isAdmin && (
-            <TabsTrigger value="algorithm">
-              Algoritma Parametreleri
-            </TabsTrigger>
-          )}
-        </TabsList>
+      <div className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Görünüm</span>
+        <select
+          className="h-8 min-w-[220px] rounded-md border bg-muted/50 px-2.5 text-xs font-medium"
+          value={view}
+          onChange={(e) => setView(e.target.value as typeof view)}
+        >
+          <option value="all">Tümü ({items.length})</option>
+          <option value="hard">Zorunlu ({hardCount})</option>
+          <option value="soft">Tercihli ({softCount})</option>
+          {isAdmin && <option value="algorithm">Algoritma Parametreleri</option>}
+        </select>
+      </div>
 
-        {(['all', 'hard', 'soft'] as const).map(tab => (
-          <TabsContent key={tab} value={tab} className="space-y-3 mt-3">
-            {filterByCategory(tab === 'all' ? 'all' : tab === 'hard' ? 'Hard' : 'Soft').map(({ group, items: groupItems }) => (
-              <GroupSection
-                key={group.key}
-                group={group}
-                constraints={groupItems}
-                isAdmin={isAdmin}
-              />
-            ))}
-          </TabsContent>
-        ))}
-
-        {isAdmin && (
-          <TabsContent value="algorithm" className="mt-3">
-            <AlgorithmParametersPanel />
-          </TabsContent>
-        )}
-      </Tabs>
+      {view === 'algorithm' && isAdmin ? (
+        <AlgorithmParametersPanel />
+      ) : (
+        <div className="space-y-3">
+          {filterByCategory(view === 'all' ? 'all' : view === 'hard' ? 'Hard' : 'Soft').map(({ group, items: groupItems }) => (
+            <GroupSection
+              key={group.key}
+              group={group}
+              constraints={groupItems}
+              isAdmin={isAdmin}
+            />
+          ))}
+        </div>
+      )}
 
       {items.length === 0 && (
         <Card>
