@@ -22,7 +22,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { downloadBlob } from '../lib/download';
 import { getErrorMessage } from '../lib/errorMessage';
 import type { SystemConfigDto, ConfigLimits } from '../api/systemConfig.api';
-import { ALGORITHM_PARAMETER_KEYS } from '../components/constraint/AlgorithmParametersPanel';
+import { ALGORITHM_PARAMETER_KEYS } from '../components/constraint/algorithmParameters.constants';
 import { Link } from 'react-router-dom';
 
 const CATEGORY_LABELS: Record<string, string> = {
