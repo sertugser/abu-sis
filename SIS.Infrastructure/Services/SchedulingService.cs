@@ -61,11 +61,13 @@ public class SchedulingService : ISchedulingService
         var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+        var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
+            candidate.InstructorId, candidate.DepartmentId, candidate.SectionId, section.TermId, cancellationToken);
 
         result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
         result.Notes.AddRange(candidate.Notes);
 
-        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
+        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig, constraintState);
         result.Conflicts = conflicts;
         result.Notes.AddRange(softNotes);
         result.IsValid = conflicts.Count == 0;
@@ -186,6 +188,8 @@ public class SchedulingService : ISchedulingService
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+        var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
+            instructorId, section.Course.DepartmentId, section.Id, section.TermId, cancellationToken);
         var candidateCourseMetadata = await LoadCourseSchedulingMetadataAsync(section.TermId, [section.CourseId], cancellationToken);
         var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
         var requiredHours = ResolveTotalRequiredHours(section);
@@ -264,7 +268,7 @@ public class SchedulingService : ISchedulingService
                     suggestedSemestersByDepartment: GetSuggestedSemestersByDepartment(section.CourseId, candidateCourseMetadata.SuggestedSemestersByDepartment),
                     accessibleDepartmentIds: GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, candidateCourseMetadata.AccessibleDepartments));
 
-                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig, hardConfig);
+                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig, hardConfig, constraintState);
                 if (conflicts.Count > 0)
                 {
                     continue;
@@ -483,6 +487,8 @@ public class SchedulingService : ISchedulingService
 
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+        var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
+            null, null, null, resolvedTerm.Id, cancellationToken);
         var systemConfig = await LoadSystemConfigAsync(cancellationToken);
         var maxBacktrackingDepth = GetInt(systemConfig, "Scheduling.MaxBacktrackingDepth", 3);
 
@@ -578,7 +584,7 @@ public class SchedulingService : ISchedulingService
             // Find the best (slot, classroom) pair
             var bestPair = FindBestPair(
                 section, availableClassrooms, slotCombinations,
-                termSnapshot, softConfig, hardConfig, instructorNameMap);
+                termSnapshot, softConfig, hardConfig, constraintState, instructorNameMap);
 
             if (bestPair != null)
             {
@@ -600,7 +606,7 @@ public class SchedulingService : ISchedulingService
                     section, priorityScore, scoredSections, assignedMap,
                     termSnapshot, availableClassrooms, slotCombinations,
                     allClassrooms, classroomAssignments, deptFacultyMap, timeSlots,
-                    softConfig, hardConfig, instructorNameMap,
+                    softConfig, hardConfig, constraintState, instructorNameMap,
                     maxBacktrackingDepth, cancellationToken);
 
                 backtrackingAttempts += backtrackResult.Attempts;
@@ -686,6 +692,7 @@ public class SchedulingService : ISchedulingService
         TermSnapshot snapshot,
         SoftConstraintConfig softConfig,
         HardConstraintConfig hardConfig,
+        ConstraintState constraintState,
         IReadOnlyDictionary<int, string> instructorNameMap)
     {
         if (classrooms.Count == 0 || slotCombinations.Count == 0)
@@ -712,13 +719,13 @@ public class SchedulingService : ISchedulingService
                     suggestedSemestersByDepartment: GetSuggestedSemestersByDepartment(section.CourseId, snapshot.CourseSuggestedSemestersByDepartment),
                     accessibleDepartmentIds: GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, snapshot.CourseAccessibleDepartments));
 
-                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
+                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig, constraintState);
                 if (conflicts.Count > 0)
                     continue;
 
                 // Calculate soft penalty score
                 double penalty = slotCombo.PreferenceScore;
-                penalty += CalculateSoftPenalty(candidate, snapshot, softConfig);
+                penalty += CalculateSoftPenalty(candidate, snapshot, softConfig, constraintState);
 
                 if (penalty < bestPenalty)
                 {
@@ -740,10 +747,11 @@ public class SchedulingService : ISchedulingService
     private double CalculateSoftPenalty(
         SectionSnapshot candidate,
         TermSnapshot snapshot,
-        SoftConstraintConfig softConfig)
+        SoftConstraintConfig softConfig,
+        ConstraintState? constraintState)
     {
         var config = BuildConstraintConfig(softConfig, null);
-        return _constraintEvaluation.CalculatePenalty(candidate, snapshot, config);
+        return _constraintEvaluation.CalculatePenalty(candidate, snapshot, config, constraintState);
     }
 
     private async Task ApplyBatchAssignment(
@@ -833,6 +841,7 @@ public class SchedulingService : ISchedulingService
         List<TimeSlot> timeSlots,
         SoftConstraintConfig softConfig,
         HardConstraintConfig hardConfig,
+        ConstraintState constraintState,
         IReadOnlyDictionary<int, string> instructorNameMap,
         int maxDepth,
         CancellationToken cancellationToken)
@@ -867,7 +876,7 @@ public class SchedulingService : ISchedulingService
                     suggestedSemestersByDepartment: GetSuggestedSemestersByDepartment(section.CourseId, snapshot.CourseSuggestedSemestersByDepartment),
                     accessibleDepartmentIds: GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, snapshot.CourseAccessibleDepartments));
 
-                var (conflicts, _) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig);
+                var (conflicts, _) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig, constraintState);
                 foreach (var conflict in conflicts)
                 {
                     if (conflict.RelatedSectionId.HasValue && assignedMap.ContainsKey(conflict.RelatedSectionId.Value))
@@ -912,7 +921,7 @@ public class SchedulingService : ISchedulingService
             // Try to place the current section
             var bestPair = FindBestPair(
                 section, sectionClassrooms, sectionSlotCombinations,
-                snapshot, softConfig, hardConfig, instructorNameMap);
+                snapshot, softConfig, hardConfig, constraintState, instructorNameMap);
 
             if (bestPair != null)
             {
@@ -936,7 +945,7 @@ public class SchedulingService : ISchedulingService
 
                 var victimNewPair = FindBestPair(
                     victimSection, victimClassrooms, victimSlotCombinations,
-                    snapshot, softConfig, hardConfig, instructorNameMap);
+                    snapshot, softConfig, hardConfig, constraintState, instructorNameMap);
 
                 if (victimNewPair != null)
                 {
@@ -1720,7 +1729,8 @@ public class SchedulingService : ISchedulingService
             snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, ct);
 
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var (conflicts, notes) = _constraintEvaluation.EvaluateAllExisting(snapshot, config);
+        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
+        var (conflicts, notes) = _constraintEvaluation.EvaluateAllExisting(snapshot, config, state);
 
         return new ScheduleValidationResultDto
         {
@@ -1736,10 +1746,14 @@ public class SchedulingService : ISchedulingService
     }
 
     private (List<SchedulingConflictDto> Conflicts, List<string> SoftNotes) EvaluateCandidateConflicts(
-        SectionSnapshot candidate, TermSnapshot snapshot, SoftConstraintConfig softConfig, HardConstraintConfig? hardConfig = null)
+        SectionSnapshot candidate,
+        TermSnapshot snapshot,
+        SoftConstraintConfig softConfig,
+        HardConstraintConfig? hardConfig = null,
+        ConstraintState? state = null)
     {
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var (conflicts, notes, _) = _constraintEvaluation.EvaluateCandidate(candidate, snapshot, config);
+        var (conflicts, notes, _) = _constraintEvaluation.EvaluateCandidate(candidate, snapshot, config, state);
         return (conflicts, notes);
     }
 

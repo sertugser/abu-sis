@@ -217,6 +217,7 @@ public sealed class LargeNeighborhoodSearch
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
             CohortConflictPairs = snapshot.CohortConflictPairs,
             EnrollmentConflicts = snapshot.EnrollmentConflicts,
+            DistributionConstraints = snapshot.DistributionConstraints,
             SlotAllowedModes = snapshot.SlotAllowedModes,
         };
     }

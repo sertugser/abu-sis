@@ -183,6 +183,12 @@ public sealed class AutoScheduleEngine
             ? await LoadCoEnrollmentPairsAsync(request.TermId, s4Threshold, ct)
             : new List<CoEnrollmentPair>();
 
+        var distributionConstraints = await _context.DistributionConstraints
+            .AsNoTracking()
+            .Include(d => d.Courses)
+            .Where(d => d.TermId == request.TermId)
+            .ToListAsync(ct);
+
         var slotAllowedModes = timeSlotsByDay
             .SelectMany(kvp => kvp.Value)
             .ToDictionary(
@@ -201,6 +207,7 @@ public sealed class AutoScheduleEngine
             CoEnrollmentPairs = coEnrollmentPairs,
             CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
             CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
+            DistributionConstraints = distributionConstraints,
             SlotAllowedModes = slotAllowedModes,
         };
 

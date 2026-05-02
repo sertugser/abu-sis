@@ -449,6 +449,24 @@ public class FacultyPlanningService : IFacultyPlanningService
                 }
             }
 
+            if (request.ClassroomId.HasValue || request.InstructorId.HasValue || request.ScheduleSlots is { Count: > 0 })
+            {
+                var validation = await _schedulingService.ValidateAsync(new ScheduleValidationRequestDto
+                {
+                    SectionId = request.SectionId,
+                    ClassroomId = request.ClassroomId,
+                    InstructorId = request.InstructorId,
+                    ScheduleSlots = request.ScheduleSlots
+                }, ct);
+
+                if (validation.Conflicts.Count > 0)
+                {
+                    var firstConflict = validation.Conflicts[0].Message;
+                    throw new InvalidOperationException(
+                        $"Atama sert kisit ihlali nedeniyle reddedildi: {firstConflict}");
+                }
+            }
+
             // Write schedule records only if this is a NEW schedule assignment (not just an instructor change)
             // Skip if section already has schedule records and classroom hasn't changed
             var hasSlotLevelClassrooms = request.ScheduleSlots?.Any(s => s.ClassroomId.HasValue) == true;
@@ -474,6 +492,7 @@ public class FacultyPlanningService : IFacultyPlanningService
             var conflicts = await _schedulingService.GetConflictsAsync(section.TermId, ct);
             var sectionConflicts = conflicts.Where(c => c.SectionId == section.Id || c.RelatedSectionId == section.Id).ToList();
             result.Conflicts = sectionConflicts;
+            result.Success = sectionConflicts.Count == 0;
 
             _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
             {
@@ -749,6 +768,13 @@ public class FacultyPlanningService : IFacultyPlanningService
                     InstructorId = item.InstructorId
                 }, userId, ct);
 
+                if (assignResult.Conflicts.Count > 0)
+                {
+                    var firstConflict = assignResult.Conflicts[0].Message;
+                    throw new InvalidOperationException(
+                        $"Sube {item.SectionId}: Sert kisit ihlali: {firstConflict}");
+                }
+
                 if (assignResult.Success) result.SuccessCount++;
                 else
                 {
@@ -898,10 +924,12 @@ public class FacultyPlanningService : IFacultyPlanningService
                 $"Slot sayisi uyumsuz: {section.Course.Code} icin {expectedSlotCount} slot gerekli, {allMatchedSlots.Count} slot secildi.");
         }
 
+        var enforceClassroomConflict = await IsConstraintEnabledAsHardAsync("H1", defaultIsHard: true, ct);
+
         // Write with hard guard against classroom double-booking (online section'lar: ClassroomId null → çakışma kontrolü yok)
         foreach (var (timeSlot, effectiveCrId) in allMatchedSlots)
         {
-            if (effectiveCrId.HasValue)
+            if (enforceClassroomConflict && effectiveCrId.HasValue)
             {
                 var alreadyOccupied = await _context.SectionSchedules
                     .AnyAsync(ss => ss.ClassroomId == effectiveCrId.Value
@@ -922,6 +950,23 @@ public class FacultyPlanningService : IFacultyPlanningService
                 ClassroomId = effectiveCrId
             });
         }
+    }
+
+    private async Task<bool> IsConstraintEnabledAsHardAsync(string code, bool defaultIsHard, CancellationToken ct)
+    {
+        var definition = await _context.ConstraintDefinitions
+            .AsNoTracking()
+            .Where(d => d.Code == code)
+            .Select(d => new { d.IsEnabled, d.Category })
+            .FirstOrDefaultAsync(ct);
+
+        if (definition == null)
+            return defaultIsHard;
+
+        if (!definition.IsEnabled)
+            return false;
+
+        return string.Equals(definition.Category, "Hard", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string DayLabel(DayOfWeek day) => day switch

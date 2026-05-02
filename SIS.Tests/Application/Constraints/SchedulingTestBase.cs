@@ -6,6 +6,7 @@ using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
+using SIS.Infrastructure.Services.Scheduling.Evaluators;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
@@ -482,6 +483,7 @@ public abstract class SchedulingTestBase : IDisposable
             new InstructorDaySpreadEvaluator(),
             new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
+            new DistributionConstraintEvaluator(),
         };
         return new ConstraintEvaluationService(evaluators, Context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
     }

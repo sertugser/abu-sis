@@ -147,7 +147,7 @@ public class FacultyPlanningServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task AssignSectionAsync_WhenDailyHoursExceedLimit_ExposesDailyLoadConflict()
+    public async Task AssignSectionAsync_WhenDailyHoursExceedLimit_RejectsDailyLoadConflict()
     {
         var classroom = AddClassroom(1, "C101", 50);
         var instructor = AddInstructor(1, 101);
@@ -167,7 +167,7 @@ public class FacultyPlanningServiceTests : IDisposable
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 55), new TimeOnly(17, 45), 10);
         var candidateSection = AddSection(2, candidateCourse.Id, instructor.Id, capacity: 35);
 
-        await _service.AssignSectionAsync(new AssignSectionRequest
+        var act = async () => await _service.AssignSectionAsync(new AssignSectionRequest
         {
             SectionId = candidateSection.Id,
             ClassroomId = classroom.Id,
@@ -182,14 +182,15 @@ public class FacultyPlanningServiceTests : IDisposable
             ]
         }, "999");
 
-        var conflicts = await _service.GetConflictsAsync(FacultyId, TermId);
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*sert kisit ihlali*");
 
-        conflicts.Should().Contain(conflict =>
-            conflict.SectionId == candidateSection.Id
-            && conflict.ConflictType == "DailyLoadConflict");
+        var writtenSchedules = await _context.SectionSchedules
+            .Where(ss => ss.CourseSectionId == candidateSection.Id)
+            .ToListAsync();
 
-        var sectionPage = await _service.GetSectionsAsync(FacultyId, TermId);
-        sectionPage.Items.Single(item => item.SectionId == candidateSection.Id).Status.Should().Be("Conflicted");
+        writtenSchedules.Should().BeEmpty();
     }
 
     [Fact]

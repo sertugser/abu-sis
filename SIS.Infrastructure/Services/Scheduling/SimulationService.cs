@@ -202,6 +202,8 @@ public sealed class SimulationService : ISimulationService
             DeptFacultyMap = snapshot.DeptFacultyMap,
             Corequisites = snapshot.Corequisites,
             CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
+            CohortConflictPairs = snapshot.CohortConflictPairs,
+            EnrollmentConflicts = snapshot.EnrollmentConflicts,
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
             DistributionConstraints = snapshot.DistributionConstraints,

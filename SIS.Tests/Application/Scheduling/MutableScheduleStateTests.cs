@@ -1,4 +1,5 @@
 using FluentAssertions;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
@@ -174,6 +175,46 @@ public class MutableScheduleStateTests
         result.TheoryHours.Should().Be(2);
         result.LabHours.Should().Be(2);
         result.InstructorId.Should().Be(40);
+    }
+
+    [Fact]
+    public void ToTermSnapshot_preserves_constraint_context_from_base_snapshot()
+    {
+        // Arrange
+        var state = new MutableScheduleState(TermId);
+        var snapshot = CreateSnapshot(sectionId: 5, courseId: 300);
+        state.Assign(5, snapshot, CreateTheoryBlocks(classroomId: 1));
+
+        var distributionConstraints = new List<DistributionConstraint>
+        {
+            new()
+            {
+                Id = 1,
+                TermId = TermId,
+                DistributionType = DistributionType.SameDay,
+                PreferenceLevel = PreferenceLevel.Unavailable
+            }
+        };
+        var cohortPairs = new HashSet<(int SectionId1, int SectionId2)> { (5, 6) };
+        var enrollmentConflicts = new EnrollmentConflictMatrix
+        {
+            HardConflictPairs = new HashSet<(int, int)> { (5, 7) }
+        };
+        var baseSnapshot = new TermSnapshot
+        {
+            TermId = TermId,
+            DistributionConstraints = distributionConstraints,
+            CohortConflictPairs = cohortPairs,
+            EnrollmentConflicts = enrollmentConflicts
+        };
+
+        // Act
+        var result = state.ToTermSnapshot(baseSnapshot);
+
+        // Assert
+        result.DistributionConstraints.Should().BeSameAs(distributionConstraints);
+        result.CohortConflictPairs.Should().BeSameAs(cohortPairs);
+        result.EnrollmentConflicts.Should().BeSameAs(enrollmentConflicts);
     }
 
     [Fact]
