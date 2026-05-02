@@ -34,48 +34,10 @@ public static partial class SeedData
             new() { Key = "Withdrawal.MaxCount.Undergraduate", Value = "6", Category = "Registration", DataType = "int", Description = "Lisans öğrencileri için toplam çekilme hakkı" },
             new() { Key = "Withdrawal.MaxCount.Associate", Value = "3", Category = "Registration", DataType = "int", Description = "Önlisans öğrencileri için toplam çekilme hakkı" },
 
-            // ── Derslik Eşikleri ──────────────────────────────────
-            new() { Key = "Classroom.AmphiThreshold", Value = "100", Category = "Scheduling", DataType = "int", Description = "Bu sayıdan fazla kontenjan → Amfi zorunlu" },
-            new() { Key = "Classroom.OccupancyTarget.Min", Value = "60", Category = "Scheduling", DataType = "int", Description = "Derslik doluluk oranı alt hedefi (%)" },
-            new() { Key = "Classroom.OccupancyTarget.Max", Value = "85", Category = "Scheduling", DataType = "int", Description = "Derslik doluluk oranı üst hedefi (%)" },
-
-            // ── Soft Constraint Parametreleri ─────────────────────
-            // Aç/kapat (S*.Enabled) ve ağırlık (Weight.S*) artık ConstraintDefinition tablosundan
-            // okunuyor — eski SystemConfig key'leri çift-kanal sorununu önlemek için kaldırıldı.
-            new() { Key = "SoftConstraint.S2.MaxDailyHours", Value = "6", Category = "Scheduling", DataType = "int", Description = "S2: Bir hocanın günlük max ders saati" },
-            new() { Key = "SoftConstraint.S3.MaxSectionsPerSlot", Value = "5", Category = "Scheduling", DataType = "int", Description = "S3: Bir slot'ta max section sayısı (prime-time yığılma önleme)" },
-            new() { Key = "SoftConstraint.S4.MinCoPairThreshold", Value = "20", Category = "Scheduling", DataType = "int", Description = "S4: Birlikte alınan ders çifti minimum öğrenci eşiği" },
-            new() { Key = "SoftConstraint.S7.MaxGapSlots", Value = "3", Category = "Scheduling", DataType = "int", Description = "S7: Max ardışık boş slot sayısı" },
-
-            // ── Scheduling Algoritma Parametreleri ───────────────
-            new() { Key = "Scheduling.MaxBacktrackingDepth", Value = "3", Category = "Scheduling", DataType = "int", Description = "Backtracking max derinlik" },
-            new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "Schedule", DataType = "bool", Description = "Öğle arası hard constraint mi (true) soft constraint mi (false)" },
-            new() { Key = "Schedule.MaxConsecutiveHours", Value = "4", Category = "Schedule", DataType = "int", Description = "Hocanın aralıksız max ardışık ders saati" },
-
-            // ── Otomatik Programlama (SA) Parametreleri ───────────
-            new() { Key = "Schedule.SA.MaxIterations", Value = "10000", Category = "Scheduling", DataType = "int", Description = "SA algoritması max iterasyon sayısı" },
-            new() { Key = "Schedule.SA.InitialTemperature", Value = "100", Category = "Scheduling", DataType = "int", Description = "SA başlangıç sıcaklığı" },
-            new() { Key = "Schedule.SA.TimeoutSeconds", Value = "90", Category = "Scheduling", DataType = "int", Description = "SA zaman aşımı (saniye)" },
-            new() { Key = "Schedule.SA.StagnationLimit", Value = "2000", Category = "Scheduling", DataType = "int", Description = "SA durgunluk limiti (iyileşme olmayan iterasyon)" },
-            new() { Key = "Schedule.SA.BacktrackLimit", Value = "50", Category = "Scheduling", DataType = "int", Description = "Construction solver backtrack limiti" },
-            new() { Key = "Schedule.SA.RelocateWeight", Value = "50", Category = "Scheduling", DataType = "int", Description = "SA relocate hamlesi ağırlığı" },
-            new() { Key = "Schedule.SA.SwapWeight", Value = "35", Category = "Scheduling", DataType = "int", Description = "SA swap hamlesi ağırlığı" },
-            new() { Key = "Schedule.SA.ChainWeight", Value = "15", Category = "Scheduling", DataType = "int", Description = "SA chain-relocate hamlesi ağırlığı" },
-
-            // ── LNS (Large Neighborhood Search) Parametreleri ─────
-            new() { Key = "Schedule.LNS.MaxIterations", Value = "100", Category = "Scheduling", DataType = "int", Description = "LNS algoritması max iterasyon sayısı" },
-            new() { Key = "Schedule.LNS.TimeoutSeconds", Value = "30", Category = "Scheduling", DataType = "int", Description = "LNS zaman aşımı (saniye)" },
-            new() { Key = "Schedule.LNS.DestroySize", Value = "8", Category = "Scheduling", DataType = "int", Description = "LNS bir iterasyonda yıkılan section sayısı" },
-
-            // ── MRV (Minimum Remaining Values) Ağırlıkları ────────
-            new() { Key = "Schedule.MRV.ClassroomWeight", Value = "3", Category = "Scheduling", DataType = "int", Description = "MRV: derslik kısıtı ağırlığı" },
-            new() { Key = "Schedule.MRV.SlotWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: zaman dilimi kısıtı ağırlığı" },
-            new() { Key = "Schedule.MRV.LabWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: lab gereksinimi ağırlığı" },
-            new() { Key = "Schedule.MRV.CapacityWeight", Value = "1", Category = "Scheduling", DataType = "int", Description = "MRV: kapasite kısıtı ağırlığı" },
-            new() { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Scheduling", DataType = "int", Description = "Teori+lab toplamı bu değeri aşarsa ayrı günlere bölünür" },
-            new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Scheduling", DataType = "string", Description = "Kapasite yetmeyince paralel oda split'i yapılabilen block tipleri. Virgülle ayrılmış (Theory, Lab). Örn: 80 kişilik lab section'ı L139+L141'e aynı saatte bölünür." },
-
             // ── Ders Programı Grid Parametreleri ─────────────────
+            // Not: Otomatik programlama algoritmasını etkileyen tüm key'ler
+            // ayrı bir tablo olan SchedulingAlgorithmConfigs'a taşındı (bkz. SeedData.SchedulingAlgorithmConfig).
+            // SystemConfig burada sadece TimeSlot grid'i + diğer domain ayarlarını barındırır.
             new() { Key = "Schedule.SlotDurationMinutes", Value = "50", Category = "Schedule", DataType = "int", Description = "Bir ders slotunun süresi (dakika)" },
             new() { Key = "Schedule.BreakBetweenSlotsMinutes", Value = "5", Category = "Schedule", DataType = "int", Description = "İki ders arası mola süresi (dakika)" },
             new() { Key = "Schedule.MorningStartTime", Value = "09:00", Category = "Schedule", DataType = "string", Description = "Sabah ilk ders başlangıç saati" },

@@ -22,8 +22,6 @@ import { useDebounce } from '../hooks/useDebounce';
 import { downloadBlob } from '../lib/download';
 import { getErrorMessage } from '../lib/errorMessage';
 import type { SystemConfigDto, ConfigLimits } from '../api/systemConfig.api';
-import { ALGORITHM_PARAMETER_KEYS } from '../components/constraint/algorithmParameters.constants';
-import { Link } from 'react-router-dom';
 
 const CATEGORY_LABELS: Record<string, string> = {
   Registration: 'Kayıt Kuralları',
@@ -108,10 +106,9 @@ export default function SystemConfigPage() {
   }
 
   const searchLower = debouncedSearch.toLowerCase();
-  // Algoritma parametreleri Kısıt Yönetimi sayfasına taşındı; burada gösterilmesi
-  // çift edit yeri yaratırdı. Tek otorite o sayfa.
-  const visible = (configs ?? []).filter(c => !ALGORITHM_PARAMETER_KEYS.has(c.key));
-  const filtered = visible.filter(c => {
+  // Algoritma parametreleri ayrı bir tabloya (SchedulingAlgorithmConfigs) taşındı,
+  // SystemConfig'de zaten yok — burada filtreleme gerekmiyor.
+  const filtered = (configs ?? []).filter(c => {
     if (!searchLower) return true;
     return (
       c.key.toLowerCase().includes(searchLower)
@@ -174,17 +171,6 @@ export default function SystemConfigPage() {
           />
         </div>
       </div>
-
-      <Alert className="py-2">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription className="text-xs">
-          Otomatik programlama algoritma parametreleri (SA, MRV, LNS) artık{' '}
-          <Link to="/ders-programi-kisitlamalari" className="font-medium underline underline-offset-2">
-            Ders Programı Kısıtlamaları
-          </Link>
-          {' '}sayfasının &ldquo;Algoritma Parametreleri&rdquo; sekmesinden yönetiliyor.
-        </AlertDescription>
-      </Alert>
 
       {sortedCategories.length === 0 && debouncedSearch && (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">

@@ -2412,7 +2412,10 @@ public class SchedulingService : ISchedulingService
 
     internal async Task<Dictionary<string, string>> LoadSystemConfigAsync(CancellationToken ct)
     {
-        return await _context.SystemConfigs.AsNoTracking()
+        // Otomatik programlama algoritma ayarları artık ayrı tabloda
+        // (SchedulingAlgorithmConfigs). Genel SystemConfig (Attendance, GPA, vs.)
+        // bu factory ile karıştırılmasın diye buradan okunmuyor.
+        return await _context.SchedulingAlgorithmConfigs.AsNoTracking()
             .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
     }
 

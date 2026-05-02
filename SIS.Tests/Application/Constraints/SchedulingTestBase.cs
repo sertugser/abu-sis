@@ -215,20 +215,41 @@ public abstract class SchedulingTestBase : IDisposable
 
     protected void SetSystemConfig(string key, string value)
     {
-        var config = Context.SystemConfigs.SingleOrDefault(item => item.Key == key);
-        if (config == null)
+        if (AlgorithmConfigKeys.Contains(key))
         {
-            Context.SystemConfigs.Add(new SystemConfig
+            var existing = Context.SchedulingAlgorithmConfigs.SingleOrDefault(item => item.Key == key);
+            if (existing == null)
             {
-                Key = key,
-                Value = value,
-                Category = "Scheduling",
-                DataType = "string"
-            });
+                Context.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
+                {
+                    Key = key,
+                    Value = value,
+                    Category = "Test",
+                    DataType = "string"
+                });
+            }
+            else
+            {
+                existing.Value = value;
+            }
         }
         else
         {
-            config.Value = value;
+            var config = Context.SystemConfigs.SingleOrDefault(item => item.Key == key);
+            if (config == null)
+            {
+                Context.SystemConfigs.Add(new SystemConfig
+                {
+                    Key = key,
+                    Value = value,
+                    Category = "Scheduling",
+                    DataType = "string"
+                });
+            }
+            else
+            {
+                config.Value = value;
+            }
         }
 
         Context.SaveChanges();
@@ -405,15 +426,61 @@ public abstract class SchedulingTestBase : IDisposable
         Context.SaveChanges();
     }
 
+    // Algoritma config key'leri SchedulingAlgorithmConfigs tablosuna,
+    // diğer SystemConfig key'leri SystemConfigs tablosuna yazılır.
+    private static readonly HashSet<string> AlgorithmConfigKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Classroom.AmphiThreshold",
+        "Classroom.OccupancyTarget.Min",
+        "Classroom.OccupancyTarget.Max",
+        "SoftConstraint.S2.MaxDailyHours",
+        "SoftConstraint.S3.MaxSectionsPerSlot",
+        "SoftConstraint.S4.MinCoPairThreshold",
+        "SoftConstraint.S7.MaxGapSlots",
+        "Schedule.LunchBreak.IsHard",
+        "Schedule.MaxConsecutiveHours",
+        "Scheduling.MaxBacktrackingDepth",
+        "Schedule.TheoryLabSplitThreshold",
+        "Schedule.SplittableBlockTypes",
+        "Schedule.SA.MaxIterations",
+        "Schedule.SA.InitialTemperature",
+        "Schedule.SA.TimeoutSeconds",
+        "Schedule.SA.StagnationLimit",
+        "Schedule.SA.BacktrackLimit",
+        "Schedule.SA.RelocateWeight",
+        "Schedule.SA.SwapWeight",
+        "Schedule.SA.ChainWeight",
+        "Schedule.LNS.MaxIterations",
+        "Schedule.LNS.TimeoutSeconds",
+        "Schedule.LNS.DestroySize",
+        "Schedule.MRV.ClassroomWeight",
+        "Schedule.MRV.SlotWeight",
+        "Schedule.MRV.LabWeight",
+        "Schedule.MRV.CapacityWeight",
+    };
+
     private void AddConfig(string key, string value)
     {
-        Context.SystemConfigs.Add(new SystemConfig
+        if (AlgorithmConfigKeys.Contains(key))
         {
-            Key = key,
-            Value = value,
-            Category = "Scheduling",
-            DataType = "string"
-        });
+            Context.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
+            {
+                Key = key,
+                Value = value,
+                Category = "Test",
+                DataType = "string"
+            });
+        }
+        else
+        {
+            Context.SystemConfigs.Add(new SystemConfig
+            {
+                Key = key,
+                Value = value,
+                Category = "Scheduling",
+                DataType = "string"
+            });
+        }
     }
 
     private TimeSlot FindOrCreateTimeSlot(

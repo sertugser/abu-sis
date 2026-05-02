@@ -212,26 +212,19 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
             }
         }
 
-        // SystemConfig entries needed by LoadSchedulingConstraintConfigAsync
-        _context.SystemConfigs.AddRange(
-            new SystemConfig { Key = "Schedule.LunchBreak.IsHard", Value = "false", Category = "Schedule", DataType = "bool" },
-            new SystemConfig { Key = "Schedule.MaxConsecutiveHours", Value = "12", Category = "Schedule", DataType = "int" },
-            new SystemConfig { Key = "Schedule.BreakDurationMinutes", Value = "5", Category = "Schedule", DataType = "int" },
-            new SystemConfig { Key = "Classroom.AmphiThreshold", Value = "100", Category = "Scheduling", DataType = "int" },
-            new SystemConfig { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Schedule", DataType = "int" },
-            new SystemConfig { Key = "SoftConstraint.S1.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S2.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S3.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S4.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S5.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S7.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S8.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S9.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "SoftConstraint.S12.Enabled", Value = "false", Category = "Scheduling", DataType = "bool" },
-            new SystemConfig { Key = "Classroom.OccupancyTarget.Min", Value = "60", Category = "Scheduling", DataType = "int" },
-            new SystemConfig { Key = "Classroom.OccupancyTarget.Max", Value = "85", Category = "Scheduling", DataType = "int" },
-            new SystemConfig { Key = "SoftConstraint.S2.MaxDailyHours", Value = "6", Category = "Scheduling", DataType = "int" },
-            new SystemConfig { Key = "SoftConstraint.S4.MinCoPairThreshold", Value = "2", Category = "Scheduling", DataType = "int" }
+        // Algoritma key'leri SchedulingAlgorithmConfigs tablosuna; S*.Enabled artık
+        // ConstraintDefinition.IsEnabled tarafından kontrol edildiği için (tek otorite),
+        // factory bunları her zaman true alır — test'te set'i etkisiz; yine de tarihsel
+        // olarak burada bırakıyoruz, ileride kaldırılabilir.
+        _context.SchedulingAlgorithmConfigs.AddRange(
+            new SchedulingAlgorithmConfig { Key = "Schedule.LunchBreak.IsHard", Value = "false", Category = "HardThreshold", DataType = "bool" },
+            new SchedulingAlgorithmConfig { Key = "Schedule.MaxConsecutiveHours", Value = "12", Category = "HardThreshold", DataType = "int" },
+            new SchedulingAlgorithmConfig { Key = "Classroom.AmphiThreshold", Value = "100", Category = "HardThreshold", DataType = "int" },
+            new SchedulingAlgorithmConfig { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Other", DataType = "int" },
+            new SchedulingAlgorithmConfig { Key = "Classroom.OccupancyTarget.Min", Value = "60", Category = "SoftThreshold", DataType = "int" },
+            new SchedulingAlgorithmConfig { Key = "Classroom.OccupancyTarget.Max", Value = "85", Category = "SoftThreshold", DataType = "int" },
+            new SchedulingAlgorithmConfig { Key = "SoftConstraint.S2.MaxDailyHours", Value = "6", Category = "SoftThreshold", DataType = "int" },
+            new SchedulingAlgorithmConfig { Key = "SoftConstraint.S4.MinCoPairThreshold", Value = "2", Category = "SoftThreshold", DataType = "int" }
         );
 
         _context.SaveChanges();

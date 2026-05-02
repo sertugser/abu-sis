@@ -680,9 +680,8 @@ public sealed class AutoScheduleEngine
 
     private async Task<SchedulingConstraintConfig> LoadSchedulingConstraintConfigAsync(CancellationToken ct)
     {
-        // SystemConfig okuma + config kurma artık SchedulingConstraintConfig.FromSystemConfig'de
-        // (tek source-of-truth — SchedulingService ve SimulationService de aynı yeri çağırıyor).
-        var config = await _context.SystemConfigs
+        // Algoritma key'leri artık SchedulingAlgorithmConfigs tablosunda — tek source-of-truth.
+        var config = await _context.SchedulingAlgorithmConfigs
             .AsNoTracking()
             .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
         return SchedulingConstraintConfig.FromSystemConfig(config);

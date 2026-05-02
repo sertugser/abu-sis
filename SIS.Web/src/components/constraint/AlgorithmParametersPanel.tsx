@@ -11,16 +11,23 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { AlertCircle, Check, Clock, Pencil, X } from 'lucide-react';
-import type { SystemConfigDto, ConfigLimits } from '../../api/systemConfig.api';
-import { useConfigLimits, useSystemConfigs, useUpdateSystemConfig } from '../../hooks/useSystemConfig';
+import type {
+  SchedulingAlgorithmConfigDto,
+  SchedulingAlgorithmConfigLimits,
+} from '../../api/schedulingAlgorithmConfig.api';
+import {
+  useSchedulingAlgorithmConfigLimits,
+  useSchedulingAlgorithmConfigs,
+  useUpdateSchedulingAlgorithmConfig,
+} from '../../hooks/useSchedulingAlgorithmConfig';
 import { getErrorMessage } from '../../lib/errorMessage';
 import { ALGORITHM_GROUPS } from './algorithmParameters.constants';
 
 type Notice = { type: 'success' | 'error'; message: string };
 
 export default function AlgorithmParametersPanel() {
-  const { data: configs, isLoading, isError } = useSystemConfigs();
-  const { data: limits } = useConfigLimits();
+  const { data: configs, isLoading, isError } = useSchedulingAlgorithmConfigs();
+  const { data: limits } = useSchedulingAlgorithmConfigLimits();
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
@@ -64,7 +71,7 @@ export default function AlgorithmParametersPanel() {
       {ALGORITHM_GROUPS.map(group => {
         const items = group.keys
           .map(k => byKey.get(k))
-          .filter((c): c is SystemConfigDto => c !== undefined);
+          .filter((c): c is SchedulingAlgorithmConfigDto => c !== undefined);
 
         if (items.length === 0) return null;
 
@@ -109,8 +116,8 @@ export default function AlgorithmParametersPanel() {
 }
 
 interface ParameterRowProps {
-  config: SystemConfigDto;
-  limits?: ConfigLimits;
+  config: SchedulingAlgorithmConfigDto;
+  limits?: SchedulingAlgorithmConfigLimits;
   onNotice: (n: Notice) => void;
 }
 
@@ -118,7 +125,7 @@ function ParameterRow({ config, limits, onNotice }: ParameterRowProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(config.value);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const updateMutation = useUpdateSystemConfig();
+  const updateMutation = useUpdateSchedulingAlgorithmConfig();
 
   useEffect(() => {
     if (!editing) {
