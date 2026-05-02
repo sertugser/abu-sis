@@ -33,14 +33,8 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
 
     private static readonly Dictionary<string, (decimal? Min, decimal? Max)> NumericLimits = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Hard / Soft thresholds
+        // Hard thresholds (paylaşılan / mod değiştirici)
         ["Classroom.AmphiThreshold"] = (0, 500),
-        ["Classroom.OccupancyTarget.Min"] = (0, 100),
-        ["Classroom.OccupancyTarget.Max"] = (0, 100),
-        ["SoftConstraint.S2.MaxDailyHours"] = (0, 24),
-        ["SoftConstraint.S3.MaxSectionsPerSlot"] = (0, 100),
-        ["SoftConstraint.S4.MinCoPairThreshold"] = (0, 1000),
-        ["SoftConstraint.S7.MaxGapSlots"] = (0, 20),
         ["Schedule.MaxConsecutiveHours"] = (1, 12),
 
         // Other

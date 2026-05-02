@@ -193,7 +193,7 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MinOccupancy": 60, "MaxOccupancy": 85, "Weight": 3}""",
+                Parameters = """{"S1MinOccupancy": 60, "S1MaxOccupancy": 85}""",
                 SortOrder = 101
             },
             new()
@@ -204,7 +204,7 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MaxDailyHours": 6, "Weight": 2}""",
+                Parameters = """{"S2MaxDailyHours": 6}""",
                 SortOrder = 102
             },
             new()
@@ -215,7 +215,7 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MaxSectionsPerSlot": 5, "Weight": 2}""",
+                Parameters = """{"S3MaxSectionsPerSlot": 5}""",
                 SortOrder = 103
             },
             new()
@@ -226,7 +226,7 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MinCoPairThreshold": 20, "Weight": 3}""",
+                Parameters = """{"S4MinCoPairThreshold": 20}""",
                 SortOrder = 104
             },
             new()
@@ -248,7 +248,7 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MaxGapSlots": 3, "Weight": 2}""",
+                Parameters = """{"S7MaxGapSlots": 3}""",
                 SortOrder = 106
             },
             new()

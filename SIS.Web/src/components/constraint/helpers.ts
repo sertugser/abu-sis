@@ -105,43 +105,32 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'H-DO': [],
 
   // ── Soft Constraints ──────────────────────────────────────────
+  // Not: 'Weight' alanı kaldırıldı — slider üstte kart başlığında ayarlanıyor.
+  // Parameter JSON key'leri backend SchedulingConstraintConfig property adlarıyla
+  // birebir eşleşiyor (MergeParameterOverride reflect ile bind ediyor).
   'S1': [
-    { key: 'MinOccupancy', label: 'Min. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
-    { key: 'MaxOccupancy', label: 'Maks. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S1MinOccupancy', label: 'Min. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
+    { key: 'S1MaxOccupancy', label: 'Maks. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
   ],
   'S2': [
-    { key: 'MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S2MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
   ],
   'S3': [
-    { key: 'MaxSectionsPerSlot', label: 'Slot Başına Maks. Şube', type: 'number', min: 1, max: 50 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S3MaxSectionsPerSlot', label: 'Slot Başına Maks. Şube', type: 'number', min: 1, max: 50 },
   ],
   'S4': [
-    { key: 'MinCoPairThreshold', label: 'Min. Birlikte Kayıt Eşiği', type: 'number', suffix: 'öğrenci', min: 1 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S4MinCoPairThreshold', label: 'Min. Birlikte Kayıt Eşiği', type: 'number', suffix: 'öğrenci', min: 1 },
   ],
-  'S5': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
+  'S5': [],
   'S7': [
-    { key: 'MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S7MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 },
   ],
-  'S8': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
-  'S9': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
+  'S8': [],
+  'S9': [],
   'S12': [
-    { key: 'MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S12MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
   ],
-  'DIST': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
+  'DIST': [],
 };
 
 // ─── Entity Type Labels ────────────────────────────────────────

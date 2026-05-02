@@ -20,15 +20,9 @@ public static partial class SeedData
             new() { Key = "Schedule.LunchBreakEnd", Value = "12:20", Category = "HardThreshold", DataType = "string", Description = "Öğle arasının bitiş saati (HH:mm)." },
             new() { Key = "Schedule.MaxConsecutiveHours", Value = "4", Category = "HardThreshold", DataType = "int", Description = "Bir öğretim üyesi en fazla kaç saat aralıksız ders verebilir. Bu sayıyı geçen blok zorunlu olarak bölünür." },
 
-            // ── Soft Kısıt Eşikleri ──────────────────────────────
-            new() { Key = "Classroom.OccupancyTarget.Min", Value = "60", Category = "SoftThreshold", DataType = "int", Description = "Bir derslik en az yüzde kaç dolu olmalı (S1 hedefi). Daha düşük doluluk soft penalty alır." },
-            new() { Key = "Classroom.OccupancyTarget.Max", Value = "85", Category = "SoftThreshold", DataType = "int", Description = "Bir derslik en fazla yüzde kaç dolu olmalı (S1 hedefi). Aşırı dolu sınıflar da penalty alır." },
-            new() { Key = "SoftConstraint.S2.MaxDailyHours", Value = "6", Category = "SoftThreshold", DataType = "int", Description = "Bir öğretim üyesinin günde kaç saatten fazla ders almaması ideal. Aşılan her saat penalty üretir." },
-            new() { Key = "SoftConstraint.S3.MaxSectionsPerSlot", Value = "5", Category = "SoftThreshold", DataType = "int", Description = "Aynı saat diliminde en fazla kaç şube olabilir (prime-time yığılması). Aşılan her şube penalty alır." },
-            new() { Key = "SoftConstraint.S4.MinCoPairThreshold", Value = "20", Category = "SoftThreshold", DataType = "int", Description = "Geçmiş kayıtlara göre kaç öğrenciyi etkileyen ders çiftleri 'sık birlikte alınan' sayılır. Eşik altında çakışma penalty üretmez." },
-            new() { Key = "SoftConstraint.S7.MaxGapSlots", Value = "3", Category = "SoftThreshold", DataType = "int", Description = "Öğrencinin gün içinde kaç ardışık boş slota toleransı var. Aşan her boşluk penalty üretir." },
-
             // ── Simulated Annealing Parametreleri ────────────────
+            // Not: S1/S2/S3/S4/S7 eşikleri ConstraintDefinition.Parameters JSON'una taşındı —
+            // admin ilgili kısıt kartının expand alanından düzenliyor.
             new() { Key = "Schedule.SA.MaxIterations", Value = "10000", Category = "SA", DataType = "int", Description = "Motor en fazla kaç iyileştirme denemesi yapsın. Artırırsan daha iyi program, ama daha yavaş çalışır. Öneri: 10000." },
             new() { Key = "Schedule.SA.InitialTemperature", Value = "100", Category = "SA", DataType = "int", Description = "Motorun başlangıçta ne kadar cesur olacağı (geniş arama). Zamanla soğur ve daha titiz olur. Öneri: 100." },
             new() { Key = "Schedule.SA.TimeoutSeconds", Value = "90", Category = "SA", DataType = "int", Description = "Motor en fazla kaç saniye çalışsın. Süre dolunca elindeki en iyi programı verir. Öneri: 90." },

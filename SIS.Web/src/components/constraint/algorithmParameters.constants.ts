@@ -52,26 +52,14 @@ export const ALGORITHM_GROUPS: AlgorithmGroup[] = [
     ],
   },
   {
-    title: 'Hard Kısıt Eşikleri',
-    description: 'Zorunlu kısıtların eşik / mod değerleri (H4, H13, H15).',
+    title: 'Paylaşılan Kısıt Eşikleri',
+    description: 'Birden fazla kısıdı etkileyen ortak eşikler (H4, H13, H15). Kısıda özel eşikler ilgili kısıt kartından düzenleniyor.',
     keys: [
       'Schedule.LunchBreak.IsHard',
       'Schedule.LunchBreakStart',
       'Schedule.LunchBreakEnd',
       'Schedule.MaxConsecutiveHours',
       'Classroom.AmphiThreshold',
-    ],
-  },
-  {
-    title: 'Soft Kısıt Eşikleri',
-    description: 'Tercihli kısıtların eşik değerleri (S1, S2, S3, S4, S7).',
-    keys: [
-      'Classroom.OccupancyTarget.Min',
-      'Classroom.OccupancyTarget.Max',
-      'SoftConstraint.S2.MaxDailyHours',
-      'SoftConstraint.S3.MaxSectionsPerSlot',
-      'SoftConstraint.S4.MinCoPairThreshold',
-      'SoftConstraint.S7.MaxGapSlots',
     ],
   },
 ];
@@ -81,14 +69,11 @@ export const ALGORITHM_PARAMETER_KEYS = new Set<string>(
 );
 
 // Admin'in günlük tune ettiği temel ayarlar — "Sık Ayarlanan" kartında öne çıkar.
-// Kalan 19 ayar "İleri Ayarlar" altında gizli kalır.
+// Kalan ayarlar "İleri Ayarlar" altında gizli kalır.
 export const ESSENTIAL_PARAMETER_KEYS: string[] = [
   'Schedule.LunchBreak.IsHard',
   'Schedule.MaxConsecutiveHours',
   'Classroom.AmphiThreshold',
-  'Classroom.OccupancyTarget.Min',
-  'Classroom.OccupancyTarget.Max',
-  'SoftConstraint.S2.MaxDailyHours',
   'Schedule.SA.MaxIterations',
   'Schedule.SA.TimeoutSeconds',
 ];
