@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -14,7 +15,7 @@ import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  AlertCircle, Building2, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
+  AlertCircle, Building2, BarChart3, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
   Clock, FlaskConical, GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -22,7 +23,6 @@ import {
   useConstraints,
   useToggleConstraint,
   useUpdateConstraintCategory,
-  useScoreBreakdown,
   useUpdateConstraintWeight,
 } from '../hooks/useConstraints';
 import { useAdminTerms } from '../hooks/useAdminTerms';
@@ -31,12 +31,10 @@ import {
 } from '../components/constraint/helpers';
 import ConstraintDetailPanel from '../components/constraint/ConstraintDetailPanel';
 import ProfileSelector from '../components/constraint/ProfileSelector';
-import ScoreBreakdownDashboard from '../components/constraint/ScoreBreakdownDashboard';
 import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
 import AlgorithmParametersPanel from '../components/constraint/AlgorithmParametersPanel';
 import ApprovalPanel from '../components/constraint/ApprovalPanel';
 import SimulationDrawer from '../components/constraint/SimulationDrawer';
-import { useTrendData, useHeatmap, useBottlenecks, useTakeSnapshot } from '../hooks/useConstraintAnalytics';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
 const GROUP_ICONS = { Building2, GraduationCap, BookOpen, Clock } as const;
@@ -313,11 +311,8 @@ export default function ConstraintManagementPage() {
     return active ? active.id : terms[0].id;
   }, [selectedTermId, terms]);
 
-  const { data: breakdown, isLoading: breakdownLoading } = useScoreBreakdown(effectiveTermId);
-  const { data: trendData } = useTrendData(effectiveTermId);
-  const { data: heatmapData } = useHeatmap(effectiveTermId);
-  const { data: bottleneckData } = useBottlenecks(effectiveTermId);
-  const takeSnapshotMut = useTakeSnapshot(effectiveTermId);
+  // Skor analizi (trend, heatmap, bottlenecks) artık ayrı sayfada:
+  // /ders-programi-skor-analizi — bu sayfa kısıt yönetimine odaklanıyor.
 
   // useMemo ile stable referans (logical || [] her render'da yeni array yaratırdı)
   const items = useMemo(() => constraints ?? [], [constraints]);
@@ -361,47 +356,44 @@ export default function ConstraintManagementPage() {
         </Alert>
       )}
 
-      {/* Term selector + Score breakdown */}
+      {/* Term selector + actions */}
       {isAdmin && terms && terms.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
-            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Dönem</span>
-            <select
-              className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none min-w-[200px]"
-              value={effectiveTermId ?? ''}
-              onChange={(e) => setSelectedTermId(Number(e.target.value))}
-            >
-              {terms.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.name} {t.isActive ? '(Aktif)' : ''}
-                </option>
-              ))}
-            </select>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+          <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Dönem</span>
+          <select
+            className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none min-w-[200px]"
+            value={effectiveTermId ?? ''}
+            onChange={(e) => setSelectedTermId(Number(e.target.value))}
+          >
+            {terms.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.name} {t.isActive ? '(Aktif)' : ''}
+              </option>
+            ))}
+          </select>
 
-            <div className="w-px self-stretch bg-gray-200 mx-1" />
+          <div className="w-px self-stretch bg-gray-200 mx-1" />
 
-            <ProfileSelector onApplied={setProfileToast} />
+          <ProfileSelector onApplied={setProfileToast} />
 
-            <div className="w-px self-stretch bg-gray-200 mx-1" />
+          <div className="w-px self-stretch bg-gray-200 mx-1" />
 
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-              onClick={() => setSimulationOpen(true)}
-            >
-              <FlaskConical className="h-3.5 w-3.5" />
-              Simülasyon
-            </button>
-          </div>
-          <ScoreBreakdownDashboard
-            breakdown={breakdown}
-            isLoading={breakdownLoading}
-            trendData={trendData}
-            heatmapData={heatmapData}
-            bottleneckData={bottleneckData}
-            onTakeSnapshot={() => takeSnapshotMut.mutate()}
-            snapshotPending={takeSnapshotMut.isPending}
-          />
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+            onClick={() => setSimulationOpen(true)}
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            Simülasyon
+          </button>
+
+          <Link
+            to="/ders-programi-skor-analizi"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Skor Analizi
+          </Link>
         </div>
       )}
 

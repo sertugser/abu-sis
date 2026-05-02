@@ -73,6 +73,7 @@ import FacultySignatureUploadPage from './pages/FacultySignatureUploadPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
+import ScheduleScoreAnalyticsPage from './pages/ScheduleScoreAnalyticsPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import ElectiveConfigurationPage from './pages/ElectiveConfigurationPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
@@ -304,6 +305,7 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-programi-kisitlamalari.view" />}>
                     <Route path="ders-programi-kisitlamalari" element={<ConstraintManagementPage />} />
+                    <Route path="ders-programi-skor-analizi" element={<ScheduleScoreAnalyticsPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-islemleri.view" />}>
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
