@@ -2418,36 +2418,20 @@ public class SchedulingService : ISchedulingService
 
     internal async Task<SoftConstraintConfig> LoadSoftConstraintConfigAsync(CancellationToken ct)
     {
+        // Tek source-of-truth: SchedulingConstraintConfig.FromSystemConfig.
+        // Aşağıdaki record sadece SchedulingService'in iç imzaları için adapter.
         var config = await LoadSystemConfigAsync(ct);
-
-        var s9MorningStart = config.TryGetValue("SoftConstraint.S9.MorningStart", out var ms) && TimeOnly.TryParse(ms, out var mst)
-            ? mst : new TimeOnly(8, 0);
-        var s9EveningStart = config.TryGetValue("SoftConstraint.S9.EveningStart", out var es) && TimeOnly.TryParse(es, out var est)
-            ? est : new TimeOnly(17, 0);
-
-        // Soft kısıt aç/kapat tek otorite: ConstraintDefinition.IsEnabled (DB).
-        // ConstraintEvaluationService üst-katmanda state.IsDisabled ile disabled evaluator'ları
-        // zaten atlıyor; aşağıdaki S*Enabled bayrakları yalnızca evaluator-içi defansif kontrol
-        // amacıyla true tutuluyor — çift kanal kalmasın diye SystemConfig'den okunmuyor.
+        var c = SchedulingConstraintConfig.FromSystemConfig(config);
         return new SoftConstraintConfig(
-            S1Enabled: true,
-            S1MinOccupancy: GetInt(config, "Classroom.OccupancyTarget.Min", 60),
-            S1MaxOccupancy: GetInt(config, "Classroom.OccupancyTarget.Max", 85),
-            S2Enabled: true,
-            S2MaxDailyHours: GetInt(config, "SoftConstraint.S2.MaxDailyHours", 6),
-            S3Enabled: true,
-            S3MaxSectionsPerSlot: GetInt(config, "SoftConstraint.S3.MaxSectionsPerSlot", 5),
-            S4Enabled: true,
-            S4MinCoPairThreshold: GetInt(config, "SoftConstraint.S4.MinCoPairThreshold", 20),
-            S5Enabled: true,
-            S7Enabled: true,
-            S7MaxGapSlots: GetInt(config, "SoftConstraint.S7.MaxGapSlots", 3),
-            S8Enabled: true,
-            S9Enabled: true,
-            S9MorningStart: s9MorningStart,
-            S9EveningStart: s9EveningStart,
-            S12Enabled: true,
-            S12MaxImbalancePercent: GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20));
+            c.S1Enabled, c.S1MinOccupancy, c.S1MaxOccupancy,
+            c.S2Enabled, c.S2MaxDailyHours,
+            c.S3Enabled, c.S3MaxSectionsPerSlot,
+            c.S4Enabled, c.S4MinCoPairThreshold,
+            c.S5Enabled,
+            c.S7Enabled, c.S7MaxGapSlots,
+            c.S8Enabled,
+            c.S9Enabled, c.S9MorningStart, c.S9EveningStart,
+            c.S12Enabled, c.S12MaxImbalancePercent);
     }
 
     /// <summary>
@@ -2509,21 +2493,13 @@ public class SchedulingService : ISchedulingService
 
     internal async Task<HardConstraintConfig> LoadHardConstraintConfigAsync(CancellationToken ct)
     {
+        // Tek source-of-truth: SchedulingConstraintConfig.FromSystemConfig (adapter).
         var config = await LoadSystemConfigAsync(ct);
-
-        var lunchIsHard = GetBool(config, "Schedule.LunchBreak.IsHard", false);
-        var lunchStart = config.TryGetValue("Schedule.LunchBreakStart", out var ls) && TimeOnly.TryParse(ls, out var lst)
-            ? lst : new TimeOnly(11, 40);
-        var lunchEnd = config.TryGetValue("Schedule.LunchBreakEnd", out var le) && TimeOnly.TryParse(le, out var let)
-            ? let : new TimeOnly(12, 20);
-        var maxConsecutive = GetInt(config, "Schedule.MaxConsecutiveHours", 4);
-        var breakDuration = GetInt(config, "Schedule.BreakDurationMinutes", 5);
-        var amphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100);
-        var theoryLabSplitThreshold = GetInt(config, "Schedule.TheoryLabSplitThreshold", 4);
-        var allowSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false);
-        var conflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var cm) ? cm : "curriculum";
-
-        return new HardConstraintConfig(lunchIsHard, lunchStart, lunchEnd, maxConsecutive, breakDuration, amphiThreshold, theoryLabSplitThreshold, allowSectionOverlap, conflictMode);
+        var c = SchedulingConstraintConfig.FromSystemConfig(config);
+        return new HardConstraintConfig(
+            c.LunchBreakIsHard, c.LunchBreakStart, c.LunchBreakEnd,
+            c.MaxConsecutiveHours, c.BreakDurationMinutes, c.AmphiThreshold,
+            c.TheoryLabSplitThreshold, c.AllowSameCourseSectionOverlap, c.CurriculumConflictMode);
     }
 
     private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)

@@ -680,56 +680,12 @@ public sealed class AutoScheduleEngine
 
     private async Task<SchedulingConstraintConfig> LoadSchedulingConstraintConfigAsync(CancellationToken ct)
     {
+        // SystemConfig okuma + config kurma artık SchedulingConstraintConfig.FromSystemConfig'de
+        // (tek source-of-truth — SchedulingService ve SimulationService de aynı yeri çağırıyor).
         var config = await _context.SystemConfigs
             .AsNoTracking()
             .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
-
-        var lunchIsHard = GetBool(config, "Schedule.LunchBreak.IsHard", false);
-        var lunchStart = config.TryGetValue("Schedule.LunchBreakStart", out var ls) && TimeOnly.TryParse(ls, out var lst)
-            ? lst : new TimeOnly(11, 40);
-        var lunchEnd = config.TryGetValue("Schedule.LunchBreakEnd", out var le) && TimeOnly.TryParse(le, out var let_)
-            ? let_ : new TimeOnly(12, 20);
-
-        var s9MorningStart = config.TryGetValue("SoftConstraint.S9.MorningStart", out var ms) && TimeOnly.TryParse(ms, out var mst)
-            ? mst : new TimeOnly(8, 0);
-        var s9EveningStart = config.TryGetValue("SoftConstraint.S9.EveningStart", out var es) && TimeOnly.TryParse(es, out var est)
-            ? est : new TimeOnly(17, 0);
-
-        return new SchedulingConstraintConfig
-        {
-            LunchBreakIsHard = lunchIsHard,
-            LunchBreakStart = lunchStart,
-            LunchBreakEnd = lunchEnd,
-            MaxConsecutiveHours = GetInt(config, "Schedule.MaxConsecutiveHours", 4),
-            BreakDurationMinutes = GetInt(config, "Schedule.BreakDurationMinutes", 5),
-            AmphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100),
-            TheoryLabSplitThreshold = GetInt(config, "Schedule.TheoryLabSplitThreshold", 4),
-            // Soft kısıt aç/kapat: tek otorite ConstraintDefinition.IsEnabled (state.IsDisabled).
-            // SystemConfig'den okunmuyor; defansif amaçla true.
-            S1Enabled = true,
-            S1MinOccupancy = GetInt(config, "Classroom.OccupancyTarget.Min", 60),
-            S1MaxOccupancy = GetInt(config, "Classroom.OccupancyTarget.Max", 85),
-            S2Enabled = true,
-            S2MaxDailyHours = GetInt(config, "SoftConstraint.S2.MaxDailyHours", 6),
-            S3Enabled = true,
-            S3MaxSectionsPerSlot = GetInt(config, "SoftConstraint.S3.MaxSectionsPerSlot", 5),
-            S4Enabled = true,
-            S4MinCoPairThreshold = GetInt(config, "SoftConstraint.S4.MinCoPairThreshold", 20),
-            S5Enabled = true,
-            S7Enabled = true,
-            S7MaxGapSlots = GetInt(config, "SoftConstraint.S7.MaxGapSlots", 3),
-            S8Enabled = true,
-            S9Enabled = true,
-            S9MorningStart = s9MorningStart,
-            S9EveningStart = s9EveningStart,
-            S12Enabled = true,
-            S12MaxImbalancePercent = GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20),
-            AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
-            CurriculumConflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var mode) ? mode : "curriculum",
-            EnrollmentConflictHardThreshold = GetInt(config, "Schedule.EnrollmentConflictHardThreshold", 1),
-            SplittableBlockTypes = ParseSplittableBlockTypes(
-                config.TryGetValue("Schedule.SplittableBlockTypes", out var sbt) ? sbt : "Lab"),
-        };
+        return SchedulingConstraintConfig.FromSystemConfig(config);
     }
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(
@@ -899,35 +855,4 @@ public sealed class AutoScheduleEngine
             .ToList();
     }
 
-    private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
-    {
-        return config.TryGetValue(key, out var value)
-            ? bool.TryParse(value, out var result) ? result : defaultValue
-            : defaultValue;
-    }
-
-    private static int GetInt(Dictionary<string, string> config, string key, int defaultValue)
-    {
-        return config.TryGetValue(key, out var value)
-            ? int.TryParse(value, out var result) ? result : defaultValue
-            : defaultValue;
-    }
-
-    /// <summary>
-    /// "Lab,Theory" gibi virgülle ayrılmış config değerini BlockType set'ine çevirir.
-    /// Geçersiz/tanınmayan değerler sessizce atlanır. Boş string boş set döner (= split kapalı).
-    /// </summary>
-    private static HashSet<BlockType> ParseSplittableBlockTypes(string value)
-    {
-        var result = new HashSet<BlockType>();
-        if (string.IsNullOrWhiteSpace(value))
-            return result;
-
-        foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (Enum.TryParse<BlockType>(token, ignoreCase: true, out var bt))
-                result.Add(bt);
-        }
-        return result;
-    }
 }
