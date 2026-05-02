@@ -79,3 +79,19 @@ export const ALGORITHM_GROUPS: AlgorithmGroup[] = [
 export const ALGORITHM_PARAMETER_KEYS = new Set<string>(
   ALGORITHM_GROUPS.flatMap(g => g.keys),
 );
+
+// Admin'in günlük tune ettiği temel ayarlar — "Sık Ayarlanan" kartında öne çıkar.
+// Kalan 19 ayar "İleri Ayarlar" altında gizli kalır.
+export const ESSENTIAL_PARAMETER_KEYS: string[] = [
+  'Schedule.LunchBreak.IsHard',
+  'Schedule.MaxConsecutiveHours',
+  'Classroom.AmphiThreshold',
+  'Classroom.OccupancyTarget.Min',
+  'Classroom.OccupancyTarget.Max',
+  'SoftConstraint.S2.MaxDailyHours',
+  'Schedule.SA.MaxIterations',
+  'Schedule.SA.TimeoutSeconds',
+];
+
+export const ESSENTIAL_PARAMETER_KEY_SET = new Set<string>(ESSENTIAL_PARAMETER_KEYS);
+

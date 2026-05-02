@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { AlertCircle, Check, Clock, Pencil, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, Clock, Pencil, Sparkles, X } from 'lucide-react';
 import type {
   SchedulingAlgorithmConfigDto,
   SchedulingAlgorithmConfigLimits,
@@ -21,7 +21,7 @@ import {
   useUpdateSchedulingAlgorithmConfig,
 } from '../../hooks/useSchedulingAlgorithmConfig';
 import { getErrorMessage } from '../../lib/errorMessage';
-import { ALGORITHM_GROUPS } from './algorithmParameters.constants';
+import { ALGORITHM_GROUPS, ESSENTIAL_PARAMETER_KEYS, ESSENTIAL_PARAMETER_KEY_SET } from './algorithmParameters.constants';
 
 type Notice = { type: 'success' | 'error'; message: string };
 
@@ -29,6 +29,7 @@ export default function AlgorithmParametersPanel() {
   const { data: configs, isLoading, isError } = useSchedulingAlgorithmConfigs();
   const { data: limits } = useSchedulingAlgorithmConfigLimits();
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     if (!notice) return;
@@ -68,8 +69,65 @@ export default function AlgorithmParametersPanel() {
         </AlertDescription>
       </Alert>
 
-      {ALGORITHM_GROUPS.map(group => {
+      {/* ── Sık Ayarlanan ── */}
+      <Card className="border-amber-200 bg-amber-50/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            <span>Sık Ayarlanan</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              ({ESSENTIAL_PARAMETER_KEYS.filter(k => byKey.has(k)).length} ayar)
+            </span>
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Günlük yönetimde en çok değiştirilen ayarlar. İleri ayarlar için aşağıdaki bölümü açın.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Parametre</TableHead>
+                <TableHead className="w-56">Değer</TableHead>
+                <TableHead className="w-20">Tip</TableHead>
+                <TableHead className="w-20 text-right">İşlem</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ESSENTIAL_PARAMETER_KEYS
+                .map(k => byKey.get(k))
+                .filter((c): c is SchedulingAlgorithmConfigDto => c !== undefined)
+                .map(config => (
+                  <ParameterRow
+                    key={config.id}
+                    config={config}
+                    limits={limits}
+                    onNotice={setNotice}
+                  />
+                ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* ── İleri Ayarlar (toggle) ── */}
+      <Button
+        variant="outline"
+        className="w-full justify-between"
+        onClick={() => setAdvancedOpen(o => !o)}
+      >
+        <span className="flex items-center gap-2">
+          <span className="font-medium">İleri Ayarlar</span>
+          <Badge variant="secondary" className="text-[10px]">
+            {ALGORITHM_GROUPS.flatMap(g => g.keys).filter(k => !ESSENTIAL_PARAMETER_KEY_SET.has(k)).length} ayar
+          </Badge>
+        </span>
+        {advancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </Button>
+
+      {advancedOpen && ALGORITHM_GROUPS.map(group => {
         const items = group.keys
+          .filter(k => !ESSENTIAL_PARAMETER_KEY_SET.has(k))
           .map(k => byKey.get(k))
           .filter((c): c is SchedulingAlgorithmConfigDto => c !== undefined);
 
