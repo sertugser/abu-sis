@@ -80,6 +80,8 @@ export default function BulkAdvisorAssignmentPage() {
   const [studentSearch, setStudentSearch] = useState('');
   const [advisorFilterIdText, setAdvisorFilterIdText] = useState('');
   const [advisorFilterType, setAdvisorFilterType] = useState<'assigned' | 'current'>('assigned');
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewPageSize, setPreviewPageSize] = useState(50);
 
   const facultyId = facultyIdText ? Number(facultyIdText) : 0;
   const departmentId = departmentIdText ? Number(departmentIdText) : 0;
@@ -98,6 +100,11 @@ export default function BulkAdvisorAssignmentPage() {
     departmentId > 0 &&
     !Number.isNaN(facultyId) &&
     !Number.isNaN(departmentId);
+
+  const currentPage = previewResult?.page ?? previewPage;
+  const currentPageSize = previewResult?.pageSize ?? previewPageSize;
+  const totalPages = previewResult?.totalPages ?? 0;
+  const totalAssignmentCount = previewResult?.totalAssignmentCount ?? 0;
 
   const getAdvisorCapacity = (advisorId: number) => {
     if (excludedAdvisorIds[advisorId]) return 0;
@@ -164,7 +171,6 @@ export default function BulkAdvisorAssignmentPage() {
 
   const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase('tr-TR');
   const advisorFilterId = advisorFilterIdText ? Number(advisorFilterIdText) : 0;
-  const advisorFilterName = advisorFilterId > 0 ? advisorNameById[advisorFilterId] ?? '' : '';
 
   const filteredAssignments = previewResult
     ? previewResult.assignments.filter((item) => {
@@ -191,8 +197,7 @@ export default function BulkAdvisorAssignmentPage() {
           advisorFilterId <= 0 ||
           (advisorFilterType === 'assigned'
             ? selectedAdvisorId === advisorFilterId
-            : (item.currentAdvisorName ?? '').toLocaleLowerCase('tr-TR') ===
-              advisorFilterName.toLocaleLowerCase('tr-TR'));
+            : item.currentAdvisorId === advisorFilterId);
 
         return matchesStudentSearch && matchesAdvisorFilter;
       })
@@ -206,9 +211,10 @@ export default function BulkAdvisorAssignmentPage() {
     setStudentSearch('');
     setAdvisorFilterIdText('');
     setAdvisorFilterType('assigned');
+    setPreviewPage(1);
   };
 
-  const handlePreview = () => {
+  const handlePreview = (pageToLoad = 1, pageSizeToUse = previewPageSize) => {
     if (!facultyId) {
       alert('Lütfen fakülte seçin.');
       return;
@@ -224,6 +230,8 @@ export default function BulkAdvisorAssignmentPage() {
         departmentId,
         programId: null,
         includeStudentsWithAdvisor,
+        page: pageToLoad,
+        pageSize: pageSizeToUse,
       },
       {
         onSuccess: (data) => {
@@ -251,6 +259,8 @@ export default function BulkAdvisorAssignmentPage() {
           );
 
           setPreviewResult(data);
+          setPreviewPage(data.page);
+          setPreviewPageSize(data.pageSize);
           setSelectedAdvisorIdsByStudent(initialSelections);
           setAdvisorCapacityTexts(initialCapacities);
           setExcludedAdvisorIds(initialExcludedAdvisors);
@@ -271,35 +281,35 @@ export default function BulkAdvisorAssignmentPage() {
       return;
     }
 
-    const advisors = previewResult.advisors.map((advisor) => {
-      const rawCapacity = advisorCapacityTexts[advisor.advisorId]?.trim() ?? '';
+    try {
+      const advisors = previewResult.advisors.map((advisor) => {
+        const rawCapacity = advisorCapacityTexts[advisor.advisorId]?.trim() ?? '';
 
-      let capacity: number | null = null;
+        let capacity: number | null = null;
 
-      if (rawCapacity !== '') {
-        const parsedCapacity = Number(rawCapacity);
+        if (rawCapacity !== '') {
+          const parsedCapacity = Number(rawCapacity);
 
-        if (!Number.isFinite(parsedCapacity) || parsedCapacity < 0) {
-          throw new Error(`${advisor.advisorName} için kontenjan geçerli değil.`);
+          if (!Number.isFinite(parsedCapacity) || parsedCapacity < 0) {
+            throw new Error(`${advisor.advisorName} için kontenjan geçerli değil.`);
+          }
+
+          capacity = Math.floor(parsedCapacity);
         }
 
-        capacity = Math.floor(parsedCapacity);
-      }
+        return {
+          advisorId: advisor.advisorId,
+          isAvailableForAdvisorAssignment: !(excludedAdvisorIds[advisor.advisorId] ?? false),
+          advisorAssignmentCapacity: capacity,
+        };
+      });
 
-      return {
-        advisorId: advisor.advisorId,
-        isAvailableForAdvisorAssignment: !(excludedAdvisorIds[advisor.advisorId] ?? false),
-        advisorAssignmentCapacity: capacity,
-      };
-    });
-
-    try {
       updateAdvisorSettingsMut.mutate(
         { advisors },
         {
           onSuccess: () => {
             alert('Danışman kontenjan ayarları kaydedildi. Önizleme yenileniyor.');
-            handlePreview();
+            handlePreview(currentPage, currentPageSize);
           },
           onError: (error) => {
             alert(getErrorMessage(error, 'Danışman kontenjan ayarları kaydedilemedi.'));
@@ -343,8 +353,8 @@ export default function BulkAdvisorAssignmentPage() {
 
     if (!hasUnlimitedAdvisor && totalFiniteCapacity < previewResult.assignments.length) {
       alert(
-        `Toplam danışman kontenjanı yetersiz.\n` +
-          `Atanacak öğrenci: ${previewResult.assignments.length}\n` +
+        `Bu sayfadaki öğrenciler için toplam danışman kontenjanı yetersiz.\n` +
+          `Bu sayfadaki atanacak öğrenci: ${previewResult.assignments.length}\n` +
           `Toplam kontenjan: ${totalFiniteCapacity}`
       );
       return;
@@ -389,7 +399,7 @@ export default function BulkAdvisorAssignmentPage() {
     }
 
     setSelectedAdvisorIdsByStudent(newSelections);
-    alert('Kontenjanlara göre yeniden dağıtım yapıldı.');
+    alert('Bu sayfadaki öğrenciler kontenjanlara göre yeniden dağıtıldı.');
   };
 
   const handleApply = () => {
@@ -411,7 +421,7 @@ export default function BulkAdvisorAssignmentPage() {
     }));
 
     const confirmed = window.confirm(
-      `${assignmentsToApply.length} öğrenci için danışman ataması uygulanacak. Onaylıyor musunuz?`
+      `Bu sayfadaki ${assignmentsToApply.length} öğrenci için danışman ataması uygulanacak. Onaylıyor musunuz?`
     );
 
     if (!confirmed) return;
@@ -428,13 +438,28 @@ export default function BulkAdvisorAssignmentPage() {
               `Atlanan: ${data.skippedCount}`
           );
 
-          resetPreviewState();
+          handlePreview(currentPage, currentPageSize);
         },
         onError: (error) => {
           alert(getErrorMessage(error, 'Danışman atamaları uygulanamadı.'));
         },
       }
     );
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (!previewResult) return;
+    if (newPage < 1 || newPage > previewResult.totalPages) return;
+
+    handlePreview(newPage, currentPageSize);
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPreviewPageSize(newPageSize);
+
+    if (previewResult) {
+      handlePreview(1, newPageSize);
+    }
   };
 
   return (
@@ -446,7 +471,7 @@ export default function BulkAdvisorAssignmentPage() {
             <h2 className="font-heading text-lg font-semibold">Atama Kriterleri</h2>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label>Fakülte</Label>
               <select
@@ -537,6 +562,22 @@ export default function BulkAdvisorAssignmentPage() {
                 Kapalıysa öğrenciler mevcut danışmanlarıyla devam eder.
               </p>
             </div>
+
+            <div className="space-y-2">
+              <Label>Sayfa Başına Öğrenci</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={previewPageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Büyük listeler sayfalı olarak yüklenir.
+              </p>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -553,7 +594,7 @@ export default function BulkAdvisorAssignmentPage() {
             </Button>
 
             <Button
-              onClick={handlePreview}
+              onClick={() => handlePreview(1, previewPageSize)}
               disabled={!canPreview || previewMut.isPending}
               className="gap-1.5"
             >
@@ -570,7 +611,7 @@ export default function BulkAdvisorAssignmentPage() {
 
       {previewResult && (
         <>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card>
               <CardContent className="p-4">
                 <p className="text-sm text-muted-foreground">Bölüm</p>
@@ -591,7 +632,14 @@ export default function BulkAdvisorAssignmentPage() {
 
             <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-muted-foreground">Planlanan Atama</p>
+                <p className="text-sm text-muted-foreground">Atanabilir Öğrenci</p>
+                <p className="text-2xl font-bold">{previewResult.totalAssignmentCount}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-muted-foreground">Bu Sayfadaki Atama</p>
                 <p className="text-2xl font-bold">{previewResult.plannedAssignmentCount}</p>
               </CardContent>
             </Card>
@@ -688,7 +736,7 @@ export default function BulkAdvisorAssignmentPage() {
                         Bu Atamadaki Kontenjan
                       </th>
                       <th className="text-center px-4 py-3 font-medium text-muted-foreground">
-                        Bu Önizlemede Seçilen
+                        Bu Sayfada Seçilen
                       </th>
                     </tr>
                   </thead>
@@ -777,8 +825,8 @@ export default function BulkAdvisorAssignmentPage() {
                 </div>
                 <Badge variant="secondary">
                   {studentSearch.trim() || advisorFilterIdText
-                    ? `${filteredAssignments.length}/${previewResult.assignments.length} öğrenci`
-                    : `${previewResult.assignments.length} öğrenci`}
+                    ? `${filteredAssignments.length}/${previewResult.assignments.length} bu sayfa`
+                    : `${previewResult.assignments.length}/${totalAssignmentCount} öğrenci`}
                 </Badge>
               </div>
 
@@ -788,7 +836,7 @@ export default function BulkAdvisorAssignmentPage() {
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <input
                       className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      placeholder="Öğrenci adı, soyadı veya numarası ara..."
+                      placeholder="Bu sayfada öğrenci adı, soyadı veya numarası ara..."
                       value={studentSearch}
                       onChange={(e) => setStudentSearch(e.target.value)}
                     />
@@ -818,7 +866,7 @@ export default function BulkAdvisorAssignmentPage() {
                 </div>
 
                 <p className="text-xs text-muted-foreground">
-                  Arama ve danışman filtresi yalnızca tabloyu filtreler. Onayla ve Ata işlemi önizlemedeki seçili danışman atamalarını uygular.
+                  Arama ve danışman filtresi yalnızca mevcut sayfadaki tabloyu filtreler. Büyük öğrenci listeleri backend tarafında sayfalı getirilir.
                 </p>
               </div>
 
@@ -916,33 +964,55 @@ export default function BulkAdvisorAssignmentPage() {
                 </table>
               </div>
 
-              <div className="flex items-center justify-end gap-2 p-4 border-t bg-muted/20">
-                <Button
-                  variant="outline"
-                  onClick={handlePreview}
-                  disabled={!canPreview || previewMut.isPending}
-                  className="gap-1.5"
-                >
-                  {previewMut.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  Yeniden Önizle
-                </Button>
+              <div className="flex flex-col gap-3 border-t bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Sayfa {totalPages === 0 ? 0 : currentPage} / {totalPages} · Toplam atanabilir öğrenci: {totalAssignmentCount}
+                </div>
 
-                <Button
-                  onClick={handleApply}
-                  disabled={!canApply}
-                  className="gap-1.5"
-                >
-                  {applyMut.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
-                  Onayla ve Ata
-                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={previewMut.isPending || currentPage <= 1}
+                  >
+                    Önceki
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={previewMut.isPending || totalPages === 0 || currentPage >= totalPages}
+                  >
+                    Sonraki
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePreview(currentPage, currentPageSize)}
+                    disabled={!canPreview || previewMut.isPending}
+                    className="gap-1.5"
+                  >
+                    {previewMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    Yeniden Önizle
+                  </Button>
+
+                  <Button
+                    onClick={handleApply}
+                    disabled={!canApply}
+                    className="gap-1.5"
+                  >
+                    {applyMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    Bu Sayfayı Onayla ve Ata
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

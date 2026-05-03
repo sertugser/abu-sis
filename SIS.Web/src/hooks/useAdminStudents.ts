@@ -56,6 +56,8 @@ export interface BulkAdvisorAssignmentPreviewRequest {
   departmentId: number;
   programId?: number | null;
   includeStudentsWithAdvisor: boolean;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface BulkAdvisorAssignmentApplyRequest {
@@ -103,6 +105,10 @@ export interface BulkAdvisorAssignmentPreviewResponse {
   totalStudentCount: number;
   plannedAssignmentCount: number;
   alreadyAssignedCount: number;
+  page: number;
+  pageSize: number;
+  totalAssignmentCount: number;
+  totalPages: number;
   advisors: BulkAdvisorCandidate[];
   assignments: BulkAdvisorAssignmentPreviewItem[];
   warnings: string[];

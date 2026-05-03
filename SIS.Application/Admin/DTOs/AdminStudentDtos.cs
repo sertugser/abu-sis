@@ -61,7 +61,9 @@ public record CreateStudentDto(
 public record BulkAdvisorAssignmentPreviewRequestDto(
     int DepartmentId,
     int? ProgramId,
-    bool IncludeStudentsWithAdvisor = false
+    bool IncludeStudentsWithAdvisor = false,
+    int Page = 1,
+    int PageSize = 50
 );
 
 public record BulkAdvisorAssignmentApplyRequestDto(
@@ -81,6 +83,10 @@ public record BulkAdvisorAssignmentPreviewResponseDto(
     int TotalStudentCount,
     int PlannedAssignmentCount,
     int AlreadyAssignedCount,
+    int Page,
+    int PageSize,
+    int TotalAssignmentCount,
+    int TotalPages,
     IReadOnlyList<BulkAdvisorCandidateDto> Advisors,
     IReadOnlyList<BulkAdvisorAssignmentPreviewItemDto> Assignments,
     IReadOnlyList<string> Warnings

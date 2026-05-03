@@ -264,256 +264,344 @@ public class AdminStudentService : IAdminStudentService
     }
 
     public async Task<BulkAdvisorAssignmentPreviewResponseDto> PreviewBulkAdvisorAssignmentAsync(
-        BulkAdvisorAssignmentPreviewRequestDto dto)
+    BulkAdvisorAssignmentPreviewRequestDto dto)
+{
+    var page = dto.Page < 1 ? 1 : dto.Page;
+    var pageSize = dto.PageSize <= 0 ? 50 : Math.Min(dto.PageSize, 100);
+
+    var department = await _context.Departments
+        .AsNoTracking()
+        .FirstOrDefaultAsync(d => d.Id == dto.DepartmentId)
+        ?? throw new KeyNotFoundException($"Bölüm bulunamadı: {dto.DepartmentId}");
+
+    AcademicProgram? selectedProgram = null;
+
+    if (dto.ProgramId.HasValue)
     {
-        var department = await _context.Departments
+        selectedProgram = await _context.AcademicPrograms
             .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == dto.DepartmentId)
-            ?? throw new KeyNotFoundException($"Bölüm bulunamadı: {dto.DepartmentId}");
+            .FirstOrDefaultAsync(p => p.Id == dto.ProgramId.Value)
+            ?? throw new KeyNotFoundException($"Program bulunamadı: {dto.ProgramId.Value}");
 
-        AcademicProgram? selectedProgram = null;
+        if (selectedProgram.DepartmentId != dto.DepartmentId)
+            throw new InvalidOperationException("Seçilen program bu bölüme ait değil.");
+    }
 
-        if (dto.ProgramId.HasValue)
-        {
-            selectedProgram = await _context.AcademicPrograms
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == dto.ProgramId.Value)
-                ?? throw new KeyNotFoundException($"Program bulunamadı: {dto.ProgramId.Value}");
+    var warnings = new List<string>();
 
-            if (selectedProgram.DepartmentId != dto.DepartmentId)
-                throw new InvalidOperationException("Seçilen program bu bölüme ait değil.");
-        }
-
-        var advisors = await _context.Instructors
-            .AsNoTracking()
-            .Include(i => i.Department)
-            .Where(i => i.DepartmentId == dto.DepartmentId)
-            .OrderBy(i => i.Id)
-            .ToListAsync();
-
-        var warnings = new List<string>();
-
-        if (advisors.Count == 0)
-        {
-            warnings.Add("Bu bölümde danışman olarak atanabilecek öğretim üyesi bulunamadı.");
-
-            return new BulkAdvisorAssignmentPreviewResponseDto(
-                department.Id,
-                department.Name,
-                selectedProgram?.Id,
-                selectedProgram?.Name,
-                0,
-                0,
-                0,
-                new List<BulkAdvisorCandidateDto>(),
-                new List<BulkAdvisorAssignmentPreviewItemDto>(),
-                warnings
-            );
-        }
-
-        var advisorUserIds = advisors.Select(a => a.UserId).ToList();
-
-        var advisorUsers = await _context.Set<ApplicationUser>()
-            .AsNoTracking()
-            .Where(u => advisorUserIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id);
-
-        var advisorIds = advisors.Select(a => a.Id).ToList();
-
-        var currentAdvisorLoads = await _context.Students
-            .AsNoTracking()
-            .Where(s => s.AdvisorId.HasValue && advisorIds.Contains(s.AdvisorId.Value))
-            .GroupBy(s => s.AdvisorId!.Value)
-            .Select(g => new
-            {
-                AdvisorId = g.Key,
-                Count = g.Count()
-            })
-            .ToDictionaryAsync(x => x.AdvisorId, x => x.Count);
-
-        var studentsQuery = _context.Students
-            .Include(s => s.StudentPrograms)
-                .ThenInclude(sp => sp.Program)
-                    .ThenInclude(p => p.Department)
-            .Include(s => s.Advisor)
-            .AsQueryable();
-
-        studentsQuery = studentsQuery.Where(s =>
+    var studentsBaseQuery = _context.Students
+        .AsNoTracking()
+        .Where(s =>
             s.Status == StudentStatus.Active &&
             s.StudentPrograms.Any(sp =>
                 sp.IsActive &&
                 sp.Type == StudentProgramType.Main &&
                 sp.Program.DepartmentId == dto.DepartmentId));
 
-        if (dto.ProgramId.HasValue)
-        {
-            studentsQuery = studentsQuery.Where(s =>
-                s.StudentPrograms.Any(sp =>
-                    sp.IsActive &&
-                    sp.Type == StudentProgramType.Main &&
-                    sp.ProgramId == dto.ProgramId.Value));
-        }
-
-        var allMatchingStudents = await studentsQuery
-            .OrderBy(s => s.CompletedSemesters)
-            .ThenBy(s => s.StudentNumber)
-            .ToListAsync();
-
-        var alreadyAssignedCount = allMatchingStudents.Count(s => s.AdvisorId.HasValue);
-
-        var studentsToAssign = dto.IncludeStudentsWithAdvisor
-            ? allMatchingStudents
-            : allMatchingStudents.Where(s => !s.AdvisorId.HasValue).ToList();
-
-        if (studentsToAssign.Count == 0)
-        {
-            warnings.Add(dto.IncludeStudentsWithAdvisor
-                ? "Bu filtreye uygun öğrenci bulunamadı."
-                : "Bu filtreye uygun danışmansız öğrenci bulunamadı. Mevcut danışmanlar korunuyor.");
-
-            var emptyAdvisorDtos = advisors.Select(advisor =>
-            {
-                advisorUsers.TryGetValue(advisor.UserId, out var advisorUser);
-                var currentCount = currentAdvisorLoads.GetValueOrDefault(advisor.Id);
-
-                return new BulkAdvisorCandidateDto(
-                    advisor.Id,
-                    advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : $"Danışman #{advisor.Id}",
-                    advisor.DepartmentId,
-                    advisor.Department?.Name ?? department.Name,
-                    currentCount,
-                    0,
-                    currentCount,
-                    advisor.IsAvailableForAdvisorAssignment != false,
-                    advisor.AdvisorAssignmentCapacity
-                );
-            }).ToList();
-
-            return new BulkAdvisorAssignmentPreviewResponseDto(
-                department.Id,
-                department.Name,
-                selectedProgram?.Id,
-                selectedProgram?.Name,
-                allMatchingStudents.Count,
-                0,
-                alreadyAssignedCount,
-                emptyAdvisorDtos,
-                new List<BulkAdvisorAssignmentPreviewItemDto>(),
-                warnings
-            );
-        }
-
-        var studentUserIds = studentsToAssign.Select(s => s.UserId).ToList();
-
-        var studentUsers = await _context.Set<ApplicationUser>()
-            .AsNoTracking()
-            .Where(u => studentUserIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id);
-
-        var currentAdvisorIds = studentsToAssign
-            .Where(s => s.AdvisorId.HasValue)
-            .Select(s => s.AdvisorId!.Value)
-            .Distinct()
-            .ToList();
-
-        var currentAdvisorUsers = await _context.Instructors
-            .AsNoTracking()
-            .Where(i => currentAdvisorIds.Contains(i.Id))
-            .Join(
-                _context.Set<ApplicationUser>().AsNoTracking(),
-                instructor => instructor.UserId,
-                user => user.Id,
-                (instructor, user) => new
-                {
-                    InstructorId = instructor.Id,
-                    AdvisorName = $"{user.FirstName} {user.LastName}"
-                })
-            .ToDictionaryAsync(x => x.InstructorId, x => x.AdvisorName);
-
-        var plannedLoads = advisors.ToDictionary(a => a.Id, _ => 0);
-
-        var assignments = new List<BulkAdvisorAssignmentPreviewItemDto>();
-
-        foreach (var student in studentsToAssign)
-        {
-            var activeProgram = student.StudentPrograms.First(sp =>
+    if (dto.ProgramId.HasValue)
+    {
+        studentsBaseQuery = studentsBaseQuery.Where(s =>
+            s.StudentPrograms.Any(sp =>
                 sp.IsActive &&
-                sp.Type == StudentProgramType.Main);
+                sp.Type == StudentProgramType.Main &&
+                sp.ProgramId == dto.ProgramId.Value));
+    }
 
-            var selectedAdvisor = advisors
-                .OrderBy(a => currentAdvisorLoads.GetValueOrDefault(a.Id) + plannedLoads[a.Id])
-                .ThenBy(a => plannedLoads[a.Id])
-                .ThenBy(a => a.Id)
-                .First();
+    var totalStudentCount = await studentsBaseQuery.CountAsync();
 
-            plannedLoads[selectedAdvisor.Id]++;
+    var alreadyAssignedCount = await studentsBaseQuery
+        .CountAsync(s => s.AdvisorId.HasValue);
 
-            studentUsers.TryGetValue(student.UserId, out var studentUser);
-            advisorUsers.TryGetValue(selectedAdvisor.UserId, out var selectedAdvisorUser);
+    var studentsToAssignQuery = dto.IncludeStudentsWithAdvisor
+        ? studentsBaseQuery
+        : studentsBaseQuery.Where(s => !s.AdvisorId.HasValue);
 
-            string? currentAdvisorName = null;
-            if (student.AdvisorId.HasValue)
-                currentAdvisorUsers.TryGetValue(student.AdvisorId.Value, out currentAdvisorName);
+    var totalAssignmentCount = await studentsToAssignQuery.CountAsync();
 
-            var reason = student.AdvisorId.HasValue
-                ? "Mevcut danışman yeniden dağıtıma dahil edildi."
-                : "Danışmansız öğrenci en uygun danışmana önerildi.";
+    var totalPages = totalAssignmentCount == 0
+        ? 0
+        : (int)Math.Ceiling(totalAssignmentCount / (double)pageSize);
 
-            assignments.Add(new BulkAdvisorAssignmentPreviewItemDto(
-                student.Id,
-                student.StudentNumber,
-                studentUser != null ? $"{studentUser.FirstName} {studentUser.LastName}" : $"Öğrenci #{student.Id}",
-                activeProgram.ProgramId,
-                activeProgram.Program?.Name ?? "-",
-                activeProgram.Program?.DepartmentId ?? dto.DepartmentId,
-                activeProgram.Program?.Department?.Name ?? department.Name,
-                student.CompletedSemesters,
-                student.AdvisorId,
-                currentAdvisorName,
-                selectedAdvisor.Id,
-                selectedAdvisorUser != null ? $"{selectedAdvisorUser.FirstName} {selectedAdvisorUser.LastName}" : $"Danışman #{selectedAdvisor.Id}",
-                reason
-            ));
-        }
+    if (totalPages > 0 && page > totalPages)
+        page = totalPages;
 
-        var advisorDtos = advisors.Select(advisor =>
-        {
-            advisorUsers.TryGetValue(advisor.UserId, out var advisorUser);
+    var advisors = await _context.Instructors
+        .AsNoTracking()
+        .Include(i => i.Department)
+        .Where(i => i.DepartmentId == dto.DepartmentId)
+        .OrderBy(i => i.Id)
+        .ToListAsync();
 
-            var currentCount = currentAdvisorLoads.GetValueOrDefault(advisor.Id);
-            var plannedNewCount = plannedLoads.GetValueOrDefault(advisor.Id);
-
-            return new BulkAdvisorCandidateDto(
-              advisor.Id,
-              advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : $"Danışman #{advisor.Id}",
-              advisor.DepartmentId,
-              advisor.Department?.Name ?? department.Name,
-              currentCount,
-              0,
-              currentCount,
-              advisor.IsAvailableForAdvisorAssignment != false,
-              advisor.AdvisorAssignmentCapacity
-             );
-        }).ToList();
-
-        if (!dto.IncludeStudentsWithAdvisor && alreadyAssignedCount > 0)
-        {
-            warnings.Add($"{alreadyAssignedCount} öğrencinin mevcut danışmanı korundu.");
-        }
+    if (advisors.Count == 0)
+    {
+        warnings.Add("Bu bölümde danışman olarak atanabilecek öğretim üyesi bulunamadı.");
 
         return new BulkAdvisorAssignmentPreviewResponseDto(
             department.Id,
             department.Name,
             selectedProgram?.Id,
             selectedProgram?.Name,
-            allMatchingStudents.Count,
-            assignments.Count,
+            totalStudentCount,
+            0,
             alreadyAssignedCount,
-            advisorDtos,
-            assignments,
+            page,
+            pageSize,
+            totalAssignmentCount,
+            totalPages,
+            new List<BulkAdvisorCandidateDto>(),
+            new List<BulkAdvisorAssignmentPreviewItemDto>(),
             warnings
         );
     }
+
+    var advisorUserIds = advisors.Select(a => a.UserId).ToList();
+
+    var advisorUsers = await _context.Set<ApplicationUser>()
+        .AsNoTracking()
+        .Where(u => advisorUserIds.Contains(u.Id))
+        .ToDictionaryAsync(u => u.Id);
+
+    var advisorIds = advisors.Select(a => a.Id).ToList();
+
+    var currentAdvisorLoads = await _context.Students
+        .AsNoTracking()
+        .Where(s => s.AdvisorId.HasValue && advisorIds.Contains(s.AdvisorId.Value))
+        .GroupBy(s => s.AdvisorId!.Value)
+        .Select(g => new
+        {
+            AdvisorId = g.Key,
+            Count = g.Count()
+        })
+        .ToDictionaryAsync(x => x.AdvisorId, x => x.Count);
+
+    if (totalAssignmentCount == 0)
+    {
+        warnings.Add(dto.IncludeStudentsWithAdvisor
+            ? "Bu filtreye uygun öğrenci bulunamadı."
+            : "Bu filtreye uygun danışmansız öğrenci bulunamadı. Mevcut danışmanlar korunuyor.");
+
+        var emptyAdvisorDtos = advisors.Select(advisor =>
+        {
+            advisorUsers.TryGetValue(advisor.UserId, out var advisorUser);
+            var currentCount = currentAdvisorLoads.GetValueOrDefault(advisor.Id);
+
+            return new BulkAdvisorCandidateDto(
+                advisor.Id,
+                advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : $"Danışman #{advisor.Id}",
+                advisor.DepartmentId,
+                advisor.Department?.Name ?? department.Name,
+                currentCount,
+                0,
+                currentCount,
+                advisor.IsAvailableForAdvisorAssignment != false,
+                advisor.AdvisorAssignmentCapacity
+            );
+        }).ToList();
+
+        return new BulkAdvisorAssignmentPreviewResponseDto(
+            department.Id,
+            department.Name,
+            selectedProgram?.Id,
+            selectedProgram?.Name,
+            totalStudentCount,
+            0,
+            alreadyAssignedCount,
+            page,
+            pageSize,
+            totalAssignmentCount,
+            totalPages,
+            emptyAdvisorDtos,
+            new List<BulkAdvisorAssignmentPreviewItemDto>(),
+            warnings
+        );
+    }
+
+    var availableAdvisors = advisors
+        .Where(a => a.IsAvailableForAdvisorAssignment != false)
+        .Where(a => !a.AdvisorAssignmentCapacity.HasValue || a.AdvisorAssignmentCapacity.Value > 0)
+        .ToList();
+
+    if (availableAdvisors.Count == 0)
+    {
+        warnings.Add("Bu bölümde otomatik danışman ataması için uygun veya kontenjanı olan öğretim üyesi bulunamadı.");
+
+        var advisorDtosWithoutAssignments = advisors.Select(advisor =>
+        {
+            advisorUsers.TryGetValue(advisor.UserId, out var advisorUser);
+            var currentCount = currentAdvisorLoads.GetValueOrDefault(advisor.Id);
+
+            return new BulkAdvisorCandidateDto(
+                advisor.Id,
+                advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : $"Danışman #{advisor.Id}",
+                advisor.DepartmentId,
+                advisor.Department?.Name ?? department.Name,
+                currentCount,
+                0,
+                currentCount,
+                advisor.IsAvailableForAdvisorAssignment != false,
+                advisor.AdvisorAssignmentCapacity
+            );
+        }).ToList();
+
+        return new BulkAdvisorAssignmentPreviewResponseDto(
+            department.Id,
+            department.Name,
+            selectedProgram?.Id,
+            selectedProgram?.Name,
+            totalStudentCount,
+            0,
+            alreadyAssignedCount,
+            page,
+            pageSize,
+            totalAssignmentCount,
+            totalPages,
+            advisorDtosWithoutAssignments,
+            new List<BulkAdvisorAssignmentPreviewItemDto>(),
+            warnings
+        );
+    }
+
+    var studentsPage = await studentsToAssignQuery
+        .Include(s => s.StudentPrograms)
+            .ThenInclude(sp => sp.Program)
+                .ThenInclude(p => p.Department)
+        .Include(s => s.Advisor)
+        .OrderBy(s => s.CompletedSemesters)
+        .ThenBy(s => s.StudentNumber)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToListAsync();
+
+    var studentUserIds = studentsPage.Select(s => s.UserId).ToList();
+
+    var studentUsers = await _context.Set<ApplicationUser>()
+        .AsNoTracking()
+        .Where(u => studentUserIds.Contains(u.Id))
+        .ToDictionaryAsync(u => u.Id);
+
+    var currentAdvisorIds = studentsPage
+        .Where(s => s.AdvisorId.HasValue)
+        .Select(s => s.AdvisorId!.Value)
+        .Distinct()
+        .ToList();
+
+    var currentAdvisorUsers = await _context.Instructors
+        .AsNoTracking()
+        .Where(i => currentAdvisorIds.Contains(i.Id))
+        .Join(
+            _context.Set<ApplicationUser>().AsNoTracking(),
+            instructor => instructor.UserId,
+            user => user.Id,
+            (instructor, user) => new
+            {
+                InstructorId = instructor.Id,
+                AdvisorName = $"{user.FirstName} {user.LastName}"
+            })
+        .ToDictionaryAsync(x => x.InstructorId, x => x.AdvisorName);
+
+    var plannedLoads = advisors.ToDictionary(a => a.Id, _ => 0);
+
+    var assignments = new List<BulkAdvisorAssignmentPreviewItemDto>();
+    var skippedBecauseOfCapacity = 0;
+
+    foreach (var student in studentsPage)
+    {
+        var activeProgram = student.StudentPrograms.First(sp =>
+            sp.IsActive &&
+            sp.Type == StudentProgramType.Main);
+
+        var selectedAdvisor = availableAdvisors
+            .Where(a =>
+                !a.AdvisorAssignmentCapacity.HasValue ||
+                plannedLoads[a.Id] < a.AdvisorAssignmentCapacity.Value)
+            .OrderBy(a => currentAdvisorLoads.GetValueOrDefault(a.Id) + plannedLoads[a.Id])
+            .ThenBy(a => plannedLoads[a.Id])
+            .ThenBy(a => a.Id)
+            .FirstOrDefault();
+
+        if (selectedAdvisor == null)
+        {
+            skippedBecauseOfCapacity++;
+            continue;
+        }
+
+        plannedLoads[selectedAdvisor.Id]++;
+
+        studentUsers.TryGetValue(student.UserId, out var studentUser);
+        advisorUsers.TryGetValue(selectedAdvisor.UserId, out var selectedAdvisorUser);
+
+        string? currentAdvisorName = null;
+        if (student.AdvisorId.HasValue)
+            currentAdvisorUsers.TryGetValue(student.AdvisorId.Value, out currentAdvisorName);
+
+        var reason = student.AdvisorId.HasValue
+            ? "Mevcut danışman yeniden dağıtıma dahil edildi."
+            : "Danışmansız öğrenci en uygun danışmana önerildi.";
+
+        assignments.Add(new BulkAdvisorAssignmentPreviewItemDto(
+            student.Id,
+            student.StudentNumber,
+            studentUser != null ? $"{studentUser.FirstName} {studentUser.LastName}" : $"Öğrenci #{student.Id}",
+            activeProgram.ProgramId,
+            activeProgram.Program?.Name ?? "-",
+            activeProgram.Program?.DepartmentId ?? dto.DepartmentId,
+            activeProgram.Program?.Department?.Name ?? department.Name,
+            student.CompletedSemesters,
+            student.AdvisorId,
+            currentAdvisorName,
+            selectedAdvisor.Id,
+            selectedAdvisorUser != null ? $"{selectedAdvisorUser.FirstName} {selectedAdvisorUser.LastName}" : $"Danışman #{selectedAdvisor.Id}",
+            reason
+        ));
+    }
+
+    if (skippedBecauseOfCapacity > 0)
+    {
+        warnings.Add($"{skippedBecauseOfCapacity} öğrenci için kontenjan yetersiz olduğu için otomatik öneri üretilemedi.");
+    }
+
+    var advisorDtos = advisors.Select(advisor =>
+    {
+        advisorUsers.TryGetValue(advisor.UserId, out var advisorUser);
+
+        var currentCount = currentAdvisorLoads.GetValueOrDefault(advisor.Id);
+        var plannedNewCount = plannedLoads.GetValueOrDefault(advisor.Id);
+
+        return new BulkAdvisorCandidateDto(
+            advisor.Id,
+            advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : $"Danışman #{advisor.Id}",
+            advisor.DepartmentId,
+            advisor.Department?.Name ?? department.Name,
+            currentCount,
+            plannedNewCount,
+            currentCount + plannedNewCount,
+            advisor.IsAvailableForAdvisorAssignment != false,
+            advisor.AdvisorAssignmentCapacity
+        );
+    }).ToList();
+
+    if (!dto.IncludeStudentsWithAdvisor && alreadyAssignedCount > 0)
+    {
+        warnings.Add($"{alreadyAssignedCount} öğrencinin mevcut danışmanı korundu.");
+    }
+
+    return new BulkAdvisorAssignmentPreviewResponseDto(
+        department.Id,
+        department.Name,
+        selectedProgram?.Id,
+        selectedProgram?.Name,
+        totalStudentCount,
+        assignments.Count,
+        alreadyAssignedCount,
+        page,
+        pageSize,
+        totalAssignmentCount,
+        totalPages,
+        advisorDtos,
+        assignments,
+        warnings
+    );
+}
 
     public async Task<BulkAdvisorAssignmentApplyResponseDto> ApplyBulkAdvisorAssignmentAsync(
         BulkAdvisorAssignmentApplyRequestDto dto)
