@@ -52,6 +52,7 @@ public sealed class AutoScheduleEngine
         var candMaxCombinations = await _configProvider.GetIntAsync("Schedule.Candidate.MaxCombinations", 500, ct);
         var candMaxWindowsPerDay = await _configProvider.GetIntAsync("Schedule.Candidate.MaxWindowsPerDay", 10, ct);
         var candMaxClassroomsPerType = await _configProvider.GetIntAsync("Schedule.Candidate.MaxClassroomsPerType", 25, ct);
+        var labMaxBlockHours = await _configProvider.GetIntAsync("Schedule.Lab.MaxBlockHours", 2, ct);
         var lnsTimeoutSeconds = await _configProvider.GetIntAsync("Schedule.LNS.TimeoutSeconds", 30, ct);
         var lnsDestroySize = await _configProvider.GetIntAsync("Schedule.LNS.DestroySize", 8, ct);
 
@@ -236,6 +237,7 @@ public sealed class AutoScheduleEngine
                 courseMetadata.SuggestedSemestersByDepartment,
                 courseMetadata.AccessibleDepartments);
             baseSnapshot.CohortConflictPairs = cohortAssignment.ConflictPairs;
+            baseSnapshot.AdjacentYearSoftPairs = cohortAssignment.AdjacentYearSoftPairs;
         }
         else if (constraintConfig.CurriculumConflictMode == "enrollment")
         {
@@ -294,7 +296,7 @@ public sealed class AutoScheduleEngine
         // 10. Run ConstructionSolver
         var candidateGen = new CandidateGenerator();
         // Faz 2: config'ten gelen limitleri uygula (eski hardcoded sabitler yerine)
-        candidateGen.Configure(candMaxCombinations, candMaxWindowsPerDay, candMaxClassroomsPerType);
+        candidateGen.Configure(candMaxCombinations, candMaxWindowsPerDay, candMaxClassroomsPerType, labMaxBlockHours);
         var constructionSolver = new ConstructionSolver(candidateGen, _constraintService);
 
         var constructionResult = constructionSolver.Solve(

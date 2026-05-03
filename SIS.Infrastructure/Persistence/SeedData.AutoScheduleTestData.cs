@@ -659,17 +659,22 @@ public static partial class SeedData
 
     private static async Task<int> EnsureCoursesAsync(AppDbContext context)
     {
-        // Mevcut kursları code → entity map'ine al (upsert için tracked)
-        var existingByCode = await context.Courses
-            .ToDictionaryAsync(c => c.Code, c => c, StringComparer.OrdinalIgnoreCase);
+        // SADECE eksik test kurslarını ekler. Mevcut kursları DOKUNMAZ — admin UI'dan
+        // saat/isim/tip değiştirilebilsin diye seed override etmiyor (DB authoritative).
+        var existingCodes = (await context.Courses
+            .AsNoTracking()
+            .Select(c => c.Code)
+            .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var deptByCode = await context.Departments
             .AsNoTracking()
             .ToDictionaryAsync(d => d.Code, d => d.Id);
 
-        var changed = 0;
+        var added = 0;
         foreach (var def in _testCourses)
         {
+            if (existingCodes.Contains(def.Code)) continue;
             if (!deptByCode.TryGetValue(def.DeptCode, out var deptId))
             {
                 throw new InvalidOperationException(
@@ -677,34 +682,9 @@ public static partial class SeedData
                     "Run academic structure seed first (SeedAcademicStructureAsync).");
             }
 
-            if (existingByCode.TryGetValue(def.Code, out var existing))
-            {
-                // Saat veya tür değişti mi? Test verisinin authoritative kaynağı _testCourses array'i;
-                // burada güncelle ki yeniden seed çağrısı saat düzeltmesini DB'ye yansıtsın.
-                var dirty = existing.Name != def.Name
-                    || existing.TheoryHours != def.TheoryHours
-                    || existing.LabHours != def.LabHours
-                    || existing.TheoryClassroomType != def.TheoryType
-                    || existing.LabClassroomType != def.LabType
-                    || existing.DepartmentId != deptId;
-
-                if (dirty)
-                {
-                    existing.Name = def.Name;
-                    existing.TheoryHours = def.TheoryHours;
-                    existing.LabHours = def.LabHours;
-                    existing.Ects = (def.TheoryHours + def.LabHours) * 2;
-                    existing.TheoryClassroomType = def.TheoryType;
-                    existing.LabClassroomType = def.LabType;
-                    existing.DepartmentId = deptId;
-                    changed++;
-                }
-                continue;
-            }
-
             try
             {
-                var course = new Course
+                context.Courses.Add(new Course
                 {
                     Code = def.Code,
                     Name = def.Name,
@@ -719,20 +699,17 @@ public static partial class SeedData
                     Language = CourseLanguage.Turkish,
                     TeachingMethod = TeachingMethod.FaceToFace,
                     Level = CourseLevel.Undergraduate,
-                };
-                context.Courses.Add(course);
-                existingByCode[def.Code] = course;
-                changed++;
+                });
+                await context.SaveChangesAsync();
+                added++;
+                existingCodes.Add(def.Code);
             }
             catch (DbUpdateException)
             {
                 context.ChangeTracker.Clear();
             }
         }
-
-        if (changed > 0)
-            await context.SaveChangesAsync();
-        return changed;
+        return added;
     }
 
     private static async Task<int> EnsureSectionsAsync(AppDbContext context)

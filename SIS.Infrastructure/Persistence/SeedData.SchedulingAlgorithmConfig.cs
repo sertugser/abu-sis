@@ -55,11 +55,22 @@ public static partial class SeedData
             new() { Key = "Schedule.Candidate.MaxWindowsPerDay", Value = "10", Category = "Other", DataType = "int", Description = "Bir derslik bir günde en fazla kaç saat aralığı önersin. Düşük = hızlı, ama bazı uygun saatler atlanır. Eski default: 5." },
             new() { Key = "Schedule.Candidate.MaxClassroomsPerType", Value = "25", Category = "Other", DataType = "int", Description = "Bir ders için en fazla kaç farklı derslik aday olarak değerlendirilsin. Eski default: 10 (14 dersliği olan fakültede 4'ü dışlıyordu)." },
 
+            // Lab time-split sınırı: 2 saatten uzun lab'lar bu değer kadar saatlik bloklara bölünür ve
+            // farklı günlere dağıtılır. Default 2: 4 saat lab → 2+2 farklı günde, 6 saat → 2+2+2.
+            // Yüksek değer = daha az bölünme. 0 veya >totalLabHours → bölünme kapalı.
+            new() { Key = "Schedule.Lab.MaxBlockHours", Value = "2", Category = "Other", DataType = "int", Description = "Lab dersi kaç saatlik bloklara bölünsün. 2 saatten uzun lab'lar bu değer kadar bloklara bölünüp farklı günlere dağıtılır. Default 2." },
+
             // Track/Cohort tabanlı müfredat çakışma kontrolü.
             //   "curriculum" (eski default): aynı bölüm/yıl müfredat'ında ders-bazlı ANY çakışma → fail (çok agresif).
             //   "cohort": section'ları (Dept, Year) gruplarına ayırıp aynı cohort içindeki farklı kurs section'ları arası çakışma → fail (alternatif-aware).
             //   "enrollment": gerçek öğrenci kayıt verisinden çıkarılan çakışma çiftleri.
             new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "H5 müfredat çakışma kontrolü modu. 'cohort' önerilen — section'ların alternatif olduğunu bilir, gerçek üniversite gibi çakışma kontrolü yapar." },
+
+            // S20 — Komşu Yıl Çakışma SOFT penalty.
+            // Aynı bölüm + |year_diff|=1 ders çiftlerinde modulo eşleşmiş sec_i↔sec_i pair'leri.
+            // Az sayıda öğrenci (kalan/önden alan) iki dersi birden alır; section seçim esnekliği var.
+            // HARD bloklamak fazla agresif — pair başına bu kadar puan eklenir, solver minimize eder.
+            new() { Key = "SoftConstraint.S20.PenaltyPerPair", Value = "5.0", Category = "Soft", DataType = "double", Description = "S20: Komşu yıl ders çiftinde modulo eşi çakışırsa pair başına eklenen ceza puanı. Yüksek = çakışmadan kaçın. Default 5.0." },
         };
 
         var existingKeys = await context.SchedulingAlgorithmConfigs
