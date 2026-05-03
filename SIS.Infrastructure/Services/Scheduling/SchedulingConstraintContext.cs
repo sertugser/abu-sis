@@ -47,6 +47,15 @@ public sealed class SchedulingConstraintConfig
     public TimeOnly S9EveningStart { get; set; }
     public bool S12Enabled { get; set; }
     public int S12MaxImbalancePercent { get; set; }
+
+    /// <summary>
+    /// S20 — Komşu Yıl Çakışma Soft Penalty.
+    /// Aynı bölüm + |year_diff|=1 ders çiftlerinde modulo eşleşmiş sec_i↔sec_i pair
+    /// çakışırsa pair başına bu kadar penalty uygulanır.
+    /// </summary>
+    public bool S20Enabled { get; set; }
+    public double S20PenaltyPerPair { get; set; }
+
     public string CurriculumConflictMode { get; set; } = "curriculum";
     public int EnrollmentConflictHardThreshold { get; set; } = 1;
 
@@ -98,6 +107,8 @@ public sealed class SchedulingConstraintConfig
             S9EveningStart = GetTime(config, "SoftConstraint.S9.EveningStart", new TimeOnly(17, 0)),
             S12Enabled = true,
             S12MaxImbalancePercent = GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20),
+            S20Enabled = true,
+            S20PenaltyPerPair = GetDouble(config, "SoftConstraint.S20.PenaltyPerPair", 5.0),
             CurriculumConflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var cm) ? cm : "curriculum",
             EnrollmentConflictHardThreshold = GetInt(config, "Schedule.EnrollmentConflictHardThreshold", 1),
         };
@@ -108,6 +119,9 @@ public sealed class SchedulingConstraintConfig
 
     private static int GetInt(IReadOnlyDictionary<string, string> config, string key, int defaultValue) =>
         config.TryGetValue(key, out var v) && int.TryParse(v, out var r) ? r : defaultValue;
+
+    private static double GetDouble(IReadOnlyDictionary<string, string> config, string key, double defaultValue) =>
+        config.TryGetValue(key, out var v) && double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var r) ? r : defaultValue;
 
     private static TimeOnly GetTime(IReadOnlyDictionary<string, string> config, string key, TimeOnly defaultValue) =>
         config.TryGetValue(key, out var v) && TimeOnly.TryParse(v, out var r) ? r : defaultValue;

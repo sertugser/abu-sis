@@ -330,6 +330,7 @@ public sealed class MutableScheduleState
             Corequisites = baseSnapshot.Corequisites,
             CoEnrollmentPairs = baseSnapshot.CoEnrollmentPairs,
             CohortConflictPairs = baseSnapshot.CohortConflictPairs,
+            AdjacentYearSoftPairs = baseSnapshot.AdjacentYearSoftPairs,
             EnrollmentConflicts = baseSnapshot.EnrollmentConflicts,
             DistributionConstraints = baseSnapshot.DistributionConstraints,
             CourseSuggestedSemestersByDepartment = baseSnapshot.CourseSuggestedSemestersByDepartment,

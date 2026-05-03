@@ -288,6 +288,17 @@ public static partial class SeedData
             },
             new()
             {
+                Code = "S20",
+                Name = "Komşu Yıl Çakışma",
+                Description = "Aynı bölüm içinde komşu yıl (1-2, 2-3, 3-4) ders çiftleri arasında çakışma penalty'si. Kalan/önden ders alan öğrenciler için section alternatifi kalmasını teşvik eder.",
+                Category = "Soft",
+                Scope = "Scheduling",
+                IsEnabled = true,
+                Parameters = """{"Weight": 1, "PenaltyPerPair": 5.0}""",
+                SortOrder = 110
+            },
+            new()
+            {
                 Code = "DIST",
                 Name = "İlişkisel Kısıtlamalar",
                 Description = "Dersler arası ilişkisel kuralları (aynı gün, ardışık, aynı derslik, sıralama) kontrol eder.",

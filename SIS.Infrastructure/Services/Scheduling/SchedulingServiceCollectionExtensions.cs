@@ -42,6 +42,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEvaluator, InstructorDaySpreadEvaluator>();
         services.AddScoped<IConstraintEvaluator, EarlyLateEvaluator>();
         services.AddScoped<IConstraintEvaluator, WeekdayBalanceEvaluator>();
+        services.AddScoped<IConstraintEvaluator, AdjacentYearConflictEvaluator>();
         // Distribution constraint evaluator (hard/soft depending on preference level)
         services.AddScoped<IConstraintEvaluator, DistributionConstraintEvaluator>();
 

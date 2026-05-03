@@ -231,6 +231,7 @@ public sealed class LargeNeighborhoodSearch
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
             CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
             CohortConflictPairs = snapshot.CohortConflictPairs,
+            AdjacentYearSoftPairs = snapshot.AdjacentYearSoftPairs,
             EnrollmentConflicts = snapshot.EnrollmentConflicts,
             DistributionConstraints = snapshot.DistributionConstraints,
             SlotAllowedModes = snapshot.SlotAllowedModes,

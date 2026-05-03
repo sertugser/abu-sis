@@ -254,6 +254,7 @@ public sealed class ConstructionSolver
             Corequisites = snapshot.Corequisites,
             CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
             CohortConflictPairs = snapshot.CohortConflictPairs,
+            AdjacentYearSoftPairs = snapshot.AdjacentYearSoftPairs,
             EnrollmentConflicts = snapshot.EnrollmentConflicts,
             DistributionConstraints = snapshot.DistributionConstraints,
             CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
