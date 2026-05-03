@@ -1521,7 +1521,7 @@ public class SchedulingService : ISchedulingService
                 courseMetadata.AccessibleDepartments))
             .ToList();
 
-        return new TermSnapshot
+        var snapshot = new TermSnapshot
         {
             TermId = termId,
             TermName = termName,
@@ -1536,6 +1536,35 @@ public class SchedulingService : ISchedulingService
             DistributionConstraints = distributionConstraints,
             SlotAllowedModes = slotAllowedModes,
         };
+
+        // ÖNEMLI: Manuel atama (Apply) yolu da AutoScheduleEngine ile AYNI mode'u kullanmalı.
+        // Aksi halde preview "cohort" mode'da OK derken Apply eski "curriculum" mode'da reddeder
+        // → tüm transaction rollback. (Ortaya çıkan tutarsızlık: 39 başarılı preview, 0 yansıma.)
+        var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
+        if (hardCfg.CurriculumConflictMode == "cohort")
+        {
+            var cohortBuilder = new Scheduling.CohortBuilder();
+            var cohortAssignment = cohortBuilder.Build(
+                snapshots,
+                courseMetadata.SuggestedSemestersByDepartment,
+                courseMetadata.AccessibleDepartments);
+            snapshot.CohortConflictPairs = cohortAssignment.ConflictPairs;
+            snapshot.AdjacentYearSoftPairs = cohortAssignment.AdjacentYearSoftPairs;
+        }
+        else if (hardCfg.CurriculumConflictMode == "enrollment")
+        {
+            // EnrollmentConflictHardThreshold HardConstraintConfig record'unda yok;
+            // SchedulingConstraintConfig.FromSystemConfig'ten oku (default=1).
+            var rawConfig = await LoadSystemConfigAsync(cancellationToken);
+            var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
+            var allSectionIds = sections.Select(s => s.Id);
+            var enrollmentMatrix = await Scheduling.EnrollmentConflictMatrix.BuildAsync(
+                _context, termId, allSectionIds,
+                fullCfg.EnrollmentConflictHardThreshold, cancellationToken);
+            snapshot.EnrollmentConflicts = enrollmentMatrix;
+        }
+
+        return snapshot;
     }
 
     private static SectionSnapshot BuildExistingSectionSnapshot(
@@ -1546,37 +1575,15 @@ public class SchedulingService : ISchedulingService
         IReadOnlyDictionary<int, HashSet<int>> accessibleDepartments)
     {
         var timeBlocks = ScheduleHelper.ToTimeBlocks(section.SectionSchedules);
-        var instructorId = section.InstructorId;
+        var instructorName = section.InstructorId.HasValue
+            && instructorNameMap.TryGetValue(section.InstructorId.Value, out var n) ? n : string.Empty;
+        var suggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : (int?)null;
 
-        return new SectionSnapshot
-        {
-            SectionId = section.Id,
-            CourseId = section.CourseId,
-            CourseCode = section.Course.Code,
-            CourseName = section.Course.Name,
-            TermId = section.TermId,
-            TheoryHours = section.Course.TheoryHours,
-            LabHours = section.Course.LabHours,
-            Capacity = section.Capacity,
-            ClassroomId = section.ClassroomId,
-            ClassroomName = section.Classroom?.Name ?? string.Empty,
-            ClassroomCapacity = section.Classroom?.Capacity ?? 0,
-            ClassroomType = section.Classroom?.Type ?? ClassroomType.Lecture,
-            TheoryClassroomType = section.Course.TheoryClassroomType,
-            LabClassroomType = section.Course.LabClassroomType,
-            InstructorId = instructorId,
-            InstructorName = instructorId.HasValue && instructorNameMap.TryGetValue(instructorId.Value, out var instructorName)
-                ? instructorName
-                : string.Empty,
-            InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 0,
-            DepartmentId = section.Course.DepartmentId,
-            SuggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : null,
-            SuggestedSemestersByDepartment = GetSuggestedSemestersByDepartment(section.CourseId, suggestedSemestersByDepartment),
-            AccessibleDepartmentIds = GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, accessibleDepartments),
-            AssignedTimeSlotCount = ResolveAssignedTimeSlotCount(timeBlocks),
-            TimeBlocks = timeBlocks,
-            Notes = new List<string>()
-        };
+        return Scheduling.SectionSnapshotFactory.FromCourseSection(
+            section, section.Classroom, section.Instructor, instructorName,
+            timeBlocks, suggestedSemester,
+            GetSuggestedSemestersByDepartment(section.CourseId, suggestedSemestersByDepartment),
+            GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, accessibleDepartments));
     }
 
     private async Task<SectionSnapshot> BuildCandidateSnapshotAsync(
@@ -1690,34 +1697,16 @@ public class SchedulingService : ISchedulingService
         Dictionary<int, int>? suggestedSemestersByDepartment = null,
         HashSet<int>? accessibleDepartmentIds = null)
     {
-        return new SectionSnapshot
-        {
-            SectionId = section.Id,
-            CourseId = section.CourseId,
-            CourseCode = section.Course.Code,
-            CourseName = section.Course.Name,
-            TermId = section.TermId,
-            TheoryHours = section.Course.TheoryHours,
-            LabHours = section.Course.LabHours,
-            Capacity = section.Capacity,
-            EnrolledCount = section.EnrolledCount,
-            ClassroomId = classroom?.Id,
-            ClassroomName = classroom?.Name ?? string.Empty,
-            ClassroomCapacity = classroom?.Capacity ?? 0,
-            ClassroomType = classroom?.Type ?? ClassroomType.Lecture,
-            TheoryClassroomType = section.Course.TheoryClassroomType,
-            LabClassroomType = section.Course.LabClassroomType,
-            InstructorId = instructor?.Id,
-            InstructorName = instructorName,
-            InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
-            DepartmentId = section.Course.DepartmentId,
-            SuggestedSemester = suggestedSemester,
-            SuggestedSemestersByDepartment = suggestedSemestersByDepartment ?? new Dictionary<int, int>(),
-            AccessibleDepartmentIds = accessibleDepartmentIds ?? new HashSet<int>(),
-            AssignedTimeSlotCount = assignedTimeSlotCount,
-            TimeBlocks = scheduleSlots.ToList(),
-            Notes = notes
-        };
+        // Not: Buradaki assignedTimeSlotCount caller'dan geliyor (genelde
+        // ResolveAssignedTimeSlotCount). Factory paralel-split aware kendi hesaplar
+        // ama caller'ı korumak için override etmiyoruz; sadece field-by-field clone.
+        return Scheduling.SectionSnapshotFactory.FromCourseSection(
+            section, classroom, instructor, instructorName,
+            scheduleSlots, suggestedSemester,
+            suggestedSemestersByDepartment ?? new Dictionary<int, int>(),
+            accessibleDepartmentIds ?? new HashSet<int>(),
+            classroomLookup: null,
+            notes: notes);
     }
 
     private async Task<ScheduleValidationResultDto> EvaluateExistingConflictsAsync(TermSnapshot snapshot, CancellationToken ct)

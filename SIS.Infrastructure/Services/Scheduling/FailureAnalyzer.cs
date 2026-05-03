@@ -277,10 +277,7 @@ public sealed class FailureAnalyzer
         TermSnapshot baseSnapshot,
         Dictionary<int, Classroom> classroomLookup)
     {
-        // Build TimeBlocks from the candidate's block assignments
         var timeBlocks = new List<TimeBlock>();
-        int? primaryClassroomId = null;
-
         if (candidate.TheoryBlock != null)
         {
             timeBlocks.Add(new TimeBlock
@@ -290,9 +287,7 @@ public sealed class FailureAnalyzer
                 EndTime = candidate.TheoryBlock.EndTime,
                 ClassroomId = candidate.TheoryBlock.ClassroomId
             });
-            primaryClassroomId = candidate.TheoryBlock.ClassroomId;
         }
-
         foreach (var labBlock in candidate.LabBlocks)
         {
             timeBlocks.Add(new TimeBlock
@@ -302,74 +297,12 @@ public sealed class FailureAnalyzer
                 EndTime = labBlock.EndTime,
                 ClassroomId = labBlock.ClassroomId
             });
-            primaryClassroomId ??= labBlock.ClassroomId;
         }
 
-        // Paralel split: aynı (Day, Start, End) penceresinde birden fazla classroom varsa
-        // tek zaman dilimi olarak sayılır (3T+4L=7 saat → 11 değil 7). H12 CreditHourEvaluator
-        // için kritik. MutableScheduleState.ToSectionSnapshot ile aynı hesap.
-        var totalHours = timeBlocks
-            .GroupBy(b => (b.Day, b.StartTime, b.EndTime))
-            .Sum(g => (int)Math.Ceiling((g.Key.EndTime - g.Key.StartTime).TotalHours));
-
-        // Paralel split kapasite hesabı (ConstructionSolver.MaterializeAssignedSnapshot ile aynı):
-        // primary window'da birden fazla classroom varsa kapasiteleri topla.
-        // Bu olmadan H3 CapacityEvaluator ClassroomCapacity=0 görüp false-positive
-        // CapacityConflict suggestion üretiyordu.
-        string? primaryClassroomName = snapshot.ClassroomName;
-        ClassroomType primaryClassroomType = snapshot.ClassroomType;
-        var effectiveCapacity = 0;
-        if (timeBlocks.Count > 0)
-        {
-            var first = timeBlocks[0];
-            var primaryWindowBlocks = timeBlocks
-                .Where(b => b.Day == first.Day && b.StartTime == first.StartTime && b.EndTime == first.EndTime)
-                .ToList();
-
-            foreach (var block in primaryWindowBlocks)
-            {
-                if (block.ClassroomId.HasValue && classroomLookup.TryGetValue(block.ClassroomId.Value, out var cr))
-                    effectiveCapacity += cr.Capacity;
-            }
-
-            if (primaryClassroomId.HasValue && classroomLookup.TryGetValue(primaryClassroomId.Value, out var primary))
-            {
-                primaryClassroomName = primary.Name;
-                primaryClassroomType = primary.Type;
-            }
-        }
-        if (effectiveCapacity == 0)
-            effectiveCapacity = snapshot.ClassroomCapacity;
-
-        return new SectionSnapshot
-        {
-            SectionId = snapshot.SectionId,
-            SectionNumber = snapshot.SectionNumber,
-            CourseId = snapshot.CourseId,
-            CourseCode = snapshot.CourseCode,
-            CourseName = snapshot.CourseName,
-            TermId = snapshot.TermId,
-            TheoryHours = snapshot.TheoryHours,
-            LabHours = snapshot.LabHours,
-            Capacity = snapshot.Capacity,
-            EnrolledCount = snapshot.EnrolledCount,
-            ClassroomId = primaryClassroomId,
-            ClassroomName = primaryClassroomName,
-            ClassroomCapacity = effectiveCapacity,
-            ClassroomType = primaryClassroomType,
-            TheoryClassroomType = snapshot.TheoryClassroomType,
-            LabClassroomType = snapshot.LabClassroomType,
-            InstructorId = snapshot.InstructorId,
-            InstructorName = snapshot.InstructorName,
-            InstructorMaxWeeklyHours = snapshot.InstructorMaxWeeklyHours,
-            DepartmentId = snapshot.DepartmentId,
-            SuggestedSemester = snapshot.SuggestedSemester,
-            SuggestedSemestersByDepartment = snapshot.SuggestedSemestersByDepartment,
-            AccessibleDepartmentIds = snapshot.AccessibleDepartmentIds,
-            AssignedTimeSlotCount = totalHours,
-            TimeBlocks = timeBlocks,
-            Notes = snapshot.Notes
-        };
+        // Factory paralel-split aware capacity + totalHours hesabını tek otoriteden yapar.
+        // Eski yanlış (FailureAnalyzer-özel): ClassroomCapacity = snapshot.ClassroomCapacity (= 0)
+        // → H3 CapacityEvaluator yanıltıcı CapacityConflict üretiyordu.
+        return SectionSnapshotFactory.WithBlocks(snapshot, timeBlocks, classroomLookup);
     }
 
     private static FailureSuggestionDto MapConflictToSuggestion(string conflictType)

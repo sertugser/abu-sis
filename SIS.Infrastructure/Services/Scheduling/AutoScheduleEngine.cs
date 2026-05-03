@@ -546,7 +546,8 @@ public sealed class AutoScheduleEngine
         CourseSchedulingMetadata courseMetadata)
     {
         var timeBlocks = ScheduleHelper.ToTimeBlocks(section.SectionSchedules);
-        var instructorId = section.InstructorId;
+        var instructorName = section.InstructorId.HasValue
+            && instructorNameMap.TryGetValue(section.InstructorId.Value, out var n) ? n : string.Empty;
 
         var suggestedSemestersByDept = courseMetadata.SuggestedSemestersByDepartment
             .TryGetValue(section.CourseId, out var deptSems)
@@ -563,41 +564,9 @@ public sealed class AutoScheduleEngine
         var suggestedSemester = courseMetadata.MinSuggestedSemesters
             .TryGetValue(section.CourseId, out var sem) ? sem : (int?)null;
 
-        var totalHours = timeBlocks.Sum(b =>
-            (int)Math.Ceiling((b.EndTime - b.StartTime).TotalHours));
-
-        return new SectionSnapshot
-        {
-            SectionId = section.Id,
-            SectionNumber = section.SectionNumber,
-            CourseId = section.CourseId,
-            CourseCode = section.Course.Code,
-            CourseName = section.Course.Name,
-            TermId = section.TermId,
-            TeachingMethod = section.Course.TeachingMethod,
-            TheoryHours = section.Course.TheoryHours,
-            LabHours = section.Course.LabHours,
-            Capacity = section.Capacity,
-            EnrolledCount = section.EnrolledCount,
-            ClassroomId = section.ClassroomId,
-            ClassroomName = section.Classroom?.Name ?? string.Empty,
-            ClassroomCapacity = section.Classroom?.Capacity ?? 0,
-            ClassroomType = section.Classroom?.Type ?? ClassroomType.Lecture,
-            TheoryClassroomType = section.Course.TheoryClassroomType,
-            LabClassroomType = section.Course.LabClassroomType,
-            InstructorId = instructorId,
-            InstructorName = instructorId.HasValue && instructorNameMap.TryGetValue(instructorId.Value, out var instrName)
-                ? instrName
-                : string.Empty,
-            InstructorMaxWeeklyHours = section.Instructor?.MaxWeeklyHours ?? 20,
-            DepartmentId = section.Course.DepartmentId,
-            SuggestedSemester = suggestedSemester,
-            SuggestedSemestersByDepartment = suggestedSemestersByDept,
-            AccessibleDepartmentIds = accessibleDepts,
-            AssignedTimeSlotCount = totalHours,
-            TimeBlocks = timeBlocks,
-            Notes = new List<string>()
-        };
+        return SectionSnapshotFactory.FromCourseSection(
+            section, section.Classroom, section.Instructor, instructorName,
+            timeBlocks, suggestedSemester, suggestedSemestersByDept, accessibleDepts);
     }
 
     private static List<BlockAssignment> BuildBlockAssignments(CourseSection section)

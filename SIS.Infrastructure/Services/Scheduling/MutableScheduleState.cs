@@ -250,8 +250,6 @@ public sealed class MutableScheduleState
     public SectionSnapshot ToSectionSnapshot(int sectionId)
     {
         var placement = _placements[sectionId];
-        var snap = placement.Snapshot;
-
         var timeBlocks = placement.Blocks.Select(b => new TimeBlock
         {
             Day = b.Day,
@@ -260,57 +258,7 @@ public sealed class MutableScheduleState
             ClassroomId = b.ClassroomId
         }).ToList();
 
-        // Paralel split: aynı (Day, StartTime, EndTime) penceresinde birden fazla oda olursa
-        // bu tek bir zaman dilimi sayılır (3 paralel lab × 4 saat ≠ 12 saat, ama 4 saat).
-        // Bu hesaplama H12 CreditHourEvaluator için kritik.
-        var totalHours = placement.Blocks
-            .GroupBy(b => (b.Day, b.StartTime, b.EndTime))
-            .Sum(g => (int)Math.Ceiling((g.Key.EndTime - g.Key.StartTime).TotalHours));
-
-        // Resolve actual classroom data from blocks (fixes stale data after SA swap/chain)
-        var actualClassroomId = placement.Blocks.Count > 0 ? placement.Blocks[0].ClassroomId : snap.ClassroomId;
-        var actualClassroomName = actualClassroomId.HasValue ? snap.ClassroomName : string.Empty;
-        var actualClassroomCapacity = actualClassroomId.HasValue ? snap.ClassroomCapacity : 0;
-        var actualClassroomType = snap.ClassroomType;
-
-        if (actualClassroomId.HasValue && _classroomLookup != null
-            && _classroomLookup.TryGetValue(actualClassroomId.Value, out var actualClassroom))
-        {
-            actualClassroomName = actualClassroom.Name;
-            actualClassroomCapacity = actualClassroom.Capacity;
-            actualClassroomType = actualClassroom.Type;
-        }
-
-        return new SectionSnapshot
-        {
-            SectionId = snap.SectionId,
-            SectionNumber = snap.SectionNumber,
-            CourseId = snap.CourseId,
-            CourseCode = snap.CourseCode,
-            CourseName = snap.CourseName,
-            TermId = snap.TermId,
-            TeachingMethod = snap.TeachingMethod,
-            TheoryHours = snap.TheoryHours,
-            LabHours = snap.LabHours,
-            Capacity = snap.Capacity,
-            EnrolledCount = snap.EnrolledCount,
-            ClassroomId = actualClassroomId,
-            ClassroomName = actualClassroomName,
-            ClassroomCapacity = actualClassroomCapacity,
-            ClassroomType = actualClassroomType,
-            TheoryClassroomType = snap.TheoryClassroomType,
-            LabClassroomType = snap.LabClassroomType,
-            InstructorId = snap.InstructorId,
-            InstructorName = snap.InstructorName,
-            InstructorMaxWeeklyHours = snap.InstructorMaxWeeklyHours,
-            DepartmentId = snap.DepartmentId,
-            SuggestedSemester = snap.SuggestedSemester,
-            SuggestedSemestersByDepartment = snap.SuggestedSemestersByDepartment,
-            AccessibleDepartmentIds = snap.AccessibleDepartmentIds,
-            AssignedTimeSlotCount = totalHours,
-            TimeBlocks = timeBlocks,
-            Notes = snap.Notes
-        };
+        return SectionSnapshotFactory.WithBlocks(placement.Snapshot, timeBlocks, _classroomLookup);
     }
 
     public TermSnapshot ToTermSnapshot(TermSnapshot baseSnapshot)

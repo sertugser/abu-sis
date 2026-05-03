@@ -276,58 +276,16 @@ public sealed class ConstructionSolver
     {
         if (blocks.Count == 0) return snap;
 
-        // Use the first block's classroom for the primary ClassroomName/Type fields
-        // Online bloklarda ClassroomId null — enrichment yapılmaz, snap olduğu gibi döner
-        var primaryClassroomId = blocks[0].ClassroomId;
-        if (!primaryClassroomId.HasValue || !classroomLookup.TryGetValue(primaryClassroomId.Value, out var primaryClassroom))
-            return snap;
-
-        // Paralel split tespiti: aynı (Day, StartTime, EndTime) penceresinde BİRDEN FAZLA
-        // farklı classroom varsa bunlar paralel çalışıyor demektir — toplam kapasite = odaların toplamı.
-        // Farklı pencerelerdeki block'lar (örn. teori + lab farklı saatlerde) ayrı değerlendirilir;
-        // burada "primary window" için paralel kapasiteyi hesaplıyoruz (en büyük oda bazlı).
-        var primaryWindowBlocks = blocks
-            .Where(b => b.Day == blocks[0].Day && b.StartTime == blocks[0].StartTime && b.EndTime == blocks[0].EndTime)
-            .ToList();
-
-        var combinedCapacity = 0;
-        foreach (var block in primaryWindowBlocks)
+        // Block'ları TimeBlock'a çevir, factory üzerinden snapshot oluştur.
+        // Factory paralel-split capacity hesabını ve totalHours'ı tek otoriteden yapar.
+        var timeBlocks = blocks.Select(b => new TimeBlock
         {
-            if (block.ClassroomId.HasValue && classroomLookup.TryGetValue(block.ClassroomId.Value, out var cr))
-                combinedCapacity += cr.Capacity;
-        }
+            Day = b.Day,
+            StartTime = b.StartTime,
+            EndTime = b.EndTime,
+            ClassroomId = b.ClassroomId,
+        }).ToList();
 
-        // Eğer paralel split yoksa combinedCapacity == primaryClassroom.Capacity olur (fallback).
-        var effectiveCapacity = combinedCapacity > 0 ? combinedCapacity : primaryClassroom.Capacity;
-
-        return new SectionSnapshot
-        {
-            SectionId = snap.SectionId,
-            SectionNumber = snap.SectionNumber,
-            CourseId = snap.CourseId,
-            CourseCode = snap.CourseCode,
-            CourseName = snap.CourseName,
-            TermId = snap.TermId,
-            TheoryHours = snap.TheoryHours,
-            LabHours = snap.LabHours,
-            Capacity = snap.Capacity,
-            EnrolledCount = snap.EnrolledCount,
-            ClassroomId = snap.ClassroomId,
-            ClassroomName = primaryClassroom.Name,
-            ClassroomCapacity = effectiveCapacity,
-            ClassroomType = primaryClassroom.Type,
-            TheoryClassroomType = snap.TheoryClassroomType,
-            LabClassroomType = snap.LabClassroomType,
-            InstructorId = snap.InstructorId,
-            InstructorName = snap.InstructorName,
-            InstructorMaxWeeklyHours = snap.InstructorMaxWeeklyHours,
-            DepartmentId = snap.DepartmentId,
-            SuggestedSemester = snap.SuggestedSemester,
-            SuggestedSemestersByDepartment = snap.SuggestedSemestersByDepartment,
-            AccessibleDepartmentIds = snap.AccessibleDepartmentIds,
-            AssignedTimeSlotCount = snap.AssignedTimeSlotCount,
-            TimeBlocks = snap.TimeBlocks,
-            Notes = snap.Notes
-        };
+        return SectionSnapshotFactory.WithBlocks(snap, timeBlocks, classroomLookup);
     }
 }
