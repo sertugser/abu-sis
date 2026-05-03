@@ -19,6 +19,12 @@ public sealed class CandidateGenerator
     public int MaxClassroomsPerType { get; private set; } = 10;
 
     /// <summary>
+    /// Lab time-split sınırı: 2 saatten uzun lab'lar 2'şerli bloklara bölünür ve farklı
+    /// günlere dağıtılır (örn. 4 saat lab → 2+2 farklı günde, 6 saat → 2+2+2).
+    /// </summary>
+    private const int MaxLabBlockHours = 2;
+
+    /// <summary>
     /// Config'ten okunan limitleri uygula. AutoScheduleEngine her çalıştırmada çağırır.
     /// </summary>
     public void Configure(int maxCombinations, int maxWindowsPerDay, int maxClassroomsPerType)
@@ -82,7 +88,7 @@ public sealed class CandidateGenerator
 
         if (hasTheory && hasLab)
             return GenerateMixed(section, state, allClassrooms, timeSlotsByDay, sortedDays,
-                splitThreshold, facultyClassroomIds, excludeBlocks, splittable);
+                facultyClassroomIds, excludeBlocks, splittable);
 
         if (hasTheory)
             return GenerateSingleBlock(
@@ -93,11 +99,7 @@ public sealed class CandidateGenerator
                 facultyClassroomIds, excludeBlocks, splittable);
 
         if (hasLab)
-            return GenerateSingleBlock(
-                BlockType.Lab,
-                section.LabHours,
-                section.LabClassroomType ?? ClassroomType.Lab,
-                section, state, allClassrooms, timeSlotsByDay, sortedDays,
+            return GenerateLabOnly(section, state, allClassrooms, timeSlotsByDay, sortedDays,
                 facultyClassroomIds, excludeBlocks, splittable);
 
         return new List<BlockCombination>();
@@ -231,7 +233,6 @@ public sealed class CandidateGenerator
         List<Classroom> allClassrooms,
         Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
         List<DayOfWeek> sortedDays,
-        int splitThreshold,
         HashSet<int> facultyClassroomIds,
         HashSet<BlockAssignment>? excludeBlocks,
         HashSet<BlockType> splittableBlockTypes)
@@ -246,9 +247,6 @@ public sealed class CandidateGenerator
             var theorySplitCombos = GenerateSplittableBlocks(
                 BlockType.Theory, section.TheoryHours, theoryType, section, state,
                 allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
-            // Mixed mode'da teori tek oda varsayılıyor; eğer theory split olursa burada
-            // TheoryBlock ilk oda, LabBlocks eklenmiş olur — bu durumda mixed kombinasyon
-            // karmaşıklaşır. Pratikte teori split nadir, şu an sadece ilk TheoryBlock'u alıyoruz.
             theoryBlocks = theorySplitCombos
                 .Where(c => c.TheoryBlock != null)
                 .Select(c => c.TheoryBlock!)
@@ -260,58 +258,174 @@ public sealed class CandidateGenerator
             theoryBlocks = FindBlocks(BlockType.Theory, section.TheoryHours, theoryClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
         }
 
-        // Lab kombinasyonları: split izinli ise paralel split dene; değilse tek oda zorunlu.
-        List<BlockCombination> labCombos;
-        if (splittableBlockTypes.Contains(BlockType.Lab))
+        // Lab time-split: 2 saatten uzun lab'ı 2'şerli bloklara böl ([4]→[2,2], [3]→[2,1]).
+        // Her lab bloğu için (paralel oda split dahil) ayrı candidate listesi üretilir,
+        // backtracking ile kombine edilir. NEW kurallar:
+        //   • Lab blokları FARKLI günlerde olmak zorunda (her lab bloğu kendine ait gün)
+        //   • Theory + lab AYNI gün olabilir AMA lab.StartTime >= theory.EndTime (lab teoriden sonra)
+        var labBlockSizes = SplitLabIntoBlocks(section.LabHours, MaxLabBlockHours);
+        var labOptionsPerBlock = new List<List<BlockCombination>>();
+        foreach (var blockHours in labBlockSizes)
         {
-            labCombos = GenerateSplittableBlocks(
-                BlockType.Lab, section.LabHours, labType, section, state,
-                allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
+            var blockCombos = GetLabBlockOptions(blockHours, labType, section, state, allClassrooms,
+                timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks, splittableBlockTypes);
+            if (blockCombos.Count == 0) return new List<BlockCombination>();
+            labOptionsPerBlock.Add(blockCombos);
         }
-        else
-        {
-            var labClassrooms = FilterClassrooms(allClassrooms, labType, section.Capacity, facultyClassroomIds, state);
-            var labBlocks = FindBlocks(BlockType.Lab, section.LabHours, labClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
-            labCombos = labBlocks
-                .Take(MaxCombinations)
-                .Select(b => new BlockCombination { LabBlocks = new List<BlockAssignment> { b } })
-                .ToList();
-        }
-
-        var totalHours = section.TheoryHours + section.LabHours;
-        var mustSplitDays = totalHours > splitThreshold;
 
         var results = new List<BlockCombination>();
-
         foreach (var theory in theoryBlocks)
         {
-            foreach (var labCombo in labCombos)
-            {
-                // Check theory vs all lab blocks for overlap
-                var valid = true;
-                foreach (var lab in labCombo.LabBlocks)
-                {
-                    if (mustSplitDays && theory.Day == lab.Day)
-                    { valid = false; break; }
+            BuildMultiLabCombinations(theory, labOptionsPerBlock, 0, new List<BlockAssignment>(), results);
+            if (results.Count >= MaxCombinations) return results;
+        }
+        return results;
+    }
 
-                    if (!mustSplitDays && theory.Day == lab.Day && HasTimeOverlap(theory, lab))
-                    { valid = false; break; }
-                }
+    /// <summary>
+    /// Lab-only ders için time-split + paralel oda split. Lab > 2 saat ise 2'şerli bloklar
+    /// farklı günlere dağıtılır.
+    /// </summary>
+    private List<BlockCombination> GenerateLabOnly(
+        SectionSnapshot section,
+        MutableScheduleState state,
+        List<Classroom> allClassrooms,
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        List<DayOfWeek> sortedDays,
+        HashSet<int> facultyClassroomIds,
+        HashSet<BlockAssignment>? excludeBlocks,
+        HashSet<BlockType> splittableBlockTypes)
+    {
+        var labType = section.LabClassroomType ?? ClassroomType.Lab;
+        var labBlockSizes = SplitLabIntoBlocks(section.LabHours, MaxLabBlockHours);
 
-                if (!valid) continue;
-
-                results.Add(new BlockCombination
-                {
-                    TheoryBlock = theory,
-                    LabBlocks = labCombo.LabBlocks
-                });
-
-                if (results.Count >= MaxCombinations)
-                    return results;
-            }
+        var labOptionsPerBlock = new List<List<BlockCombination>>();
+        foreach (var blockHours in labBlockSizes)
+        {
+            var blockCombos = GetLabBlockOptions(blockHours, labType, section, state, allClassrooms,
+                timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks, splittableBlockTypes);
+            if (blockCombos.Count == 0) return new List<BlockCombination>();
+            labOptionsPerBlock.Add(blockCombos);
         }
 
+        var results = new List<BlockCombination>();
+        BuildMultiLabCombinations(null, labOptionsPerBlock, 0, new List<BlockAssignment>(), results);
         return results;
+    }
+
+    /// <summary>
+    /// Tek bir lab bloğu (X saatlik) için aday üretir. Split izinliyse paralel oda split dener.
+    /// </summary>
+    private List<BlockCombination> GetLabBlockOptions(
+        int blockHours,
+        ClassroomType labType,
+        SectionSnapshot section,
+        MutableScheduleState state,
+        List<Classroom> allClassrooms,
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        List<DayOfWeek> sortedDays,
+        HashSet<int> facultyClassroomIds,
+        HashSet<BlockAssignment>? excludeBlocks,
+        HashSet<BlockType> splittableBlockTypes)
+    {
+        if (splittableBlockTypes.Contains(BlockType.Lab))
+        {
+            return GenerateSplittableBlocks(BlockType.Lab, blockHours, labType, section, state,
+                allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
+        }
+
+        var labClassrooms = FilterClassrooms(allClassrooms, labType, section.Capacity, facultyClassroomIds, state);
+        var blocks = FindBlocks(BlockType.Lab, blockHours, labClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
+        return blocks
+            .Take(MaxCombinations)
+            .Select(b => new BlockCombination { LabBlocks = new List<BlockAssignment> { b } })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Lab saatlerini max 2'şerli bloklara böler.
+    /// 1→[1], 2→[2], 3→[2,1], 4→[2,2], 5→[2,2,1], 6→[2,2,2].
+    /// </summary>
+    private static List<int> SplitLabIntoBlocks(int totalLabHours, int maxBlockHours)
+    {
+        if (totalLabHours <= 0) return new List<int>();
+        if (totalLabHours <= maxBlockHours) return new List<int> { totalLabHours };
+
+        var blocks = new List<int>();
+        var remaining = totalLabHours;
+        while (remaining > maxBlockHours)
+        {
+            blocks.Add(maxBlockHours);
+            remaining -= maxBlockHours;
+        }
+        if (remaining > 0) blocks.Add(remaining);
+        return blocks;
+    }
+
+    /// <summary>
+    /// Theory + N lab block kombinasyonu için backtracking. NEW kurallar:
+    ///   • Lab blokları farklı günlerde olmak zorunda (her lab bloğu kendi gününe)
+    ///   • Theory + lab AYNI gün olabilir AMA lab.StartTime >= theory.EndTime
+    ///     (yani aynı gün ise lab teoriden SONRA olmalı, ÖNCE olamaz)
+    /// theory parametresi null ise lab-only modu (sadece lab blokları arası gün kontrolü).
+    /// Bir labCombo içindeki paralel split blokları aynı (Day, StartTime, EndTime) paylaşır;
+    /// bunlar tek bir "lab bloğu" olarak değerlendirilir (gün kullanımı: combo.Day).
+    /// </summary>
+    private void BuildMultiLabCombinations(
+        BlockAssignment? theory,
+        List<List<BlockCombination>> labOptionsPerBlock,
+        int blockIdx,
+        List<BlockAssignment> currentLabs,
+        List<BlockCombination> results)
+    {
+        if (results.Count >= MaxCombinations) return;
+
+        if (blockIdx == labOptionsPerBlock.Count)
+        {
+            results.Add(new BlockCombination
+            {
+                TheoryBlock = theory,
+                LabBlocks = currentLabs.ToList(),
+            });
+            return;
+        }
+
+        foreach (var labCombo in labOptionsPerBlock[blockIdx])
+        {
+            // Lab combo (paralel split) içindeki block'ların hepsini al — hepsi aynı günde.
+            var newBlocks = labCombo.LabBlocks;
+            if (newBlocks.Count == 0) continue;
+
+            // Theory vs lab kontrolü: aynı gün olabilir AMA lab.StartTime >= theory.EndTime
+            var conflictsTheory = false;
+            if (theory != null)
+            {
+                foreach (var lab in newBlocks)
+                {
+                    if (theory.Day == lab.Day && lab.StartTime < theory.EndTime)
+                    { conflictsTheory = true; break; }
+                }
+            }
+            if (conflictsTheory) continue;
+
+            // Lab vs önceki lab blokları: FARKLI günlerde olmak zorunda
+            var conflictsPrev = false;
+            foreach (var prevLab in currentLabs)
+            {
+                foreach (var lab in newBlocks)
+                {
+                    if (prevLab.Day == lab.Day) { conflictsPrev = true; break; }
+                }
+                if (conflictsPrev) break;
+            }
+            if (conflictsPrev) continue;
+
+            currentLabs.AddRange(newBlocks);
+            BuildMultiLabCombinations(theory, labOptionsPerBlock, blockIdx + 1, currentLabs, results);
+            currentLabs.RemoveRange(currentLabs.Count - newBlocks.Count, newBlocks.Count);
+
+            if (results.Count >= MaxCombinations) return;
+        }
     }
 
     private List<Classroom> FilterClassrooms(
@@ -431,7 +545,9 @@ public sealed class CandidateGenerator
 
     /// <summary>
     /// Online dersler için candidate üretir. Derslik iterasyonu yok — ClassroomId=null olarak döner.
-    /// Hafta sonu dahil tüm günleri kullanabilir. Teori+Lab saatlerini tek pencerede toplar (split threshold hariç).
+    /// ÖNCELIK kuralı: önce TimeSlot.AllowedMode == OnlineOnly slotlardan (hafta sonu + akşam saatleri)
+    /// aday üretilir; yetmezse Both slotlarına fallback. Bu sayede gündüz hafta içi Both slotları
+    /// yüz-yüze derslere ayrılmış kalır, online dersler "kendi" slotlarını işgal eder.
     /// </summary>
     private List<BlockCombination> GenerateOnlineCandidates(
         SectionSnapshot section,
@@ -450,26 +566,36 @@ public sealed class CandidateGenerator
             .ThenBy(d => d)
             .ToList();
 
-        var results = new List<BlockCombination>();
         var mustSplit = totalHours > splitThreshold && section.TheoryHours > 0 && section.LabHours > 0;
 
         if (!mustSplit)
         {
-            // Tek pencere: totalHours ardışık slot
-            var blocks = FindOnlineBlocks(section.TheoryHours > 0 ? BlockType.Theory : BlockType.Lab,
-                totalHours, state, timeSlotsByDay, allDays, excludeBlocks);
+            var blockType = section.TheoryHours > 0 ? BlockType.Theory : BlockType.Lab;
+            // Faz 1: sadece OnlineOnly slot'lardan aday topla
+            var onlineOnly = FindOnlineBlocks(blockType, totalHours, state, timeSlotsByDay, allDays, excludeBlocks,
+                requireOnlineOnly: true);
+            // Faz 2: yetmezse Both slot'lardan da topla (fallback)
+            var both = onlineOnly.Count >= MaxCombinations
+                ? new List<BlockAssignment>()
+                : FindOnlineBlocks(blockType, totalHours, state, timeSlotsByDay, allDays, excludeBlocks,
+                    requireOnlineOnly: false, excludeOnlineOnly: true);
 
-            foreach (var block in blocks.Take(MaxCombinations))
-            {
-                results.Add(new BlockCombination { TheoryBlock = block });
-            }
-            return results;
+            return onlineOnly.Concat(both)
+                .Take(MaxCombinations)
+                .Select(b => new BlockCombination { TheoryBlock = b })
+                .ToList();
         }
 
         // Split: teori + lab ayrı günlerde
-        var theoryBlocks = FindOnlineBlocks(BlockType.Theory, section.TheoryHours, state, timeSlotsByDay, allDays, excludeBlocks);
-        var labBlocks = FindOnlineBlocks(BlockType.Lab, section.LabHours, state, timeSlotsByDay, allDays, excludeBlocks);
+        var theoryOnlineOnly = FindOnlineBlocks(BlockType.Theory, section.TheoryHours, state, timeSlotsByDay, allDays, excludeBlocks, requireOnlineOnly: true);
+        var theoryBoth = FindOnlineBlocks(BlockType.Theory, section.TheoryHours, state, timeSlotsByDay, allDays, excludeBlocks, requireOnlineOnly: false, excludeOnlineOnly: true);
+        var theoryBlocks = theoryOnlineOnly.Concat(theoryBoth).ToList();
 
+        var labOnlineOnly = FindOnlineBlocks(BlockType.Lab, section.LabHours, state, timeSlotsByDay, allDays, excludeBlocks, requireOnlineOnly: true);
+        var labBoth = FindOnlineBlocks(BlockType.Lab, section.LabHours, state, timeSlotsByDay, allDays, excludeBlocks, requireOnlineOnly: false, excludeOnlineOnly: true);
+        var labBlocks = labOnlineOnly.Concat(labBoth).ToList();
+
+        var results = new List<BlockCombination>();
         foreach (var t in theoryBlocks)
         {
             foreach (var l in labBlocks)
@@ -483,13 +609,20 @@ public sealed class CandidateGenerator
         return results;
     }
 
+    /// <summary>
+    /// Online aday penceresi arar. requireOnlineOnly=true: sadece tüm slotları AllowedMode=OnlineOnly
+    /// olan pencereler. excludeOnlineOnly=true: sadece tüm slotları Both olan pencereler (OnlineOnly
+    /// olanlar zaten faz 1'de bulundu — duplikat önler).
+    /// </summary>
     private List<BlockAssignment> FindOnlineBlocks(
         BlockType blockType,
         int requiredHours,
         MutableScheduleState state,
         Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
         List<DayOfWeek> sortedDays,
-        HashSet<BlockAssignment>? excludeBlocks)
+        HashSet<BlockAssignment>? excludeBlocks,
+        bool requireOnlineOnly = false,
+        bool excludeOnlineOnly = false)
     {
         var results = new List<BlockAssignment>();
 
@@ -521,6 +654,22 @@ public sealed class CandidateGenerator
                 }
 
                 if (!valid) continue;
+
+                // AllowedMode önceliği: pencereyi oluşturan TÜM slotların mode'u kuralı sağlamalı.
+                if (requireOnlineOnly || excludeOnlineOnly)
+                {
+                    var allOnlineOnly = true;
+                    for (var j = 0; j < requiredHours; j++)
+                    {
+                        if (sorted[i + j].AllowedMode != Domain.Enums.TimeSlotAllowedMode.OnlineOnly)
+                        {
+                            allOnlineOnly = false;
+                            break;
+                        }
+                    }
+                    if (requireOnlineOnly && !allOnlineOnly) continue;
+                    if (excludeOnlineOnly && allOnlineOnly) continue;
+                }
 
                 var windowStart = sorted[i].StartTime;
                 var windowEnd = sorted[i + requiredHours - 1].EndTime;

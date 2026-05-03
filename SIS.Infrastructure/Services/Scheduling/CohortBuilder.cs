@@ -39,44 +39,58 @@ public sealed class CohortBuilder
             }
         }
 
-        // 2. Assign cohorts per group
+        // 2. Conflict pair üretimi — pairwise + bottleneck propagation
         foreach (var (key, groupSections) in deptYearGroups)
         {
             var byCourse = groupSections
                 .GroupBy(s => s.CourseId)
                 .ToDictionary(g => g.Key, g => g.OrderBy(s => s.SectionNumber).ToList());
 
-            var maxSections = byCourse.Values.Max(list => list.Count);
+            var courseIds = byCourse.Keys.ToList();
 
+            // Her section için cohort index (gösterim amaçlı, gerçek conflict altta)
             foreach (var (courseId, courseSections) in byCourse)
             {
                 for (var i = 0; i < courseSections.Count; i++)
                 {
-                    var cohortIndex = i % maxSections;
                     if (!sectionCohortMap.ContainsKey(courseSections[i].SectionId))
-                        sectionCohortMap[courseSections[i].SectionId] = cohortIndex;
+                        sectionCohortMap[courseSections[i].SectionId] = i;
                 }
             }
 
-            // 3. Build conflict pairs from same-cohort sections
-            var cohortSections = groupSections
-                .Where(s => sectionCohortMap.ContainsKey(s.SectionId))
-                .GroupBy(s => sectionCohortMap[s.SectionId])
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            foreach (var (cohort, cohortMembers) in cohortSections)
+            // Her DERS ÇİFTİ için section-level conflict pair üret:
+            //   • Bottleneck case (en az birinde 1 sec): TÜM (a, b) çiftleri çakışmamalı
+            //     (öğrenci az olan ders için alternatifsiz, çoklu olanın HER section'ıyla
+            //      uyumlu zaman gerekli)
+            //   • Çoklu-çoklu case: index'e göre eşleştir (sec_i ↔ sec_i çakışmasın)
+            //     Bu pairwise minimum — öğrenci için en az bir uyumlu kombinasyon kalır
+            for (var ai = 0; ai < courseIds.Count; ai++)
             {
-                for (var i = 0; i < cohortMembers.Count; i++)
+                for (var bi = ai + 1; bi < courseIds.Count; bi++)
                 {
-                    for (var j = i + 1; j < cohortMembers.Count; j++)
-                    {
-                        if (cohortMembers[i].CourseId == cohortMembers[j].CourseId)
-                            continue;
+                    var sectionsA = byCourse[courseIds[ai]];
+                    var sectionsB = byCourse[courseIds[bi]];
 
-                        var pair = cohortMembers[i].SectionId < cohortMembers[j].SectionId
-                            ? (cohortMembers[i].SectionId, cohortMembers[j].SectionId)
-                            : (cohortMembers[j].SectionId, cohortMembers[i].SectionId);
-                        conflictPairs.Add(pair);
+                    if (sectionsA.Count == 1 || sectionsB.Count == 1)
+                    {
+                        // Bottleneck: tek section'lı ders varsa TÜM çiftler çakışmasın
+                        foreach (var a in sectionsA)
+                        {
+                            foreach (var b in sectionsB)
+                            {
+                                AddPair(conflictPairs, a.SectionId, b.SectionId);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Çoklu-çoklu: index'e göre eşleştir (cohort 0=sec1 ↔ cohort 0=sec1)
+                        // Sec sayıları farklı olabilir — küçük olan kadar pair üret
+                        var pairCount = Math.Min(sectionsA.Count, sectionsB.Count);
+                        for (var i = 0; i < pairCount; i++)
+                        {
+                            AddPair(conflictPairs, sectionsA[i].SectionId, sectionsB[i].SectionId);
+                        }
                     }
                 }
             }
@@ -87,5 +101,12 @@ public sealed class CohortBuilder
             SectionCohortMap = sectionCohortMap,
             ConflictPairs = conflictPairs
         };
+    }
+
+    private static void AddPair(HashSet<(int, int)> set, int idA, int idB)
+    {
+        if (idA == idB) return;
+        var pair = idA < idB ? (idA, idB) : (idB, idA);
+        set.Add(pair);
     }
 }

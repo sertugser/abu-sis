@@ -54,6 +54,12 @@ public static partial class SeedData
             new() { Key = "Schedule.Candidate.MaxCombinations", Value = "500", Category = "Other", DataType = "int", Description = "Bir ders için en fazla kaç saat/derslik kombinasyonu test edilsin. Yüksek = daha geniş arama, daha yavaş. Eski default: 200." },
             new() { Key = "Schedule.Candidate.MaxWindowsPerDay", Value = "10", Category = "Other", DataType = "int", Description = "Bir derslik bir günde en fazla kaç saat aralığı önersin. Düşük = hızlı, ama bazı uygun saatler atlanır. Eski default: 5." },
             new() { Key = "Schedule.Candidate.MaxClassroomsPerType", Value = "25", Category = "Other", DataType = "int", Description = "Bir ders için en fazla kaç farklı derslik aday olarak değerlendirilsin. Eski default: 10 (14 dersliği olan fakültede 4'ü dışlıyordu)." },
+
+            // Track/Cohort tabanlı müfredat çakışma kontrolü.
+            //   "curriculum" (eski default): aynı bölüm/yıl müfredat'ında ders-bazlı ANY çakışma → fail (çok agresif).
+            //   "cohort": section'ları (Dept, Year) gruplarına ayırıp aynı cohort içindeki farklı kurs section'ları arası çakışma → fail (alternatif-aware).
+            //   "enrollment": gerçek öğrenci kayıt verisinden çıkarılan çakışma çiftleri.
+            new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "H5 müfredat çakışma kontrolü modu. 'cohort' önerilen — section'ların alternatif olduğunu bilir, gerçek üniversite gibi çakışma kontrolü yapar." },
         };
 
         var existingKeys = await context.SchedulingAlgorithmConfigs

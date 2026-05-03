@@ -170,7 +170,7 @@ public sealed class ConstructionSolver
             if (!placed)
             {
                 failedSectionIds.Add(nextSectionId);
-                assignedIds.Add(nextSectionId); // treat as "processed"
+                assignedIds.Add(nextSectionId);
             }
         }
 
