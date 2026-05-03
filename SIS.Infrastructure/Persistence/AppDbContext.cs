@@ -490,20 +490,44 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         });
 
         // ── GradeComponent ─────────────────────────────────────
-        builder.Entity<GradeComponent>(e =>
-        {
-            e.Property(gc => gc.Weight).HasPrecision(5, 2);
+builder.Entity<GradeComponent>(e =>
+{
+    e.Property(gc => gc.Name)
+     .HasMaxLength(100)
+     .IsRequired();
 
-            e.HasOne(gc => gc.Course)
-             .WithMany()
-             .HasForeignKey(gc => gc.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
+    e.Property(gc => gc.ExamType)
+     .HasMaxLength(40)
+     .HasDefaultValue("Other")
+     .IsRequired();
 
-            e.HasOne(gc => gc.AcademicTerm)
-             .WithMany()
-             .HasForeignKey(gc => gc.AcademicTermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
+    e.Property(gc => gc.Weight)
+     .HasPrecision(5, 2);
+
+    e.Property(gc => gc.MinimumScore)
+     .HasPrecision(5, 2);
+
+    e.Property(gc => gc.IsRequired)
+     .HasDefaultValue(true);
+
+    e.Property(gc => gc.RequiresAttendanceEligibility)
+     .HasDefaultValue(false);
+
+    e.HasOne(gc => gc.Course)
+     .WithMany()
+     .HasForeignKey(gc => gc.CourseId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.AcademicTerm)
+     .WithMany()
+     .HasForeignKey(gc => gc.AcademicTermId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.PrerequisiteGradeComponent)
+     .WithMany(gc => gc.DependentComponents)
+     .HasForeignKey(gc => gc.PrerequisiteGradeComponentId)
+     .OnDelete(DeleteBehavior.Restrict);
+});
 
         // ── StudentGrade ──────────────────────────────────────
         builder.Entity<StudentGrade>(e =>
@@ -525,21 +549,26 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         });
 
         // ── GradingCriteria ─────────────────────────────────────
-        builder.Entity<GradingCriteria>(e =>
-        {
-            // Bir ders bir dönemde tek aralık tanımına sahip olur
-            e.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId }).IsUnique();
+builder.Entity<GradingCriteria>(e =>
+{
+    // Bir ders bir dönemde tek aralık tanımına sahip olur
+    e.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId }).IsUnique();
 
-            e.HasOne(gc => gc.Course)
-             .WithMany()
-             .HasForeignKey(gc => gc.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
+    e.Property(gc => gc.CalculationMethod)
+     .HasMaxLength(30)
+     .HasDefaultValue("Absolute")
+     .IsRequired();
 
-            e.HasOne(gc => gc.AcademicTerm)
-             .WithMany()
-             .HasForeignKey(gc => gc.AcademicTermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
+    e.HasOne(gc => gc.Course)
+     .WithMany()
+     .HasForeignKey(gc => gc.CourseId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.AcademicTerm)
+     .WithMany()
+     .HasForeignKey(gc => gc.AcademicTermId)
+     .OnDelete(DeleteBehavior.Restrict);
+});
 
         // ── CourseSectionApproval ──────────────────────────────
         builder.Entity<CourseSectionApproval>(e =>

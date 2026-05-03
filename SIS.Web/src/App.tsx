@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+﻿import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
@@ -33,6 +33,7 @@ import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
 
 import CourseOpeningPage from './pages/CourseOpeningPage';
+import ExamCurriculumPage from './pages/ExamCurriculumPage';
 import InstructorAssignmentPage from './pages/InstructorAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
 import StudentDirectoryPage from './pages/StudentDirectoryPage';
@@ -45,7 +46,7 @@ import CourseCatalogAdminPage from './pages/CourseCatalogAdminPage';
 import SystemConfigPage from './pages/SystemConfigPage';
 import AuditLogPage from './pages/AuditLogPage';
 import MufredatSinifDonemTanimlariPage from './pages/MufredatSinifDonemTanimlariPage';
-// ── Öğrenci İşlemleri (placeholder) ──
+// â”€â”€ Ã–ÄŸrenci Ä°ÅŸlemleri (placeholder) â”€â”€
 import StudentNumberChangePage from './pages/StudentNumberChangePage';
 import StudentPromotionPage from './pages/StudentPromotionPage';
 import BulkAdvisorAssignmentPage from './pages/BulkAdvisorAssignmentPage';
@@ -56,14 +57,14 @@ import CourseRegistrationEditPage from './pages/CourseRegistrationEditPage';
 import SectionTransferPage from './pages/SectionTransferPage';
 import CourseTransferPage from './pages/CourseTransferPage';
 import LetterGradeEditPage from './pages/LetterGradeEditPage';
-// ── Yönetim → Kullanıcı İşlemleri (placeholder) ──
+// â”€â”€ YÃ¶netim â†’ KullanÄ±cÄ± Ä°ÅŸlemleri (placeholder) â”€â”€
 import UserPermissionGroupsPage from './pages/UserPermissionGroupsPage';
 import UserReportGroupsPage from './pages/UserReportGroupsPage';
 import UserGroupRestrictionsPage from './pages/UserGroupRestrictionsPage';
 import UserReportDesignGroupsPage from './pages/UserReportDesignGroupsPage';
 import UserDelegationPage from './pages/UserDelegationPage';
 import PasswordChangePage from './pages/PasswordChangePage';
-// ── Yönetim → Genel Ayarlar (placeholder) ──
+// â”€â”€ YÃ¶netim â†’ Genel Ayarlar (placeholder) â”€â”€
 import UniversityInfoPage from './pages/UniversityInfoPage';
 import InstitutionalIntegrationPage from './pages/InstitutionalIntegrationPage';
 import DocumentRestrictionsPage from './pages/DocumentRestrictionsPage';
@@ -110,10 +111,10 @@ export default function App() {
                 <Route element={<AppLayout />}>
                   <Route index element={<RoleDashboard />} />
 
-                  {/* RBAC: yetki yetersiz olduğunda RoleProtectedRoute buraya yönlendirir */}
+                  {/* RBAC: yetki yetersiz olduÄŸunda RoleProtectedRoute buraya yÃ¶nlendirir */}
                   <Route path="forbidden" element={<ForbiddenPage />} />
 
-                  {/* Herkesin erişebildiği sayfalar */}
+                  {/* Herkesin eriÅŸebildiÄŸi sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
                   <Route path="duyurular" element={<AnnouncementsPage />} />
 
@@ -189,6 +190,7 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-acma-islemleri.view" />}>
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
+              <Route path="sinav-mufredati" element={<ExamCurriculumPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ogretim-elemani-atama.view" />}>
                     <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
@@ -226,11 +228,11 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-sinif-donem.view" />}>
                     <Route path="mufredat-sinif-donem-tanimlari" element={<MufredatSinifDonemTanimlariPage />} />
                   </Route>
-                  {/* Eski URL → yeni URL'e redirect (γ hibrit + C rename) */}
+                  {/* Eski URL â†’ yeni URL'e redirect (Î³ hibrit + C rename) */}
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-sinif-donem.view" />}>
                     <Route path="sinif-atlatma-kurallari" element={<Navigate to="/mufredat-sinif-donem-tanimlari" replace />} />
                   </Route>
-                  {/* ── Öğrenci İşlemleri (placeholder, SystemAdmin) ── */}
+                  {/* â”€â”€ Ã–ÄŸrenci Ä°ÅŸlemleri (placeholder, SystemAdmin) â”€â”€ */}
                   <Route element={<RoleProtectedRoute permission="menu.ogrenci-no-degistirme.view" />}>
                     <Route path="ogrenci-no-degistirme" element={<StudentNumberChangePage />} />
                   </Route>
@@ -261,7 +263,7 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.harf-notu-duzenleme.view" />}>
                     <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
                   </Route>
-                  {/* ── Yönetim → Kullanıcı İşlemleri (placeholder, SystemAdmin) ── */}
+                  {/* â”€â”€ YÃ¶netim â†’ KullanÄ±cÄ± Ä°ÅŸlemleri (placeholder, SystemAdmin) â”€â”€ */}
                   <Route element={<RoleProtectedRoute permission="menu.kullanici-yetki-gruplari.view" />}>
                     <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
                   </Route>
@@ -280,7 +282,7 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.sifre-degistir.view" />}>
                     <Route path="sifre-degistir" element={<PasswordChangePage />} />
                   </Route>
-                  {/* ── Yönetim → Genel Ayarlar (placeholder, SystemAdmin) ── */}
+                  {/* â”€â”€ YÃ¶netim â†’ Genel Ayarlar (placeholder, SystemAdmin) â”€â”€ */}
                   <Route element={<RoleProtectedRoute permission="menu.universite-bilgileri.view" />}>
                     <Route path="universite-bilgileri" element={<UniversityInfoPage />} />
                   </Route>
@@ -355,8 +357,8 @@ export default function App() {
                     <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
 
-                  {/* Dev-only test route — Karar 9: production sidebar/route YOK,
-                      Phase 2'de Kullanıcı Yetki Grupları placeholder'a import edilecek */}
+                  {/* Dev-only test route â€” Karar 9: production sidebar/route YOK,
+                      Phase 2'de KullanÄ±cÄ± Yetki GruplarÄ± placeholder'a import edilecek */}
                   {import.meta.env.DEV && (
                     <Route element={<RoleProtectedRoute permission="system.permission.view" />}>
                       <Route path="__dev/permission-matrix" element={
@@ -380,3 +382,4 @@ export default function App() {
     </QueryClientProvider>
   );
 }
+
