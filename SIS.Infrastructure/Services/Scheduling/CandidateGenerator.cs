@@ -19,19 +19,20 @@ public sealed class CandidateGenerator
     public int MaxClassroomsPerType { get; private set; } = 10;
 
     /// <summary>
-    /// Lab time-split sınırı: 2 saatten uzun lab'lar 2'şerli bloklara bölünür ve farklı
-    /// günlere dağıtılır (örn. 4 saat lab → 2+2 farklı günde, 6 saat → 2+2+2).
+    /// Lab time-split sınırı: 2 saatten uzun lab'lar bu değer kadar saatlik bloklara
+    /// bölünür ve farklı günlere dağıtılır. Config'ten gelir; default 2.
     /// </summary>
-    private const int MaxLabBlockHours = 2;
+    public int MaxLabBlockHours { get; private set; } = 2;
 
     /// <summary>
     /// Config'ten okunan limitleri uygula. AutoScheduleEngine her çalıştırmada çağırır.
     /// </summary>
-    public void Configure(int maxCombinations, int maxWindowsPerDay, int maxClassroomsPerType)
+    public void Configure(int maxCombinations, int maxWindowsPerDay, int maxClassroomsPerType, int maxLabBlockHours = 2)
     {
         MaxCombinations = Math.Max(1, maxCombinations);
         MaxWindowsPerDay = Math.Max(1, maxWindowsPerDay);
         MaxClassroomsPerType = Math.Max(1, maxClassroomsPerType);
+        MaxLabBlockHours = Math.Max(1, maxLabBlockHours);
     }
 
     /// <summary>
@@ -74,11 +75,15 @@ public sealed class CandidateGenerator
         if (section.TeachingMethod == TeachingMethod.Online)
             return GenerateOnlineCandidates(section, state, timeSlotsByDay, splitThreshold, excludeBlocks);
 
-        // Sort days by least loaded first. Hafta sonu slotları da dahil — bu slotlar
-        // zaten AllowedMode=OnlineOnly damgalı gelir (seed'de WeekendOnlineOnly=true);
-        // H17 FaceToFaceSlotRestrictionEvaluator OnlineOnly slota FaceToFace dersi bloklar.
-        // Admin bir hafta sonu slotunu Both'a çevirirse yüz-yüze de düşebilir — tasarım gereği.
-        var sortedDays = timeSlotsByDay.Keys
+        // FaceToFace dersler OnlineOnly slot'a (akşam 18:00+, hafta sonu) yerleşemez —
+        // H17 evaluator post-hoc fail ediyor. Daha verimli: aday üretmeden önce çıkar.
+        // Hibrit dersler ise her slota girebilir, filtre uygulamayız.
+        var effectiveTimeSlotsByDay = section.TeachingMethod == TeachingMethod.FaceToFace
+            ? FilterOutOnlineOnlySlots(timeSlotsByDay)
+            : timeSlotsByDay;
+
+        // Sort days by least loaded first.
+        var sortedDays = effectiveTimeSlotsByDay.Keys
             .OrderBy(d => state.GetDaySectionCount(d))
             .ThenBy(d => d)
             .ToList();
@@ -87,7 +92,7 @@ public sealed class CandidateGenerator
             return new List<BlockCombination>();
 
         if (hasTheory && hasLab)
-            return GenerateMixed(section, state, allClassrooms, timeSlotsByDay, sortedDays,
+            return GenerateMixed(section, state, allClassrooms, effectiveTimeSlotsByDay, sortedDays,
                 facultyClassroomIds, excludeBlocks, splittable);
 
         if (hasTheory)
@@ -95,14 +100,35 @@ public sealed class CandidateGenerator
                 BlockType.Theory,
                 section.TheoryHours,
                 section.TheoryClassroomType ?? ClassroomType.Lecture,
-                section, state, allClassrooms, timeSlotsByDay, sortedDays,
+                section, state, allClassrooms, effectiveTimeSlotsByDay, sortedDays,
                 facultyClassroomIds, excludeBlocks, splittable);
 
         if (hasLab)
-            return GenerateLabOnly(section, state, allClassrooms, timeSlotsByDay, sortedDays,
+            return GenerateLabOnly(section, state, allClassrooms, effectiveTimeSlotsByDay, sortedDays,
                 facultyClassroomIds, excludeBlocks, splittable);
 
         return new List<BlockCombination>();
+    }
+
+    /// <summary>
+    /// FaceToFace dersleri için OnlineOnly slot'ları filtreler. Hafta sonu (Cts/Paz)
+    /// günlerinde tüm slotlar OnlineOnly olduğu için o günler tamamen çıkar; hafta içi
+    /// 18:00 sonrası akşam slotları da çıkar. H17 evaluator zaten bunları reddediyor;
+    /// önceden filtre suni paralel split contention'ı azaltır.
+    /// </summary>
+    private static Dictionary<DayOfWeek, List<TimeSlot>> FilterOutOnlineOnlySlots(
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay)
+    {
+        var filtered = new Dictionary<DayOfWeek, List<TimeSlot>>();
+        foreach (var (day, slots) in timeSlotsByDay)
+        {
+            var nonOnlineOnly = slots
+                .Where(s => s.AllowedMode != Domain.Enums.TimeSlotAllowedMode.OnlineOnly)
+                .ToList();
+            if (nonOnlineOnly.Count > 0)
+                filtered[day] = nonOnlineOnly;
+        }
+        return filtered;
     }
 
     private List<BlockCombination> GenerateSingleBlock(
