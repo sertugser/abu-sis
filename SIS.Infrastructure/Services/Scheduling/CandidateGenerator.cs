@@ -75,12 +75,10 @@ public sealed class CandidateGenerator
         if (section.TeachingMethod == TeachingMethod.Online)
             return GenerateOnlineCandidates(section, state, timeSlotsByDay, splitThreshold, excludeBlocks);
 
-        // FaceToFace dersler OnlineOnly slot'a (akşam 18:00+, hafta sonu) yerleşemez —
-        // H17 evaluator post-hoc fail ediyor. Daha verimli: aday üretmeden önce çıkar.
-        // Hibrit dersler ise her slota girebilir, filtre uygulamayız.
-        var effectiveTimeSlotsByDay = section.TeachingMethod == TeachingMethod.FaceToFace
-            ? FilterOutOnlineOnlySlots(timeSlotsByDay)
-            : timeSlotsByDay;
+        // Aday üretirken ders öğretim yöntemiyle uyumsuz slot tipini önceden çıkar —
+        // H17 evaluator post-hoc fail edecekti, önden filtre suni contention'ı azaltır.
+        // Tek otorite: SlotAllowedModePolicy + TeachingMethodPolicy.
+        var effectiveTimeSlotsByDay = FilterIncompatibleSlots(timeSlotsByDay, section.TeachingMethod);
 
         // Sort days by least loaded first.
         var sortedDays = effectiveTimeSlotsByDay.Keys
@@ -111,22 +109,22 @@ public sealed class CandidateGenerator
     }
 
     /// <summary>
-    /// FaceToFace dersleri için OnlineOnly slot'ları filtreler. Hafta sonu (Cts/Paz)
-    /// günlerinde tüm slotlar OnlineOnly olduğu için o günler tamamen çıkar; hafta içi
-    /// 18:00 sonrası akşam slotları da çıkar. H17 evaluator zaten bunları reddediyor;
-    /// önceden filtre suni paralel split contention'ı azaltır.
+    /// Belirli ders öğretim yöntemi için uyumsuz slot'ları filtreler.
+    /// SlotAllowedModePolicy + TeachingMethodPolicy üzerinden tek otorite davranış:
+    /// - FaceToFace ders: OnlineOnly slotlar çıkar (hafta sonu, akşam 18:00+)
+    /// - Online ders: FaceToFaceOnly slotlar çıkar
+    /// - Hybrid ders: hepsi serbest (filtre boş döner)
     /// </summary>
-    private static Dictionary<DayOfWeek, List<TimeSlot>> FilterOutOnlineOnlySlots(
-        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay)
+    private static Dictionary<DayOfWeek, List<TimeSlot>> FilterIncompatibleSlots(
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        TeachingMethod method)
     {
         var filtered = new Dictionary<DayOfWeek, List<TimeSlot>>();
         foreach (var (day, slots) in timeSlotsByDay)
         {
-            var nonOnlineOnly = slots
-                .Where(s => s.AllowedMode != Domain.Enums.TimeSlotAllowedMode.OnlineOnly)
-                .ToList();
-            if (nonOnlineOnly.Count > 0)
-                filtered[day] = nonOnlineOnly;
+            var compatible = SlotAllowedModePolicy.FilterIncompatibleSlots(slots, method).ToList();
+            if (compatible.Count > 0)
+                filtered[day] = compatible;
         }
         return filtered;
     }

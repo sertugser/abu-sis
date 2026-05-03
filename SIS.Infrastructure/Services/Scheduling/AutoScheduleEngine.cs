@@ -227,26 +227,17 @@ public sealed class AutoScheduleEngine
             SlotAllowedModes = slotAllowedModes,
         };
 
-        // 8b. Build cohort assignments if cohort mode enabled
-        if (constraintConfig.CurriculumConflictMode == "cohort")
-        {
-            var cohortBuilder = new CohortBuilder();
-            var allSnaps = sectionSnapshots.Values.ToList();
-            var cohortAssignment = cohortBuilder.Build(
-                allSnaps,
-                courseMetadata.SuggestedSemestersByDepartment,
-                courseMetadata.AccessibleDepartments);
-            baseSnapshot.CohortConflictPairs = cohortAssignment.ConflictPairs;
-            baseSnapshot.AdjacentYearSoftPairs = cohortAssignment.AdjacentYearSoftPairs;
-        }
-        else if (constraintConfig.CurriculumConflictMode == "enrollment")
-        {
-            var allSectionIds = sections.Select(s => s.Id);
-            var enrollmentMatrix = await EnrollmentConflictMatrix.BuildAsync(
-                _context, request.TermId, allSectionIds,
-                constraintConfig.EnrollmentConflictHardThreshold, ct);
-            baseSnapshot.EnrollmentConflicts = enrollmentMatrix;
-        }
+        // 8b. CurriculumConflictMode'a göre çakışma çiftlerini snapshot'a yükle.
+        // Tek otorite ConflictPairsBuilder; SchedulingService.BuildTermSnapshotAsync da
+        // aynı çağrıyı yapar — preview ve apply yolları artık tutarlı.
+        await ConflictPairsBuilder.ApplyToSnapshotAsync(
+            baseSnapshot,
+            constraintConfig.CurriculumConflictMode,
+            sectionSnapshots.Values.ToList(),
+            courseMetadata.SuggestedSemestersByDepartment,
+            courseMetadata.AccessibleDepartments,
+            constraintConfig.EnrollmentConflictHardThreshold,
+            _context, request.TermId, ct);
 
         // 9a. Kural ihlali retroaktif doğrulama — mevcut atamaları SlotAllowedModes'a göre kontrol et.
         // Örn: slot AllowedMode=OnlineOnly olduktan sonra eski FaceToFace atamaları temizlenir, yeniden atanır.
