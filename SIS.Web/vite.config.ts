@@ -12,7 +12,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:5213',
+        // HTTPS API'ye direkt git — UseHttpsRedirection() ile HTTP→HTTPS 307 redirect
+        // tarayıcıya leak ediyordu (cert authority invalid). HTTPS direkt + secure:false
+        // ile dev cert kabul edilir, tarayıcı sadece localhost:5173 görür.
+        target: 'https://127.0.0.1:7035',
         changeOrigin: true,
         secure: false,
       },
