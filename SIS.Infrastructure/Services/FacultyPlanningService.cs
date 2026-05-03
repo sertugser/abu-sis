@@ -262,9 +262,12 @@ public class FacultyPlanningService : IFacultyPlanningService
                 var hasInstructor = s.InstructorId.HasValue;
                 var hasConflict = conflictSectionIds.Contains(s.Id);
 
+                // Online ders → ClassroomId her zaman null (sınıf yok); schedule varsa
+                // "Scheduled" sayılmalı. Aksi halde online dersler hep "Unscheduled" gözüküyordu.
+                var isOnlineCourse = s.Course.TeachingMethod == TeachingMethod.Online;
                 string sectionStatus;
                 if (hasConflict) sectionStatus = "Conflicted";
-                else if (hasClassroom && hasSchedule) sectionStatus = "Scheduled";
+                else if (hasSchedule && (hasClassroom || isOnlineCourse)) sectionStatus = "Scheduled";
                 else if (hasClassroom || hasInstructor) sectionStatus = "Partial";
                 else sectionStatus = "Unscheduled";
 
@@ -411,7 +414,15 @@ public class FacultyPlanningService : IFacultyPlanningService
             }
             else if (request.ScheduleSlots is { Count: > 0 })
             {
-                throw new ArgumentException("Zaman slotu atanirken derslik de belirtilmelidir.");
+                // Online dersler için classroom YOK — atama serbest. Hibrit/yüz-yüze
+                // dersler için classroom zorunlu (ya section-level ya slot-level).
+                // Auto-schedule online dersi (CandidateGenerator.GenerateOnlineCandidates)
+                // her iki classroomId alanını da null bırakır; bu durum geçerli, throw edilmesin.
+                var slotLevelHasClassroom = request.ScheduleSlots.Any(s => s.ClassroomId.HasValue);
+                if (section.Course.TeachingMethod != TeachingMethod.Online && !slotLevelHasClassroom)
+                {
+                    throw new ArgumentException("Zaman slotu atanirken derslik de belirtilmelidir.");
+                }
             }
 
             if (request.InstructorId.HasValue)
@@ -468,9 +479,11 @@ public class FacultyPlanningService : IFacultyPlanningService
             }
 
             // Write schedule records only if this is a NEW schedule assignment (not just an instructor change)
-            // Skip if section already has schedule records and classroom hasn't changed
+            // Skip if section already has schedule records and classroom hasn't changed.
+            // Online dersler için classroomId null kabul edilir (slot kayıtları classroom'suz yazılır).
             var hasSlotLevelClassrooms = request.ScheduleSlots?.Any(s => s.ClassroomId.HasValue) == true;
-            if ((request.ClassroomId.HasValue || hasSlotLevelClassrooms) && request.ScheduleSlots is { Count: > 0 })
+            var isOnlineCourse = section.Course.TeachingMethod == TeachingMethod.Online;
+            if ((request.ClassroomId.HasValue || hasSlotLevelClassrooms || isOnlineCourse) && request.ScheduleSlots is { Count: > 0 })
             {
                 var existingScheduleCount = await _context.SectionSchedules
                     .CountAsync(ss => ss.CourseSectionId == section.Id, ct);
@@ -478,7 +491,7 @@ public class FacultyPlanningService : IFacultyPlanningService
                 var classroomChanged = request.ClassroomId.HasValue && previousClassroomId != request.ClassroomId.Value;
                 var isNewSchedule = existingScheduleCount == 0;
 
-                if (isNewSchedule || classroomChanged)
+                if (isNewSchedule || classroomChanged || isOnlineCourse)
                 {
                     await WriteSectionScheduleRecordsAsync(
                         section.Id,
@@ -751,15 +764,15 @@ public class FacultyPlanningService : IFacultyPlanningService
     {
         var result = new ApplyScheduleResultDto();
 
-        // B15: wrap all assignments in a single transaction so that a failure in any
-        // assignment rolls back all previously applied assignments atomically.
-        await using var transaction = await _context.Database.BeginTransactionAsync(ct);
-        try
+        // Section-bazlı atama: her atama kendi içinde atomik (AssignSectionAsync kendi
+        // transaction'ını yönetir). Bir section fail olursa SADECE o atlanır, diğer
+        // atamalar yazılmaya devam eder. Eski davranış (tek fail → tüm rollback) auto-
+        // schedule akışı için yıkıcıydı: preview "39 başarılı, 5 fail" derken apply'da
+        // tek bir constraint ihlali tüm 38 atamayı geri alıyordu.
+        foreach (var item in request.Assignments)
         {
-            foreach (var item in request.Assignments)
+            try
             {
-                // AssignSectionAsync detects the active transaction and reuses it
-                // instead of opening a nested one.
                 var assignResult = await AssignSectionAsync(new AssignSectionRequest
                 {
                     SectionId = item.SectionId,
@@ -770,27 +783,30 @@ public class FacultyPlanningService : IFacultyPlanningService
 
                 if (assignResult.Conflicts.Count > 0)
                 {
-                    var firstConflict = assignResult.Conflicts[0].Message;
-                    throw new InvalidOperationException(
-                        $"Sube {item.SectionId}: Sert kisit ihlali: {firstConflict}");
+                    result.FailedCount++;
+                    var conflictMsg = assignResult.Conflicts[0].Message;
+                    result.Errors.Add($"Sube {item.SectionId}: {conflictMsg}");
+                    continue;
                 }
 
-                if (assignResult.Success) result.SuccessCount++;
+                if (assignResult.Success)
+                {
+                    result.SuccessCount++;
+                }
                 else
                 {
                     result.FailedCount++;
                     result.Errors.Add($"Sube {item.SectionId}: Atama basarisiz.");
                 }
             }
-
-            await transaction.CommitAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            await transaction.RollbackAsync(ct);
-            result.RolledBack = true;
-            result.FailedCount++;
-            result.Errors.Add($"Tum atamalar geri alindi: {ex.Message}");
+            catch (Exception ex)
+            {
+                // AssignSectionAsync içinde throw oldu (validation/H17/transaction);
+                // o atama kendi transaction'ında zaten rollback olmuş. Diğerlerini
+                // etkilemez — sayım ve hata mesajı ekle, devam et.
+                result.FailedCount++;
+                result.Errors.Add($"Sube {item.SectionId}: {ex.Message}");
+            }
         }
 
         return result;
