@@ -68,19 +68,27 @@ export function usePoolCandidates(poolId: number | null, termId: number | null) 
   });
 }
 
-export function useDepartmentInstructors(departmentId: number | null, termId?: number | null) {
+export function useDepartmentInstructors(
+  departmentId: number | null,
+  termId?: number | null,
+  allowAll = false,
+) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.departmentInstructors(departmentId ?? 0), termId],
-    queryFn: () => getDepartmentInstructors(departmentId!, termId ?? undefined),
-    enabled: departmentId !== null,
+    queryKey: [...QUERY_KEYS.departmentInstructors(departmentId ?? 0), termId, allowAll ? 'all-enabled' : 'department-only'],
+    queryFn: () => getDepartmentInstructors(departmentId, termId ?? undefined),
+    enabled: allowAll || departmentId !== null,
     staleTime: 30 * 1000,
   });
 }
 
-export function useInstructorWorkload(instructorId: number | null, termId: number | null) {
+export function useInstructorWorkload(
+  instructorId: number | null,
+  termId: number | null,
+  departmentId?: number | null,
+) {
   return useQuery({
-    queryKey: ['courseOpening', 'workload', instructorId, termId],
-    queryFn: () => getInstructorWorkload(instructorId!, termId!),
+    queryKey: ['courseOpening', 'workload', instructorId, termId, departmentId ?? null],
+    queryFn: () => getInstructorWorkload(instructorId!, termId!, departmentId),
     enabled: instructorId !== null && instructorId > 0 && termId !== null,
     staleTime: 30 * 1000,
   });

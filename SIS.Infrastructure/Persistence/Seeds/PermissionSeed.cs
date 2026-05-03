@@ -298,6 +298,7 @@ public static class PermissionSeed
         ("menu.toplu-danisman-atama.assign",             PermissionCategory.Menu, "Tek/toplu danışman ataması"),
         ("menu.toplu-staj-danisman-atama.view",          PermissionCategory.Menu, "Toplu staj danışman atama sayfası"),
         ("menu.toplu-mufredat-atama.view",               PermissionCategory.Menu, "Toplu müfredat atama sayfası"),
+        ("menu.toplu-mufredat-atama.assign",             PermissionCategory.Menu, "Tek/toplu müfredat ataması"),
         ("menu.toplu-ders-kaydi.view",                   PermissionCategory.Menu, "Toplu ders kaydı sayfası"),
         ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
         ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),

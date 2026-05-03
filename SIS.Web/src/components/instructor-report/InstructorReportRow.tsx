@@ -7,14 +7,16 @@ import type { InstructorOptionDto } from '../../types/courseOpening';
 interface Props {
   instructor: InstructorOptionDto & { departmentName: string };
   termId: number;
+  departmentId?: number | null;
 }
 
-export function InstructorReportRow({ instructor, termId }: Props) {
+export function InstructorReportRow({ instructor, termId, departmentId }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const workloadQuery = useInstructorWorkload(
     expanded ? instructor.instructorId : null,
     termId,
+    departmentId,
   );
 
   const workload = workloadQuery.data;

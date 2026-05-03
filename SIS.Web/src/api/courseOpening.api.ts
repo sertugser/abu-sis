@@ -62,9 +62,9 @@ export async function getPoolCandidates(poolId: number, termId: number): Promise
   return data;
 }
 
-export async function getDepartmentInstructors(departmentId: number, termId?: number): Promise<InstructorOptionDto[]> {
+export async function getDepartmentInstructors(departmentId?: number | null, termId?: number): Promise<InstructorOptionDto[]> {
   const { data } = await apiClient.get<InstructorOptionDto[]>('/course-opening/instructors', {
-    params: { departmentId, termId },
+    params: { departmentId: departmentId ?? undefined, termId },
   });
   return data;
 }
@@ -166,10 +166,14 @@ export async function getExternalCourses(departmentId: number, termId: number): 
   return data;
 }
 
-export async function getInstructorWorkload(instructorId: number, termId: number): Promise<InstructorWorkloadDto> {
+export async function getInstructorWorkload(
+  instructorId: number,
+  termId: number,
+  departmentId?: number | null,
+): Promise<InstructorWorkloadDto> {
   const { data } = await apiClient.get<InstructorWorkloadDto>(
     `/course-opening/instructors/${instructorId}/workload`,
-    { params: { termId } },
+    { params: { termId, departmentId: departmentId ?? undefined } },
   );
   return data;
 }
