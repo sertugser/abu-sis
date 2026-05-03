@@ -28,6 +28,7 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                Parameters = """{"AmphiThreshold": 100}""",
                 SortOrder = 2
             },
             new()
@@ -171,6 +172,7 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                Parameters = """{"TheoryLabSplitThreshold": 4}""",
                 SortOrder = 16
             },
             new()

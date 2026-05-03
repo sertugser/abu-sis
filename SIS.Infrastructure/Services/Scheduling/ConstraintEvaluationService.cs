@@ -56,13 +56,6 @@ public sealed class ConstraintEvaluationService
         SectionSnapshot candidate, TermSnapshot snapshot, SchedulingConstraintConfig config,
         ConstraintState? state = null)
     {
-        var context = new SchedulingConstraintContext
-        {
-            Candidate = candidate,
-            Snapshot = snapshot,
-            Config = config,
-        };
-
         var allConflicts = new List<SchedulingConflictDto>();
         var allNotes = new List<string>();
         double totalPenalty = 0;
@@ -78,19 +71,17 @@ public sealed class ConstraintEvaluationService
                 // B25: Check if there's an exemption for this candidate
                 if (state.IsExempt(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId))
                     continue;
-
-                // B27: Check for parameter override and apply to config
-                var paramOverride = state.GetParameterOverride(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
-                if (paramOverride != null)
-                {
-                    context = new SchedulingConstraintContext
-                    {
-                        Candidate = context.Candidate,
-                        Snapshot = context.Snapshot,
-                        Config = MergeParameterOverride(config, paramOverride),
-                    };
-                }
             }
+
+            var effectiveConfig = BuildEffectiveConfig(
+                config, evaluator, state, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
+
+            var context = new SchedulingConstraintContext
+            {
+                Candidate = candidate,
+                Snapshot = snapshot,
+                Config = effectiveConfig,
+            };
 
             var result = evaluator.Evaluate(context);
             var effectiveCategory = ResolveCategory(evaluator, state);
@@ -135,13 +126,6 @@ public sealed class ConstraintEvaluationService
                 SlotAllowedModes = snapshot.SlotAllowedModes,
             };
 
-            var context = new SchedulingConstraintContext
-            {
-                Candidate = section,
-                Snapshot = filteredSnapshot,
-                Config = config,
-            };
-
             foreach (var evaluator in _evaluators)
             {
                 if (state != null)
@@ -151,18 +135,17 @@ public sealed class ConstraintEvaluationService
 
                     if (state.IsExempt(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId))
                         continue;
-
-                    var paramOverride = state.GetParameterOverride(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId);
-                    if (paramOverride != null)
-                    {
-                        context = new SchedulingConstraintContext
-                        {
-                            Candidate = context.Candidate,
-                            Snapshot = context.Snapshot,
-                            Config = MergeParameterOverride(config, paramOverride),
-                        };
-                    }
                 }
+
+                var effectiveConfig = BuildEffectiveConfig(
+                    config, evaluator, state, section.InstructorId, section.DepartmentId, section.SectionId);
+
+                var context = new SchedulingConstraintContext
+                {
+                    Candidate = section,
+                    Snapshot = filteredSnapshot,
+                    Config = effectiveConfig,
+                };
 
                 var result = evaluator.Evaluate(context);
                 var effectiveCategory = ResolveCategory(evaluator, state);
@@ -215,28 +198,20 @@ public sealed class ConstraintEvaluationService
                 SlotAllowedModes = snapshot.SlotAllowedModes,
             };
 
-            var context = new SchedulingConstraintContext
-            {
-                Candidate = section,
-                Snapshot = filteredSnapshot,
-                Config = config,
-            };
-
             foreach (var evaluator in _evaluators)
             {
                 if (state.IsDisabled(evaluator.Code)) continue;
                 if (state.IsExempt(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId)) continue;
 
-                var paramOverride = state.GetParameterOverride(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId);
-                if (paramOverride != null)
+                var effectiveConfig = BuildEffectiveConfig(
+                    config, evaluator, state, section.InstructorId, section.DepartmentId, section.SectionId);
+
+                var context = new SchedulingConstraintContext
                 {
-                    context = new SchedulingConstraintContext
-                    {
-                        Candidate = context.Candidate,
-                        Snapshot = context.Snapshot,
-                        Config = MergeParameterOverride(config, paramOverride),
-                    };
-                }
+                    Candidate = section,
+                    Snapshot = filteredSnapshot,
+                    Config = effectiveConfig,
+                };
 
                 var result = evaluator.Evaluate(context);
                 var effectiveCategory = ResolveCategory(evaluator, state);
@@ -307,18 +282,13 @@ public sealed class ConstraintEvaluationService
 
     /// <summary>
     /// Calculate soft penalty score only (for auto-scheduling scoring).
+    /// SA/LNS optimizer'ı bu fonksiyonu çağırıyor — admin'in kısıt ağırlıkları (1-10)
+    /// burada SoftPenalty ile çarpılarak motora aktarılıyor.
     /// </summary>
     public double CalculatePenalty(
         SectionSnapshot candidate, TermSnapshot snapshot, SchedulingConstraintConfig config,
         ConstraintState? state = null)
     {
-        var context = new SchedulingConstraintContext
-        {
-            Candidate = candidate,
-            Snapshot = snapshot,
-            Config = config,
-        };
-
         double totalPenalty = 0;
         foreach (var evaluator in _evaluators)
         {
@@ -333,24 +303,24 @@ public sealed class ConstraintEvaluationService
 
                 if (state.IsExempt(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId))
                     continue;
-
-                var paramOverride = state.GetParameterOverride(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
-                if (paramOverride != null)
-                {
-                    context = new SchedulingConstraintContext
-                    {
-                        Candidate = context.Candidate,
-                        Snapshot = context.Snapshot,
-                        Config = MergeParameterOverride(config, paramOverride),
-                    };
-                }
             }
+
+            var effectiveConfig = BuildEffectiveConfig(
+                config, evaluator, state, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
+
+            var context = new SchedulingConstraintContext
+            {
+                Candidate = candidate,
+                Snapshot = snapshot,
+                Config = effectiveConfig,
+            };
 
             var result = evaluator.Evaluate(context);
             var categoryChanged = effectiveCategory != evaluator.Category;
-            totalPenalty += result.SoftPenalty;
+            var weight = ResolveWeight(evaluator, state);
+            totalPenalty += result.SoftPenalty * weight;
             if (categoryChanged && result.Conflicts.Count > 0)
-                totalPenalty += ConvertConflictsToSoftPenalty(result.Conflicts.Count);
+                totalPenalty += ConvertConflictsToSoftPenalty(result.Conflicts.Count) * weight;
         }
         return totalPenalty;
     }
@@ -364,6 +334,50 @@ public sealed class ConstraintEvaluationService
         }
 
         return evaluator.Category;
+    }
+
+    /// <summary>
+    /// Admin kısıt kartından ayarlanan 1-10 ağırlık. State yoksa veya tanım eksikse 1 dön (nötr çarpan).
+    /// </summary>
+    private static int ResolveWeight(IConstraintEvaluator evaluator, ConstraintState? state)
+    {
+        if (state?.Definitions.TryGetValue(evaluator.Code, out var definition) == true)
+        {
+            return Math.Clamp(definition.Weight, 1, 10);
+        }
+        return 1;
+    }
+
+    /// <summary>
+    /// Override sıralaması: baseline (FromSystemConfig) → ConstraintDefinition.Parameters
+    /// (kısıt kartından admin ayarı) → ConstraintException.ParameterOverride (entity-spesifik istisna).
+    /// En spesifik kazanır. State yoksa baseline döner.
+    /// </summary>
+    private SchedulingConstraintConfig BuildEffectiveConfig(
+        SchedulingConstraintConfig baseConfig,
+        IConstraintEvaluator evaluator,
+        ConstraintState? state,
+        int? instructorId, int? departmentId, int? sectionId)
+    {
+        if (state == null) return baseConfig;
+
+        var current = baseConfig;
+
+        // 1. Kısıt kartı parametreleri (genel admin ayarı)
+        if (state.Definitions.TryGetValue(evaluator.Code, out var def)
+            && !string.IsNullOrWhiteSpace(def.Parameters))
+        {
+            current = MergeParameterOverride(current, def.Parameters);
+        }
+
+        // 2. İstisna override'ı (entity-spesifik, en yerel)
+        var exOverride = state.GetParameterOverride(evaluator.Code, instructorId, departmentId, sectionId);
+        if (exOverride != null)
+        {
+            current = MergeParameterOverride(current, exOverride);
+        }
+
+        return current;
     }
 
     private static void AppendCandidateResult(

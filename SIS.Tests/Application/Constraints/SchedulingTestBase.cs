@@ -215,6 +215,15 @@ public abstract class SchedulingTestBase : IDisposable
 
     protected void SetSystemConfig(string key, string value)
     {
+        // H4/H13/H15/H16 parametre eşikleri artık ConstraintDefinitions.Parameters JSON'unda
+        // yaşıyor (RemoveDualChannelKisitParameters migration). Test'in niyeti korunsun diye
+        // bu key'leri ConstraintEvaluationService'in okuyacağı yere yönlendir.
+        if (ConstraintParameterKeys.TryGetValue(key, out var mapping))
+        {
+            SetConstraintParameter(mapping.ConstraintCode, mapping.ParamKey, value);
+            return;
+        }
+
         if (AlgorithmConfigKeys.Contains(key))
         {
             var existing = Context.SchedulingAlgorithmConfigs.SingleOrDefault(item => item.Key == key);
@@ -252,6 +261,64 @@ public abstract class SchedulingTestBase : IDisposable
             }
         }
 
+        Context.SaveChanges();
+    }
+
+    private static readonly Dictionary<string, (string ConstraintCode, string ParamKey)> ConstraintParameterKeys =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Classroom.AmphiThreshold"] = ("H4", "AmphiThreshold"),
+            ["Schedule.LunchBreakStart"] = ("H13", "LunchBreakStart"),
+            ["Schedule.LunchBreakEnd"] = ("H13", "LunchBreakEnd"),
+            ["Schedule.MaxConsecutiveHours"] = ("H15", "MaxConsecutiveHours"),
+            ["Schedule.TheoryLabSplitThreshold"] = ("H16", "TheoryLabSplitThreshold"),
+        };
+
+    private void SetConstraintParameter(string code, string paramKey, string value)
+    {
+        var definition = Context.ConstraintDefinitions.SingleOrDefault(d => d.Code == code);
+        if (definition == null)
+        {
+            definition = new ConstraintDefinition
+            {
+                Code = code,
+                Name = code,
+                Category = "Hard",
+                Scope = "Scheduling",
+                IsEnabled = true,
+            };
+            Context.ConstraintDefinitions.Add(definition);
+        }
+
+        // Mevcut Parameters JSON'unu key/value haritası olarak yükle (varsa).
+        var paramDict = new Dictionary<string, object?>();
+        if (!string.IsNullOrWhiteSpace(definition.Parameters))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(definition.Parameters);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    paramDict[prop.Name] = prop.Value.ValueKind switch
+                    {
+                        System.Text.Json.JsonValueKind.Number => prop.Value.GetInt32(),
+                        System.Text.Json.JsonValueKind.True => true,
+                        System.Text.Json.JsonValueKind.False => false,
+                        System.Text.Json.JsonValueKind.String => prop.Value.GetString(),
+                        _ => prop.Value.GetRawText()
+                    };
+                }
+            }
+            catch { /* malformed JSON → sıfırdan başla */ }
+        }
+
+        // Yeni değeri uygun tiple yaz: int parse edilebilirse number, değilse string.
+        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var intVal))
+            paramDict[paramKey] = intVal;
+        else
+            paramDict[paramKey] = value;
+
+        definition.Parameters = System.Text.Json.JsonSerializer.Serialize(paramDict);
         Context.SaveChanges();
     }
 

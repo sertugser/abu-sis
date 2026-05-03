@@ -41,12 +41,19 @@ public sealed class ConstructionSolver
         HashSet<int> facultyClassroomIds,
         int splitThreshold,
         int backtrackLimit,
-        MrvWeights mrvWeights)
+        MrvWeights mrvWeights,
+        int softLookaheadCount = 1)
     {
         var classroomLookup = classrooms.ToDictionary(c => c.Id);
         var sectionLookup = targetSections.ToDictionary(s => s.SectionId);
         var domainStore = new DomainStore();
         var conflictStats = new ConflictStatistics();
+
+        // Faz 3: Section difficulty — büyük zorunlu section'lar önce yerleşir.
+        // CENG 384 (88 kişi, sadece AMFİ 1 + C 018 yeter) → MAT 121 (86, daha çok seçenek)
+        // önünde sıraya girer. AMFİ 1 doğru section'a verilir, küçük section'lar küçük odalara.
+        var difficultyScorer = new SectionDifficultyScorer();
+        var difficulty = difficultyScorer.ScoreAll(targetSections, classrooms, facultyClassroomIds);
 
         // Step 1: Initialize domains — generate candidates for each section
         foreach (var section in targetSections)
@@ -68,11 +75,19 @@ public sealed class ConstructionSolver
             var unassigned = domainStore.GetUnassignedByMrv(assignedIds);
             if (unassigned.Count == 0) break;
 
-            // Tiebreak: among those with same domain size, pick most-failed first
-            var bestDomainSize = domainStore.DomainSize(unassigned[0]);
+            // Faz 3+: criticality-aware MRV.
+            // Eski: smallest domain first, sonra difficulty tiebreak (eşit domain'de).
+            // Yeni: criticality = difficulty / domain_size — kaynağı dar OLAN ZOR section'lar önce.
+            // Bu paralel split gerekenleri ÖNCE yerleştirir, kolay section'lar sonra dolar.
             var nextSectionId = unassigned
-                .TakeWhile(id => domainStore.DomainSize(id) == bestDomainSize)
-                .OrderByDescending(id => conflictStats.GetFailCount(id))
+                .OrderByDescending(id =>
+                {
+                    var diff = difficulty.GetValueOrDefault(id, 0);
+                    var domain = Math.Max(1, domainStore.DomainSize(id));
+                    return diff / (double)domain;
+                })
+                .ThenBy(id => domainStore.DomainSize(id))                       // ikincil: küçük domain
+                .ThenByDescending(id => conflictStats.GetFailCount(id))         // üçüncül: eskiden fail
                 .First();
 
             var section = sectionLookup[nextSectionId];
@@ -89,7 +104,13 @@ public sealed class ConstructionSolver
                 continue;
             }
 
-            var placed = false;
+            // ── Faz 1.3: Best-Fit Construction ──
+            // Eskiden: ilk hard-pass eden candidate seçiliyordu (soft skor görmezden geliniyordu).
+            // Yeni: top-K hard-pass eden candidate'ı topla, en az soft penalty vereni seç.
+            //       FC en sona ertelenir (B-yolu, performans için). FC fail olursa 2.'ye düş.
+            var lookahead = Math.Max(1, softLookaheadCount);
+            var feasibleScored = new List<(BlockCombination Combo, List<BlockAssignment> Blocks, double SoftPenalty)>();
+
             foreach (var combo in candidates)
             {
                 var blocks = new List<BlockAssignment>();
@@ -97,46 +118,50 @@ public sealed class ConstructionSolver
                 blocks.AddRange(combo.LabBlocks);
                 if (blocks.Count == 0) continue;
 
-                // Temporarily assign
                 state.Assign(nextSectionId, section, blocks);
 
-                // Build enriched snapshot and evaluate hard constraints
                 var rawSnap = state.ToSectionSnapshot(nextSectionId);
                 var sectionSnap = EnrichWithClassroomData(rawSnap, blocks, classroomLookup);
                 var termSnap = state.ToTermSnapshot(baseSnapshot);
                 var filteredSnapshot = BuildFilteredSnapshot(termSnap, nextSectionId);
 
-                var (conflicts, _, _) = _constraintService.EvaluateCandidate(
+                var (conflicts, _, softPenalty) = _constraintService.EvaluateCandidate(
                     sectionSnap, filteredSnapshot, config, constraintState);
+
+                state.Unassign(nextSectionId);
 
                 if (conflicts.Count > 0)
                 {
-                    // Record each conflict for future ordering
                     foreach (var c in conflicts)
                     {
                         conflictStats.RecordConflict(nextSectionId, c.ConflictType, c.Day, c.StartTime);
                     }
-
-                    state.Unassign(nextSectionId);
                     continue;
                 }
 
-                // No hard conflicts — run forward check
+                feasibleScored.Add((combo, blocks, softPenalty));
+                if (feasibleScored.Count >= lookahead) break;
+            }
+
+            // En düşük soft penalty veren candidate'tan başlayarak FC dene; ilk geçen seçilir.
+            var placed = false;
+            foreach (var entry in feasibleScored.OrderBy(x => x.SoftPenalty))
+            {
+                state.Assign(nextSectionId, section, entry.Blocks);
+
                 var fcResult = domainStore.ForwardCheck(
-                    nextSectionId, blocks, section, assignedIds,
+                    nextSectionId, entry.Blocks, section, assignedIds,
                     (otherId, otherCombo) => IsConflicting(
                         otherId, otherCombo, sectionLookup, state, classroomLookup,
                         baseSnapshot, config, constraintState));
 
                 if (fcResult.WipedOut)
                 {
-                    // Forward check caused a wipeout — undo prune and try next candidate
                     domainStore.UndoLastPrune();
                     state.Unassign(nextSectionId);
                     continue;
                 }
 
-                // Assignment successful
                 assignedIds.Add(nextSectionId);
                 placed = true;
                 break;

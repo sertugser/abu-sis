@@ -12,9 +12,21 @@ public sealed class BlockCombination
 
 public sealed class CandidateGenerator
 {
-    private const int MaxCombinations = 200;
-    private const int MaxWindowsPerDay = 5;
-    private const int MaxClassroomsPerType = 10;
+    // Faz 2: sabitler config-driven oldu, default'lar geriye uyumluluk için.
+    // AutoScheduleEngine.RunAsync başında Configure() çağrılır.
+    public int MaxCombinations { get; private set; } = 200;
+    public int MaxWindowsPerDay { get; private set; } = 5;
+    public int MaxClassroomsPerType { get; private set; } = 10;
+
+    /// <summary>
+    /// Config'ten okunan limitleri uygula. AutoScheduleEngine her çalıştırmada çağırır.
+    /// </summary>
+    public void Configure(int maxCombinations, int maxWindowsPerDay, int maxClassroomsPerType)
+    {
+        MaxCombinations = Math.Max(1, maxCombinations);
+        MaxWindowsPerDay = Math.Max(1, maxWindowsPerDay);
+        MaxClassroomsPerType = Math.Max(1, maxClassroomsPerType);
+    }
 
     /// <summary>
     /// Classroom types considered compatible for theory/general teaching.
@@ -112,7 +124,7 @@ public sealed class CandidateGenerator
                 allClassrooms, timeSlotsByDay, sortedDays, facultyClassroomIds, excludeBlocks);
         }
 
-        var classrooms = FilterClassrooms(allClassrooms, requiredClassroomType, section.Capacity, facultyClassroomIds);
+        var classrooms = FilterClassrooms(allClassrooms, requiredClassroomType, section.Capacity, facultyClassroomIds, state);
         var blocks = FindBlocks(blockType, requiredHours, classrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
 
         return blocks
@@ -141,7 +153,7 @@ public sealed class CandidateGenerator
         HashSet<BlockAssignment>? excludeBlocks)
     {
         // 1) Tek oda yeterli mi? Try single room first (capacity >= section capacity)
-        var singleRoomClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, section.Capacity, facultyClassroomIds);
+        var singleRoomClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, section.Capacity, facultyClassroomIds, state);
         if (singleRoomClassrooms.Count > 0)
         {
             var blocks = FindBlocks(blockType, requiredHours, singleRoomClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
@@ -154,8 +166,7 @@ public sealed class CandidateGenerator
         }
 
         // 2) Tek oda yetmiyor — paralel split dene
-        // Uygun oda sayısını hesapla: en büyük oda bazında
-        var allMatchingClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, 1, facultyClassroomIds);
+        var allMatchingClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, 1, facultyClassroomIds, state);
         if (allMatchingClassrooms.Count == 0)
             return new List<BlockCombination>();
 
@@ -163,7 +174,7 @@ public sealed class CandidateGenerator
         var groupCount = (int)Math.Ceiling((double)section.Capacity / maxCapacity);
         var minCapacityPerGroup = (int)Math.Ceiling((double)section.Capacity / groupCount);
 
-        var splitClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, minCapacityPerGroup, facultyClassroomIds);
+        var splitClassrooms = FilterClassrooms(allClassrooms, requiredClassroomType, minCapacityPerGroup, facultyClassroomIds, state);
         if (splitClassrooms.Count < groupCount)
             return new List<BlockCombination>();
 
@@ -245,7 +256,7 @@ public sealed class CandidateGenerator
         }
         else
         {
-            var theoryClassrooms = FilterClassrooms(allClassrooms, theoryType, section.Capacity, facultyClassroomIds);
+            var theoryClassrooms = FilterClassrooms(allClassrooms, theoryType, section.Capacity, facultyClassroomIds, state);
             theoryBlocks = FindBlocks(BlockType.Theory, section.TheoryHours, theoryClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
         }
 
@@ -259,7 +270,7 @@ public sealed class CandidateGenerator
         }
         else
         {
-            var labClassrooms = FilterClassrooms(allClassrooms, labType, section.Capacity, facultyClassroomIds);
+            var labClassrooms = FilterClassrooms(allClassrooms, labType, section.Capacity, facultyClassroomIds, state);
             var labBlocks = FindBlocks(BlockType.Lab, section.LabHours, labClassrooms, state, timeSlotsByDay, sortedDays, excludeBlocks);
             labCombos = labBlocks
                 .Take(MaxCombinations)
@@ -303,11 +314,12 @@ public sealed class CandidateGenerator
         return results;
     }
 
-    private static List<Classroom> FilterClassrooms(
+    private List<Classroom> FilterClassrooms(
         List<Classroom> allClassrooms,
         ClassroomType requiredType,
         int requiredCapacity,
-        HashSet<int> facultyClassroomIds)
+        HashSet<int> facultyClassroomIds,
+        MutableScheduleState state)
     {
         // For general teaching types (Lecture, Seminar, Amphitheater), accept any general teaching classroom.
         // For lab types (Lab, Computer), accept any lab teaching classroom.
@@ -323,13 +335,18 @@ public sealed class CandidateGenerator
                     ? LabTeachingTypes.Contains(c.Type)
                     : c.Type == requiredType)
             .Where(c => c.Capacity >= requiredCapacity)
+            // Faz 1.2 (revize): kapasite waste'ini önlemek için önce kapasiteye yakın olanı seç,
+            // EŞİT kapasitede tiebreaker olarak az kullanılan dersliği öne çek (load balance).
+            // İlk versiyon (load-first) regresyona yol açıyordu: küçük section büyük amfiyi
+            // dolduruyordu, büyük section yer bulamıyordu.
             .OrderBy(c => c.Type == requiredType ? 0 : 1) // prefer exact match first
-            .ThenBy(c => c.Capacity) // then smallest sufficient
+            .ThenBy(c => c.Capacity)                       // smallest sufficient (no waste)
+            .ThenBy(c => state.GetClassroomSlotCount(c.Id)) // tiebreaker: load balance
             .Take(MaxClassroomsPerType)
             .ToList();
     }
 
-    private static List<BlockAssignment> FindBlocks(
+    private List<BlockAssignment> FindBlocks(
         BlockType blockType,
         int requiredHours,
         List<Classroom> classrooms,
@@ -416,7 +433,7 @@ public sealed class CandidateGenerator
     /// Online dersler için candidate üretir. Derslik iterasyonu yok — ClassroomId=null olarak döner.
     /// Hafta sonu dahil tüm günleri kullanabilir. Teori+Lab saatlerini tek pencerede toplar (split threshold hariç).
     /// </summary>
-    private static List<BlockCombination> GenerateOnlineCandidates(
+    private List<BlockCombination> GenerateOnlineCandidates(
         SectionSnapshot section,
         MutableScheduleState state,
         Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
@@ -466,7 +483,7 @@ public sealed class CandidateGenerator
         return results;
     }
 
-    private static List<BlockAssignment> FindOnlineBlocks(
+    private List<BlockAssignment> FindOnlineBlocks(
         BlockType blockType,
         int requiredHours,
         MutableScheduleState state,

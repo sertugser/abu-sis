@@ -36,7 +36,8 @@ public sealed class LargeNeighborhoodSearch
         int seed,
         int maxIterations,
         int timeoutSeconds,
-        int destroySize)
+        int destroySize,
+        int softLookaheadCount = 1)
     {
         var random = new Random(seed);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -76,7 +77,7 @@ public sealed class LargeNeighborhoodSearch
             }
 
             GreedyRepair(repairPool, snapLookup, state, classrooms, classroomLookup,
-                timeSlotsByDay, config, constraintState, baseSnapshot, facultyClassroomIds, splitThreshold);
+                timeSlotsByDay, config, constraintState, baseSnapshot, facultyClassroomIds, splitThreshold, softLookaheadCount);
 
             var newPlacedCount = state.GetAssignedNonPinnedSectionIds().Count;
 
@@ -165,7 +166,7 @@ public sealed class LargeNeighborhoodSearch
         MutableScheduleState state, List<Classroom> classrooms, Dictionary<int, Classroom> classroomLookup,
         Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay, SchedulingConstraintConfig config,
         ConstraintState constraintState, TermSnapshot baseSnapshot,
-        HashSet<int> facultyClassroomIds, int splitThreshold)
+        HashSet<int> facultyClassroomIds, int splitThreshold, int softLookaheadCount = 1)
     {
         var ordered = sectionIds
             .Where(id => snapLookup.ContainsKey(id) && !state.IsAssigned(id))
@@ -179,9 +180,14 @@ public sealed class LargeNeighborhoodSearch
             .OrderBy(x => x.Candidates.Count)
             .ToList();
 
+        var lookahead = Math.Max(1, softLookaheadCount);
+
         foreach (var (sectionId, section, candidates) in ordered)
         {
             if (state.IsAssigned(sectionId)) continue;
+
+            // Faz 1.4: Best-Fit GreedyRepair — top-K hard-pass candidate'tan en az soft veren seçilir.
+            var feasibleScored = new List<(BlockCombination Combo, List<BlockAssignment> Blocks, double SoftPenalty)>();
 
             foreach (var combo in candidates)
             {
@@ -197,11 +203,20 @@ public sealed class LargeNeighborhoodSearch
                 var termSnap = state.ToTermSnapshot(baseSnapshot);
                 var filtered = BuildFilteredSnapshot(termSnap, sectionId);
 
-                var (conflicts, _, _) = _constraintService.EvaluateCandidate(enriched, filtered, config, constraintState);
+                var (conflicts, _, softPenalty) = _constraintService.EvaluateCandidate(enriched, filtered, config, constraintState);
 
-                if (conflicts.Count == 0) break;
                 state.Unassign(sectionId);
+
+                if (conflicts.Count > 0) continue;
+
+                feasibleScored.Add((combo, blocks, softPenalty));
+                if (feasibleScored.Count >= lookahead) break;
             }
+
+            if (feasibleScored.Count == 0) continue;
+
+            var best = feasibleScored.OrderBy(x => x.SoftPenalty).First();
+            state.Assign(sectionId, section, best.Blocks);
         }
     }
 

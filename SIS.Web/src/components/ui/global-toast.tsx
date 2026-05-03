@@ -46,7 +46,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {toasts.length > 0 && (
         <div className="pointer-events-none fixed inset-0 z-[100] flex items-start justify-center pt-24">
-          <div className="pointer-events-auto flex w-full max-w-md flex-col gap-2 px-4">
+          <div className="pointer-events-auto flex w-full max-w-xl flex-col gap-3 px-4">
             {toasts.map((t) => (
               <ToastCard key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
             ))}
@@ -75,22 +75,22 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => vo
   return (
     <div
       role="status"
-      className={`flex items-start gap-3 rounded-xl border bg-white px-4 py-3 shadow-lg ring-2 ${palette.ring} ${palette.bg}`}
+      className={`flex items-start gap-4 rounded-2xl border bg-white px-6 py-5 shadow-xl ring-2 ${palette.ring} ${palette.bg}`}
     >
-      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${palette.icon}`} />
+      <Icon className={`mt-0.5 h-7 w-7 shrink-0 ${palette.icon}`} />
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-semibold ${palette.title}`}>{toast.title}</p>
+        <p className={`text-lg font-semibold leading-tight ${palette.title}`}>{toast.title}</p>
         {toast.description && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{toast.description}</p>
+          <p className="mt-1.5 text-sm leading-snug text-foreground/80">{toast.description}</p>
         )}
       </div>
       <button
         type="button"
         onClick={onDismiss}
         aria-label="Kapat"
-        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="-mt-1 -mr-1 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        <X className="h-4 w-4" />
+        <X className="h-5 w-5" />
       </button>
     </div>
   );

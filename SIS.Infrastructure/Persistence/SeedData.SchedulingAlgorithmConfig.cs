@@ -14,15 +14,12 @@ public static partial class SeedData
         var configs = new List<SchedulingAlgorithmConfig>
         {
             // ── Hard Kısıt Eşikleri ──────────────────────────────
-            new() { Key = "Classroom.AmphiThreshold", Value = "100", Category = "HardThreshold", DataType = "int", Description = "Bir dersin kontenjanı bu sayıyı geçerse amfi zorunlu olur. (Derslik Tipi Uyumu kısıtı için kullanılır.)" },
+            // Not: Kısıda özel eşikler (H4 AmphiThreshold, H13 LunchBreakStart/End,
+            // H15 MaxConsecutiveHours, H16 TheoryLabSplitThreshold) ConstraintDefinition.Parameters
+            // JSON'una taşındı — admin ilgili kısıt kartından düzenliyor (tek otorite).
             new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: öğle arasına ders koyulamaz (zorunlu). KAPALI: koyulabilir ama ceza alır (tercihli)." },
-            new() { Key = "Schedule.LunchBreakStart", Value = "11:40", Category = "HardThreshold", DataType = "string", Description = "Öğle arasının başlangıç saati (HH:mm). Bu pencereye değen dersler 'öğle arası ihlali' sayılır." },
-            new() { Key = "Schedule.LunchBreakEnd", Value = "12:20", Category = "HardThreshold", DataType = "string", Description = "Öğle arasının bitiş saati (HH:mm)." },
-            new() { Key = "Schedule.MaxConsecutiveHours", Value = "4", Category = "HardThreshold", DataType = "int", Description = "Bir öğretim üyesi en fazla kaç saat aralıksız ders verebilir. Bu sayıyı geçen blok zorunlu olarak bölünür." },
 
             // ── Simulated Annealing Parametreleri ────────────────
-            // Not: S1/S2/S3/S4/S7 eşikleri ConstraintDefinition.Parameters JSON'una taşındı —
-            // admin ilgili kısıt kartının expand alanından düzenliyor.
             new() { Key = "Schedule.SA.MaxIterations", Value = "10000", Category = "SA", DataType = "int", Description = "Motor en fazla kaç iyileştirme denemesi yapsın. Artırırsan daha iyi program, ama daha yavaş çalışır. Öneri: 10000." },
             new() { Key = "Schedule.SA.InitialTemperature", Value = "100", Category = "SA", DataType = "int", Description = "Motorun başlangıçta ne kadar cesur olacağı (geniş arama). Zamanla soğur ve daha titiz olur. Öneri: 100." },
             new() { Key = "Schedule.SA.TimeoutSeconds", Value = "90", Category = "SA", DataType = "int", Description = "Motor en fazla kaç saniye çalışsın. Süre dolunca elindeki en iyi programı verir. Öneri: 90." },
@@ -45,8 +42,18 @@ public static partial class SeedData
 
             // ── Diğer Algoritma Ayarları ─────────────────────────
             new() { Key = "Scheduling.MaxBacktrackingDepth", Value = "3", Category = "Other", DataType = "int", Description = "Motor takıldığında kaç adım geri gidip tekrar denesin. Yüksek = daha titiz, daha yavaş. Öneri: 3." },
-            new() { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Other", DataType = "int", Description = "Bir dersin teori + lab toplamı bu saati aşarsa motor otomatik olarak farklı günlere böler. Öneri: 4 saat." },
             new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Other", DataType = "string", Description = "Bir derslik yetmediğinde hangi tip dersler aynı saatte iki ayrı dersliğe bölünebilir. Virgülle ayrılmış (örn: 'Theory,Lab'). Boş = bölünme yok." },
+
+            // Faz 1.5: Construction Solver'ın ilk programı kurarken her ders için kaç aday yeri
+            // soft penalty ile puanlayıp en iyisini seçeceği. 1 = eski 'ilk feasible' davranışı (geriye uyumluluk).
+            // 5-10 = en iyi öneri. Yüksek = daha iyi başlangıç, biraz daha yavaş.
+            new() { Key = "Schedule.Construction.SoftLookaheadCount", Value = "10", Category = "Other", DataType = "int", Description = "İlk programı kurarken her ders için kaç aday yer puanlansın. 1 = ilk uygunla yetin (eski davranış). 5-10 = en az ceza vereni seç (önerilen)." },
+
+            // Faz 2: aday üretici (CandidateGenerator) sınırları — eski hardcoded sabitler config'e taşındı.
+            // Defaults büyütüldü ki paralel split ve büyük dersliklerin tamamı görünebilsin.
+            new() { Key = "Schedule.Candidate.MaxCombinations", Value = "500", Category = "Other", DataType = "int", Description = "Bir ders için en fazla kaç saat/derslik kombinasyonu test edilsin. Yüksek = daha geniş arama, daha yavaş. Eski default: 200." },
+            new() { Key = "Schedule.Candidate.MaxWindowsPerDay", Value = "10", Category = "Other", DataType = "int", Description = "Bir derslik bir günde en fazla kaç saat aralığı önersin. Düşük = hızlı, ama bazı uygun saatler atlanır. Eski default: 5." },
+            new() { Key = "Schedule.Candidate.MaxClassroomsPerType", Value = "25", Category = "Other", DataType = "int", Description = "Bir ders için en fazla kaç farklı derslik aday olarak değerlendirilsin. Eski default: 10 (14 dersliği olan fakültede 4'ü dışlıyordu)." },
         };
 
         var existingKeys = await context.SchedulingAlgorithmConfigs

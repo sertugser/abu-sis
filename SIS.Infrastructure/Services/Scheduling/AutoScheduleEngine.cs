@@ -46,6 +46,12 @@ public sealed class AutoScheduleEngine
         var chainWeight = await _configProvider.GetIntAsync("Schedule.SA.ChainWeight", 15, ct);
 
         var lnsIterations = await _configProvider.GetIntAsync("Schedule.LNS.MaxIterations", 100, ct);
+        var softLookaheadCount = await _configProvider.GetIntAsync("Schedule.Construction.SoftLookaheadCount", 10, ct);
+
+        // Faz 2: aday üretici limitleri config'ten — sabit hardcoded değil
+        var candMaxCombinations = await _configProvider.GetIntAsync("Schedule.Candidate.MaxCombinations", 500, ct);
+        var candMaxWindowsPerDay = await _configProvider.GetIntAsync("Schedule.Candidate.MaxWindowsPerDay", 10, ct);
+        var candMaxClassroomsPerType = await _configProvider.GetIntAsync("Schedule.Candidate.MaxClassroomsPerType", 25, ct);
         var lnsTimeoutSeconds = await _configProvider.GetIntAsync("Schedule.LNS.TimeoutSeconds", 30, ct);
         var lnsDestroySize = await _configProvider.GetIntAsync("Schedule.LNS.DestroySize", 8, ct);
 
@@ -177,14 +183,17 @@ public sealed class AutoScheduleEngine
             .Where(cp => cp.IsCorequisite)
             .ToListAsync(ct);
 
-        // S4 enabled durumu ConstraintDefinition.IsEnabled'dan okunuyor (tek otorite).
-        // Disabled ise CoEnrollmentPairs DB sorgusunu atlıyoruz — performans optimizasyonu.
-        var s4Enabled = await _context.ConstraintDefinitions
+        // S4 enabled + threshold tek otorite olarak ConstraintDefinitions tablosunda:
+        // IsEnabled flag'i + Parameters JSON'undaki "S4MinCoPairThreshold". Daha önce
+        // SchedulingAlgorithmConfigs'tan okunuyordu, ama o key migration ile silindi (artık
+        // soft eşikler kısıt kartından yönetiliyor — bkz. MoveSoftThresholdsToConstraintParameters).
+        var s4Definition = await _context.ConstraintDefinitions
             .AsNoTracking()
             .Where(d => d.Code == "S4")
-            .Select(d => (bool?)d.IsEnabled)
-            .FirstOrDefaultAsync(ct) ?? true;
-        var s4Threshold = await _configProvider.GetIntAsync("SoftConstraint.S4.MinCoPairThreshold", 20, ct);
+            .Select(d => new { d.IsEnabled, d.Parameters })
+            .FirstOrDefaultAsync(ct);
+        var s4Enabled = s4Definition?.IsEnabled ?? true;
+        var s4Threshold = ParseS4Threshold(s4Definition?.Parameters, defaultValue: 20);
         var coEnrollmentPairs = s4Enabled
             ? await LoadCoEnrollmentPairsAsync(request.TermId, s4Threshold, ct)
             : new List<CoEnrollmentPair>();
@@ -284,12 +293,15 @@ public sealed class AutoScheduleEngine
 
         // 10. Run ConstructionSolver
         var candidateGen = new CandidateGenerator();
+        // Faz 2: config'ten gelen limitleri uygula (eski hardcoded sabitler yerine)
+        candidateGen.Configure(candMaxCombinations, candMaxWindowsPerDay, candMaxClassroomsPerType);
         var constructionSolver = new ConstructionSolver(candidateGen, _constraintService);
 
         var constructionResult = constructionSolver.Solve(
             targetSections, state, classrooms, timeSlotsByDay,
             constraintConfig, constraintState, baseSnapshot,
-            facultyClassroomIds, splitThreshold, backtrackLimit, mrvWeights);
+            facultyClassroomIds, splitThreshold, backtrackLimit, mrvWeights,
+            softLookaheadCount);
 
         // 11. Run SimulatedAnnealingOptimizer
         var nonPinnedCount = state.GetAssignedNonPinnedSectionIds().Count;
@@ -323,7 +335,8 @@ public sealed class AutoScheduleEngine
                 classrooms, timeSlotsByDay,
                 constraintConfig, constraintState, baseSnapshot,
                 facultyClassroomIds, splitThreshold, seed,
-                lnsIterations, lnsTimeoutSeconds, lnsDestroySize);
+                lnsIterations, lnsTimeoutSeconds, lnsDestroySize,
+                softLookaheadCount);
 
             // Update failed list — remove sections that LNS recovered
             constructionResult.FailedSectionIds.RemoveAll(id => state.IsAssigned(id));
@@ -676,6 +689,23 @@ public sealed class AutoScheduleEngine
             });
 
         return string.Join(", ", parts);
+    }
+
+    private static int ParseS4Threshold(string? parametersJson, int defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(parametersJson)) return defaultValue;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(parametersJson);
+            if (doc.RootElement.TryGetProperty("S4MinCoPairThreshold", out var prop)
+                && prop.ValueKind == System.Text.Json.JsonValueKind.Number
+                && prop.TryGetInt32(out var v))
+            {
+                return v;
+            }
+        }
+        catch { /* malformed JSON → default'a düş */ }
+        return defaultValue;
     }
 
     private async Task<SchedulingConstraintConfig> LoadSchedulingConstraintConfigAsync(CancellationToken ct)

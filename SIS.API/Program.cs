@@ -224,6 +224,11 @@ if (app.Environment.IsDevelopment())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
     await SeedData.SeedAsync(context, userManager, roleManager);
+
+    // Auto-schedule algoritma test verisi — Mühendislik fakültesinin gerçek dönem verisi
+    // (Güz 2024-25 + Bahar 2025-26, 162 section, hoca atanmamış). Idempotent — varsa skip.
+    // Memory: project_autoschedule_test_data.md, project_autoschedule_test_disabled_constraints.md
+    await SeedData.SeedAutoScheduleTestDataAsync(context);
 }
 
 app.Run();

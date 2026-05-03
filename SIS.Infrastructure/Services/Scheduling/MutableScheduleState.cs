@@ -39,6 +39,11 @@ public sealed class MutableScheduleState
     // Day-level section counts
     private readonly Dictionary<DayOfWeek, int> _daySectionCounts = new();
 
+    // Classroom-level slot counts (Faz 1.1) — derslik dengeleme için
+    // Bir block her atandığında o derslik için counter +1; kaldırılınca -1.
+    // CandidateGenerator.FilterClassrooms bu değere göre az kullanılan dersliği öne sıralar.
+    private readonly Dictionary<int, int> _classroomSlotCounts = new();
+
     // Classroom lookup for enriching snapshots after SA moves
     private IReadOnlyDictionary<int, Classroom>? _classroomLookup;
 
@@ -89,6 +94,10 @@ public sealed class MutableScheduleState
                     _classroomOccupancy[crKey] = crSlots;
                 }
                 crSlots.Add((block.StartTime, block.EndTime, sectionId));
+
+                // Faz 1.1: classroom-level load tracking (gün için olan pattern'ın derslik versiyonu)
+                _classroomSlotCounts.TryGetValue(classroomId, out var crCount);
+                _classroomSlotCounts[classroomId] = crCount + 1;
             }
 
             // Instructor occupancy (online dersler de hoca çakışmasına dahil)
@@ -132,6 +141,16 @@ public sealed class MutableScheduleState
                     crSlots.RemoveAll(s => s.SectionId == sectionId);
                     if (crSlots.Count == 0)
                         _classroomOccupancy.Remove(crKey);
+                }
+
+                // Faz 1.1: classroom-level load tracking decrement
+                if (_classroomSlotCounts.TryGetValue(classroomId, out var crCount))
+                {
+                    var newCount = crCount - 1;
+                    if (newCount <= 0)
+                        _classroomSlotCounts.Remove(classroomId);
+                    else
+                        _classroomSlotCounts[classroomId] = newCount;
                 }
             }
 
@@ -193,6 +212,14 @@ public sealed class MutableScheduleState
     public int GetDaySectionCount(DayOfWeek day) =>
         _daySectionCounts.GetValueOrDefault(day);
 
+    /// <summary>
+    /// Bir dersliğe atanmış toplam slot sayısı (Faz 1.1).
+    /// CandidateGenerator.FilterClassrooms az kullanılan dersliği öne sıralar.
+    /// Derslik dengelemesi için tek source-of-truth.
+    /// </summary>
+    public int GetClassroomSlotCount(int classroomId) =>
+        _classroomSlotCounts.GetValueOrDefault(classroomId);
+
     public DayOfWeek GetLeastLoadedDay(IReadOnlyList<DayOfWeek> candidates)
     {
         if (candidates.Count == 0)
@@ -233,8 +260,12 @@ public sealed class MutableScheduleState
             ClassroomId = b.ClassroomId
         }).ToList();
 
-        var totalHours = placement.Blocks.Sum(b =>
-            (int)Math.Ceiling((b.EndTime - b.StartTime).TotalHours));
+        // Paralel split: aynı (Day, StartTime, EndTime) penceresinde birden fazla oda olursa
+        // bu tek bir zaman dilimi sayılır (3 paralel lab × 4 saat ≠ 12 saat, ama 4 saat).
+        // Bu hesaplama H12 CreditHourEvaluator için kritik.
+        var totalHours = placement.Blocks
+            .GroupBy(b => (b.Day, b.StartTime, b.EndTime))
+            .Sum(g => (int)Math.Ceiling((g.Key.EndTime - g.Key.StartTime).TotalHours));
 
         // Resolve actual classroom data from blocks (fixes stale data after SA swap/chain)
         var actualClassroomId = placement.Blocks.Count > 0 ? placement.Blocks[0].ClassroomId : snap.ClassroomId;
@@ -335,6 +366,10 @@ public sealed class MutableScheduleState
         // Deep copy day counts
         foreach (var (day, count) in _daySectionCounts)
             clone._daySectionCounts[day] = count;
+
+        // Faz 1.1: deep copy classroom load counts
+        foreach (var (classroomId, count) in _classroomSlotCounts)
+            clone._classroomSlotCounts[classroomId] = count;
 
         return clone;
     }

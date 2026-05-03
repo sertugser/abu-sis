@@ -46,7 +46,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'time',
     label: 'Zaman & Dağılım Kısıtlamaları',
     icon: 'Clock',
-    codes: ['H13', 'S3', 'S5', 'S7', 'S9', 'S12', 'DIST'],
+    codes: ['H13', 'H17', 'S3', 'S5', 'S7', 'S9', 'S12', 'DIST'],
   },
 ];
 
@@ -98,6 +98,8 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'H16': [
     { key: 'TheoryLabSplitThreshold', label: 'Teori-Lab Ayrım Eşiği (saat)', type: 'number', min: 2, max: 10 },
   ],
+  // H17: form alanı yok — slot davranışı Ders Saatleri Yönetimi sayfasındaki AllowedMode'dan yönetiliyor.
+  'H17': [],
   'H-DL': [
     { key: 'MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
   ],

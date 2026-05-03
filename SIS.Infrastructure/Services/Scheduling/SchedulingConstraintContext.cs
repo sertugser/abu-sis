@@ -54,22 +54,29 @@ public sealed class SchedulingConstraintConfig
     /// SystemConfig key/value haritasından scheduling constraint config'i kurar.
     /// Hem manuel atama (SchedulingService) hem otomatik programlama (AutoScheduleEngine)
     /// hem simulasyon (SimulationService) tek yerden okusun diye burada toplu.
+    ///
+    /// Kısıda özel eşikler (LunchBreakStart/End, MaxConsecutiveHours, AmphiThreshold,
+    /// TheoryLabSplitThreshold) artık ConstraintDefinition.Parameters JSON'undan geliyor —
+    /// ConstraintEvaluationService.BuildEffectiveConfig per-evaluator override ediyor.
+    /// Buradaki default'lar, kısıt kartında parametre yazılı değilse devreye girer.
     /// </summary>
     public static SchedulingConstraintConfig FromSystemConfig(IReadOnlyDictionary<string, string> config)
     {
         return new SchedulingConstraintConfig
         {
-            // Hard
+            // Hard — sadece global mod ayarları (kısıt kartında yer almayan)
             LunchBreakIsHard = GetBool(config, "Schedule.LunchBreak.IsHard", false),
-            LunchBreakStart = GetTime(config, "Schedule.LunchBreakStart", new TimeOnly(11, 40)),
-            LunchBreakEnd = GetTime(config, "Schedule.LunchBreakEnd", new TimeOnly(12, 20)),
-            MaxConsecutiveHours = GetInt(config, "Schedule.MaxConsecutiveHours", 4),
             BreakDurationMinutes = GetInt(config, "Schedule.BreakDurationMinutes", 5),
-            AmphiThreshold = GetInt(config, "Classroom.AmphiThreshold", 100),
-            TheoryLabSplitThreshold = GetInt(config, "Schedule.TheoryLabSplitThreshold", 4),
             AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
             SplittableBlockTypes = ParseSplittableBlockTypes(
                 config.TryGetValue("Schedule.SplittableBlockTypes", out var sbt) ? sbt : "Lab"),
+
+            // Default değerler (kısıt kartı Parameters JSON'u override eder)
+            LunchBreakStart = new TimeOnly(11, 40),
+            LunchBreakEnd = new TimeOnly(12, 20),
+            MaxConsecutiveHours = 4,
+            AmphiThreshold = 100,
+            TheoryLabSplitThreshold = 4,
 
             // Soft — aç/kapat tek otorite ConstraintDefinition.IsEnabled (state.IsDisabled).
             // Evaluator-içi defansif S*Enabled bayrakları daima true.
