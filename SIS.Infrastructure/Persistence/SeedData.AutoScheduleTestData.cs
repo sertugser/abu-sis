@@ -69,8 +69,8 @@ public static partial class SeedData
         new TestCourseDef("MATH 224", "Discrete Math", "TBK", 3, 0, ClassroomType.Lecture, null),
 
         // ── BM (BMTR) ──
-        new TestCourseDef("BM 101", "Bilgisayar Muhendisligine Giris", "BMTR", 3, 4, ClassroomType.Lecture, ClassroomType.Lab),
-        new TestCourseDef("BM 102", "Programlama I", "BMTR", 3, 4, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("BM 101", "Bilgisayar Muhendisligine Giris", "BMTR", 3, 2, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("BM 102", "Programlama I", "BMTR", 3, 4, ClassroomType.Lecture, ClassroomType.Lab),  // Onaylı: 3T+4L
         new TestCourseDef("BM 203", "Programlama II", "BMTR", 3, 2, ClassroomType.Lecture, ClassroomType.Lab),
         new TestCourseDef("BM 214", "Algoritma", "BMTR", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("BM 223", "Veri Yapilari", "BMTR", 3, 0, ClassroomType.Lecture, null),
@@ -84,26 +84,26 @@ public static partial class SeedData
         new TestCourseDef("BM 424", "Bitirme Projesi", "BMTR", 6, 0, ClassroomType.Lecture, null),
 
         // ── CENG (BM) ──
-        new TestCourseDef("CENG 101", "Intro to Computer Engineering", "BM", 3, 4, ClassroomType.Amphitheater, ClassroomType.Lab),
-        new TestCourseDef("CENG 102", "Programming I", "BM", 3, 6, ClassroomType.Lecture, ClassroomType.Lab),
-        new TestCourseDef("CENG 213", "Data Structures Lab", "BM", 0, 3, ClassroomType.Lab, ClassroomType.Lab),
+        new TestCourseDef("CENG 101", "Intro to Computer Engineering", "BM", 3, 2, ClassroomType.Amphitheater, ClassroomType.Lab),
+        new TestCourseDef("CENG 102", "Programming I", "BM", 3, 4, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("CENG 213", "Data Structures", "BM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("CENG 214", "Discrete Math (CENG)", "BM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("CENG 223", "Object Oriented Programming", "BM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("CENG 241", "Logic Design", "BM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("CENG 256", "Operating Systems", "BM", 3, 0, ClassroomType.Lecture, null),
-        new TestCourseDef("CENG 332", "Computer Networks", "BM", 3, 6, ClassroomType.Lecture, ClassroomType.Lab),
-        new TestCourseDef("CENG 336", "Artificial Intelligence", "BM", 3, 3, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("CENG 332", "Computer Networks", "BM", 3, 2, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("CENG 336", "Artificial Intelligence", "BM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("CENG 384", "Senior Project I", "BM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("CENG 424", "Compilers", "BM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("CENG 446", "Cloud Computing", "BM", 3, 0, ClassroomType.Lecture, null),
 
         // ── EEE (EEM) ──
         new TestCourseDef("EEE 102", "Intro to EEE", "EEM", 2, 2, ClassroomType.Lecture, ClassroomType.Lab),
-        new TestCourseDef("EEE 201", "Circuits I", "EEM", 3, 3, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("EEE 201", "Circuits I", "EEM", 4, 0, ClassroomType.Lecture, null),
         new TestCourseDef("EEE 202", "Circuits II", "EEM", 4, 0, ClassroomType.Lecture, null),
-        new TestCourseDef("EEE 203", "Digital Logic", "EEM", 3, 4, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("EEE 203", "Digital Logic", "EEM", 3, 2, ClassroomType.Lecture, ClassroomType.Lab),
         new TestCourseDef("EEE 204", "Electronics I", "EEM", 3, 0, ClassroomType.Lecture, null),
-        new TestCourseDef("EEE 205", "Lab Course I", "EEM", 0, 3, ClassroomType.Lab, ClassroomType.Lab),
+        new TestCourseDef("EEE 205", "Lab Course I", "EEM", 2, 1, ClassroomType.Lecture, ClassroomType.Lab),
         new TestCourseDef("EEE 208", "Signals and Systems", "EEM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("EEE 212", "Circuit Theory Lab", "EEM", 0, 2, ClassroomType.Lab, ClassroomType.Lab),
         new TestCourseDef("EEE 236", "Electromagnetics", "EEM", 3, 0, ClassroomType.Lecture, null),
@@ -159,7 +159,7 @@ public static partial class SeedData
         new TestCourseDef("ISE 350", "Enterprise Resource Planning", "BSM", 3, 0, ClassroomType.Lecture, null),
 
         // ── SENG (YM) ──
-        new TestCourseDef("SENG 264", "Software Engineering", "YM", 3, 3, ClassroomType.Lecture, ClassroomType.Lab),
+        new TestCourseDef("SENG 264", "Software Engineering", "YM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("SENG 322", "Software Quality", "YM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("SENG 324", "Web Applications", "YM", 3, 0, ClassroomType.Lecture, null),
         new TestCourseDef("SENG 413", "Distributed Systems", "YM", 3, 0, ClassroomType.Lecture, null),
@@ -659,20 +659,17 @@ public static partial class SeedData
 
     private static async Task<int> EnsureCoursesAsync(AppDbContext context)
     {
-        var existingCodes = (await context.Courses
-            .AsNoTracking()
-            .Select(c => c.Code)
-            .ToListAsync())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Mevcut kursları code → entity map'ine al (upsert için tracked)
+        var existingByCode = await context.Courses
+            .ToDictionaryAsync(c => c.Code, c => c, StringComparer.OrdinalIgnoreCase);
 
         var deptByCode = await context.Departments
             .AsNoTracking()
             .ToDictionaryAsync(d => d.Code, d => d.Id);
 
-        var added = 0;
+        var changed = 0;
         foreach (var def in _testCourses)
         {
-            if (existingCodes.Contains(def.Code)) continue;
             if (!deptByCode.TryGetValue(def.DeptCode, out var deptId))
             {
                 throw new InvalidOperationException(
@@ -680,9 +677,34 @@ public static partial class SeedData
                     "Run academic structure seed first (SeedAcademicStructureAsync).");
             }
 
+            if (existingByCode.TryGetValue(def.Code, out var existing))
+            {
+                // Saat veya tür değişti mi? Test verisinin authoritative kaynağı _testCourses array'i;
+                // burada güncelle ki yeniden seed çağrısı saat düzeltmesini DB'ye yansıtsın.
+                var dirty = existing.Name != def.Name
+                    || existing.TheoryHours != def.TheoryHours
+                    || existing.LabHours != def.LabHours
+                    || existing.TheoryClassroomType != def.TheoryType
+                    || existing.LabClassroomType != def.LabType
+                    || existing.DepartmentId != deptId;
+
+                if (dirty)
+                {
+                    existing.Name = def.Name;
+                    existing.TheoryHours = def.TheoryHours;
+                    existing.LabHours = def.LabHours;
+                    existing.Ects = (def.TheoryHours + def.LabHours) * 2;
+                    existing.TheoryClassroomType = def.TheoryType;
+                    existing.LabClassroomType = def.LabType;
+                    existing.DepartmentId = deptId;
+                    changed++;
+                }
+                continue;
+            }
+
             try
             {
-                context.Courses.Add(new Course
+                var course = new Course
                 {
                     Code = def.Code,
                     Name = def.Name,
@@ -697,17 +719,20 @@ public static partial class SeedData
                     Language = CourseLanguage.Turkish,
                     TeachingMethod = TeachingMethod.FaceToFace,
                     Level = CourseLevel.Undergraduate,
-                });
-                await context.SaveChangesAsync();
-                added++;
-                existingCodes.Add(def.Code);
+                };
+                context.Courses.Add(course);
+                existingByCode[def.Code] = course;
+                changed++;
             }
             catch (DbUpdateException)
             {
                 context.ChangeTracker.Clear();
             }
         }
-        return added;
+
+        if (changed > 0)
+            await context.SaveChangesAsync();
+        return changed;
     }
 
     private static async Task<int> EnsureSectionsAsync(AppDbContext context)
