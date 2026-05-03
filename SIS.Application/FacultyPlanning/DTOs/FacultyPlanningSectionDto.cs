@@ -23,6 +23,7 @@ public class FacultyPlanningSectionDto
     public int SectionIndex { get; set; }
     public bool IsPinned { get; set; }
     public int SuggestedSemester { get; set; }
+    public TeachingMethod TeachingMethod { get; set; } = TeachingMethod.FaceToFace;
 }
 
 

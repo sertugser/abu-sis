@@ -230,7 +230,13 @@ function SectionBlock({
 export interface CalendarGridProps {
   sections: FacultyPlanningSection[];
   timeSlots: FacultyPlanningTimeSlot[];
-  onEmptyCellClick?: (day: number, slotOrder: number, startTime: string, endTime: string) => void;
+  onEmptyCellClick?: (
+    day: number,
+    slotOrder: number,
+    startTime: string,
+    endTime: string,
+    allowedMode: FacultyPlanningTimeSlot['allowedMode'],
+  ) => void;
 }
 
 export function CalendarGrid({
@@ -437,10 +443,11 @@ export function CalendarGrid({
                     const isOnlineOnly = slot?.allowedMode === 'OnlineOnly';
                     const slotMissing = slot === undefined;
 
+                    // OnlineOnly slot da tıklanabilir — sheet TeachingMethod-aware filter yapar.
+                    // Yalnızca slotMissing veya zaten dolu hücreler tıklanamaz.
                     const isClickableEmpty =
                       cellBlocks.length === 0 &&
                       !slotMissing &&
-                      !isOnlineOnly &&
                       onEmptyCellClick != null;
 
                     return (
@@ -451,7 +458,7 @@ export function CalendarGrid({
                             cellBlocks.length > 0 && 'min-h-[2.5rem]',
                             isClickableEmpty && 'cursor-pointer hover:bg-blue-50/50 rounded transition-colors group min-h-[2.5rem] items-center justify-center',
                           )}
-                          onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime) : undefined}
+                          onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime, slot!.allowedMode) : undefined}
                         >
                           {cellBlocks.map(b => {
                             const startKey = `${b.sectionId}-${b.day}-${row.startTime}`;

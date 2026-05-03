@@ -64,9 +64,6 @@ public sealed class CandidateGenerator
         HashSet<BlockAssignment>? excludeBlocks = null,
         HashSet<BlockType>? splittableBlockTypes = null)
     {
-        var hasTheory = section.TheoryHours > 0;
-        var hasLab = section.LabHours > 0;
-
         // Varsayılan: sadece Lab split'i yapılabilir. Config'ten farklı gelirse üzerine yazar.
         var splittable = splittableBlockTypes ?? new HashSet<BlockType> { BlockType.Lab };
 
@@ -75,12 +72,56 @@ public sealed class CandidateGenerator
         if (section.TeachingMethod == TeachingMethod.Online)
             return GenerateOnlineCandidates(section, state, timeSlotsByDay, splitThreshold, excludeBlocks);
 
-        // Aday üretirken ders öğretim yöntemiyle uyumsuz slot tipini önceden çıkar —
-        // H17 evaluator post-hoc fail edecekti, önden filtre suni contention'ı azaltır.
+        // Hybrid ders: önce OnlineOnly slot'lardan aday üret (hafta sonu/akşam),
+        // yetmezse Both/F2FOnly slot'lardan tamamla. Online dersler nasıl OnlineOnly
+        // slot'a önceliklendiriliyorsa Hybrid de aynı kuralı izler — yüz-yüze gündüz
+        // slot'larını gereksiz işgal etmesin.
+        if (section.TeachingMethod == TeachingMethod.Hybrid)
+        {
+            var onlineOnlyMap = FilterTimeSlotsByMode(timeSlotsByDay, m => m == TimeSlotAllowedMode.OnlineOnly);
+            var onlineFirst = GenerateForFilteredSlots(
+                section, state, allClassrooms, onlineOnlyMap,
+                splitThreshold, facultyClassroomIds, excludeBlocks, splittable);
+
+            if (onlineFirst.Count >= MaxCombinations)
+                return onlineFirst.Take(MaxCombinations).ToList();
+
+            // Faz 2: OnlineOnly olmayan slot'lardan tamamla
+            var nonOnlineMap = FilterTimeSlotsByMode(timeSlotsByDay, m => m != TimeSlotAllowedMode.OnlineOnly);
+            var nonOnlineFallback = GenerateForFilteredSlots(
+                section, state, allClassrooms, nonOnlineMap,
+                splitThreshold, facultyClassroomIds, excludeBlocks, splittable);
+
+            return onlineFirst.Concat(nonOnlineFallback).Take(MaxCombinations).ToList();
+        }
+
+        // FaceToFace: H17 koruması — OnlineOnly slot'lar tamamen dışarıda.
         // Tek otorite: SlotAllowedModePolicy + TeachingMethodPolicy.
         var effectiveTimeSlotsByDay = FilterIncompatibleSlots(timeSlotsByDay, section.TeachingMethod);
 
-        // Sort days by least loaded first.
+        return GenerateForFilteredSlots(
+            section, state, allClassrooms, effectiveTimeSlotsByDay,
+            splitThreshold, facultyClassroomIds, excludeBlocks, splittable);
+    }
+
+    /// <summary>
+    /// Verilen filtreli slot haritası üzerinden teori/lab/karışık candidate akışını
+    /// çalıştırır. Generate ana metodundan çağrılır — Hybrid için iki kez (faz 1: OnlineOnly,
+    /// faz 2: Both+F2FOnly), F2F için bir kez (filtreli), Online için kullanılmaz (kendi akışı).
+    /// </summary>
+    private List<BlockCombination> GenerateForFilteredSlots(
+        SectionSnapshot section,
+        MutableScheduleState state,
+        List<Classroom> allClassrooms,
+        Dictionary<DayOfWeek, List<TimeSlot>> effectiveTimeSlotsByDay,
+        int splitThreshold,
+        HashSet<int> facultyClassroomIds,
+        HashSet<BlockAssignment>? excludeBlocks,
+        HashSet<BlockType> splittable)
+    {
+        var hasTheory = section.TheoryHours > 0;
+        var hasLab = section.LabHours > 0;
+
         var sortedDays = effectiveTimeSlotsByDay.Keys
             .OrderBy(d => state.GetDaySectionCount(d))
             .ThenBy(d => d)
@@ -106,6 +147,24 @@ public sealed class CandidateGenerator
                 facultyClassroomIds, excludeBlocks, splittable);
 
         return new List<BlockCombination>();
+    }
+
+    /// <summary>
+    /// Slot haritasından AllowedMode predicate'ine uyan slot'ları toplar.
+    /// Hybrid akışında faz 1 (OnlineOnly) ve faz 2 (Both+F2FOnly) için kullanılır.
+    /// </summary>
+    private static Dictionary<DayOfWeek, List<TimeSlot>> FilterTimeSlotsByMode(
+        Dictionary<DayOfWeek, List<TimeSlot>> timeSlotsByDay,
+        Func<TimeSlotAllowedMode, bool> predicate)
+    {
+        var filtered = new Dictionary<DayOfWeek, List<TimeSlot>>();
+        foreach (var (day, slots) in timeSlotsByDay)
+        {
+            var matching = slots.Where(s => predicate(s.AllowedMode)).ToList();
+            if (matching.Count > 0)
+                filtered[day] = matching;
+        }
+        return filtered;
     }
 
     /// <summary>

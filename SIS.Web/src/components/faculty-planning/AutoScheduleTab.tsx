@@ -54,6 +54,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
     slotOrder: number;
     startTime: string;
     endTime: string;
+    allowedMode: FacultyPlanningTimeSlot['allowedMode'];
   } | null>(null);
 
   const selectedRunId = previewMutation.data
@@ -372,8 +373,8 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
         <CalendarGrid
           sections={sections}
           timeSlots={timeSlots}
-          onEmptyCellClick={(day, slotOrder, startTime, endTime) => {
-            setAssignSlot({ day, slotOrder, startTime, endTime });
+          onEmptyCellClick={(day, slotOrder, startTime, endTime, allowedMode) => {
+            setAssignSlot({ day, slotOrder, startTime, endTime, allowedMode });
           }}
         />
       </div>
@@ -398,6 +399,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
           slotOrder={assignSlot.slotOrder}
           startTime={assignSlot.startTime}
           endTime={assignSlot.endTime}
+          allowedMode={assignSlot.allowedMode}
           termId={termId}
           sections={sections}
         />

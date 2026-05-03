@@ -9,7 +9,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAssignSection, useAvailableClassrooms } from '../../hooks/useFacultyPlanning';
-import type { FacultyPlanningSection } from '../../types/facultyPlanning';
+import type { FacultyPlanningSection, TimeSlotAllowedMode, TeachingMethod } from '../../types/facultyPlanning';
 import { AssignableSectionRow } from './AssignableSectionRow';
 
 const DAY_NAMES: Record<number, string> = {
@@ -20,6 +20,27 @@ const DAY_NAMES: Record<number, string> = {
   5: 'Cuma',
 };
 
+/**
+ * Backend `TeachingMethodPolicy.IsSlotModeCompatible` ile birebir senkron.
+ * Tek-otorite kuralı: aynı karar 2 yere yazılırsa bug çıkar — bu fonksiyonun her satırı
+ * SIS.Infrastructure/Services/Scheduling/TeachingMethodPolicy.cs'i mirror eder.
+ */
+function isSlotCompatibleWithMethod(
+  slotMode: TimeSlotAllowedMode,
+  method: TeachingMethod,
+): boolean {
+  switch (slotMode) {
+    case 'Both':
+      return true;
+    case 'OnlineOnly':
+      // FaceToFace ders OnlineOnly slot'a giremez (H17)
+      return method !== 'FaceToFace';
+    case 'FaceToFaceOnly':
+      // Online ders F2F-only slot'a giremez
+      return method !== 'Online';
+  }
+}
+
 interface SlotAssignSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -27,6 +48,7 @@ interface SlotAssignSheetProps {
   slotOrder: number;
   startTime: string;
   endTime: string;
+  allowedMode: TimeSlotAllowedMode;
   termId: number;
   sections: FacultyPlanningSection[];
 }
@@ -39,7 +61,7 @@ interface SectionWithReason {
 
 function classifySection(
   section: FacultyPlanningSection,
-  _day: number,
+  allowedMode: TimeSlotAllowedMode,
 ): SectionWithReason {
   if (section.isPinned) {
     return { section, available: false, reason: 'Sabitlenmiş' };
@@ -49,6 +71,14 @@ function classifySection(
   }
   if (!section.instructorId) {
     return { section, available: false, reason: 'Öğretim üyesi yok' };
+  }
+  if (!isSlotCompatibleWithMethod(allowedMode, section.teachingMethod)) {
+    const reason = allowedMode === 'OnlineOnly'
+      ? 'Yüz-yüze ders online slot\'a atanamaz'
+      : allowedMode === 'FaceToFaceOnly'
+        ? 'Online ders yüz-yüze slot\'a atanamaz'
+        : 'Slot tipi uyumsuz';
+    return { section, available: false, reason };
   }
   return { section, available: true };
 }
@@ -107,6 +137,7 @@ export function SlotAssignSheet({
   slotOrder: _slotOrder,
   startTime,
   endTime,
+  allowedMode,
   termId,
   sections,
 }: SlotAssignSheetProps) {
@@ -117,8 +148,8 @@ export function SlotAssignSheet({
   const classified = useMemo<SectionWithReason[]>(() => {
     return sections
       .filter(s => s.status === 'Unscheduled' || s.isPinned)
-      .map(s => classifySection(s, day));
-  }, [sections, day]);
+      .map(s => classifySection(s, allowedMode));
+  }, [sections, allowedMode]);
 
   const filtered = useMemo<SectionWithReason[]>(() => {
     if (!search.trim()) return classified;
@@ -160,12 +191,23 @@ export function SlotAssignSheet({
     );
   };
 
+  const slotModeLabel = allowedMode === 'OnlineOnly'
+    ? 'Online Slot'
+    : allowedMode === 'FaceToFaceOnly'
+      ? 'Yüz-yüze Slot'
+      : null;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[400px] sm:w-[440px] p-0 flex flex-col">
         <SheetHeader className="px-4 pt-5 pb-3 border-b border-slate-100 shrink-0">
           <SheetTitle className="text-base font-semibold text-[#003366]">
             {dayName} {timeLabel} — Şube Ata
+            {slotModeLabel && (
+              <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium uppercase rounded bg-slate-100 text-slate-600 align-middle">
+                {slotModeLabel}
+              </span>
+            )}
           </SheetTitle>
           <div className="relative mt-2">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />

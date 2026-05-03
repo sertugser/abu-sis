@@ -43,6 +43,8 @@ export interface RecentAssignment {
 
 export type SectionStatus = 'Unscheduled' | 'Scheduled' | 'Conflicted' | 'Partial';
 
+export type TeachingMethod = 'FaceToFace' | 'Online' | 'Hybrid';
+
 export interface FacultyPlanningSection {
   sectionId: number;
   courseId: number;
@@ -63,6 +65,7 @@ export interface FacultyPlanningSection {
   sectionIndex: number;
   isPinned: boolean;
   suggestedSemester: number;
+  teachingMethod: TeachingMethod;
 }
 
 export interface FacultyPlanningSectionPage {
