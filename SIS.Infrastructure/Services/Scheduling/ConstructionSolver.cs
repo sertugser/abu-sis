@@ -42,12 +42,19 @@ public sealed class ConstructionSolver
         int splitThreshold,
         int backtrackLimit,
         MrvWeights mrvWeights,
-        int softLookaheadCount = 1)
+        int softLookaheadCount = 1,
+        int perturbationSeed = 0)
     {
         var classroomLookup = classrooms.ToDictionary(c => c.Id);
         var sectionLookup = targetSections.ToDictionary(s => s.SectionId);
         var domainStore = new DomainStore();
         var conflictStats = new ConflictStatistics();
+        // Multi-restart için perturbation: tie-break'lerde küçük random terim ile
+        // section ordering'i çeşitlendirir. perturbationSeed=0 → deterministik (eski davranış).
+        var perturbRng = perturbationSeed != 0 ? new Random(perturbationSeed) : null;
+        var perturbScores = perturbRng != null
+            ? targetSections.ToDictionary(s => s.SectionId, _ => perturbRng.NextDouble())
+            : null;
 
         // Faz 3: Section difficulty — büyük zorunlu section'lar önce yerleşir.
         // CENG 384 (88 kişi, sadece AMFİ 1 + C 018 yeter) → MAT 121 (86, daha çok seçenek)
@@ -79,12 +86,18 @@ public sealed class ConstructionSolver
             // Eski: smallest domain first, sonra difficulty tiebreak (eşit domain'de).
             // Yeni: criticality = difficulty / domain_size — kaynağı dar OLAN ZOR section'lar önce.
             // Bu paralel split gerekenleri ÖNCE yerleştirir, kolay section'lar sonra dolar.
+            // Multi-restart için yumuşak perturbation: criticality'ye ±%5 noise.
+            // Daha güçlü değer (±%15) section ordering'i bozup başarıyı düşürdü; bu seviye
+            // restart'lar arası çeşitlilik sağlamak için yeterli, yapısal kararı bozmayacak kadar küçük.
             var nextSectionId = unassigned
                 .OrderByDescending(id =>
                 {
                     var diff = difficulty.GetValueOrDefault(id, 0);
                     var domain = Math.Max(1, domainStore.DomainSize(id));
-                    return diff / (double)domain;
+                    var baseCrit = diff / (double)domain;
+                    if (perturbScores == null) return baseCrit;
+                    var noise = (perturbScores[id] - 0.5) * 0.10 * baseCrit; // ±%5
+                    return baseCrit + noise;
                 })
                 .ThenBy(id => domainStore.DomainSize(id))                       // ikincil: küçük domain
                 .ThenByDescending(id => conflictStats.GetFailCount(id))         // üçüncül: eskiden fail
@@ -104,67 +117,96 @@ public sealed class ConstructionSolver
                 continue;
             }
 
-            // ── Faz 1.3: Best-Fit Construction ──
-            // Eskiden: ilk hard-pass eden candidate seçiliyordu (soft skor görmezden geliniyordu).
-            // Yeni: top-K hard-pass eden candidate'ı topla, en az soft penalty vereni seç.
-            //       FC en sona ertelenir (B-yolu, performans için). FC fail olursa 2.'ye düş.
-            var lookahead = Math.Max(1, softLookaheadCount);
+            // ── Faz 1.3 + Bug A fix: Adaptive Best-Fit ──
+            // Eski davranış: ilk K hard-pass candidate alınıp K'sının da FC fail etmesi durumunda
+            // section fail ediyordu (kalan hard-pass candidate'lar görünmez kalıyordu).
+            // Yeni: hard-pass candidate'ları batch-batch topla. Bir batch'in tümü FC wipeout
+            // ederse batch'i 2× büyüt, candidate listesi tükenene kadar devam et.
+            // CENG 102 gibi yüksek-yüklü section'lar paralel split combo'larında top-K aynı
+            // (gün, saat) penceresinde yoğunlaştığında bu sayede 11.+ candidate'a ulaşır.
+            var initialLookahead = Math.Max(1, softLookaheadCount);
             var feasibleScored = new List<(BlockCombination Combo, List<BlockAssignment> Blocks, double SoftPenalty)>();
-
-            foreach (var combo in candidates)
-            {
-                var blocks = new List<BlockAssignment>();
-                if (combo.TheoryBlock != null) blocks.Add(combo.TheoryBlock);
-                blocks.AddRange(combo.LabBlocks);
-                if (blocks.Count == 0) continue;
-
-                state.Assign(nextSectionId, section, blocks);
-
-                var rawSnap = state.ToSectionSnapshot(nextSectionId);
-                var sectionSnap = EnrichWithClassroomData(rawSnap, blocks, classroomLookup);
-                var termSnap = state.ToTermSnapshot(baseSnapshot);
-                var filteredSnapshot = BuildFilteredSnapshot(termSnap, nextSectionId);
-
-                var (conflicts, _, softPenalty) = _constraintService.EvaluateCandidate(
-                    sectionSnap, filteredSnapshot, config, constraintState);
-
-                state.Unassign(nextSectionId);
-
-                if (conflicts.Count > 0)
-                {
-                    foreach (var c in conflicts)
-                    {
-                        conflictStats.RecordConflict(nextSectionId, c.ConflictType, c.Day, c.StartTime);
-                    }
-                    continue;
-                }
-
-                feasibleScored.Add((combo, blocks, softPenalty));
-                if (feasibleScored.Count >= lookahead) break;
-            }
-
-            // En düşük soft penalty veren candidate'tan başlayarak FC dene; ilk geçen seçilir.
+            var triedFcEntries = new HashSet<int>(); // feasibleScored index'leri (FC denenenler)
+            var nextCandIdx = 0;
+            var batchTarget = initialLookahead;
             var placed = false;
-            foreach (var entry in feasibleScored.OrderBy(x => x.SoftPenalty))
+
+            while (!placed)
             {
-                state.Assign(nextSectionId, section, entry.Blocks);
-
-                var fcResult = domainStore.ForwardCheck(
-                    nextSectionId, entry.Blocks, section, assignedIds,
-                    (otherId, otherCombo) => IsConflicting(
-                        otherId, otherCombo, sectionLookup, state, classroomLookup,
-                        baseSnapshot, config, constraintState));
-
-                if (fcResult.WipedOut)
+                // 1) Hard-pass candidate'ları batchTarget'a kadar topla.
+                while (feasibleScored.Count < batchTarget && nextCandIdx < candidates.Count)
                 {
-                    domainStore.UndoLastPrune();
+                    var combo = candidates[nextCandIdx++];
+                    var blocks = new List<BlockAssignment>();
+                    if (combo.TheoryBlock != null) blocks.Add(combo.TheoryBlock);
+                    blocks.AddRange(combo.LabBlocks);
+                    if (blocks.Count == 0) continue;
+
+                    state.Assign(nextSectionId, section, blocks);
+
+                    var rawSnap = state.ToSectionSnapshot(nextSectionId);
+                    var sectionSnap = EnrichWithClassroomData(rawSnap, blocks, classroomLookup);
+                    var termSnap = state.ToTermSnapshot(baseSnapshot);
+                    var filteredSnapshot = BuildFilteredSnapshot(termSnap, nextSectionId);
+
+                    var (conflicts, _, softPenalty) = _constraintService.EvaluateCandidate(
+                        sectionSnap, filteredSnapshot, config, constraintState);
+
                     state.Unassign(nextSectionId);
-                    continue;
+
+                    if (conflicts.Count > 0)
+                    {
+                        foreach (var c in conflicts)
+                        {
+                            conflictStats.RecordConflict(nextSectionId, c.ConflictType, c.Day, c.StartTime);
+                        }
+                        continue;
+                    }
+
+                    feasibleScored.Add((combo, blocks, softPenalty));
                 }
 
-                assignedIds.Add(nextSectionId);
-                placed = true;
-                break;
+                // 2) Hiç hard-pass yoksa veya hepsi denendiyse → çık.
+                if (feasibleScored.Count == 0 || feasibleScored.Count == triedFcEntries.Count)
+                    break;
+
+                // 3) Bu batch'in henüz denenmemiş entry'lerini soft-best sırayla FC dene.
+                var orderedIndices = feasibleScored
+                    .Select((entry, idx) => (Entry: entry, Idx: idx))
+                    .Where(p => !triedFcEntries.Contains(p.Idx))
+                    .OrderBy(p => p.Entry.SoftPenalty)
+                    .ToList();
+
+                foreach (var (entry, idx) in orderedIndices)
+                {
+                    triedFcEntries.Add(idx);
+
+                    state.Assign(nextSectionId, section, entry.Blocks);
+
+                    var fcResult = domainStore.ForwardCheck(
+                        nextSectionId, entry.Blocks, section, assignedIds,
+                        (otherId, otherCombo) => IsConflicting(
+                            otherId, otherCombo, sectionLookup, state, classroomLookup,
+                            baseSnapshot, config, constraintState));
+
+                    if (fcResult.WipedOut)
+                    {
+                        domainStore.UndoLastPrune();
+                        state.Unassign(nextSectionId);
+                        continue;
+                    }
+
+                    assignedIds.Add(nextSectionId);
+                    placed = true;
+                    break;
+                }
+
+                if (placed) break;
+
+                // 4) Bu batch tümüyle FC fail etti. Candidate listesi tükendiyse bırak,
+                //    yoksa batch'i 2× büyütüp yeni hard-pass'lar topla.
+                if (nextCandIdx >= candidates.Count) break;
+                batchTarget = Math.Min(candidates.Count, batchTarget * 2);
             }
 
             if (!placed)

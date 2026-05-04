@@ -284,17 +284,52 @@ public sealed class AutoScheduleEngine
             .Select(id => sectionSnapshots[id])
             .ToList();
 
-        // 10. Run ConstructionSolver
+        // 10. Run ConstructionSolver — multi-restart with seed perturbation.
+        // Construction tek deterministik akış; tek seed = tek sonuç. Farklı tie-break
+        // sıralamalarıyla 3-5 restart koşulup en iyisi seçilir → CENG 102 gibi yüksek-yüklü
+        // section'ların farklı ordering'lerde yer bulma şansı artar.
         var candidateGen = new CandidateGenerator();
         // Faz 2: config'ten gelen limitleri uygula (eski hardcoded sabitler yerine)
         candidateGen.Configure(candMaxCombinations, candMaxWindowsPerDay, candMaxClassroomsPerType, labMaxBlockHours);
         var constructionSolver = new ConstructionSolver(candidateGen, _constraintService);
 
-        var constructionResult = constructionSolver.Solve(
-            targetSections, state, classrooms, timeSlotsByDay,
-            constraintConfig, constraintState, baseSnapshot,
-            facultyClassroomIds, splitThreshold, backtrackLimit, mrvWeights,
-            softLookaheadCount);
+        // RestartCount=1 default: r=0 deterministik tek koşu. Multi-restart faydası
+        // benchmark'larda ölçülmedi (perturbation tek başına yapısal fail'leri çözmüyor),
+        // overhead getirmesin. Config'ten 3-5 yapılabilir, gelişmiş senaryolar için.
+        var restartCount = await _configProvider.GetIntAsync("Schedule.Construction.RestartCount", 1, ct);
+        restartCount = Math.Max(1, restartCount);
+
+        // Pinned section'lar yerleştirilmiş state'in snapshot'ı; her restart fresh clone alır.
+        var basePinnedState = state.Clone();
+
+        ConstructionResult? bestResult = null;
+        MutableScheduleState? bestState = null;
+
+        for (var r = 0; r < restartCount; r++)
+        {
+            var trialState = r == 0 ? state : basePinnedState.Clone();
+            // İlk restart deterministik (perturbationSeed=0) — eski davranışla bit-exact
+            // uyum sağlar. Sonraki restart'lar farklı seed ile tie-break'lerde çeşitlenir.
+            var perturbSeed = r == 0 ? 0 : seed + r * 31337;
+
+            var trialResult = constructionSolver.Solve(
+                targetSections, trialState, classrooms, timeSlotsByDay,
+                constraintConfig, constraintState, baseSnapshot,
+                facultyClassroomIds, splitThreshold, backtrackLimit, mrvWeights,
+                softLookaheadCount, perturbSeed);
+
+            if (bestResult == null
+                || trialResult.SuccessCount > bestResult.SuccessCount
+                || (trialResult.SuccessCount == bestResult.SuccessCount && r == 0))
+            {
+                bestResult = trialResult;
+                bestState = trialState;
+            }
+        }
+
+        // En iyi restart'ın state'ine bağlan; SA + LNS bu state üstünde çalışacak.
+        state = bestState!;
+        var constructionResult = bestResult!;
 
         // 11. Run SimulatedAnnealingOptimizer
         var nonPinnedCount = state.GetAssignedNonPinnedSectionIds().Count;
