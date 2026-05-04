@@ -738,6 +738,22 @@ public sealed class CandidateGenerator
 
                 if (!valid) continue;
 
+                // F2FOnly slot Online ders için kesin yasak (TeachingMethodPolicy kuralı).
+                // Pencerede tek bir F2FOnly slot bile varsa pencere reddedilir — H17 hard
+                // violation üretmesin diye ön-filtre. Phase 1 (requireOnlineOnly) zaten
+                // OnlineOnly'i isterken F2FOnly otomatik dışta kalıyordu; Phase 2 (Both
+                // fallback) eski koşulda F2FOnly'i de dahil ediyordu — bu silent bug'ı kapatır.
+                var hasF2FOnly = false;
+                for (var j = 0; j < requiredHours; j++)
+                {
+                    if (sorted[i + j].AllowedMode == Domain.Enums.TimeSlotAllowedMode.FaceToFaceOnly)
+                    {
+                        hasF2FOnly = true;
+                        break;
+                    }
+                }
+                if (hasF2FOnly) continue;
+
                 // AllowedMode önceliği: pencereyi oluşturan TÜM slotların mode'u kuralı sağlamalı.
                 if (requireOnlineOnly || excludeOnlineOnly)
                 {
