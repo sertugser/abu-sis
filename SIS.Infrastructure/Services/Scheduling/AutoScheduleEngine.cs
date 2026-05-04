@@ -522,6 +522,8 @@ public sealed class AutoScheduleEngine
 
         var toDelete = new List<SectionSchedule>();
 
+        // ── Pass 1: HARD ihlaller ──
+        // OnlineOnly slot + FaceToFace ders, veya FaceToFaceOnly slot + Online ders → her zaman invalidate.
         foreach (var section in sections)
         {
             if (section.SectionSchedules.Count == 0) continue;
@@ -551,14 +553,75 @@ public sealed class AutoScheduleEngine
             {
                 invalidated[section.Id] = reason;
                 toDelete.AddRange(section.SectionSchedules);
-                section.SectionSchedules.Clear(); // in-memory da temizle ki isScheduled=false olsun
+                section.SectionSchedules.Clear();
+            }
+        }
+
+        // ── Pass 2: PREFERENCE mismatch (Online/Hybrid Both slot'ta) ──
+        // Online dersler OnlineOnly slot'a yerleşmeli (priority kuralı). Eğer mevcut atamalar
+        // tamamen Both slot'taysa VE yeterli sayıda boş OnlineOnly slot varsa → invalidate edilir
+        // ki auto-schedule re-arrange ederken OnlineOnly priority tetiklensin. Hybrid için de
+        // benzer kural: gündüz Both slot'larını gereksiz işgal etmesin, OnlineOnly tercih edilsin.
+        var totalOnlineOnlySlots = slotAllowedModes
+            .Count(kvp => kvp.Value == Domain.Enums.TimeSlotAllowedMode.OnlineOnly);
+
+        if (totalOnlineOnlySlots > 0)
+        {
+            // OnlineOnly slot'ların ne kadarı şu an dolu (henüz invalidate edilmemiş atamalar)
+            var usedOnlineOnly = sections
+                .Where(s => !invalidated.ContainsKey(s.Id))
+                .SelectMany(s => s.SectionSchedules)
+                .Count(ss => ss.TimeSlot != null
+                    && slotAllowedModes.TryGetValue((ss.TimeSlot.DayOfWeek, ss.TimeSlot.StartTime), out var m)
+                    && m == Domain.Enums.TimeSlotAllowedMode.OnlineOnly);
+
+            var freeOnlineOnly = totalOnlineOnlySlots - usedOnlineOnly;
+
+            // Online ders'leri öncelik (tam priority kuralı), sonra Hybrid'ler.
+            var preferenceCandidates = sections
+                .Where(s => !invalidated.ContainsKey(s.Id) && s.SectionSchedules.Count > 0)
+                .Where(s => s.Course.TeachingMethod == TeachingMethod.Online
+                         || s.Course.TeachingMethod == TeachingMethod.Hybrid)
+                .OrderBy(s => s.Course.TeachingMethod == TeachingMethod.Online ? 0 : 1)
+                .ToList();
+
+            foreach (var section in preferenceCandidates)
+            {
+                if (freeOnlineOnly <= 0) break;
+
+                // Atamalardan kaçı OnlineOnly slot'ta? Hepsi Both ise priority kuralı ihlal.
+                var schedules = section.SectionSchedules.ToList();
+                var slotModes = schedules
+                    .Where(ss => ss.TimeSlot != null)
+                    .Select(ss => slotAllowedModes.TryGetValue((ss.TimeSlot!.DayOfWeek, ss.TimeSlot.StartTime), out var m) ? m : Domain.Enums.TimeSlotAllowedMode.Both)
+                    .ToList();
+
+                var allInBothSlots = slotModes.Count > 0
+                    && slotModes.All(m => m == Domain.Enums.TimeSlotAllowedMode.Both);
+
+                if (!allInBothSlots) continue;
+
+                var requiredSlots = schedules.Count;
+                if (freeOnlineOnly < requiredSlots) continue;
+
+                var methodLabel = section.Course.TeachingMethod == TeachingMethod.Online ? "Online" : "Hybrid";
+                invalidated[section.Id] = $"{methodLabel} ders Both slot'ta — OnlineOnly slot kapasitesi yeterli, yeniden yerleştirilecek.";
+                toDelete.AddRange(schedules);
+                section.SectionSchedules.Clear();
+                freeOnlineOnly -= requiredSlots;
             }
         }
 
         if (toDelete.Count > 0)
         {
-            _context.SectionSchedules.RemoveRange(toDelete);
-            await _context.SaveChangesAsync(ct);
+            // Set-based delete — RemoveRange tracking pollution yarattığı için kullanılmaz
+            // (Pass 2 birden fazla section'ı toplu invalidate ettiğinde Course graph attacher
+            // duplicate-key çakışması üretir). ExecuteDeleteAsync EF tracking'e dokunmadan SQL
+            // ile siler; in-memory section.SectionSchedules.Clear() zaten yukarıda yapıldı.
+            var idsToDelete = toDelete.Select(ss => ss.Id).ToList();
+            await _context.SectionSchedules
+                .Where(ss => idsToDelete.Contains(ss.Id))
+                .ExecuteDeleteAsync(ct);
         }
 
         return invalidated;
