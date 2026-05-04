@@ -43,3 +43,16 @@ public sealed class NoOpScheduleProgressReporter : IScheduleProgressReporter
     public Task ReportAsync(string userId, ScheduleProgressEvent evt, CancellationToken ct = default)
         => Task.CompletedTask;
 }
+
+/// <summary>
+/// Algoritma loop'larının (Construction / SA / LNS) içinden çağrılan periodic progress
+/// callback'i. Fire-and-forget kullanılır: algoritma sync devam eder, callback async
+/// işler (SignalR send). Implementor exception atmamalı (no-throw kontratı).
+/// </summary>
+/// <param name="stage">"construction" | "sa" | "lns"</param>
+/// <param name="percent">0-100 global progress</param>
+/// <param name="current">İşlenen item sayısı</param>
+/// <param name="total">Toplam item sayısı</param>
+/// <param name="detail">Kullanıcı için kısa metin</param>
+public delegate void ScheduleProgressCallback(
+    string stage, int percent, int current, int total, string? detail);

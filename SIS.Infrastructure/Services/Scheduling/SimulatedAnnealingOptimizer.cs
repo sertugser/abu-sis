@@ -38,7 +38,10 @@ public sealed class SimulatedAnnealingOptimizer
         double initialTemperature,
         int relocateWeight,
         int swapWeight,
-        int chainWeight)
+        int chainWeight,
+        Application.Scheduling.Services.ScheduleProgressCallback? progressCallback = null,
+        int progressStartPercent = 40,
+        int progressEndPercent = 65)
     {
         var random = new Random(seed);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -72,6 +75,25 @@ public sealed class SimulatedAnnealingOptimizer
         var totalWeight = relocateWeight + swapWeight + chainWeight;
         var stagnationCounter = 0;
         var iterations = 0;
+        // Progress throttle — sıkı SA döngüsünde tek event/200ms yeterli.
+        var lastProgressEmit = DateTime.MinValue;
+        void EmitProgress()
+        {
+            if (progressCallback == null) return;
+            var now = DateTime.UtcNow;
+            if ((now - lastProgressEmit).TotalMilliseconds < 200) return;
+            lastProgressEmit = now;
+            var local = maxIterations > 0 ? Math.Min(100, iterations * 100 / maxIterations) : 0;
+            var globalPercent = progressStartPercent + (local * (progressEndPercent - progressStartPercent) / 100);
+
+            // Kalite kazancı varsa onu öne çıkar; yoksa "deneme yapılıyor".
+            var quality = initialPenalty - bestPenalty;
+            string detail = quality > 0
+                ? $"Kalite +{Math.Round(quality, 1)} puan iyileşti ({iterations:N0} deneme)"
+                : $"Daha iyi yerleşim aranıyor ({iterations:N0} deneme)";
+
+            progressCallback("sa", globalPercent, iterations, maxIterations, detail);
+        }
 
         for (iterations = 0; iterations < maxIterations; iterations++)
         {
@@ -80,6 +102,10 @@ public sealed class SimulatedAnnealingOptimizer
                 break;
             if (stagnationCounter >= stagnationLimit)
                 break;
+
+            // Periodic progress (her ~500 iter veya 200ms — hangisi önce gelirse).
+            if ((iterations & 0x1FF) == 0)
+                EmitProgress();
 
             // Select move type
             var roll = random.Next(totalWeight);

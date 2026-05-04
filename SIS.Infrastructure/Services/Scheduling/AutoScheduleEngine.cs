@@ -53,6 +53,19 @@ public sealed class AutoScheduleEngine
                     new ScheduleProgressEvent(stage, percent, current, total, detail), ct);
         }
 
+        // Periodic progress callback — algoritma loop'larından (Construction/SA/LNS)
+        // sync olarak çağrılır; içeride fire-and-forget reporter'a yönlendirir, böylece
+        // algoritma akışı SignalR send'ini beklemez.
+        ScheduleProgressCallback? periodicCallback = null;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            periodicCallback = (stage, percent, current, total, detail) =>
+            {
+                _ = _progressReporter.ReportAsync(userId,
+                    new ScheduleProgressEvent(stage, percent, current, total, detail), ct);
+            };
+        }
+
         try
         {
             await ReportAsync("started", 0, detail: "Auto-schedule başlatılıyor...");
@@ -344,11 +357,14 @@ public sealed class AutoScheduleEngine
             // uyum sağlar. Sonraki restart'lar farklı seed ile tie-break'lerde çeşitlenir.
             var perturbSeed = r == 0 ? 0 : seed + r * 31337;
 
+            // Progress callback'i sadece ilk restart'ta (deterministik) gönderiyoruz —
+            // multi-restart'ta birden çok restart UI'ya çelişen yüzde gönderirdi.
             var trialResult = constructionSolver.Solve(
                 targetSections, trialState, classrooms, timeSlotsByDay,
                 constraintConfig, constraintState, baseSnapshot,
                 facultyClassroomIds, splitThreshold, backtrackLimit, mrvWeights,
-                softLookaheadCount, perturbSeed);
+                softLookaheadCount, perturbSeed,
+                progressCallback: r == 0 ? periodicCallback : null);
 
             if (bestResult == null
                 || trialResult.SuccessCount > bestResult.SuccessCount
@@ -384,7 +400,8 @@ public sealed class AutoScheduleEngine
                 constraintConfig, constraintState, baseSnapshot,
                 facultyClassroomIds, splitThreshold, seed,
                 scaledIterations, timeoutSeconds, stagnationLimit,
-                initialTemperature, relocateWeight, swapWeight, chainWeight);
+                initialTemperature, relocateWeight, swapWeight, chainWeight,
+                progressCallback: periodicCallback);
         }
         else
         {
@@ -412,7 +429,8 @@ public sealed class AutoScheduleEngine
                 constraintConfig, constraintState, baseSnapshot,
                 facultyClassroomIds, splitThreshold, seed,
                 lnsIterations, lnsTimeoutSeconds, lnsDestroySize,
-                softLookaheadCount);
+                softLookaheadCount,
+                progressCallback: periodicCallback);
 
             // Update failed list — remove sections that LNS recovered
             constructionResult.FailedSectionIds.RemoveAll(id => state.IsAssigned(id));

@@ -1,4 +1,5 @@
 using SIS.Application.Scheduling.Constraints;
+using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Services;
 
@@ -43,12 +44,27 @@ public sealed class ConstructionSolver
         int backtrackLimit,
         MrvWeights mrvWeights,
         int softLookaheadCount = 1,
-        int perturbationSeed = 0)
+        int perturbationSeed = 0,
+        ScheduleProgressCallback? progressCallback = null,
+        int progressStartPercent = 10,
+        int progressEndPercent = 35)
     {
         var classroomLookup = classrooms.ToDictionary(c => c.Id);
         var sectionLookup = targetSections.ToDictionary(s => s.SectionId);
         var domainStore = new DomainStore();
         var conflictStats = new ConflictStatistics();
+        // Progress throttle — peş peşe event yağmurunu engellemek için minimum 200ms.
+        var lastProgressEmit = DateTime.MinValue;
+        void EmitProgress(int processed, int total, string? detail = null)
+        {
+            if (progressCallback == null) return;
+            var now = DateTime.UtcNow;
+            if ((now - lastProgressEmit).TotalMilliseconds < 200) return;
+            lastProgressEmit = now;
+            var local = total > 0 ? Math.Min(100, processed * 100 / total) : 0;
+            var globalPercent = progressStartPercent + (local * (progressEndPercent - progressStartPercent) / 100);
+            progressCallback("construction", globalPercent, processed, total, detail);
+        }
         // Multi-restart için perturbation: tie-break'lerde küçük random terim ile
         // section ordering'i çeşitlendirir. perturbationSeed=0 → deterministik (eski davranış).
         var perturbRng = perturbationSeed != 0 ? new Random(perturbationSeed) : null;
@@ -214,6 +230,14 @@ public sealed class ConstructionSolver
                 failedSectionIds.Add(nextSectionId);
                 assignedIds.Add(nextSectionId);
             }
+
+            // Progress: section'ın atandığı veya fail edildiği her noktada (throttle 200ms).
+            // assignedIds.Count = işlenen toplam (placed + failed-as-processed).
+            var placedSoFar = assignedIds.Count - failedSectionIds.Count;
+            var progressDetail = failedSectionIds.Count == 0
+                ? $"{placedSoFar}/{targetSections.Count} ders yerleştirildi"
+                : $"{placedSoFar} yerleşti, {failedSectionIds.Count} başarısız ({assignedIds.Count}/{targetSections.Count})";
+            EmitProgress(assignedIds.Count, targetSections.Count, progressDetail);
         }
 
         var successCount = assignedIds.Count - failedSectionIds.Count;

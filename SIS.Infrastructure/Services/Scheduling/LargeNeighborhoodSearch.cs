@@ -37,7 +37,10 @@ public sealed class LargeNeighborhoodSearch
         int maxIterations,
         int timeoutSeconds,
         int destroySize,
-        int softLookaheadCount = 1)
+        int softLookaheadCount = 1,
+        Application.Scheduling.Services.ScheduleProgressCallback? progressCallback = null,
+        int progressStartPercent = 70,
+        int progressEndPercent = 90)
     {
         var random = new Random(seed);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -59,9 +62,37 @@ public sealed class LargeNeighborhoodSearch
             new("related", 1.0, (s, r, ds) => RelatedDestroy(s, r, ds)),
         };
 
+        // Progress throttle — 200ms minimum aralık.
+        var lastProgressEmit = DateTime.MinValue;
+        var initialFailCount = failedSectionIds.Count;
+        void EmitProgress()
+        {
+            if (progressCallback == null) return;
+            var now = DateTime.UtcNow;
+            if ((now - lastProgressEmit).TotalMilliseconds < 200) return;
+            lastProgressEmit = now;
+            var local = maxIterations > 0 ? Math.Min(100, iterations * 100 / maxIterations) : 0;
+            var globalPercent = progressStartPercent + (local * (progressEndPercent - progressStartPercent) / 100);
+
+            // Anlamlı detail metni — "0/100 iter, 0 ders" yerine kullanıcının önemsediği
+            // mesaja odaklan. Iter sayısı global progress bar'a zaten yansıyor.
+            string detail;
+            if (recovered > 0)
+                detail = $"{recovered}/{initialFailCount} ders kurtarıldı";
+            else if (iterations < 5)
+                detail = "Alternatif yerleşim aranıyor...";
+            else
+                detail = $"Alternatif yerleşim aranıyor ({iterations}. deneme)";
+
+            progressCallback("lns", globalPercent, recovered, initialFailCount, detail);
+        }
+
         for (iterations = 0; iterations < maxIterations; iterations++)
         {
             if (stopwatch.Elapsed.TotalSeconds > timeoutSeconds) break;
+            // Periodic progress (her 5 iter veya 200ms — hangisi önce).
+            if ((iterations % 5) == 0)
+                EmitProgress();
 
             var op = SelectOperator(operators, random);
             var backup = state.Clone();
