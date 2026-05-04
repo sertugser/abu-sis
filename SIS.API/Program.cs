@@ -127,7 +127,33 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!))
     };
+
+    // SignalR WebSocket bağlantısı header gönderemez — token query param'dan gelir.
+    // Bu event sadece /hubs/* path'lerinde devreye girer; HTTP API çağrıları
+    // standart Authorization header'ını kullanmaya devam eder.
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
+
+// SignalR — auto-schedule progress, real-time bildirimler vb. için.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleProgressReporter,
+    SIS.API.Hubs.SignalRScheduleProgressReporter>();
+// Cancel registry: aktif auto-schedule run'larının CTS'ini kullanıcı bazında tutar.
+// Singleton — tüm hub instance'ları aynı registry üzerinden çalışır.
+builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleCancelRegistry,
+    SIS.Infrastructure.Services.Scheduling.ScheduleCancelRegistry>();
 
 // Register Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -215,6 +241,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+app.MapHub<SIS.API.Hubs.ScheduleProgressHub>("/hubs/schedule-progress");
 
 // Seed database
 if (app.Environment.IsDevelopment())

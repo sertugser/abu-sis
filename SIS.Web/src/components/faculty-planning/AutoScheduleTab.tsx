@@ -17,6 +17,7 @@ import {
 import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { CalendarGrid } from './CalendarGrid';
 import { ScheduleResultModal } from './ScheduleResultModal';
+import { AutoScheduleProgressModal } from './AutoScheduleProgressModal';
 import InlineConfirmButton from './InlineConfirmButton';
 import { cn } from '@/lib/utils';
 
@@ -378,6 +379,17 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
           }}
         />
       </div>
+
+      {/* ── Canlı progress modalı — algoritma çalışırken gösterilir ── */}
+      <AutoScheduleProgressModal
+        open={isPending}
+        onCancel={() => {
+          // Backend Hub.Cancel() zaten CancellationTokenSource'u tetikledi.
+          // Mutation'ı reset edip UI state'i temizliyoruz; preview hata olarak
+          // OperationCanceledException dönecek ve isPending false olacak.
+          previewMutation.reset();
+        }}
+      />
 
       {/* ── Sonuç Modalı — hesaplama bitince otomatik açılır ── */}
       {previewData && (

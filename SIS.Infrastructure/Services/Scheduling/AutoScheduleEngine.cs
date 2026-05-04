@@ -3,6 +3,7 @@ using SIS.Application.Common.Services;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -14,21 +15,48 @@ public sealed class AutoScheduleEngine
     private readonly AppDbContext _context;
     private readonly ConstraintEvaluationService _constraintService;
     private readonly ISystemConfigProvider _configProvider;
+    private readonly IScheduleProgressReporter _progressReporter;
+    private readonly IScheduleCancelRegistry? _cancelRegistry;
 
     public AutoScheduleEngine(
         AppDbContext context,
         ConstraintEvaluationService constraintService,
-        ISystemConfigProvider configProvider)
+        ISystemConfigProvider configProvider,
+        IScheduleProgressReporter? progressReporter = null,
+        IScheduleCancelRegistry? cancelRegistry = null)
     {
         _context = context;
         _constraintService = constraintService;
         _configProvider = configProvider;
+        _progressReporter = progressReporter ?? new NoOpScheduleProgressReporter();
+        _cancelRegistry = cancelRegistry;
     }
 
     public async Task<AutoSchedulePreviewDto> RunAsync(
         AutoScheduleRequest request,
+        string? userId = null,
         CancellationToken ct = default)
     {
+        // Cancel registry'e kayıt — Hub.Cancel() çağırılınca bu CTS tetiklenir.
+        // CreateLinkedTokenSource: dış ct (request abort) ile bizim cancel mesajımızı
+        // birleştirir; ikisinden biri tetiklenirse algoritma durur.
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (!string.IsNullOrEmpty(userId))
+            _cancelRegistry?.Register(userId, linkedCts);
+        ct = linkedCts.Token;
+
+        // Progress reporter shortcut — userId yoksa veya reporter NoOp ise hiçbir şey yapmaz.
+        async Task ReportAsync(string stage, int percent, int current = 0, int total = 0, string? detail = null)
+        {
+            if (!string.IsNullOrEmpty(userId))
+                await _progressReporter.ReportAsync(userId,
+                    new ScheduleProgressEvent(stage, percent, current, total, detail), ct);
+        }
+
+        try
+        {
+            await ReportAsync("started", 0, detail: "Auto-schedule başlatılıyor...");
+
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         // 1. Determine seed
@@ -284,6 +312,10 @@ public sealed class AutoScheduleEngine
             .Select(id => sectionSnapshots[id])
             .ToList();
 
+        await ReportAsync("construction", 10,
+            current: 0, total: targetSections.Count,
+            detail: $"Aday kombinasyonlar üretiliyor ({targetSections.Count} ders işlenecek)...");
+
         // 10. Run ConstructionSolver — multi-restart with seed perturbation.
         // Construction tek deterministik akış; tek seed = tek sonuç. Farklı tie-break
         // sıralamalarıyla 3-5 restart koşulup en iyisi seçilir → CENG 102 gibi yüksek-yüklü
@@ -331,6 +363,10 @@ public sealed class AutoScheduleEngine
         state = bestState!;
         var constructionResult = bestResult!;
 
+        await ReportAsync("construction", 35,
+            current: constructionResult.SuccessCount, total: targetSections.Count,
+            detail: $"Yerleştirildi: {constructionResult.SuccessCount}/{targetSections.Count} (başarısız: {constructionResult.FailedCount})");
+
         // 11. Run SimulatedAnnealingOptimizer
         var nonPinnedCount = state.GetAssignedNonPinnedSectionIds().Count;
         var scaledIterations = Math.Max(1000, baseIterations * nonPinnedCount / 100);
@@ -338,6 +374,10 @@ public sealed class AutoScheduleEngine
 
         if (nonPinnedCount >= 2)
         {
+            await ReportAsync("sa", 40,
+                current: 0, total: scaledIterations,
+                detail: $"Yerleşim optimize ediliyor (Simulated Annealing, {scaledIterations} iterasyon)...");
+
             var optimizer = new SimulatedAnnealingOptimizer(candidateGen, _constraintService);
             saResult = optimizer.Optimize(
                 state, classrooms, timeSlotsByDay,
@@ -351,10 +391,18 @@ public sealed class AutoScheduleEngine
             saResult = new SAResult(0, 0, 0, 0);
         }
 
+        await ReportAsync("sa", 65,
+            current: saResult.Iterations, total: scaledIterations,
+            detail: $"Optimizasyon tamamlandı ({saResult.Iterations} iterasyon, kalite +{Math.Round(saResult.InitialPenalty - saResult.FinalPenalty, 1)} puan)");
+
         // 11b. Run LNS to recover failed sections
         LNSResult lnsResult;
         if (constructionResult.FailedSectionIds.Count > 0 && lnsIterations > 0)
         {
+            await ReportAsync("lns", 70,
+                current: 0, total: constructionResult.FailedSectionIds.Count,
+                detail: $"Çakışma çözümü ({constructionResult.FailedSectionIds.Count} ders kurtarılmaya çalışılıyor)...");
+
             var lns = new LargeNeighborhoodSearch(candidateGen, _constraintService);
             var failedIds = new List<int>(constructionResult.FailedSectionIds);
 
@@ -368,6 +416,10 @@ public sealed class AutoScheduleEngine
 
             // Update failed list — remove sections that LNS recovered
             constructionResult.FailedSectionIds.RemoveAll(id => state.IsAssigned(id));
+
+            await ReportAsync("lns", 90,
+                current: lnsResult.SectionsRecovered, total: constructionResult.FailedCount,
+                detail: $"Çakışma çözümü tamamlandı ({lnsResult.SectionsRecovered} ders kurtarıldı)");
         }
         else
         {
@@ -483,6 +535,10 @@ public sealed class AutoScheduleEngine
             })
             .ToList();
 
+        await ReportAsync("complete", 100,
+            current: assignments.Count, total: targetSectionIds.Count,
+            detail: $"Tamamlandı: {assignments.Count}/{targetSectionIds.Count} ders yerleştirildi ({Math.Round(stopwatch.Elapsed.TotalSeconds, 1)}s)");
+
         return new AutoSchedulePreviewDto
         {
             TotalProcessed = targetSectionIds.Count,
@@ -503,6 +559,21 @@ public sealed class AutoScheduleEngine
                 ElapsedSeconds = stopwatch.Elapsed.TotalSeconds
             }
         };
+        }
+        catch (OperationCanceledException)
+        {
+            // Hub.Cancel() veya request abort tetiklendi — kullanıcıya temiz bilgi ver, exception'ı yukarı fırlat.
+            if (!string.IsNullOrEmpty(userId))
+                await _progressReporter.ReportAsync(userId,
+                    new ScheduleProgressEvent("failed", 0, 0, 0, "İşlem iptal edildi."), CancellationToken.None);
+            throw;
+        }
+        finally
+        {
+            // Registry'den temizle — sonraki run aynı kullanıcı için yeni CTS register edebilsin.
+            if (!string.IsNullOrEmpty(userId))
+                _cancelRegistry?.Unregister(userId);
+        }
     }
 
     /// <summary>
