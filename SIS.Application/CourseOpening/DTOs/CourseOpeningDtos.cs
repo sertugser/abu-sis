@@ -172,7 +172,25 @@ public class BulkOpenCoursesResultDto
 {
     public int TotalCoursesOpened { get; set; }
     public int TotalSectionsCreated { get; set; }
+    /// <summary>
+    /// Başarıyla açılan dersler için özet liste — modal'da satır satır gösterilir.
+    /// Hata olursa transaction rollback'i ile bu liste de temizlenir (boş döner).
+    /// </summary>
+    public List<OpenedCourseSummaryDto> OpenedCourses { get; set; } = [];
     public List<string> Errors { get; set; } = [];
+}
+
+public class OpenedCourseSummaryDto
+{
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int SectionCount { get; set; }
+    /// <summary>Açılan şubelerin numaraları — kullanıcıya "Şube 1, 2, 3" şeklinde gösterilir.</summary>
+    public List<int> SectionNumbers { get; set; } = [];
+    public int TotalCapacity { get; set; }
+    /// <summary>Tüm şubelerde aynı hoca varsa adı, farklıysa null.</summary>
+    public string? InstructorName { get; set; }
 }
 
 public class UpdateOpenedSectionRequest

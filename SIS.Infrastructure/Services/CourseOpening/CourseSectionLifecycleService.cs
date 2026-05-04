@@ -282,8 +282,32 @@ public class CourseSectionLifecycleService(
             {
                 currentCourse = courseReq;
                 var created = await OpenCourseAsync(departmentId, termId, courseReq, ct);
-                result.TotalCoursesOpened++;
-                result.TotalSectionsCreated += created.Count;
+                if (created.Count == 0) continue;
+
+                // Cross-list ya da müfredat dışı paralel açılışlarda dönüş listesi
+                // birden fazla CourseId içerebilir — her biri için ayrı özet üretiyoruz.
+                foreach (var grp in created.GroupBy(s => s.CourseId))
+                {
+                    var first = grp.First();
+                    var instructorNames = grp
+                        .Select(s => s.InstructorName)
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .Distinct()
+                        .ToList();
+
+                    result.OpenedCourses.Add(new OpenedCourseSummaryDto
+                    {
+                        CourseId = grp.Key,
+                        CourseCode = first.CourseCode,
+                        CourseName = first.CourseName,
+                        SectionCount = grp.Count(),
+                        SectionNumbers = grp.Select(s => s.SectionNumber).OrderBy(n => n).ToList(),
+                        TotalCapacity = grp.Sum(s => s.Capacity),
+                        InstructorName = instructorNames.Count == 1 ? instructorNames[0] : null,
+                    });
+                    result.TotalCoursesOpened++;
+                    result.TotalSectionsCreated += grp.Count();
+                }
             }
 
             if (transaction != null)
@@ -295,6 +319,7 @@ public class CourseSectionLifecycleService(
                 await transaction.RollbackAsync(ct);
             result.TotalCoursesOpened = 0;
             result.TotalSectionsCreated = 0;
+            result.OpenedCourses.Clear();
             result.Errors.Add($"Ders ID {currentCourse?.CourseId}: {ex.Message} Toplu işlem geri alındı.");
         }
         catch
