@@ -130,9 +130,20 @@ export interface BulkOpenCoursesRequest {
   courses: OpenCourseRequest[];
 }
 
+export interface OpenedCourseSummaryDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  sectionCount: number;
+  sectionNumbers: number[];
+  totalCapacity: number;
+  instructorName: string | null;
+}
+
 export interface BulkOpenCoursesResultDto {
   totalCoursesOpened: number;
   totalSectionsCreated: number;
+  openedCourses: OpenedCourseSummaryDto[];
   errors: string[];
 }
 

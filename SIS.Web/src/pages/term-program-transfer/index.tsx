@@ -44,6 +44,7 @@ export default function TermProgramTransferPage() {
   const [classLevel, setClassLevel] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [transferResult, setTransferResult] = useState<TransferFromTermResultDto | null>(null);
+  const [transferException, setTransferException] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<number, CourseOverride>>({});
   const [searchCode, setSearchCode] = useState('');
   const [searchName, setSearchName] = useState('');
@@ -143,6 +144,7 @@ export default function TermProgramTransferPage() {
     if (!deptId || !sourceTermId || !targetTermId || selectedIds.size === 0) return;
     setShowConfirmDialog(false);
     setTransferResult(null);
+    setTransferException(null);
 
     const courseItems: TransferCourseItem[] = selectedCourses.map((c) => {
       const ov = getOverride(c);
@@ -159,19 +161,34 @@ export default function TermProgramTransferPage() {
       };
     });
 
-    const result = await transferMutation.mutateAsync({
-      departmentId: deptId,
-      sourceTermId,
-      targetTermId,
-      courses: courseItems,
-    });
-    setTransferResult(result);
-    setSelectedIds(new Set());
+    try {
+      const result = await transferMutation.mutateAsync({
+        departmentId: deptId,
+        sourceTermId,
+        targetTermId,
+        courses: courseItems,
+      });
+      setTransferResult(result);
+      setSelectedIds(new Set());
+    } catch (err) {
+      const e = err as {
+        response?: { data?: { error?: string; detail?: string; title?: string } };
+        message?: string;
+      };
+      setTransferException(
+        e?.response?.data?.error ??
+          e?.response?.data?.detail ??
+          e?.response?.data?.title ??
+          e?.message ??
+          'Aktarım sırasında beklenmeyen bir hata oluştu.',
+      );
+    }
   };
 
   const resetSelection = () => {
     setSelectedIds(new Set());
     setTransferResult(null);
+    setTransferException(null);
     setOverrides({});
     setSearchCode('');
     setSearchName('');
@@ -199,6 +216,26 @@ export default function TermProgramTransferPage() {
   return (
     <div className="space-y-3">
       <TransferFilterBar termStatus={termStatus} isTermSuitable={isTermSuitable} />
+
+      {transferException && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+            <div className="flex-1 text-sm">
+              <div className="font-semibold text-destructive">Aktarım yapılamadı</div>
+              <div className="text-destructive/90">{transferException}</div>
+            </div>
+            <button
+              type="button"
+              className="text-xs text-destructive/70 hover:text-destructive"
+              onClick={() => setTransferException(null)}
+              aria-label="Kapat"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {transferResult && <TransferResultBanner result={transferResult} />}
 
