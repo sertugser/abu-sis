@@ -473,12 +473,15 @@ public partial class FacultyPlanningService : IFacultyPlanningService
     private async Task<HashSet<int>> GetOccupiedClassroomIdsAsync(
         int termId, DayOfWeek day, TimeOnly startTime, TimeOnly endTime, CancellationToken ct)
     {
+        // CourseSection.IsActive bir computed property (`=> Status == Active`) ve EF Core
+        // bunu SQL'e çeviremiyor — sorgu runtime'da InvalidOperationException atıyor ve
+        // frontend "uygun derslik yok" görüyor. Direkt Status karşılaştırması kullan.
         var occupiedClassroomIds = await _context.SectionSchedules
             .AsNoTracking()
             .Include(ss => ss.TimeSlot)
             .Include(ss => ss.CourseSection)
             .Where(ss => ss.CourseSection.TermId == termId
-                && ss.CourseSection.IsActive
+                && ss.CourseSection.Status == Domain.Enums.CourseSectionStatus.Active
                 && ss.TimeSlot.DayOfWeek == day
                 && ss.TimeSlot.StartTime < endTime
                 && ss.TimeSlot.EndTime > startTime)

@@ -1,7 +1,7 @@
 // SIS.Web/src/components/faculty-planning/AutoScheduleTab.tsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SlotAssignSheet } from './SlotAssignSheet';
+import { SlotAssignDialog } from './SlotAssignDialog';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -404,7 +404,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
       )}
 
       {assignSlot && termId && (
-        <SlotAssignSheet
+        <SlotAssignDialog
           open={!!assignSlot}
           onOpenChange={(open) => { if (!open) setAssignSlot(null); }}
           day={assignSlot.day}
