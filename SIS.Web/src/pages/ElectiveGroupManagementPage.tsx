@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, FolderOpen, Loader2, Plus, RotateCcw } from 'lucide-react';
+import {
+  AlertCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  FolderOpen, Loader2, Plus, RotateCcw,
+} from 'lucide-react';
+
+const PAGE_SIZE = 10;
 import {
   useElectiveGroupList,
   useCreateElectiveGroup,
@@ -288,6 +293,7 @@ export default function ElectiveGroupManagementPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: faculties } = useAdminFaculties();
   const facultyFilterIdNum = facultyFilter !== 'all' ? Number(facultyFilter) : undefined;
@@ -307,6 +313,22 @@ export default function ElectiveGroupManagementPage() {
 
   const hasActiveFilters = subtypeFilter !== 'all' || facultyFilter !== 'all' || departmentFilter !== 'all' || statusFilter !== 'all';
 
+  const totalCount = groups?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const pagedGroups = useMemo(
+    () => (groups ?? []).slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [groups, currentPage],
+  );
+
+  // Filtre değiştiğinde veya toplam sayfa azaldığında geçerli sayfayı sıfırla.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [subtypeFilter, facultyFilter, departmentFilter, statusFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   function resetFilters() {
     setSubtypeFilter('all');
     setFacultyFilter('all');
@@ -315,116 +337,120 @@ export default function ElectiveGroupManagementPage() {
   }
 
   return (
-    <div className="space-y-5">
-
+    <>
       {/* ── Error ── */}
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Gruplar yüklenirken hata oluştu.</AlertDescription>
-        </Alert>
+        <div className="px-4 pt-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>Gruplar yüklenirken hata oluştu.</AlertDescription>
+          </Alert>
+        </div>
       )}
 
-      {/* ── Single Container ── */}
-      <div className="bg-background border border-border rounded-xl overflow-hidden">
+      {/* ── Toolbar: Filters + Action (simetrik: tüm dropdown 200px, padding px-4 py-4) ── */}
+      <div className="flex flex-col gap-3 px-4 py-4 border-b border-border/80 bg-card sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-xs font-medium text-muted-foreground">Tip</span>
+          <Select value={subtypeFilter} onValueChange={setSubtypeFilter}>
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              {(filterSubtypes ?? []).map(s => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        {/* ── Toolbar: Filters + Action ── */}
-        <div className="flex flex-wrap gap-3 items-end px-4 py-3 border-b border-border bg-muted/40">
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Tip</span>
-            <Select value={subtypeFilter} onValueChange={setSubtypeFilter}>
-              <SelectTrigger className="w-[200px] h-9 bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                {(filterSubtypes ?? []).map(s => (
-                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-xs font-medium text-muted-foreground">Fakülte</span>
+          <Select
+            value={facultyFilter}
+            onValueChange={v => { setFacultyFilter(v); setDepartmentFilter('all'); }}
+          >
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue placeholder="Tümü" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              {faculties?.map(f => (
+                <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Fakülte</span>
-            <Select
-              value={facultyFilter}
-              onValueChange={v => { setFacultyFilter(v); setDepartmentFilter('all'); }}
-            >
-              <SelectTrigger className="w-[180px] h-9 bg-white">
-                <SelectValue placeholder="Tümü" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                {faculties?.map(f => (
-                  <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-xs font-medium text-muted-foreground">Bölüm</span>
+          <Select
+            value={departmentFilter}
+            onValueChange={setDepartmentFilter}
+            disabled={facultyFilter === 'all'}
+          >
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue placeholder="Tümü" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              {(filterDepartments ?? []).map(d => (
+                <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Bölüm</span>
-            <Select
-              value={departmentFilter}
-              onValueChange={setDepartmentFilter}
-              disabled={facultyFilter === 'all'}
-            >
-              <SelectTrigger className="w-[180px] h-9 bg-white">
-                <SelectValue placeholder="Tümü" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                {(filterDepartments ?? []).map(d => (
-                  <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-xs font-medium text-muted-foreground">Durum</span>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              <SelectItem value="active">Aktif</SelectItem>
+              <SelectItem value="inactive">Pasif</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Durum</span>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[120px] h-9 bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                <SelectItem value="active">Aktif</SelectItem>
-                <SelectItem value="inactive">Pasif</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-end sm:gap-2 sm:ml-auto">
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground" onClick={resetFilters}>
-              <RotateCcw className="h-3 w-3 mr-1" />
+            <Button
+              variant="ghost"
+              className="h-10 text-sm text-muted-foreground w-full sm:w-auto hover:bg-primary/5 hover:text-primary"
+              onClick={resetFilters}
+            >
+              <RotateCcw className="h-4 w-4 mr-1.5" />
               Sıfırla
             </Button>
           )}
-
-          <Button onClick={() => setCreateOpen(true)} className="h-9 ml-auto">
+          <Button onClick={() => setCreateOpen(true)} className="h-10 w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-1.5" />
             Yeni Grup
           </Button>
         </div>
+      </div>
 
-        {/* ── Table ── */}
-        <table className="w-full">
-          <thead className="bg-muted/20 border-b border-border">
+      {/* ── Table — kolonlar 8'in katlarında, tüm padding px-4 py-3.5 ── */}
+      <div className="overflow-x-auto min-h-[484px]">
+        <table className="w-full min-w-[720px]">
+          <thead className="bg-card border-b border-border/80">
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-28">Kod</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Grup Adı</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-32">Tip</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-56">Kapsam</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-16">Ders</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Durum</th>
+              <th className="text-left px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-32">Kod</th>
+              <th className="text-left px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Grup Adı</th>
+              <th className="text-center px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-40">Tip</th>
+              <th className="text-left px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-56">Kapsam</th>
+              <th className="text-center px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-20">Ders</th>
+              <th className="text-center px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-24">Durum</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-border/80">
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-muted-foreground" />
                   Yükleniyor...
                 </td>
@@ -448,18 +474,18 @@ export default function ElectiveGroupManagementPage() {
               </tr>
             )}
 
-            {!isLoading && groups && groups.map((g: ElectiveGroupListDto) => (
+            {!isLoading && groups && pagedGroups.map((g: ElectiveGroupListDto) => (
               <tr
                 key={g.id}
-                className="cursor-pointer hover:bg-muted/20 transition-colors"
+                className="cursor-pointer hover:bg-primary/5 transition-colors"
                 onClick={() => setSelectedGroupId(g.id)}
               >
-                <td className="px-4 py-3 font-mono text-xs font-medium">{g.code}</td>
-                <td className="px-4 py-3 text-sm font-medium">{g.name}</td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-3.5 font-mono text-xs font-medium">{g.code}</td>
+                <td className="px-4 py-3.5 text-sm font-medium">{g.name}</td>
+                <td className="px-4 py-3.5 text-center">
                   <SubtypeBadge subtype={findSubtypeById(filterSubtypes, g.electiveSubtypeId)} />
                 </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
+                <td className="px-4 py-3.5 text-xs text-muted-foreground">
                   {g.facultyName ? (
                     <>
                       <span>Fakülte: <span className="text-foreground">{g.facultyName}</span></span>
@@ -471,8 +497,8 @@ export default function ElectiveGroupManagementPage() {
                     <span>Okul geneli</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-center text-sm">{g.courseCount}</td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-3.5 text-center text-sm">{g.courseCount}</td>
+                <td className="px-4 py-3.5 text-center">
                   <Badge
                     variant="outline"
                     className={
@@ -488,16 +514,36 @@ export default function ElectiveGroupManagementPage() {
             ))}
           </tbody>
         </table>
-
-        {/* ── Footer ── */}
-        {!isLoading && groups && groups.length > 0 && (
-          <div className="px-4 py-2.5 border-t border-border bg-muted/30">
-            <p className="text-xs text-muted-foreground">
-              Toplam <span className="font-medium text-foreground">{groups.length}</span> grup
-            </p>
-          </div>
-        )}
       </div>
+
+      {/* ── Footer + Pagination — simetrik: px-4 py-3, butonlar h-9 ── */}
+      {!isLoading && groups && groups.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-border/80 bg-card">
+          <p className="text-xs text-muted-foreground">
+            Toplam <span className="font-medium text-foreground">{totalCount}</span> grup
+            {totalPages > 1 && (
+              <> — Sayfa <span className="font-medium text-foreground">{currentPage}</span>/{totalPages}</>
+            )}
+          </p>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="px-3 min-w-[2.5rem] text-center text-sm font-medium">{currentPage}</span>
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Create Dialog ── */}
       <CreateElectiveGroupDialog open={createOpen} onOpenChange={setCreateOpen} />
@@ -508,6 +554,6 @@ export default function ElectiveGroupManagementPage() {
         groupId={selectedGroupId}
         onClose={() => setSelectedGroupId(null)}
       />
-    </div>
+    </>
   );
 }
