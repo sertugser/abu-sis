@@ -52,6 +52,9 @@ public class AcademicCalendarServiceTests
         GradeEntryStart:    t.TermEnd,
         GradeEntryEnd:      t.TermEnd.AddDays(14));
 
+    private static DateTime Utc(int year, int month, int day) =>
+        new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
+
     // ── Tests ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -352,6 +355,34 @@ public class AcademicCalendarServiceTests
         var result = await svc.GetActiveStudentViewAsync();
 
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateEventAsync_RecalculatesMidtermDependentEvents_WhenMidtermMoves()
+    {
+        using var ctx = CreateContext();
+        var term = SeedTerm(ctx);
+        var svc = CreateService(ctx);
+
+        await svc.UpsertAsync(term.Id, ValidDto(term));
+        ctx.TermCalendarEvents.AddRange(
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.MidtermExam, Title = "Ara Sinavlar", StartDate = Utc(2025, 11, 10), EndDate = Utc(2025, 11, 15), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "midterm_exam" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.ExcuseExamApplication, Title = "Mazeret Sinav Basvurularinin Son Gunu", StartDate = Utc(2025, 11, 17), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "midterm_excuse_application" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.ExcuseExam, Title = "Mazeret Sinavlari", StartDate = Utc(2025, 11, 19), EndDate = Utc(2025, 11, 21), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "midterm_excuse_exam" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.MidtermGradePublication, Title = "Ara Sinavlarin Ilaninin Son Gunu", StartDate = Utc(2025, 11, 28), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "midterm_publication" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.FinalExam, Title = "Final Sinavlari", StartDate = Utc(2026, 1, 5), EndDate = Utc(2026, 1, 16), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "final_exam" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.FinalGradePublication, Title = "Final Sonuclarinin Ilani", StartDate = Utc(2026, 1, 21), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "final_publication" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.MakeupGradePublication, Title = "Butunleme Sonuclarinin Ilani", StartDate = Utc(2026, 2, 6), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "makeup_publication" });
+        await ctx.SaveChangesAsync();
+
+        var midterm = ctx.TermCalendarEvents.Single(e => e.TemplateItemKey == "midterm_exam");
+
+        var result = await svc.UpdateEventAsync(term.Id, midterm.Id, new UpdateTermCalendarEventDto(Utc(2025, 11, 3), Utc(2025, 11, 9)));
+
+        result.Events.Single(e => e.TemplateItemKey == "midterm_excuse_application").StartDate.Should().Be(Utc(2025, 11, 10));
+        result.Events.Single(e => e.TemplateItemKey == "midterm_excuse_exam").StartDate.Should().Be(Utc(2025, 11, 12));
+        result.Events.Single(e => e.TemplateItemKey == "midterm_excuse_exam").EndDate.Should().Be(Utc(2025, 11, 14));
+        result.Events.Single(e => e.TemplateItemKey == "midterm_publication").StartDate.Should().Be(Utc(2025, 11, 19));
     }
 
     [Fact]

@@ -9,12 +9,18 @@ echo =========================================
 
 set "PATH=%PATH%;C:\Program Files\nodejs;%AppData%\npm"
 set "DOTNET_CLI_HOME=%CD%\.dotnet-cli"
+set "MSBUILDDISABLENODEREUSE=1"
+
+echo.
+echo [0/3] Cleaning up stale backend processes...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$repo=(Resolve-Path '.').Path; Get-Process -Name SIS.API -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force"
+timeout /t 2 /nobreak >nul
 
 echo.
 echo [1/3] Backend (SIS.API) setup...
 cd SIS.API
 call dotnet restore
-call dotnet build
+call dotnet build -p:UseSharedCompilation=false
 cd ..
 
 echo.
@@ -23,7 +29,7 @@ call dotnet tool restore
 if errorlevel 1 (
   echo [WARN] dotnet tool restore failed. Skipping database update and continuing startup...
 ) else (
-  call dotnet ef database update -p SIS.Infrastructure -s SIS.API
+  call dotnet ef database update -p SIS.Infrastructure -s SIS.API --no-build
   if errorlevel 1 (
     echo [WARN] Database update failed. Continuing startup without blocking the system...
   )

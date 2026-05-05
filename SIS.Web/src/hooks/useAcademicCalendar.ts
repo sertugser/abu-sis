@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '../lib/constants';
 import apiClient from '../api/axios';
 
@@ -28,6 +28,8 @@ export interface TermCalendarEventDto {
   isPublic: boolean;
   isGenerated: boolean;
   blocksAcademicEvents: boolean;
+  chainCode: string | null;
+  templateItemKey: string | null;
 }
 
 export interface StudentAcademicCalendarDto {
@@ -50,6 +52,12 @@ export interface StudentAcademicCalendarDto {
   isWithdrawalOpen: boolean;
   isGradeEntryOpen: boolean;
   events: TermCalendarEventDto[];
+}
+
+export interface UpdateAcademicCalendarEventDto {
+  startDate: string;
+  endDate: string | null;
+  propagateChanges?: boolean;
 }
 
 // ── Admin hooks ─────────────────────────────────────────────────
@@ -97,5 +105,24 @@ export function useAcademicCalendarTerms() {
       const { data } = await apiClient.get<AcademicCalendarTermSummaryDto[]>(`${PUBLIC}/terms`);
       return data;
     }
+  });
+}
+
+export function useMoveAcademicCalendarEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ termId, eventId, dto }: { termId: number; eventId: number; dto: UpdateAcademicCalendarEventDto }) => {
+      const { data } = await apiClient.put<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}/events/${eventId}`, dto);
+      return data;
+    },
+    onSuccess: async (calendar, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(variables.termId) }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive }),
+      ]);
+
+      queryClient.setQueryData(QUERY_KEYS.studentAcademicCalendar(variables.termId), calendar);
+    },
   });
 }

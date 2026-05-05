@@ -43,7 +43,15 @@ public record TermCalendarEventDto(
     string? Note,
     bool IsPublic,
     bool IsGenerated,
-    bool BlocksAcademicEvents
+    bool BlocksAcademicEvents,
+    string? ChainCode,
+    string? TemplateItemKey
+);
+
+public record UpdateTermCalendarEventDto(
+    DateTime StartDate,
+    DateTime? EndDate,
+    bool? PropagateChanges = true
 );
 
 public record StudentAcademicCalendarDto(

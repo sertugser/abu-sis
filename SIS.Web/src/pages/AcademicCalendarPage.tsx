@@ -1,16 +1,23 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AlertTriangle, CalendarDays, LogOut, Repeat2, UserPlus } from 'lucide-react';
-import { CalendarVisualizer, type VisualizerEvent } from '@/components/CalendarVisualizer';
+import { AlertTriangle, CalendarDays, FileDown, LogOut, RefreshCw, Repeat2, UserPlus } from 'lucide-react';
+import { CalendarVisualizer, type DropFeedback, type DropFeedbackRequest, type VisualizerEvent } from '@/components/CalendarVisualizer';
+import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { downloadAcademicCalendarPdf, type AcademicCalendarPdfSection } from '@/lib/academicCalendarPdf';
 import { cn } from '@/lib/utils';
 import { displayTurkishText } from '@/lib/turkishText';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   useAcademicCalendarTerms,
   useAcademicYearCalendars,
+  useMoveAcademicCalendarEvent,
   type StudentAcademicCalendarDto,
   type TermCalendarEventDto,
 } from '@/hooks/useAcademicCalendar';
+
+const NON_DRAGGABLE_EVENT_TYPES = new Set(['NationalHoliday', 'ReligiousHoliday', 'ImportantDay']);
+const EXAM_EVENT_TYPES = new Set(['MidtermExam', 'FinalExam', 'MakeupExam', 'ExcuseExam', 'PrepSchoolExam', 'SummerSchoolExam']);
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '-';
@@ -25,6 +32,29 @@ function academicYearLabel(year: number | null | undefined) {
   return year ? `${year}-${year + 1}` : '-';
 }
 
+function formatEventDateRange(start: string | null | undefined, end: string | null | undefined) {
+  if (!start)
+    return '-';
+
+  const startDate = new Date(start);
+  const endDate = end ? new Date(end) : startDate;
+  const sameDay = startDate.toDateString() === endDate.toDateString();
+  if (sameDay)
+    return startDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const sameYear = startDate.getFullYear() === endDate.getFullYear();
+  const sameMonth = sameYear && startDate.getMonth() === endDate.getMonth();
+  if (sameMonth) {
+    return `${startDate.toLocaleDateString('tr-TR', { day: 'numeric' })} - ${endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  }
+
+  if (sameYear) {
+    return `${startDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })} - ${endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  }
+
+  return `${startDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })} - ${endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+}
+
 function rangeText(ranges: Array<[string | null | undefined, string | null | undefined]>) {
   const starts = ranges.map(([start]) => start).filter(Boolean).sort() as string[];
   const ends = ranges.map(([, end]) => end).filter(Boolean).sort() as string[];
@@ -37,18 +67,153 @@ function latestText(values: Array<string | null | undefined>) {
   return dates.length > 0 ? fmtDate(dates[dates.length - 1]) : '-';
 }
 
-function eventToVisualizerEvent(termId: number, event: TermCalendarEventDto): VisualizerEvent | null {
+function parseDateValue(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function shiftDateValue(value: string, days: number) {
+  const shifted = parseDateValue(value);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().substring(0, 10);
+}
+
+function dayDifference(target: string, source: string) {
+  return Math.round((parseDateValue(target).getTime() - parseDateValue(source).getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function isWeekendDate(value: string) {
+  const day = parseDateValue(value).getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function rangesOverlap(leftStart: string, leftEnd: string, rightStart: string, rightEnd: string) {
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+function eventEndDate(event: TermCalendarEventDto) {
+  return isoToDateStr(event.endDate) ?? isoToDateStr(event.startDate) ?? '';
+}
+
+function eventStartDate(event: TermCalendarEventDto) {
+  return isoToDateStr(event.startDate) ?? '';
+}
+
+function calendarEditWindow(calendar: StudentAcademicCalendarDto) {
+  return {
+    start: `${calendar.year}-06-01`,
+    end: `${calendar.year + 1}-09-30`,
+  };
+}
+
+function countBusinessDaysAfter(fromExclusive: string, toInclusive: string, calendar: StudentAcademicCalendarDto) {
+  let count = 0;
+  const cursor = parseDateValue(fromExclusive);
+  const end = parseDateValue(toInclusive);
+  while (cursor < end) {
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+    const value = cursor.toISOString().substring(0, 10);
+    if (isWeekendDate(value))
+      continue;
+
+    const isBlocked = calendar.events.some(event =>
+      event.blocksAcademicEvents && rangesOverlap(value, value, eventStartDate(event), eventEndDate(event)));
+    if (!isBlocked)
+      count++;
+  }
+
+  return count;
+}
+
+function buildVisualizerEventId(termId: number, eventId: number) {
+  return `${termId}:${eventId}`;
+}
+
+function parseVisualizerEventId(value: string | number) {
+  const [termId, eventId] = String(value).split(':').map(Number);
+  return Number.isFinite(termId) && Number.isFinite(eventId)
+    ? { termId, eventId }
+    : null;
+}
+
+function canDragCalendarEvent(event: TermCalendarEventDto) {
+  return event.isPublic && !event.blocksAcademicEvents && !NON_DRAGGABLE_EVENT_TYPES.has(event.eventType);
+}
+
+function matchesTemplate(event: TermCalendarEventDto, templateItemKey: string) {
+  return event.templateItemKey?.toLowerCase() === templateItemKey.toLowerCase();
+}
+
+function findCalendarEvent(calendar: StudentAcademicCalendarDto, templateItemKey: string, eventType: string) {
+  return calendar.events.find(event => matchesTemplate(event, templateItemKey))
+    ?? calendar.events.find(event => event.eventType === eventType);
+}
+
+function movingEventRecalculatesMidtermPublication(event: TermCalendarEventDto) {
+  const title = displayTurkishText(event.title).toLocaleLowerCase('tr-TR');
+  return matchesTemplate(event, 'midterm_exam')
+    || matchesTemplate(event, 'midterm_excuse_exam')
+    || event.eventType === 'ExcuseExam'
+    || (event.eventType === 'MidtermExam' && !title.includes('mazeret'))
+    || (event.eventType === 'MidtermExam' && title.includes('mazeret'));
+}
+
+function eventRangeForValidation(event: TermCalendarEventDto, movingEventId: number, nextStartDate: string, nextEndDate: string) {
+  if (event.id === movingEventId)
+    return { start: nextStartDate, end: nextEndDate };
+
+  return { start: eventStartDate(event), end: eventEndDate(event) };
+}
+
+function validateChronologyForDrop(calendar: StudentAcademicCalendarDto, event: TermCalendarEventDto, nextStartDate: string, nextEndDate: string): string | null {
+  const rangeOf = (candidate: TermCalendarEventDto | undefined) =>
+    candidate ? eventRangeForValidation(candidate, event.id, nextStartDate, nextEndDate) : null;
+  const classesStart = rangeOf(findCalendarEvent(calendar, 'classes_start', 'ClassesStart'));
+  const classesEnd = rangeOf(findCalendarEvent(calendar, 'classes_end', 'ClassesEnd'));
+  const midterm = rangeOf(findCalendarEvent(calendar, 'midterm_exam', 'MidtermExam'));
+  const finalExam = rangeOf(findCalendarEvent(calendar, 'final_exam', 'FinalExam'));
+  const midtermPublication = rangeOf(findCalendarEvent(calendar, 'midterm_publication', 'MidtermGradePublication'));
+
+  if (classesStart && classesEnd && classesStart.start > classesEnd.start)
+    return 'Ders başlangıcı ders bitişinden sonra olamaz.';
+
+  if (midterm && finalExam && midterm.end > finalExam.start)
+    return 'Ara sınavlar final sınavlarından sonra gelemez.';
+
+  if (classesEnd && finalExam && classesEnd.start > finalExam.start)
+    return 'Final sınavı ders bitişinden önce başlayamaz.';
+
+  if (!movingEventRecalculatesMidtermPublication(event) && midterm && midtermPublication && midtermPublication.start <= midterm.end)
+    return 'Ara sınav ilanı ara sınavlardan sonra olmalıdır.';
+
+  if (!movingEventRecalculatesMidtermPublication(event) && midterm && midtermPublication && countBusinessDaysAfter(midterm.end, midtermPublication.start, calendar) > 10)
+    return 'Ara sınav ilanı 10 iş günü sınırını aşar.';
+
+  return null;
+}
+
+function getErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object')
+    return 'Islem tamamlanamadi.';
+
+  const maybe = error as { response?: { data?: { message?: string; error?: string } }; message?: string };
+  return maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? 'Islem tamamlanamadi.';
+}
+
+function eventToVisualizerEvent(termId: number, event: TermCalendarEventDto, allowDrag: boolean): VisualizerEvent | null {
   const startDate = isoToDateStr(event.startDate);
   const endDate = isoToDateStr(event.endDate) ?? startDate;
   if (!startDate || !endDate) return null;
 
   return {
-    id: `${termId}-${event.id}`,
+    id: buildVisualizerEventId(termId, event.id),
     eventType: event.eventType,
     title: displayTurkishText(event.title),
     startDate,
     endDate,
     note: event.note ? displayTurkishText(event.note) : event.note,
+    templateItemKey: event.templateItemKey,
+    draggable: allowDrag && canDragCalendarEvent(event),
   };
 }
 
@@ -69,12 +234,47 @@ function fallbackPhaseEvents(calendar: StudentAcademicCalendarDto): VisualizerEv
   return events;
 }
 
-function toVisualizerEvents(calendar: StudentAcademicCalendarDto): VisualizerEvent[] {
+function printableEventsForCalendar(calendar: StudentAcademicCalendarDto) {
   const publicEvents = calendar.events
-    .map(event => eventToVisualizerEvent(calendar.termId, event))
-    .filter((event): event is VisualizerEvent => event !== null);
+    .filter(event => event.isPublic)
+    .slice()
+    .sort((left, right) =>
+      left.startDate.localeCompare(right.startDate)
+      || (left.endDate ?? left.startDate).localeCompare(right.endDate ?? right.startDate)
+      || displayTurkishText(left.title).localeCompare(displayTurkishText(right.title), 'tr-TR'))
+    .map(event => ({
+      dateText: formatEventDateRange(event.startDate, event.endDate),
+      title: displayTurkishText(event.title),
+    }));
 
-  return publicEvents.length > 0 ? publicEvents : fallbackPhaseEvents(calendar);
+  if (publicEvents.length > 0)
+    return publicEvents;
+
+  return [
+    {
+      dateText: formatEventDateRange(calendar.registrationStart, calendar.registrationEnd),
+      title: 'Ders kayıtları',
+    },
+    {
+      dateText: formatEventDateRange(calendar.addDropStart, calendar.addDropEnd),
+      title: 'Ders ekleme / bırakma',
+    },
+    {
+      dateText: formatEventDateRange(calendar.withdrawalDeadline, calendar.withdrawalDeadline),
+      title: 'Dersten çekilme son günü',
+    },
+    {
+      dateText: formatEventDateRange(calendar.gradeEntryStart, calendar.gradeEntryEnd),
+      title: 'Not girişi',
+    },
+  ].filter(event => event.dateText !== '-');
+}
+
+function buildPdfSections(calendars: StudentAcademicCalendarDto[]): AcademicCalendarPdfSection[] {
+  return calendars.map(calendar => ({
+    title: `${displayTurkishText(calendar.termTypeLabel).toLocaleUpperCase('tr-TR')} DÖNEMİ`,
+    rows: printableEventsForCalendar(calendar),
+  }));
 }
 
 function PhaseCard({
@@ -104,7 +304,12 @@ function PhaseCard({
 
 export default function AcademicCalendarPage() {
   const terms = useAcademicCalendarTerms();
+  const { hasPermission } = usePermissions();
+  const moveCalendarEvent = useMoveAcademicCalendarEvent();
   const [explicitYear, setExplicitYear] = useState<number | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const canEditCalendar = hasPermission('menu.akademik-takvim-olusturma.edit');
 
   const academicYears = useMemo(() => {
     const years = new Set((terms.data ?? []).map(term => term.year));
@@ -129,7 +334,17 @@ export default function AcademicCalendarPage() {
   const missingCalendarTerms = selectedYearTerms.filter(term => !term.hasCalendar);
 
   const visualizerEvents = useMemo(
-    () => calendars.flatMap(calendar => toVisualizerEvents(calendar)),
+    () => calendars.flatMap(calendar => {
+      const publicEvents = calendar.events
+        .map(event => eventToVisualizerEvent(calendar.termId, event, canEditCalendar))
+        .filter((event): event is VisualizerEvent => event !== null);
+
+      return publicEvents.length > 0 ? publicEvents : fallbackPhaseEvents(calendar);
+    }),
+    [calendars, canEditCalendar],
+  );
+  const pdfSections = useMemo(
+    () => buildPdfSections(calendars),
     [calendars],
   );
 
@@ -137,8 +352,113 @@ export default function AcademicCalendarPage() {
     ? `${fmtDate(`${selectedYear}-09-01`)} - ${fmtDate(`${selectedYear + 1}-08-31`)}`
     : '-';
 
+  async function handleDownloadPdf() {
+    if (pdfSections.length === 0)
+      return;
+
+    try {
+      setIsDownloadingPdf(true);
+      await new Promise(resolve => window.requestAnimationFrame(() => resolve(null)));
+
+      downloadAcademicCalendarPdf({
+        documentTitle: `${academicYearLabel(selectedYear)} Akademik Takvim`,
+        fileName: `akademik-takvim-${academicYearLabel(selectedYear)}.pdf`,
+        sections: pdfSections,
+      });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  }
+
+  const handleEventDrop = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate }: {
+    eventId: VisualizerEvent['id'];
+    targetDate: string;
+    sourceStartDate: string;
+    sourceEndDate: string;
+  }) => {
+    if (moveCalendarEvent.isPending)
+      return;
+
+    const parsed = parseVisualizerEventId(eventId);
+    if (!parsed) {
+      setNotice('Tasınan etkinlik kimligi çözümlenemedi.');
+      return;
+    }
+
+    const shiftDays = dayDifference(targetDate, sourceStartDate);
+    if (shiftDays === 0)
+      return;
+
+    const nextStartDate = shiftDateValue(sourceStartDate, shiftDays);
+    const nextEndDate = shiftDateValue(sourceEndDate, shiftDays);
+
+    setNotice(null);
+    moveCalendarEvent.mutate({
+      termId: parsed.termId,
+      eventId: parsed.eventId,
+      dto: {
+        startDate: `${nextStartDate}T00:00:00.000Z`,
+        endDate: nextEndDate === nextStartDate ? null : `${nextEndDate}T00:00:00.000Z`,
+        propagateChanges: true,
+      },
+    }, {
+      onSuccess: () => {
+        setNotice(`Etkinlik ${fmtDate(`${nextStartDate}T00:00:00.000Z`)} tarihine tasindi; bagli olaylar yeniden hesaplandi.`);
+      },
+      onError: error => setNotice(getErrorMessage(error)),
+    });
+  }, [moveCalendarEvent]);
+
+  const getDropFeedback = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate }: DropFeedbackRequest): DropFeedback => {
+    const parsed = parseVisualizerEventId(eventId);
+    if (!parsed)
+      return { allowed: false, reason: 'Etkinlik kimliği çözümlenemedi.' };
+
+    const calendar = calendars.find(item => item.termId === parsed.termId);
+    const event = calendar?.events.find(item => item.id === parsed.eventId);
+    if (!calendar || !event)
+      return { allowed: false, reason: 'Etkinlik bulunamadı.' };
+
+    if (!canDragCalendarEvent(event))
+      return { allowed: false, reason: 'Bu etkinlik sürükle-bırak ile değiştirilemez.' };
+
+    const shiftDays = dayDifference(targetDate, sourceStartDate);
+    const nextStartDate = shiftDateValue(sourceStartDate, shiftDays);
+    const nextEndDate = shiftDateValue(sourceEndDate, shiftDays);
+    const window = calendarEditWindow(calendar);
+
+    if (nextStartDate < window.start || nextEndDate > window.end)
+      return { allowed: false, reason: 'Akademik yıl düzenleme aralığı dışında.' };
+
+    if (EXAM_EVENT_TYPES.has(event.eventType) && isWeekendDate(nextStartDate))
+      return { allowed: false, reason: 'Sınav etkinlikleri hafta sonu başlayamaz.' };
+
+    const blockingEvent = calendar.events.find(candidate =>
+      candidate.id !== event.id
+      && candidate.blocksAcademicEvents
+      && rangesOverlap(nextStartDate, nextEndDate, eventStartDate(candidate), eventEndDate(candidate)));
+    if (blockingEvent)
+      return { allowed: false, reason: `${displayTurkishText(blockingEvent.title)} ile çakışıyor.` };
+
+    const chronologyError = validateChronologyForDrop(calendar, event, nextStartDate, nextEndDate);
+    if (chronologyError)
+      return { allowed: false, reason: chronologyError };
+
+    return { allowed: true, reason: 'Uygun hedef. Bağlı olaylar otomatik ayarlanır.' };
+  }, [calendars]);
+
+  const handleInvalidEventDrop = useCallback(({ reason }: DropFeedbackRequest & { reason?: string }) => {
+    setNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
+  }, []);
+
   return (
     <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-hidden">
+      {notice && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+          {notice}
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row lg:items-stretch border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
         <div className="lg:w-72 lg:flex-shrink-0 bg-slate-50 lg:border-r border-slate-200">
           <label htmlFor="academic-year-select" className="sr-only">Akademik yıl</label>
@@ -203,12 +523,37 @@ export default function AcademicCalendarPage() {
           Takvim yükleniyor...
         </div>
       ) : (
-        <CalendarVisualizer
-          events={visualizerEvents}
-          inlineYearView
-          filterableLegend
-          academicYearStart={selectedYear ?? undefined}
-        />
+        <div className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            {canEditCalendar ? (
+              <p className="text-sm text-slate-500">
+                Düzenlenebilir etkinlikleri yeni güne sürükleyebilirsiniz. Yeşil alanlar uygun, kırmızı alanlar kısıtlıdır; bağlı olaylar otomatik hesaplanır.
+              </p>
+            ) : (
+              <span />
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf || moveCalendarEvent.isPending || pdfSections.length === 0}
+            >
+              {isDownloadingPdf ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              {isDownloadingPdf ? 'PDF hazirlaniyor' : 'PDF indir'}
+            </Button>
+          </div>
+
+          <CalendarVisualizer
+            events={visualizerEvents}
+            inlineYearView
+            filterableLegend
+            academicYearStart={selectedYear ?? undefined}
+            onEventDrop={canEditCalendar ? handleEventDrop : undefined}
+            getDropFeedback={canEditCalendar ? getDropFeedback : undefined}
+            onInvalidEventDrop={handleInvalidEventDrop}
+            dragDisabled={moveCalendarEvent.isPending}
+          />
+        </div>
       )}
     </div>
   );

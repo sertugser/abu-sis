@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIS.API.Authorization;
+using SIS.Application.AcademicCalendar.DTOs;
 using SIS.Application.AcademicCalendar.Services;
 
 namespace SIS.API.Controllers;
@@ -38,4 +39,23 @@ public class AcademicCalendarController : ControllerBase
     [RequirePermission("lookup.term")]
     public async Task<IActionResult> ListStudentTerms(CancellationToken ct)
         => Ok(await _svc.ListTermsAsync(ct));
+
+    [HttpPut("academic-calendar/{termId:int}/events/{eventId:int}")]
+    [Authorize]
+    [RequirePermission("menu.akademik-takvim-olusturma.edit")]
+    public async Task<IActionResult> UpdateEvent(int termId, int eventId, [FromBody] UpdateTermCalendarEventDto dto, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _svc.UpdateEventAsync(termId, eventId, dto, ct));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }

@@ -37,6 +37,7 @@ project.nuget.cache
 *.csproj.nuget.*
 .dotnet-cli/
 .dotnet-cli */
+.tmp-build/
 .tmp_pypdf/
 
 # ASP.NET Core secrets / environment-specific

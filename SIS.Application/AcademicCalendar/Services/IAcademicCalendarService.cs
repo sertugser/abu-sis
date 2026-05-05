@@ -8,6 +8,7 @@ public interface IAcademicCalendarService
     Task<AcademicCalendarDto?> GetByTermIdAsync(int termId, CancellationToken ct = default);
     Task<AcademicCalendarDto> UpsertAsync(int termId, UpsertAcademicCalendarDto dto, CancellationToken ct = default);
     Task UpdatePhaseOverrideAsync(int termId, UpdateCalendarPhaseOverrideDto dto, CancellationToken ct = default);
+    Task<StudentAcademicCalendarDto> UpdateEventAsync(int termId, int eventId, UpdateTermCalendarEventDto dto, CancellationToken ct = default);
     Task<IReadOnlyList<AcademicCalendarTermSummaryDto>> ListTermsAsync(CancellationToken ct = default);
 
     // Public (öğrenci/hoca)

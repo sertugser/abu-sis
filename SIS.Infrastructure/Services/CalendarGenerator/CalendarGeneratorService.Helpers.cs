@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CalendarGenerator.DTOs;
@@ -476,6 +476,14 @@ public partial class CalendarGeneratorService
             or CalendarEventType.PrepSchoolExam
             or CalendarEventType.SummerSchoolExam;
 
+    private static bool IsExamEvent(CalendarEventType eventType) =>
+        eventType is CalendarEventType.MidtermExam
+            or CalendarEventType.FinalExam
+            or CalendarEventType.MakeupExam
+            or CalendarEventType.PrepSchoolExam
+            or CalendarEventType.SummerSchoolExam
+            or CalendarEventType.ExcuseExam;
+
     private static DateTime MondayOnOrAfter(DateTime date)
     {
         var current = date.Date;
@@ -831,8 +839,12 @@ public partial class CalendarGeneratorService
 
             var excuseApplication = updated.SingleOrDefault(e =>
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_application", StringComparison.OrdinalIgnoreCase));
-            if (excuseApplication != null && excuseApplication.StartDate.Date <= midtermEnd.Date)
-                updated = ReplaceEvent(updated, excuseApplication with { StartDate = NextBusinessDayAfter(midtermEnd, holidays), EndDate = null });
+            if (excuseApplication != null)
+            {
+                var desiredApplicationStart = NextBusinessDayAfter(midtermEnd, holidays);
+                if (excuseApplication.StartDate.Date != desiredApplicationStart.Date || excuseApplication.EndDate != null)
+                    updated = ReplaceEvent(updated, excuseApplication with { StartDate = desiredApplicationStart, EndDate = null });
+            }
 
             var excuseExam = updated.SingleOrDefault(e =>
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_exam", StringComparison.OrdinalIgnoreCase));
@@ -840,8 +852,9 @@ public partial class CalendarGeneratorService
             {
                 var desiredStart = NthBusinessDayAfter(midtermEnd, ExcuseExamMinBusinessDays, holidays);
                 var durationDays = ((excuseExam.EndDate ?? excuseExam.StartDate).Date - excuseExam.StartDate.Date).Days;
-                if (excuseExam.StartDate.Date <= desiredStart.Date)
-                    updated = ReplaceEvent(updated, excuseExam with { StartDate = desiredStart, EndDate = desiredStart.AddDays(durationDays) });
+                var desiredEnd = desiredStart.AddDays(durationDays);
+                if (excuseExam.StartDate.Date != desiredStart.Date || (excuseExam.EndDate ?? excuseExam.StartDate).Date != desiredEnd.Date)
+                    updated = ReplaceEvent(updated, excuseExam with { StartDate = desiredStart, EndDate = desiredEnd });
             }
 
             var midtermPublication = updated.SingleOrDefault(e =>
@@ -851,8 +864,18 @@ public partial class CalendarGeneratorService
             if (midtermPublication != null && refreshedExcuseExam != null)
             {
                 var excuseEnd = refreshedExcuseExam.EndDate ?? refreshedExcuseExam.StartDate;
-                if (midtermPublication.StartDate.Date <= excuseEnd.Date)
-                    updated = ReplaceEvent(updated, midtermPublication with { StartDate = NthBusinessDayAfter(excuseEnd, 3, holidays), EndDate = null });
+                var earliestPublication = NextBusinessDayAfter(excuseEnd, holidays);
+                var preferredPublication = NthBusinessDayAfter(excuseEnd, 3, holidays);
+                var latestAllowedPublication = NthBusinessDayAfter(midtermEnd, GradePublicationBusinessDayLimit, holidays);
+
+                var desiredPublication = preferredPublication;
+                if (desiredPublication.Date > latestAllowedPublication.Date)
+                    desiredPublication = latestAllowedPublication.Date >= earliestPublication.Date
+                        ? latestAllowedPublication
+                        : earliestPublication;
+
+                if (midtermPublication.StartDate.Date != desiredPublication.Date || midtermPublication.EndDate != null)
+                    updated = ReplaceEvent(updated, midtermPublication with { StartDate = desiredPublication, EndDate = null });
             }
         }
 

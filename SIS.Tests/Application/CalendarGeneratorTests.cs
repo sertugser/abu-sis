@@ -849,6 +849,41 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task WhatIf_RecalculatesMidtermPublicationDeadline_WhenSpringMidtermMovesEarlier()
+    {
+        var generated = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var springMidterm = generated.Events.Single(e =>
+            e.Semester == SemesterType.Spring && e.TemplateItemKey == "midterm_exam");
+
+        var whatIf = await _generatorService.WhatIfAsync(
+            generated.DraftId,
+            new WhatIfRequestDto(
+                springMidterm.DraftEventId,
+                Utc(2026, 4, 1),
+                Utc(2026, 4, 7)));
+
+        var excuseApplication = whatIf.Events.Single(e =>
+            e.Semester == SemesterType.Spring && e.TemplateItemKey == "midterm_excuse_application");
+        var excuseExam = whatIf.Events.Single(e =>
+            e.Semester == SemesterType.Spring && e.TemplateItemKey == "midterm_excuse_exam");
+        var publication = whatIf.Events.Single(e =>
+            e.Semester == SemesterType.Spring && e.TemplateItemKey == "midterm_publication");
+
+        excuseApplication.StartDate.Should().Be(Utc(2026, 4, 8));
+        excuseExam.StartDate.Should().Be(Utc(2026, 4, 10));
+        excuseExam.EndDate.Should().Be(Utc(2026, 4, 12));
+        publication.StartDate.Should().Be(Utc(2026, 4, 15));
+        whatIf.Warnings.Should().NotContain(w => w.Code == "REG_GRADE_PUBLICATION");
+    }
+
+    [Fact]
     public async Task WhatIf_DoesNotShiftDependentEvents_WhenNonCriticalChangeSkipsDomino()
     {
         var generated = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
