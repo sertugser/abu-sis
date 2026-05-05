@@ -14,6 +14,24 @@ public record CrossListItemDto(int CourseId, string Code, string Name, int Ects)
 public record CourseCurriculumUsageDto(
     int CurriculumId, string ProgramName, string CurriculumVersion, bool IsActive);
 
+public record SectionScheduleItemDto(
+    string DayOfWeek,
+    string StartTime,
+    string EndTime,
+    string? Classroom);
+
+public record CourseSectionItemDto(
+    int SectionId,
+    int TermId,
+    string TermName,
+    int SectionNumber,
+    int? InstructorId,
+    string? InstructorFullName,
+    int Capacity,
+    int EnrolledCount,
+    string Status,
+    List<SectionScheduleItemDto> Schedules);
+
 [ApiController]
 [Route("api/admin/courses")]
 [Authorize]
@@ -101,6 +119,68 @@ public class CourseCatalogAdminController(IAdminCourseCatalogService service, Ap
         try { return Ok(await service.UpdateCoursePrereqRulesAsync(id, dto)); }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    // ── Bu dersin tüm dönemlerdeki şubeleri (Ders Programı + Öğretim Üyeleri sekmeleri için ortak veri) ──
+    [HttpGet("{id:int}/sections")]
+    [RequirePermission("menu.ders-katalogu.view")]
+    public async Task<IActionResult> GetCourseSections(int id, CancellationToken ct)
+    {
+        if (!await db.Courses.AnyAsync(c => c.Id == id, ct))
+            return NotFound(new { message = "Ders bulunamadı." });
+
+        var sections = await db.CourseSections
+            .AsNoTracking()
+            .Where(cs => cs.CourseId == id)
+            .Include(cs => cs.Term)
+            .Include(cs => cs.Instructor)
+            .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
+            .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.Classroom)
+            .OrderByDescending(cs => cs.Term.Year)
+            .ThenByDescending(cs => (int)cs.Term.TermType)
+            .ThenBy(cs => cs.SectionNumber)
+            .ToListAsync(ct);
+
+        var userIds = sections
+            .Where(s => s.Instructor != null)
+            .Select(s => s.Instructor!.UserId)
+            .Distinct()
+            .ToList();
+
+        var userMap = await db.Users
+            .AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FirstName, u.LastName })
+            .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim(), ct);
+
+        var result = sections.Select(cs => new CourseSectionItemDto(
+            cs.Id,
+            cs.TermId,
+            cs.Term.Name,
+            cs.SectionNumber,
+            cs.InstructorId,
+            cs.Instructor != null && userMap.TryGetValue(cs.Instructor.UserId, out var fullName)
+                ? string.IsNullOrWhiteSpace(cs.Instructor.Title) ? fullName : $"{cs.Instructor.Title} {fullName}"
+                : null,
+            cs.Capacity,
+            cs.EnrolledCount,
+            cs.Status.ToString(),
+            cs.SectionSchedules
+                .OrderBy(ss => ss.TimeSlot.DayOfWeek)
+                .ThenBy(ss => ss.TimeSlot.StartTime)
+                .Select(ss => new SectionScheduleItemDto(
+                    ss.TimeSlot.DayOfWeek.ToString(),
+                    ss.TimeSlot.StartTime.ToString("HH:mm"),
+                    ss.TimeSlot.EndTime.ToString("HH:mm"),
+                    ss.Classroom != null
+                        ? string.IsNullOrWhiteSpace(ss.Classroom.BuildingName)
+                            ? ss.Classroom.Name
+                            : $"{ss.Classroom.BuildingName} {ss.Classroom.Name}".Trim()
+                        : null))
+                .ToList()
+        )).ToList();
+
+        return Ok(result);
     }
 
     // ── Curriculum usage — bu dersi kullanan müfredatların listesi (yan etki uyarısı için) ──

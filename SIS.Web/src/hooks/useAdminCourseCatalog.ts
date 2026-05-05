@@ -21,6 +21,14 @@ export interface CourseListItemDto {
   teachingMethod: number;
   status: number;
   level: number;
+  // Müfredat agregatları
+  nationalCredit: number | null;
+  semesterMin: number | null;
+  semesterMax: number | null;
+  requirementType: 'Compulsory' | 'Elective' | 'Mixed' | 'None';
+  // Aktif dönem section bilgisi
+  isOpenInActiveTerm: boolean;
+  activeTermInstructorName: string | null;
 }
 
 export interface PrerequisiteDto { courseId: number; code: string; name: string; }
@@ -328,5 +336,70 @@ export function useCourseCurriculumUsage(courseId: number | null) {
     },
     enabled: courseId !== null,
     staleTime: 60 * 1000,
+  });
+}
+
+// ── Bu dersin tüm dönemlerdeki şubeleri (Ders Programı + Öğretim Üyeleri sekmeleri) ──
+export interface SectionScheduleItemDto {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  classroom: string | null;
+}
+
+export interface CourseSectionItemDto {
+  sectionId: number;
+  termId: number;
+  termName: string;
+  sectionNumber: number;
+  instructorId: number | null;
+  instructorFullName: string | null;
+  capacity: number;
+  enrolledCount: number;
+  status: string;
+  schedules: SectionScheduleItemDto[];
+}
+
+export function useCourseSections(courseId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'courses', 'sections', courseId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CourseSectionItemDto[]>(`${BASE}/${courseId}/sections`);
+      return data;
+    },
+    enabled: courseId !== null,
+    staleTime: 30 * 1000,
+  });
+}
+
+// ── Toplu silme — frontend'de Promise.allSettled ile sıralı tek-tek silme ──
+export interface BulkDeleteResultItem {
+  id: number;
+  success: boolean;
+  message: string | null;
+}
+
+export function useBulkDeleteCourses() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: number[]): Promise<BulkDeleteResultItem[]> => {
+      const results = await Promise.allSettled(
+        ids.map(id => apiClient.delete(`${BASE}/${id}`))
+      );
+      return results.map((r, i) => {
+        if (r.status === 'fulfilled') {
+          return { id: ids[i], success: true, message: null };
+        }
+        const err = r.reason as { response?: { data?: { message?: string } }; message?: string };
+        return {
+          id: ids[i],
+          success: false,
+          message: err?.response?.data?.message ?? err?.message ?? 'Hata',
+        };
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'courses'] });
+    },
   });
 }

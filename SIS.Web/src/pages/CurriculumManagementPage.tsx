@@ -33,6 +33,8 @@ import type {
   CurriculumRow,
 } from '../types/curriculumManagement';
 import { ROUTES } from '@/lib/constants';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
 
 type ViewMode = 'list' | 'courses';
 
@@ -452,7 +454,7 @@ export default function CurriculumManagementPage() {
 
   return (
     <div className="space-y-4">
-      {/* ── Filtre Barı (iki kolonlu Proliz düzeni) ── */}
+      {/* ── Filtre Barı (3 kolon × 2 satır, Ara satırının yanında Müfredat Ekle) ── */}
       {view === 'list' && (
         <CurriculumFilterBar
           facultyId={facultyId}

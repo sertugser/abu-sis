@@ -9,7 +9,15 @@ public record CourseListItemDto(
     int? DepartmentId, string? DepartmentName,
     int PrerequisiteCount, int EquivalencyCount,
     CourseLanguage Language, TeachingMethod TeachingMethod,
-    CourseStatus Status, CourseLevel Level
+    CourseStatus Status, CourseLevel Level,
+    // Müfredat agregatları (Proliz tarzı tablo için)
+    int? NationalCredit,
+    int? SemesterMin,
+    int? SemesterMax,
+    string RequirementType,  // "Compulsory" | "Elective" | "Mixed" | "None"
+    // Aktif dönem section bilgisi (KO/DO/Kon + Öğretim Üyesi sütunları için)
+    bool IsOpenInActiveTerm,
+    string? ActiveTermInstructorName
 );
 
 public record CourseDetailDto(
