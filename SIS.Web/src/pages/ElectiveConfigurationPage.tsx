@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { usePermissions } from '../hooks/usePermissions';
 import ElectiveGroupManagementPage from './ElectiveGroupManagementPage';
 import ElectiveSubtypeManagementPage from './ElectiveSubtypeManagementPage';
@@ -27,18 +30,17 @@ const TAB_TRIGGER_CLASS = `
   transition-colors
 `;
 
-/* Kart kabuğu — shadcn Card component'iyle birebir aynı stil
-   (rounded-2xl, border-border/80, bg-card = saf beyaz). */
+/* Kart kabuğu — shadcn Card component'iyle birebir aynı stil. */
 const CARD_SHELL_CLASS = 'bg-card border border-border/80 rounded-2xl overflow-hidden transition-all duration-200';
 
 /**
  * Birleşik Seçmeli Ders Yapılandırması sayfası.
  *
  * - URL: /secmeli-yapilandirma/gruplar | /secmeli-yapilandirma/tipler
- * - Tab visibility permission-gated.
- * - Sayfa erişimi (RoleProtectedRoute) → menu.secmeli-yapilandirma.view (meta)
- * - Tek-tab edge case: sadece bir alt-permission varsa Tabs UI gizlenir,
- *   içerik aynı kart kabuğu içinde direkt render edilir.
+ * - Create butonları (Yeni Grup / Yeni Tip) parent'ta yaşar; tab şeridinin
+ *   sağ üstüne sabitlenir → simetrik admin layout, butonlar filtre satırında
+ *   havada uçmaz. State lift-up: child page'lere props ile geçer.
+ * - Tek-tab fallback: aynı kart kabuğu içinde sade başlık + buton.
  */
 export default function ElectiveConfigurationPage() {
   const navigate = useNavigate();
@@ -48,6 +50,9 @@ export default function ElectiveConfigurationPage() {
   const canSeeGroups = hasPermission('menu.secmeli-ders-gruplari.view');
   const canSeeSubtypes = hasPermission('menu.secmeli-tipleri.view');
   const showTabs = canSeeGroups && canSeeSubtypes;
+
+  const [groupCreateOpen, setGroupCreateOpen] = useState(false);
+  const [subtypeCreateOpen, setSubtypeCreateOpen] = useState(false);
 
   if (!isValidTab(tab)) {
     return <Navigate to="/secmeli-yapilandirma/gruplar" replace />;
@@ -64,14 +69,34 @@ export default function ElectiveConfigurationPage() {
     if (canSeeGroups) {
       return (
         <div className={CARD_SHELL_CLASS}>
-          <ElectiveGroupManagementPage />
+          <div className="flex items-center justify-between border-b border-border/80 bg-card px-4 py-3">
+            <h2 className="font-heading text-base font-semibold">Ders Grupları</h2>
+            <Button onClick={() => setGroupCreateOpen(true)} className="h-10">
+              <Plus className="h-4 w-4 mr-1.5" />
+              Yeni Grup
+            </Button>
+          </div>
+          <ElectiveGroupManagementPage
+            createOpen={groupCreateOpen}
+            onCreateOpenChange={setGroupCreateOpen}
+          />
         </div>
       );
     }
     if (canSeeSubtypes) {
       return (
         <div className={CARD_SHELL_CLASS}>
-          <ElectiveSubtypeManagementPage />
+          <div className="flex items-center justify-between border-b border-border/80 bg-card px-4 py-3">
+            <h2 className="font-heading text-base font-semibold">Grup Tipleri</h2>
+            <Button onClick={() => setSubtypeCreateOpen(true)} className="h-10">
+              <Plus className="h-4 w-4 mr-1.5" />
+              Yeni Tip
+            </Button>
+          </div>
+          <ElectiveSubtypeManagementPage
+            createOpen={subtypeCreateOpen}
+            onCreateOpenChange={setSubtypeCreateOpen}
+          />
         </div>
       );
     }
@@ -84,10 +109,15 @@ export default function ElectiveConfigurationPage() {
     }
   }
 
+  /* Aktif tab'a göre create butonu — etiket + handler. */
+  const activeAction = tab === 'gruplar'
+    ? { label: 'Yeni Grup', onClick: () => setGroupCreateOpen(true) }
+    : { label: 'Yeni Tip',  onClick: () => setSubtypeCreateOpen(true) };
+
   return (
     <div className={CARD_SHELL_CLASS}>
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-        <div className="border-b border-border/80 bg-card px-4 pt-2.5">
+        <div className="flex items-end justify-between gap-3 border-b border-border/80 bg-card px-4 pt-2.5">
           <TabsList className="bg-transparent p-0 h-auto gap-2 rounded-none">
             <TabsTrigger value="gruplar" className={TAB_TRIGGER_CLASS}>
               Ders Grupları
@@ -96,13 +126,23 @@ export default function ElectiveConfigurationPage() {
               Grup Tipleri
             </TabsTrigger>
           </TabsList>
+          <Button onClick={activeAction.onClick} className="h-10 mb-2">
+            <Plus className="h-4 w-4 mr-1.5" />
+            {activeAction.label}
+          </Button>
         </div>
 
         <TabsContent value="gruplar" className="m-0 mt-0">
-          <ElectiveGroupManagementPage />
+          <ElectiveGroupManagementPage
+            createOpen={groupCreateOpen}
+            onCreateOpenChange={setGroupCreateOpen}
+          />
         </TabsContent>
         <TabsContent value="tipler" className="m-0 mt-0">
-          <ElectiveSubtypeManagementPage />
+          <ElectiveSubtypeManagementPage
+            createOpen={subtypeCreateOpen}
+            onCreateOpenChange={setSubtypeCreateOpen}
+          />
         </TabsContent>
       </Tabs>
     </div>

@@ -7,10 +7,17 @@ import {
 } from '@/components/ui/select';
 import {
   AlertCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  FolderOpen, Loader2, Plus,
+  FolderOpen, Loader2,
 } from 'lucide-react';
 
 const PAGE_SIZE = 10;
+
+/** Create dialog state'i parent'ta yaşar (ElectiveConfigurationPage), butona
+ * tab şeridinin sağında erişilir. */
+interface ElectiveSubtypeManagementPageProps {
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}
 import { useElectiveSubtypeList } from '../hooks/useElectiveSubtypes';
 import type { ElectiveSubtypeDto } from '../types/electiveSubtype';
 import ElectiveSubtypeFormDialog from '../components/elective-subtype/ElectiveSubtypeFormDialog';
@@ -21,9 +28,11 @@ import ElectiveSubtypeFormDialog from '../components/elective-subtype/ElectiveSu
  * Karar #14: Code immutable; Name + flag'ler + SortOrder + IsActive editable.
  * Hard delete YOK — sadece IsActive=false (soft delete).
  */
-export default function ElectiveSubtypeManagementPage() {
+export default function ElectiveSubtypeManagementPage({
+  createOpen,
+  onCreateOpenChange,
+}: ElectiveSubtypeManagementPageProps) {
   const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active');
-  const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ElectiveSubtypeDto | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -56,10 +65,11 @@ export default function ElectiveSubtypeManagementPage() {
         </div>
       )}
 
-      {/* ── Toolbar — simetrik: dropdown 200px, padding px-4 py-4, buton h-10 ── */}
+      {/* ── Toolbar — simetrik: dropdown 200px, padding px-4 py-4 ──
+           "Yeni Tip" butonu parent'ta (tab şeridinin sağ üstünde). */}
       <div className="flex flex-col gap-3 px-4 py-4 border-b border-border/80 bg-card sm:flex-row sm:flex-wrap sm:items-end">
         <div className="space-y-1.5 w-full sm:w-[200px]">
-          <span className="text-xs font-medium text-muted-foreground">Durum</span>
+          <span className="text-sm font-medium text-muted-foreground">Durum</span>
           <Select value={statusFilter} onValueChange={v => setStatusFilter(v as 'active' | 'all')}>
             <SelectTrigger className="w-full h-10 bg-white text-sm">
               <SelectValue />
@@ -70,23 +80,19 @@ export default function ElectiveSubtypeManagementPage() {
             </SelectContent>
           </Select>
         </div>
-
-        <Button onClick={() => setCreateOpen(true)} className="h-10 w-full sm:w-auto sm:ml-auto">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Yeni Tip
-        </Button>
       </div>
 
-      {/* ── Table — kolonlar 8'in katlarında, tüm padding px-4 py-3.5 ── */}
-      <div className="overflow-x-auto min-h-[484px]">
+      {/* ── Table — kolonlar 8'in katlarında, tüm padding px-4 py-3.5.
+           Yükseklik adaptif: kart veri kadar büyür, 11+ kayıtta pagination devreye girer. */}
+      <div className="overflow-x-auto">
         <table className="w-full min-w-[720px]">
           <thead className="bg-card border-b border-border/80">
             <tr>
-              <th className="text-left px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-16">Sıra</th>
-              <th className="text-left px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-48">Kod</th>
-              <th className="text-left px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Türkçe Ad</th>
-              <th className="text-center px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-72">Scope Kuralları</th>
-              <th className="text-center px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground w-24">Durum</th>
+              <th className="text-center px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-16">Sıra</th>
+              <th className="text-left px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-48">Kod</th>
+              <th className="text-left px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Türkçe Ad</th>
+              <th className="text-center px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-72">Kapsam Kuralları</th>
+              <th className="text-center px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-24">Durum</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/80">
@@ -119,10 +125,10 @@ export default function ElectiveSubtypeManagementPage() {
                 className="cursor-pointer hover:bg-primary/5 transition-colors"
                 onClick={() => setEditTarget(s)}
               >
-                <td className="px-4 py-3.5 text-sm tabular-nums text-muted-foreground">{s.sortOrder}</td>
-                <td className="px-4 py-3.5 font-mono text-xs font-medium">{s.code}</td>
+                <td className="px-4 py-3.5 text-center text-sm tabular-nums text-muted-foreground">{s.sortOrder}</td>
+                <td className="px-4 py-3.5 font-mono text-sm font-medium">{s.code}</td>
                 <td className="px-4 py-3.5 text-sm font-medium">{s.name}</td>
-                <td className="px-4 py-3.5">
+                <td className="px-4 py-3.5 text-center">
                   <FlagBadges subtype={s} />
                 </td>
                 <td className="px-4 py-3.5 text-center">
@@ -146,7 +152,7 @@ export default function ElectiveSubtypeManagementPage() {
       {/* ── Footer + Pagination — simetrik: px-4 py-3, butonlar h-9 ── */}
       {!isLoading && subtypes && subtypes.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-border/80 bg-card">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Toplam <span className="font-medium text-foreground">{totalCount}</span> tip
             {totalPages > 1 && (
               <> — Sayfa <span className="font-medium text-foreground">{currentPage}</span>/{totalPages}</>
@@ -175,7 +181,7 @@ export default function ElectiveSubtypeManagementPage() {
       <ElectiveSubtypeFormDialog
         mode="create"
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={onCreateOpenChange}
         subtype={null}
       />
       <ElectiveSubtypeFormDialog
@@ -193,27 +199,27 @@ export default function ElectiveSubtypeManagementPage() {
 
 function FlagBadges({ subtype }: { subtype: ElectiveSubtypeDto }) {
   const items: { label: string; on: boolean; tone: 'req' | 'forbid' }[] = [
-    { label: 'Fak. zor.', on: subtype.requiresFaculty,    tone: 'req' },
-    { label: 'Fak. yasak', on: subtype.forbidsFaculty,    tone: 'forbid' },
-    { label: 'Böl. zor.', on: subtype.requiresDepartment, tone: 'req' },
-    { label: 'Böl. yasak', on: subtype.forbidsDepartment, tone: 'forbid' },
+    { label: 'Fakülte Zorunlu', on: subtype.requiresFaculty,    tone: 'req' },
+    { label: 'Fakülte Yasak',   on: subtype.forbidsFaculty,    tone: 'forbid' },
+    { label: 'Bölüm Zorunlu',   on: subtype.requiresDepartment, tone: 'req' },
+    { label: 'Bölüm Yasak',     on: subtype.forbidsDepartment, tone: 'forbid' },
   ];
 
   const active = items.filter(i => i.on);
   if (active.length === 0) {
-    return <span className="text-[10px] text-muted-foreground italic">Kısıtsız</span>;
+    return <span className="text-sm text-muted-foreground italic">Serbest</span>;
   }
 
   return (
-    <div className="flex flex-wrap gap-1 justify-center">
+    <div className="flex flex-wrap gap-1.5 justify-center">
       {active.map(i => (
         <Badge
           key={i.label}
           variant="outline"
           className={
             i.tone === 'req'
-              ? 'text-[10px] bg-blue-50 text-blue-700 border-blue-200'
-              : 'text-[10px] bg-rose-50 text-rose-700 border-rose-200'
+              ? 'text-xs font-medium px-2.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200'
+              : 'text-xs font-medium px-2.5 py-0.5 bg-rose-50 text-rose-700 border-rose-200'
           }
         >
           {i.label}
