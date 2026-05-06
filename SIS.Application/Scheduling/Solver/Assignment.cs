@@ -1,0 +1,16 @@
+using System.Collections.Generic;
+
+namespace SIS.Application.Scheduling.Solver;
+
+public sealed record Assignment
+{
+    public required int SectionId { get; init; }
+    public required IReadOnlyList<AssignedSlot> Slots { get; init; }
+}
+
+public sealed record AssignedSlot
+{
+    public required int TimeSlotId { get; init; }
+    public required int ClassroomId { get; init; }
+    public required string ComponentType { get; init; }   // "Lecture" | "Lab"
+}
