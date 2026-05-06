@@ -130,6 +130,7 @@ const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>
   const activeComponentId = selectedComponentId ?? components?.[0]?.id ?? null;
   const totalWeight = components?.reduce((sum, c) => sum + c.weight, 0) ?? 0;
   const activeComponent = components?.find(c => c.id === activeComponentId);
+  const hideStatistics = gradesData?.hideStatistics ?? false;
 
   useEffect(() => {
     if (!gradesData || !activeComponentId) return;
@@ -345,11 +346,15 @@ const handleApplyImport = () => {
               <span className="text-lg font-semibold text-foreground">{gradesData.courseName}</span>
             </div>
             <div className="flex items-center gap-3 mt-0.5">
-              <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Users className="h-3.5 w-3.5" />
-                {gradesData.students.length} öğrenci
-              </span>
-              <span className="text-muted-foreground">·</span>
+              {!hideStatistics && (
+                <>
+                  <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Users className="h-3.5 w-3.5" />
+                    {gradesData.students.length} öğrenci
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                </>
+              )}
              <Badge
                   variant="secondary"
                   className="text-xs"
@@ -724,7 +729,9 @@ const handleApplyImport = () => {
                 <p className="text-sm text-foreground leading-relaxed">
                   Bu işlem tüm öğrencilerin ağırlıklı ortalamalarını hesaplayıp harf notlarını belirleyecektir.
                   Eksik notu olan öğrenciler <span className="font-mono font-bold text-red-600">NA</span> alacaktır.
-                  Tüm öğrencilerin <span className="font-semibold">CGPA/SGPA</span> değerleri güncellenecektir.
+                  {!hideStatistics && (
+                    <> Tüm öğrencilerin <span className="font-semibold">CGPA/SGPA</span> değerleri güncellenecektir.</>
+                  )}
                 </p>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -745,7 +752,9 @@ const handleApplyImport = () => {
                   <thead className="sticky top-0 bg-background">
                     <tr className="border-b">
                       <th className="text-left py-2.5 px-4 font-medium text-muted-foreground">Öğrenci</th>
-                      <th className="text-center py-2.5 px-4 font-medium text-muted-foreground">Ağ. Ortalama</th>
+                      {!hideStatistics && (
+                        <th className="text-center py-2.5 px-4 font-medium text-muted-foreground">Ağ. Ortalama</th>
+                      )}
                       <th className="text-center py-2.5 px-4 font-medium text-muted-foreground">Harf Notu</th>
                     </tr>
                   </thead>
@@ -757,9 +766,11 @@ const handleApplyImport = () => {
                           <td className="py-2.5 px-4 font-medium">
                             {student ? `${student.firstName} ${student.lastName}` : `#${r.studentId}`}
                           </td>
-                          <td className="py-2.5 px-4 text-center font-mono">
-                            {r.weightedAverage.toFixed(1)}
-                          </td>
+                          {!hideStatistics && (
+                            <td className="py-2.5 px-4 text-center font-mono">
+                              {r.weightedAverage.toFixed(1)}
+                            </td>
+                          )}
                           <td className="py-2.5 px-4 text-center">
                             <GradeChip grade={r.letterGrade} />
                           </td>

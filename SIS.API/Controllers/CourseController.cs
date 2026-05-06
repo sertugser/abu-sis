@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,14 +19,20 @@ public class CourseController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IDateTimeProvider _clock;
-    private readonly IWebModuleSettingsProvider _webSettings;
-    private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
+    private readonly IWebModuleControlService _webModuleControls;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public CourseController(AppDbContext context, IDateTimeProvider clock, IWebModuleSettingsProvider? webSettings = null)
+    public CourseController(
+        AppDbContext context,
+        IDateTimeProvider clock,
+        ISystemConfigProvider systemConfig,
+        IWebModuleSettingsProvider? webSettings = null,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _clock = clock;
-        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
+        _systemConfig = systemConfig;
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
     /// <summary>
@@ -164,6 +169,9 @@ public class CourseController : ControllerBase
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
 
+        var allowNonCurriculumCourseSelection = await _systemConfig.GetBoolAsync("Registration.AllowNonCurriculumCourseSelection", true);
+        var hideQuotaInCatalog = await _systemConfig.GetBoolAsync("Registration.HideQuotaInCatalog", false);
+
         // 3. Curriculum data — which courses are in the student's program
         var curriculumCourses = await _context.CurriculumCourses
             .Where(cc => cc.CurriculumId == activeProgram.CurriculumId)
@@ -285,8 +293,11 @@ public class CourseController : ControllerBase
 
         // Müfredattaki dersler + erişim politikası olan dersler + ortak dersler
         var visibleCourseIds = new HashSet<int>(relevantCourseIds);
-        visibleCourseIds.UnionWith(accessibleCourseIds);
-        visibleCourseIds.UnionWith(sharedCourseIds);
+        if (allowNonCurriculumCourseSelection)
+        {
+            visibleCourseIds.UnionWith(accessibleCourseIds);
+            visibleCourseIds.UnionWith(sharedCourseIds);
+        }
 
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
@@ -387,12 +398,13 @@ public class CourseController : ControllerBase
                         InstructorName = s.Instructor != null && userNames.TryGetValue(s.Instructor.UserId, out var name)
                             ? $"{s.Instructor.Title} {name}".Trim()
                             : string.Empty,
-                        Capacity = s.Capacity,
-                        EnrolledCount = s.EnrolledCount,
-                        AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),
+                        Capacity = hideQuotaInCatalog ? 0 : s.Capacity,
+                        EnrolledCount = hideQuotaInCatalog ? 0 : s.EnrolledCount,
+                        AvailableSeats = hideQuotaInCatalog ? 0 : Math.Max(0, s.Capacity - s.EnrolledCount),
                         ClassroomName = s.Classroom?.Name ?? string.Empty,
                         Schedule = catalogScheduleMap.GetValueOrDefault(s.Id, string.Empty),
-                        IsActive = s.IsActive
+                        IsActive = s.IsActive,
+                        QuotaVisible = !hideQuotaInCatalog
                     }).ToList()
                 };
             })
@@ -435,16 +447,19 @@ public class CourseController : ControllerBase
             .Where(ss => ss.CourseSectionId == section.Id)
             .ToListAsync();
 
+        var hideQuotaInCatalog = await _systemConfig.GetBoolAsync("Registration.HideQuotaInCatalog", false);
+
         var dto = new SectionDto
         {
             SectionId = section.Id,
             InstructorName = instructorName,
-            Capacity = section.Capacity,
-            EnrolledCount = section.EnrolledCount,
-            AvailableSeats = Math.Max(0, section.Capacity - section.EnrolledCount),
+            Capacity = hideQuotaInCatalog ? 0 : section.Capacity,
+            EnrolledCount = hideQuotaInCatalog ? 0 : section.EnrolledCount,
+            AvailableSeats = hideQuotaInCatalog ? 0 : Math.Max(0, section.Capacity - section.EnrolledCount),
             ClassroomName = section.Classroom?.Name ?? string.Empty,
             Schedule = ScheduleHelper.FormatSchedule(detailSchedules),
-            IsActive = section.IsActive
+            IsActive = section.IsActive,
+            QuotaVisible = !hideQuotaInCatalog
         };
 
         return Ok(new
@@ -475,9 +490,12 @@ public class CourseController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
 
-        var registrationControl = await GetStudentRegistrationControlAsync();
-        var baseRegistrationOpen = term.IsRegistrationOpen(_clock.UtcNow);
-        var baseAddDropOpen = term.IsAddDropOpen(_clock.UtcNow);
+        var registrationControlCode = await ResolveRegistrationControlCodeForCurrentUserAsync(term.Id);
+        var addDropControlCode = await ResolveAddDropControlCodeForCurrentUserAsync();
+        var registrationControl = await GetStudentRegistrationControlAsync(term.Id, registrationControlCode);
+        var addDropControl = await GetStudentRegistrationControlAsync(term.Id, addDropControlCode);
+        var freezeControl = await GetStudentRegistrationControlAsync(term.Id, "registration-freeze-application");
+        var freezeEnabled = await _systemConfig.GetBoolAsync("Application.RegistrationFreezeApplicationEnabled", true);
 
         var dto = new ActiveTermDto
         {
@@ -489,57 +507,81 @@ public class CourseController : ControllerBase
             RegistrationEnd = term.AcademicCalendar?.RegistrationEnd ?? term.TermStart,
             AddDropStart = term.AcademicCalendar?.AddDropStart ?? term.TermStart,
             AddDropEnd = term.AcademicCalendar?.AddDropEnd ?? term.TermStart,
-            IsRegistrationOpen = baseRegistrationOpen && registrationControl.IsOpen,
-            IsAddDropOpen = baseAddDropOpen && registrationControl.IsOpen,
+            IsRegistrationOpen = registrationControl.IsOpen,
+            IsAddDropOpen = addDropControl.IsOpen,
             Status = term.GetStatus(_clock.UtcNow).ToString(),
             HasAcademicCalendar = term.AcademicCalendar != null,
             StudentRegistrationEnabled = registrationControl.IsEnabled,
-            StudentRegistrationOpenAt = registrationControl.OpenAt?.ToString("HH:mm", CultureInfo.InvariantCulture),
-            StudentRegistrationMessage = registrationControl.Message
+            StudentRegistrationOpenAt = null,
+            StudentRegistrationMessage = registrationControl.Message,
+            IsFreezeApplicationOpen = freezeEnabled && freezeControl.IsOpen,
+            StudentFreezeApplicationMessage = freezeEnabled
+                ? freezeControl.Message
+                : "Kayıt dondurma başvurusu sistem konfigürasyonunda kapalı."
         };
 
         return Ok(dto);
     }
 
-    private async Task<StudentRegistrationControl> GetStudentRegistrationControlAsync()
+    private async Task<StudentRegistrationControl> GetStudentRegistrationControlAsync(int? termId, string controlCode)
     {
-        var enabled = await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", true);
-        if (!enabled)
-            return new StudentRegistrationControl(false, false, null, "Ders kayıt işlemleri web modül ayarlarından kapatılmıştır.");
-
-        var openAt = await _webSettings.GetTimeAsync("StudentPanel", "CourseRegistrationOpenAt", TimeOnly.MinValue);
-        if (openAt > TimeOnly.MinValue)
-        {
-            var localNow = TimeZoneInfo.ConvertTimeFromUtc(_clock.UtcNow, TurkeyTimeZone);
-            if (TimeOnly.FromDateTime(localNow) < openAt)
-            {
-                return new StudentRegistrationControl(
-                    true,
-                    false,
-                    openAt,
-                    $"Ders kayıt işlemleri bugün saat {openAt.ToString("HH:mm", CultureInfo.InvariantCulture)} itibarıyla açılacaktır.");
-            }
-
-            return new StudentRegistrationControl(true, true, openAt, null);
-        }
-
-        return new StudentRegistrationControl(true, true, null, null);
+        var access = await _webModuleControls.EvaluateAsync(controlCode, termId);
+        return new StudentRegistrationControl(access.IsEnabled, access.IsOpen, null, access.Message);
     }
 
-    private static TimeZoneInfo ResolveTurkeyTimeZone()
+    private async Task<string> ResolveRegistrationControlCodeForCurrentUserAsync(int termId)
     {
-        try
+        var student = await LoadCurrentStudentAsync();
+        if (student is null)
+            return "student-course-registration";
+
+        if (student.CompletedSemesters == 0)
+            return "student-new-course-registration";
+
+        return IsOverNormalStudyDuration(student)
+            ? "student-extended-course-registration"
+            : "student-course-registration";
+    }
+
+    private async Task<string> ResolveAddDropControlCodeForCurrentUserAsync()
+    {
+        var student = await LoadCurrentStudentAsync();
+        return student?.CompletedSemesters == 0
+            ? "student-new-add-drop"
+            : "student-add-drop";
+    }
+
+    private async Task<SIS.Domain.Entities.Student?> LoadCurrentStudentAsync()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return null;
+
+        return await _context.Students
+            .AsNoTracking()
+            .Include(student => student.StudentPrograms)
+                .ThenInclude(program => program.Program)
+            .FirstOrDefaultAsync(student => student.UserId == userId);
+    }
+
+    private static bool IsOverNormalStudyDuration(SIS.Domain.Entities.Student student)
+    {
+        var activeProgram = student.StudentPrograms
+            .FirstOrDefault(program => program.Type == StudentProgramType.Main && program.IsActive);
+
+        if (activeProgram?.Program == null)
+            return false;
+
+        var normalDurationSemesters = activeProgram.Program.DegreeLevel switch
         {
-            return TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return TimeZoneInfo.Local;
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return TimeZoneInfo.Local;
-        }
+            DegreeLevel.Associate => 4,
+            DegreeLevel.Bachelor => 8,
+            DegreeLevel.Master => 4,
+            DegreeLevel.Doctorate => 8,
+            _ => 8
+        };
+
+        return student.CompletedSemesters >= normalDurationSemesters;
     }
 
     private sealed record StudentRegistrationControl(bool IsEnabled, bool IsOpen, TimeOnly? OpenAt, string? Message);

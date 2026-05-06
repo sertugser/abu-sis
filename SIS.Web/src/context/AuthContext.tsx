@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { login as loginApi } from '../api/auth.api';
+import { changePassword as changePasswordApi, login as loginApi } from '../api/auth.api';
 import { decodeJwt, extractUser } from '../lib/jwt';
 import { queryClient } from '../lib/queryClient';
 import type { User } from '../types/auth';
@@ -9,7 +9,9 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  passwordChangeRequired: boolean;
   login: (email: string, password: string) => Promise<string | null>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
   logout: () => void;
 }
 
@@ -33,6 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return null;
   });
+  const [passwordChangeRequired, setPasswordChangeRequired] = useState<boolean>(() => {
+    const stored = localStorage.getItem('sis_password_change_required');
+    return stored === 'true';
+  });
   const [isLoading] = useState(() => {
     const storedToken = localStorage.getItem('sis_token');
     const expiresAt = localStorage.getItem('sis_token_expires');
@@ -40,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('sis_token');
       localStorage.removeItem('sis_token_expires');
       localStorage.removeItem('sis_roles');
+      localStorage.removeItem('sis_password_change_required');
     }
     return false;
   });
@@ -53,27 +60,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('sis_token', response.token);
       localStorage.setItem('sis_token_expires', response.expiresAt);
       localStorage.setItem('sis_roles', JSON.stringify(response.roles));
+      localStorage.setItem('sis_password_change_required', response.passwordChangeRequired ? 'true' : 'false');
       const payload = decodeJwt(response.token);
       const userData = extractUser(payload);
       setUser(userData);
       setToken(response.token);
+      setPasswordChangeRequired(!!response.passwordChangeRequired);
       return null;
     }
     return response.error || 'Giriş başarısız';
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<string | null> => {
+    const response = await changePasswordApi({ currentPassword, newPassword });
+    if (!response.success) {
+      return response.error || 'Şifre değiştirilemedi';
+    }
+
+    queryClient.clear();
+    localStorage.setItem('sis_token', response.token);
+    localStorage.setItem('sis_token_expires', response.expiresAt);
+    localStorage.setItem('sis_roles', JSON.stringify(response.roles));
+    localStorage.setItem('sis_password_change_required', 'false');
+    const payload = decodeJwt(response.token);
+    const userData = extractUser(payload);
+    setUser(userData);
+    setToken(response.token);
+    setPasswordChangeRequired(false);
+    return null;
   };
 
   const logout = () => {
     localStorage.removeItem('sis_token');
     localStorage.removeItem('sis_token_expires');
     localStorage.removeItem('sis_roles');
+    localStorage.removeItem('sis_password_change_required');
     setUser(null);
     setToken(null);
+    setPasswordChangeRequired(false);
     // Tum cache'i temizle — eski kullanicinin verileri kalmasin
     queryClient.clear();
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated: !!token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated: !!token, isLoading, passwordChangeRequired, login, changePassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

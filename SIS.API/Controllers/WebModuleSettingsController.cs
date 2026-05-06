@@ -21,16 +21,38 @@ public record WebModuleSettingDto(
     DateTime? EffectiveFrom,
     DateTime? EffectiveTo);
 
+public record WebModuleControlOptionDto(string Code, string Label, string Description);
+public record WebModuleControlSummaryDto(
+    string Code,
+    string Title,
+    string Category,
+    string Description,
+    int DisplayOrder,
+    int? ModeSettingId,
+    int? AnnouncementSettingId,
+    string SelectedMode,
+    string SelectedModeLabel,
+    bool IsCurrentlyOpen,
+    string EffectiveStateLabel,
+    string? EffectiveMessage,
+    string? Announcement,
+    IReadOnlyList<WebModuleControlOptionDto> Options);
+
 public record UpdateWebModuleSettingDto(string Value, DateTime? EffectiveFrom, DateTime? EffectiveTo);
 public record WebModuleSettingImportItemDto(string ModuleKey, string Key, string Value, DateTime? EffectiveFrom, DateTime? EffectiveTo);
+public record UpdateWebModuleControlDto(string Mode, string? Announcement);
 
 [ApiController]
 [Route("api/admin/web-module-settings")]
 [Authorize]
-public class WebModuleSettingsController(AppDbContext context, IWebModuleSettingsProvider settingsProvider) : ControllerBase
+public class WebModuleSettingsController(
+    AppDbContext context,
+    IWebModuleSettingsProvider settingsProvider,
+    IWebModuleControlService controlService) : ControllerBase
 {
     private readonly AppDbContext _context = context;
     private readonly IWebModuleSettingsProvider _settingsProvider = settingsProvider;
+    private readonly IWebModuleControlService _controlService = controlService;
 
     private static readonly Dictionary<string, (decimal? Min, decimal? Max)> NumericLimits = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -106,6 +128,68 @@ public class WebModuleSettingsController(AppDbContext context, IWebModuleSetting
             StringComparer.OrdinalIgnoreCase);
 
         return Ok(limits);
+    }
+
+    [HttpGet("modules")]
+    [RequirePermission("menu.web-modul-ayarlari.view")]
+    public async Task<IActionResult> GetModuleControls(CancellationToken ct)
+    {
+        var summaries = await _controlService.GetSummariesAsync(ct);
+        return Ok(summaries.Select(MapModuleSummary).ToList());
+    }
+
+    [HttpPut("modules/{code}")]
+    [RequirePermission("menu.web-modul-ayarlari.edit")]
+    public async Task<IActionResult> UpdateModuleControl(string code, [FromBody] UpdateWebModuleControlDto dto, CancellationToken ct)
+    {
+        var definition = _controlService.GetDefinition(code);
+        if (definition is null)
+            return NotFound(new { error = "Web modülü bulunamadı." });
+
+        if (string.IsNullOrWhiteSpace(dto.Mode))
+            return BadRequest(new { error = "Modül durumu boş olamaz." });
+
+        var selectedOption = definition.Options.FirstOrDefault(option =>
+            string.Equals(option.Code, dto.Mode.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (selectedOption is null)
+        {
+            return BadRequest(new
+            {
+                error = "Geçersiz modül durumu seçildi.",
+                allowedModes = definition.Options.Select(option => option.Code).ToList(),
+            });
+        }
+
+        var settings = await _context.WebModuleSettings
+            .Where(setting => setting.ModuleKey == definition.SettingModuleKey
+                && (setting.Key == definition.ModeKey || setting.Key == definition.AnnouncementKey))
+            .ToListAsync(ct);
+
+        var modeSetting = settings.FirstOrDefault(setting => setting.Key == definition.ModeKey);
+        var announcementSetting = settings.FirstOrDefault(setting => setting.Key == definition.AnnouncementKey);
+
+        if (modeSetting is null || announcementSetting is null)
+            return NotFound(new { error = "Web modülüne ait ayar kayıtları eksik." });
+
+        modeSetting.Value = selectedOption.Code;
+        announcementSetting.Value = dto.Announcement?.Trim() ?? string.Empty;
+
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { error = "Web modülü başka bir kullanıcı tarafından değiştirildi. Sayfayı yenileyip tekrar deneyin." });
+        }
+
+        _settingsProvider.InvalidateCache(modeSetting.ModuleKey, modeSetting.Key);
+        _settingsProvider.InvalidateCache(announcementSetting.ModuleKey, announcementSetting.Key);
+
+        var updatedSummary = (await _controlService.GetSummariesAsync(ct))
+            .First(summary => string.Equals(summary.Code, code, StringComparison.OrdinalIgnoreCase));
+
+        return Ok(MapModuleSummary(updatedSummary));
     }
 
     [HttpPut("{id:int}")]
@@ -275,6 +359,28 @@ public class WebModuleSettingsController(AppDbContext context, IWebModuleSetting
             setting.DataType,
             setting.EffectiveFrom,
             setting.EffectiveTo);
+    }
+
+    private static WebModuleControlSummaryDto MapModuleSummary(WebModuleControlSummary summary)
+    {
+        return new WebModuleControlSummaryDto(
+            summary.Code,
+            summary.Title,
+            summary.Category,
+            summary.Description,
+            summary.DisplayOrder,
+            summary.ModeSettingId,
+            summary.AnnouncementSettingId,
+            summary.SelectedMode,
+            summary.SelectedModeLabel,
+            summary.IsCurrentlyOpen,
+            summary.EffectiveStateLabel,
+            summary.EffectiveMessage,
+            summary.Announcement,
+            summary.Options.Select(option => new WebModuleControlOptionDto(
+                option.Code,
+                option.Label,
+                option.Description)).ToList());
     }
 
     private static bool TryNormalizeAndValidateValue(

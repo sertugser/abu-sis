@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Enums;
@@ -17,25 +18,38 @@ public class AdvisorController : ControllerBase
 {
     private readonly ICourseRegistrationService _registrationService;
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public AdvisorController(ICourseRegistrationService registrationService, AppDbContext context)
+    public AdvisorController(ICourseRegistrationService registrationService, AppDbContext context, ISystemConfigProvider systemConfig)
     {
         _registrationService = registrationService;
         _context = context;
+        _systemConfig = systemConfig;
     }
 
     [HttpGet("pending-approvals")]
     [RequirePermission("menu.ders-kayit-duzenleme.view")]
     public async Task<IActionResult> GetPendingApprovals()
     {
+        var calculationMethod = await _systemConfig.GetStringAsync("Instructor.AdvisingCalculationMethod", "standard");
         var instructorId = await GetInstructorIdAsync();
         if (instructorId == null)
             // Ogretim uyesi profili olmayan kullanicilar (orn. SystemAdmin) icin bos liste don.
             // 401 doner isek frontend axios interceptor JWT expired sanip logout yapar.
-            return Ok(new List<PendingApprovalDto>());
+            return Ok(new PendingApprovalListDto
+            {
+                CalculationMethod = calculationMethod,
+                CalculationMethodLabel = ResolveCalculationMethodLabel(calculationMethod),
+                Items = new List<PendingApprovalDto>(),
+            });
 
         var result = await _registrationService.GetPendingApprovalsAsync(instructorId.Value);
-        return Ok(result);
+        return Ok(new PendingApprovalListDto
+        {
+            CalculationMethod = calculationMethod,
+            CalculationMethodLabel = ResolveCalculationMethodLabel(calculationMethod),
+            Items = result,
+        });
     }
 
     [HttpGet("students")]
@@ -112,4 +126,9 @@ public class AdvisorController : ControllerBase
         var instructor = await _context.Instructors.FirstOrDefaultAsync(i => i.UserId == userId);
         return instructor?.Id;
     }
+
+    private static string ResolveCalculationMethodLabel(string? value) =>
+        string.Equals(value, "load-based", StringComparison.OrdinalIgnoreCase)
+            ? "Yük Bazlı"
+            : "Standart";
 }

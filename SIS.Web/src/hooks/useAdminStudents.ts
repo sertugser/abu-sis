@@ -11,18 +11,20 @@ export interface AdminStudentListItem {
   firstName: string;
   lastName: string;
   email: string;
-  cgpa: number;
-  completedSemesters: number;
+  cgpa: number | null;
+  completedSemesters: number | null;
   status: string;
   programName: string;
   programCode: string;
   departmentName: string;
   advisorName?: string;
+  transcriptAccessible?: boolean;
+  transcriptAccessMessage?: string;
 }
 
 export interface AdminStudentDetail extends AdminStudentListItem {
-  sgpa: number;
-  frozenSemesterCount: number;
+  sgpa: number | null;
+  frozenSemesterCount: number | null;
   isScholarshipStudent: boolean;
   hasFinancialBlock: boolean;
   advisorId?: number;

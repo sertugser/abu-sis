@@ -8,6 +8,7 @@ export interface AuthResponse {
   token: string;
   expiresAt: string;
   roles: string[];
+  passwordChangeRequired?: boolean;
   error?: string;
 }
 

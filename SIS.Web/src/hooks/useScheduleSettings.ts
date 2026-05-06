@@ -8,11 +8,13 @@ import type { DayOfWeekName, TimeSlotAllowedMode } from './useTimeSlots';
  * Config yoksa fallback default'lar kullanılır (admin henüz ayar eklememişse bile çalışır).
  */
 export interface ScheduleSettings {
+  workDays: DayOfWeekName[];
   slotDurationMinutes: number;
   breakBetweenSlotsMinutes: number;
   morningStartTime: string;      // "HH:mm"
   lunchBreakStart: string;
   lunchBreakEnd: string;
+  lunchBreakIsHard: boolean;
   afternoonEndTime: string;
   eveningStartTime: string;
   eveningSlotCount: number;
@@ -22,11 +24,13 @@ export interface ScheduleSettings {
 }
 
 const DEFAULTS: Omit<ScheduleSettings, 'isLoading'> = {
+  workDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
   slotDurationMinutes: 50,
   breakBetweenSlotsMinutes: 5,
   morningStartTime: '09:00',
   lunchBreakStart: '11:40',
   lunchBreakEnd: '12:20',
+  lunchBreakIsHard: true,
   afternoonEndTime: '18:30',
   eveningStartTime: '20:10',
   eveningSlotCount: 2,
@@ -51,13 +55,28 @@ export function useScheduleSettings(): ScheduleSettings {
       if (!v) return fallback;
       return v.toLowerCase() === 'true';
     };
+    const getWorkDays = (key: string, fallback: DayOfWeekName[]): DayOfWeekName[] => {
+      const v = map.get(key);
+      if (!v) return fallback;
+
+      const parsed = v
+        .split(',')
+        .map(token => token.trim())
+        .filter((token): token is DayOfWeekName =>
+          ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].includes(token)
+        );
+
+      return parsed.length > 0 ? parsed : fallback;
+    };
 
     return {
+      workDays:                 getWorkDays('Schedule.WorkDays',              DEFAULTS.workDays),
       slotDurationMinutes:      getInt('Schedule.SlotDurationMinutes',      DEFAULTS.slotDurationMinutes),
       breakBetweenSlotsMinutes: getInt('Schedule.BreakBetweenSlotsMinutes', DEFAULTS.breakBetweenSlotsMinutes),
       morningStartTime:         get   ('Schedule.MorningStartTime',          DEFAULTS.morningStartTime),
       lunchBreakStart:          get   ('Schedule.LunchBreakStart',           DEFAULTS.lunchBreakStart),
       lunchBreakEnd:            get   ('Schedule.LunchBreakEnd',             DEFAULTS.lunchBreakEnd),
+      lunchBreakIsHard:         getBool('Schedule.LunchBreak.IsHard',        DEFAULTS.lunchBreakIsHard),
       afternoonEndTime:         get   ('Schedule.AfternoonEndTime',          DEFAULTS.afternoonEndTime),
       eveningStartTime:         get   ('Schedule.EveningStartTime',          DEFAULTS.eveningStartTime),
       eveningSlotCount:         getInt('Schedule.EveningSlotCount',          DEFAULTS.eveningSlotCount),

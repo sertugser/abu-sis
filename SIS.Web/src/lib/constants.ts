@@ -128,6 +128,7 @@ export const QUERY_KEYS = {
   adminTerms: ['admin', 'terms'] as const,
   systemConfigs: ['admin', 'systemConfigs'] as const,
   systemConfigLimits: ['admin', 'systemConfigLimits'] as const,
+  webModuleControlSummaries: ['admin', 'webModuleControlSummaries'] as const,
   webModuleSettings: ['admin', 'webModuleSettings'] as const,
   webModuleSettingLimits: ['admin', 'webModuleSettingLimits'] as const,
   auditLogs: (params?: Record<string, unknown>) => ['admin', 'auditLogs', params] as const,

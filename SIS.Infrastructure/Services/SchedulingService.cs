@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
@@ -13,11 +14,16 @@ public class SchedulingService : ISchedulingService
 {
     private readonly AppDbContext _context;
     private readonly ConstraintEvaluationService _constraintEvaluation;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public SchedulingService(AppDbContext context, ConstraintEvaluationService constraintEvaluation)
+    public SchedulingService(
+        AppDbContext context,
+        ConstraintEvaluationService constraintEvaluation,
+        ISystemConfigProvider? systemConfig = null)
     {
         _context = context;
         _constraintEvaluation = constraintEvaluation;
+        _systemConfig = systemConfig ?? new NullSystemConfigProvider();
     }
 
     public async Task<List<SchedulingConflictDto>> GetConflictsAsync(int? termId = null, CancellationToken cancellationToken = default)
@@ -55,6 +61,12 @@ public class SchedulingService : ISchedulingService
             result.IsValid = false;
             result.Notes.Add("Section bulunamadı.");
             return result;
+        }
+
+        if (section.Instructor != null)
+        {
+            var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, cancellationToken);
+            section.Instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(section.Instructor.Title, section.Instructor.MaxWeeklyHours);
         }
 
         var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
@@ -163,6 +175,9 @@ public class SchedulingService : ISchedulingService
             response.Notes.Add("Öğretim üyesi bulunamadı.");
             return response;
         }
+
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, cancellationToken);
+        instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(instructor.Title, instructor.MaxWeeklyHours);
 
         var instructorName = await GetInstructorNameAsync(instructor, cancellationToken);
 
@@ -387,6 +402,12 @@ public class SchedulingService : ISchedulingService
         }
 
         var allSections = await sectionsQuery.ToListAsync(cancellationToken);
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, cancellationToken);
+        foreach (var section in allSections)
+        {
+            if (section.Instructor != null)
+                section.Instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(section.Instructor.Title, section.Instructor.MaxWeeklyHours);
+        }
 
         // ── ForceRegenerate: clear non-locked schedules ──────────────────
         if (request.ForceRegenerate)
@@ -1439,6 +1460,13 @@ public class SchedulingService : ISchedulingService
                 .FirstOrDefaultAsync(cancellationToken) ?? "Bolum"
             : "Tum sistem";
 
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, cancellationToken);
+        foreach (var section in sections)
+        {
+            if (section.Instructor != null)
+                section.Instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(section.Instructor.Title, section.Instructor.MaxWeeklyHours);
+        }
+
         var instructorIds = sections
             .Where(section => section.InstructorId.HasValue)
             .Select(section => section.InstructorId!.Value)
@@ -1596,6 +1624,8 @@ public class SchedulingService : ISchedulingService
             }
             else
             {
+                var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, cancellationToken);
+                instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(instructor.Title, instructor.MaxWeeklyHours);
                 instructorName = await GetInstructorNameAsync(instructor, cancellationToken);
             }
         }

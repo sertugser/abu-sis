@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
@@ -20,12 +21,21 @@ public class GradeController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaService;
     private readonly IDateTimeProvider _clock;
+    private readonly IWebModuleControlService _webModuleControls;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public GradeController(AppDbContext context, IGpaCalculationService gpaService, IDateTimeProvider clock)
+    public GradeController(
+        AppDbContext context,
+        IGpaCalculationService gpaService,
+        IDateTimeProvider clock,
+        ISystemConfigProvider systemConfig,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _gpaService = gpaService;
         _clock = clock;
+        _systemConfig = systemConfig;
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
     // ══════════════════════════════════════════════════════════
@@ -185,6 +195,8 @@ public class GradeController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
+        var hideStatistics = await _systemConfig.GetBoolAsync("Instructor.HideGradeEntryStatistics", false);
+
         var components = await _context.GradeComponents
             .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
             .OrderBy(gc => gc.Order)
@@ -214,7 +226,7 @@ public class GradeController : ControllerBase
 
             // Ağırlıklı ortalamayı hesapla
             decimal? weightedAverage = null;
-            if (components.Count > 0 && studentGrades.Any(sg => sg.Score != null))
+            if (!hideStatistics && components.Count > 0 && studentGrades.Any(sg => sg.Score != null))
             {
                 decimal totalWeightedScore = 0;
                 decimal totalWeight = 0;
@@ -254,6 +266,7 @@ public class GradeController : ControllerBase
             CourseName = section.Course.Name,
             SectionId = section.Id,
             IsFinalized = section.IsFinalized,
+            HideStatistics = hideStatistics,
             Components = components.Select(c => new { c.Id, c.Name, c.Weight, c.Order }),
             Students = students
         });
@@ -278,13 +291,6 @@ public class GradeController : ControllerBase
         if (term == null)
             return NotFound(new { error = "Dönem bulunamadi." });
 
-        if (!term.IsGradeEntryOpen(_clock.UtcNow))
-            return BadRequest(new { error = "Not girişi sadece 'Not Girişi' döneminde yapılabilir." });
-
-        if (section.IsFinalized)
-            return BadRequest(new { error = "Sonuclandirilmis ders icin not girilemez. Once sonuclandirmayi iptal edin." });
-
-        // Bileşenin bu derse ait olduğunu doğrula
         var component = await _context.GradeComponents
             .FirstOrDefaultAsync(gc => gc.Id == dto.ComponentId
                 && gc.CourseId == section.CourseId
@@ -292,6 +298,13 @@ public class GradeController : ControllerBase
 
         if (component == null)
             return NotFound(new { error = "Bilesen bulunamadi." });
+
+        var gradeEntryGate = await EnsureGradeEntryModuleOpenAsync(term.Id, component.Name, "Not girişi sadece uygun takvim penceresinde yapılabilir.");
+        if (gradeEntryGate is not null)
+            return gradeEntryGate;
+
+        if (section.IsFinalized)
+            return BadRequest(new { error = "Sonuclandirilmis ders icin not girilemez. Once sonuclandirmayi iptal edin." });
 
         // Bu section'daki aktif kayıtları al
         var registrations = await _context.CourseRegistrations
@@ -368,12 +381,6 @@ public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int c
     if (term == null)
         return NotFound(new { error = "Dönem bulunamadi." });
 
-    if (!term.IsGradeEntryOpen(_clock.UtcNow))
-        return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
-
-    if (section.IsFinalized)
-        return BadRequest(new { error = "Sonuclandirilmis ders icin Excel sablonu olusturulamaz." });
-
     var component = await _context.GradeComponents
         .FirstOrDefaultAsync(gc => gc.Id == componentId
             && gc.CourseId == section.CourseId
@@ -381,6 +388,13 @@ public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int c
 
     if (component == null)
         return NotFound(new { error = "Bilesen bulunamadi." });
+
+    var templateGate = await EnsureGradeEntryModuleOpenAsync(term.Id, component.Name, "Excel import sadece uygun takvim penceresinde yapılabilir.");
+    if (templateGate is not null)
+        return templateGate;
+
+    if (section.IsFinalized)
+        return BadRequest(new { error = "Sonuclandirilmis ders icin Excel sablonu olusturulamaz." });
 
     var registrations = await _context.CourseRegistrations
         .Include(cr => cr.Student)
@@ -483,12 +497,6 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
     if (term == null)
         return NotFound(new { error = "Dönem bulunamadi." });
 
-    if (!term.IsGradeEntryOpen(_clock.UtcNow))
-        return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
-
-    if (section.IsFinalized)
-        return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
-
     using var stream = new MemoryStream();
     await file.CopyToAsync(stream);
     stream.Position = 0;
@@ -513,6 +521,13 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
 
     if (component == null)
         return BadRequest(new { error = "Yuklenen sablondaki bilesen bu section icin gecersiz." });
+
+    var importGate = await EnsureGradeEntryModuleOpenAsync(term.Id, component.Name, "Excel import sadece uygun takvim penceresinde yapılabilir.");
+    if (importGate is not null)
+        return importGate;
+
+    if (section.IsFinalized)
+        return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
 
     var registrations = await _context.CourseRegistrations
         .Include(cr => cr.Student)
@@ -685,12 +700,6 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     if (term == null)
         return NotFound(new { error = "Dönem bulunamadi." });
 
-    if (!term.IsGradeEntryOpen(_clock.UtcNow))
-        return BadRequest(new { error = "Excel import sadece 'Not Girisi' doneminde yapilabilir." });
-
-    if (section.IsFinalized)
-        return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
-
     using var stream = new MemoryStream();
     await file.CopyToAsync(stream);
     stream.Position = 0;
@@ -714,6 +723,13 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 
     if (component == null)
         return BadRequest(new { error = "Yuklenen sablondaki bilesen bu section icin gecersiz." });
+
+    var secondImportGate = await EnsureGradeEntryModuleOpenAsync(term.Id, component.Name, "Excel import sadece uygun takvim penceresinde yapılabilir.");
+    if (secondImportGate is not null)
+        return secondImportGate;
+
+    if (section.IsFinalized)
+        return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
 
     var registrations = await _context.CourseRegistrations
         .Where(cr => cr.CourseSectionId == sectionId
@@ -840,8 +856,9 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         if (term == null)
             return NotFound(new { error = "Dönem bulunamadi." });
 
-        if (!term.IsGradeEntryOpen(_clock.UtcNow))
-            return BadRequest(new { error = "Sonuçlandırma sadece 'Not Girişi' döneminde yapılabilir." });
+        var finalizeGate = await EnsureGradeEntryModuleOpenAsync(term.Id, "Sonuçlandırma sadece 'Not Girişi' döneminde yapılabilir.");
+        if (finalizeGate is not null)
+            return finalizeGate;
 
         if (section.IsFinalized)
             return BadRequest(new { error = "Bu section zaten sonuclandirilmis." });
@@ -969,8 +986,9 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         if (term == null)
             return NotFound(new { error = "Dönem bulunamadi." });
 
-        if (!term.IsGradeEntryOpen(_clock.UtcNow))
-            return BadRequest(new { error = "Sonuçlandırma iptali sadece 'Not Girişi' döneminde yapılabilir." });
+        var unfinalizeGate = await EnsureGradeEntryModuleOpenAsync(term.Id, "Sonuçlandırma iptali sadece 'Not Girişi' döneminde yapılabilir.");
+        if (unfinalizeGate is not null)
+            return unfinalizeGate;
 
         if (!section.IsFinalized)
             return BadRequest(new { error = "Bu section zaten sonuclandirilmamis." });
@@ -1088,6 +1106,55 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     // ══════════════════════════════════════════════════════════
     //  YARDIMCI METOTLAR
     // ══════════════════════════════════════════════════════════
+
+    private async Task<IActionResult?> EnsureGradeEntryModuleOpenAsync(int termId, string fallbackMessage)
+    {
+        var access = await _webModuleControls.EvaluateAsync("instructor-grade-entry", termId);
+        if (access.IsOpen)
+            return null;
+
+        return BadRequest(new { error = access.Message ?? fallbackMessage });
+    }
+
+    private async Task<IActionResult?> EnsureGradeEntryModuleOpenAsync(int termId, string componentName, string fallbackMessage)
+    {
+        var genericGate = await EnsureGradeEntryModuleOpenAsync(termId, fallbackMessage);
+        if (genericGate is not null)
+            return genericGate;
+
+        var controlCode = ResolveGradeEntryControlCode(componentName);
+        if (string.Equals(controlCode, "instructor-grade-entry", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var access = await _webModuleControls.EvaluateAsync(controlCode, termId);
+        if (access.IsOpen)
+            return null;
+
+        return BadRequest(new { error = access.Message ?? fallbackMessage });
+    }
+
+    private static string ResolveGradeEntryControlCode(string componentName)
+    {
+        var normalized = componentName.Trim().ToLowerInvariant();
+
+        if (normalized.Contains("mazeret") || normalized.Contains("excuse"))
+        {
+            return normalized.Contains("ara") || normalized.Contains("midterm") || normalized.Contains("vize")
+                ? "midterm-excuse-grade-entry"
+                : "makeup-grade-entry";
+        }
+
+        if (normalized.Contains("ara") || normalized.Contains("midterm") || normalized.Contains("vize"))
+            return "midterm-grade-entry";
+
+        if (normalized.Contains("bütünleme") || normalized.Contains("butunleme") || normalized.Contains("makeup") || normalized.Contains("yys"))
+            return "makeup-grade-entry";
+
+        if (normalized.Contains("yarıyıl") || normalized.Contains("yariyil") || normalized.Contains("final"))
+            return "final-grade-entry";
+
+        return "instructor-grade-entry";
+    }
 
     /// <summary>
     /// Giriş yapan hocaya ait section'ı doğrular ve döner.

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -12,11 +13,13 @@ public class AdminStudentService : IAdminStudentService
 {
     private readonly AppDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public AdminStudentService(AppDbContext context, UserManager<ApplicationUser> userManager)
+    public AdminStudentService(AppDbContext context, UserManager<ApplicationUser> userManager, ISystemConfigProvider systemConfig)
     {
         _context = context;
         _userManager = userManager;
+        _systemConfig = systemConfig;
     }
 
     public async Task<PagedResult<AdminStudentListItemDto>> GetStudentsAsync(AdminStudentFilterDto filter)
@@ -175,7 +178,8 @@ public class AdminStudentService : IAdminStudentService
             Email = email,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            PasswordChangedAtUtc = DateTime.UtcNow
         };
 
         var createResult = await _userManager.CreateAsync(user, dto.Password);
@@ -225,6 +229,10 @@ public class AdminStudentService : IAdminStudentService
 
         var instructor = await _context.Instructors.FindAsync(advisorId)
             ?? throw new KeyNotFoundException($"Öğretim üyesi bulunamadı: {advisorId}");
+
+        var enableAdvisorOptOutOptions = await _systemConfig.GetBoolAsync("Instructor.EnableAdvisorOptOutOptions", true);
+        if (enableAdvisorOptOutOptions && instructor.AdvisorOptOutRequested)
+            throw new InvalidOperationException("Bu öğretim üyesi danışmanlık görevi almak istemediğini belirtmiştir.");
 
         student.AdvisorId = instructor.Id;
         await _context.SaveChangesAsync();

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -9,10 +10,12 @@ namespace SIS.Infrastructure.Services;
 public class TimeSlotService : ITimeSlotService
 {
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public TimeSlotService(AppDbContext context)
+    public TimeSlotService(AppDbContext context, ISystemConfigProvider systemConfig)
     {
         _context = context;
+        _systemConfig = systemConfig;
     }
 
     public async Task<int> GenerateTimeSlotsForTermAsync(int termId, CancellationToken ct = default)
@@ -44,6 +47,7 @@ public class TimeSlotService : ITimeSlotService
     {
         await EnsureTermEditableAsync(dto.TermId, ct);
         ValidateTimeRange(dto.StartTime, dto.EndTime);
+        await ValidateConfiguredRulesAsync(dto.DayOfWeek, dto.StartTime, dto.EndTime, ct);
         await EnsureNoOverlapAsync(dto.TermId, dto.DayOfWeek, dto.StartTime, dto.EndTime, excludeSlotId: null, ct);
 
         var slotOrder = await _context.TimeSlots
@@ -75,6 +79,7 @@ public class TimeSlotService : ITimeSlotService
 
         await EnsureTermEditableAsync(slot.TermId, ct);
         ValidateTimeRange(dto.StartTime, dto.EndTime);
+        await ValidateConfiguredRulesAsync(dto.DayOfWeek, dto.StartTime, dto.EndTime, ct);
         await EnsureNoOverlapAsync(slot.TermId, dto.DayOfWeek, dto.StartTime, dto.EndTime, excludeSlotId: id, ct);
 
         var dayChanged = slot.DayOfWeek != dto.DayOfWeek;
@@ -196,6 +201,28 @@ public class TimeSlotService : ITimeSlotService
             throw new ArgumentException("Bitiş saati başlangıçtan sonra olmalı.");
     }
 
+    private async Task ValidateConfiguredRulesAsync(DayOfWeek day, TimeOnly start, TimeOnly end, CancellationToken ct)
+    {
+        var allowedDays = await GetConfiguredWorkDaysAsync(ct);
+        if (!allowedDays.Contains(day))
+            throw new InvalidOperationException($"'{GetDayName(day)}' günü sistemde ders günü olarak tanımlı değil.");
+
+        var configuredDuration = await _systemConfig.GetIntAsync("Schedule.SlotDurationMinutes", 50, ct);
+        var actualDuration = (int)(end.ToTimeSpan() - start.ToTimeSpan()).TotalMinutes;
+        if (actualDuration != configuredDuration)
+            throw new InvalidOperationException($"Slot süresi sistem ayarı gereği tam {configuredDuration} dakika olmalıdır.");
+
+        var lunchBreakIsHard = await _systemConfig.GetBoolAsync("Schedule.LunchBreak.IsHard", false, ct);
+        if (!lunchBreakIsHard)
+            return;
+
+        var lunchStart = await GetConfiguredTimeAsync("Schedule.LunchBreakStart", new TimeOnly(11, 40), ct);
+        var lunchEnd = await GetConfiguredTimeAsync("Schedule.LunchBreakEnd", new TimeOnly(12, 20), ct);
+
+        if (start < lunchEnd && end > lunchStart)
+            throw new InvalidOperationException($"Öğle arası sistem ayarı gereği {lunchStart:HH:mm}-{lunchEnd:HH:mm} aralığında slot tanımlanamaz.");
+    }
+
     private async Task EnsureNoOverlapAsync(
         int termId, DayOfWeek day, TimeOnly start, TimeOnly end,
         int? excludeSlotId, CancellationToken ct)
@@ -232,6 +259,38 @@ public class TimeSlotService : ITimeSlotService
 
     private static string BuildDisplayName(DayOfWeek day, int slotOrder, TimeOnly start, TimeOnly end) =>
         $"{GetDayName(day)} {slotOrder}. Ders ({start:HH:mm}-{end:HH:mm})";
+
+    private async Task<HashSet<DayOfWeek>> GetConfiguredWorkDaysAsync(CancellationToken ct)
+    {
+        var raw = await _systemConfig.GetStringAsync(
+            "Schedule.WorkDays",
+            "Monday,Tuesday,Wednesday,Thursday,Friday",
+            ct);
+
+        var result = raw
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(token => Enum.TryParse<DayOfWeek>(token, ignoreCase: true, out var parsed) ? parsed : (DayOfWeek?)null)
+            .Where(day => day.HasValue)
+            .Select(day => day!.Value)
+            .ToHashSet();
+
+        return result.Count == 0
+            ? new HashSet<DayOfWeek>
+            {
+                DayOfWeek.Monday,
+                DayOfWeek.Tuesday,
+                DayOfWeek.Wednesday,
+                DayOfWeek.Thursday,
+                DayOfWeek.Friday,
+            }
+            : result;
+    }
+
+    private async Task<TimeOnly> GetConfiguredTimeAsync(string key, TimeOnly fallback, CancellationToken ct)
+    {
+        var raw = await _systemConfig.GetStringAsync(key, fallback.ToString("HH:mm"), ct);
+        return TimeOnly.TryParse(raw, out var parsed) ? parsed : fallback;
+    }
 
     private static string GetDayName(DayOfWeek day) => day switch
     {

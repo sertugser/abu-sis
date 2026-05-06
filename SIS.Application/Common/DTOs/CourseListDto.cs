@@ -23,6 +23,7 @@ public class SectionDto
     public string ClassroomName { get; set; } = string.Empty;
     public string Schedule { get; set; } = string.Empty;
     public bool IsActive { get; set; }
+    public bool QuotaVisible { get; set; } = true;
 }
 
 public class StudentCourseDto
@@ -90,4 +91,6 @@ public class ActiveTermDto
     public bool StudentRegistrationEnabled { get; set; } = true;
     public string? StudentRegistrationOpenAt { get; set; }
     public string? StudentRegistrationMessage { get; set; }
+    public bool IsFreezeApplicationOpen { get; set; }
+    public string? StudentFreezeApplicationMessage { get; set; }
 }

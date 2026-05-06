@@ -30,9 +30,45 @@ public static partial class SeedData
             new() { Key = "Security.PasswordRotationMonths", Value = "6", Category = "Security", DataType = "int", Description = "Şifre değiştirme periyodu (ay)" },
             new() { Key = "Localization.DefaultLanguage", Value = "tr-TR", Category = "Localization", DataType = "string", Description = "Sistem varsayılan arayüz dili" },
 
+            // ── Akademisyen / Başvuru Master Anahtarları ─────────
+            new() { Key = "Instructor.StudentContactInfoVisible", Value = "true", Category = "Instructor", DataType = "bool", Description = "Akademisyen ekranlarında öğrenci e-posta ve GSM bilgileri gösterilsin mi?" },
+            new() { Key = "Instructor.AcademicCvActiveYear", Value = "2026", Category = "Instructor", DataType = "int", Description = "Akademik CV faaliyet girişinde aktif yıl" },
+            new() { Key = "Instructor.AcademicCvApprovedActivityEditable", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademik CV faaliyet girişinde onaylı faaliyet değiştirilebilir mi?" },
+            new() { Key = "Instructor.AcademicCvAutoApprove", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademik CV faaliyet girişinde otomatik onayla" },
+            new() { Key = "Instructor.PhotoRequestAutoApprove", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademik fotoğraf talebinde otomatik onayla" },
+            new() { Key = "Instructor.SimplifyDashboardStatistics", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademisyen açılış sayfasındaki istatistikleri sadeleştir" },
+            new() { Key = "Instructor.ProfileOrgUnitUpdateDeadline", Value = "2099-12-31", Category = "Instructor", DataType = "string", Description = "Akademisyen birim, fakülte, bölüm, program girilen tarihe kadar güncelleme yapabilir" },
+            new() { Key = "Instructor.EnableAdvisorOptOutOptions", Value = "true", Category = "Instructor", DataType = "bool", Description = "Akademisyen danışmanlık yapmak istemiyorum seçeneklerini aç" },
+            new() { Key = "Instructor.DefaultLoginLanguage", Value = "tr-TR", Category = "Instructor", DataType = "string", Description = "Akademisyen giriş sayfası varsayılan dil" },
+            new() { Key = "Instructor.HideGradeEntryStatistics", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademisyen not girişinde istatistik kapalı" },
+            new() { Key = "Instructor.RequireOfficeHoursOnProfileUpdate", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademisyen profil bilgileri girilirken ofis saatlerini tanımlamaya zorla" },
+            new() { Key = "Instructor.FaqUrl", Value = "https://obs.ankarabilim.edu.tr/yardim/akademisyen", Category = "Instructor", DataType = "string", Description = "Akademisyen sıkça sorulan sorular bağlantı adresi" },
+            new() { Key = "Instructor.TranscriptClosed", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademisyen transkript kapalı" },
+            new() { Key = "Instructor.PrimaryEmailImmutable", Value = "false", Category = "Instructor", DataType = "bool", Description = "Akademisyen 1. e-posta adresini değiştiremez" },
+            new() { Key = "Instructor.AdvisingCalculationMethod", Value = "standard", Category = "Instructor", DataType = "string", Description = "Danışmanlık hesaplama yöntemi" },
+            new() { Key = "Application.SocialTranscriptStudentApplicationEnabled", Value = "true", Category = "Application", DataType = "bool", Description = "Sosyal transkript öğrenci başvurusu sistem seviyesinde açık mı?" },
+            new() { Key = "Application.SocialTranscriptApplicationEvaluationEnabled", Value = "true", Category = "Application", DataType = "bool", Description = "Sosyal transkript değerlendirme akışı sistem seviyesinde açık mı?" },
+            new() { Key = "Application.SocialTranscriptObjectionEnabled", Value = "true", Category = "Application", DataType = "bool", Description = "Sosyal transkript itiraz akışı sistem seviyesinde açık mı?" },
+            new() { Key = "Application.RegistrationFreezeApplicationEnabled", Value = "true", Category = "Application", DataType = "bool", Description = "Kayıt dondurma başvuru akışı sistem seviyesinde açık mı?" },
+            new() { Key = "Application.CourseWithdrawalEnabled", Value = "true", Category = "Application", DataType = "bool", Description = "Dersten çekilme / ders silme başvuru akışı sistem seviyesinde açık mı?" },
+            new() { Key = "Application.InstituteDisableUserCreationVerification", Value = "false", Category = "Application", DataType = "bool", Description = "Enstitü başvuru sisteminde kullanıcı oluşturma doğrulamayı kapat" },
+            new() { Key = "Application.FormationApplicantIdentityVerificationEnabled", Value = "true", Category = "Application", DataType = "bool", Description = "Formasyon başvuru, aday kullanıcı oluştururken T.C. No veya Y.U No için NV/KPS'den doğrulama yap" },
+            new() { Key = "Application.FormationDisableUserCreationVerification", Value = "false", Category = "Application", DataType = "bool", Description = "Formasyon başvuru sisteminde kullanıcı oluşturma doğrulamayı kapat" },
+            new() { Key = "Application.FormationCancellationApplicationEnabled", Value = "false", Category = "Application", DataType = "bool", Description = "Formasyon iptal başvuru sistemi açık" },
+            new() { Key = "Application.FormationCancellationPetitionEnabled", Value = "false", Category = "Application", DataType = "bool", Description = "Formasyon iptal başvuru sistemi başvuru dilekçesi açık" },
+            new() { Key = "Application.FormationCancellationApprovalText", Value = "Formasyon iptal başvuru onay metnini kabul ediyorum.", Category = "Application", DataType = "string", Description = "Formasyon iptal başvuru sistemi onay metni" },
+            new() { Key = "Application.FineArtsApplicantIdentityVerificationEnabled", Value = "true", Category = "Application", DataType = "bool", Description = "Güzel sanatlar başvuru, aday kullanıcı oluştururken T.C. No veya Y.U No için NV/KPS'den doğrulama yap" },
+            new() { Key = "Application.FineArtsDisableUserCreationVerification", Value = "false", Category = "Application", DataType = "bool", Description = "Güzel sanatlar başvuru sisteminde kullanıcı oluşturma doğrulamayı kapat" },
+            new() { Key = "Application.DeregistrationCareerPortalEnabled", Value = "false", Category = "Application", DataType = "bool", Description = "İlişik kesme başvurusu kariyer portalından başvuruya açık" },
+            new() { Key = "Application.DeregistrationRequireEDevletLogin", Value = "true", Category = "Application", DataType = "bool", Description = "İlişik kesme başvurusuna sadece e-Devlet ile giriş yapan öğrenciler başvuru yapabilir" },
+
             // ── Ders Çekilme Limitleri ────────────────────────────
             new() { Key = "Withdrawal.MaxCount.Undergraduate", Value = "6", Category = "Registration", DataType = "int", Description = "Lisans öğrencileri için toplam çekilme hakkı" },
             new() { Key = "Withdrawal.MaxCount.Associate", Value = "3", Category = "Registration", DataType = "int", Description = "Önlisans öğrencileri için toplam çekilme hakkı" },
+
+            // ── Ders Kayıt Kontrolleri ────────────────────────────
+            new() { Key = "Registration.HideQuotaInCatalog", Value = "false", Category = "RegistrationControl", DataType = "bool", Description = "Ders kayıt ekranında kontenjan, doluluk ve boş yer bilgileri gizlensin mi?" },
+            new() { Key = "Registration.AllowNonCurriculumCourseSelection", Value = "true", Category = "RegistrationControl", DataType = "bool", Description = "Öğrenci müfredatında olmayan dersleri listede görüp seçebilsin mi?" },
 
             // ── YÖK Unvan → MaxWeeklyHours ───────────────────────
             new() { Key = "Instructor.MaxWeeklyHours.Professor", Value = "12", Category = "Scheduling", DataType = "int", Description = "Profesör max haftalık ders saati" },

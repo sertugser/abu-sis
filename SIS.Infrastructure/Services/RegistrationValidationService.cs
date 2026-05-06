@@ -14,12 +14,20 @@ public class RegistrationValidationService : IRegistrationValidationService
     private readonly AppDbContext _context;
     private readonly ISystemConfigProvider _config;
     private readonly IDateTimeProvider _clock;
+    private readonly IWebModuleControlService _webModuleControls;
+    private readonly bool _useCalendarFallbackForRegistrationWindow;
 
-    public RegistrationValidationService(AppDbContext context, IDateTimeProvider clock, ISystemConfigProvider? config = null)
+    public RegistrationValidationService(
+        AppDbContext context,
+        IDateTimeProvider clock,
+        ISystemConfigProvider? config = null,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _useCalendarFallbackForRegistrationWindow = webModuleControls is null;
     }
 
     public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
@@ -108,13 +116,20 @@ public class RegistrationValidationService : IRegistrationValidationService
                 Message = "Aktif akademik donem bulunamadi."
             });
         }
-        else if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
+        else
         {
-            errors.Add(new ValidationError
+            var registrationControlCode = ResolveStudentRegistrationControlCode(student);
+            var registrationAccess = _useCalendarFallbackForRegistrationWindow
+                ? BuildFallbackRegistrationAccess(activeTerm)
+                : await _webModuleControls.EvaluateAsync(registrationControlCode, activeTerm.Id);
+            if (!registrationAccess.IsOpen)
             {
-                Rule = "RegistrationPeriod",
-                Message = $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}"
-            });
+                errors.Add(new ValidationError
+                {
+                    Rule = "RegistrationPeriod",
+                    Message = registrationAccess.Message ?? $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}"
+                });
+            }
         }
 
         // If blocking errors so far, return early
@@ -386,6 +401,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         var mainProgramForCurr = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
         if (mainProgramForCurr != null)
         {
+            var allowNonCurriculumCourseSelection = await _config.GetBoolAsync("Registration.AllowNonCurriculumCourseSelection", true);
             var curriculumCourseIds = await _context.CurriculumCourses
                 .Where(cc => cc.CurriculumId == mainProgramForCurr.CurriculumId)
                 .Select(cc => cc.CourseId)
@@ -404,12 +420,19 @@ public class RegistrationValidationService : IRegistrationValidationService
             {
                 if (!curriculumCourseSet.Contains(section.CourseId))
                 {
-                    result.Warnings.Add(new ValidationError
+                    var item = new ValidationError
                     {
                         Rule = "NonCurriculumCourse",
-                        Message = $"'{section.Course.Code} {section.Course.Name}' dersi mevcut müfredatınızda bulunmuyor. Danışman onayı gerektirir.",
+                        Message = allowNonCurriculumCourseSelection
+                            ? $"'{section.Course.Code} {section.Course.Name}' dersi mevcut müfredatınızda bulunmuyor. Danışman onayı gerektirir."
+                            : $"'{section.Course.Code} {section.Course.Name}' dersi mevcut müfredatınızda bulunmadığı için sistem konfigürasyonuna göre seçilemez.",
                         CourseSectionId = section.Id
-                    });
+                    };
+
+                    if (allowNonCurriculumCourseSelection)
+                        result.Warnings.Add(item);
+                    else
+                        errors.Add(item);
                 }
             }
         }
@@ -575,6 +598,65 @@ public class RegistrationValidationService : IRegistrationValidationService
         result.IsValid = !errors.Any(e => e.Rule != "ScheduleConflict_NeedsApproval");
         result.Errors = errors;
         return result;
+    }
+
+    private WebModuleAccessResult BuildFallbackRegistrationAccess(AcademicTerm activeTerm)
+    {
+        if (activeTerm.AcademicCalendar is null)
+        {
+            return new WebModuleAccessResult(
+                IsEnabled: true,
+                IsOpen: false,
+                SelectedMode: WebModuleControlModes.AcademicCalendarRegistration,
+                SelectedModeLabel: "Ak.Takvime Bağlı",
+                EffectiveStateLabel: "Beklemede",
+                Message: "Aktif dönemin akademik takvimi tanımlı olmadığı için ders kayıt işlemleri açılamıyor.");
+        }
+
+        if (!activeTerm.IsRegistrationOpen(_clock.UtcNow))
+        {
+            return new WebModuleAccessResult(
+                IsEnabled: true,
+                IsOpen: false,
+                SelectedMode: WebModuleControlModes.AcademicCalendarRegistration,
+                SelectedModeLabel: "Ak.Takvime Bağlı",
+                EffectiveStateLabel: "Beklemede",
+                Message: $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}");
+        }
+
+        return new WebModuleAccessResult(
+            IsEnabled: true,
+            IsOpen: true,
+            SelectedMode: WebModuleControlModes.AcademicCalendarRegistration,
+            SelectedModeLabel: "Ak.Takvime Bağlı",
+            EffectiveStateLabel: "Açık",
+            Message: null);
+    }
+
+    private static string ResolveStudentRegistrationControlCode(Student student)
+    {
+        if (student.CompletedSemesters == 0)
+            return "student-new-course-registration";
+
+        var activeProgram = student.StudentPrograms
+            .FirstOrDefault(program => program.Type == StudentProgramType.Main && program.IsActive);
+
+        if (activeProgram?.Program != null)
+        {
+            var normalDurationSemesters = activeProgram.Program.DegreeLevel switch
+            {
+                DegreeLevel.Associate => 4,
+                DegreeLevel.Bachelor => 8,
+                DegreeLevel.Master => 4,
+                DegreeLevel.Doctorate => 8,
+                _ => 8
+            };
+
+            if (student.CompletedSemesters >= normalDurationSemesters)
+                return "student-extended-course-registration";
+        }
+
+        return "student-course-registration";
     }
 
 }

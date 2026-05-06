@@ -6,5 +6,6 @@ public class AuthResponseDto
     public string Token { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public string[] Roles { get; set; } = Array.Empty<string>();
+    public bool PasswordChangeRequired { get; set; }
     public string? Error { get; set; }
 }

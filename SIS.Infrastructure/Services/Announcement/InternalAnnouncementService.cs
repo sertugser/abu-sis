@@ -12,11 +12,16 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 {
     private readonly AppDbContext _context;
     private readonly IWebModuleSettingsProvider _webSettings;
+    private readonly IWebModuleControlService _webModuleControls;
 
-    public InternalAnnouncementService(AppDbContext context, IWebModuleSettingsProvider? webSettings = null)
+    public InternalAnnouncementService(
+        AppDbContext context,
+        IWebModuleSettingsProvider? webSettings = null,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
     public async Task<List<AnnouncementListDto>> GetActiveForUserAsync(
@@ -27,6 +32,10 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
+        var feedAccess = await _webModuleControls.EvaluateAsync("announcements-feed", ct: ct);
+        if (!feedAccess.IsOpen)
+            return [];
+
         var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var isStudent = roleSet.Contains("Student");
         var isInstructor = roleSet.Contains("Instructor") || roleSet.Contains("AcademicAdvisor");

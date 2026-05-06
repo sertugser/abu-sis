@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -14,11 +15,13 @@ namespace SIS.Infrastructure.Services.CourseOpening;
 public class CourseOpeningQueryService(
     AppDbContext context,
     IEnrollmentForecastService forecastService,
-    CourseOpeningHelpers helpers) : ICourseOpeningQueryService
+    CourseOpeningHelpers helpers,
+    ISystemConfigProvider? systemConfig = null) : ICourseOpeningQueryService
 {
     private readonly AppDbContext _context = context;
     private readonly IEnrollmentForecastService _forecastService = forecastService;
     private readonly CourseOpeningHelpers _helpers = helpers;
+    private readonly ISystemConfigProvider _systemConfig = systemConfig ?? new NullSystemConfigProvider();
 
     public async Task<OpenedCourseListDto> GetOpenedCoursesAsync(int departmentId, int termId, CancellationToken ct = default)
     {
@@ -299,6 +302,7 @@ public class CourseOpeningQueryService(
 
     public async Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, int? termId = null, CancellationToken ct = default)
     {
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, ct);
         var facultyId = await _context.Departments
             .AsNoTracking()
             .Where(d => d.Id == departmentId)
@@ -342,11 +346,12 @@ public class CourseOpeningQueryService(
                 ? $"{baseName} ({deptCode})"
                 : baseName;
             workloadMap.TryGetValue(i.Id, out var assignedHours);
+            var effectiveMaxWeeklyHours = weeklyHoursPolicy.Resolve(i.Title, i.MaxWeeklyHours);
             return new InstructorOptionDto
             {
                 InstructorId = i.Id,
                 FullName = name,
-                MaxWeeklyHours = i.MaxWeeklyHours,
+                MaxWeeklyHours = effectiveMaxWeeklyHours,
                 AssignedWeeklyHours = assignedHours,
             };
         })

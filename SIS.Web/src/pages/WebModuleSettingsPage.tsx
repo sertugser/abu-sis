@@ -1,172 +1,56 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, Check, CheckCircle2, Download, Pencil, Search, Upload, X } from 'lucide-react';
-import WebModuleSettingHistoryDrawer from '@/components/web-module-settings/WebModuleSettingHistoryDrawer';
-import { exportWebModuleSettingsFile } from '../api/webModuleSettings.api';
-import {
-  useImportWebModuleSettings,
-  useUpdateWebModuleSetting,
-  useWebModuleSettingLimits,
-  useWebModuleSettings,
-} from '../hooks/useWebModuleSettings';
-import { useDebounce } from '../hooks/useDebounce';
-import { downloadBlob } from '../lib/download';
+import { AlertCircle, CheckCircle2, Loader2, Search } from 'lucide-react';
+import { useUpdateWebModuleControl, useWebModuleControlSummaries } from '../hooks/useWebModuleSettings';
+import type { WebModuleControlSummaryDto } from '../api/webModuleSettings.api';
 import { getErrorMessage } from '../lib/errorMessage';
-import type { WebModuleSettingDto, WebModuleSettingLimits } from '../api/webModuleSettings.api';
-
-const MODULE_LABELS: Record<string, string> = {
-  StudentPanel: 'Öğrenci Paneli',
-  InstructorPanel: 'Akademisyen Paneli',
-  StaffPanel: 'Personel Paneli',
-  Announcements: 'Duyurular',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  Registration: 'Ders Kayıt',
-  Documents: 'Belge İşlemleri',
-  Privacy: 'Gizlilik',
-  Announcements: 'Duyurular',
-  General: 'Genel',
-};
+import { cn } from '../lib/utils';
 
 type Notice = {
   type: 'success' | 'error';
   message: string;
 };
 
-function toDateTimeInputValue(value: string | null) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return [
-    date.getFullYear(),
-    '-',
-    pad(date.getMonth() + 1),
-    '-',
-    pad(date.getDate()),
-    'T',
-    pad(date.getHours()),
-    ':',
-    pad(date.getMinutes()),
-  ].join('');
-}
-
-function fromDateTimeInputValue(value: string) {
-  return value ? new Date(value).toISOString() : null;
-}
-
-function formatEffectiveDate(value: string | null) {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 export default function WebModuleSettingsPage() {
-  const { data: settings, isLoading, isError } = useWebModuleSettings();
-  const { data: limits } = useWebModuleSettingLimits();
-  const importMutation = useImportWebModuleSettings();
-  const importInputRef = useRef<HTMLInputElement>(null);
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const { data, isLoading, isError } = useWebModuleControlSummaries();
   const [searchText, setSearchText] = useState('');
-  const debouncedSearch = useDebounce(searchText, 300);
+  const deferredSearch = useDeferredValue(searchText.trim().toLocaleLowerCase('tr-TR'));
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
     if (!notice) return;
-    const duration = notice.type === 'error' ? 8000 : 4000;
-    const t = setTimeout(() => setNotice(null), duration);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNotice(null), notice.type === 'error' ? 8000 : 4000);
+    return () => clearTimeout(timer);
   }, [notice]);
 
-  const filteredSettings = useMemo(() => {
-    const searchLower = debouncedSearch.toLocaleLowerCase('tr-TR');
+  const filteredModules = useMemo(() => {
+    const modules = [...(data ?? [])]
+      .sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title, 'tr'));
 
-    return (settings ?? []).filter(setting => {
-      if (!searchLower) return true;
+    if (!deferredSearch) return modules;
 
-      return (
-        setting.key.toLocaleLowerCase('tr-TR').includes(searchLower)
-        || setting.value.toLocaleLowerCase('tr-TR').includes(searchLower)
-        || setting.moduleKey.toLocaleLowerCase('tr-TR').includes(searchLower)
-        || (setting.description ?? '').toLocaleLowerCase('tr-TR').includes(searchLower)
-        || (MODULE_LABELS[setting.moduleKey] ?? setting.moduleKey).toLocaleLowerCase('tr-TR').includes(searchLower)
-        || (CATEGORY_LABELS[setting.category] ?? setting.category).toLocaleLowerCase('tr-TR').includes(searchLower)
-      );
-    });
-  }, [debouncedSearch, settings]);
+    return modules.filter(module => (
+      module.title.toLocaleLowerCase('tr-TR').includes(deferredSearch)
+      || module.category.toLocaleLowerCase('tr-TR').includes(deferredSearch)
+      || module.description.toLocaleLowerCase('tr-TR').includes(deferredSearch)
+      || (module.announcement ?? '').toLocaleLowerCase('tr-TR').includes(deferredSearch)
+      || (module.effectiveMessage ?? '').toLocaleLowerCase('tr-TR').includes(deferredSearch)
+    ));
+  }, [data, deferredSearch]);
 
-  const groupedByModule = useMemo(() => (
-    filteredSettings.reduce<Record<string, WebModuleSettingDto[]>>((acc, setting) => {
-      (acc[setting.moduleKey] ??= []).push(setting);
-      return acc;
-    }, {})
-  ), [filteredSettings]);
-
-  const modules = Object.keys(groupedByModule).sort((a, b) => (
-    (MODULE_LABELS[a] ?? a).localeCompare(MODULE_LABELS[b] ?? b, 'tr')
-  ));
-
-  async function handleExport() {
-    setNotice(null);
-    setIsExporting(true);
-
-    try {
-      const file = await exportWebModuleSettingsFile();
-      downloadBlob(file, 'web-module-settings.json');
-    } catch (error) {
-      setNotice({ type: 'error', message: getErrorMessage(error, 'Web modül ayarları dışa aktarılamadı.') });
-    } finally {
-      setIsExporting(false);
-    }
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-16 rounded-md" />
+        <Skeleton className="h-[42rem] rounded-md" />
+      </div>
+    );
   }
 
-  async function handleImportChange(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    if (!file) return;
-
-    setNotice(null);
-
-    try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      if (!Array.isArray(parsed)) {
-        throw new Error('İçe aktarım dosyası bir JSON dizi formatında olmalıdır.');
-      }
-
-      const result = await importMutation.mutateAsync(parsed);
-      setNotice({
-        type: 'success',
-        message: `${result.updatedCount} ayar güncellendi. ${result.processedCount} kayıt doğrulandı.`,
-      });
-    } catch (error) {
-      setNotice({ type: 'error', message: getErrorMessage(error, 'Web modül ayarları içe aktarılamadı.') });
-    } finally {
-      input.value = '';
-    }
-  }
-
-  if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
   if (isError) {
     return (
       <Alert variant="destructive">
@@ -177,9 +61,9 @@ export default function WebModuleSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {notice && (
-        <Alert variant={notice.type === 'error' ? 'destructive' : undefined} className="py-2">
+        <Alert variant={notice.type === 'error' ? 'destructive' : undefined}>
           {notice.type === 'error'
             ? <AlertCircle className="h-4 w-4" />
             : <CheckCircle2 className="h-4 w-4" />}
@@ -187,389 +71,174 @@ export default function WebModuleSettingsPage() {
         </Alert>
       )}
 
-      <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-2.5">
-        <div className="relative w-80 max-w-full">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Ayar ara..."
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            className="h-9 rounded-lg border bg-muted/50 pl-9 text-sm"
-          />
+      <div className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <p className="text-sm font-semibold text-slate-700">Sistem Konfigürasyonu</p>
         </div>
-        <div className="flex-1" />
-        <div className="h-5 w-px bg-border" />
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-9" onClick={handleExport} disabled={isExporting}>
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            {isExporting ? 'Hazırlanıyor...' : 'JSON İndir'}
-          </Button>
-          <Button variant="ghost" size="sm" className="h-9" onClick={() => importInputRef.current?.click()} disabled={importMutation.isPending}>
-            <Upload className="mr-1.5 h-3.5 w-3.5" />
-            {importMutation.isPending ? 'İçe Aktarılıyor...' : 'JSON Yükle'}
-          </Button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={handleImportChange}
-          />
+
+        <div className="border-b border-slate-200 px-5 py-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <Input
+              value={searchText}
+              onChange={event => setSearchText(event.target.value)}
+              placeholder="Modül ara"
+              className="h-10 rounded-sm border-slate-300 lg:max-w-md"
+            />
+            <Button type="button" variant="outline" className="h-10 rounded-sm border-slate-300 px-5 text-sm text-slate-700">
+              <Search className="mr-2 h-4 w-4" />
+              Ara/Bul
+            </Button>
+          </div>
+
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            Bu sayfada yapılan değişiklikler sadece görünümü değil, ilgili backend akışlarını da etkiler.
+            Ders kayıt, danışman onayı, not girişi ve not yayınlama kararları bu ayarlardan okunur.
+          </p>
         </div>
-      </div>
 
-      {modules.length === 0 && debouncedSearch && (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          &ldquo;{debouncedSearch}&rdquo; ile eşleşen ayar bulunamadı.
+        <div className="hidden grid-cols-[minmax(0,1.55fr)_minmax(280px,320px)_minmax(340px,1fr)_130px] border-b border-slate-300 bg-slate-700 px-5 py-2.5 text-sm font-semibold text-white lg:grid">
+          <div>Modül Adı</div>
+          <div>Durum</div>
+          <div>Duyuru</div>
+          <div className="text-right">Kaydet</div>
         </div>
-      )}
 
-      {modules.length > 0 && (
-        <Tabs defaultValue={modules[0]} className="space-y-4">
-          <TabsList className="h-auto flex-wrap justify-start">
-            {modules.map(moduleKey => (
-              <TabsTrigger key={moduleKey} value={moduleKey}>
-                {MODULE_LABELS[moduleKey] ?? moduleKey}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {modules.map(moduleKey => (
-            <TabsContent key={moduleKey} value={moduleKey}>
-              <ModuleSettingsCard
-                moduleKey={moduleKey}
-                settings={groupedByModule[moduleKey]}
-                limits={limits}
+        {filteredModules.length === 0 ? (
+          <div className="px-5 py-10 text-sm text-slate-500">
+            Arama ölçütüne uyan modül bulunamadı.
+          </div>
+        ) : (
+          <div>
+            {filteredModules.map((module, index) => (
+              <ModuleControlRow
+                key={module.code}
+                module={module}
+                zebra={index % 2 === 1}
                 onNotice={setNotice}
               />
-            </TabsContent>
-          ))}
-        </Tabs>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function ModuleSettingsCard({
-  moduleKey,
-  settings,
-  limits,
+function ModuleControlRow({
+  module,
+  zebra,
   onNotice,
 }: {
-  moduleKey: string;
-  settings: WebModuleSettingDto[];
-  limits?: WebModuleSettingLimits;
+  module: WebModuleControlSummaryDto;
+  zebra: boolean;
   onNotice: (notice: Notice) => void;
 }) {
-  const grouped = settings.reduce<Record<string, WebModuleSettingDto[]>>((acc, setting) => {
-    (acc[setting.category || 'General'] ??= []).push(setting);
-    return acc;
-  }, {});
+  const mutation = useUpdateWebModuleControl();
+  const [mode, setMode] = useState(module.selectedMode);
+  const [announcement, setAnnouncement] = useState(module.announcement ?? '');
 
-  const categories = Object.keys(grouped).sort((a, b) => (
-    (CATEGORY_LABELS[a] ?? a).localeCompare(CATEGORY_LABELS[b] ?? b, 'tr')
-  ));
+  useEffect(() => {
+    setMode(module.selectedMode);
+    setAnnouncement(module.announcement ?? '');
+  }, [module.selectedMode, module.announcement, module.code]);
 
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm">
-          <Badge variant="outline" className="mr-2">{MODULE_LABELS[moduleKey] ?? moduleKey}</Badge>
-          {settings.length} ayar
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {categories.map(category => (
-          <div key={category} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-[10px]">{CATEGORY_LABELS[category] ?? category}</Badge>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ayar</TableHead>
-                  <TableHead>Değer</TableHead>
-                  <TableHead className="w-56">Geçerlilik</TableHead>
-                  <TableHead className="w-20">Tip</TableHead>
-                  <TableHead className="w-32 text-right">İşlem</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grouped[category].map(setting => (
-                  <WebModuleSettingRow
-                    key={setting.id}
-                    setting={setting}
-                    limits={limits}
-                    onNotice={onNotice}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
+  const isDirty = mode !== module.selectedMode || announcement !== (module.announcement ?? '');
+  const selectedOption = module.options.find(option => option.code === mode) ?? module.options[0];
+  const isClosedState = mode === 'closed' || module.effectiveStateLabel.toLocaleLowerCase('tr-TR') === 'kapalı';
 
-function WebModuleSettingRow({
-  setting,
-  limits,
-  onNotice,
-}: {
-  setting: WebModuleSettingDto;
-  limits?: WebModuleSettingLimits;
-  onNotice: (notice: Notice) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(setting.value);
-  const [effectiveFrom, setEffectiveFrom] = useState(toDateTimeInputValue(setting.effectiveFrom));
-  const [effectiveTo, setEffectiveTo] = useState(toDateTimeInputValue(setting.effectiveTo));
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const updateMutation = useUpdateWebModuleSetting();
-
-  // editing/setting değişince form alanlarını senkronla — adjust-state-during-render
-  // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
-  const syncKey = `${editing}-${setting.value}-${setting.effectiveFrom ?? ''}-${setting.effectiveTo ?? ''}`;
-  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
-  if (syncKey !== prevSyncKey) {
-    setPrevSyncKey(syncKey);
-    if (!editing) {
-      setValue(setting.value);
-      setEffectiveFrom(toDateTimeInputValue(setting.effectiveFrom));
-      setEffectiveTo(toDateTimeInputValue(setting.effectiveTo));
-    }
-  }
-
-  const compositeKey = `${setting.moduleKey}.${setting.key}`;
-  const limit = limits?.[compositeKey];
-  const limitHint = limit
-    ? `Min: ${limit.min ?? '—'}, Max: ${limit.max ?? '—'}`
-    : null;
-  const label = `${MODULE_LABELS[setting.moduleKey] ?? setting.moduleKey}.${setting.key}`;
-
-  function buildPayload() {
-    return {
-      value,
-      effectiveFrom: fromDateTimeInputValue(effectiveFrom),
-      effectiveTo: fromDateTimeInputValue(effectiveTo),
-    };
-  }
-
-  function doSave() {
-    setErrorMessage(null);
-    updateMutation.mutate(
-      { id: setting.id, payload: buildPayload() },
+  function handleSave() {
+    mutation.mutate(
       {
-        onSuccess: updatedSetting => {
-          setValue(updatedSetting.value);
-          setEffectiveFrom(toDateTimeInputValue(updatedSetting.effectiveFrom));
-          setEffectiveTo(toDateTimeInputValue(updatedSetting.effectiveTo));
-          setEditing(false);
-          onNotice({ type: 'success', message: `${setting.key} güncellendi.` });
+        code: module.code,
+        payload: {
+          mode,
+          announcement: announcement.trim() || null,
         },
-        onError: error => {
-          setErrorMessage(getErrorMessage(error, 'Ayar kaydedilemedi.'));
-        },
+      },
+      {
+        onSuccess: () => onNotice({ type: 'success', message: `${module.title} güncellendi.` }),
+        onError: error => onNotice({ type: 'error', message: getErrorMessage(error, 'Web modülü güncellenemedi.') }),
       },
     );
   }
 
-  function handleSave() {
-    const nextPayload = buildPayload();
-    const unchanged = value === setting.value
-      && nextPayload.effectiveFrom === setting.effectiveFrom
-      && nextPayload.effectiveTo === setting.effectiveTo;
-
-    if (unchanged) {
-      setEditing(false);
-      return;
-    }
-
-    setConfirmOpen(true);
-  }
-
-  function handleCancel() {
-    setValue(setting.value);
-    setEffectiveFrom(toDateTimeInputValue(setting.effectiveFrom));
-    setEffectiveTo(toDateTimeInputValue(setting.effectiveTo));
-    setErrorMessage(null);
-    setEditing(false);
-  }
-
-  function renderEditInput() {
-    if (setting.dataType === 'bool') {
-      const checked = value === 'true' || value === '1' || value === 'yes' || value === 'on';
-      return (
-        <div className="flex items-center gap-2">
-          <Switch checked={checked} onCheckedChange={c => setValue(c ? 'true' : 'false')} />
-          <span className="text-xs text-muted-foreground">{checked ? 'Aktif' : 'Pasif'}</span>
-        </div>
-      );
-    }
-
-    if (setting.dataType === 'json') {
-      return (
-        <Textarea
-          className="min-h-[80px] w-64 font-mono text-xs"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Escape') handleCancel();
-          }}
-          autoFocus
-        />
-      );
-    }
-
-    if (setting.dataType === 'int' || setting.dataType === 'decimal') {
-      return (
-        <div className="space-y-1">
-          <Input
-            type="number"
-            className="h-8 w-56 text-sm"
-            value={value}
-            step={setting.dataType === 'decimal' ? '0.01' : '1'}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') handleSave();
-              if (e.key === 'Escape') handleCancel();
-            }}
-            autoFocus
-          />
-          {limitHint && <p className="text-[10px] text-muted-foreground">{limitHint}</p>}
-          {setting.dataType === 'decimal' && (
-            <p className="text-[10px] text-amber-600">Ondalık ayracı olarak nokta (.) kullanın</p>
-          )}
-          {errorMessage && <p className="max-w-md text-[11px] text-red-600">{errorMessage}</p>}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-1">
-        <Input
-          type={setting.dataType === 'time' ? 'time' : 'text'}
-          className="h-8 w-56 text-sm"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') handleSave();
-            if (e.key === 'Escape') handleCancel();
-          }}
-          autoFocus
-        />
-        {errorMessage && <p className="max-w-md text-[11px] text-red-600">{errorMessage}</p>}
-      </div>
-    );
-  }
-
-  function renderDisplayValue() {
-    if (setting.dataType === 'bool') {
-      const checked = setting.value === 'true' || setting.value === '1';
-      return (
-        <Badge variant={checked ? 'default' : 'secondary'} className="text-[10px]">
-          {checked ? 'Aktif' : 'Pasif'}
-        </Badge>
-      );
-    }
-
-    return <span className="text-sm font-medium">{setting.value}</span>;
-  }
-
-  function renderEffectiveRange() {
-    if (editing) {
-      return (
-        <div className="grid gap-2">
-          <Input
-            type="datetime-local"
-            className="h-8 text-xs"
-            value={effectiveFrom}
-            onChange={e => setEffectiveFrom(e.target.value)}
-          />
-          <Input
-            type="datetime-local"
-            className="h-8 text-xs"
-            value={effectiveTo}
-            onChange={e => setEffectiveTo(e.target.value)}
-          />
-        </div>
-      );
-    }
-
-    if (!setting.effectiveFrom && !setting.effectiveTo) {
-      return <span className="text-xs text-muted-foreground">Sürekli</span>;
-    }
-
-    return (
-      <div className="space-y-0.5 text-xs text-muted-foreground">
-        <p>{formatEffectiveDate(setting.effectiveFrom)}</p>
-        <p>{formatEffectiveDate(setting.effectiveTo)}</p>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <TableRow>
-        <TableCell>
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium leading-tight">{setting.description || setting.key}</p>
-            <p className="font-mono text-[11px] text-muted-foreground">{compositeKey}</p>
+    <div
+      className={cn(
+        'border-b border-slate-200 px-5 py-4 last:border-b-0',
+        isDirty ? 'bg-indigo-50/70' : zebra ? 'bg-slate-50/70' : 'bg-white',
+      )}
+    >
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(280px,320px)_minmax(340px,1fr)_130px] lg:items-start">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[15px] font-medium text-slate-900">{module.title}</p>
+            <span className={cn(
+              'rounded-md border px-2.5 py-1 text-[11px] font-semibold',
+              isClosedState
+                ? 'border-red-200 bg-red-100 text-red-700'
+                : module.isCurrentlyOpen
+                  ? 'border-emerald-200 bg-emerald-100 text-emerald-700'
+                  : 'border-amber-200 bg-amber-100 text-amber-700',
+            )}>
+              {module.effectiveStateLabel}
+            </span>
           </div>
-        </TableCell>
-        <TableCell>{editing ? renderEditInput() : renderDisplayValue()}</TableCell>
-        <TableCell>{renderEffectiveRange()}</TableCell>
-        <TableCell>
-          <Badge variant="secondary" className="text-[10px]">{setting.dataType}</Badge>
-        </TableCell>
-        <TableCell>
-          {editing ? (
-            <div className="flex justify-end gap-1">
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={updateMutation.isPending}>
-                <Check className="h-4 w-4 text-green-600" />
-              </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancel}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex justify-end gap-1">
-              <WebModuleSettingHistoryDrawer
-                settingId={setting.id}
-                label={label}
-                currentValue={setting.value}
-                currentEffectiveFrom={setting.effectiveFrom}
-                currentEffectiveTo={setting.effectiveTo}
-              />
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(true)}>
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </TableCell>
-      </TableRow>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Ayar değişikliğini onayla</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div>
-                <span className="font-mono text-xs">{compositeKey}</span> değerini{' '}
-                <span className="font-semibold">{setting.value}</span> &rarr;{' '}
-                <span className="font-semibold">{value}</span> olarak değiştirmek istediğinize emin misiniz?
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>İptal</AlertDialogCancel>
-            <AlertDialogAction onClick={doSave}>Onayla</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+          <p className="text-xs text-slate-500">{module.description}</p>
+          {module.effectiveMessage && (
+            <p className="text-xs leading-5 text-slate-600">{module.effectiveMessage}</p>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 lg:hidden">
+            Durum
+          </p>
+          <Select value={mode} onValueChange={setMode}>
+            <SelectTrigger className={cn(
+              'h-11 rounded-md bg-white text-[15px]',
+              isClosedState
+                ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-200'
+                : 'border-slate-300',
+            )}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {module.options.map(option => (
+                <SelectItem key={option.code} value={option.code}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] leading-4 text-slate-500">{selectedOption.description}</p>
+        </div>
+
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 lg:hidden">
+            Duyuru
+          </p>
+          <Input
+            value={announcement}
+            onChange={event => setAnnouncement(event.target.value)}
+            placeholder="Kullanıcı duyurusu"
+            className="h-11 rounded-md border-slate-300 text-[15px]"
+          />
+        </div>
+
+        <div className="flex items-start justify-end">
+          <Button
+            type="button"
+            size="sm"
+            className="h-11 w-full rounded-md bg-slate-800 px-4 text-white hover:bg-slate-700 lg:w-[120px]"
+            disabled={!isDirty || mutation.isPending}
+            onClick={handleSave}
+          >
+            {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Kaydet'}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

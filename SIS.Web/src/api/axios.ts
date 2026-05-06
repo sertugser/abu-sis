@@ -25,7 +25,14 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('sis_token');
       localStorage.removeItem('sis_token_expires');
       localStorage.removeItem('sis_roles');
+      localStorage.removeItem('sis_password_change_required');
       window.location.href = '/login';
+    }
+    if (error.response?.status === 403 && error.response?.data?.code === 'PasswordChangeRequired') {
+      localStorage.setItem('sis_password_change_required', 'true');
+      if (window.location.pathname !== '/sifre-degistir') {
+        window.location.href = '/sifre-degistir';
+      }
     }
     return Promise.reject(error);
   }

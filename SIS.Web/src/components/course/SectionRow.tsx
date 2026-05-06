@@ -42,7 +42,11 @@ export default function SectionRow({
             )}
           </div>
           <div className="text-sm text-muted-foreground">{section.schedule || 'Program belirtilmemiş'}</div>
-          <CapacityBar enrolled={section.enrolledCount} capacity={section.capacity} />
+          {section.quotaVisible ? (
+            <CapacityBar enrolled={section.enrolledCount} capacity={section.capacity} />
+          ) : (
+            <div className="text-xs font-medium text-muted-foreground">Kontenjan bilgisi gizli</div>
+          )}
           <div className="flex items-center justify-end gap-2">
             <Button
               size="icon"
@@ -112,13 +116,21 @@ export default function SectionRow({
                 <DetailItem icon={Users} label="Öğretim Üyesi" value={detail.section.instructorName || '—'} />
                 <DetailItem icon={MapPin} label="Sınıf" value={detail.section.classroomName || 'Belirtilmemiş'} />
                 <DetailItem icon={Clock} label="Program" value={detail.section.schedule || 'Belirtilmemiş'} />
-                <DetailItem icon={Users} label="Kontenjan" value={`${detail.section.enrolledCount} / ${detail.section.capacity}`} />
+                <DetailItem
+                  icon={Users}
+                  label="Kontenjan"
+                  value={detail.section.quotaVisible ? `${detail.section.enrolledCount} / ${detail.section.capacity}` : 'Gizli'}
+                />
               </div>
               <div className="flex items-center gap-2 pt-2 border-t border-border">
                 <span className="text-sm text-muted-foreground">Boş Yer:</span>
-                <Badge variant={detail.section.availableSeats > 0 ? 'success' : 'destructive'}>
-                  {detail.section.availableSeats}
-                </Badge>
+                {detail.section.quotaVisible ? (
+                  <Badge variant={detail.section.availableSeats > 0 ? 'success' : 'destructive'}>
+                    {detail.section.availableSeats}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">Gizli</Badge>
+                )}
                 <span className="text-sm text-muted-foreground ml-auto">Durum:</span>
                 <Badge variant={detail.section.isActive ? 'success' : 'secondary'}>
                   {detail.section.isActive ? 'Aktif' : 'Pasif'}

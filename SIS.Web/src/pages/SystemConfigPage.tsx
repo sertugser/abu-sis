@@ -1,43 +1,82 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, Check, CheckCircle2, Download, Pencil, Search, Upload, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, Pencil, Search, Upload } from 'lucide-react';
 import ConfigHistoryDrawer from '@/components/system-config/ConfigHistoryDrawer';
 import { exportSystemConfigsFile } from '../api/systemConfig.api';
 import { useConfigLimits, useImportSystemConfigs, useSystemConfigs, useUpdateSystemConfig } from '../hooks/useSystemConfig';
 import { useDebounce } from '../hooks/useDebounce';
 import { downloadBlob } from '../lib/download';
 import { getErrorMessage } from '../lib/errorMessage';
-import type { SystemConfigDto, ConfigLimits } from '../api/systemConfig.api';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  Registration: 'Kayıt Kuralları',
-  GPA: 'Not Hesaplama',
-  Scheduling: 'Zamanlama',
-  Schedule: 'Ders Programı',
-  Attendance: 'Devamsızlık',
-  Security: 'Güvenlik',
-  Localization: 'Dil ve Yerelleştirme',
-  General: 'Genel',
-};
+import { cn } from '../lib/utils';
+import type { ConfigLimits, SystemConfigDto, SystemConfigValueOptionDto } from '../api/systemConfig.api';
 
 type Notice = {
   type: 'success' | 'error';
   message: string;
 };
+
+type GroupOption = {
+  key: string;
+  label: string;
+};
+
+const DATE_CONFIG_KEYS = new Set<string>([
+  'Instructor.ProfileOrgUnitUpdateDeadline',
+]);
+
+const URL_CONFIG_KEYS = new Set<string>([
+  'Instructor.FaqUrl',
+]);
+
+const HIDDEN_SYSTEM_CONFIG_KEYS = new Set<string>([
+  'Classroom.AmphiThreshold',
+  'Scheduling.MaxBacktrackingDepth',
+  'SoftConstraint.S1.Enabled',
+  'SoftConstraint.S2.MaxDailyHours',
+  'SoftConstraint.S3.Enabled',
+  'SoftConstraint.S3.MaxSectionsPerSlot',
+  'SoftConstraint.S4.Enabled',
+  'SoftConstraint.S4.MinCoPairThreshold',
+  'SoftConstraint.S7.MaxGapSlots',
+  'SoftConstraint.S8.Enabled',
+  'SoftConstraint.S9.Enabled',
+  'SoftConstraint.S12.Enabled',
+  'SoftConstraint.Weight.S1',
+  'SoftConstraint.Weight.S2',
+  'SoftConstraint.Weight.S3',
+  'SoftConstraint.Weight.S4',
+  'SoftConstraint.Weight.S5',
+  'SoftConstraint.Weight.S7',
+  'SoftConstraint.Weight.S8',
+  'SoftConstraint.Weight.S9',
+  'SoftConstraint.Weight.S12',
+  'Schedule.SA.MaxIterations',
+  'Schedule.SA.InitialTemperature',
+  'Schedule.SA.TimeoutSeconds',
+  'Schedule.SA.StagnationLimit',
+  'Schedule.SA.BacktrackLimit',
+  'Schedule.SA.RelocateWeight',
+  'Schedule.SA.SwapWeight',
+  'Schedule.SA.ChainWeight',
+  'Schedule.MRV.ClassroomWeight',
+  'Schedule.MRV.SlotWeight',
+  'Schedule.MRV.LabWeight',
+  'Schedule.MRV.CapacityWeight',
+]);
 
 export default function SystemConfigPage() {
   const { data: configs, isLoading, isError } = useSystemConfigs();
@@ -47,13 +86,13 @@ export default function SystemConfigPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const debouncedSearch = useDebounce(searchText, 300);
+  const [selectedGroup, setSelectedGroup] = useState('all');
+  const debouncedSearch = useDebounce(searchText, 250);
 
   useEffect(() => {
     if (!notice) return;
-    const duration = notice.type === 'error' ? 8000 : 4000;
-    const t = setTimeout(() => setNotice(null), duration);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNotice(null), notice.type === 'error' ? 8000 : 4500);
+    return () => clearTimeout(timer);
   }, [notice]);
 
   async function handleExport() {
@@ -79,9 +118,8 @@ export default function SystemConfigPage() {
 
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
-      if (!Array.isArray(parsed)) {
+      if (!Array.isArray(parsed))
         throw new Error('İçe aktarım dosyası bir JSON dizi formatında olmalıdır.');
-      }
 
       const result = await importMutation.mutateAsync(parsed);
       setNotice({
@@ -95,7 +133,52 @@ export default function SystemConfigPage() {
     }
   }
 
-  if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
+  const sortedConfigs = useMemo(
+    () => [...(configs ?? [])]
+      .filter(config => !HIDDEN_SYSTEM_CONFIG_KEYS.has(config.key))
+      .sort((left, right) =>
+        left.groupLabel.localeCompare(right.groupLabel, 'tr')
+        || left.displayOrder - right.displayOrder
+        || left.displayName.localeCompare(right.displayName, 'tr')),
+    [configs],
+  );
+
+  const groups = useMemo<GroupOption[]>(() => {
+    const map = new Map<string, string>();
+    for (const config of sortedConfigs) {
+      if (!map.has(config.groupKey))
+        map.set(config.groupKey, config.groupLabel);
+    }
+
+    return [
+      { key: 'all', label: 'Tümü' },
+      ...Array.from(map.entries()).map(([key, label]) => ({ key, label })),
+    ];
+  }, [sortedConfigs]);
+
+  const filteredConfigs = useMemo(() => {
+    const query = debouncedSearch.trim().toLocaleLowerCase('tr-TR');
+
+    return sortedConfigs.filter(config => {
+      if (selectedGroup !== 'all' && config.groupKey !== selectedGroup)
+        return false;
+
+      if (!query)
+        return true;
+
+      return [
+        config.groupLabel,
+        config.displayName,
+        config.description ?? '',
+        config.key,
+        config.value,
+      ].some(field => field.toLocaleLowerCase('tr-TR').includes(query));
+    });
+  }, [debouncedSearch, selectedGroup, sortedConfigs]);
+
+  if (isLoading)
+    return <Skeleton className="h-[42rem] rounded-[28px]" />;
+
   if (isError) {
     return (
       <Alert variant="destructive">
@@ -105,33 +188,10 @@ export default function SystemConfigPage() {
     );
   }
 
-  const searchLower = debouncedSearch.toLowerCase();
-  const filtered = (configs ?? []).filter(c => {
-    if (!searchLower) return true;
-    return (
-      c.key.toLowerCase().includes(searchLower)
-      || c.value.toLowerCase().includes(searchLower)
-      || (c.description ?? '').toLowerCase().includes(searchLower)
-      || (CATEGORY_LABELS[c.category] ?? c.category).toLowerCase().includes(searchLower)
-    );
-  });
-
-  const grouped = filtered.reduce<Record<string, SystemConfigDto[]>>((acc, config) => {
-    const category = config.category || 'General';
-    (acc[category] ??= []).push(config);
-    return acc;
-  }, {});
-
-  const sortedCategories = Object.keys(grouped).sort((a, b) => {
-    const labelA = CATEGORY_LABELS[a] ?? a;
-    const labelB = CATEGORY_LABELS[b] ?? b;
-    return labelA.localeCompare(labelB, 'tr');
-  });
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {notice && (
-        <Alert variant={notice.type === 'error' ? 'destructive' : undefined} className="py-2">
+        <Alert variant={notice.type === 'error' ? 'destructive' : undefined}>
           {notice.type === 'error'
             ? <AlertCircle className="h-4 w-4" />
             : <CheckCircle2 className="h-4 w-4" />}
@@ -139,70 +199,104 @@ export default function SystemConfigPage() {
         </Alert>
       )}
 
-      <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-2.5">
-        <div className="relative w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Ayar ara... (anahtar, değer veya açıklama)"
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            className="h-9 rounded-lg border bg-muted/50 pl-9 text-sm"
-          />
-        </div>
-        <div className="flex-1" />
-        <div className="h-5 w-px bg-border" />
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-9" onClick={handleExport} disabled={isExporting}>
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            {isExporting ? 'Hazırlanıyor...' : 'JSON İndir'}
-          </Button>
-          <Button variant="ghost" size="sm" className="h-9" onClick={() => importInputRef.current?.click()} disabled={importMutation.isPending}>
-            <Upload className="mr-1.5 h-3.5 w-3.5" />
-            {importMutation.isPending ? 'İçe Aktarılıyor...' : 'JSON Yükle'}
-          </Button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={handleImportChange}
-          />
-        </div>
-      </div>
+      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
+        <div className="border-b border-slate-200 px-6 py-5">
+          <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)_auto] xl:items-center">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Genel Ayar Grubu</p>
+              <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+                <SelectTrigger className="h-11 rounded-md border-slate-300 bg-white text-left text-[15px]">
+                  <SelectValue placeholder="Seçiniz" />
+                </SelectTrigger>
+                <SelectContent>
+                  {groups.map(group => (
+                    <SelectItem key={group.key} value={group.key}>{group.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-      {sortedCategories.length === 0 && debouncedSearch && (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          &ldquo;{debouncedSearch}&rdquo; ile eşleşen ayar bulunamadı.
-        </div>
-      )}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Açıklama / Anahtar</p>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={searchText}
+                  onChange={event => setSearchText(event.target.value)}
+                  placeholder="Ayar ara... (anahtar, değer veya açıklama)"
+                  className="h-11 rounded-md border-slate-300 bg-white pl-11 text-[15px]"
+                />
+              </div>
+            </div>
 
-      {sortedCategories.map(category => (
-        <Card key={category}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">
-              <Badge variant="outline" className="mr-2">{CATEGORY_LABELS[category] || category}</Badge>
-              {grouped[category].length} ayar
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ayar</TableHead>
-                  <TableHead>Değer</TableHead>
-                  <TableHead className="w-20">Tip</TableHead>
-                  <TableHead className="w-32 text-right">İşlem</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grouped[category].map(config => (
-                  <ConfigRow key={config.id} config={config} limits={limits} onNotice={setNotice} />
+            <div className="flex items-end justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-md border-slate-300 px-4 text-sm"
+                onClick={handleExport}
+                disabled={isExporting}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {isExporting ? 'Hazırlanıyor...' : 'JSON İndir'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-md border-slate-300 px-4 text-sm"
+                onClick={() => importInputRef.current?.click()}
+                disabled={importMutation.isPending}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                {importMutation.isPending ? 'Yükleniyor...' : 'JSON Yükle'}
+              </Button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleImportChange}
+              />
+            </div>
+          </div>
+
+          <p className="mt-4 text-sm leading-6 text-slate-500">
+            Bu ekrandaki değişiklikler yalnızca gösterimi değil, bağlı backend akışlarını da etkiler.
+            Kayıt kontrolleri, başvuru master anahtarları, ders programı parametreleri ve öğretim elemanı görünürlüğü
+            canlı olarak bu tablodan okunur.
+          </p>
+        </div>
+
+        {filteredConfigs.length === 0 ? (
+          <div className="px-6 py-16 text-center text-sm text-slate-500">
+            Seçilen filtreyle eşleşen sistem ayarı bulunamadı.
+          </div>
+        ) : (
+          <div className="w-full">
+            <table className="w-full table-fixed">
+              <thead>
+                <tr className="border-b border-slate-300 bg-slate-700 text-left text-sm font-semibold text-white">
+                  <th className="w-[170px] px-4 py-3">Genel Ayar Grubu</th>
+                  <th className="px-6 py-3">Tanımı</th>
+                  <th className="w-[180px] px-4 py-3">Değeri</th>
+                  <th className="w-[112px] px-4 py-3 text-right">İşlem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredConfigs.map((config, index) => (
+                  <ConfigRow
+                    key={config.id}
+                    config={config}
+                    limits={limits}
+                    zebra={index % 2 === 1}
+                    onNotice={setNotice}
+                  />
                 ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -210,39 +304,44 @@ export default function SystemConfigPage() {
 function ConfigRow({
   config,
   limits,
+  zebra,
   onNotice,
 }: {
   config: SystemConfigDto;
   limits?: ConfigLimits;
-  onNotice: (n: Notice) => void;
+  zebra: boolean;
+  onNotice: (notice: Notice) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(config.value);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const updateMutation = useUpdateSystemConfig();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [draftValue, setDraftValue] = useState(config.value);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!editing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resyncing input with props when exiting edit mode; intentional
-      setValue(config.value);
+    if (!dialogOpen) {
+      setDraftValue(config.value);
+      setErrorMessage(null);
     }
-  }, [config.value, editing]);
+  }, [config.value, dialogOpen]);
 
+  const selectedOption = config.options.find(option => option.value === config.value);
+  const displayValue = getDisplayValue(config.value, config.options);
   const limit = limits?.[config.key];
-  const limitHint = limit
-    ? `Min: ${limit.min ?? '—'}, Max: ${limit.max ?? '—'}`
-    : null;
 
-  function doSave() {
+  function handleClose() {
+    setDialogOpen(false);
+    setDraftValue(config.value);
+    setErrorMessage(null);
+  }
+
+  function handleSave() {
     setErrorMessage(null);
     updateMutation.mutate(
-      { id: config.id, value },
+      { id: config.id, value: draftValue },
       {
         onSuccess: updatedConfig => {
-          setValue(updatedConfig.value);
-          setEditing(false);
-          onNotice({ type: 'success', message: `${config.key} güncellendi.` });
+          onNotice({ type: 'success', message: `${updatedConfig.displayName} güncellendi.` });
+          setDialogOpen(false);
         },
         onError: error => {
           setErrorMessage(getErrorMessage(error, 'Ayar kaydedilemedi.'));
@@ -251,162 +350,192 @@ function ConfigRow({
     );
   }
 
-  function handleSave() {
-    if (value === config.value) {
-      setEditing(false);
-      return;
-    }
-    setConfirmOpen(true);
-  }
-
-  function handleCancel() {
-    setValue(config.value);
-    setErrorMessage(null);
-    setEditing(false);
-  }
-
-  function renderEditInput() {
-    if (config.dataType === 'bool') {
-      const checked = value === 'true' || value === '1' || value === 'yes' || value === 'on';
-      return (
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={checked}
-            onCheckedChange={c => setValue(c ? 'true' : 'false')}
-          />
-          <span className="text-xs text-muted-foreground">{checked ? 'Aktif' : 'Pasif'}</span>
-        </div>
-      );
-    }
-
-    if (config.dataType === 'json') {
-      return (
-        <Textarea
-          className="min-h-[80px] w-64 font-mono text-xs"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Escape') handleCancel();
-          }}
-          autoFocus
-        />
-      );
-    }
-
-    if (config.dataType === 'int' || config.dataType === 'decimal') {
-      return (
-        <div className="space-y-1">
-          <Input
-            type="number"
-            className="h-8 w-56 text-sm"
-            value={value}
-            step={config.dataType === 'decimal' ? '0.01' : '1'}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') handleSave();
-              if (e.key === 'Escape') handleCancel();
-            }}
-            autoFocus
-          />
-          {limitHint && (
-            <p className="text-[10px] text-muted-foreground">{limitHint}</p>
+  return (
+    <>
+      <tr className={cn('border-b border-slate-200 align-top', zebra ? 'bg-slate-50/70' : 'bg-white')}>
+        <td className="px-4 py-4 text-sm font-medium text-slate-600">{config.groupLabel}</td>
+        <td className="px-6 py-4">
+          <div className="space-y-1.5">
+            <p className="text-[15px] font-medium leading-6 text-slate-900">{config.displayName}</p>
+            {config.description && (
+              <p className="text-sm leading-6 text-slate-500">{config.description}</p>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-4">
+          {config.dataType === 'bool' ? (
+            <Badge
+              variant={config.value === 'true' ? 'default' : 'secondary'}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-semibold',
+                config.value === 'true'
+                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-100',
+              )}
+            >
+              {displayValue}
+            </Badge>
+          ) : (
+            <span className="block break-all text-[15px] font-medium leading-6 text-slate-800">
+              {displayValue}
+            </span>
           )}
-          {config.dataType === 'decimal' && (
-            <p className="text-[10px] text-amber-600">Ondalık ayracı olarak nokta (.) kullanın</p>
-          )}
-          {errorMessage && (
-            <p className="max-w-md text-[11px] text-red-600">{errorMessage}</p>
-          )}
-        </div>
-      );
-    }
+        </td>
+        <td className="px-4 py-4">
+          <div className="flex shrink-0 justify-end gap-1">
+            <ConfigHistoryDrawer configId={config.id} configKey={config.key} currentValue={config.value} />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 rounded-md text-slate-700 hover:bg-slate-100"
+              onClick={() => setDialogOpen(true)}
+              title="Düzenle"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </div>
+        </td>
+      </tr>
 
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>Düzenle</DialogTitle>
+            <DialogDescription>
+              Bu ayar kaydedildiğinde ilgili backend kuralları ve bağlı frontend ekranları yeni değeri kullanır.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-start">
+            <p className="text-sm font-medium text-slate-500">Grubu</p>
+            <p className="text-sm font-semibold text-slate-900">{config.groupLabel}</p>
+
+            <p className="text-sm font-medium text-slate-500">Tanımı</p>
+            <p className="text-sm font-semibold text-slate-900">{config.displayName}</p>
+
+            <p className="text-sm font-medium text-slate-500">Açıklaması</p>
+            <p className="text-sm leading-6 text-slate-600">{config.description || '—'}</p>
+
+            <p className="text-sm font-medium text-slate-500">Değeri</p>
+            <div className="space-y-2">
+              <ConfigValueEditor
+                config={config}
+                value={draftValue}
+                onChange={setDraftValue}
+              />
+
+              {selectedOption && config.dataType !== 'bool' && (
+                <p className="text-xs text-slate-500">
+                  Mevcut seçenek: <span className="font-medium text-slate-700">{selectedOption.label}</span>
+                </p>
+              )}
+
+              {limit && (
+                <p className="text-xs text-slate-500">
+                  Min: {limit.min ?? '—'} · Max: {limit.max ?? '—'}
+                </p>
+              )}
+
+              {config.dataType === 'decimal' && (
+                <p className="text-xs text-amber-600">Ondalık ayracı olarak nokta (.) kullanın.</p>
+              )}
+
+              {errorMessage && (
+                <p className="text-sm text-red-600">{errorMessage}</p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClose}>İptal</Button>
+            <Button type="button" onClick={handleSave} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? 'Kaydediliyor...' : 'Kaydet'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function ConfigValueEditor({
+  config,
+  value,
+  onChange,
+}: {
+  config: SystemConfigDto;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  if (config.options.length > 0) {
     return (
-      <div className="space-y-1">
-        <Input
-          className="h-8 w-56 text-sm"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') handleSave();
-            if (e.key === 'Escape') handleCancel();
-          }}
-          autoFocus
-        />
-        {errorMessage && (
-          <p className="max-w-md text-[11px] text-red-600">{errorMessage}</p>
-        )}
-      </div>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-11 rounded-md border-slate-300 bg-white text-[15px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {config.options.map(option => (
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     );
   }
 
-  function renderDisplayValue() {
-    if (config.dataType === 'bool') {
-      const checked = config.value === 'true' || config.value === '1';
-      return (
-        <Badge variant={checked ? 'default' : 'secondary'} className="text-[10px]">
-          {checked ? 'Aktif' : 'Pasif'}
-        </Badge>
-      );
-    }
+  if (config.dataType === 'json') {
+    return (
+      <Textarea
+        className="min-h-[120px] font-mono text-xs"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+      />
+    );
+  }
 
-    return <span className="text-sm font-medium">{config.value}</span>;
+  if (config.dataType === 'int' || config.dataType === 'decimal') {
+    return (
+      <Input
+        type="number"
+        step={config.dataType === 'decimal' ? '0.01' : '1'}
+        className="h-11 rounded-md border-slate-300 bg-white text-[15px]"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+      />
+    );
+  }
+
+  if (DATE_CONFIG_KEYS.has(config.key)) {
+    return (
+      <Input
+        type="date"
+        className="h-11 rounded-md border-slate-300 bg-white text-[15px]"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+      />
+    );
+  }
+
+  if (URL_CONFIG_KEYS.has(config.key)) {
+    return (
+      <Input
+        type="url"
+        className="h-11 rounded-md border-slate-300 bg-white text-[15px]"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+      />
+    );
   }
 
   return (
-    <>
-      <TableRow>
-        <TableCell>
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium leading-tight">{config.description || config.key}</p>
-            <p className="font-mono text-[11px] text-muted-foreground">{config.key}</p>
-          </div>
-        </TableCell>
-        <TableCell>
-          {editing ? renderEditInput() : renderDisplayValue()}
-        </TableCell>
-        <TableCell>
-          <Badge variant="secondary" className="text-[10px]">{config.dataType}</Badge>
-        </TableCell>
-        <TableCell>
-          {editing ? (
-            <div className="flex justify-end gap-1">
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={updateMutation.isPending}>
-                <Check className="h-4 w-4 text-green-600" />
-              </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancel}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex justify-end gap-1">
-              <ConfigHistoryDrawer configId={config.id} configKey={config.key} currentValue={config.value} />
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(true)}>
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </TableCell>
-      </TableRow>
-
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Ayar değişikliğini onayla</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div>
-                <span className="font-mono text-xs">{config.key}</span> değerini{' '}
-                <span className="font-semibold">{config.value}</span> &rarr;{' '}
-                <span className="font-semibold">{value}</span> olarak değiştirmek istediğinize emin misiniz?
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>İptal</AlertDialogCancel>
-            <AlertDialogAction onClick={doSave}>Onayla</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <Input
+      className="h-11 rounded-md border-slate-300 bg-white text-[15px]"
+      value={value}
+      onChange={event => onChange(event.target.value)}
+    />
   );
+}
+
+function getDisplayValue(value: string, options: SystemConfigValueOptionDto[]) {
+  return options.find(option => option.value === value)?.label ?? value;
 }

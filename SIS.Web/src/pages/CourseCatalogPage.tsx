@@ -31,10 +31,10 @@ import {
   CircleAlert, Layers, Loader2, RotateCcw, GraduationCap, Calendar, Clock, User,
 } from 'lucide-react';
 
-function getEctsExplanation(cgpa: number): string {
-  if (cgpa >= 2.50) return `GANO 2.50 ve üstü olduğundan 48 AKTS alınabilir.`;
-  if (cgpa >= 2.00) return `GANO 2.00-2.49 arasında olduğundan 42 AKTS alınabilir.`;
-  return `GANO 2.00 altında olduğundan 30 AKTS alınabilir.`;
+function getEctsExplanation(cgpa: number, ectsLimit: number): string {
+  if (cgpa >= 2.50) return `GANO 2.50 ve üstü olduğundan ${ectsLimit} AKTS alınabilir.`;
+  if (cgpa >= 2.00) return `GANO 2.00-2.49 arasında olduğundan ${ectsLimit} AKTS alınabilir.`;
+  return `GANO 2.00 altında olduğundan ${ectsLimit} AKTS alınabilir.`;
 }
 
 const TAKE_TYPE_COLORS: Record<string, string> = {
@@ -494,7 +494,7 @@ export default function CourseCatalogPage() {
                 />
                 {student && (
                   <span className="text-[11px] text-muted-foreground hidden lg:inline">
-                    ({getEctsExplanation(student.cgpa)})
+                    ({getEctsExplanation(student.cgpa, ectsLimit)})
                   </span>
                 )}
               </div>

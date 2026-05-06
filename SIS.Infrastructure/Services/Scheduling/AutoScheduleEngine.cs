@@ -116,6 +116,12 @@ public sealed class AutoScheduleEngine
         }
 
         var sections = await sectionsQuery.ToListAsync(ct);
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_configProvider, ct);
+        foreach (var section in sections)
+        {
+            if (section.Instructor != null)
+                section.Instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(section.Instructor.Title, section.Instructor.MaxWeeklyHours);
+        }
 
         if (sections.Count == 0)
         {

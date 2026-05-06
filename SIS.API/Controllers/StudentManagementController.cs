@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.API.Filters;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -17,11 +18,13 @@ public class StudentManagementController : ControllerBase
 {
     private readonly IAdminStudentService _service;
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public StudentManagementController(IAdminStudentService service, AppDbContext context)
+    public StudentManagementController(IAdminStudentService service, AppDbContext context, ISystemConfigProvider systemConfig)
     {
         _service = service;
         _context = context;
+        _systemConfig = systemConfig;
     }
 
     [HttpGet]
@@ -41,7 +44,31 @@ public class StudentManagementController : ControllerBase
             : filter;
 
         var result = await _service.GetStudentsAsync(appliedFilter);
-        return Ok(result);
+        if (!await ShouldMaskTranscriptSummaryAsync())
+            return Ok(result);
+
+        var items = result.Items
+            .Select(item => new
+            {
+                item.Id,
+                item.StudentNumber,
+                item.FirstName,
+                item.LastName,
+                item.Email,
+                Cgpa = (decimal?)null,
+                CompletedSemesters = (int?)null,
+                item.Status,
+                item.ProgramName,
+                item.ProgramCode,
+                item.DepartmentName,
+                item.AdvisorName,
+                TranscriptAccessible = false,
+                TranscriptAccessMessage = "Akademisyen transkript erisimi sistem ayari nedeniyle kapali."
+            })
+            .Cast<object>()
+            .ToList();
+
+        return Ok(new PagedResult<object>(items, result.TotalCount, result.Page, result.PageSize));
     }
 
     [HttpGet("{id:int}")]
@@ -70,7 +97,31 @@ public class StudentManagementController : ControllerBase
             if (!await HasDepartmentAccessAsync(userId, studentDeptId.Value)) return Forbid();
         }
 
-        return Ok(result);
+        if (!await ShouldMaskTranscriptSummaryAsync())
+            return Ok(result);
+
+        return Ok(new
+        {
+            result.Id,
+            result.StudentNumber,
+            result.FirstName,
+            result.LastName,
+            result.Email,
+            Cgpa = (decimal?)null,
+            Sgpa = (decimal?)null,
+            CompletedSemesters = (int?)null,
+            FrozenSemesterCount = (int?)null,
+            result.Status,
+            result.IsScholarshipStudent,
+            result.HasFinancialBlock,
+            result.ProgramName,
+            result.ProgramCode,
+            result.DepartmentName,
+            result.AdvisorName,
+            result.AdvisorId,
+            TranscriptAccessible = false,
+            TranscriptAccessMessage = "Akademisyen transkript erisimi sistem ayari nedeniyle kapali."
+        });
     }
 
     [HttpPost]
@@ -104,6 +155,10 @@ public class StudentManagementController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 
@@ -176,6 +231,17 @@ public class StudentManagementController : ControllerBase
             return instructor.DepartmentId == departmentId;
 
         return false;
+    }
+
+    private async Task<bool> ShouldMaskTranscriptSummaryAsync(CancellationToken ct = default)
+    {
+        var transcriptClosed = await _systemConfig.GetBoolAsync("Instructor.TranscriptClosed", false, ct);
+        if (!transcriptClosed)
+            return false;
+
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hasCentralAdminRole = roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff");
+        return !hasCentralAdminRole && roles.Overlaps(new[] { "Instructor", "AcademicAdvisor", "Dean", "DepartmentManager" });
     }
 }
 

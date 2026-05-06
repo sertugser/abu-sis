@@ -1,5 +1,5 @@
-using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
@@ -17,8 +17,7 @@ public class CourseRegistrationService : ICourseRegistrationService
     private readonly ISystemConfigProvider _config;
     private readonly IAdvisorConstraintService? _advisorConstraintService;
     private readonly IDateTimeProvider _clock;
-    private readonly IWebModuleSettingsProvider _webSettings;
-    private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
+    private readonly IWebModuleControlService _webModuleControls;
 
     public CourseRegistrationService(
         AppDbContext context,
@@ -26,26 +25,20 @@ public class CourseRegistrationService : ICourseRegistrationService
         IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
         IAdvisorConstraintService? advisorConstraintService = null,
-        IWebModuleSettingsProvider? webSettings = null)
+        IWebModuleSettingsProvider? webSettings = null,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _validationService = validationService;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
         _advisorConstraintService = advisorConstraintService;
-        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
 
         var section = await _context.CourseSections
             .Include(cs => cs.Course)
@@ -71,30 +64,11 @@ public class CourseRegistrationService : ICourseRegistrationService
             .FirstOrDefaultAsync(t => t.Id == section.TermId);
         if (term != null)
         {
-            if (term.AcademicCalendar == null)
+            var termSpecificGate = await ValidateStudentRegistrationWebModuleAsync(studentId, term.Id);
+            if (termSpecificGate is not null)
             {
                 response.Success = false;
-                response.ValidationResult = new ValidationResultDto
-                {
-                    IsValid = false,
-                    Errors = new List<ValidationError>
-                    {
-                        new() { Rule = "CalendarMissing", Message = "Bu dönemin akademik takvimi henüz tanımlanmamış. Kayıt alamazsınız — lütfen öğrenci işleri ile iletişime geçin." }
-                    }
-                };
-                return response;
-            }
-            if (!term.IsRegistrationOpen(_clock.UtcNow) && !term.IsAddDropOpen(_clock.UtcNow))
-            {
-                response.Success = false;
-                response.ValidationResult = new ValidationResultDto
-                {
-                    IsValid = false,
-                    Errors = new List<ValidationError>
-                    {
-                        new() { Rule = "RegistrationClosed", Message = "Ders kayıt dönemi açık değil." }
-                    }
-                };
+                response.ValidationResult = termSpecificGate;
                 return response;
             }
         }
@@ -429,7 +403,15 @@ public class CourseRegistrationService : ICourseRegistrationService
     public async Task<RegistrationResponseDto> SubmitRegistrationAsync(int studentId, RegistrationSubmitDto dto)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
+
+        var submittedSections = await _context.CourseSections
+            .Include(cs => cs.Course)
+            .Where(cs => dto.CourseSectionIds.Contains(cs.Id))
+            .ToListAsync();
+
+        var requestedTermIds = submittedSections.Select(section => section.TermId).Distinct().ToList();
+        int? requestedTermId = requestedTermIds.Count == 1 ? requestedTermIds[0] : null;
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync(studentId, requestedTermId);
         if (webModuleGate is not null)
         {
             response.Success = false;
@@ -446,11 +428,6 @@ public class CourseRegistrationService : ICourseRegistrationService
             response.ValidationResult = validationResult;
             return response;
         }
-
-        var submittedSections = await _context.CourseSections
-            .Include(cs => cs.Course)
-            .Where(cs => dto.CourseSectionIds.Contains(cs.Id))
-            .ToListAsync();
 
         var advisorConstraintResult = await EvaluateAdvisorConstraintsAsync(
             studentId,
@@ -1006,14 +983,6 @@ public class CourseRegistrationService : ICourseRegistrationService
     public async Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
-
         var registration = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Course)
@@ -1036,19 +1005,11 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
-        // Guard: dönem AddDrop aşamasında olmalı
-        var dropTerm = registration.CourseSection.Term;
-        if (!dropTerm.IsAddDropOpen(_clock.UtcNow) && !dropTerm.IsRegistrationOpen(_clock.UtcNow))
+        var addDropGate = await ValidateStudentAddDropWebModuleAsync(studentId, registration.CourseSection.TermId);
+        if (addDropGate is not null)
         {
             response.Success = false;
-            response.ValidationResult = new ValidationResultDto
-            {
-                IsValid = false,
-                Errors = new List<ValidationError>
-                {
-                    new() { Rule = "TermStatus", Message = $"Ders bırakma sadece kayıt veya ekleme/bırakma döneminde yapılabilir." }
-                }
-            };
+            response.ValidationResult = addDropGate;
             return response;
         }
 
@@ -1127,6 +1088,21 @@ public class CourseRegistrationService : ICourseRegistrationService
         var response = new RegistrationResponseDto();
         var errors = new List<ValidationError>();
 
+        var withdrawalFeatureEnabled = await _config.GetBoolAsync("Application.CourseWithdrawalEnabled", true);
+        if (!withdrawalFeatureEnabled)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "WithdrawalDisabled", Message = "Ders silme / dersten çekilme başvurusu sistem konfigürasyonunda kapalı." }
+                }
+            };
+            return response;
+        }
+
         var registration = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Course)
@@ -1149,19 +1125,11 @@ public class CourseRegistrationService : ICourseRegistrationService
             return response;
         }
 
-        // Guard: dönem WithdrawalPeriod aşamasında olmalı
-        var withdrawTerm = registration.CourseSection.Term;
-        if (!withdrawTerm.IsWithdrawalOpen(_clock.UtcNow))
+        var withdrawalGate = await ValidateStudentWithdrawalWebModuleAsync(studentId, registration.CourseSection.TermId);
+        if (withdrawalGate is not null)
         {
             response.Success = false;
-            response.ValidationResult = new ValidationResultDto
-            {
-                IsValid = false,
-                Errors = new List<ValidationError>
-                {
-                    new() { Rule = "TermStatus", Message = $"Ders çekilme sadece çekilme döneminde yapılabilir." }
-                }
-            };
+            response.ValidationResult = withdrawalGate;
             return response;
         }
 
@@ -1201,12 +1169,13 @@ public class CourseRegistrationService : ICourseRegistrationService
         }
 
         // FR-57: Check withdrawal deadline
-        if (!term.IsWithdrawalOpen(DateTime.UtcNow))
+        var withdrawalAccess = await _webModuleControls.EvaluateAsync("student-withdrawal", term.Id);
+        if (!withdrawalAccess.IsOpen)
         {
             errors.Add(new ValidationError
             {
                 Rule = "WithdrawalDeadline",
-                Message = "Ders çekilme dönemi kapalı. Çekilme süresi dolmuş veya henüz başlamamış."
+                Message = withdrawalAccess.Message ?? "Ders çekilme dönemi kapalı. Çekilme süresi dolmuş veya henüz başlamamış."
             });
         }
 
@@ -1476,7 +1445,6 @@ public class CourseRegistrationService : ICourseRegistrationService
                     SubmittedAt = g.Max(r => r.UpdatedAt ?? r.CreatedAt)
                 };
             })
-            .OrderBy(dto => dto.StudentName)
             .ToList();
 
         // Alttan dersler, müfredat özeti ve plan durumu ekle
@@ -1537,7 +1505,19 @@ public class CourseRegistrationService : ICourseRegistrationService
             }
         }
 
-        return result;
+        var calculationMethod = await _config.GetStringAsync("Instructor.AdvisingCalculationMethod", "standard");
+        var nameComparer = StringComparer.Create(new CultureInfo("tr-TR"), ignoreCase: true);
+
+        return string.Equals(calculationMethod, "load-based", StringComparison.OrdinalIgnoreCase)
+            ? result
+                .OrderByDescending(dto => dto.EctsLimit > 0 ? (decimal)dto.TotalEcts / dto.EctsLimit : 0m)
+                .ThenByDescending(dto => dto.FailedCourses.Count(course => !course.IsSelectedInPlan))
+                .ThenBy(dto => dto.Cgpa)
+                .ThenBy(dto => dto.StudentName, nameComparer)
+                .ToList()
+            : result
+                .OrderBy(dto => dto.StudentName, nameComparer)
+                .ToList();
     }
 
     public async Task<ApprovalResponseDto> ApproveStudentRegistrationsAsync(int advisorInstructorId, ApprovalActionDto dto)
@@ -1568,13 +1548,18 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
-        // Guard: dönem RegistrationOpen veya AddDrop olmalı
-        if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
+        var approvalControlCode = await ResolveAdvisorApprovalControlCodeAsync(dto.StudentId, activeTerm.Id, nowApprove);
+        var approvalGate = await ValidateModuleAsync(
+            approvalControlCode,
+            activeTerm.Id,
+            "WebModuleAdvisorApprovalClosed",
+            "Danışman onay işlemleri şu anda kullanılamıyor.");
+        if (approvalGate is not null)
         {
             return new ApprovalResponseDto
             {
                 Success = false,
-                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir.",
+                Message = approvalGate.Errors.FirstOrDefault()?.Message ?? "Danışman onay işlemleri şu anda kullanılamıyor.",
                 AffectedRegistrations = 0
             };
         }
@@ -1638,6 +1623,22 @@ public class CourseRegistrationService : ICourseRegistrationService
             };
         }
 
+        var rejectControlCode = await ResolveAdvisorApprovalControlCodeAsync(dto.StudentId, activeTerm.Id, nowReject);
+        var rejectGate = await ValidateModuleAsync(
+            rejectControlCode,
+            activeTerm.Id,
+            "WebModuleAdvisorApprovalClosed",
+            "Danışman onay işlemleri şu anda kullanılamıyor.");
+        if (rejectGate is not null)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = rejectGate.Errors.FirstOrDefault()?.Message ?? "Danışman onay işlemleri şu anda kullanılamıyor.",
+                AffectedRegistrations = 0
+            };
+        }
+
         // Find PendingAdvisorApproval registrations (Include CourseSection for EnrolledCount)
         var registrations = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
@@ -1689,29 +1690,100 @@ public class CourseRegistrationService : ICourseRegistrationService
         return (int)Math.Ceiling(totalHours * limitPercent / 100m);
     }
 
-    private async Task<ValidationResultDto?> ValidateStudentRegistrationWebModuleAsync()
+    private async Task<ValidationResultDto?> ValidateStudentRegistrationWebModuleAsync(int studentId, int? termId = null)
     {
-        var enabled = await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", true);
-        if (!enabled)
-        {
-            return CreateWebModuleError(
-                "WebModuleDisabled",
-                "Ders kayıt işlemleri web modül ayarlarından kapatılmıştır.");
-        }
+        var controlCode = await ResolveStudentRegistrationControlCodeAsync(studentId, termId);
+        return await ValidateModuleAsync(controlCode, termId, "WebModuleRegistrationClosed", "Ders kayıt işlemleri şu anda kullanılamıyor.");
+    }
 
-        var openAt = await _webSettings.GetTimeAsync("StudentPanel", "CourseRegistrationOpenAt", TimeOnly.MinValue);
-        if (openAt > TimeOnly.MinValue)
-        {
-            var localNow = TimeZoneInfo.ConvertTimeFromUtc(_clock.UtcNow, TurkeyTimeZone);
-            if (TimeOnly.FromDateTime(localNow) < openAt)
-            {
-                return CreateWebModuleError(
-                    "WebModuleOpenAt",
-                    $"Ders kayıt işlemleri bugün saat {openAt.ToString("HH:mm", CultureInfo.InvariantCulture)} itibarıyla açılacaktır.");
-            }
-        }
+    private async Task<ValidationResultDto?> ValidateStudentAddDropWebModuleAsync(int studentId, int? termId = null)
+    {
+        var controlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
+        return await ValidateModuleAsync(controlCode, termId, "WebModuleAddDropClosed", "Ders ekle/bırak işlemleri şu anda kullanılamıyor.");
+    }
 
-        return null;
+    private async Task<ValidationResultDto?> ValidateStudentWithdrawalWebModuleAsync(int studentId, int? termId = null)
+    {
+        return await ValidateModuleAsync("student-withdrawal", termId, "WebModuleWithdrawalClosed", "Dersten çekilme işlemleri şu anda kullanılamıyor.");
+    }
+
+    private async Task<string> ResolveStudentRegistrationControlCodeAsync(int studentId, int? termId)
+    {
+        var student = await LoadStudentModuleProfileAsync(studentId);
+        if (student is null)
+            return "student-course-registration";
+
+        if (student.CompletedSemesters == 0)
+            return "student-new-course-registration";
+
+        return IsOverNormalStudyDuration(student)
+            ? "student-extended-course-registration"
+            : "student-course-registration";
+    }
+
+    private async Task<string> ResolveStudentAddDropControlCodeAsync(int studentId)
+    {
+        var student = await LoadStudentModuleProfileAsync(studentId);
+        return student?.CompletedSemesters == 0
+            ? "student-new-add-drop"
+            : "student-add-drop";
+    }
+
+    private async Task<string> ResolveAdvisorApprovalControlCodeAsync(int studentId, int termId, DateTime nowUtc)
+    {
+        var term = await _context.AcademicTerms
+            .AsNoTracking()
+            .Include(item => item.AcademicCalendar)
+            .FirstOrDefaultAsync(item => item.Id == termId);
+
+        if (term?.IsAddDropOpen(nowUtc) == true)
+            return "advisor-add-drop-approval";
+
+        var student = await LoadStudentModuleProfileAsync(studentId);
+        return student?.CompletedSemesters == 0
+            ? "advisor-new-student-registration-approval"
+            : "advisor-registration-approval";
+    }
+
+    private async Task<Domain.Entities.Student?> LoadStudentModuleProfileAsync(int studentId)
+    {
+        return await _context.Students
+            .Include(student => student.StudentPrograms)
+                .ThenInclude(program => program.Program)
+            .FirstOrDefaultAsync(student => student.Id == studentId);
+    }
+
+    private static bool IsOverNormalStudyDuration(Domain.Entities.Student student)
+    {
+        var activeProgram = student.StudentPrograms
+            .FirstOrDefault(program => program.Type == StudentProgramType.Main && program.IsActive);
+
+        if (activeProgram?.Program == null)
+            return false;
+
+        var normalDurationSemesters = activeProgram.Program.DegreeLevel switch
+        {
+            DegreeLevel.Associate => 4,
+            DegreeLevel.Bachelor => 8,
+            DegreeLevel.Master => 4,
+            DegreeLevel.Doctorate => 8,
+            _ => 8
+        };
+
+        return student.CompletedSemesters >= normalDurationSemesters;
+    }
+
+    private async Task<ValidationResultDto?> ValidateModuleAsync(
+        string controlCode,
+        int? termId,
+        string rule,
+        string fallbackMessage)
+    {
+        var access = await _webModuleControls.EvaluateAsync(controlCode, termId);
+        if (access.IsOpen)
+            return null;
+
+        return CreateWebModuleError(rule, access.Message ?? fallbackMessage);
     }
 
     private static ValidationResultDto CreateWebModuleError(string rule, string message)
@@ -1724,22 +1796,6 @@ public class CourseRegistrationService : ICourseRegistrationService
                 new() { Rule = rule, Message = message }
             }
         };
-    }
-
-    private static TimeZoneInfo ResolveTurkeyTimeZone()
-    {
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return TimeZoneInfo.Local;
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return TimeZoneInfo.Local;
-        }
     }
 
     private async Task<ValidationResultDto> EvaluateAdvisorConstraintsAsync(
