@@ -56,8 +56,24 @@ const examTypeOptions = [
 ];
 
 function getErrorMessage(error: unknown, fallback: string) {
-  const err = error as { response?: { data?: { message?: string; error?: string } } };
-  return err.response?.data?.message ?? err.response?.data?.error ?? fallback;
+  const err = error as {
+    message?: string;
+    response?: {
+      status?: number;
+      data?: { message?: string; error?: string; title?: string; detail?: string } | string;
+    };
+  };
+
+  const data = err.response?.data;
+  const message =
+    typeof data === 'string'
+      ? data
+      : data?.message ?? data?.error ?? data?.detail ?? data?.title ?? err.message;
+
+  if (message) return message;
+  if (err.response?.status) return `${fallback} HTTP ${err.response.status}`;
+
+  return fallback;
 }
 
 function createClientKey() {

@@ -134,6 +134,10 @@ public class ExamCurriculumController : ControllerBase
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("template")]
@@ -409,7 +413,13 @@ public class ExamCurriculumController : ControllerBase
             return new NotFoundObjectResult(new { message = "Müfredat bulunamadı." });
 
         if (!await HasDepartmentAccessAsync(userId, curriculumDepartmentId.Value, ct))
-            return new ForbidResult();
+            return new ObjectResult(new
+            {
+                message = "Seçilen müfredatın bölümüne erişim yetkiniz bulunmuyor."
+            })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
 
         var courseBelongsToCurriculum = await _context.CurriculumCourses
             .AsNoTracking()
