@@ -87,6 +87,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<MenuItemPermission> MenuItemPermissions => Set<MenuItemPermission>();
 
+    // ── RBAC (Phase 2) ──────────────────────────────────────────
+    public DbSet<PermissionBundle> PermissionBundles => Set<PermissionBundle>();
+    public DbSet<PermissionBundleItem> PermissionBundleItems => Set<PermissionBundleItem>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder); // Identity tables
@@ -1102,10 +1106,13 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(p => p.Category);
         });
 
-        // ── RBAC: RolePermission (composite PK) ─────────────────
+        // ── RBAC: RolePermission (Phase 2 — surrogate PK + Source tracking) ─
+        // Aynı (RoleId, PermissionId) için iki satır olabilir: biri Manual,
+        // diğer(ler)i farklı bundle'lardan. Source ayrımı için surrogate Id PK kullanılır.
+        // Filtered unique index'lerle veri bütünlüğü korunur.
         builder.Entity<RolePermission>(e =>
         {
-            e.HasKey(rp => new { rp.RoleId, rp.PermissionId });
+            e.HasKey(rp => rp.Id);
             e.HasOne<IdentityRole<int>>()
              .WithMany()
              .HasForeignKey(rp => rp.RoleId)
@@ -1114,7 +1121,47 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany(p => p.RolePermissions)
              .HasForeignKey(rp => rp.PermissionId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(rp => rp.SourceBundle)
+             .WithMany(b => b.AppliedRolePermissions)
+             .HasForeignKey(rp => rp.SourceBundleId)
+             .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(rp => rp.PermissionId);
+            e.HasIndex(rp => rp.RoleId);
+            // Manuel atamada her (rol, permission) tekildir
+            e.HasIndex(rp => new { rp.RoleId, rp.PermissionId })
+             .IsUnique()
+             .HasFilter("\"SourceBundleId\" IS NULL")
+             .HasDatabaseName("ix_role_permissions_manual_unique");
+            // Bundle atamasında her (rol, permission, bundle) tekildir
+            e.HasIndex(rp => new { rp.RoleId, rp.PermissionId, rp.SourceBundleId })
+             .IsUnique()
+             .HasFilter("\"SourceBundleId\" IS NOT NULL")
+             .HasDatabaseName("ix_role_permissions_bundle_unique");
+        });
+
+        // ── RBAC Phase 2: PermissionBundle ──────────────────────
+        builder.Entity<PermissionBundle>(e =>
+        {
+            e.Property(b => b.Name).HasMaxLength(200).IsRequired();
+            e.Property(b => b.Description).HasMaxLength(1000);
+            e.Property(b => b.Category).HasMaxLength(100);
+            e.HasIndex(b => b.Name).IsUnique();
+            e.HasIndex(b => b.Category);
+        });
+
+        // ── RBAC Phase 2: PermissionBundleItem (composite PK) ───
+        builder.Entity<PermissionBundleItem>(e =>
+        {
+            e.HasKey(i => new { i.BundleId, i.PermissionId });
+            e.HasOne(i => i.Bundle)
+             .WithMany(b => b.Items)
+             .HasForeignKey(i => i.BundleId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(i => i.Permission)
+             .WithMany(p => p.BundleItems)
+             .HasForeignKey(i => i.PermissionId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(i => i.PermissionId);
         });
 
         // ── RBAC: MenuModule (recursive tree) ───────────────────

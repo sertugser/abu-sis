@@ -38,5 +38,9 @@ public static partial class SeedData
         await PermissionSeed.SeedAsync(context);
         await MenuStructureSeed.SeedAsync(context);
         await RolePermissionSeed.SeedAsync(context, roleManager);
+
+        // ── RBAC Phase 2 (Permission Bundles) ───────────────────
+        // MenuStructureSeed sonrası: bundle'lar menu modüllerinden derive ediliyor
+        await PermissionBundleSeed.SeedAsync(context);
     }
 }

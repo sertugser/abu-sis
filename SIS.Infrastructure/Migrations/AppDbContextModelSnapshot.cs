@@ -3401,13 +3401,68 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("Permissions");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
+            modelBuilder.Entity("SIS.Domain.Identity.PermissionBundle", b =>
                 {
-                    b.Property<int>("RoleId")
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsSystemDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("PermissionBundles");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.PermissionBundleItem", b =>
+                {
+                    b.Property<int>("BundleId")
                         .HasColumnType("integer");
 
                     b.Property<int>("PermissionId")
                         .HasColumnType("integer");
+
+                    b.HasKey("BundleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("PermissionBundleItems");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("GrantedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3415,9 +3470,32 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("GrantedByUserId")
                         .HasColumnType("integer");
 
-                    b.HasKey("RoleId", "PermissionId");
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SourceBundleId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
 
                     b.HasIndex("PermissionId");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("SourceBundleId");
+
+                    b.HasIndex("RoleId", "PermissionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_permissions_manual_unique")
+                        .HasFilter("\"SourceBundleId\" IS NULL");
+
+                    b.HasIndex("RoleId", "PermissionId", "SourceBundleId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_permissions_bundle_unique")
+                        .HasFilter("\"SourceBundleId\" IS NOT NULL");
 
                     b.ToTable("RolePermissions");
                 });
@@ -4602,6 +4680,25 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Parent");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Identity.PermissionBundleItem", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.PermissionBundle", "Bundle")
+                        .WithMany("Items")
+                        .HasForeignKey("BundleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Identity.Permission", "Permission")
+                        .WithMany("BundleItems")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bundle");
+
+                    b.Navigation("Permission");
+                });
+
             modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
                 {
                     b.HasOne("SIS.Domain.Identity.Permission", "Permission")
@@ -4616,7 +4713,14 @@ namespace SIS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("SIS.Domain.Identity.PermissionBundle", "SourceBundle")
+                        .WithMany("AppliedRolePermissions")
+                        .HasForeignKey("SourceBundleId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("Permission");
+
+                    b.Navigation("SourceBundle");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
@@ -4742,9 +4846,18 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Identity.Permission", b =>
                 {
+                    b.Navigation("BundleItems");
+
                     b.Navigation("MenuItemPermissions");
 
                     b.Navigation("RolePermissions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.PermissionBundle", b =>
+                {
+                    b.Navigation("AppliedRolePermissions");
+
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

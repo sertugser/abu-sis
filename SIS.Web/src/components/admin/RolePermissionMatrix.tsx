@@ -9,7 +9,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Save, RotateCcw } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ChevronDown, ChevronRight, Save, RotateCcw, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getRoleDisplayLabel } from '../../lib/roles';
 import {
@@ -18,6 +25,11 @@ import {
   useRolePermissions,
   useUpdateRolePermissions,
 } from '../../hooks/useRolePermissions';
+import {
+  useApplyBundleToRole,
+  usePermissionBundles,
+} from '../../hooks/usePermissionBundles';
+import { usePermissions } from '../../context/PermissionContext';
 import type { PermissionDto } from '../../api/permissionAdmin.api';
 
 /**
@@ -121,12 +133,29 @@ const CATEGORY_LABELS: Record<string, string> = {
   system: 'Sistem Yetkileri',
 };
 
+const EMPTY_NUMBER_ARRAY: readonly number[] = [];
+
 export function RolePermissionMatrix() {
-  const { data: permissions = [], isLoading: permsLoading } = useAllPermissions();
-  const { data: roles = [], isLoading: rolesLoading } = useAssignableRoles();
+  const { data: permissionsData, isLoading: permsLoading } = useAllPermissions();
+  const { data: rolesData, isLoading: rolesLoading } = useAssignableRoles();
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
-  const { data: rolePermIds = [], isLoading: rolePermsLoading } = useRolePermissions(selectedRoleId);
+  const { data: rolePermIdsData, isLoading: rolePermsLoading } = useRolePermissions(selectedRoleId);
   const updateMutation = useUpdateRolePermissions();
+  const { data: bundlesData } = usePermissionBundles();
+  const applyBundleMut = useApplyBundleToRole();
+  const { hasPermission } = usePermissions();
+  const canApplyBundle = hasPermission('system.permission-bundle.apply');
+
+  // React Query default destructure (`data = []`) her render'da YENİ array ref üretiyor;
+  // aşağıdaki adjust-state-during-render karşılaştırması sürekli setState tetikliyor
+  // ("Too many re-renders" döngüsü). Stabil referans için useMemo ile sabitle.
+  const permissions = useMemo(() => permissionsData ?? [], [permissionsData]);
+  const roles = useMemo(() => rolesData ?? [], [rolesData]);
+  const bundles = useMemo(() => bundlesData ?? [], [bundlesData]);
+  const rolePermIds = useMemo<readonly number[]>(
+    () => rolePermIdsData ?? EMPTY_NUMBER_ARRAY,
+    [rolePermIdsData],
+  );
 
   // Local draft (optimistic) — Set<permissionId>
   const [draft, setDraft] = useState<Set<number>>(new Set());
@@ -183,6 +212,13 @@ export function RolePermissionMatrix() {
     updateMutation.mutate({ roleId: selectedRoleId, permissionIds: Array.from(draft) });
   }
 
+  function applyBundle(bundleIdStr: string) {
+    if (selectedRoleId === null) return;
+    const bundleId = Number(bundleIdStr);
+    if (!Number.isFinite(bundleId)) return;
+    applyBundleMut.mutate({ bundleId, roleId: selectedRoleId });
+  }
+
   if (permsLoading || rolesLoading) {
     return <Skeleton className="h-96 w-full" />;
   }
@@ -230,6 +266,30 @@ export function RolePermissionMatrix() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {canApplyBundle && selectedRoleId !== null && bundles.length > 0 && (
+              <Select
+                value=""
+                onValueChange={applyBundle}
+                disabled={applyBundleMut.isPending || rolePermsLoading}
+              >
+                <SelectTrigger className="w-[260px] h-9 text-xs">
+                  <Package className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder={applyBundleMut.isPending ? 'Uygulanıyor…' : 'Paket Uygula'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {bundles.map(b => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      <div className="flex items-center gap-2">
+                        <span>{b.name}</span>
+                        <Badge variant="outline" className="text-[10px] tabular-nums">
+                          {b.permissionCount}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {diff.isDirty && (
               <Badge variant="outline" className="text-xs">
                 <span className="text-emerald-600 font-medium">+{diff.added.length}</span>

@@ -12,4 +12,5 @@ public class Permission
 
     public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
     public ICollection<MenuItemPermission> MenuItemPermissions { get; set; } = new List<MenuItemPermission>();
+    public ICollection<PermissionBundleItem> BundleItems { get; set; } = new List<PermissionBundleItem>();
 }

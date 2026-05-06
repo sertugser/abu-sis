@@ -188,8 +188,9 @@ builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddScoped<IWebModuleSettingsProvider, WebModuleSettingsProvider>();
 
-// RBAC (Phase 1)
+// RBAC (Phase 1 + Phase 2)
 builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IPermissionBundleService, PermissionBundleService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 
 // Course Evaluation + Internal Announcements

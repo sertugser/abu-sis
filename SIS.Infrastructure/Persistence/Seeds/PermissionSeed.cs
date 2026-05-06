@@ -384,6 +384,15 @@ public static class PermissionSeed
         // SystemAdmin kod-shortcut ile zaten otomatik erişir (Karar 4).
         ("system.permission.view",                       PermissionCategory.System, "Permission tablosu görüntüleme (admin UI)"),
         ("system.permission.assign",                     PermissionCategory.System, "Role permission atama (admin UI)"),
+
+        // ─── system.* (Phase 2 — Permission Bundles) ────────────────────────
+        ("system.permission-bundle.view",                PermissionCategory.System, "Yetki paketi listesi/detayı görüntüleme (admin UI)"),
+        ("system.permission-bundle.manage",              PermissionCategory.System, "Yetki paketi oluşturma/düzenleme/silme (admin UI)"),
+        ("system.permission-bundle.apply",               PermissionCategory.System, "Yetki paketini role uygulama/kaldırma (admin UI)"),
+
+        // ─── menu.* (Phase 2 — Permission Bundles sayfası) ──────────────────
+        ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası görüntüleme"),
+        ("menu.kullanici-yetki-gruplari.manage",         PermissionCategory.Menu, "Kullanıcı yetki grupları oluşturma/düzenleme/silme"),
     };
 
     /// <summary>
