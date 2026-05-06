@@ -7,6 +7,7 @@ using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services.Scheduling.Legacy;
 
 namespace SIS.Infrastructure.Services.Scheduling;
 

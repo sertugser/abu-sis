@@ -3,7 +3,7 @@ using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Services;
 
-namespace SIS.Infrastructure.Services.Scheduling;
+namespace SIS.Infrastructure.Services.Scheduling.Legacy;
 
 public sealed class MrvWeights
 {

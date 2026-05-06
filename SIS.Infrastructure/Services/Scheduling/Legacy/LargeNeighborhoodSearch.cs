@@ -1,7 +1,7 @@
 using SIS.Application.Scheduling.Constraints;
 using SIS.Domain.Entities;
 
-namespace SIS.Infrastructure.Services.Scheduling;
+namespace SIS.Infrastructure.Services.Scheduling.Legacy;
 
 public sealed record LNSResult(
     int Iterations,

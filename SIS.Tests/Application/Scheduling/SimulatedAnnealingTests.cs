@@ -4,6 +4,7 @@ using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
+using SIS.Infrastructure.Services.Scheduling.Legacy;
 using SIS.Tests.Application.Constraints;
 
 namespace SIS.Tests.Application.Scheduling;
