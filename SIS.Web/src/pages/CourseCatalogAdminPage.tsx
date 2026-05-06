@@ -577,11 +577,10 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formError, setFormError] = useState('');
-  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [prereqSearch, setPrereqSearch] = useState('');
   const [equivSearch, setEquivSearch] = useState('');
   const [crossListSearch, setCrossListSearch] = useState('');
-  const { showSuccess, showError, showInfo } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
 
   // Get all departments (unfiltered) for the edit form
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
@@ -628,18 +627,17 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
     setEditMode(false);
     setForm(initialForm);
     setFormError('');
-    setMissingFields([]);
   }
 
   async function handleSave() {
     // Pre-flight: server kurallarını ön-gör (UpdateCourseAsync da aynı kuralları zorlar).
     const missing = collectMissingRequiredFields(form);
     if (missing.length > 0) {
-      setMissingFields(missing);
       setFormError('');
-      showInfo(
-        'Eksik bilgi',
-        `${missing.length} zorunlu alan doldurulmamış: ${missing.join(', ')}`,
+      showWarning(
+        'Değişiklikler kaydedilemedi',
+        `${missing.length} zorunlu alan eksik: ${missing.join(', ')}. Lütfen tamamlayıp tekrar deneyin.`,
+        { center: true, durationMs: 10000 },
       );
       return;
     }
@@ -647,7 +645,6 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
       const result = await updateCourse.mutateAsync({ id: courseId, ...form });
       setEditMode(false);
       setFormError('');
-      setMissingFields([]);
       showSuccess(
         'Ders güncellendi',
         `${result.code} — ${result.name}${result.departmentName ? ` · ${result.departmentName}` : ''}`,
@@ -655,7 +652,6 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
     } catch (e: unknown) {
       const msg = getServerErrorMessage(e, 'Güncelleme başarısız.');
       setFormError(msg);
-      setMissingFields([]);
       showError('Ders güncellenemedi', msg);
     }
   }
@@ -739,20 +735,7 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
 
             <Separator className="flex-shrink-0" />
 
-            {/* Validation alerts — edit modunda eksik alan veya server hatası gösterilir */}
-            {editMode && missingFields.length > 0 && (
-              <Alert variant="destructive" className="mt-3 mb-1">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  <p className="font-medium mb-1.5">
-                    Lütfen eksik veya geçersiz alanları tamamlayın:
-                  </p>
-                  <ul className="list-disc list-inside space-y-0.5 text-sm">
-                    {missingFields.map(f => <li key={f}>{f}</li>)}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            )}
+            {/* Validation alerts — edit modunda server hatası gösterilir */}
             {editMode && formError && (
               <Alert variant="destructive" className="mt-3 mb-1">
                 <AlertCircle className="h-4 w-4" />
@@ -822,7 +805,6 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
                   onChange={f => {
                     setForm(f);
                     setFormError('');
-                    if (missingFields.length > 0) setMissingFields(collectMissingRequiredFields(f));
                   }}
                   departments={allDepartments}
                   disabled={!editMode}
@@ -836,7 +818,6 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
                   onChange={f => {
                     setForm(f);
                     setFormError('');
-                    if (missingFields.length > 0) setMissingFields(collectMissingRequiredFields(f));
                   }}
                   departments={allDepartments}
                   disabled={!editMode}
@@ -1396,23 +1377,22 @@ interface CreateDialogProps {
 function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps) {
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
   const createCourse = useCreateCourse();
-  const { showSuccess, showError, showInfo } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
   const [form, setForm] = useState<CreateCourseDto>(() => {
     if (!template) return emptyCourseForm();
     return { ...template, code: '', name: `${template.name} (Kopya)` };
   });
-  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [serverError, setServerError] = useState('');
 
   async function handleCreate() {
     // 1) Pre-flight: server kurallarını ön-gör (Service.CreateCourseAsync mirror).
     const missing = collectMissingRequiredFields(form);
     if (missing.length > 0) {
-      setMissingFields(missing);
       setServerError('');
-      showInfo(
-        'Eksik bilgi',
-        `${missing.length} zorunlu alan doldurulmamış: ${missing.join(', ')}`,
+      showWarning(
+        'Ders oluşturulamadı',
+        `${missing.length} zorunlu alan eksik: ${missing.join(', ')}. Lütfen tamamlayıp tekrar deneyin.`,
+        { center: true, durationMs: 10000 },
       );
       return;
     }
@@ -1428,7 +1408,6 @@ function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps)
     } catch (e: unknown) {
       const msg = getServerErrorMessage(e, 'Ders oluşturulurken bir hata oluştu.');
       setServerError(msg);
-      setMissingFields([]);
       showError('Ders oluşturulamadı', msg);
     }
   }
@@ -1447,19 +1426,6 @@ function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps)
           </div>
           <Separator className="mb-4" />
           <div className="flex-1 overflow-y-auto">
-            {missingFields.length > 0 && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  <p className="font-medium mb-1.5">
-                    Lütfen eksik veya geçersiz alanları tamamlayın:
-                  </p>
-                  <ul className="list-disc list-inside space-y-0.5 text-sm">
-                    {missingFields.map(f => <li key={f}>{f}</li>)}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            )}
             {serverError && (
               <Alert variant="destructive" className="mb-4">
                 <AlertCircle className="h-4 w-4" />
@@ -1474,9 +1440,6 @@ function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps)
               onChange={f => {
                 setForm(f);
                 setServerError('');
-                if (missingFields.length > 0) {
-                  setMissingFields(collectMissingRequiredFields(f));
-                }
               }}
               departments={allDepartments}
             />
