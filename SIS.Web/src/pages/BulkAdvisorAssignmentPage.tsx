@@ -214,7 +214,15 @@ export default function BulkAdvisorAssignmentPage() {
     setPreviewPage(1);
   };
 
-  const handlePreview = (pageToLoad = 1, pageSizeToUse = previewPageSize) => {
+  const handlePreview = (
+    pageToLoad = 1,
+    pageSizeToUse = previewPageSize,
+    filters: {
+      studentSearch?: string;
+      advisorFilterType?: 'assigned' | 'current';
+      advisorFilterIdText?: string;
+    } = {}
+  ) => {
     if (!facultyId) {
       alert('Lütfen fakülte seçin.');
       return;
@@ -225,6 +233,11 @@ export default function BulkAdvisorAssignmentPage() {
       return;
     }
 
+    const searchToUse = filters.studentSearch ?? studentSearch;
+    const advisorFilterTypeToUse = filters.advisorFilterType ?? advisorFilterType;
+    const advisorFilterIdTextToUse = filters.advisorFilterIdText ?? advisorFilterIdText;
+    const advisorFilterIdToUse = advisorFilterIdTextToUse ? Number(advisorFilterIdTextToUse) : null;
+
     previewMut.mutate(
       {
         departmentId,
@@ -232,6 +245,9 @@ export default function BulkAdvisorAssignmentPage() {
         includeStudentsWithAdvisor,
         page: pageToLoad,
         pageSize: pageSizeToUse,
+        studentSearch: searchToUse.trim() || null,
+        advisorFilterType: advisorFilterIdToUse ? advisorFilterTypeToUse : null,
+        advisorFilterId: advisorFilterIdToUse,
       },
       {
         onSuccess: (data) => {
@@ -264,9 +280,6 @@ export default function BulkAdvisorAssignmentPage() {
           setSelectedAdvisorIdsByStudent(initialSelections);
           setAdvisorCapacityTexts(initialCapacities);
           setExcludedAdvisorIds(initialExcludedAdvisors);
-          setStudentSearch('');
-          setAdvisorFilterIdText('');
-          setAdvisorFilterType('assigned');
         },
         onError: (error) => {
           alert(getErrorMessage(error, 'Önizleme alınamadı.'));
@@ -839,13 +852,25 @@ export default function BulkAdvisorAssignmentPage() {
                       placeholder="Bu sayfada öğrenci adı, soyadı veya numarası ara..."
                       value={studentSearch}
                       onChange={(e) => setStudentSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handlePreview(1, currentPageSize, { studentSearch });
+                        }
+                      }}
                     />
                   </div>
 
                   <select
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={advisorFilterType}
-                    onChange={(e) => setAdvisorFilterType(e.target.value as 'assigned' | 'current')}
+                    onChange={(e) => {
+                      const nextFilterType = e.target.value as 'assigned' | 'current';
+                      setAdvisorFilterType(nextFilterType);
+
+                      if (previewResult) {
+                        handlePreview(1, currentPageSize, { advisorFilterType: nextFilterType });
+                      }
+                    }}
                   >
                     <option value="assigned">Atanacak danışmana göre filtrele</option>
                     <option value="current">Mevcut danışmana göre filtrele</option>
@@ -854,7 +879,16 @@ export default function BulkAdvisorAssignmentPage() {
                   <select
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={advisorFilterIdText}
-                    onChange={(e) => setAdvisorFilterIdText(e.target.value)}
+                    onChange={(e) => {
+                      const nextAdvisorFilterIdText = e.target.value;
+                      setAdvisorFilterIdText(nextAdvisorFilterIdText);
+
+                      if (previewResult) {
+                        handlePreview(1, currentPageSize, {
+                          advisorFilterIdText: nextAdvisorFilterIdText,
+                        });
+                      }
+                    }}
                   >
                     <option value="">Tüm danışmanlar</option>
                     {previewResult.advisors.map((advisor) => (

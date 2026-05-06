@@ -316,6 +316,31 @@ public class AdminStudentService : IAdminStudentService
         ? studentsBaseQuery
         : studentsBaseQuery.Where(s => !s.AdvisorId.HasValue);
 
+    if (!string.IsNullOrWhiteSpace(dto.StudentSearch))
+    {
+        var search = dto.StudentSearch.Trim().ToLower();
+        var matchingUserIds = await _context.Set<ApplicationUser>()
+            .AsNoTracking()
+            .Where(u =>
+                u.FirstName.ToLower().Contains(search) ||
+                u.LastName.ToLower().Contains(search) ||
+                (u.Email ?? "").ToLower().Contains(search))
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        studentsToAssignQuery = studentsToAssignQuery.Where(s =>
+            s.StudentNumber.ToLower().Contains(search) ||
+            matchingUserIds.Contains(s.UserId));
+    }
+
+    var advisorFilterId = dto.AdvisorFilterId.GetValueOrDefault();
+    var advisorFilterType = dto.AdvisorFilterType?.Trim().ToLowerInvariant();
+
+    if (advisorFilterId > 0 && advisorFilterType == "current")
+    {
+        studentsToAssignQuery = studentsToAssignQuery.Where(s => s.AdvisorId == advisorFilterId);
+    }
+
     var totalAssignmentCount = await studentsToAssignQuery.CountAsync();
 
     var totalPages = totalAssignmentCount == 0
@@ -365,7 +390,17 @@ public class AdminStudentService : IAdminStudentService
 
     var currentAdvisorLoads = await _context.Students
         .AsNoTracking()
-        .Where(s => s.AdvisorId.HasValue && advisorIds.Contains(s.AdvisorId.Value))
+        .Where(s =>
+            s.AdvisorId.HasValue &&
+            advisorIds.Contains(s.AdvisorId.Value) &&
+            s.StudentPrograms.Any(sp =>
+                sp.IsActive &&
+                sp.Type == StudentProgramType.Main &&
+                sp.Program.DepartmentId == dto.DepartmentId))
+        .Where(s => !dto.ProgramId.HasValue || s.StudentPrograms.Any(sp =>
+            sp.IsActive &&
+            sp.Type == StudentProgramType.Main &&
+            sp.ProgramId == dto.ProgramId.Value))
         .GroupBy(s => s.AdvisorId!.Value)
         .Select(g => new
         {
@@ -461,16 +496,22 @@ public class AdminStudentService : IAdminStudentService
         );
     }
 
-    var studentsPage = await studentsToAssignQuery
+    var needsAssignedAdvisorFilter = advisorFilterId > 0 && advisorFilterType == "assigned";
+
+    var studentsForPreviewQuery = studentsToAssignQuery
         .Include(s => s.StudentPrograms)
             .ThenInclude(sp => sp.Program)
                 .ThenInclude(p => p.Department)
         .Include(s => s.Advisor)
         .OrderBy(s => s.CompletedSemesters)
-        .ThenBy(s => s.StudentNumber)
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .ToListAsync();
+        .ThenBy(s => s.StudentNumber);
+
+    var studentsPage = needsAssignedAdvisorFilter
+        ? await studentsForPreviewQuery.ToListAsync()
+        : await studentsForPreviewQuery
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
 
     var studentUserIds = studentsPage.Select(s => s.UserId).ToList();
 
@@ -558,6 +599,26 @@ public class AdminStudentService : IAdminStudentService
     if (skippedBecauseOfCapacity > 0)
     {
         warnings.Add($"{skippedBecauseOfCapacity} öğrenci için kontenjan yetersiz olduğu için otomatik öneri üretilemedi.");
+    }
+
+    if (needsAssignedAdvisorFilter)
+    {
+        assignments = assignments
+            .Where(a => a.SuggestedAdvisorId == advisorFilterId)
+            .ToList();
+
+        totalAssignmentCount = assignments.Count;
+        totalPages = totalAssignmentCount == 0
+            ? 0
+            : (int)Math.Ceiling(totalAssignmentCount / (double)pageSize);
+
+        if (totalPages > 0 && page > totalPages)
+            page = totalPages;
+
+        assignments = assignments
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
     }
 
     var advisorDtos = advisors.Select(advisor =>

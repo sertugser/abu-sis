@@ -63,7 +63,10 @@ public record BulkAdvisorAssignmentPreviewRequestDto(
     int? ProgramId,
     bool IncludeStudentsWithAdvisor = false,
     int Page = 1,
-    int PageSize = 50
+    int PageSize = 50,
+    string? StudentSearch = null,
+    string? AdvisorFilterType = null,
+    int? AdvisorFilterId = null
 );
 
 public record BulkAdvisorAssignmentApplyRequestDto(

@@ -58,6 +58,9 @@ export interface BulkAdvisorAssignmentPreviewRequest {
   includeStudentsWithAdvisor: boolean;
   page?: number;
   pageSize?: number;
+  studentSearch?: string | null;
+  advisorFilterType?: 'assigned' | 'current' | null;
+  advisorFilterId?: number | null;
 }
 
 export interface BulkAdvisorAssignmentApplyRequest {
