@@ -27,6 +27,8 @@ public class OpenedCourseSectionDto
     public string? DepartmentName { get; set; }
     /// <summary>Cross-list grup ID'si (null = tek başına).</summary>
     public int? CrossListGroupId { get; set; }
+    /// <summary>Z (Zorunlu) / S (Seçmeli) — bölümün aktif müfredatından alınır.</summary>
+    public bool IsCompulsory { get; set; }
 }
 
 public class OpenedCourseListDto
@@ -306,6 +308,8 @@ public class TransferCourseResultItem
 }
 
 public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);
+
+public record DeleteAllSectionsResultDto(int DeletedSectionCount, int DeletedRegistrationCount, int DeletedAccessPolicyCount);
 
 // ── External Courses (opened by other departments but in our curriculum) ──
 

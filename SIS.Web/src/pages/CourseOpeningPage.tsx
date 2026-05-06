@@ -23,6 +23,7 @@ import {
   useBulkOpenCourses,
   useCloseSection,
   useCloseAllSections,
+  useDeleteAllSectionsHard,
   useReactivateSection,
   useCurriculumCoursesForOpening,
   usePoolSlotsForOpening,
@@ -119,6 +120,7 @@ export default function CourseOpeningPage() {
   const updateMutation = useUpdateOpenedSection(deptId ?? 0, targetTermId ?? 0);
   const closeMutation = useCloseSection(deptId ?? 0, targetTermId ?? 0);
   const closeAllMutation = useCloseAllSections(deptId ?? 0, targetTermId ?? 0);
+  const deleteAllHardMutation = useDeleteAllSectionsHard(deptId ?? 0, targetTermId ?? 0);
   const reactivateMutation = useReactivateSection(deptId ?? 0, targetTermId ?? 0);
 
   const forecastMap = useMemo(() => {
@@ -226,6 +228,10 @@ export default function CourseOpeningPage() {
   const handleCloseAllSections = useCallback(
     (courseId: number) => closeAllMutation.mutateAsync(courseId),
     [closeAllMutation],
+  );
+  const handleDeleteAllSectionsHard = useCallback(
+    (courseId: number) => deleteAllHardMutation.mutateAsync(courseId),
+    [deleteAllHardMutation],
   );
   const handleReactivateSection = useCallback(
     (sectionId: number) => reactivateMutation.mutateAsync(sectionId),
@@ -388,6 +394,7 @@ export default function CourseOpeningPage() {
           onUpdateSection={handleUpdateSection}
           onCloseSection={handleCloseSection}
           onCloseAllSections={handleCloseAllSections}
+          onDeleteAllSectionsHard={handleDeleteAllSectionsHard}
           onReactivateSection={handleReactivateSection}
           onAddSection={handleAddSection}
           updatePending={updateMutation.isPending}

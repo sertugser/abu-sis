@@ -564,4 +564,91 @@ public class CourseSectionLifecycleService(
         _forecastCacheInvalidator.InvalidateForecastContext();
     }
 
+    /// <summary>
+    /// Bir dersin tüm şubelerini DB'den fiziksel siler (hard delete).
+    /// CloseAllSectionsAsync'in aksine geri alınamaz; ders "hiç açılmamış gibi" olur.
+    /// </summary>
+    public async Task<DeleteAllSectionsResultDto> DeleteAllSectionsHardAsync(int courseId, int termId, CancellationToken ct = default)
+    {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new InvalidOperationException("Dönem bulunamadı.");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("İptal edilmiş dönemde silme yapılamaz.");
+
+        // Tüm şubeleri (Aktif + Cancelled dahil) topla — komple temizlik amaçlı
+        var sections = await _context.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.TermId == termId)
+            .ToListAsync(ct);
+
+        if (sections.Count == 0)
+            throw new InvalidOperationException("Bu ders için silinecek şube bulunamadı.");
+
+        var sectionIds = sections.Select(s => s.Id).ToList();
+
+        // Safety 1: Aktif kayıtlı öğrenci varsa sil
+        var activeRegistrationCount = await _context.CourseRegistrations
+            .CountAsync(cr => sectionIds.Contains(cr.CourseSectionId)
+                && cr.Status == RegistrationStatus.Active, ct);
+        if (activeRegistrationCount > 0)
+            throw new InvalidOperationException(
+                $"Bu derste {activeRegistrationCount} aktif kayıtlı öğrenci var. Önce öğrencilerin kaydı düşürülmeli.");
+
+        // Safety 2: Tamamlanmış (Completed) kayıtlar geçmiş not olarak korunmalı — silinmez
+        var completedRegistrationCount = await _context.CourseRegistrations
+            .CountAsync(cr => sectionIds.Contains(cr.CourseSectionId)
+                && cr.Status == RegistrationStatus.Completed, ct);
+        if (completedRegistrationCount > 0)
+            throw new InvalidOperationException(
+                $"Bu derste {completedRegistrationCount} tamamlanmış öğrenci kaydı var (transcript'te görünür) — silinemez.");
+
+        // Safety 3: Ders değerlendirmesi yapılmış mı? (öğrenci ders evaluation'ı)
+        var evaluationCount = await _context.EvaluationResponses
+            .CountAsync(er => sectionIds.Contains(er.CourseSectionId), ct);
+        if (evaluationCount > 0)
+            throw new InvalidOperationException(
+                $"Bu ders için {evaluationCount} adet ders değerlendirmesi yapılmış — silinemez.");
+
+        // Safety 4: Yoklama oturumu kaydı varsa sil (geçmiş yoklama silinmemeli)
+        var attendanceSessionCount = await _context.AttendanceSessions
+            .CountAsync(asn => sectionIds.Contains(asn.CourseSectionId), ct);
+        if (attendanceSessionCount > 0)
+            throw new InvalidOperationException(
+                $"Bu derste {attendanceSessionCount} yoklama oturumu kaydı var — silinemez.");
+
+        // Hard-delete: Restrict FK olan satırları manuel temizle
+        var allRegistrations = await _context.CourseRegistrations
+            .Where(cr => sectionIds.Contains(cr.CourseSectionId))
+            .ToListAsync(ct);
+        _context.CourseRegistrations.RemoveRange(allRegistrations);
+
+        // SchedulingAuditLog (Restrict FK) — log kayıtları silinir, geçmiş audit'i kaybederiz ama bu kabul edilebilir
+        var auditLogs = await _context.SchedulingAuditLogs
+            .Where(log => sectionIds.Contains(log.SectionId))
+            .ToListAsync(ct);
+        _context.SchedulingAuditLogs.RemoveRange(auditLogs);
+
+        // Course-level CourseAccessPolicy temizliği
+        var accessPolicies = await _context.CourseAccessPolicies
+            .Where(cap => cap.CourseId == courseId && cap.TermId == termId)
+            .ToListAsync(ct);
+        _context.CourseAccessPolicies.RemoveRange(accessPolicies);
+
+        // CourseSection silinince:
+        //   - SectionSchedule (Cascade) → otomatik silinir
+        //   - AttendanceSession (Cascade) → safety 4 zaten 0 olduğunu garanti etti
+        //   - ConstraintEvaluation (SetNull) → otomatik null'lanır
+        //   - ConstraintException (SetNull) → otomatik null'lanır
+        //   - DistributionConstraintCourse (SetNull) → otomatik null'lanır
+        _context.CourseSections.RemoveRange(sections);
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+
+        return new DeleteAllSectionsResultDto(
+            DeletedSectionCount: sections.Count,
+            DeletedRegistrationCount: allRegistrations.Count,
+            DeletedAccessPolicyCount: accessPolicies.Count
+        );
+    }
+
 }

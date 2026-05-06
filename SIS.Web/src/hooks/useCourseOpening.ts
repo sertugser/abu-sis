@@ -12,6 +12,7 @@ import {
   updateOpenedSection,
   closeSection,
   closeAllSections,
+  deleteAllSectionsHard,
   reactivateSection,
   bulkAssignInstructor,
   getPreviousTermCourses,
@@ -299,6 +300,36 @@ export function useCloseAllSections(departmentId: number, termId: number) {
     },
     onError: (error) => {
       showError('Şubeler kapatılamadı', getApiErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Hard-delete: Dersin tüm şubelerini DB'den fiziksel olarak siler.
+ * useCloseAllSections'tan farkı: geri alınamaz, ders "hiç açılmamış" gibi olur.
+ * Backend safety: aktif/tamamlanmış kayıt, değerlendirme veya yoklama varsa reddedilir.
+ */
+export function useDeleteAllSectionsHard(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+  return useMutation({
+    mutationFn: (courseId: number) => deleteAllSectionsHard(courseId, termId),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      const deleted = result?.deletedSectionCount ?? 0;
+      const detail =
+        deleted === 0
+          ? 'Bu dönemden kaldırıldı.'
+          : deleted === 1
+            ? '1 şube bu dönemden kaldırıldı.'
+            : `${deleted} şube bu dönemden kaldırıldı.`;
+      showSuccess('Ders bu dönemden kaldırıldı', detail);
+    },
+    onError: (error) => {
+      showError('Ders kaldırılamadı', getApiErrorMessage(error));
     },
   });
 }

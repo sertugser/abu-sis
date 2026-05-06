@@ -25,10 +25,8 @@ import { TransferConfirmDialog } from './components/TransferConfirmDialog';
 import { TransferResultBanner } from './components/TransferResultBanner';
 import { TargetTermPanel } from './components/TargetTermPanel';
 import { RowEditSheet } from './components/RowEditSheet';
-import { SectionDetailDialog } from './components/SectionDetailDialog';
-import { SectionEditDialog } from './components/SectionEditDialog';
-import { DeleteSectionDialog } from './components/DeleteSectionDialog';
-import { AddSectionDialog } from './components/AddSectionDialog';
+import { SectionManagementDialog } from './components/SectionManagementDialog';
+import { CalendarClock } from 'lucide-react';
 import type { OpenedCourseSectionDto } from '../../types/courseOpening';
 
 export default function TermProgramTransferPage() {
@@ -51,10 +49,7 @@ export default function TermProgramTransferPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [includeSchedule, setIncludeSchedule] = useState(false);
   const [editingCourseId, setEditingCourseId] = useState<number | null>(null);
-  const [detailSection, setDetailSection] = useState<OpenedCourseSectionDto | null>(null);
-  const [editSection, setEditSection] = useState<OpenedCourseSectionDto | null>(null);
-  const [addSectionFor, setAddSectionFor] = useState<OpenedCourseSectionDto | null>(null);
-  const [deleteSection, setDeleteSection] = useState<OpenedCourseSectionDto | null>(null);
+  const [manageSection, setManageSection] = useState<OpenedCourseSectionDto | null>(null);
 
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
   const targetTermId = activeTerm?.id ?? null;
@@ -76,7 +71,6 @@ export default function TermProgramTransferPage() {
   );
   const instructors = useMemo(() => instructorsQuery.data ?? [], [instructorsQuery.data]);
   const courses = useMemo(() => coursesQuery.data ?? [], [coursesQuery.data]);
-  const transferable = useMemo(() => courses.filter((c) => !c.alreadyOpened), [courses]);
 
   const filteredCourses = useMemo(() => {
     let result = courses;
@@ -139,6 +133,84 @@ export default function TermProgramTransferPage() {
   const selectedCourses = courses.filter((c) => selectedIds.has(c.courseId));
   const totalCredits = selectedCourses.reduce((sum, c) => sum + c.credits, 0);
   const totalEcts = selectedCourses.reduce((sum, c) => sum + c.ects, 0);
+
+  // ── Filtrelenenleri Seç (header checkbox) ───────────────────────────────────
+  // 'none': hiçbiri seçili değil · 'some': bazısı · 'all': filtrelenen tüm
+  // aktarılabilirler seçili. alreadyOpened=true olanlar her zaman atlanır.
+  const sourceSelectAllState = useMemo<'none' | 'some' | 'all'>(() => {
+    const transferableFiltered = filteredCourses.filter((c) => !c.alreadyOpened);
+    if (transferableFiltered.length === 0) return 'none';
+    const sel = transferableFiltered.filter((c) => selectedIds.has(c.courseId)).length;
+    if (sel === 0) return 'none';
+    if (sel === transferableFiltered.length) return 'all';
+    return 'some';
+  }, [filteredCourses, selectedIds]);
+
+  const toggleSelectAllFiltered = useCallback(() => {
+    const transferableFiltered = filteredCourses.filter((c) => !c.alreadyOpened);
+    if (transferableFiltered.length === 0) return;
+    const allSelected = transferableFiltered.every((c) => selectedIds.has(c.courseId));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const c of transferableFiltered) next.delete(c.courseId);
+      } else {
+        for (const c of transferableFiltered) next.add(c.courseId);
+      }
+      return next;
+    });
+  }, [filteredCourses, selectedIds]);
+
+  // ── Kaynak panel CSV / Yazdır / Mail ────────────────────────────────────────
+  const exportSourceCsv = useCallback(() => {
+    if (filteredCourses.length === 0) return;
+    const escape = (v: string | null | undefined) =>
+      `"${(v ?? '').replace(/"/g, '""')}"`;
+    const header = 'Kod,Ad,Z/S,Sınıf,Krd,AKTS,Şube,Kontenjan,Kayıtlı,Hoca,Hedefte';
+    const rows = filteredCourses.map((c) =>
+      [
+        c.courseCode,
+        escape(c.courseName),
+        c.isCompulsory ? 'Z' : 'S',
+        c.suggestedSemester > 0 ? Math.ceil(c.suggestedSemester / 2) : '',
+        c.credits,
+        c.ects,
+        c.sectionCount,
+        c.totalCapacity,
+        c.totalEnrolled,
+        escape(c.instructorName),
+        c.alreadyOpened ? 'Evet' : 'Hayır',
+      ].join(','),
+    );
+    const csv = '﻿' + header + '\n' + rows.join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aktarim-kaynak-${selectedSourceTerm?.name ?? 'liste'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filteredCourses, selectedSourceTerm]);
+
+  const mailSourceList = useCallback(() => {
+    const subject = `Aktarım Listesi: ${selectedSourceTerm?.name ?? '—'} → ${activeTerm?.name ?? '—'}`;
+    const lines = [
+      `Kaynak Dönem: ${selectedSourceTerm?.name ?? '—'}`,
+      `Hedef Dönem: ${activeTerm?.name ?? '—'}`,
+      `Bölüm: ${departments.find((d) => d.departmentId === deptId)?.departmentName ?? '—'}`,
+      `Ders Sayısı: ${filteredCourses.length}`,
+      '',
+      'Kod\tAd\tKrd\tAKTS\tHoca',
+      ...filteredCourses
+        .slice(0, 100)
+        .map((c) =>
+          `${c.courseCode}\t${c.courseName}\t${c.credits}\t${c.ects}\t${c.instructorName ?? ''}`,
+        ),
+      filteredCourses.length > 100 ? `… (${filteredCourses.length - 100} ders daha)` : '',
+    ].filter(Boolean);
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
+  }, [filteredCourses, selectedSourceTerm, activeTerm, departments, deptId]);
+
+  const printPage = useCallback(() => window.print(), []);
 
   const handleTransfer = async () => {
     if (!deptId || !sourceTermId || !targetTermId || selectedIds.size === 0) return;
@@ -214,11 +286,11 @@ export default function TermProgramTransferPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3 h-[calc(100vh-120px)] min-h-[480px]">
       <TransferFilterBar termStatus={termStatus} isTermSuitable={isTermSuitable} />
 
       {transferException && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3">
+        <div className="shrink-0 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
             <div className="flex-1 text-sm">
@@ -239,83 +311,119 @@ export default function TermProgramTransferPage() {
 
       {transferResult && <TransferResultBanner result={transferResult} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-        {/* SOL: Kaynak (Referans) panel — kendi filtreleri ve aksiyonları */}
-        <Card className="overflow-hidden">
-          <SourcePanelHeader
-            departments={departments}
-            departmentId={deptId}
-            onDepartmentChange={changeDept}
-            sourceTerms={sourceTerms}
-            sourceTermId={sourceTermId}
-            onSourceChange={changeSource}
-            programs={programs}
-            programId={programId}
-            onProgramChange={setProgramId}
-            classLevel={classLevel}
-            onClassLevelChange={setClassLevel}
-            searchCode={searchCode}
-            onSearchCodeChange={setSearchCode}
-            searchName={searchName}
-            onSearchNameChange={setSearchName}
-            selectedCount={selectedIds.size}
-            totalCount={courses.length}
-            transferableCount={transferable.length}
-            totalCredits={totalCredits}
-            totalEcts={totalEcts}
-            includeSchedule={includeSchedule}
-            onIncludeScheduleChange={setIncludeSchedule}
-            targetDepartmentLabel={departments.find((d) => d.departmentId === deptId)?.departmentName ?? null}
-            onTransferClick={() => setShowConfirmDialog(true)}
-            isPending={transferMutation.isPending}
-            canTransfer={Boolean(targetTermId) && isTermSuitable}
-          />
+      {/* Tek kart, içinde iki bölge — ortada belirgin ayraç. Sayfanın kalan yüksekliğini kaplar. */}
+      <Card className="overflow-hidden flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch">
+          {/* SOL bölge: Kaynak (Referans) — outer Card stilini nötrle, iç davranış aynı */}
+          <Card className="overflow-hidden border-0 shadow-none rounded-none flex flex-col min-h-0 max-h-full">
+            <SourcePanelHeader
+              departments={departments}
+              departmentId={deptId}
+              onDepartmentChange={changeDept}
+              sourceTerms={sourceTerms}
+              sourceTermId={sourceTermId}
+              onSourceChange={changeSource}
+              programs={programs}
+              programId={programId}
+              onProgramChange={setProgramId}
+              classLevel={classLevel}
+              onClassLevelChange={setClassLevel}
+              searchCode={searchCode}
+              onSearchCodeChange={setSearchCode}
+              searchName={searchName}
+              onSearchNameChange={setSearchName}
+              totalCount={courses.length}
+              onExportCsv={exportSourceCsv}
+              onPrint={printPage}
+              onMail={mailSourceList}
+              selectedCount={selectedIds.size}
+              onTransferClick={() => setShowConfirmDialog(true)}
+              isPending={transferMutation.isPending}
+              canTransfer={Boolean(targetTermId) && isTermSuitable}
+              targetDepartmentLabel={departments.find((d) => d.departmentId === deptId)?.departmentName ?? null}
+            />
 
-          <CardContent className="p-0">
-            {!sourceTermId ? (
-              <div className="py-12 text-center">
-                <Copy className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Kaynak dönem seçin</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-1">
-                  Üstteki filtreden bir önceki dönemi seçin.
-                </p>
-              </div>
-            ) : coursesQuery.isLoading ? (
-              <div className="py-12 text-center text-xs text-muted-foreground">Yükleniyor...</div>
-            ) : courses.length === 0 ? (
-              <div className="py-12 text-center">
-                <AlertCircle className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Ders bulunamadı</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-1">
-                  {selectedSourceTerm?.name} döneminde bu bölüme ait açılmış ders yok.
-                </p>
-              </div>
-            ) : (
-              <TransferTable
-                courses={filteredCourses}
-                selectedIds={selectedIds}
-                onToggle={toggle}
-                onEdit={(c) => setEditingCourseId(c.courseId)}
-              />
-            )}
-          </CardContent>
-        </Card>
+            <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
+              {!sourceTermId ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12">
+                  <Copy className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-xs text-muted-foreground">Kaynak dönem seçin</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                    Üstteki filtreden bir önceki dönemi seçin.
+                  </p>
+                </div>
+              ) : coursesQuery.isLoading ? (
+                <div className="flex-1 flex items-center justify-center py-12 text-xs text-muted-foreground">
+                  Yükleniyor...
+                </div>
+              ) : courses.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12">
+                  <AlertCircle className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-xs text-muted-foreground">Ders bulunamadı</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                    {selectedSourceTerm?.name} döneminde bu bölüme ait açılmış ders yok.
+                  </p>
+                </div>
+              ) : (
+                <TransferTable
+                  courses={filteredCourses}
+                  selectedIds={selectedIds}
+                  onToggle={toggle}
+                  onEdit={(c) => setEditingCourseId(c.courseId)}
+                  onToggleSelectAll={toggleSelectAllFiltered}
+                  selectAllState={sourceSelectAllState}
+                  paginationExtraInfo={
+                    <>
+                      <label
+                        htmlFor="include-schedule"
+                        className="inline-flex items-center gap-1 cursor-pointer select-none"
+                        title="Geçen dönemin gün/saat/derslik bilgisini de aktarır."
+                      >
+                        <input
+                          id="include-schedule"
+                          type="checkbox"
+                          checked={includeSchedule}
+                          onChange={(e) => setIncludeSchedule(e.target.checked)}
+                          className="h-3 w-3 cursor-pointer"
+                        />
+                        <CalendarClock className="h-3 w-3" />
+                        <span>Programı kopyala</span>
+                      </label>
+                      {selectedIds.size > 0 && (
+                        <span className="whitespace-nowrap">
+                          ·{' '}
+                          <strong className="text-foreground">{selectedIds.size}</strong> seçili
+                          {' · '}
+                          <strong className="text-foreground">{totalCredits}</strong> Krd ·{' '}
+                          <strong className="text-foreground">{totalEcts}</strong> AKTS
+                        </span>
+                      )}
+                    </>
+                  }
+                />
+              )}
+            </CardContent>
+          </Card>
 
-        {/* SAĞ: Hedef dönem — Bölüm+Program sol ile çift yönlü, dönem/sınıf/arama bağımsız */}
-        <TargetTermPanel
-          departments={departments}
-          departmentId={deptId}
-          onDepartmentChange={changeDept}
-          programId={programId}
-          onProgramChange={setProgramId}
-          defaultTermId={targetTermId}
-          availableTerms={allTerms ?? []}
-          onDetail={setDetailSection}
-          onEdit={setEditSection}
-          onAddSection={setAddSectionFor}
-          onDelete={setDeleteSection}
-        />
-      </div>
+          {/* Belirgin ayraç — desktop'ta dikey, mobilde yatay */}
+          <div className="hidden lg:block bg-slate-200 self-stretch" aria-hidden />
+          <div className="lg:hidden h-px bg-slate-200" aria-hidden />
+
+          {/* SAĞ bölge: Hedef dönem — outer Card stilini nötrle, flex-col h-full propage et */}
+          <div className="flex flex-col min-h-0 max-h-full [&>div]:border-0 [&>div]:shadow-none [&>div]:rounded-none [&>div]:flex [&>div]:flex-col [&>div]:min-h-0 [&>div]:flex-1">
+            <TargetTermPanel
+              departments={departments}
+              departmentId={deptId}
+              onDepartmentChange={changeDept}
+              programId={programId}
+              onProgramChange={setProgramId}
+              defaultTermId={targetTermId}
+              availableTerms={allTerms ?? []}
+              onManage={setManageSection}
+            />
+          </div>
+        </div>
+      </Card>
 
       <TransferConfirmDialog
         open={showConfirmDialog}
@@ -340,33 +448,14 @@ export default function TermProgramTransferPage() {
         }}
       />
 
-      {/* Sağ panel aksiyon dialogları */}
-      <SectionDetailDialog
-        section={detailSection}
-        open={detailSection != null}
-        onOpenChange={(o) => !o && setDetailSection(null)}
-      />
-      <SectionEditDialog
-        section={editSection}
+      {/* Sağ panel — tek yönetim penceresi (çift tık ile açılır, içinde tüm aksiyonlar) */}
+      <SectionManagementDialog
+        section={manageSection}
         departmentId={deptId ?? 0}
         termId={targetTermId ?? 0}
         instructors={instructors}
-        open={editSection != null}
-        onOpenChange={(o) => !o && setEditSection(null)}
-      />
-      <AddSectionDialog
-        section={addSectionFor}
-        departmentId={deptId ?? 0}
-        termId={targetTermId ?? 0}
-        open={addSectionFor != null}
-        onOpenChange={(o) => !o && setAddSectionFor(null)}
-      />
-      <DeleteSectionDialog
-        section={deleteSection}
-        departmentId={deptId ?? 0}
-        termId={targetTermId ?? 0}
-        open={deleteSection != null}
-        onOpenChange={(o) => !o && setDeleteSection(null)}
+        open={manageSection != null}
+        onOpenChange={(o) => !o && setManageSection(null)}
       />
     </div>
   );

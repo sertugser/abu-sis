@@ -55,6 +55,8 @@ export interface OpenedCourseSectionDto {
   departmentId: number | null;
   departmentName: string | null;
   crossListGroupId: number | null;
+  /** Z (zorunlu) / S (seçmeli) — bölümün aktif müfredatından alınır. */
+  isCompulsory: boolean;
 }
 
 export interface OpenedCourseListDto {

@@ -14,4 +14,14 @@ public interface ICourseSectionLifecycleService
     Task CloseSectionAsync(int sectionId, CancellationToken cancellationToken = default);
     Task<CloseAllSectionsResultDto> CloseAllSectionsAsync(int courseId, int termId, CancellationToken cancellationToken = default);
     Task ReactivateSectionAsync(int sectionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bir dersin tüm şubelerini (verilen dönemde) DB'den fiziksel olarak siler.
+    /// CloseAllSectionsAsync'in aksine geri alınamaz.
+    /// Reddedilir: aktif kayıtlı öğrenci varsa, ders değerlendirmesi yapılmışsa.
+    /// Cascade silinir: SectionSchedule, AttendanceSession.
+    /// SetNull: ConstraintEvaluation, DistributionConstraintCourse.
+    /// Manuel silinir: CourseRegistration (Draft/Pending), CourseAccessPolicy.
+    /// </summary>
+    Task<DeleteAllSectionsResultDto> DeleteAllSectionsHardAsync(int courseId, int termId, CancellationToken cancellationToken = default);
 }

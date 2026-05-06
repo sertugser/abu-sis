@@ -25,7 +25,7 @@ export function CurriculumCourseRow({ course, selected, onToggle, onOpenDetail }
   return (
     <div
       className={cn(
-        'grid grid-cols-[28px_100px_1fr_32px_48px_52px_40px_80px_32px] items-center gap-2 px-3 py-2 border-b border-gray-100 text-sm cursor-pointer transition-colors',
+        'grid grid-cols-[28px_100px_1fr_32px_48px_52px_40px_80px_32px] items-center gap-2 px-2 py-2 border-b border-gray-100 text-xs cursor-pointer transition-colors',
         selected ? 'bg-amber-50 hover:bg-amber-100/80' : 'hover:bg-gray-50',
         !canSelect && 'opacity-60',
       )}
@@ -45,7 +45,7 @@ export function CurriculumCourseRow({ course, selected, onToggle, onOpenDetail }
       />
 
       <button
-        className="text-left font-mono text-slate-800 font-semibold hover:text-primary hover:underline truncate"
+        className="text-left font-mono text-slate-800 font-medium hover:text-primary hover:underline truncate"
         onClick={(e) => {
           e.stopPropagation();
           onOpenDetail(course);
