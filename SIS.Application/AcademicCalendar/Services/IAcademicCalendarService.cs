@@ -12,6 +12,6 @@ public interface IAcademicCalendarService
     Task<IReadOnlyList<AcademicCalendarTermSummaryDto>> ListTermsAsync(CancellationToken ct = default);
 
     // Public (öğrenci/hoca)
-    Task<StudentAcademicCalendarDto?> GetStudentViewAsync(int termId, CancellationToken ct = default);
-    Task<StudentAcademicCalendarDto?> GetActiveStudentViewAsync(CancellationToken ct = default);
+    Task<StudentAcademicCalendarDto?> GetStudentViewAsync(int termId, bool includeAllEvents = false, CancellationToken ct = default);
+    Task<StudentAcademicCalendarDto?> GetActiveStudentViewAsync(bool includeAllEvents = false, CancellationToken ct = default);
 }

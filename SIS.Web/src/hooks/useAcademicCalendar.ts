@@ -75,23 +75,27 @@ export function useActiveStudentCalendar() {
   });
 }
 
-export function useStudentCalendar(termId: number | null | undefined) {
+export function useStudentCalendar(termId: number | null | undefined, includeAllEvents = false) {
   return useQuery({
-    queryKey: QUERY_KEYS.studentAcademicCalendar(termId ?? null),
+    queryKey: QUERY_KEYS.studentAcademicCalendar(termId ?? null, includeAllEvents),
     queryFn: async () => {
-      const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`);
+      const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`, {
+        params: includeAllEvents ? { includeAllEvents: true } : undefined,
+      });
       return data;
     },
     enabled: !!termId
   });
 }
 
-export function useAcademicYearCalendars(termIds: number[]) {
+export function useAcademicYearCalendars(termIds: number[], includeAllEvents = false) {
   return useQueries({
     queries: termIds.map(termId => ({
-      queryKey: QUERY_KEYS.studentAcademicCalendar(termId),
+      queryKey: QUERY_KEYS.studentAcademicCalendar(termId, includeAllEvents),
       queryFn: async () => {
-        const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`);
+        const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`, {
+          params: includeAllEvents ? { includeAllEvents: true } : undefined,
+        });
         return data;
       },
     })),
@@ -119,10 +123,11 @@ export function useMoveAcademicCalendarEvent() {
     onSuccess: async (calendar, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(variables.termId) }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(variables.termId, true) }),
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive }),
       ]);
 
-      queryClient.setQueryData(QUERY_KEYS.studentAcademicCalendar(variables.termId), calendar);
+      queryClient.setQueryData(QUERY_KEYS.studentAcademicCalendar(variables.termId, true), calendar);
     },
   });
 }

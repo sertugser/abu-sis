@@ -187,12 +187,12 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     // ── Public (öğrenci / hoca) ───────────────────────────────────────
 
-    public async Task<StudentAcademicCalendarDto?> GetStudentViewAsync(int termId, CancellationToken ct = default)
+    public async Task<StudentAcademicCalendarDto?> GetStudentViewAsync(int termId, bool includeAllEvents = false, CancellationToken ct = default)
     {
         var term = await _ctx.AcademicTerms
             .AsNoTracking()
             .Include(t => t.AcademicCalendar)
-            .Include(t => t.CalendarEvents.Where(e => e.IsPublic))
+            .Include(t => t.CalendarEvents.Where(e => includeAllEvents || e.IsPublic))
             .FirstOrDefaultAsync(t => t.Id == termId, ct);
 
         if (term is null)
@@ -201,14 +201,14 @@ public class AcademicCalendarService : IAcademicCalendarService
         return BuildStudentDto(term, _clock.UtcNow);
     }
 
-    public async Task<StudentAcademicCalendarDto?> GetActiveStudentViewAsync(CancellationToken ct = default)
+    public async Task<StudentAcademicCalendarDto?> GetActiveStudentViewAsync(bool includeAllEvents = false, CancellationToken ct = default)
     {
         var now = _clock.UtcNow;
 
         var term = await _ctx.AcademicTerms
             .AsNoTracking()
             .Include(t => t.AcademicCalendar)
-            .Include(t => t.CalendarEvents.Where(e => e.IsPublic))
+            .Include(t => t.CalendarEvents.Where(e => includeAllEvents || e.IsPublic))
             .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
             .FirstOrDefaultAsync(ct);
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CalendarVisualizer, type VisualizerEvent } from '@/components/CalendarVisualizer';
+import { CalendarVisualizer, type DropFeedback, type DropFeedbackRequest, type VisualizerEvent } from '@/components/CalendarVisualizer';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -172,6 +172,10 @@ function shiftAcademicYear(academicYear: string, offset: number) {
 
 function dateValue(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function formatUtcDateValue(date: Date) {
+  return dateValue(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
 }
 
 function nearestMondayDateValue(year: number, month: number, day: number) {
@@ -381,6 +385,72 @@ function isEditableDraftEvent(ev: GeneratedCalendarEventDto | null) {
   return !!ev && !ev.isHoliday;
 }
 
+function isExamDraftEvent(ev: GeneratedCalendarEventDto) {
+  return calendarEventCategory(ev.eventType, ev.title, ev.templateItemKey) === 'exam';
+}
+
+function validateDraftEventDateEdit(ev: GeneratedCalendarEventDto, startDate: string, endDate: string) {
+  if (!startDate)
+    return 'Baslangic tarihi secilmelidir.';
+
+  if (endDate < startDate)
+    return 'Bitis tarihi baslangic tarihinden once olamaz.';
+
+  if (isExamDraftEvent(ev)) {
+    const parsedStart = parseUtcDisplayDate(startDate);
+    const parsedEnd = parseUtcDisplayDate(endDate);
+    if ((parsedStart && isWeekend(parsedStart)) || (parsedEnd && isWeekend(parsedEnd)))
+      return 'Sinav tarihleri hafta sonuna denk gelemez. Lutfen sadece hafta ici gunleri secin.';
+  }
+
+  return null;
+}
+
+function constraintMatchesDraftEvent(constraint: CalendarConstraintInputDto, ev: GeneratedCalendarEventDto) {
+  if (constraint.targetEventType && constraint.targetEventType !== ev.eventType)
+    return false;
+
+  if (constraint.targetChainCode && constraint.targetChainCode !== ev.chainCode)
+    return false;
+
+  const parameters = parseConstraintParameters(constraint.parameterJson);
+  const templateItemKey = readString(parameters?.templateItemKey);
+  if (templateItemKey && templateItemKey.toLocaleLowerCase('tr-TR') !== (ev.templateItemKey ?? '').toLocaleLowerCase('tr-TR'))
+    return false;
+
+  const semester = readString(parameters?.semester);
+  if (semester && semester !== ev.semester)
+    return false;
+
+  return true;
+}
+
+function validateDraftEventConstraints(
+  ev: GeneratedCalendarEventDto,
+  startDate: string,
+  endDate: string,
+  constraints: CalendarConstraintInputDto[],
+) {
+  const pinConstraint = constraints
+    .filter(constraint => constraint.isHard && constraint.constraintType === 'Pin' && constraintMatchesDraftEvent(constraint, ev))
+    .sort((left, right) => left.priority - right.priority)[0];
+
+  if (!pinConstraint)
+    return null;
+
+  const parameters = parseConstraintParameters(pinConstraint.parameterJson);
+  const pinnedStartDate = readString(parameters?.startDate);
+  const pinnedEndDate = readString(parameters?.endDate) ?? pinnedStartDate;
+  if (!pinnedStartDate || !pinnedEndDate)
+    return null;
+
+  if (startDate === pinnedStartDate && endDate === pinnedEndDate)
+    return null;
+
+  const pinnedRange = pinnedStartDate === pinnedEndDate ? pinnedStartDate : `${pinnedStartDate} - ${pinnedEndDate}`;
+  return `${displayText(ev.title)} ${pinnedRange} tarihine sabitlenmis; Pin kisiti nedeniyle tasinamaz.`;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   exam: 'Sınav',
   registration: 'Kayıt',
@@ -505,6 +575,21 @@ function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);
   return next;
+}
+
+function dayDifference(target: string, source: string) {
+  const targetDate = parseUtcDisplayDate(target);
+  const sourceDate = parseUtcDisplayDate(source);
+  if (!targetDate || !sourceDate) return null;
+
+  return Math.round((targetDate.getTime() - sourceDate.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function shiftDateValue(value: string, days: number) {
+  const date = parseUtcDisplayDate(value);
+  if (!date) return null;
+
+  return formatUtcDateValue(addDays(date, days));
 }
 
 function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
@@ -1046,11 +1131,11 @@ export default function AcademicCalendarGeneratorPage() {
       .slice(0, 12);
   }, [calendar, whatIf.data]);
 
-  function eventDatesChanged(ev: GeneratedCalendarEventDto | null) {
+  function eventDatesChanged(ev: GeneratedCalendarEventDto | null, nextStartDate = editForm.startDate, nextEndDate = editForm.endDate || editForm.startDate) {
     if (!ev) return false;
     const oldStart = dateInput(ev.startDate);
     const oldEnd = dateInput(ev.endDate) || oldStart;
-    return oldStart !== editForm.startDate || oldEnd !== (editForm.endDate || editForm.startDate);
+    return oldStart !== nextStartDate || oldEnd !== nextEndDate;
   }
 
   // PinDate range dışındaysa temizle (adjust state during render)
@@ -1136,8 +1221,8 @@ export default function AcademicCalendarGeneratorPage() {
     });
   }
 
-  async function askCascadeShiftPreference(ev: GeneratedCalendarEventDto, actionLabel: string) {
-    if (!eventDatesChanged(ev))
+  async function askCascadeShiftPreference(ev: GeneratedCalendarEventDto, actionLabel: string, nextStartDate = editForm.startDate, nextEndDate = editForm.endDate || editForm.startDate) {
+    if (!eventDatesChanged(ev, nextStartDate, nextEndDate))
       return false;
 
     if (isCriticalEvent(ev)) {
@@ -1154,7 +1239,7 @@ export default function AcademicCalendarGeneratorPage() {
     return askConfirm({
       title: 'Zincirleme kaydırma uygulansın mı?',
       message:
-        `${actionLabel}: ${displayText(ev.title)} tarihi ${daySpan(ev)} -> ${fmt(utcDate(editForm.startDate))}${editForm.endDate && editForm.endDate !== editForm.startDate ? ` - ${fmt(utcDate(editForm.endDate))}` : ''} olacak.\n\n` +
+        `${actionLabel}: ${displayText(ev.title)} tarihi ${daySpan(ev)} -> ${fmt(utcDate(nextStartDate))}${nextEndDate && nextEndDate !== nextStartDate ? ` - ${fmt(utcDate(nextEndDate))}` : ''} olacak.\n\n` +
         'Bağımlı sonraki olaylar da aynı fark kadar kaydırılsın mı?',
       confirmLabel: 'Evet, zincirleme kaydır',
       cancelLabel: 'Hayır, sadece bu etkinlik',
@@ -1166,6 +1251,156 @@ export default function AcademicCalendarGeneratorPage() {
     setSelectedEventId(ev.draftEventId);
     setEditForm({ title: displayText(ev.title), startDate: dateInput(ev.startDate), endDate: dateInput(ev.endDate), note: ev.note ?? '' });
     whatIf.reset();
+  }
+
+  function findDraftEvent(eventId: VisualizerEvent['id']) {
+    return calendar?.events.find(event => event.draftEventId === String(eventId)) ?? null;
+  }
+
+  function resolveDroppedDates(targetDate: string, sourceStartDate: string, sourceEndDate: string, dragAnchorDate: string) {
+    const shiftDays = dayDifference(targetDate, dragAnchorDate);
+    if (shiftDays === null)
+      return null;
+
+    const nextStartDate = shiftDateValue(sourceStartDate, shiftDays);
+    const nextEndDate = shiftDateValue(sourceEndDate, shiftDays);
+    if (!nextStartDate || !nextEndDate)
+      return null;
+
+    return { nextStartDate, nextEndDate, shiftDays };
+  }
+
+  async function updateDraftEventDates(ev: GeneratedCalendarEventDto, nextStartDate: string, nextEndDate: string, actionLabel: string) {
+    if (!activeDraftId || updateDraftEvent.isPending)
+      return;
+
+    if (!isEditableDraftEvent(ev)) {
+      setNotice('Tatil ve bloklayici ozel gunler tarih duzenleme ile degistirilemez.');
+      return;
+    }
+
+    const validationError = validateDraftEventDateEdit(ev, nextStartDate, nextEndDate);
+    if (validationError) {
+      setNotice(validationError);
+      return;
+    }
+
+    const constraintError = validateDraftEventConstraints(ev, nextStartDate, nextEndDate, constraints);
+    if (constraintError) {
+      setNotice(constraintError);
+      return;
+    }
+
+    setSelectedSemester(ev.semester);
+    setSelectedEventId(ev.draftEventId);
+    setEditForm({
+      title: displayText(ev.title),
+      startDate: nextStartDate,
+      endDate: nextEndDate,
+      note: ev.note ?? '',
+    });
+    whatIf.reset();
+
+    if (!eventDatesChanged(ev, nextStartDate, nextEndDate)) {
+      setNotice('Etkinlik zaten bu tarihte.');
+      return;
+    }
+
+    const propagateChanges = await askCascadeShiftPreference(ev, actionLabel, nextStartDate, nextEndDate);
+    const shouldUpdate = await askConfirm({
+      title: 'Taslağa yazılsın mı?',
+      message:
+        `${displayText(ev.title)} taslakta guncellenecek.\n\n` +
+        `Yeni tarih: ${nextStartDate}${nextEndDate !== nextStartDate ? ` - ${nextEndDate}` : ''}\n` +
+        `Zincirleme kaydirma: ${propagateChanges ? 'uygulanacak' : 'uygulanmayacak'}\n\n` +
+        'Bu islem taslagi degistirir ama gercek akademik takvime henuz yazmaz. Devam edilsin mi?',
+      confirmLabel: 'Evet, taslağa yaz',
+      cancelLabel: 'Vazgeç',
+    });
+    if (!shouldUpdate) {
+      setNotice('Taslak guncelleme islemi iptal edildi.');
+      return;
+    }
+
+    updateDraftEvent.mutate({
+      draftId: activeDraftId,
+      eventId: ev.draftEventId,
+      dto: {
+        startDate: utcDate(nextStartDate) ?? ev.startDate,
+        endDate: nextEndDate === nextStartDate ? null : utcDate(nextEndDate),
+        title: displayText(ev.title),
+        note: ev.note || null,
+        propagateChanges,
+      },
+    }, {
+      onSuccess: data => {
+        setGenerated(null);
+        setSelectedDraftId(data.id);
+        setSelectedEventId(null);
+        setNotice(propagateChanges
+          ? 'Taslak etkinligi guncellendi; bagimli tarihler yeniden hesaplandi.'
+          : 'Taslak etkinligi guncellendi; zincirleme kaydirma uygulanmadi, sadece secili etkinlik degisti.');
+      },
+      onError: error => setNotice(getErrorMessage(error)),
+    });
+  }
+
+  async function handleDraftEventDrop({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: {
+    eventId: VisualizerEvent['id'];
+    targetDate: string;
+    sourceStartDate: string;
+    sourceEndDate: string;
+    dragAnchorDate: string;
+  }) {
+    const ev = findDraftEvent(eventId);
+    if (!ev) {
+      setNotice('Tasınan etkinlik kimliği çözümlenemedi.');
+      return;
+    }
+
+    const resolved = resolveDroppedDates(targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
+    if (!resolved) {
+      setNotice('Bırakılan tarih okunamadı.');
+      return;
+    }
+
+    if (resolved.shiftDays === 0)
+      return;
+
+    await updateDraftEventDates(ev, resolved.nextStartDate, resolved.nextEndDate, 'Sürükle-bırak ile tarih düzenleme');
+  }
+
+  function getDraftDropFeedback({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: DropFeedbackRequest): DropFeedback {
+    if (!activeDraftId)
+      return { allowed: false, reason: 'Açık taslak bulunamadı.' };
+
+    const ev = findDraftEvent(eventId);
+    if (!ev)
+      return { allowed: false, reason: 'Etkinlik bulunamadı.' };
+
+    if (!isEditableDraftEvent(ev))
+      return { allowed: false, reason: 'Bu etkinlik sürükle-bırak ile değiştirilemez.' };
+
+    const resolved = resolveDroppedDates(targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
+    if (!resolved)
+      return { allowed: false, reason: 'Bırakılan tarih okunamadı.' };
+
+    if (resolved.shiftDays === 0)
+      return { allowed: false, reason: 'Etkinlik zaten bu tarihte.' };
+
+    const validationError = validateDraftEventDateEdit(ev, resolved.nextStartDate, resolved.nextEndDate);
+    if (validationError)
+      return { allowed: false, reason: validationError };
+
+    const constraintError = validateDraftEventConstraints(ev, resolved.nextStartDate, resolved.nextEndDate, constraints);
+    if (constraintError)
+      return { allowed: false, reason: constraintError };
+
+    return { allowed: true, reason: 'Uygun hedef. Bırakınca taslak güncellemesi onaylanır.' };
+  }
+
+  function handleInvalidDraftEventDrop({ reason }: DropFeedbackRequest & { reason?: string }) {
+    setNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
   }
 
   async function addPinConstraint() {
@@ -1992,6 +2227,7 @@ export default function AcademicCalendarGeneratorPage() {
         note: null,
         isChangedPreview,
         templateItemKey: targetEvent.templateItemKey,
+        draggable: isEditableDraftEvent(e),
       };
     });
 
@@ -2003,7 +2239,16 @@ export default function AcademicCalendarGeneratorPage() {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900 mb-3">Takvim Görünümü</h2>
-        <CalendarVisualizer events={eventsToRender} compact={true} multiMonth={true} academicYearStart={calendarYearStart} />
+        <CalendarVisualizer
+          events={eventsToRender}
+          compact={true}
+          multiMonth={true}
+          academicYearStart={calendarYearStart}
+          onEventDrop={handleDraftEventDrop}
+          getDropFeedback={getDraftDropFeedback}
+          onInvalidEventDrop={handleInvalidDraftEventDrop}
+          dragDisabled={updateDraftEvent.isPending}
+        />
       </div>
     );
   }

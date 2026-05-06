@@ -1,8 +1,24 @@
-import { useState, useMemo, useCallback, useEffect, useRef, type DragEvent } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  rectIntersection,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+  type UniqueIdentifier,
+} from '@dnd-kit/core';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { calendarEventCategory, type CalendarEventCategory } from '@/lib/calendarEventTypes';
-import { getWeekdayOnlyDateRanges } from '@/lib/calendarWeekdaySegments';
 import { cn } from '@/lib/utils';
 
 const TODAY = new Date();
@@ -67,6 +83,19 @@ type DragState = {
   eventId: VisualizerEvent['id'];
   sourceStartDate: string;
   sourceEndDate: string;
+  dragAnchorDate: string;
+};
+
+type CalendarDragData = DragState & {
+  kind: 'calendar-event';
+  title: string;
+  eventType: string;
+  templateItemKey?: string | null;
+};
+
+type CalendarDropData = {
+  kind: 'calendar-day';
+  targetDate: string;
 };
 
 export type DropFeedback = {
@@ -79,6 +108,7 @@ export type DropFeedbackRequest = {
   targetDate: string;
   sourceStartDate: string;
   sourceEndDate: string;
+  dragAnchorDate: string;
 };
 
 export interface CalendarVisualizerProps {
@@ -94,10 +124,47 @@ export interface CalendarVisualizerProps {
     targetDate: string;
     sourceStartDate: string;
     sourceEndDate: string;
+    dragAnchorDate: string;
   }) => void;
   getDropFeedback?: (event: DropFeedbackRequest) => DropFeedback;
   onInvalidEventDrop?: (event: DropFeedbackRequest & { reason?: string }) => void;
   dragDisabled?: boolean;
+}
+
+const calendarCollisionDetection: CollisionDetection = args => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args);
+};
+
+function isCalendarDragData(value: unknown): value is CalendarDragData {
+  if (!value || typeof value !== 'object')
+    return false;
+
+  const maybe = value as Partial<CalendarDragData>;
+  return maybe.kind === 'calendar-event'
+    && maybe.eventId !== undefined
+    && typeof maybe.sourceStartDate === 'string'
+    && typeof maybe.sourceEndDate === 'string'
+    && typeof maybe.dragAnchorDate === 'string'
+    && typeof maybe.title === 'string'
+    && typeof maybe.eventType === 'string';
+}
+
+function isCalendarDropData(value: unknown): value is CalendarDropData {
+  if (!value || typeof value !== 'object')
+    return false;
+
+  const maybe = value as Partial<CalendarDropData>;
+  return maybe.kind === 'calendar-day' && typeof maybe.targetDate === 'string';
+}
+
+function dragStateFromData(data: CalendarDragData): DragState {
+  return {
+    eventId: data.eventId,
+    sourceStartDate: data.sourceStartDate,
+    sourceEndDate: data.sourceEndDate,
+    dragAnchorDate: data.dragAnchorDate,
+  };
 }
 
 function toStr(d: Date) {
@@ -110,6 +177,22 @@ function sameDay(a: Date, b: Date) {
 
 function trDate(iso: string) {
   return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function dateOnly(value?: string | null) {
+  return value ? value.slice(0, 10) : '';
+}
+
+function eventDateRange(event: VisualizerEvent) {
+  const startDate = dateOnly(event.startDate);
+  const endDate = dateOnly(event.endDate) || startDate;
+  if (!startDate)
+    return null;
+
+  return {
+    startDate,
+    endDate: endDate >= startDate ? endDate : startDate,
+  };
 }
 
 function monthKey(month: ViewMonth) {
@@ -269,6 +352,109 @@ function buildAcademicYearMonths(events: VisualizerEvent[], fallbackAnchor: View
   return Array.from({ length: 12 }, (_, index) => addMonths(start, index));
 }
 
+function CalendarDropCell({
+  id,
+  targetDate,
+  feedback,
+  disabled,
+  className,
+  style,
+  children,
+}: {
+  id: UniqueIdentifier;
+  targetDate: string;
+  feedback: DropFeedback | null;
+  disabled: boolean;
+  className: string;
+  style: CSSProperties;
+  children: ReactNode;
+}) {
+  const { setNodeRef } = useDroppable({
+    id,
+    disabled,
+    data: {
+      kind: 'calendar-day',
+      targetDate,
+    } satisfies CalendarDropData,
+  });
+
+  return (
+    <div ref={setNodeRef} title={feedback?.reason} className={className} style={style}>
+      {children}
+    </div>
+  );
+}
+
+function DraggableCalendarEvent({
+  id,
+  event,
+  disabled,
+  className,
+  style,
+  children,
+}: {
+  id: UniqueIdentifier;
+  event: RenderedVisualizerEvent;
+  disabled: boolean;
+  className: string;
+  style: CSSProperties;
+  children: ReactNode;
+}) {
+  const dragData = useMemo<CalendarDragData>(() => ({
+    kind: 'calendar-event',
+    eventId: event.sourceEventId,
+    sourceStartDate: event.sourceStartDate,
+    sourceEndDate: event.sourceEndDate,
+    dragAnchorDate: event.startDate,
+    title: event.title,
+    eventType: event.eventType,
+    templateItemKey: event.templateItemKey,
+  }), [event]);
+
+  const { attributes, isDragging, listeners, setNodeRef } = useDraggable({
+    id,
+    data: dragData,
+    disabled,
+    attributes: {
+      roleDescription: 'Takvim etkinligi',
+    },
+  });
+
+  return (
+    <TooltipTrigger asChild>
+      <div
+        ref={setNodeRef}
+        className={cn(className, isDragging && 'opacity-50')}
+        style={{ ...style, touchAction: disabled ? undefined : 'none' }}
+        {...attributes}
+        {...listeners}
+      >
+        {children}
+      </div>
+    </TooltipTrigger>
+  );
+}
+
+function CalendarDragOverlay({ event }: { event: CalendarDragData | null }) {
+  if (!event)
+    return null;
+
+  const style = CAT_STYLE[calendarEventCategory(event.eventType, event.title, event.templateItemKey)];
+
+  return (
+    <div
+      className={cn(
+        'flex h-6 max-w-[260px] items-center rounded border-l-[3px] px-2 text-xs font-semibold shadow-xl ring-2 ring-white',
+        style.bg,
+        style.border,
+        style.text,
+      )}
+    >
+      <span className="truncate">{event.title}</span>
+    </div>
+  );
+}
+
 export function CalendarVisualizer({
   events,
   compact = false,
@@ -287,11 +473,21 @@ export function CalendarVisualizer({
   const [activeCategory, setActiveCategory] = useState<CalendarEventCategory | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [activeDropFeedback, setActiveDropFeedback] = useState<DropFeedback | null>(null);
+  const [activeDragOverlay, setActiveDragOverlay] = useState<CalendarDragData | null>(null);
+  const dragStateRef = useRef<DragState | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const monthRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const lastEventSignatureRef = useRef<string | null>(null);
   const programmaticScrollRef = useRef(false);
   const scrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 1,
+      },
+    }),
+  );
 
   const visibleEvents = useMemo(
     () => activeCategory
@@ -301,16 +497,18 @@ export function CalendarVisualizer({
   );
   const renderedEvents = useMemo<RenderedVisualizerEvent[]>(
     () => visibleEvents.flatMap(event => {
-      const ranges = getWeekdayOnlyDateRanges(event);
-      return ranges.map((range, index) => ({
+      const range = eventDateRange(event);
+      if (!range)
+        return [];
+
+      return [{
         ...event,
-        id: ranges.length === 1 ? event.id : `${event.id}::${index}`,
         sourceEventId: event.id,
-        sourceStartDate: event.startDate,
-        sourceEndDate: event.endDate,
+        sourceStartDate: range.startDate,
+        sourceEndDate: range.endDate,
         startDate: range.startDate,
         endDate: range.endDate,
-      }));
+      }];
     }),
     [visibleEvents],
   );
@@ -427,33 +625,21 @@ export function CalendarVisualizer({
     scrollToMonth(isMonthInRange(initialMonth, allMonths) ? initialMonth : closestMonthTo(initialMonth, allMonths));
   }, [allMonths, initialMonth, scrollToMonth]);
 
-  const handleEventDragStart = useCallback((event: RenderedVisualizerEvent) => {
-    if (!onEventDrop || dragDisabled || event.draggable !== true)
-      return;
-
-    setDragState({
-      eventId: event.sourceEventId,
-      sourceStartDate: event.sourceStartDate,
-      sourceEndDate: event.sourceEndDate,
-    });
-  }, [dragDisabled, onEventDrop]);
-
-  const handleEventDragEnd = useCallback(() => {
+  const resetDrag = useCallback(() => {
+    dragStateRef.current = null;
     setDragState(null);
     setDragOverDate(null);
+    setActiveDropFeedback(null);
+    setActiveDragOverlay(null);
   }, []);
 
-  const getDayDropFeedback = useCallback((targetDate: string): DropFeedback | null => {
-    if (!dragState || !onEventDrop || dragDisabled)
-      return null;
-
-    return getDropFeedback?.({
-      eventId: dragState.eventId,
-      targetDate,
-      sourceStartDate: dragState.sourceStartDate,
-      sourceEndDate: dragState.sourceEndDate,
-    }) ?? { allowed: true };
-  }, [dragDisabled, dragState, getDropFeedback, onEventDrop]);
+  const buildDropRequest = useCallback((currentDragState: DragState, targetDate: string): DropFeedbackRequest => ({
+    eventId: currentDragState.eventId,
+    targetDate,
+    sourceStartDate: currentDragState.sourceStartDate,
+    sourceEndDate: currentDragState.sourceEndDate,
+    dragAnchorDate: currentDragState.dragAnchorDate,
+  }), []);
 
   const getDropFeedbackClass = useCallback((feedback: DropFeedback | null, targetDate: string) => {
     if (!dragState || !feedback)
@@ -465,45 +651,77 @@ export function CalendarVisualizer({
       : cn('bg-rose-50 ring-1 ring-inset ring-rose-300', isActive && 'bg-rose-100 ring-2 ring-rose-500');
   }, [dragOverDate, dragState]);
 
-  const handleDayDragOver = useCallback((day: Day, nativeEvent: DragEvent<HTMLDivElement>) => {
-    if (!dragState || !onEventDrop || dragDisabled)
+  const handleDndDragStart = useCallback(({ active }: DragStartEvent) => {
+    if (!onEventDrop || dragDisabled)
       return;
 
-    nativeEvent.preventDefault();
-    const feedback = getDayDropFeedback(day.str);
-    nativeEvent.dataTransfer.dropEffect = feedback?.allowed === false ? 'none' : 'move';
-    if (dragOverDate !== day.str)
-      setDragOverDate(day.str);
-  }, [dragDisabled, dragOverDate, dragState, getDayDropFeedback, onEventDrop]);
-
-  const handleDayDrop = useCallback((day: Day, nativeEvent: DragEvent<HTMLDivElement>) => {
-    if (!dragState || !onEventDrop || dragDisabled)
+    const dragData = active.data.current;
+    if (!isCalendarDragData(dragData))
       return;
 
-    nativeEvent.preventDefault();
-    const feedback = getDayDropFeedback(day.str);
-    if (feedback?.allowed === false) {
-      onInvalidEventDrop?.({
-        eventId: dragState.eventId,
-        targetDate: day.str,
-        sourceStartDate: dragState.sourceStartDate,
-        sourceEndDate: dragState.sourceEndDate,
-        reason: feedback.reason,
-      });
-      setDragState(null);
-      setDragOverDate(null);
+    const nextDragState = dragStateFromData(dragData);
+    dragStateRef.current = nextDragState;
+    setDragState(nextDragState);
+    setActiveDragOverlay(dragData);
+  }, [dragDisabled, onEventDrop]);
+
+  const updateActiveDropTarget = useCallback((over: DragOverEvent['over']) => {
+    const dropData = over?.data.current;
+    const targetDate = isCalendarDropData(dropData) ? dropData.targetDate : null;
+    const currentDragState = dragStateRef.current;
+
+    setDragOverDate(current => current === targetDate ? current : targetDate);
+
+    if (!targetDate || !currentDragState || !onEventDrop || dragDisabled) {
+      setActiveDropFeedback(current => current === null ? current : null);
       return;
     }
 
-    onEventDrop({
-      eventId: dragState.eventId,
-      targetDate: day.str,
-      sourceStartDate: dragState.sourceStartDate,
-      sourceEndDate: dragState.sourceEndDate,
-    });
-    setDragState(null);
-    setDragOverDate(null);
-  }, [dragDisabled, dragState, getDayDropFeedback, onEventDrop, onInvalidEventDrop]);
+    const feedback = getDropFeedback?.(buildDropRequest(currentDragState, targetDate)) ?? { allowed: true };
+    setActiveDropFeedback(current =>
+      current?.allowed === feedback.allowed && current?.reason === feedback.reason ? current : feedback);
+  }, [buildDropRequest, dragDisabled, getDropFeedback, onEventDrop]);
+
+  const handleDndDragMove = useCallback(({ over }: DragMoveEvent) => {
+    updateActiveDropTarget(over);
+  }, [updateActiveDropTarget]);
+
+  const handleDndDragOver = useCallback(({ over }: DragOverEvent) => {
+    updateActiveDropTarget(over);
+  }, [updateActiveDropTarget]);
+
+  const handleDndDragEnd = useCallback(({ active, over }: DragEndEvent) => {
+    if (!onEventDrop || dragDisabled) {
+      resetDrag();
+      return;
+    }
+
+    const dragData = active.data.current;
+    const dropData = over?.data.current;
+    const currentDragState = isCalendarDragData(dragData)
+      ? dragStateFromData(dragData)
+      : dragStateRef.current ?? dragState;
+
+    if (!currentDragState || !isCalendarDropData(dropData)) {
+      resetDrag();
+      return;
+    }
+
+    const request = buildDropRequest(currentDragState, dropData.targetDate);
+
+    const feedback = getDropFeedback?.(request) ?? { allowed: true };
+    if (feedback?.allowed === false) {
+      onInvalidEventDrop?.({
+        ...request,
+        reason: feedback.reason,
+      });
+      resetDrag();
+      return;
+    }
+
+    onEventDrop(request);
+    resetDrag();
+  }, [buildDropRequest, dragDisabled, dragState, getDropFeedback, onEventDrop, onInvalidEventDrop, resetDrag]);
 
   function renderYearMonth(y: number, m: number) {
     const weeks = buildGrid(y, m);
@@ -541,19 +759,20 @@ export function CalendarVisualizer({
             <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
               <div className="grid grid-cols-7">
                 {week.map((day, di) => {
-                  const dropFeedback = getDayDropFeedback(day.str);
+                  const dropFeedback = dragOverDate === day.str ? activeDropFeedback : null;
                   return (
-                    <div
+                    <CalendarDropCell
+                      id={`calendar-day:year:${y}-${m}:${wi}-${di}:${day.str}`}
                       key={di}
-                      title={dropFeedback?.reason}
+                      targetDate={day.str}
+                      feedback={dropFeedback}
+                      disabled={!onEventDrop || dragDisabled}
                       className={cn(
-                        'border-r border-gray-100 px-1 pt-1 text-[10px] leading-none last:border-r-0 transition-colors',
+                        'border-r border-gray-100 px-1 pt-1 text-[10px] leading-none last:border-r-0 transition-colors duration-75',
                         !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
                       style={{ minHeight: `${cellMinHeight}px` }}
-                      onDragOver={event => handleDayDragOver(day, event)}
-                      onDrop={event => handleDayDrop(day, event)}
                     >
                       <span
                         className={cn(
@@ -565,46 +784,39 @@ export function CalendarVisualizer({
                       >
                         {day.day}
                       </span>
-                    </div>
+                    </CalendarDropCell>
                   );
                 })}
               </div>
 
               {bars.map((b, i) => {
                 const s = CAT_STYLE[b.cat];
-                const isDraggable = b.start && b.event.draggable === true && !dragDisabled && !!onEventDrop;
+                const isDraggable = b.event.draggable === true && !dragDisabled && !!onEventDrop;
 
                 return (
                   <TooltipProvider key={`year-${b.event.id}-${y}-${m}-${wi}-${i}`} delayDuration={100}>
                     <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div
-                          className={cn(
-                            'absolute flex h-3.5 items-center overflow-hidden rounded border-l-[3px] px-1 text-[9px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
-                            s.bg,
-                            s.border,
-                            s.text,
-                            b.event.isChangedPreview && 'ring-1 ring-primary bg-primary/20',
-                            isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
-                            dragState && 'pointer-events-none',
-                          )}
-                          style={{
-                            top: `${eventTopBase + b.lane * 12}px`,
-                            left: `calc(${(b.col / 7) * 100}% + 2px)`,
-                            width: `calc(${(b.span / 7) * 100}% - 4px)`,
-                          }}
-                          draggable={isDraggable}
-                          onDragStart={event => {
-                            if (!isDraggable) return;
-                            event.dataTransfer.effectAllowed = 'move';
-                            event.dataTransfer.setData('text/plain', String(b.event.sourceEventId));
-                            handleEventDragStart(b.event);
-                          }}
-                          onDragEnd={handleEventDragEnd}
-                        >
-                          <span className="truncate">{b.event.title}</span>
-                        </div>
-                      </TooltipTrigger>
+                      <DraggableCalendarEvent
+                        id={`calendar-event:year:${y}-${m}:${wi}-${i}:${String(b.event.id)}`}
+                        event={b.event}
+                        disabled={!isDraggable}
+                        className={cn(
+                          'absolute flex h-3.5 items-center overflow-hidden rounded border-l-[3px] px-1 text-[9px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
+                          s.bg,
+                          s.border,
+                          s.text,
+                          b.event.isChangedPreview && 'ring-1 ring-primary bg-primary/20',
+                          isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+                          dragState && 'pointer-events-none',
+                        )}
+                        style={{
+                          top: `${eventTopBase + b.lane * 12}px`,
+                          left: `calc(${(b.col / 7) * 100}% + 2px)`,
+                          width: `calc(${(b.span / 7) * 100}% - 4px)`,
+                        }}
+                      >
+                        <span className="truncate">{b.event.title}</span>
+                      </DraggableCalendarEvent>
                       <TooltipContent side="top" className="max-w-xs z-[100]">
                         <p className="font-semibold">{b.event.title}</p>
                         <p className="text-xs text-gray-500 mt-0.5">
@@ -664,19 +876,20 @@ export function CalendarVisualizer({
             <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
               <div className="grid grid-cols-7">
                 {week.map((day, di) => {
-                  const dropFeedback = getDayDropFeedback(day.str);
+                  const dropFeedback = dragOverDate === day.str ? activeDropFeedback : null;
                   return (
-                    <div
+                    <CalendarDropCell
+                      id={`calendar-day:month:${y}-${m}:${wi}-${di}:${day.str}`}
                       key={di}
-                      title={dropFeedback?.reason}
+                      targetDate={day.str}
+                      feedback={dropFeedback}
+                      disabled={!onEventDrop || dragDisabled}
                       className={cn(
-                        'border-r border-gray-100 last:border-r-0 px-1 pt-1 transition-colors sm:px-2 sm:pt-2',
+                        'border-r border-gray-100 last:border-r-0 px-1 pt-1 transition-colors duration-75 sm:px-2 sm:pt-2',
                         !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
                       style={{ minHeight: `${cellMinHeight}px` }}
-                      onDragOver={event => handleDayDragOver(day, event)}
-                      onDrop={event => handleDayDrop(day, event)}
                     >
                       <span
                         className={cn(
@@ -688,7 +901,7 @@ export function CalendarVisualizer({
                       >
                         {day.day}
                       </span>
-                    </div>
+                    </CalendarDropCell>
                   );
                 })}
               </div>
@@ -696,47 +909,35 @@ export function CalendarVisualizer({
               {visible.map((b, i) => {
                 const s = CAT_STYLE[b.cat];
                 const isContinuation = !b.start;
-                const isDraggable = !isContinuation && b.event.draggable === true && !dragDisabled && !!onEventDrop;
+                const isDraggable = b.event.draggable === true && !dragDisabled && !!onEventDrop;
                 return (
                   <TooltipProvider key={`${b.event.id}-${wi}-${i}`} delayDuration={100}>
                     <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div
-                          className={cn(
-                            'absolute transition-shadow hover:shadow-md hover:z-10',
-                            isContinuation
-                              ? cn('h-1.5 rounded-full', s.bg.replace('-100', '-300'))
-                              : cn('flex items-center h-5 sm:h-6 border-l-[3px] px-1 sm:px-2 text-[10px] sm:text-[13px] font-medium truncate rounded', s.bg, s.border, s.text),
-                            b.event.isChangedPreview && 'ring-2 ring-primary border-primary bg-primary/20 bg-blend-multiply',
-                            isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
-                            dragState && 'pointer-events-none',
-                          )}
-                          style={{
-                            top: isContinuation
-                              ? `${eventTopBase + b.lane * 24 + 8}px`
-                              : `${eventTopBase + b.lane * 24}px`,
-                            left: `calc(${(b.col / 7) * 100}% + 3px)`,
-                            width: `calc(${(b.span / 7) * 100}% - 6px)`,
-                          }}
-                          draggable={isDraggable}
-                          onDragStart={event => {
-                            if (!isDraggable) return;
-                            event.dataTransfer.effectAllowed = 'move';
-                            event.dataTransfer.setData('text/plain', String(b.event.sourceEventId));
-                            handleEventDragStart(b.event);
-                          }}
-                          onDragEnd={handleEventDragEnd}
-                        >
-                          {!isContinuation && (
-                            <>
-                              <span className="uppercase text-[9px] sm:text-[10px] font-bold opacity-60 mr-1.5 shrink-0 hidden sm:inline">
-                                {s.label}
-                              </span>
-                              <span className="truncate">{b.event.title}</span>
-                            </>
-                          )}
-                        </div>
-                      </TooltipTrigger>
+                      <DraggableCalendarEvent
+                        id={`calendar-event:month:${y}-${m}:${wi}-${i}:${String(b.event.id)}`}
+                        event={b.event}
+                        disabled={!isDraggable}
+                        className={cn(
+                          'absolute flex h-5 items-center rounded border-l-[3px] px-1 text-[10px] font-medium truncate transition-shadow hover:z-10 hover:shadow-md sm:h-6 sm:px-2 sm:text-[13px]',
+                          s.bg,
+                          s.border,
+                          s.text,
+                          isContinuation && 'opacity-90',
+                          b.event.isChangedPreview && 'ring-2 ring-primary border-primary bg-primary/20 bg-blend-multiply',
+                          isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+                          dragState && 'pointer-events-none',
+                        )}
+                        style={{
+                          top: `${eventTopBase + b.lane * 24}px`,
+                          left: `calc(${(b.col / 7) * 100}% + 3px)`,
+                          width: `calc(${(b.span / 7) * 100}% - 6px)`,
+                        }}
+                      >
+                        <span className="uppercase text-[9px] sm:text-[10px] font-bold opacity-60 mr-1.5 shrink-0 hidden sm:inline">
+                          {s.label}
+                        </span>
+                        <span className="truncate">{b.event.title}</span>
+                      </DraggableCalendarEvent>
                       <TooltipContent side="top" className="max-w-xs z-[100]">
                         <p className="font-semibold">{b.event.title}</p>
                         {b.event.isChangedPreview && (
@@ -849,11 +1050,30 @@ export function CalendarVisualizer({
     );
   }
 
-  if (inlineYearView) {
-    return renderInlineYearView();
+  function renderDndShell(content: ReactNode) {
+    return (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={calendarCollisionDetection}
+        onDragStart={handleDndDragStart}
+        onDragMove={handleDndDragMove}
+        onDragOver={handleDndDragOver}
+        onDragEnd={handleDndDragEnd}
+        onDragCancel={resetDrag}
+      >
+        {content}
+        <DragOverlay dropAnimation={null} zIndex={120}>
+          <CalendarDragOverlay event={activeDragOverlay} />
+        </DragOverlay>
+      </DndContext>
+    );
   }
 
-  return (
+  if (inlineYearView) {
+    return renderDndShell(renderInlineYearView());
+  }
+
+  return renderDndShell(
     <div className={cn('space-y-3', multiMonth && 'flex flex-col max-h-[70vh]')}>
       <div className={cn(multiMonth && 'sticky top-0 z-10 bg-white pb-1')}>
         <div className="flex flex-wrap items-center justify-between gap-2">

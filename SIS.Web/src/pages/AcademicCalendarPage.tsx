@@ -12,12 +12,17 @@ import {
   useAcademicCalendarTerms,
   useAcademicYearCalendars,
   useMoveAcademicCalendarEvent,
+  type AcademicCalendarTermSummaryDto,
   type StudentAcademicCalendarDto,
   type TermCalendarEventDto,
 } from '@/hooks/useAcademicCalendar';
 
 const NON_DRAGGABLE_EVENT_TYPES = new Set(['NationalHoliday', 'ReligiousHoliday', 'ImportantDay']);
 const EXAM_EVENT_TYPES = new Set(['MidtermExam', 'FinalExam', 'MakeupExam', 'ExcuseExam', 'PrepSchoolExam', 'SummerSchoolExam']);
+const EDIT_CALENDAR_PERMISSION_KEYS = [
+  'menu.akademik-takvim-olusturma.edit',
+  'menu.akademik-takvim-olusturma.generate',
+] as const;
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '-';
@@ -30,6 +35,16 @@ function isoToDateStr(iso: string | null | undefined): string | null {
 
 function academicYearLabel(year: number | null | undefined) {
   return year ? `${year}-${year + 1}` : '-';
+}
+
+function academicYearForTerm(term: Pick<AcademicCalendarTermSummaryDto, 'termStart' | 'year'>) {
+  const start = isoToDateStr(term.termStart);
+  if (!start) return term.year;
+
+  const [startYear, startMonth] = start.split('-').map(Number);
+  if (!startYear || !startMonth) return term.year;
+
+  return startMonth >= 9 ? startYear : startYear - 1;
 }
 
 function formatEventDateRange(start: string | null | undefined, end: string | null | undefined) {
@@ -234,9 +249,9 @@ function fallbackPhaseEvents(calendar: StudentAcademicCalendarDto): VisualizerEv
   return events;
 }
 
-function printableEventsForCalendar(calendar: StudentAcademicCalendarDto) {
+function printableEventsForCalendar(calendar: StudentAcademicCalendarDto, includeAllEvents: boolean) {
   const publicEvents = calendar.events
-    .filter(event => event.isPublic)
+    .filter(event => includeAllEvents || event.isPublic)
     .slice()
     .sort((left, right) =>
       left.startDate.localeCompare(right.startDate)
@@ -270,10 +285,10 @@ function printableEventsForCalendar(calendar: StudentAcademicCalendarDto) {
   ].filter(event => event.dateText !== '-');
 }
 
-function buildPdfSections(calendars: StudentAcademicCalendarDto[]): AcademicCalendarPdfSection[] {
+function buildPdfSections(calendars: StudentAcademicCalendarDto[], includeAllEvents: boolean): AcademicCalendarPdfSection[] {
   return calendars.map(calendar => ({
     title: `${displayTurkishText(calendar.termTypeLabel).toLocaleUpperCase('tr-TR')} DÖNEMİ`,
-    rows: printableEventsForCalendar(calendar),
+    rows: printableEventsForCalendar(calendar, includeAllEvents),
   }));
 }
 
@@ -304,34 +319,34 @@ function PhaseCard({
 
 export default function AcademicCalendarPage() {
   const terms = useAcademicCalendarTerms();
-  const { hasPermission } = usePermissions();
+  const { hasAnyPermission } = usePermissions();
   const moveCalendarEvent = useMoveAcademicCalendarEvent();
   const [explicitYear, setExplicitYear] = useState<number | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const canEditCalendar = hasPermission('menu.akademik-takvim-olusturma.edit');
+  const canEditCalendar = hasAnyPermission(EDIT_CALENDAR_PERMISSION_KEYS);
 
   const academicYears = useMemo(() => {
-    const years = new Set((terms.data ?? []).map(term => term.year));
+    const years = new Set((terms.data ?? []).map(academicYearForTerm));
     return Array.from(years).sort((left, right) => right - left);
   }, [terms.data]);
 
   const activeTerm = terms.data?.find(term => term.isActive && !term.isCancelled);
-  const selectedYear = explicitYear ?? activeTerm?.year ?? academicYears[0] ?? null;
+  const selectedYear = explicitYear ?? (activeTerm ? academicYearForTerm(activeTerm) : null) ?? academicYears[0] ?? null;
 
   const selectedYearTerms = useMemo(
     () => (terms.data ?? [])
-      .filter(term => term.year === selectedYear && !term.isCancelled)
+      .filter(term => academicYearForTerm(term) === selectedYear)
       .sort((left, right) => left.termStart.localeCompare(right.termStart)),
     [selectedYear, terms.data],
   );
 
-  const calendarQueries = useAcademicYearCalendars(selectedYearTerms.map(term => term.termId));
+  const calendarQueries = useAcademicYearCalendars(selectedYearTerms.map(term => term.termId), canEditCalendar);
   const calendars = calendarQueries
     .map(query => query.data)
     .filter((calendar): calendar is StudentAcademicCalendarDto => Boolean(calendar));
   const isLoading = terms.isLoading || calendarQueries.some(query => query.isLoading);
-  const missingCalendarTerms = selectedYearTerms.filter(term => !term.hasCalendar);
+  const missingCalendarTerms = selectedYearTerms.filter(term => !term.isCancelled && !term.hasCalendar);
 
   const visualizerEvents = useMemo(
     () => calendars.flatMap(calendar => {
@@ -344,8 +359,8 @@ export default function AcademicCalendarPage() {
     [calendars, canEditCalendar],
   );
   const pdfSections = useMemo(
-    () => buildPdfSections(calendars),
-    [calendars],
+    () => buildPdfSections(calendars, canEditCalendar),
+    [calendars, canEditCalendar],
   );
 
   const yearRangeValue = selectedYear
@@ -370,11 +385,12 @@ export default function AcademicCalendarPage() {
     }
   }
 
-  const handleEventDrop = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate }: {
+  const handleEventDrop = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: {
     eventId: VisualizerEvent['id'];
     targetDate: string;
     sourceStartDate: string;
     sourceEndDate: string;
+    dragAnchorDate: string;
   }) => {
     if (moveCalendarEvent.isPending)
       return;
@@ -385,7 +401,7 @@ export default function AcademicCalendarPage() {
       return;
     }
 
-    const shiftDays = dayDifference(targetDate, sourceStartDate);
+    const shiftDays = dayDifference(targetDate, dragAnchorDate);
     if (shiftDays === 0)
       return;
 
@@ -409,7 +425,7 @@ export default function AcademicCalendarPage() {
     });
   }, [moveCalendarEvent]);
 
-  const getDropFeedback = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate }: DropFeedbackRequest): DropFeedback => {
+  const getDropFeedback = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: DropFeedbackRequest): DropFeedback => {
     const parsed = parseVisualizerEventId(eventId);
     if (!parsed)
       return { allowed: false, reason: 'Etkinlik kimliği çözümlenemedi.' };
@@ -422,7 +438,7 @@ export default function AcademicCalendarPage() {
     if (!canDragCalendarEvent(event))
       return { allowed: false, reason: 'Bu etkinlik sürükle-bırak ile değiştirilemez.' };
 
-    const shiftDays = dayDifference(targetDate, sourceStartDate);
+    const shiftDays = dayDifference(targetDate, dragAnchorDate);
     const nextStartDate = shiftDateValue(sourceStartDate, shiftDays);
     const nextEndDate = shiftDateValue(sourceEndDate, shiftDays);
     const window = calendarEditWindow(calendar);

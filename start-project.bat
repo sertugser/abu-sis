@@ -49,16 +49,17 @@ echo (Press CTRL+C once to stop both later)
 echo =========================================
 
 :: Start Backend in background (same terminal window)
-start /b cmd /c "cd SIS.API && set DOTNET_CLI_HOME=%DOTNET_CLI_HOME% && dotnet run --launch-profile http"
+:: The project was already built above, so avoid a second build here. On slower
+:: machines that extra build can make the readiness check report a false warning.
+start /b cmd /c "cd SIS.API && set DOTNET_CLI_HOME=%DOTNET_CLI_HOME% && dotnet run --no-build --launch-profile http"
 
 :: Start Frontend in background (same terminal window)
 start /b cmd /c "cd SIS.Web && npm run dev"
 
 echo.
 echo Waiting for servers to be ready...
-timeout /t 10 /nobreak >nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$deadline=(Get-Date).AddSeconds(60); while ((Get-Date) -lt $deadline) { $tcp=$null; try { $tcp=[Net.Sockets.TcpClient]::new(); $connect=$tcp.BeginConnect('127.0.0.1',5213,$null,$null); if ($connect.AsyncWaitHandle.WaitOne(500)) { $tcp.EndConnect($connect); $tcp.Close(); exit 0 } } catch { } finally { if ($tcp) { $tcp.Close() } }; Start-Sleep -Milliseconds 500 }; exit 1" >nul 2>&1
 
-powershell -NoProfile -Command "if (Test-NetConnection -ComputerName 127.0.0.1 -Port 5213 -InformationLevel Quiet) { exit 0 } else { exit 1 }" >nul 2>&1
 if errorlevel 1 (
   echo [WARN] Backend API 5213 portunda acilmadi.
   echo [WARN] Bu durumda en olasi neden Windows App Control / Smart App Control / AppLocker bloklamasidir.
