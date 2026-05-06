@@ -23,7 +23,7 @@ export interface PoolCandidateDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
-  nationalCredit: number | null;
+  nationalCredit: number;
   ects: number;
   alreadyOpened: boolean;
   existingSectionCount: number;
@@ -79,7 +79,7 @@ export interface CurriculumCourseForOpeningDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
-  nationalCredit?: number | null;
+  nationalCredit: number;
   ects: number;
   suggestedSemester: number;
   isCompulsory: boolean;

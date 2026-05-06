@@ -19,7 +19,7 @@ interface Props {
 export function CurriculumCourseRow({ course, selected, onToggle, onOpenDetail }: Props) {
   const canSelect = course.canOpen && !course.alreadyOpened;
   const classYear = course.suggestedSemester > 0 ? Math.ceil(course.suggestedSemester / 2) : null;
-  const credit = course.nationalCredit ?? course.theoryHours + course.labHours;
+  const credit = course.nationalCredit;
   const groupLabel = course.source === 'Pool' ? course.electiveGroupCode ?? '—' : '—';
 
   return (

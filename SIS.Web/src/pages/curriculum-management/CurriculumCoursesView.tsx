@@ -128,7 +128,7 @@ export default function CurriculumCoursesView({
     if (!detail) return { count: 0, credit: 0, ects: 0 };
     return {
       count: detail.courses.length,
-      credit: detail.courses.reduce((s, c) => s + (c.nationalCredit ?? 0), 0),
+      credit: detail.courses.reduce((s, c) => s + c.nationalCredit, 0),
       ects: detail.courses.reduce((s, c) => s + c.ects, 0),
     };
   }, [detail]);

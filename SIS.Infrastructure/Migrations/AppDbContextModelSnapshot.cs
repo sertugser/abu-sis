@@ -1045,7 +1045,7 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("NationalCredit")
+                    b.Property<int>("NationalCredit")
                         .HasColumnType("integer");
 
                     b.Property<int?>("OpenType")

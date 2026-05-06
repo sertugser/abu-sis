@@ -59,28 +59,42 @@ export default function ScheduleSection({ value, onChange, showSharedHints = fal
       <div className="grid grid-cols-2 gap-3">
         <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
           <div className="space-y-1">
-            <Label className="text-xs">AKTS *</Label>
+            <Label className="text-xs">
+              AKTS
+              <span className="text-destructive ml-0.5 font-semibold" aria-hidden="true">*</span>
+              <span className="sr-only"> (zorunlu)</span>
+            </Label>
             <Input
               type="number"
-              min={0}
+              min={1}
+              max={30}
               value={value.ects}
               onChange={e => onChange({ ...value, ects: Number(e.target.value) })}
+              aria-required="true"
+              aria-invalid={!value.ects || value.ects < 1}
             />
           </div>
         </SharedFieldWrapper>
 
         <SharedFieldWrapper ownership="shared" showSharedHint={showSharedHints}>
           <div className="space-y-1">
-            <Label className="text-xs">Kredi (Ulusal)</Label>
+            <Label className="text-xs">
+              Kredi (Ulusal)
+              <span className="text-destructive ml-0.5 font-semibold" aria-hidden="true">*</span>
+              <span className="sr-only"> (zorunlu)</span>
+            </Label>
             <Input
               type="number"
               min={0}
-              value={value.nationalCredit ?? ''}
+              max={20}
+              value={value.nationalCredit}
               onChange={e => onChange({
                 ...value,
-                nationalCredit: e.target.value === '' ? null : Number(e.target.value),
+                nationalCredit: e.target.value === '' ? 0 : Number(e.target.value),
               })}
               placeholder="örn. 4"
+              aria-required="true"
+              aria-invalid={value.nationalCredit < 0 || value.nationalCredit > 20}
             />
           </div>
         </SharedFieldWrapper>

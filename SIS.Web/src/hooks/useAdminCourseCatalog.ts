@@ -22,7 +22,7 @@ export interface CourseListItemDto {
   status: number;
   level: number;
   // Müfredat agregatları
-  nationalCredit: number | null;
+  nationalCredit: number;
   semesterMin: number | null;
   semesterMax: number | null;
   requirementType: 'Compulsory' | 'Elective' | 'Mixed' | 'None';
@@ -94,7 +94,7 @@ export interface CourseDetailDto {
   status: number;
   description: string | null;
   level: number;
-  nationalCredit: number | null;
+  nationalCredit: number;
   // Proliz "Diğer Ön Koşul Tanımları"
   minCreditsRequired: number | null;
   minEctsRequired: number | null;
@@ -133,7 +133,7 @@ export interface CreateCourseDto {
   status: number | string;
   description?: string | null;
   level: number | string;
-  nationalCredit?: number | null;
+  nationalCredit: number;
   // Proliz "Diğer Ön Koşul Tanımları" (opsiyonel — backend default'a düşer)
   minCreditsRequired?: number | null;
   minEctsRequired?: number | null;

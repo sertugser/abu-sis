@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search, Plus, Edit2, Trash2, X, BookOpen, BarChart3, GitBranch,
-  AlertTriangle, SlidersHorizontal, Copy, Users, CalendarClock, Layers,
+  AlertTriangle, AlertCircle, SlidersHorizontal, Copy, Users, CalendarClock, Layers,
   IdCard, Clock, GraduationCap, ShieldCheck, FileText,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   ArrowUpDown, ArrowUp, ArrowDown, Columns3, Rows3,
@@ -15,6 +15,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/components/ui/global-toast';
 import {
   Dialog,
   DialogContent,
@@ -100,7 +102,8 @@ function emptyCourseForm(): CreateCourseDto {
     status: 'Active',
     level: 'Undergraduate',
     description: null,
-    nationalCredit: null,
+    // Ulusal Kredi: Türk eğitim sisteminde theory + lab/2 konvensiyonu, default 3 (3T+0L tipik ders).
+    nationalCredit: 3,
     // Proliz "Diğer Ön Koşul Tanımları"
     minCreditsRequired: null,
     minEctsRequired: null,
@@ -169,6 +172,46 @@ function FieldSection({ icon: Icon, iconColor = 'text-primary', title, children 
 // Okuma modunda input/select/textarea: opaklık tam, border/bg soluk, cursor default
 const READ_MODE_CLASS = 'disabled:opacity-100 disabled:cursor-default disabled:bg-muted/30 disabled:border-muted/50 disabled:text-foreground';
 
+// ── Zorunlu alan etiketi (kırmızı yıldız) ──
+// Sebep-sonuç: Backend (AdminCourseCatalogService.CreateCourseAsync) DB schema'dan
+// türeyen şu kuralları zorlar:
+//  - Code: non-nullable + unique index (DB)
+//  - Name: non-nullable
+//  - DepartmentId: explicit "Ders sahipliği zorunludur" check
+//  - Ects/TheoryHours/LabHours: non-nullable int
+function RequiredLabel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <Label className={cn('text-xs', className)}>
+      {children}
+      <span className="text-destructive ml-0.5 font-semibold" aria-hidden="true">*</span>
+      <span className="sr-only"> (zorunlu)</span>
+    </Label>
+  );
+}
+
+/** Pre-flight: server'ın gerçek doğrulama kurallarını ön-görür. Eksik alan listesi döner. */
+function collectMissingRequiredFields(form: CreateCourseDto): string[] {
+  const missing: string[] = [];
+  if (!form.code.trim()) missing.push('Ders Kodu');
+  if (!form.name.trim()) missing.push('Ders Adı');
+  if (form.departmentId == null) missing.push('Bölüm (ders sahipliği zorunlu)');
+  if (!form.ects || form.ects < 1 || form.ects > 30) missing.push('AKTS (1-30 aralığında)');
+  // Ulusal Kredi (YÖKSİS zorunlu): null/undefined kabul edilmez, 0-20 aralığı.
+  if (form.nationalCredit == null || form.nationalCredit < 0 || form.nationalCredit > 20) {
+    missing.push('Ulusal Kredi (0-20 aralığında, YÖKSİS raporlama zorunlu)');
+  }
+  if (form.theoryHours < 0 || form.theoryHours > 10) missing.push('Teori Saati (0-10 arası)');
+  if (form.labHours < 0 || form.labHours > 10) missing.push('Lab Saati (0-10 arası)');
+  return missing;
+}
+
+function getServerErrorMessage(error: unknown, fallback: string): string {
+  return (
+    (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+    fallback
+  );
+}
+
 // ─── Styled native select (shared pattern) ──────────────────────────────────
 
 function NativeSelect({
@@ -217,12 +260,14 @@ function KimlikSection({ form, onChange, departments, disabled = false }: Course
         {/* Sol kolon — uzun ad alanları */}
         <div className="space-y-4">
           <div className="space-y-1">
-            <Label className="text-xs">Ders Adı</Label>
+            <RequiredLabel>Ders Adı</RequiredLabel>
             <Input
               value={form.name}
               onChange={e => onChange({ ...form, name: e.target.value })}
               placeholder="örn. Programlamaya Giriş"
               disabled={disabled}
+              aria-required="true"
+              aria-invalid={!disabled && !form.name.trim()}
               className={READ_MODE_CLASS}
             />
           </div>
@@ -250,24 +295,26 @@ function KimlikSection({ form, onChange, departments, disabled = false }: Course
         {/* Sağ kolon — kısa kod/bölüm + bayraklar */}
         <div className="space-y-4">
           <div className="space-y-1">
-            <Label className="text-xs">Ders Kodu</Label>
+            <RequiredLabel>Ders Kodu</RequiredLabel>
             <Input
               value={form.code}
               onChange={e => onChange({ ...form, code: e.target.value.toUpperCase() })}
               placeholder="örn. BM101"
               maxLength={20}
               disabled={disabled}
+              aria-required="true"
+              aria-invalid={!disabled && !form.code.trim()}
               className={cn('font-mono', READ_MODE_CLASS)}
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Bölüm</Label>
+            <RequiredLabel>Bölüm</RequiredLabel>
             <NativeSelect
               value={form.departmentId ?? 'none'}
               onChange={v => onChange({ ...form, departmentId: v === 'none' ? null : Number(v) })}
               disabled={disabled}
             >
-              <option value="none">Bölüm yok (Ortak ders)</option>
+              <option value="none">— Bölüm seçin —</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </NativeSelect>
           </div>
@@ -320,28 +367,40 @@ function KrediSaatSection({ form, onChange, disabled = false }: CourseFormFields
     <FieldSection icon={Clock} iconColor="text-purple-600" title="Kredi & Saat">
       <div className="grid grid-cols-5 gap-4 mt-3">
         <div className="space-y-1">
-          <Label className="text-xs">AKTS</Label>
+          <RequiredLabel>AKTS</RequiredLabel>
           <Input type="number" min={1} max={30} value={form.ects}
             onChange={e => onChange({ ...form, ects: Number(e.target.value) })}
-            disabled={disabled} className={READ_MODE_CLASS} />
+            disabled={disabled}
+            aria-required="true"
+            aria-invalid={!disabled && (!form.ects || form.ects < 1)}
+            className={READ_MODE_CLASS} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Ulusal Kredi</Label>
-          <Input type="number" min={0} max={20} value={form.nationalCredit ?? ''}
-            onChange={e => onChange({ ...form, nationalCredit: e.target.value ? Number(e.target.value) : null })}
-            disabled={disabled} placeholder="—" className={READ_MODE_CLASS} />
+          <RequiredLabel>Ulusal Kredi</RequiredLabel>
+          <Input type="number" min={0} max={20} value={form.nationalCredit}
+            onChange={e => onChange({ ...form, nationalCredit: e.target.value === '' ? 0 : Number(e.target.value) })}
+            disabled={disabled}
+            aria-required="true"
+            aria-invalid={!disabled && (form.nationalCredit == null || form.nationalCredit < 0 || form.nationalCredit > 20)}
+            className={READ_MODE_CLASS} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Teori Saati</Label>
+          <RequiredLabel>Teori Saati</RequiredLabel>
           <Input type="number" min={0} max={10} value={form.theoryHours}
             onChange={e => onChange({ ...form, theoryHours: Number(e.target.value) })}
-            disabled={disabled} className={READ_MODE_CLASS} />
+            disabled={disabled}
+            aria-required="true"
+            aria-invalid={!disabled && (form.theoryHours < 0 || form.theoryHours > 10)}
+            className={READ_MODE_CLASS} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Lab Saati</Label>
+          <RequiredLabel>Lab Saati</RequiredLabel>
           <Input type="number" min={0} max={10} value={form.labHours}
             onChange={e => onChange({ ...form, labHours: Number(e.target.value) })}
-            disabled={disabled} className={READ_MODE_CLASS} />
+            disabled={disabled}
+            aria-required="true"
+            aria-invalid={!disabled && (form.labHours < 0 || form.labHours > 10)}
+            className={READ_MODE_CLASS} />
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Uygulama Saati</Label>
@@ -518,9 +577,11 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formError, setFormError] = useState('');
+  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [prereqSearch, setPrereqSearch] = useState('');
   const [equivSearch, setEquivSearch] = useState('');
   const [crossListSearch, setCrossListSearch] = useState('');
+  const { showSuccess, showError, showInfo } = useToast();
 
   // Get all departments (unfiltered) for the edit form
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
@@ -567,19 +628,35 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
     setEditMode(false);
     setForm(initialForm);
     setFormError('');
+    setMissingFields([]);
   }
 
   async function handleSave() {
-    if (!form.code.trim() || !form.name.trim()) {
-      setFormError('Kod ve ad zorunludur.');
+    // Pre-flight: server kurallarını ön-gör (UpdateCourseAsync da aynı kuralları zorlar).
+    const missing = collectMissingRequiredFields(form);
+    if (missing.length > 0) {
+      setMissingFields(missing);
+      setFormError('');
+      showInfo(
+        'Eksik bilgi',
+        `${missing.length} zorunlu alan doldurulmamış: ${missing.join(', ')}`,
+      );
       return;
     }
     try {
-      await updateCourse.mutateAsync({ id: courseId, ...form });
+      const result = await updateCourse.mutateAsync({ id: courseId, ...form });
       setEditMode(false);
       setFormError('');
+      setMissingFields([]);
+      showSuccess(
+        'Ders güncellendi',
+        `${result.code} — ${result.name}${result.departmentName ? ` · ${result.departmentName}` : ''}`,
+      );
     } catch (e: unknown) {
-      setFormError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Güncelleme başarısız.');
+      const msg = getServerErrorMessage(e, 'Güncelleme başarısız.');
+      setFormError(msg);
+      setMissingFields([]);
+      showError('Ders güncellenemedi', msg);
     }
   }
 
@@ -662,6 +739,35 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
 
             <Separator className="flex-shrink-0" />
 
+            {/* Validation alerts — edit modunda eksik alan veya server hatası gösterilir */}
+            {editMode && missingFields.length > 0 && (
+              <Alert variant="destructive" className="mt-3 mb-1">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-medium mb-1.5">
+                    Lütfen eksik veya geçersiz alanları tamamlayın:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 text-sm">
+                    {missingFields.map(f => <li key={f}>{f}</li>)}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+            {editMode && formError && (
+              <Alert variant="destructive" className="mt-3 mb-1">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-medium mb-0.5">Sunucu doğrulamayı reddetti</p>
+                  <p className="text-sm">{formError}</p>
+                </AlertDescription>
+              </Alert>
+            )}
+            {editMode && (
+              <p className="text-[11px] text-muted-foreground mt-2 px-0.5">
+                <span className="text-destructive font-semibold">*</span> işaretli alanlar zorunludur.
+              </p>
+            )}
+
             {/* Tabs */}
             <Tabs defaultValue="genel" className="flex-1 flex flex-col min-h-0 mt-1">
               <TabsList className="h-auto p-0 mb-4 flex-shrink-0 w-full bg-transparent border-b rounded-none">
@@ -713,22 +819,28 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
               <TabsContent value="genel" className="flex-1 overflow-y-auto">
                 <GenelFields
                   form={form}
-                  onChange={f => { setForm(f); setFormError(''); }}
+                  onChange={f => {
+                    setForm(f);
+                    setFormError('');
+                    if (missingFields.length > 0) setMissingFields(collectMissingRequiredFields(f));
+                  }}
                   departments={allDepartments}
                   disabled={!editMode}
                 />
-                {formError && <p className="text-sm text-destructive mt-2">{formError}</p>}
               </TabsContent>
 
               {/* Tab 2: Akademik — Kredi & Saat + Akademik Bilgiler + Ön Koşul Kuralları */}
               <TabsContent value="akademik" className="flex-1 overflow-y-auto">
                 <AkademikFields
                   form={form}
-                  onChange={f => { setForm(f); setFormError(''); }}
+                  onChange={f => {
+                    setForm(f);
+                    setFormError('');
+                    if (missingFields.length > 0) setMissingFields(collectMissingRequiredFields(f));
+                  }}
                   departments={allDepartments}
                   disabled={!editMode}
                 />
-                {formError && <p className="text-sm text-destructive mt-2">{formError}</p>}
               </TabsContent>
 
               {/* Tab 2: Önkoşullar & Eşdeğerlikler */}
@@ -1284,19 +1396,40 @@ interface CreateDialogProps {
 function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps) {
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
   const createCourse = useCreateCourse();
+  const { showSuccess, showError, showInfo } = useToast();
   const [form, setForm] = useState<CreateCourseDto>(() => {
     if (!template) return emptyCourseForm();
     return { ...template, code: '', name: `${template.name} (Kopya)` };
   });
-  const [formError, setFormError] = useState('');
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [serverError, setServerError] = useState('');
 
   async function handleCreate() {
-    if (!form.code.trim() || !form.name.trim()) { setFormError('Kod ve ad zorunludur.'); return; }
+    // 1) Pre-flight: server kurallarını ön-gör (Service.CreateCourseAsync mirror).
+    const missing = collectMissingRequiredFields(form);
+    if (missing.length > 0) {
+      setMissingFields(missing);
+      setServerError('');
+      showInfo(
+        'Eksik bilgi',
+        `${missing.length} zorunlu alan doldurulmamış: ${missing.join(', ')}`,
+      );
+      return;
+    }
+
+    // 2) Submit — server'ın InvalidOperationException mesajları doğrudan gösterilir.
     try {
       const result = await createCourse.mutateAsync(form);
+      showSuccess(
+        'Ders başarıyla oluşturuldu',
+        `${result.code} — ${result.name}${result.departmentName ? ` · ${result.departmentName}` : ''} (ID: ${result.id})`,
+      );
       onCreated(result.id);
     } catch (e: unknown) {
-      setFormError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Hata oluştu.');
+      const msg = getServerErrorMessage(e, 'Ders oluşturulurken bir hata oluştu.');
+      setServerError(msg);
+      setMissingFields([]);
+      showError('Ders oluşturulamadı', msg);
     }
   }
 
@@ -1304,17 +1437,49 @@ function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps)
     <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
       <ResizableDialogContent defaultWidth={1040} defaultHeight={800} minWidth={500} minHeight={400}>
         <div className="flex flex-col h-full min-h-0">
-          <h2 className="text-base font-semibold text-foreground mb-4 pr-8">
-            {template ? 'Dersi Çoğalt' : 'Yeni Ders Aç'}
-          </h2>
+          <div className="mb-4 pr-8">
+            <h2 className="text-base font-semibold text-foreground">
+              {template ? 'Dersi Çoğalt' : 'Yeni Ders Aç'}
+            </h2>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              <span className="text-destructive font-semibold">*</span> işaretli alanlar zorunludur.
+            </p>
+          </div>
           <Separator className="mb-4" />
           <div className="flex-1 overflow-y-auto">
+            {missingFields.length > 0 && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-medium mb-1.5">
+                    Lütfen eksik veya geçersiz alanları tamamlayın:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 text-sm">
+                    {missingFields.map(f => <li key={f}>{f}</li>)}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+            {serverError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-medium mb-0.5">Sunucu doğrulamayı reddetti</p>
+                  <p className="text-sm">{serverError}</p>
+                </AlertDescription>
+              </Alert>
+            )}
             <CourseFormFields
               form={form}
-              onChange={f => { setForm(f); setFormError(''); }}
+              onChange={f => {
+                setForm(f);
+                setServerError('');
+                if (missingFields.length > 0) {
+                  setMissingFields(collectMissingRequiredFields(f));
+                }
+              }}
               departments={allDepartments}
             />
-            {formError && <p className="text-sm text-destructive mt-2">{formError}</p>}
           </div>
           <Separator className="mt-4 mb-3" />
           <DialogFooter className="flex-shrink-0">
@@ -1978,7 +2143,7 @@ export default function CourseCatalogAdminPage() {
                         <td className={cn('px-4 text-center font-mono tabular-nums text-muted-foreground', rowPad)}>{c.theoryHours}+{c.labHours}</td>
                         {!hiddenCols.has('nationalCredit') && (
                           <td className={cn('px-4 text-center tabular-nums text-muted-foreground', rowPad)}>
-                            {c.nationalCredit ?? <span className="text-muted-foreground/40">—</span>}
+                            {c.nationalCredit}
                           </td>
                         )}
                         <td className={cn('px-4 text-center tabular-nums text-muted-foreground', rowPad)}>{c.ects}</td>

@@ -46,7 +46,7 @@ public class CurriculumCourseForOpeningDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
-    public int? NationalCredit { get; set; }
+    public int NationalCredit { get; set; }
     public int Ects { get; set; }
     public int SuggestedSemester { get; set; }
     public bool IsCompulsory { get; set; }
@@ -116,7 +116,7 @@ public class PoolCandidateDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
-    public int? NationalCredit { get; set; }
+    public int NationalCredit { get; set; }
     public int Ects { get; set; }
     public bool AlreadyOpened { get; set; }
     public int ExistingSectionCount { get; set; }

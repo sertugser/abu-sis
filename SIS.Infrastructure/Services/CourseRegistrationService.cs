@@ -319,7 +319,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                     CourseCode = course.Code,
                     CourseName = course.Name,
                     Ects = course.Ects,
-                    NationalCredit = course.NationalCredit ?? course.Ects,
+                    NationalCredit = course.NationalCredit,
                     SuggestedSemester = suggestedSemester,
                     ProgramName = programName,
                     TheoryHours = course.TheoryHours,

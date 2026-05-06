@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useCurriculumList,
   useCurriculumDetail,
@@ -42,18 +43,38 @@ const PAGE_SIZE = 10;          // Müfredat liste sayfalama
 const COURSES_PAGE_SIZE = 15;  // Müfredat detay → ders listesi sayfalama
 
 export default function CurriculumManagementPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Deep-link: /mufredat-islemleri?curriculum=ID → o müfredat ders görünümünde
+  // direkt açılır. ElectiveGroupDetailSheet "Bağlı Müfredatlar" tab'ından gelir.
+  const initialCurriculumId = (() => {
+    const raw = searchParams.get('curriculum');
+    const num = raw !== null ? Number(raw) : NaN;
+    return Number.isFinite(num) && num > 0 ? num : null;
+  })();
+
   // ── Filter state ──
   const [facultyId, setFacultyId] = useState<number | undefined>();
   const [departmentId, setDepartmentId] = useState<number | undefined>();
   const [programId, setProgramId] = useState<number | undefined>();
-  const [selectedCurriculumId, setSelectedCurriculumId] = useState<number | null>(null);
+  const [selectedCurriculumId, setSelectedCurriculumId] = useState<number | null>(initialCurriculumId);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [yearFilter, setYearFilter] = useState<YearFilter>('all');
   // Anahtar kelimeyle arama — fakülte / program / müfredat adı / yıl / program kodu içinde
   const [searchKeyword, setSearchKeyword] = useState('');
 
   // Sayfa görünüm modu: 'list' (müfredat listesi tablosu) | 'courses' (ders listesi)
-  const [view, setView] = useState<ViewMode>('list');
+  const [view, setView] = useState<ViewMode>(initialCurriculumId !== null ? 'courses' : 'list');
+
+  // Query param'ı tek seferlik tüket — kullanıcı normal kullanıma dönünce
+  // URL temizlenir; geri butonuyla deep-link tekrar tetiklenmez.
+  useEffect(() => {
+    if (searchParams.has('curriculum')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('curriculum');
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -222,7 +243,7 @@ export default function CurriculumManagementPage() {
   );
   // Alt summary bar — sadece course'lardan toplam (pool'lar derslerin AKTS'ini tekrar saymasın diye dışarıda)
   const flatCoursesCredit = useMemo(
-    () => flatCourses.reduce((s, c) => s + (c.nationalCredit ?? 0), 0),
+    () => flatCourses.reduce((s, c) => s + c.nationalCredit, 0),
     [flatCourses],
   );
   const flatCoursesEcts = useMemo(

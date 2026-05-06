@@ -58,7 +58,7 @@ export default function CurriculumCourseEditDialog({
     code: '', name: '', englishName: '', alternativeName: '', showInInfoPackage: true,
   });
   const [schedule, setSchedule] = useState<CourseScheduleState>({
-    ects: 0, nationalCredit: null, theoryHours: 0, labHours: 0, applicationHours: null,
+    ects: 0, nationalCredit: 0, theoryHours: 0, labHours: 0, applicationHours: null,
   });
   const [classification, setClassification] = useState<CourseClassificationState>({
     language: 'Turkish',
@@ -198,11 +198,11 @@ export default function CurriculumCourseEditDialog({
         oldValue: courseDetail.applicationHours != null ? String(courseDetail.applicationHours) : '—',
         newValue: schedule.applicationHours != null ? String(schedule.applicationHours) : '—',
       });
-    if ((schedule.nationalCredit ?? null) !== (courseDetail.nationalCredit ?? null))
+    if (schedule.nationalCredit !== courseDetail.nationalCredit)
       c.push({
         label: 'Kredi',
-        oldValue: courseDetail.nationalCredit != null ? String(courseDetail.nationalCredit) : '—',
-        newValue: schedule.nationalCredit != null ? String(schedule.nationalCredit) : '—',
+        oldValue: String(courseDetail.nationalCredit),
+        newValue: String(schedule.nationalCredit),
       });
     if (description.description !== (courseDetail.description ?? ''))
       c.push({ label: 'Açıklama', oldValue: '(önceki)', newValue: '(yeni)' });

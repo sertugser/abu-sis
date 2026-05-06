@@ -409,6 +409,11 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             throw new InvalidOperationException("Ders sahipliği zorunludur. Bölüm veya koordinatörlük seçin.");
         if (!await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
             throw new KeyNotFoundException("Bölüm bulunamadı.");
+        // Ulusal Kredi: YÖKSİS raporlama için zorunlu, makul aralıkta olmalı.
+        if (dto.NationalCredit < 0 || dto.NationalCredit > 20)
+            throw new InvalidOperationException("Ulusal Kredi 0-20 aralığında olmalıdır.");
+        if (dto.Ects < 1 || dto.Ects > 30)
+            throw new InvalidOperationException("AKTS 1-30 aralığında olmalıdır.");
 
         var course = new Course
         {
@@ -453,6 +458,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             throw new InvalidOperationException("Ders sahipliği zorunludur. Bölüm veya koordinatörlük seçin.");
         if (!await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
             throw new KeyNotFoundException("Bölüm bulunamadı.");
+        if (dto.NationalCredit < 0 || dto.NationalCredit > 20)
+            throw new InvalidOperationException("Ulusal Kredi 0-20 aralığında olmalıdır.");
+        if (dto.Ects < 1 || dto.Ects > 30)
+            throw new InvalidOperationException("AKTS 1-30 aralığında olmalıdır.");
 
         course.Code = dto.Code;
         course.Name = dto.Name;

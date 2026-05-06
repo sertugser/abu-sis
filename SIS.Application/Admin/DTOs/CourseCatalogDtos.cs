@@ -11,7 +11,7 @@ public record CourseListItemDto(
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, CourseLevel Level,
     // Müfredat agregatları (Proliz tarzı tablo için)
-    int? NationalCredit,
+    int NationalCredit,
     int? SemesterMin,
     int? SemesterMax,
     string RequirementType,  // "Compulsory" | "Elective" | "Mixed" | "None"
@@ -30,7 +30,7 @@ public record CourseDetailDto(
     List<CurriculumAssignmentDto> CurriculumAssignments,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit,
+    CourseLevel Level, int NationalCredit,
     // Proliz "Diğer Ön Koşul Tanımları"
     int? MinCreditsRequired,
     int? MinEctsRequired,
@@ -60,7 +60,7 @@ public record CreateCourseDto(
     int? DepartmentId,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit,
+    CourseLevel Level, int NationalCredit,
     // Proliz "Diğer Ön Koşul Tanımları" (opsiyonel — default değerler kullanılır)
     int? MinCreditsRequired = null,
     int? MinEctsRequired = null,
@@ -80,7 +80,7 @@ public record UpdateCourseDto(
     int? DepartmentId,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit,
+    CourseLevel Level, int NationalCredit,
     // Proliz "Diğer Ön Koşul Tanımları"
     int? MinCreditsRequired = null,
     int? MinEctsRequired = null,
