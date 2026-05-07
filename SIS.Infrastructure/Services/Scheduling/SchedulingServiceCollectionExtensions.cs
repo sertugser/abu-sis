@@ -106,6 +106,7 @@ public static class SchedulingServiceCollectionExtensions
             var maxHours = config.GetIntAsync("Schedule.MaxConsecutiveHoursPerDay", 4, default).GetAwaiter().GetResult();
             return new MaxConsecutiveHoursEncoder(maxHours);
         });
+        services.AddScoped<IConstraintEncoder, FaceToFaceSlotEncoder>();
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
