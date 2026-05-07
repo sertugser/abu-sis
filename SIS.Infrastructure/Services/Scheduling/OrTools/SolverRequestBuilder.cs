@@ -60,9 +60,9 @@ public sealed class SolverRequestBuilder
         }
 
         var sectionEntities = await sectionsQuery.ToListAsync(cancellationToken);
-        var sections = sectionEntities.Select(MapSection).ToList();
 
         // 3) Classrooms — faculty'nin term-assigned derslikleri
+        // (Section mapping'den önce yüklüyoruz; LabGroupCount hesabı için lab capacity'lere ihtiyacımız var.)
         var classroomEntities = await _context.ClassroomTermAssignments
             .AsNoTracking()
             .Where(cta => cta.TermId == termId && cta.FacultyId == facultyId)
@@ -73,6 +73,15 @@ public sealed class SolverRequestBuilder
             .Where(c => c != null)
             .Select(MapClassroom)
             .ToList();
+
+        // Plan 4 Task 1 — paralel lab support için lab classroom kapasitelerini topla.
+        // Lab + Computer derslikler lab component'i barındırabilir.
+        var labClassroomCapacities = classroomEntities
+            .Where(c => c != null && (c.Type == ClassroomType.Lab || c.Type == ClassroomType.Computer))
+            .Select(c => c.Capacity)
+            .ToList();
+
+        var sections = sectionEntities.Select(cs => MapSection(cs, labClassroomCapacities)).ToList();
 
         // 4) TimeSlots — term grid (day + slot ordering deterministic indexing için)
         var timeSlotEntities = await _context.TimeSlots
@@ -106,7 +115,7 @@ public sealed class SolverRequestBuilder
         };
     }
 
-    private static SectionInput MapSection(CourseSection cs) => new()
+    private static SectionInput MapSection(CourseSection cs, IReadOnlyList<int> labClassroomCapacities) => new()
     {
         Id = cs.Id,
         CourseId = cs.CourseId,
@@ -120,12 +129,27 @@ public sealed class SolverRequestBuilder
         DepartmentId = cs.Course.DepartmentId,
         TeachingMethod = cs.Course.TeachingMethod,
         IsPinned = cs.IsPinned,
-        IsScheduleLocked = cs.IsScheduleLocked
+        IsScheduleLocked = cs.IsScheduleLocked,
         // ProgramId, Year — Plan 2'de null (Plan 3 curriculum entegrasyonu)
         // RequiredTheoryClassroomType / RequiredLabClassroomType — Plan 2'de null
         //   (Course üzerinde TheoryClassroomType/LabClassroomType var; bunlar Type enum
         //    int değerine ihtiyaç duyduğumuzda Plan 3'te map edilir).
+        LabGroupCount = ComputeLabGroupCount(cs.Capacity, cs.Course.LabHours, labClassroomCapacities)
     };
+
+    /// <summary>
+    /// Plan 4 Task 1 — paralel lab grup sayısı: section kapasitesi en büyük lab odasını
+    /// aşıyorsa ⌈capacity / max_lab_capacity⌉ döner; aksi takdirde 1.
+    /// LabHours=0 (lab component yok) veya hiç lab odası yoksa default 1.
+    /// </summary>
+    private static int ComputeLabGroupCount(int sectionCapacity, int labHours, IReadOnlyList<int> labCapacities)
+    {
+        if (labHours <= 0 || labCapacities.Count == 0) return 1;
+        var maxLabCap = labCapacities.Max();
+        if (maxLabCap <= 0) return 1;
+        if (maxLabCap >= sectionCapacity) return 1;
+        return (int)Math.Ceiling((double)sectionCapacity / maxLabCap);
+    }
 
     private static ClassroomInput MapClassroom(Classroom c) => new()
     {

@@ -23,4 +23,11 @@ public sealed record SectionInput
     // NEW (Plan 2 Task 7 — for H5 CurriculumConflictEncoder):
     public int? ProgramId { get; init; }
     public int? Year { get; init; }
+
+    /// <summary>
+    /// Lab component için paralel grup sayısı. 1 (default) = tek oda yeterli.
+    /// >1 = section kapasitesi tek lab odasına sığmıyor, paralel split gerekiyor.
+    /// SolverRequestBuilder runtime'da hesaplar: ⌈capacity / max_lab_capacity⌉.
+    /// </summary>
+    public int LabGroupCount { get; init; } = 1;
 }

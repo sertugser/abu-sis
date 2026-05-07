@@ -335,4 +335,119 @@ public class SolverRequestBuilderTests
         req.ConstraintFlags.Should().BeEmpty();
         req.Corequisites.Should().BeEmpty();
     }
+
+    // ========================================================================
+    // Plan 4 Task 1 — LabGroupCount calculation
+    // ========================================================================
+
+    /// <summary>
+    /// Helper: paralel lab senaryosu seed eder — section capacity ve lab room
+    /// capacity parametrize edilebilir. Course'un LabHours = 2 (lab component'li).
+    /// Classroom Type = Lab (lab capacity hesabına dahil).
+    /// </summary>
+    private static async Task<AppDbContext> SeedScenarioWithCustomCapacityAsync(
+        int sectionCapacity,
+        int labRoomCapacity)
+    {
+        var ctx = NewInMemoryContext();
+
+        ctx.Faculties.Add(new Faculty { Id = 1, Code = "MUH", Name = "Mühendislik" });
+        ctx.Departments.Add(new Department { Id = 1, Code = "BM", Name = "Bilgisayar", FacultyId = 1 });
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = 1,
+            Year = 2026,
+            TermType = TermType.Spring,
+            Name = "2025-2026 Bahar",
+            ShortName = "B26",
+            EnglishName = "Spring 2025-2026",
+            ShortEnglishName = "S26",
+            TermStart = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            TermEnd = new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc)
+        });
+        ctx.Courses.Add(new Course
+        {
+            Id = 100,
+            Code = "X",
+            Name = "X",
+            DepartmentId = 1,
+            TheoryHours = 3,
+            LabHours = 2,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            Ects = 6,
+            NationalCredit = 6
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = 1000,
+            CourseId = 100,
+            TermId = 1,
+            SectionNumber = 1,
+            Capacity = sectionCapacity,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+        ctx.Classrooms.Add(new Classroom
+        {
+            Id = 9,
+            Name = "Lab",
+            BuildingName = "C Blok",
+            Floor = 0,
+            Capacity = labRoomCapacity,
+            Type = ClassroomType.Lab
+        });
+        ctx.ClassroomTermAssignments.Add(new ClassroomTermAssignment
+        {
+            Id = 1,
+            TermId = 1,
+            FacultyId = 1,
+            ClassroomId = 9
+        });
+
+        await ctx.SaveChangesAsync();
+        return ctx;
+    }
+
+    [Fact]
+    public async Task BuildAsync_LabSectionFitsInSingleRoom_ReturnsLabGroupCount1()
+    {
+        // Arrange — section capacity 40, lab room cap 50 → groupCount = 1
+        await using var ctx = await SeedScenarioWithCustomCapacityAsync(sectionCapacity: 40, labRoomCapacity: 50);
+        var builder = new SolverRequestBuilder(ctx);
+
+        // Act
+        var req = await builder.BuildAsync(termId: 1, facultyId: 1, null, null, default);
+
+        // Assert
+        req.Sections.Should().HaveCount(1);
+        req.Sections[0].LabGroupCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task BuildAsync_LabSectionExceedsSingleRoom_ReturnsLabGroupCount2()
+    {
+        // Arrange — section capacity 80, lab room cap 40 → groupCount = ⌈80/40⌉ = 2
+        await using var ctx = await SeedScenarioWithCustomCapacityAsync(sectionCapacity: 80, labRoomCapacity: 40);
+        var builder = new SolverRequestBuilder(ctx);
+
+        // Act
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        // Assert
+        req.Sections[0].LabGroupCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task BuildAsync_LabSection120StudentsLab40Cap_ReturnsLabGroupCount3()
+    {
+        // Arrange — 120 / 40 = 3 groups
+        await using var ctx = await SeedScenarioWithCustomCapacityAsync(sectionCapacity: 120, labRoomCapacity: 40);
+        var builder = new SolverRequestBuilder(ctx);
+
+        // Act
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        // Assert
+        req.Sections[0].LabGroupCount.Should().Be(3);
+    }
 }
