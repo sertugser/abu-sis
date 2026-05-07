@@ -15,7 +15,9 @@ public sealed class DecisionVariables
     private readonly Dictionary<int, IntervalVar> _lectureIntervals = new();
     private readonly Dictionary<int, IntervalVar> _labIntervals = new();
     private readonly Dictionary<int, IntVar> _lectureRooms = new();
-    private readonly Dictionary<int, IntVar> _labRooms = new();
+    // Plan 4 Task 2 — Parallel lab support: N IntVar per section (groupCount-based).
+    // Single-room sections: list with one element. Single-room callers (GetLabRoom) read [0].
+    private readonly Dictionary<int, IReadOnlyList<IntVar>> _labRoomsList = new();
     private readonly Dictionary<int, ILiteral> _sectionPresent = new();
 
     public DecisionVariables(CpModel model, int totalSlots)
@@ -70,21 +72,41 @@ public sealed class DecisionVariables
     }
 
     public void CreateRoomVariable(int sectionId, ComponentType componentType,
-        IReadOnlyList<ClassroomInput> classrooms)
+        IReadOnlyList<ClassroomInput> classrooms, int groupCount = 1)
     {
         var allowedIds = classrooms.Select(c => (long)c.Id).ToArray();
-        var room = _model.NewIntVarFromDomain(
-            Google.OrTools.Util.Domain.FromValues(allowedIds),
-            $"room_{componentType.ToString().ToLowerInvariant()}_s{sectionId}");
 
         switch (componentType)
         {
             case ComponentType.Lecture:
+            {
+                var room = _model.NewIntVarFromDomain(
+                    Google.OrTools.Util.Domain.FromValues(allowedIds),
+                    $"room_lecture_s{sectionId}");
                 _lectureRooms[sectionId] = room;
                 break;
+            }
             case ComponentType.Lab:
-                _labRooms[sectionId] = room;
+            {
+                if (groupCount < 1)
+                    throw new ArgumentOutOfRangeException(
+                        nameof(groupCount), groupCount,
+                        "groupCount must be >= 1.");
+
+                var labRooms = new List<IntVar>(groupCount);
+                for (int i = 0; i < groupCount; i++)
+                {
+                    var room = _model.NewIntVarFromDomain(
+                        Google.OrTools.Util.Domain.FromValues(allowedIds),
+                        $"room_lab_s{sectionId}_g{i}");
+                    labRooms.Add(room);
+                }
+                // Paralel split: tüm group'lar farklı odada (groupCount > 1 ise).
+                if (groupCount > 1)
+                    _model.AddAllDifferent(labRooms);
+                _labRoomsList[sectionId] = labRooms;
                 break;
+            }
             default:
                 throw new ArgumentOutOfRangeException(
                     nameof(componentType), componentType,
@@ -120,12 +142,28 @@ public sealed class DecisionVariables
         _lectureRooms.TryGetValue(sectionId, out var v) ? v
         : throw new KeyNotFoundException($"No lecture room variable for section {sectionId}.");
 
+    /// <summary>
+    /// Section'ın lab room IntVar'larından İLK group'unkini döner. Backward-compat shim:
+    /// Plan 4 öncesi tek IntVar dünyasından kalan call site'lar için.
+    /// Multi-group section'larda (groupCount > 1) tüm room'lara erişmek için <see cref="GetLabRooms"/> kullan.
+    /// </summary>
     public IntVar GetLabRoom(int sectionId) =>
-        _labRooms.TryGetValue(sectionId, out var v) ? v
-        : throw new KeyNotFoundException($"No lab room variable for section {sectionId}.");
+        _labRoomsList.TryGetValue(sectionId, out var rooms) && rooms.Count > 0
+            ? rooms[0]
+            : throw new KeyNotFoundException($"No lab room variable for section {sectionId}.");
+
+    /// <summary>
+    /// Section'ın tüm lab room IntVar'larını döner (paralel split desteği).
+    /// Plan 4 Task 2: groupCount kadar IntVar; AddAllDifferent ile farklı oda zorunlu (groupCount > 1).
+    /// </summary>
+    public IReadOnlyList<IntVar> GetLabRooms(int sectionId) =>
+        _labRoomsList.TryGetValue(sectionId, out var rooms)
+            ? rooms
+            : throw new KeyNotFoundException($"No lab rooms for section {sectionId}.");
 
     public IReadOnlyDictionary<int, IntervalVar> AllLectureIntervals => _lectureIntervals;
     public IReadOnlyDictionary<int, IntervalVar> AllLabIntervals => _labIntervals;
+    public IReadOnlyDictionary<int, IReadOnlyList<IntVar>> AllLabRoomsLists => _labRoomsList;
 
     /// <summary>
     /// Section'ın "yerleşti mi?" boolean literal'ı. Plan 3 Task 3 partial scheduling için eklendi.

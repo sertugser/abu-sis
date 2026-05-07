@@ -39,7 +39,8 @@ public sealed class ScheduleModelBuilder
             if (section.TheoryHours > 0)
                 variables.CreateRoomVariable(section.Id, ComponentType.Lecture, request.Classrooms);
             if (section.LabHours > 0)
-                variables.CreateRoomVariable(section.Id, ComponentType.Lab, request.Classrooms);
+                variables.CreateRoomVariable(section.Id, ComponentType.Lab, request.Classrooms,
+                    groupCount: section.LabGroupCount);
         }
 
         var penalties = new List<LinearExpr>();

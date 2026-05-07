@@ -179,4 +179,41 @@ public class DecisionVariablesTests
         registry.AllSectionPresent.Should().HaveCount(3);
         registry.AllSectionPresent.Should().ContainKeys(1, 2, 3);
     }
+
+    // Plan 4 Task 2 — Parallel lab support: N IntVar lab rooms per section
+    [Fact]
+    public void CreateRoomVariable_LabGroupCount2_RegistersTwoRoomVars()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 0, lab: 2));
+
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 40, Type = ClassroomType.Lab },
+            new() { Id = 10, Name = "L2", Capacity = 40, Type = ClassroomType.Lab }
+        };
+
+        registry.CreateRoomVariable(1, ComponentType.Lab, classrooms, groupCount: 2);
+
+        var labRooms = registry.GetLabRooms(1);
+        labRooms.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void GetLabRoom_BackwardCompat_ReturnsFirstGroupRoom()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 0, lab: 2));
+
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L", Capacity = 40, Type = ClassroomType.Lab }
+        };
+
+        registry.CreateRoomVariable(1, ComponentType.Lab, classrooms, groupCount: 1);
+
+        registry.GetLabRoom(1).Should().NotBeNull();
+    }
 }
