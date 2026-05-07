@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
@@ -40,6 +42,9 @@ public sealed class CapacityEncoder : IConstraintEncoder
             {
                 var labRooms = ctx.Variables.GetLabRooms(section.Id);
                 var groupCount = labRooms.Count;
+                // Invariant: DecisionVariables creates exactly section.LabGroupCount IntVars.
+                Debug.Assert(groupCount == section.LabGroupCount,
+                    $"labRooms.Count ({groupCount}) != section.LabGroupCount ({section.LabGroupCount}) for section {section.Id}");
                 // Per-group capacity threshold (ceil division). groupCount >= 1 garantili (DecisionVariables).
                 var minCapPerGroup = (section.Capacity + groupCount - 1) / groupCount;
 

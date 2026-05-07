@@ -195,4 +195,40 @@ public class CapacityEncoderTests
         // minCapPerGroup = ⌈80/2⌉ = 40; both rooms have cap 40 → no per-group violation.
         ctx.Assumptions.Count.Should().Be(0);
     }
+
+    [Fact]
+    public void Encode_LabSection80WithLabGroupCount2_LabRoomsCap35_RegistersAssumptionForBothGroups()
+    {
+        // Plan 4 Task 3 — Multi-group violation: section.Capacity=80 split into 2 groups,
+        // each group needs ⌈80/2⌉=40 cap; both 35-cap rooms fall short → assumption registered.
+        // Single literal blocks BOTH labRooms IntVars from picking the violating classroom.
+        var encoder = new CapacityEncoder();
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 35, Type = ClassroomType.Lab },
+            new() { Id = 10, Name = "L2", Capacity = 35, Type = ClassroomType.Lab }
+        };
+        var section = new SectionInput
+        {
+            Id = 1,
+            CourseId = 100,
+            CourseCode = "X",
+            CourseName = "X",
+            SectionNumber = 1,
+            Capacity = 80,
+            TheoryHours = 0,
+            LabHours = 2,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            LabGroupCount = 2
+        };
+        var ctx = BuildContextWithRooms(
+            new[] { section },
+            classrooms,
+            flags: new Dictionary<string, bool> { ["H3"] = true });
+
+        encoder.Encode(ctx);
+
+        // 2 violating classrooms × 1 literal each = 2 assumptions; each literal gates 2 IntVars internally.
+        ctx.Assumptions.Count.Should().Be(2);
+    }
 }
