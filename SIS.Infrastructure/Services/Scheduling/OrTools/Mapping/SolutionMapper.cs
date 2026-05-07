@@ -49,6 +49,7 @@ public sealed class SolutionMapper
     /// <summary>
     /// CP-SAT Optimal/Feasible çözümü Assignment record listesine dönüştürür.
     /// Solver'dan interval start/end ve room IntVar değerlerini okur, slot index → TimeSlot.Id mapping yapar.
+    /// Plan 3 Task 4: presence == 0 olan section'ları Failures listesine ekler (partial scheduling).
     /// </summary>
     public SolverResult MapSuccess(
         CpSolver solver,
@@ -58,9 +59,22 @@ public sealed class SolutionMapper
         CpSolverStatus status)
     {
         var assignments = new List<Assignment>();
+        var failures = new List<Failure>();
 
         foreach (var section in request.Sections)
         {
+            // Plan 3 Task 4: Solver bu section'ı drop ettiyse (present == 0) failures'a ekle
+            bool isPresent = ReadPresenceValue(solver, build, section.Id);
+            if (!isPresent)
+            {
+                failures.Add(new Failure
+                {
+                    SectionId = section.Id,
+                    Reason = "Solver bu section'ı yerleştiremedi; kısıtlamalar nedeniyle çıkarıldı, diğer section'lar yerleşti."
+                });
+                continue;
+            }
+
             var slots = new List<AssignedSlot>();
 
             // Lecture component
@@ -123,7 +137,7 @@ public sealed class SolutionMapper
         {
             Status = status == CpSolverStatus.Optimal ? SolverStatus.Optimal : SolverStatus.Feasible,
             Assignments = assignments,
-            Failures = new List<Failure>(),
+            Failures = failures,
             Diagnostics = new SolverDiagnostics
             {
                 EngineVersion = "v2-ortools",
@@ -134,6 +148,27 @@ public sealed class SolutionMapper
                 UnsatCore = new List<UnsatCoreEntry>()
             }
         };
+    }
+
+    /// <summary>
+    /// Section'ın presence boolean'ını solver'dan okur. Plan 3 Task 4 — partial scheduling.
+    /// Defensive: if presence can't be read, assume present (preserve old all-or-nothing behavior).
+    /// </summary>
+    private static bool ReadPresenceValue(CpSolver solver, ScheduleModelBuildResult build, int sectionId)
+    {
+        try
+        {
+            var presence = build.Variables.GetSectionPresent(sectionId);
+            // CP-SAT C# binding: presence literals created via NewBoolVar; BoolVar : IntVar
+            if (presence is IntVar intVar)
+                return solver.Value(intVar) != 0L;
+            // Fallback: ILiteral may not be IntVar (e.g. negation); skip and assume present
+            return true;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     /// <summary>

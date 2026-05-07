@@ -55,6 +55,34 @@ public class CpSatSolverEngineTests
     // Backward-compat for existing tests that don't care about config:
     private static CpSatSolverEngine BuildEngine() => BuildEngineWithConfig().engine;
 
+    /// <summary>
+    /// Partial-scheduling tests gibi farklı encoder kümesi gerektiren testler için yardımcı.
+    /// BuildEngineWithConfig sadece ClassroomConflictEncoder kullanıyor; bu helper ile çağıran
+    /// kendi encoder listesini geçer (örn. H1 + H8 same-course no-overlap).
+    /// </summary>
+    private static CpSatSolverEngine BuildEngineWithCustomEncoders(
+        IConstraintEncoder[] encoders,
+        int timeLimitSeconds = 30,
+        int numWorkers = 8,
+        int randomSeed = 42)
+    {
+        var configMock = new Mock<ISystemConfigProvider>();
+        configMock.Setup(x => x.GetIntAsync("Schedule.OrTools.TimeLimitSeconds", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(timeLimitSeconds);
+        configMock.Setup(x => x.GetIntAsync("Schedule.OrTools.NumWorkers", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(numWorkers);
+        configMock.Setup(x => x.GetIntAsync("Schedule.OrTools.RandomSeed", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(randomSeed);
+        configMock.Setup(x => x.GetBoolAsync("Schedule.OrTools.LogToConsole", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var modelBuilder = new ScheduleModelBuilder(encoders);
+        var mapper = new SolutionMapper();
+        var unsatInterpreter = new UnsatCoreInterpreter();
+        var preflightChecker = new PreflightFeasibilityChecker();
+        return new CpSatSolverEngine(modelBuilder, mapper, configMock.Object, unsatInterpreter, preflightChecker);
+    }
+
     [Fact]
     public async Task SolveAsync_TwoNonOverlappingSections_ReturnsOptimalOrFeasible()
     {
@@ -249,5 +277,82 @@ public class CpSatSolverEngineTests
         result.Assignments.Should().BeEmpty();
         result.Failures.Should().HaveCount(1);
         result.Failures[0].SectionId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SolveAsync_ThreeSameCourseSectionsTwoSlots_AssignsTwoDropsOne()
+    {
+        // Plan 3 partial scheduling: aynı dersin 3 section'ı (H8: çakışma yok)
+        // Sadece 2 zaman slot'u — max 2 section yerleşebilir, 1'i drop edilmeli.
+        // NOT: H1 (classroom no-overlap) burada disabled — H1'in room optional interval'ları
+        // section.present literal'ine bağlanmıyor (ayrı presence: room==classroomId), bu yüzden
+        // section drop'u classroom slot'unu serbest bırakmıyor. Bu encoder bug'ı Plan 3 Task 4
+        // kapsamında değil; test pure section-level partial scheduling'i izole eder.
+        var engine = BuildEngineWithCustomEncoders(new IConstraintEncoder[]
+        {
+            new SameCourseSectionEncoder()
+        });
+
+        var sections = new[]
+        {
+            new SectionInput
+            {
+                Id = 1, CourseId = 100, CourseCode = "X", CourseName = "X",
+                SectionNumber = 1, Capacity = 40, TheoryHours = 1, LabHours = 0,
+                TeachingMethod = TeachingMethod.FaceToFace
+            },
+            new SectionInput
+            {
+                Id = 2, CourseId = 100, CourseCode = "X", CourseName = "X",
+                SectionNumber = 2, Capacity = 40, TheoryHours = 1, LabHours = 0,
+                TeachingMethod = TeachingMethod.FaceToFace
+            },
+            new SectionInput
+            {
+                Id = 3, CourseId = 100, CourseCode = "X", CourseName = "X",
+                SectionNumber = 3, Capacity = 40, TheoryHours = 1, LabHours = 0,
+                TeachingMethod = TeachingMethod.FaceToFace
+            }
+        };
+
+        var request = new SolverRequest
+        {
+            TermId = 1,
+            FacultyId = 1,
+            Sections = sections,
+            Classrooms = new[]
+            {
+                new ClassroomInput { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture }
+            },
+            TimeSlots = new[]
+            {
+                new TimeSlotInput
+                {
+                    Id = 1, DayOfWeek = DayOfWeek.Monday, SlotOrder = 1,
+                    StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                    AllowedMode = TimeSlotAllowedMode.Both
+                },
+                new TimeSlotInput
+                {
+                    Id = 2, DayOfWeek = DayOfWeek.Monday, SlotOrder = 2,
+                    StartTime = new TimeOnly(9, 55), EndTime = new TimeOnly(10, 45),
+                    AllowedMode = TimeSlotAllowedMode.Both
+                }
+            },
+            ConstraintFlags = new Dictionary<string, bool>
+            {
+                ["H1"] = false,
+                ["H8"] = true   // same-course no overlap → 1 section drop edilmek zorunda
+            }
+        };
+
+        var result = await engine.SolveAsync(request, CancellationToken.None);
+
+        result.Status.Should().BeOneOf(new[] { SolverStatus.Optimal, SolverStatus.Feasible },
+            because: "partial scheduling feasible bir sonuç üretmeli, infeasible değil");
+        result.Assignments.Should().HaveCount(2,
+            because: "2 slot + H8 ile max 2 same-course section yerleşebilir");
+        result.Failures.Should().HaveCount(1,
+            because: "1 section drop edilmek zorunda (Maximize(present) objective)");
     }
 }

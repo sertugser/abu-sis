@@ -12,7 +12,10 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 ///   2) Hard encoder'ları çağır (H1, H3, ..., H17)
 ///   3) Soft encoder'ları çağır (objective penalty toplar)
 ///   4) AssumptionRegistry.RegisterAllAsAssumptions() — UNSAT core için
-///   5) Objective: model.Minimize(LinearExpr.Sum(penalties))
+///   5) Objective (Plan 3 Task 4 — partial scheduling):
+///      Maximize(W * sum(present) - sum(penalties))
+///      Primary: olabildiği kadar çok section yerleştir (heavy weight).
+///      Secondary: soft penalty'leri minimize et (tie-breaker).
 /// </summary>
 public sealed class ScheduleModelBuilder
 {
@@ -63,9 +66,28 @@ public sealed class ScheduleModelBuilder
         // 4) UNSAT core için assumption literal'ları register et
         assumptions.RegisterAllAsAssumptions();
 
-        // 5) Objective: penalty toplam minimize
-        if (penalties.Count > 0)
+        // 5) Objective (Plan 3 Task 4 — partial scheduling):
+        //    Maximize(W * sum(present) - sum(penalties))
+        //    Primary: schedule as many sections as possible (W heavy weight).
+        //    Secondary: minimize soft penalties (tie-breaker).
+        const int presenceWeight = 10000;
+
+        var presenceVars = variables.AllSectionPresent.Values
+            .OfType<BoolVar>()
+            .ToList();
+
+        if (presenceVars.Count > 0)
+        {
+            LinearExpr objective = LinearExpr.Sum(presenceVars) * presenceWeight;
+            if (penalties.Count > 0)
+                objective = objective - LinearExpr.Sum(penalties);
+            model.Maximize(objective);
+        }
+        else if (penalties.Count > 0)
+        {
+            // No section presence vars (shouldn't happen in normal flow) — only minimize penalties
             model.Minimize(LinearExpr.Sum(penalties));
+        }
 
         return new ScheduleModelBuildResult(model, variables, assumptions);
     }
