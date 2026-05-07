@@ -70,6 +70,7 @@ public static class SchedulingServiceCollectionExtensions
         // ── OR-Tools v2 Engine ───────────────────────────────────────────
         // Encoder'lar (Faz 2 PoC: sadece H1)
         services.AddScoped<IConstraintEncoder, ClassroomConflictEncoder>();
+        services.AddScoped<IConstraintEncoder, CapacityEncoder>();
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
