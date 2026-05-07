@@ -85,6 +85,18 @@ public static class SchedulingServiceCollectionExtensions
             var threshold = config.GetIntAsync("Schedule.TheoryLabSplitThreshold", 4, default).GetAwaiter().GetResult();
             return new TheoryLabDaySplitEncoder(threshold);
         });
+        services.AddScoped<IConstraintEncoder>(sp =>
+        {
+            // H13 — config-driven lunch window (sync DI factory: 5min cache → DB call rare).
+            // Admin DB'den 11:40→11:45 değiştirebilir; cache yenilenince effective olur.
+            var config = sp.GetRequiredService<ISystemConfigProvider>();
+            var startStr = config.GetStringAsync("Schedule.LunchBreakStart", "11:40", default).GetAwaiter().GetResult();
+            var endStr = config.GetStringAsync("Schedule.LunchBreakEnd", "12:20", default).GetAwaiter().GetResult();
+            // Defansif fallback: malformed config → defaults (admin UI validation HH:mm formatını zorlar).
+            var start = TimeOnly.TryParse(startStr, out var s) ? s : new TimeOnly(11, 40);
+            var end = TimeOnly.TryParse(endStr, out var e) ? e : new TimeOnly(12, 20);
+            return new LunchBreakEncoder(start, end);
+        });
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
