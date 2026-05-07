@@ -13,4 +13,5 @@ public sealed record SolverRequest
     public IReadOnlyList<TimeSlotInput> TimeSlots { get; init; } = [];
     public IReadOnlyDictionary<string, bool> ConstraintFlags { get; init; } =
         new Dictionary<string, bool>();
+    public IReadOnlyList<CourseRelationship> Corequisites { get; init; } = [];
 }
