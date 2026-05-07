@@ -26,17 +26,20 @@ public sealed class CpSatSolverEngine : ISolverEngine
     private readonly ScheduleModelBuilder _modelBuilder;
     private readonly SolutionMapper _mapper;
     private readonly ISystemConfigProvider _config;
+    private readonly UnsatCoreInterpreter _unsatInterpreter;
     private readonly ILogger<CpSatSolverEngine>? _logger;
 
     public CpSatSolverEngine(
         ScheduleModelBuilder modelBuilder,
         SolutionMapper mapper,
         ISystemConfigProvider config,
+        UnsatCoreInterpreter unsatInterpreter,
         ILogger<CpSatSolverEngine>? logger = null)
     {
         _modelBuilder = modelBuilder;
         _mapper = mapper;
         _config = config;
+        _unsatInterpreter = unsatInterpreter;
         _logger = logger;
     }
 
@@ -89,7 +92,7 @@ public sealed class CpSatSolverEngine : ISolverEngine
         return status switch
         {
             CpSolverStatus.Infeasible => _mapper.MapInfeasible(
-                unsatCore: ExtractUnsatCore(solver, build.Assumptions),
+                unsatCore: ExtractUnsatCore(solver, build.Assumptions, request),
                 request,
                 elapsedSeconds),
             CpSolverStatus.Optimal or CpSolverStatus.Feasible => BuildSuccessResult(
@@ -98,30 +101,13 @@ public sealed class CpSatSolverEngine : ISolverEngine
         };
     }
 
-    private static IReadOnlyList<UnsatCoreEntry> ExtractUnsatCore(
+    private IReadOnlyList<UnsatCoreEntry> ExtractUnsatCore(
         CpSolver solver,
-        AssumptionRegistry registry)
+        AssumptionRegistry registry,
+        SolverRequest request)
     {
-        // Faz 2 PoC: SufficientAssumptionsForInfeasibility'den sebep listesi.
-        // Tam Türkçe sebep mapping Plan 2'de UnsatCoreInterpreter'a taşınacak.
-        var coreIndices = solver.SufficientAssumptionsForInfeasibility();
-        var allLiterals = registry.AllLiterals;
-        var entries = new List<UnsatCoreEntry>();
-
-        foreach (var idx in coreIndices)
-        {
-            if (idx < 0 || idx >= allLiterals.Count) continue;
-            var meta = registry.LookupByLiteral(allLiterals[idx]);
-            if (meta == null) continue;
-
-            entries.Add(new UnsatCoreEntry(
-                meta.ConstraintCode,
-                $"{meta.ConstraintCode} kuralı: §{meta.PrimarySectionId} ile §{meta.SecondarySectionId} çakışıyor.",
-                meta.PrimarySectionId,
-                meta.SecondarySectionId));
-        }
-
-        return entries;
+        // Plan 2 Task 16: Türkçe sebep mapping UnsatCoreInterpreter'a taşındı.
+        return _unsatInterpreter.Interpret(solver, registry, request);
     }
 
     private SolverResult BuildSuccessResult(

@@ -6,6 +6,7 @@ using SIS.Domain.Enums;
 using SIS.Infrastructure.Services.Scheduling.OrTools;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Diagnostics;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Mapping;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
@@ -45,7 +46,8 @@ public class CpSatSolverEngineTests
         var encoders = new IConstraintEncoder[] { new ClassroomConflictEncoder() };
         var modelBuilder = new ScheduleModelBuilder(encoders);
         var mapper = new SolutionMapper();
-        var engine = new CpSatSolverEngine(modelBuilder, mapper, configMock.Object);
+        var unsatInterpreter = new UnsatCoreInterpreter();
+        var engine = new CpSatSolverEngine(modelBuilder, mapper, configMock.Object, unsatInterpreter);
         return (engine, configMock);
     }
 

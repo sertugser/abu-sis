@@ -8,6 +8,7 @@ using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 using SIS.Infrastructure.Services.Scheduling.OrTools;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Diagnostics;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Mapping;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
@@ -107,6 +108,9 @@ public static class SchedulingServiceCollectionExtensions
             return new MaxConsecutiveHoursEncoder(maxHours);
         });
         services.AddScoped<IConstraintEncoder, FaceToFaceSlotEncoder>();
+
+        // Diagnostics
+        services.AddScoped<UnsatCoreInterpreter>();
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
