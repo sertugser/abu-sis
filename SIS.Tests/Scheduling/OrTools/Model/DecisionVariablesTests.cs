@@ -73,4 +73,35 @@ public class DecisionVariablesTests
 
         act.Should().Throw<KeyNotFoundException>();
     }
+
+    [Fact]
+    public void GetLectureInterval_LabOnlySection_ReturnsNull()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(5, theory: 0, lab: 2));
+
+        registry.GetLectureInterval(5).Should().BeNull();
+    }
+
+    [Fact]
+    public void GetLabInterval_LectureOnlySection_ReturnsNull()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(6, theory: 3, lab: 0));
+
+        registry.GetLabInterval(6).Should().BeNull();
+    }
+
+    [Fact]
+    public void GetLabInterval_UnregisteredSection_ThrowsKeyNotFoundException()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+
+        var act = () => registry.GetLabInterval(999);
+
+        act.Should().Throw<KeyNotFoundException>();
+    }
 }

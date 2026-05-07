@@ -19,6 +19,11 @@ public sealed class DecisionVariables
 
     public DecisionVariables(CpModel model, int totalSlots)
     {
+        if (totalSlots <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(totalSlots), totalSlots,
+                "totalSlots must be positive.");
+
         _model = model;
         _totalSlots = totalSlots;
     }
@@ -56,10 +61,19 @@ public sealed class DecisionVariables
             Google.OrTools.Util.Domain.FromValues(allowedIds),
             $"room_{componentType.ToString().ToLowerInvariant()}_s{sectionId}");
 
-        if (componentType == ComponentType.Lecture)
-            _lectureRooms[sectionId] = room;
-        else if (componentType == ComponentType.Lab)
-            _labRooms[sectionId] = room;
+        switch (componentType)
+        {
+            case ComponentType.Lecture:
+                _lectureRooms[sectionId] = room;
+                break;
+            case ComponentType.Lab:
+                _labRooms[sectionId] = room;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(componentType), componentType,
+                    $"Unsupported component type: {componentType}");
+        }
     }
 
     /// <summary>
@@ -74,12 +88,25 @@ public sealed class DecisionVariables
         throw new KeyNotFoundException($"Section {sectionId} not registered.");
     }
 
-    public IntervalVar? GetLabInterval(int sectionId) =>
-        _labIntervals.GetValueOrDefault(sectionId);
+    /// <summary>
+    /// Section'ın lab interval'ını döner.
+    /// Section hiç register edilmemişse KeyNotFoundException.
+    /// Section register edilmiş ama lab component yoksa (sadece teori) null.
+    /// </summary>
+    public IntervalVar? GetLabInterval(int sectionId)
+    {
+        if (_labIntervals.TryGetValue(sectionId, out var iv)) return iv;
+        if (_lectureIntervals.ContainsKey(sectionId)) return null;
+        throw new KeyNotFoundException($"Section {sectionId} not registered.");
+    }
 
-    public IntVar GetLectureRoom(int sectionId) => _lectureRooms[sectionId];
+    public IntVar GetLectureRoom(int sectionId) =>
+        _lectureRooms.TryGetValue(sectionId, out var v) ? v
+        : throw new KeyNotFoundException($"No lecture room variable for section {sectionId}.");
 
-    public IntVar GetLabRoom(int sectionId) => _labRooms[sectionId];
+    public IntVar GetLabRoom(int sectionId) =>
+        _labRooms.TryGetValue(sectionId, out var v) ? v
+        : throw new KeyNotFoundException($"No lab room variable for section {sectionId}.");
 
     public IReadOnlyDictionary<int, IntervalVar> AllLectureIntervals => _lectureIntervals;
     public IReadOnlyDictionary<int, IntervalVar> AllLabIntervals => _labIntervals;
