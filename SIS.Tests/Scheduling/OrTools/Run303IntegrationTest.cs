@@ -42,7 +42,8 @@ public class Run303IntegrationTest
         var modelBuilder = new ScheduleModelBuilder(encoders);
         var mapper = new SolutionMapper();
         var unsatInterpreter = new UnsatCoreInterpreter();
-        var engine = new CpSatSolverEngine(modelBuilder, mapper, configMock.Object, unsatInterpreter);
+        var preflightChecker = new PreflightFeasibilityChecker();
+        var engine = new CpSatSolverEngine(modelBuilder, mapper, configMock.Object, unsatInterpreter, preflightChecker);
 
         // Act
         var result = await engine.SolveAsync(request, CancellationToken.None);

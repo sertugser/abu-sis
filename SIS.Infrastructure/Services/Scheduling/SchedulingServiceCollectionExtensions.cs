@@ -112,6 +112,9 @@ public static class SchedulingServiceCollectionExtensions
         // Diagnostics
         services.AddScoped<UnsatCoreInterpreter>();
 
+        // Pre-flight feasibility checker (Plan 3 Task 1+2 — partial scheduling)
+        services.AddScoped<PreflightFeasibilityChecker>();
+
         // DB → SolverRequest builder (Plan 2 Task 17 — AutoScheduleEngine ve Run 303 testi kullanır)
         services.AddScoped<SolverRequestBuilder>();
 

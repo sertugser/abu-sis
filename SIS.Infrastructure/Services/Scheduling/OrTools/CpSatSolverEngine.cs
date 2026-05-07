@@ -27,6 +27,7 @@ public sealed class CpSatSolverEngine : ISolverEngine
     private readonly SolutionMapper _mapper;
     private readonly ISystemConfigProvider _config;
     private readonly UnsatCoreInterpreter _unsatInterpreter;
+    private readonly PreflightFeasibilityChecker _preflightChecker;
     private readonly ILogger<CpSatSolverEngine>? _logger;
 
     public CpSatSolverEngine(
@@ -34,12 +35,14 @@ public sealed class CpSatSolverEngine : ISolverEngine
         SolutionMapper mapper,
         ISystemConfigProvider config,
         UnsatCoreInterpreter unsatInterpreter,
+        PreflightFeasibilityChecker preflightChecker,
         ILogger<CpSatSolverEngine>? logger = null)
     {
         _modelBuilder = modelBuilder;
         _mapper = mapper;
         _config = config;
         _unsatInterpreter = unsatInterpreter;
+        _preflightChecker = preflightChecker;
         _logger = logger;
     }
 
@@ -49,6 +52,20 @@ public sealed class CpSatSolverEngine : ISolverEngine
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // ── Pre-flight feasibility check (Plan 3 Task 2) ──────────────────
+        // Filter out sections that have NO valid classroom; mark them as failures.
+        // Prevents CP-SAT 'all-or-nothing' infeasibility on real-world data.
+        var preflight = _preflightChecker.Check(request.Sections, request.Classrooms);
+
+        if (preflight.FeasibleSections.Count == 0)
+        {
+            // All sections infeasible — return early with all as preflight failures
+            return BuildAllInfeasibleResult(preflight, elapsedSeconds: 0);
+        }
+
+        // Reduce request.Sections to only feasible ones for solver
+        var reducedRequest = request with { Sections = preflight.FeasibleSections };
+
         // Read solver parameters from SystemConfig (5-min cached). Fallbacks only fire on missing keys.
         var timeLimit = await _config.GetIntAsync(
             "Schedule.OrTools.TimeLimitSeconds", FALLBACK_TIME_LIMIT_SECONDS, cancellationToken);
@@ -57,12 +74,12 @@ public sealed class CpSatSolverEngine : ISolverEngine
         // SolverRequest.Seed (if provided) overrides the configured seed for caller-driven determinism.
         var configuredSeed = await _config.GetIntAsync(
             "Schedule.OrTools.RandomSeed", FALLBACK_RANDOM_SEED, cancellationToken);
-        var randomSeed = request.Seed ?? configuredSeed;
+        var randomSeed = reducedRequest.Seed ?? configuredSeed;
         var logToConsole = await _config.GetBoolAsync(
             "Schedule.OrTools.LogToConsole", FALLBACK_LOG_TO_CONSOLE, cancellationToken);
 
         var sw = Stopwatch.StartNew();
-        var build = _modelBuilder.Build(request);
+        var build = _modelBuilder.Build(reducedRequest);
 
         var solver = new CpSolver
         {
@@ -89,16 +106,63 @@ public sealed class CpSatSolverEngine : ISolverEngine
         sw.Stop();
         var elapsedSeconds = sw.Elapsed.TotalSeconds;
 
-        return status switch
+        var solverResult = status switch
         {
             CpSolverStatus.Infeasible => _mapper.MapInfeasible(
-                unsatCore: ExtractUnsatCore(solver, build.Assumptions, request),
-                request,
+                unsatCore: ExtractUnsatCore(solver, build.Assumptions, reducedRequest),
+                reducedRequest,
                 elapsedSeconds),
             CpSolverStatus.Optimal or CpSolverStatus.Feasible => BuildSuccessResult(
-                solver, build, request, elapsedSeconds, status),
-            _ => BuildTimeoutResult(solver, build, request, elapsedSeconds)
+                solver, build, reducedRequest, elapsedSeconds, status),
+            _ => BuildTimeoutResult(solver, build, reducedRequest, elapsedSeconds)
         };
+
+        // Append preflight infeasibles as additional failures
+        return AppendPreflightFailures(solverResult, preflight);
+    }
+
+    /// <summary>All sections were rejected at preflight — short-circuit return.</summary>
+    private static SolverResult BuildAllInfeasibleResult(PreflightResult preflight, double elapsedSeconds)
+    {
+        var failures = preflight.InfeasibleSections.Select(infs => new Failure
+        {
+            SectionId = infs.Section.Id,
+            Reason = infs.Reason
+        }).ToList();
+
+        return new SolverResult
+        {
+            Status = SolverStatus.Infeasible,
+            Assignments = new List<Assignment>(),
+            Failures = failures,
+            Diagnostics = new SolverDiagnostics
+            {
+                EngineVersion = "v2-ortools",
+                ElapsedSeconds = elapsedSeconds,
+                Branches = 0,
+                Conflicts = 0,
+                ObjectiveValue = 0,
+                UnsatCore = new List<UnsatCoreEntry>()
+            }
+        };
+    }
+
+    /// <summary>Append preflight-rejected sections to the solver result's failure list.</summary>
+    private static SolverResult AppendPreflightFailures(SolverResult result, PreflightResult preflight)
+    {
+        if (preflight.InfeasibleSections.Count == 0) return result;
+
+        var combinedFailures = result.Failures.ToList();
+        foreach (var infs in preflight.InfeasibleSections)
+        {
+            combinedFailures.Add(new Failure
+            {
+                SectionId = infs.Section.Id,
+                Reason = infs.Reason
+            });
+        }
+
+        return result with { Failures = combinedFailures };
     }
 
     private IReadOnlyList<UnsatCoreEntry> ExtractUnsatCore(
