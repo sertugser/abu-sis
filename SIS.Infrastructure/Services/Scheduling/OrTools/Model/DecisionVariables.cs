@@ -17,7 +17,7 @@ public sealed class DecisionVariables
     private readonly Dictionary<int, IntVar> _lectureRooms = new();
     // Plan 4 Task 2 — Parallel lab support: N IntVar per section (groupCount-based).
     // Single-room sections: list with one element. Single-room callers (GetLabRoom) read [0].
-    private readonly Dictionary<int, IReadOnlyList<IntVar>> _labRoomsList = new();
+    private readonly Dictionary<int, IReadOnlyList<IntVar>> _labRooms = new();
     private readonly Dictionary<int, ILiteral> _sectionPresent = new();
 
     public DecisionVariables(CpModel model, int totalSlots)
@@ -104,7 +104,7 @@ public sealed class DecisionVariables
                 // Paralel split: tüm group'lar farklı odada (groupCount > 1 ise).
                 if (groupCount > 1)
                     _model.AddAllDifferent(labRooms);
-                _labRoomsList[sectionId] = labRooms;
+                _labRooms[sectionId] = labRooms;
                 break;
             }
             default:
@@ -148,7 +148,7 @@ public sealed class DecisionVariables
     /// Multi-group section'larda (groupCount > 1) tüm room'lara erişmek için <see cref="GetLabRooms"/> kullan.
     /// </summary>
     public IntVar GetLabRoom(int sectionId) =>
-        _labRoomsList.TryGetValue(sectionId, out var rooms) && rooms.Count > 0
+        _labRooms.TryGetValue(sectionId, out var rooms) && rooms.Count > 0
             ? rooms[0]
             : throw new KeyNotFoundException($"No lab room variable for section {sectionId}.");
 
@@ -157,13 +157,13 @@ public sealed class DecisionVariables
     /// Plan 4 Task 2: groupCount kadar IntVar; AddAllDifferent ile farklı oda zorunlu (groupCount > 1).
     /// </summary>
     public IReadOnlyList<IntVar> GetLabRooms(int sectionId) =>
-        _labRoomsList.TryGetValue(sectionId, out var rooms)
+        _labRooms.TryGetValue(sectionId, out var rooms)
             ? rooms
             : throw new KeyNotFoundException($"No lab rooms for section {sectionId}.");
 
     public IReadOnlyDictionary<int, IntervalVar> AllLectureIntervals => _lectureIntervals;
     public IReadOnlyDictionary<int, IntervalVar> AllLabIntervals => _labIntervals;
-    public IReadOnlyDictionary<int, IReadOnlyList<IntVar>> AllLabRoomsLists => _labRoomsList;
+    public IReadOnlyDictionary<int, IReadOnlyList<IntVar>> AllLabRooms => _labRooms;
 
     /// <summary>
     /// Section'ın "yerleşti mi?" boolean literal'ı. Plan 3 Task 3 partial scheduling için eklendi.

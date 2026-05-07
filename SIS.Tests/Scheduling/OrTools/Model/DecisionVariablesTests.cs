@@ -198,6 +198,11 @@ public class DecisionVariablesTests
 
         var labRooms = registry.GetLabRooms(1);
         labRooms.Should().HaveCount(2);
+        // AllLabRooms accessor surfaces the same list
+        registry.AllLabRooms.Should().ContainKey(1);
+        registry.AllLabRooms[1].Should().BeSameAs(labRooms);
+        // Distinct IntVar instances per group (AddAllDifferent operates on these)
+        labRooms[0].Should().NotBeSameAs(labRooms[1]);
     }
 
     [Fact]
@@ -214,6 +219,25 @@ public class DecisionVariablesTests
 
         registry.CreateRoomVariable(1, ComponentType.Lab, classrooms, groupCount: 1);
 
-        registry.GetLabRoom(1).Should().NotBeNull();
+        // Shim must return same instance as index 0 of the multi-room list
+        registry.GetLabRoom(1).Should().BeSameAs(registry.GetLabRooms(1)[0]);
+    }
+
+    [Fact]
+    public void CreateRoomVariable_GroupCountZero_ThrowsArgumentOutOfRange()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 0, lab: 2));
+
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L", Capacity = 40, Type = ClassroomType.Lab }
+        };
+
+        Action act = () => registry.CreateRoomVariable(1, ComponentType.Lab, classrooms, groupCount: 0);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .Where(ex => ex.ParamName == "groupCount");
     }
 }
