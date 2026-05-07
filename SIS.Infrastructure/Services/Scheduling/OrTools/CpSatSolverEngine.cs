@@ -97,7 +97,7 @@ public sealed class CpSatSolverEngine : ISolverEngine
                 elapsedSeconds),
             CpSolverStatus.Optimal or CpSolverStatus.Feasible => BuildSuccessResult(
                 solver, build, request, elapsedSeconds, status),
-            _ => BuildTimeoutResult(elapsedSeconds, request)
+            _ => BuildTimeoutResult(solver, build, request, elapsedSeconds)
         };
     }
 
@@ -117,40 +117,15 @@ public sealed class CpSatSolverEngine : ISolverEngine
         double elapsedSeconds,
         CpSolverStatus status)
     {
-        // PoC: Detaylı assignment mapping Plan 2'de SolutionMapper.MapSuccess olarak gelecek.
-        return new SolverResult
-        {
-            Status = status == CpSolverStatus.Optimal ? SolverStatus.Optimal : SolverStatus.Feasible,
-            Assignments = new List<Assignment>(),
-            Failures = new List<Failure>(),
-            Diagnostics = new SolverDiagnostics
-            {
-                EngineVersion = "v2-ortools",
-                ElapsedSeconds = elapsedSeconds,
-                Branches = solver.NumBranches(),
-                Conflicts = solver.NumConflicts(),
-                ObjectiveValue = solver.ObjectiveValue,
-                UnsatCore = new List<UnsatCoreEntry>()
-            }
-        };
+        return _mapper.MapSuccess(solver, build, request, elapsedSeconds, status);
     }
 
-    private SolverResult BuildTimeoutResult(double elapsedSeconds, SolverRequest request)
+    private SolverResult BuildTimeoutResult(
+        CpSolver solver,
+        ScheduleModelBuildResult build,
+        SolverRequest request,
+        double elapsedSeconds)
     {
-        return new SolverResult
-        {
-            Status = SolverStatus.Timeout,
-            Assignments = new List<Assignment>(),
-            Failures = new List<Failure>(),
-            Diagnostics = new SolverDiagnostics
-            {
-                EngineVersion = "v2-ortools",
-                ElapsedSeconds = elapsedSeconds,
-                Branches = 0,
-                Conflicts = 0,
-                ObjectiveValue = 0,
-                UnsatCore = new List<UnsatCoreEntry>()
-            }
-        };
+        return _mapper.MapTimeout(solver, build, request, elapsedSeconds);
     }
 }
