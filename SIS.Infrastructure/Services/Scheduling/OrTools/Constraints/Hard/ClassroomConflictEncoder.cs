@@ -5,7 +5,9 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 /// <summary>
 /// H1 — Classroom Conflict.
 /// PoC implementasyon (Plan 1 Faz 2): Aynı saat aralığında iki lecture interval'ı çakışamaz.
-/// Plan 2'de gerçek "per-classroom AddNoOverlap" modeline geçilecek (room IntVar matching ile).
+/// Plan 2'de gerçek "per-classroom AddNoOverlap" modeline (optional interval + room IntVar matching) geçilecek.
+/// Not: CP-SAT 9.10 NoOverlap üzerinde OnlyEnforceIf desteklemediği için PoC'de
+/// AddNoOverlap koşulsuz uygulanır; assumption literal sadece UNSAT core registry'sinde tutulur.
 /// </summary>
 public sealed class ClassroomConflictEncoder : IConstraintEncoder
 {
@@ -32,9 +34,9 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
                     var iv2 = ctx.Variables.GetLectureInterval(s2.Id);
                     if (iv1 != null && iv2 != null)
                     {
-                        var literal = ctx.Assumptions.Register(Code, s1.Id, s2.Id);
-                        ctx.Model.AddNoOverlap(new[] { iv1, iv2 })
-                            .OnlyEnforceIf(literal);
+                        // Assumption literal kayıtlı ama enforcement yok (Plan 2'de optional interval ile bağlanacak).
+                        ctx.Assumptions.Register(Code, s1.Id, s2.Id);
+                        ctx.Model.AddNoOverlap(new[] { iv1, iv2 });
                     }
                 }
             }
