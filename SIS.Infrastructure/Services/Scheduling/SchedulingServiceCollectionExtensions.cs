@@ -71,6 +71,7 @@ public static class SchedulingServiceCollectionExtensions
         // Encoder'lar (Faz 2 PoC: sadece H1)
         services.AddScoped<IConstraintEncoder, ClassroomConflictEncoder>();
         services.AddScoped<IConstraintEncoder, CapacityEncoder>();
+        services.AddScoped<IConstraintEncoder, ClassroomTypeEncoder>();
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
