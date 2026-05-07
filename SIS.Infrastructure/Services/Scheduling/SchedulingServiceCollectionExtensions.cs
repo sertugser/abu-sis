@@ -8,6 +8,7 @@ using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 using SIS.Infrastructure.Services.Scheduling.OrTools;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Diagnostics;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Mapping;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
@@ -108,6 +109,15 @@ public static class SchedulingServiceCollectionExtensions
             return new MaxConsecutiveHoursEncoder(maxHours);
         });
         services.AddScoped<IConstraintEncoder, FaceToFaceSlotEncoder>();
+
+        // Soft constraint encoders (Plan 3 diagnostic stubs; real penalty in Plan 4)
+        services.AddScoped<IConstraintEncoder, OccupancyEncoder>();
+        services.AddScoped<IConstraintEncoder, SlotCongestionEncoder>();
+        services.AddScoped<IConstraintEncoder, CoEnrollmentEncoder>();
+        services.AddScoped<IConstraintEncoder, StudentGapEncoder>();
+        services.AddScoped<IConstraintEncoder, EarlyLateEncoder>();
+        services.AddScoped<IConstraintEncoder, WeekdayBalanceEncoder>();
+        services.AddScoped<IConstraintEncoder, AdjacentYearEncoder>();
 
         // Diagnostics
         services.AddScoped<UnsatCoreInterpreter>();
