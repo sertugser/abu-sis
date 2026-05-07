@@ -2,8 +2,12 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
 /// H3 — Capacity. Section'ın kapasitesi atanan dersliğin fiziksel kapasitesini aşamaz.
-/// CP-SAT model: Her (section, classroom) pair için section.Capacity > classroom.Capacity ise
-/// room[section] != classroom.Id constraint'i, assumption literal ile gated.
+/// CP-SAT model: Lecture tek oda, lab paralel split desteği (Plan 4 Task 3):
+/// - Lecture: section.Capacity > classroom.Capacity → roomVar != classroom.Id (assumption-gated).
+/// - Lab: groupCount per-section; minCapPerGroup = ⌈Capacity/groupCount⌉. Her group'un IntVar'ı için
+///   minCapPerGroup > classroom.Capacity ise roomVar != classroom.Id (assumption-gated).
+///   Tek (sectionId, classroomId) literal'i N group'un hepsini bloklar — minCapPerGroup hesabı tüm
+///   group'lar için aynı olduğundan tek literal yeterli.
 /// </summary>
 public sealed class CapacityEncoder : IConstraintEncoder
 {
@@ -17,24 +21,37 @@ public sealed class CapacityEncoder : IConstraintEncoder
 
         foreach (var section in ctx.Request.Sections)
         {
-            foreach (var classroom in ctx.Request.Classrooms)
+            // Lecture component (single room — unchanged)
+            if (section.TheoryHours > 0)
             {
-                if (section.Capacity > classroom.Capacity)
+                var roomVar = ctx.Variables.GetLectureRoom(section.Id);
+                foreach (var classroom in ctx.Request.Classrooms)
                 {
-                    // Lecture component: forbid this classroom for the section's lecture
-                    if (section.TheoryHours > 0)
+                    if (section.Capacity > classroom.Capacity)
                     {
-                        var roomVar = ctx.Variables.GetLectureRoom(section.Id);
                         var literal = ctx.Assumptions.Register(Code, section.Id, classroom.Id);
                         ctx.Model.Add(roomVar != classroom.Id).OnlyEnforceIf(literal);
                     }
+                }
+            }
 
-                    // Lab component: forbid this classroom for the section's lab
-                    if (section.LabHours > 0)
+            // Lab component (multi-room paralel split desteği — Plan 4 Task 3)
+            if (section.LabHours > 0)
+            {
+                var labRooms = ctx.Variables.GetLabRooms(section.Id);
+                var groupCount = labRooms.Count;
+                // Per-group capacity threshold (ceil division). groupCount >= 1 garantili (DecisionVariables).
+                var minCapPerGroup = (section.Capacity + groupCount - 1) / groupCount;
+
+                foreach (var classroom in ctx.Request.Classrooms)
+                {
+                    if (minCapPerGroup > classroom.Capacity)
                     {
-                        var roomVar = ctx.Variables.GetLabRoom(section.Id);
                         var literal = ctx.Assumptions.Register(Code, section.Id, classroom.Id);
-                        ctx.Model.Add(roomVar != classroom.Id).OnlyEnforceIf(literal);
+                        foreach (var roomVar in labRooms)
+                        {
+                            ctx.Model.Add(roomVar != classroom.Id).OnlyEnforceIf(literal);
+                        }
                     }
                 }
             }
