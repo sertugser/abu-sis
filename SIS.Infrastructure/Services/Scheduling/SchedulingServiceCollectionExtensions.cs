@@ -112,6 +112,9 @@ public static class SchedulingServiceCollectionExtensions
         // Diagnostics
         services.AddScoped<UnsatCoreInterpreter>();
 
+        // DB → SolverRequest builder (Plan 2 Task 17 — AutoScheduleEngine ve Run 303 testi kullanır)
+        services.AddScoped<SolverRequestBuilder>();
+
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
         services.AddScoped<SolutionMapper>();
