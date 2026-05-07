@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.Solver;
 using SIS.Infrastructure.Services.Scheduling.Evaluators;
@@ -77,6 +78,13 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, SameCourseSectionEncoder>();
         services.AddScoped<IConstraintEncoder, FacultyClassroomEncoder>();
         services.AddScoped<IConstraintEncoder, CorequisiteEncoder>();
+        services.AddScoped<IConstraintEncoder>(sp =>
+        {
+            // H12 — config-driven splitThreshold (sync DI factory: heavy 5min cache → DB call rare).
+            var config = sp.GetRequiredService<ISystemConfigProvider>();
+            var threshold = config.GetIntAsync("Schedule.TheoryLabSplitThreshold", 4, default).GetAwaiter().GetResult();
+            return new TheoryLabDaySplitEncoder(threshold);
+        });
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
