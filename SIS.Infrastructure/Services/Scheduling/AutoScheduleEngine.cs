@@ -75,27 +75,41 @@ public sealed class AutoScheduleEngine
         {
             await ReportAsync("started", 0, detail: "Auto-schedule başlatılıyor...");
 
-        // ── Engine flag dispatch (Plan 1: stub) ──────────────────────────
-        // SystemConfig.Schedule.Engine == "v2-ortools" ise CpSatSolverEngine kullanılır.
-        // Faz 2 PoC: sadece v2 path'in çağrılabilirliği doğrulanır; gerçek mapping Plan 2'de.
-        // v1 hâlâ default (Schedule.Engine = "v1-mrv").
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        // 1. Determine seed (v1 ve v2 path'lerinde ortak — DTO'ya yazılır)
+        var seed = request.Seed ?? (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+
+        // ── Engine flag dispatch (Plan 2 Task 19: real v2 dispatch) ──────
+        // SystemConfig.Schedule.Engine == "v2-ortools" → CpSatSolverEngine kullan,
+        // sonucu DTO'ya map'le, dön. Default v1-mrv → mevcut akış aşağıda devam eder.
         var engineFlag = await _configProvider.GetStringAsync(
             "Schedule.Engine", "v1-mrv", ct);
 
         if (engineFlag == "v2-ortools")
         {
-            // Plan 2'de: SolverRequest'i SolverRequestBuilder ile inşa et, ISolverEngine.SolveAsync çağır,
-            // SolverResult'ı AutoSchedulePreviewDto'ya map'le.
-            // Şu an Plan 1 PoC: log'la ve v1 fallback yap.
-            await ReportAsync("warning", 0,
-                detail: "v2-ortools engine henüz tam implement edilmedi (Plan 2'de). v1 fallback'e dönülüyor.");
+            await ReportAsync("v2-building-request", 10,
+                detail: "v2-ortools: SolverRequest DB'den inşa ediliyor...");
+
+            var requestBuilder = new SIS.Infrastructure.Services.Scheduling.OrTools.SolverRequestBuilder(_context);
+            var solverRequest = await requestBuilder.BuildAsync(
+                request.TermId,
+                request.FacultyId,
+                request.DepartmentId,
+                request.Seed,
+                ct);
+
+            await ReportAsync("v2-solving", 50,
+                detail: $"v2-ortools: CP-SAT çözücü çalışıyor ({solverRequest.Sections.Count} section)...");
+
+            var solverResult = await _solverEngine.SolveAsync(solverRequest, ct);
+
+            await ReportAsync("complete", 100,
+                detail: $"v2-ortools tamamlandı ({solverResult.Status}, {solverResult.Diagnostics.ElapsedSeconds:F2}s).");
+
+            return MapSolverResultToPreviewDto(solverResult, solverRequest, seed);
         }
         // ── Mevcut v1 akışı aynen devam ──────────────────────────────────
-
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        // 1. Determine seed
-        var seed = request.Seed ?? (int)(DateTime.UtcNow.Ticks % int.MaxValue);
 
         // 2. Load all SystemConfig parameters
         var splitThreshold = await _configProvider.GetIntAsync("Schedule.TheoryLabSplitThreshold", 4, ct);
@@ -1053,6 +1067,111 @@ public sealed class AutoScheduleEngine
                 StudentCount = kvp.Value
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// Plan 2 Task 19: SolverResult → AutoSchedulePreviewDto mapping.
+    /// CP-SAT'ın ürettiği Assignment ve Failure listelerini frontend'in beklediği DTO formatına
+    /// çevirir. Solver request içindeki section/classroom/timeslot lookup'larıyla zenginleştirir.
+    /// Bilinmeyen id'leri sessizce atlar (defensive — solver malformed cevap üretirse engine
+    /// patlamasın diye).
+    /// </summary>
+    private static AutoSchedulePreviewDto MapSolverResultToPreviewDto(
+        SolverResult result,
+        SolverRequest solverRequest,
+        int seed)
+    {
+        var sectionLookup = solverRequest.Sections.ToDictionary(s => s.Id, s => s);
+        var classroomLookup = solverRequest.Classrooms.ToDictionary(c => c.Id, c => c);
+        var timeSlotLookup = solverRequest.TimeSlots.ToDictionary(ts => ts.Id, ts => ts);
+
+        // ── Assignment mapping ───────────────────────────────────────────
+        var assignmentDtos = new List<AutoSchedulePreviewItemDto>();
+        foreach (var asn in result.Assignments)
+        {
+            if (!sectionLookup.TryGetValue(asn.SectionId, out var section))
+            {
+                continue; // unknown section id — defensive skip
+            }
+
+            var primaryClassroomId = asn.Slots.Count > 0 ? asn.Slots[0].ClassroomId : (int?)null;
+            ClassroomInput? primaryClassroom = null;
+            if (primaryClassroomId.HasValue
+                && classroomLookup.TryGetValue(primaryClassroomId.Value, out var cr))
+            {
+                primaryClassroom = cr;
+            }
+
+            var scheduleSlots = asn.Slots
+                .Select(s =>
+                {
+                    var ts = timeSlotLookup.TryGetValue(s.TimeSlotId, out var slot) ? slot : null;
+                    var crName = classroomLookup.TryGetValue(s.ClassroomId, out var c) ? c.Name : "?";
+                    return new ScheduleSlotDto
+                    {
+                        Day = ts?.DayOfWeek ?? DayOfWeek.Monday,
+                        StartTime = ts?.StartTime ?? TimeOnly.MinValue,
+                        EndTime = ts?.EndTime ?? TimeOnly.MinValue,
+                        ClassroomId = s.ClassroomId,
+                        ClassroomName = crName
+                    };
+                })
+                .ToList();
+
+            var summary = string.Join(", ", scheduleSlots.Select(ss =>
+                $"{ss.Day} {ss.StartTime:HH\\:mm}-{ss.EndTime:HH\\:mm} ({ss.ClassroomName})"));
+
+            assignmentDtos.Add(new AutoSchedulePreviewItemDto
+            {
+                SectionId = section.Id,
+                SectionNumber = section.SectionNumber,
+                CourseCode = section.CourseCode,
+                CourseName = section.CourseName,
+                DepartmentCode = string.Empty, // SolverRequest dept code taşımıyor (Plan 3'te eklenebilir)
+                ClassroomId = primaryClassroomId,
+                ClassroomName = primaryClassroom?.Name ?? string.Empty,
+                ScheduleSlots = scheduleSlots,
+                ScheduleSummary = summary,
+                InstructorId = section.InstructorId,
+                InstructorName = null,
+                FitScore = 0
+            });
+        }
+
+        // ── Failure mapping ──────────────────────────────────────────────
+        var failureDtos = new List<AutoScheduleFailureDto>();
+        foreach (var f in result.Failures)
+        {
+            if (!sectionLookup.TryGetValue(f.SectionId, out var section))
+            {
+                continue; // unknown section id — defensive skip
+            }
+            failureDtos.Add(new AutoScheduleFailureDto
+            {
+                SectionId = section.Id,
+                SectionNumber = section.SectionNumber,
+                Capacity = section.Capacity,
+                CourseCode = section.CourseCode,
+                CourseName = section.CourseName,
+                Reason = f.Reason,
+                Suggestions = new List<FailureSuggestionDto>()
+            });
+        }
+
+        return new AutoSchedulePreviewDto
+        {
+            Seed = seed,
+            TotalProcessed = assignmentDtos.Count + failureDtos.Count,
+            SuccessCount = assignmentDtos.Count,
+            FailedCount = failureDtos.Count,
+            TotalPenalty = result.Diagnostics.ObjectiveValue,
+            Assignments = assignmentDtos,
+            Failures = failureDtos,
+            Stats = new AutoScheduleStats
+            {
+                ElapsedSeconds = result.Diagnostics.ElapsedSeconds
+            }
+        };
     }
 
 }
