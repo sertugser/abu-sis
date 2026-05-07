@@ -97,6 +97,15 @@ public static class SchedulingServiceCollectionExtensions
             var end = TimeOnly.TryParse(endStr, out var e) ? e : new TimeOnly(12, 20);
             return new LunchBreakEncoder(start, end);
         });
+        services.AddScoped<IConstraintEncoder>(sp =>
+        {
+            // H16 — config-driven max consecutive hours per instructor per day.
+            // Plan 2: diagnostic-only (no cumulative constraint added).
+            // Plan 3 will read same config and add real sliding-window cumulative constraint.
+            var config = sp.GetRequiredService<ISystemConfigProvider>();
+            var maxHours = config.GetIntAsync("Schedule.MaxConsecutiveHoursPerDay", 4, default).GetAwaiter().GetResult();
+            return new MaxConsecutiveHoursEncoder(maxHours);
+        });
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
