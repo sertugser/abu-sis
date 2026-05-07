@@ -71,6 +71,23 @@ public sealed class AutoScheduleEngine
         {
             await ReportAsync("started", 0, detail: "Auto-schedule başlatılıyor...");
 
+        // ── Engine flag dispatch (Plan 1: stub) ──────────────────────────
+        // SystemConfig.Schedule.Engine == "v2-ortools" ise CpSatSolverEngine kullanılır.
+        // Faz 2 PoC: sadece v2 path'in çağrılabilirliği doğrulanır; gerçek mapping Plan 2'de.
+        // v1 hâlâ default (Schedule.Engine = "v1-mrv").
+        var engineFlag = await _configProvider.GetStringAsync(
+            "Schedule.Engine", "v1-mrv", ct);
+
+        if (engineFlag == "v2-ortools")
+        {
+            // Plan 2'de: SolverRequest'i SolverRequestBuilder ile inşa et, ISolverEngine.SolveAsync çağır,
+            // SolverResult'ı AutoSchedulePreviewDto'ya map'le.
+            // Şu an Plan 1 PoC: log'la ve v1 fallback yap.
+            await ReportAsync("warning", 0,
+                detail: "v2-ortools engine henüz tam implement edilmedi (Plan 2'de). v1 fallback'e dönülüyor.");
+        }
+        // ── Mevcut v1 akışı aynen devam ──────────────────────────────────
+
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         // 1. Determine seed
