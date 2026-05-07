@@ -4,6 +4,7 @@ using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
+using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -16,6 +17,7 @@ public sealed class AutoScheduleEngine
     private readonly AppDbContext _context;
     private readonly ConstraintEvaluationService _constraintService;
     private readonly ISystemConfigProvider _configProvider;
+    private readonly ISolverEngine _solverEngine;
     private readonly IScheduleProgressReporter _progressReporter;
     private readonly IScheduleCancelRegistry? _cancelRegistry;
 
@@ -23,12 +25,14 @@ public sealed class AutoScheduleEngine
         AppDbContext context,
         ConstraintEvaluationService constraintService,
         ISystemConfigProvider configProvider,
+        ISolverEngine solverEngine,
         IScheduleProgressReporter? progressReporter = null,
         IScheduleCancelRegistry? cancelRegistry = null)
     {
         _context = context;
         _constraintService = constraintService;
         _configProvider = configProvider;
+        _solverEngine = solverEngine;
         _progressReporter = progressReporter ?? new NoOpScheduleProgressReporter();
         _cancelRegistry = cancelRegistry;
     }

@@ -1,9 +1,11 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -33,7 +35,7 @@ public class FacultyPlanningServiceTests : IDisposable
 
         _context = new AppDbContext(options);
         var constraintService = CreateConstraintEvaluationService();
-        var autoScheduleEngine = new AutoScheduleEngine(_context, constraintService, new NullSystemConfigProvider());
+        var autoScheduleEngine = new AutoScheduleEngine(_context, constraintService, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
         _service = new FacultyPlanningService(_context, new SchedulingService(_context, constraintService), new HttpContextAccessor(), autoScheduleEngine);
 
         SeedBaseData();

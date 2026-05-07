@@ -4,6 +4,7 @@ using Moq;
 using SIS.Application.Common.Services;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.Constraints;
+using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -62,7 +63,7 @@ public class AutoScheduleEngineIntegrationTests : IDisposable
 
         _configProvider = configMock.Object;
 
-        _engine = new AutoScheduleEngine(_context, _constraintService, _configProvider);
+        _engine = new AutoScheduleEngine(_context, _constraintService, _configProvider, Mock.Of<ISolverEngine>());
 
         SeedDatabase();
     }
