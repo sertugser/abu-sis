@@ -19,4 +19,8 @@ public sealed record SectionInput
     public int? RequiredLabClassroomType { get; init; }
     public bool IsPinned { get; init; }
     public bool IsScheduleLocked { get; init; }
+
+    // NEW (Plan 2 Task 7 — for H5 CurriculumConflictEncoder):
+    public int? ProgramId { get; init; }
+    public int? Year { get; init; }
 }
