@@ -19,7 +19,7 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
-        var sections = ctx.Request.Sections.ToList();
+        var sections = ctx.Request.Sections;
 
         for (int i = 0; i < sections.Count; i++)
         {

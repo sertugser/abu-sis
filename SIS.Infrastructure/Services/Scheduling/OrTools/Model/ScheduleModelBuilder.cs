@@ -72,7 +72,10 @@ public sealed class ScheduleModelBuilder
 
     private static int ComputeTotalSlots(SolverRequest request)
     {
-        return request.TimeSlots.Count > 0 ? request.TimeSlots.Count : 50;
+        if (request.TimeSlots.Count == 0)
+            throw new InvalidOperationException(
+                "SolverRequest.TimeSlots is empty. CP-SAT model requires at least 1 time slot.");
+        return request.TimeSlots.Count;
     }
 }
 

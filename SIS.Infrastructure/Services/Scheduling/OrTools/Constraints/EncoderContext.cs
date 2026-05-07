@@ -12,5 +12,5 @@ public sealed class EncoderContext
     public required AssumptionRegistry Assumptions { get; init; }
     public required SolverRequest Request { get; init; }
     public required IReadOnlyDictionary<string, bool> ConstraintFlags { get; init; }
-    public required List<LinearExpr> Penalties { get; init; }
+    public required IList<LinearExpr> Penalties { get; init; }
 }

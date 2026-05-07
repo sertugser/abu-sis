@@ -65,7 +65,17 @@ public class CpSatSolverEngineTests
             {
                 new() { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture }
             },
-            TimeSlots = new List<TimeSlotInput>(),
+            TimeSlots = Enumerable.Range(1, 8)
+                .Select(i => new TimeSlotInput
+                {
+                    Id = i,
+                    DayOfWeek = DayOfWeek.Monday,
+                    SlotOrder = i,
+                    StartTime = new TimeOnly(8 + i, 0),
+                    EndTime = new TimeOnly(8 + i, 50),
+                    AllowedMode = TimeSlotAllowedMode.Both
+                })
+                .ToList(),
             ConstraintFlags = new Dictionary<string, bool> { ["H1"] = true }
         };
 
@@ -90,7 +100,12 @@ public class CpSatSolverEngineTests
             {
                 new() { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture }
             },
-            TimeSlots = new List<TimeSlotInput>()
+            TimeSlots = new List<TimeSlotInput>
+            {
+                new() { Id = 1, DayOfWeek = DayOfWeek.Monday, SlotOrder = 1,
+                    StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                    AllowedMode = TimeSlotAllowedMode.Both }
+            }
         };
 
         var act = async () => await engine.SolveAsync(request, cts.Token);
