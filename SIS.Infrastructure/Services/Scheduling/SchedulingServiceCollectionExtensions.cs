@@ -73,6 +73,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, CapacityEncoder>();
         services.AddScoped<IConstraintEncoder, ClassroomTypeEncoder>();
         services.AddScoped<IConstraintEncoder, CurriculumConflictEncoder>();
+        services.AddScoped<IConstraintEncoder, TheoryLabComponentEncoder>();
 
         // Model builder + mapper
         services.AddScoped<ScheduleModelBuilder>();
