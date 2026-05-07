@@ -37,7 +37,7 @@ public class ClassroomTypeEncoderTests
             if (s.TheoryHours > 0)
                 variables.CreateRoomVariable(s.Id, ComponentType.Lecture, classrooms);
             if (s.LabHours > 0)
-                variables.CreateRoomVariable(s.Id, ComponentType.Lab, classrooms);
+                variables.CreateRoomVariable(s.Id, ComponentType.Lab, classrooms, groupCount: s.LabGroupCount);
         }
 
         return new EncoderContext
@@ -158,6 +158,41 @@ public class ClassroomTypeEncoderTests
         encoder.Encode(ctx);
 
         // Lab component is constrained; lecture component is not. 1 assumption (lab→lecture room forbidden).
+        ctx.Assumptions.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public void Encode_LabSectionMultiGroup_NonLabClassroom_RegistersAssumptionForAllGroups()
+    {
+        var encoder = new ClassroomTypeEncoder();
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 40, Type = ClassroomType.Lab },
+            new() { Id = 10, Name = "L2", Capacity = 40, Type = ClassroomType.Lab },
+            new() { Id = 11, Name = "Lecture A", Capacity = 100, Type = ClassroomType.Lecture }
+        };
+        var section = new SectionInput
+        {
+            Id = 1,
+            CourseId = 100,
+            CourseCode = "X",
+            CourseName = "X",
+            SectionNumber = 1,
+            Capacity = 80,
+            TheoryHours = 0,
+            LabHours = 2,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            LabGroupCount = 2
+        };
+        var ctx = BuildContextWithRooms(
+            new[] { section },
+            classrooms,
+            flags: new Dictionary<string, bool> { ["H4"] = true });
+
+        encoder.Encode(ctx);
+
+        // 1 non-lab classroom (Lecture) × 1 literal = 1 assumption.
+        // The single literal gates BOTH labRooms IntVars (consistent with H3 pattern).
         ctx.Assumptions.Count.Should().Be(1);
     }
 
