@@ -1,5 +1,6 @@
 using Google.OrTools.Sat;
 using Microsoft.Extensions.Logging;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Solver;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Diagnostics;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Mapping;
@@ -15,17 +16,27 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools;
 /// </summary>
 public sealed class CpSatSolverEngine : ISolverEngine
 {
+    // Fallback defaults — production reads from DB (SystemConfig seeded in Plan 1 Task 4).
+    // These constants only apply if a SystemConfig row is missing for the corresponding key.
+    private const int FALLBACK_TIME_LIMIT_SECONDS = 30;
+    private const int FALLBACK_NUM_WORKERS = 8;
+    private const int FALLBACK_RANDOM_SEED = 42;
+    private const bool FALLBACK_LOG_TO_CONSOLE = false;
+
     private readonly ScheduleModelBuilder _modelBuilder;
     private readonly SolutionMapper _mapper;
+    private readonly ISystemConfigProvider _config;
     private readonly ILogger<CpSatSolverEngine>? _logger;
 
     public CpSatSolverEngine(
         ScheduleModelBuilder modelBuilder,
         SolutionMapper mapper,
+        ISystemConfigProvider config,
         ILogger<CpSatSolverEngine>? logger = null)
     {
         _modelBuilder = modelBuilder;
         _mapper = mapper;
+        _config = config;
         _logger = logger;
     }
 
@@ -35,12 +46,28 @@ public sealed class CpSatSolverEngine : ISolverEngine
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Read solver parameters from SystemConfig (5-min cached). Fallbacks only fire on missing keys.
+        var timeLimit = await _config.GetIntAsync(
+            "Schedule.OrTools.TimeLimitSeconds", FALLBACK_TIME_LIMIT_SECONDS, cancellationToken);
+        var numWorkers = await _config.GetIntAsync(
+            "Schedule.OrTools.NumWorkers", FALLBACK_NUM_WORKERS, cancellationToken);
+        // SolverRequest.Seed (if provided) overrides the configured seed for caller-driven determinism.
+        var configuredSeed = await _config.GetIntAsync(
+            "Schedule.OrTools.RandomSeed", FALLBACK_RANDOM_SEED, cancellationToken);
+        var randomSeed = request.Seed ?? configuredSeed;
+        var logToConsole = await _config.GetBoolAsync(
+            "Schedule.OrTools.LogToConsole", FALLBACK_LOG_TO_CONSOLE, cancellationToken);
+
         var sw = Stopwatch.StartNew();
         var build = _modelBuilder.Build(request);
 
         var solver = new CpSolver
         {
-            StringParameters = "num_workers:8 max_time_in_seconds:30 random_seed:42"
+            StringParameters = string.Join(" ",
+                $"num_workers:{numWorkers}",
+                $"max_time_in_seconds:{timeLimit}",
+                $"random_seed:{randomSeed}",
+                $"log_search_progress:{(logToConsole ? "true" : "false")}")
         };
 
         // Cancellation propagation: ct trip → solver.StopSearch()
