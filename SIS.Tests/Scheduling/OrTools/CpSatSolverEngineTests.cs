@@ -284,12 +284,12 @@ public class CpSatSolverEngineTests
     {
         // Plan 3 partial scheduling: aynı dersin 3 section'ı (H8: çakışma yok)
         // Sadece 2 zaman slot'u — max 2 section yerleşebilir, 1'i drop edilmeli.
-        // NOT: H1 (classroom no-overlap) burada disabled — H1'in room optional interval'ları
-        // section.present literal'ine bağlanmıyor (ayrı presence: room==classroomId), bu yüzden
-        // section drop'u classroom slot'unu serbest bırakmıyor. Bu encoder bug'ı Plan 3 Task 4
-        // kapsamında değil; test pure section-level partial scheduling'i izole eder.
+        // Plan 3 Task 4.5 sonrası: H1 (classroom no-overlap) artık aktif edildi —
+        // CreateOptionalRoomInterval presence'i sectionPresent ∧ (room == classroomId)
+        // şeklinde gate ediyor; section drop edilince room presence de düşüyor ve slot serbest kalıyor.
         var engine = BuildEngineWithCustomEncoders(new IConstraintEncoder[]
         {
+            new ClassroomConflictEncoder(),
             new SameCourseSectionEncoder()
         });
 
@@ -341,7 +341,7 @@ public class CpSatSolverEngineTests
             },
             ConstraintFlags = new Dictionary<string, bool>
             {
-                ["H1"] = false,
+                ["H1"] = true,   // Plan 3 Task 4.5 sonrası re-enabled — section-level gating slotları doğru serbest bırakıyor
                 ["H8"] = true   // same-course no overlap → 1 section drop edilmek zorunda
             }
         };

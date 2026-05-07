@@ -143,7 +143,7 @@ public sealed class DecisionVariables
 
     /// <summary>
     /// Section'ın belirli derslikte belirli component için optional interval'ını oluşturur.
-    /// Presence literal: room[sectionId] == classroomId.
+    /// Presence literal: sectionPresent ∧ (room[sectionId] == classroomId).
     /// Used by classroom-aware encoders (H1, H3, etc.) for per-classroom AddNoOverlap grouping.
     /// Idempotent: returns existing interval if already created for the same (sectionId, classroomId, componentType).
     /// </summary>
@@ -157,15 +157,30 @@ public sealed class DecisionVariables
         if (_optionalIntervals.TryGetValue(key, out var existing))
             return existing;
 
-        // Create presence literal: room[sectionId] == classroomId ↔ presence
-        var presence = _model.NewBoolVar(
-            $"present_{componentType.ToString().ToLowerInvariant()}_s{sectionId}_c{classroomId}");
+        // Plan 3 Task 4.5: presence must be gated by both section-level present AND room equality.
+        // Otherwise dropped sections still occupy slots via room IntVar's residual value.
+        if (!_sectionPresent.TryGetValue(sectionId, out var sectionPresent))
+            throw new InvalidOperationException(
+                $"Section {sectionId} has no presence literal. Call CreateIntervalsForSection first.");
 
+        // Step 1: Reify room equality (roomEqLit ⇔ (roomVar == classroomId))
         var roomVar = componentType == ComponentType.Lecture
             ? GetLectureRoom(sectionId)
             : GetLabRoom(sectionId);
-        _model.Add(roomVar == classroomId).OnlyEnforceIf(presence);
-        _model.Add(roomVar != classroomId).OnlyEnforceIf(presence.Not());
+        var roomEqLit = _model.NewBoolVar(
+            $"room_eq_{componentType.ToString().ToLowerInvariant()}_s{sectionId}_c{classroomId}");
+        _model.Add(roomVar == classroomId).OnlyEnforceIf(roomEqLit);
+        _model.Add(roomVar != classroomId).OnlyEnforceIf(roomEqLit.Not());
+
+        // Step 2: Combined presence — must be present AT section level AND in this specific classroom
+        // presence ⇔ (sectionPresent ∧ roomEqLit)
+        var presence = _model.NewBoolVar(
+            $"present_{componentType.ToString().ToLowerInvariant()}_s{sectionId}_c{classroomId}");
+
+        // presence → sectionPresent ∧ roomEqLit
+        _model.AddBoolAnd(new ILiteral[] { sectionPresent, roomEqLit }).OnlyEnforceIf(presence);
+        // ¬presence → ¬sectionPresent ∨ ¬roomEqLit
+        _model.AddBoolOr(new ILiteral[] { sectionPresent.Not(), roomEqLit.Not() }).OnlyEnforceIf(presence.Not());
 
         // Use existing component interval's start/end as the optional interval's bounds
         var sourceInterval = componentType == ComponentType.Lecture
@@ -175,7 +190,7 @@ public sealed class DecisionVariables
             throw new InvalidOperationException(
                 $"Section {sectionId} has no {componentType} interval; cannot create optional room interval.");
 
-        // Create optional interval gated by presence; same start/duration/end as source interval
+        // Optional interval gated by combined presence
         var optInterval = _model.NewOptionalIntervalVar(
             sourceInterval.StartExpr(),
             LinearExpr.Constant(duration),
