@@ -108,6 +108,41 @@ public class PreflightFeasibilityCheckerTests
     }
 
     [Fact]
+    public void Check_LabSection80Capacity_TwoLab40Rooms_MarkedFeasible_ParallelSplit()
+    {
+        // Plan 4 Task 6: paralel split — 80-cap section bölünerek 2x40 lab'a sığar.
+        var checker = new PreflightFeasibilityChecker();
+        var sections = new[] { Section(1, theory: 0, lab: 2, capacity: 80) };
+        var classrooms = new[]
+        {
+            new ClassroomInput { Id = 1, Name = "L1", Capacity = 40, Type = ClassroomType.Lab },
+            new ClassroomInput { Id = 2, Name = "L2", Capacity = 40, Type = ClassroomType.Lab }
+        };
+
+        var result = checker.Check(sections, classrooms);
+
+        result.FeasibleSections.Should().HaveCount(1);
+        result.InfeasibleSections.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Check_LabSection80Capacity_OneLab40Room_MarkedInfeasible_NotEnoughRooms()
+    {
+        // Plan 4 Task 6: 80-cap section, tek 40-cap lab → 2 paralel grup gerekli ama 1 lab var → infeasible.
+        var checker = new PreflightFeasibilityChecker();
+        var sections = new[] { Section(1, theory: 0, lab: 2, capacity: 80) };
+        var classrooms = new[]
+        {
+            new ClassroomInput { Id = 1, Name = "L1", Capacity = 40, Type = ClassroomType.Lab }
+        };
+
+        var result = checker.Check(sections, classrooms);
+
+        result.InfeasibleSections.Should().HaveCount(1);
+        result.InfeasibleSections[0].Reason.Should().Contain("paralel grup");
+    }
+
+    [Fact]
     public void Check_MultipleSectionsMixed_PartialFeasibility()
     {
         var checker = new PreflightFeasibilityChecker();
