@@ -102,26 +102,32 @@ public sealed class SolutionMapper
                 }
             }
 
-            // Lab component
+            // Lab component (Plan 4 Task 7 — paralel split: emit one AssignedSlot per group×slot).
+            // groupCount=1 (default) → outer foreach runs once → semantically identical to old shim path.
+            // groupCount>1 → N entries per slot, each with a different ClassroomId (parallel labs).
             if (section.LabHours > 0)
             {
                 var labInterval = build.Variables.GetLabInterval(section.Id);
                 if (labInterval != null)
                 {
-                    var roomId = (int)solver.Value(build.Variables.GetLabRoom(section.Id));
                     var startSlotIdx = (int)solver.Value(labInterval.StartExpr());
                     var endSlotIdx = (int)solver.Value(labInterval.EndExpr());
+                    var labRooms = build.Variables.GetLabRooms(section.Id);
 
-                    for (int i = startSlotIdx; i < endSlotIdx; i++)
+                    foreach (var roomVar in labRooms)
                     {
-                        if (i >= 0 && i < request.TimeSlots.Count)
+                        var roomId = (int)solver.Value(roomVar);
+                        for (int i = startSlotIdx; i < endSlotIdx; i++)
                         {
-                            slots.Add(new AssignedSlot
+                            if (i >= 0 && i < request.TimeSlots.Count)
                             {
-                                TimeSlotId = request.TimeSlots[i].Id,
-                                ClassroomId = roomId,
-                                ComponentType = ComponentType.Lab
-                            });
+                                slots.Add(new AssignedSlot
+                                {
+                                    TimeSlotId = request.TimeSlots[i].Id,
+                                    ClassroomId = roomId,
+                                    ComponentType = ComponentType.Lab
+                                });
+                            }
                         }
                     }
                 }

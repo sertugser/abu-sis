@@ -132,6 +132,87 @@ public class SolutionMapperTests
         result.Status.Should().Be(SolverStatus.Feasible);
     }
 
+    // ─────────────── Plan 4 Task 7 — Parallel lab AssignedSlot emission ───────────────
+
+    /// <summary>
+    /// Plan 4 Task 7: Lab section with LabGroupCount=2 must emit AssignedSlots for BOTH
+    /// parallel groups, each with a different ClassroomId, sharing the same slot range.
+    /// Expected: 2 groups × 2 slots = 4 AssignedSlot entries; 2 distinct ClassroomIds.
+    /// Pre-fix (using GetLabRoom shim): would emit only 2 entries (group 0's room).
+    /// </summary>
+    [Fact]
+    public void MapSuccess_LabSectionMultiGroup_EmitsSlotsForEveryGroup()
+    {
+        // Arrange: 1 section with LabGroupCount=2, LabHours=2; 2 lab classrooms sized
+        // so each group fits in one room (capacity 40 + 40 ≥ section capacity 80).
+        var section = new SectionInput
+        {
+            Id = 1,
+            CourseId = 100,
+            CourseCode = "X",
+            CourseName = "X",
+            SectionNumber = 1,
+            Capacity = 80,
+            TheoryHours = 0,
+            LabHours = 2,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            LabGroupCount = 2
+        };
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 40, Type = ClassroomType.Lab },
+            new() { Id = 10, Name = "L2", Capacity = 40, Type = ClassroomType.Lab }
+        };
+        var slots = BuildSimpleSlots(8);
+        var request = new SolverRequest
+        {
+            TermId = 1,
+            FacultyId = 1,
+            Sections = new[] { section },
+            Classrooms = classrooms,
+            TimeSlots = slots,
+            ConstraintFlags = new Dictionary<string, bool>
+            {
+                ["H1"] = true,
+                ["H3"] = true,
+                ["H4"] = true
+            }
+        };
+
+        var encoders = new IConstraintEncoder[]
+        {
+            new ClassroomConflictEncoder(),
+            new CapacityEncoder(),
+            new ClassroomTypeEncoder()
+        };
+        var modelBuilder = new ScheduleModelBuilder(encoders);
+        var build = modelBuilder.Build(request);
+
+        // Force present == 1 so solver actually schedules the section
+        // (otherwise Maximize(presence) would still pick it, but we're explicit).
+        if (build.Variables.GetSectionPresent(section.Id) is IntVar pv)
+            build.Model.Add(pv == 1);
+
+        var solver = new CpSolver();
+        var status = solver.Solve(build.Model);
+        status.Should().BeOneOf(CpSolverStatus.Optimal, CpSolverStatus.Feasible);
+
+        // Act
+        var mapper = new SolutionMapper();
+        var result = mapper.MapSuccess(solver, build, request, elapsedSeconds: 0.1, status);
+
+        // Assert
+        result.Assignments.Should().HaveCount(1);
+        var labAssignments = result.Assignments[0].Slots
+            .Where(s => s.ComponentType == ComponentType.Lab)
+            .ToList();
+        labAssignments.Should().HaveCount(4);                          // 2 groups × 2 slots
+        labAssignments.Select(s => s.ClassroomId).Distinct().Should().HaveCount(2);  // 2 distinct rooms
+        // Each TimeSlotId appears exactly twice (once per group).
+        labAssignments.GroupBy(s => s.TimeSlotId)
+            .Should().AllSatisfy(g => g.Count().Should().Be(2));
+    }
+
     // ─────────────── Helpers ───────────────
 
     private static SolverRequest BuildSimpleRequest() => new()
