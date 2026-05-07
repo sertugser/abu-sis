@@ -240,4 +240,66 @@ public class DecisionVariablesTests
         act.Should().Throw<ArgumentOutOfRangeException>()
             .Where(ex => ex.ParamName == "groupCount");
     }
+
+    // Plan 4 Task 5 — per-group optional room intervals for parallel labs
+    [Fact]
+    public void CreateOptionalRoomIntervalForGroup_LabMultiGroup_RegistersDistinctIntervalsPerGroup()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 0, lab: 2));
+
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 40, Type = ClassroomType.Lab },
+            new() { Id = 10, Name = "L2", Capacity = 40, Type = ClassroomType.Lab }
+        };
+        registry.CreateRoomVariable(1, ComponentType.Lab, classrooms, groupCount: 2);
+
+        var iv0 = registry.CreateOptionalRoomIntervalForGroup(1, 9, ComponentType.Lab, duration: 2, groupIndex: 0);
+        var iv1 = registry.CreateOptionalRoomIntervalForGroup(1, 9, ComponentType.Lab, duration: 2, groupIndex: 1);
+
+        iv0.Should().NotBeSameAs(iv1);
+        registry.AllOptionalIntervalsForGroups.Should()
+            .ContainKey((1, 9, ComponentType.Lab, 0))
+            .And.ContainKey((1, 9, ComponentType.Lab, 1));
+    }
+
+    [Fact]
+    public void CreateOptionalRoomIntervalForGroup_Idempotent_SameKeyReturnsSameInterval()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 0, lab: 2));
+
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 40, Type = ClassroomType.Lab }
+        };
+        registry.CreateRoomVariable(1, ComponentType.Lab, classrooms, groupCount: 1);
+
+        var first = registry.CreateOptionalRoomIntervalForGroup(1, 9, ComponentType.Lab, duration: 2, groupIndex: 0);
+        var second = registry.CreateOptionalRoomIntervalForGroup(1, 9, ComponentType.Lab, duration: 2, groupIndex: 0);
+
+        second.Should().BeSameAs(first);
+    }
+
+    [Fact]
+    public void CreateOptionalRoomIntervalForGroup_LabGroupIndexOutOfRange_Throws()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 0, lab: 2));
+
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 40, Type = ClassroomType.Lab }
+        };
+        registry.CreateRoomVariable(1, ComponentType.Lab, classrooms, groupCount: 1);
+
+        Action act = () => registry.CreateOptionalRoomIntervalForGroup(1, 9, ComponentType.Lab, 2, groupIndex: 5);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .Where(ex => ex.ParamName == "groupIndex");
+    }
 }

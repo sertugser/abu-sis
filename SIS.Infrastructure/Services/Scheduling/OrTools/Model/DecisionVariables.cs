@@ -243,4 +243,81 @@ public sealed class DecisionVariables
 
     public IReadOnlyDictionary<(int, int, ComponentType), IntervalVar> AllOptionalIntervals => _optionalIntervals;
     public IReadOnlyDictionary<(int, int, ComponentType), ILiteral> AllPresenceLiterals => _presenceLiterals;
+
+    private readonly Dictionary<(int sectionId, int classroomId, ComponentType type, int groupIndex), IntervalVar> _optionalIntervalsForGroups = new();
+    private readonly Dictionary<(int sectionId, int classroomId, ComponentType type, int groupIndex), ILiteral> _presenceLiteralsForGroups = new();
+
+    /// <summary>
+    /// Plan 4 Task 5 — paralel lab support.
+    /// Section'ın belirli derslikte belirli component için <b>belirli group'a</b> ait optional interval'ını oluşturur.
+    /// Lecture için <paramref name="groupIndex"/> 0 olmalı (lecture'da group kavramı yok).
+    /// Lab için <paramref name="groupIndex"/> ∈ [0, GetLabRooms(sectionId).Count).
+    /// Presence literal: sectionPresent ∧ (labRooms[groupIndex] == classroomId).
+    /// Idempotent: aynı (sectionId, classroomId, componentType, groupIndex) anahtarıyla tekrar çağrılırsa cache'lenmiş interval döner.
+    /// </summary>
+    public IntervalVar CreateOptionalRoomIntervalForGroup(
+        int sectionId,
+        int classroomId,
+        ComponentType componentType,
+        int duration,
+        int groupIndex)
+    {
+        var key = (sectionId, classroomId, componentType, groupIndex);
+        if (_optionalIntervalsForGroups.TryGetValue(key, out var existing))
+            return existing;
+
+        if (!_sectionPresent.TryGetValue(sectionId, out var sectionPresent))
+            throw new InvalidOperationException(
+                $"Section {sectionId} has no presence literal. Call CreateIntervalsForSection first.");
+
+        IntVar roomVar;
+        if (componentType == ComponentType.Lecture)
+        {
+            if (groupIndex != 0)
+                throw new ArgumentOutOfRangeException(nameof(groupIndex), groupIndex,
+                    "Lecture component supports only groupIndex=0.");
+            roomVar = GetLectureRoom(sectionId);
+        }
+        else
+        {
+            var labRooms = GetLabRooms(sectionId);
+            if (groupIndex < 0 || groupIndex >= labRooms.Count)
+                throw new ArgumentOutOfRangeException(nameof(groupIndex), groupIndex,
+                    $"groupIndex out of range for section {sectionId} (labRooms.Count={labRooms.Count}).");
+            roomVar = labRooms[groupIndex];
+        }
+
+        var typeName = componentType.ToString().ToLowerInvariant();
+
+        // Step 1: reify room equality for this specific group's IntVar
+        var roomEqLit = _model.NewBoolVar($"room_eq_{typeName}_s{sectionId}_c{classroomId}_g{groupIndex}");
+        _model.Add(roomVar == classroomId).OnlyEnforceIf(roomEqLit);
+        _model.Add(roomVar != classroomId).OnlyEnforceIf(roomEqLit.Not());
+
+        // Step 2: presence ⇔ (sectionPresent ∧ roomEqLit)
+        var presence = _model.NewBoolVar($"present_{typeName}_s{sectionId}_c{classroomId}_g{groupIndex}");
+        _model.AddBoolAnd(new ILiteral[] { sectionPresent, roomEqLit }).OnlyEnforceIf(presence);
+        _model.AddBoolOr(new ILiteral[] { sectionPresent.Not(), roomEqLit.Not() }).OnlyEnforceIf(presence.Not());
+
+        var sourceInterval = componentType == ComponentType.Lecture
+            ? GetLectureInterval(sectionId)
+            : GetLabInterval(sectionId);
+        if (sourceInterval == null)
+            throw new InvalidOperationException(
+                $"Section {sectionId} has no {componentType} interval; cannot create optional room interval.");
+
+        var optInterval = _model.NewOptionalIntervalVar(
+            sourceInterval.StartExpr(),
+            LinearExpr.Constant(duration),
+            sourceInterval.EndExpr(),
+            presence,
+            $"opt_iv_{typeName}_s{sectionId}_c{classroomId}_g{groupIndex}");
+
+        _optionalIntervalsForGroups[key] = optInterval;
+        _presenceLiteralsForGroups[key] = presence;
+        return optInterval;
+    }
+
+    public IReadOnlyDictionary<(int, int, ComponentType, int), IntervalVar> AllOptionalIntervalsForGroups => _optionalIntervalsForGroups;
+    public IReadOnlyDictionary<(int, int, ComponentType, int), ILiteral> AllPresenceLiteralsForGroups => _presenceLiteralsForGroups;
 }

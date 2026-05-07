@@ -37,7 +37,7 @@ public class ClassroomConflictEncoderTests
             if (s.TheoryHours > 0)
                 variables.CreateRoomVariable(s.Id, ComponentType.Lecture, classrooms);
             if (s.LabHours > 0)
-                variables.CreateRoomVariable(s.Id, ComponentType.Lab, classrooms);
+                variables.CreateRoomVariable(s.Id, ComponentType.Lab, classrooms, groupCount: s.LabGroupCount);
         }
 
         return new EncoderContext
@@ -142,5 +142,44 @@ public class ClassroomConflictEncoderTests
 
         // 1 classroom × 1 section interval = only 1 interval per classroom; AddNoOverlap not added (Count < 2)
         ctx.Assumptions.Count.Should().Be(0);
+    }
+
+    // Plan 4 Task 5 — multi-group lab section emits per-group optional intervals
+    [Fact]
+    public void Encode_LabSectionMultiGroup_RegistersOptionalIntervalsForEveryGroup()
+    {
+        var encoder = new ClassroomConflictEncoder();
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "L1", Capacity = 40, Type = ClassroomType.Lab },
+            new() { Id = 10, Name = "L2", Capacity = 40, Type = ClassroomType.Lab }
+        };
+        var section = new SectionInput
+        {
+            Id = 1,
+            CourseId = 100,
+            CourseCode = "X",
+            CourseName = "X",
+            SectionNumber = 1,
+            Capacity = 80,
+            TheoryHours = 0,
+            LabHours = 2,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            LabGroupCount = 2
+        };
+        var ctx = BuildContextWithRooms(
+            new[] { section },
+            classrooms,
+            flags: new Dictionary<string, bool> { ["H1"] = true });
+
+        encoder.Encode(ctx);
+
+        // 2 groups × 2 classrooms = 4 lab optional intervals registered for this section
+        var labKeys = ctx.Variables.AllOptionalIntervalsForGroups
+            .Keys
+            .Where(k => k.Item1 == section.Id && k.Item3 == ComponentType.Lab)
+            .ToList();
+        labKeys.Should().HaveCount(4);
+        labKeys.Select(k => k.Item4).Distinct().Should().BeEquivalentTo(new[] { 0, 1 });
     }
 }

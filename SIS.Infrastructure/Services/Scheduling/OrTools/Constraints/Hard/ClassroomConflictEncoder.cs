@@ -28,13 +28,13 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
 
         foreach (var section in sections)
         {
-            // Lecture component: create optional interval for each candidate classroom
+            // Lecture component: create optional interval for each candidate classroom (groupIndex=0).
             if (section.TheoryHours > 0)
             {
                 foreach (var classroom in classrooms)
                 {
-                    var optInterval = ctx.Variables.CreateOptionalRoomInterval(
-                        section.Id, classroom.Id, ComponentType.Lecture, section.TheoryHours);
+                    var optInterval = ctx.Variables.CreateOptionalRoomIntervalForGroup(
+                        section.Id, classroom.Id, ComponentType.Lecture, section.TheoryHours, groupIndex: 0);
 
                     if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
                     {
@@ -45,20 +45,25 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
                 }
             }
 
-            // Lab component: create optional interval for each candidate classroom
+            // Lab component: create optional interval per (group, classroom). Plan 4 Task 5 — paralel lab support.
+            // Single-group sections still iterate exactly once (groupCount=1).
             if (section.LabHours > 0)
             {
-                foreach (var classroom in classrooms)
+                var labRooms = ctx.Variables.GetLabRooms(section.Id);
+                for (int g = 0; g < labRooms.Count; g++)
                 {
-                    var optInterval = ctx.Variables.CreateOptionalRoomInterval(
-                        section.Id, classroom.Id, ComponentType.Lab, section.LabHours);
-
-                    if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
+                    foreach (var classroom in classrooms)
                     {
-                        list = new List<IntervalVar>();
-                        perClassroomIntervals[classroom.Id] = list;
+                        var optInterval = ctx.Variables.CreateOptionalRoomIntervalForGroup(
+                            section.Id, classroom.Id, ComponentType.Lab, section.LabHours, groupIndex: g);
+
+                        if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
+                        {
+                            list = new List<IntervalVar>();
+                            perClassroomIntervals[classroom.Id] = list;
+                        }
+                        list.Add(optInterval);
                     }
-                    list.Add(optInterval);
                 }
             }
         }
