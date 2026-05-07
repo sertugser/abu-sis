@@ -110,4 +110,57 @@ public sealed class DecisionVariables
 
     public IReadOnlyDictionary<int, IntervalVar> AllLectureIntervals => _lectureIntervals;
     public IReadOnlyDictionary<int, IntervalVar> AllLabIntervals => _labIntervals;
+
+    private readonly Dictionary<(int sectionId, int classroomId, ComponentType type), IntervalVar> _optionalIntervals = new();
+    private readonly Dictionary<(int sectionId, int classroomId, ComponentType type), ILiteral> _presenceLiterals = new();
+
+    /// <summary>
+    /// Section'ın belirli derslikte belirli component için optional interval'ını oluşturur.
+    /// Presence literal: room[sectionId] == classroomId.
+    /// Used by classroom-aware encoders (H1, H3, etc.) for per-classroom AddNoOverlap grouping.
+    /// Idempotent: returns existing interval if already created for the same (sectionId, classroomId, componentType).
+    /// </summary>
+    public IntervalVar CreateOptionalRoomInterval(
+        int sectionId,
+        int classroomId,
+        ComponentType componentType,
+        int duration)
+    {
+        var key = (sectionId, classroomId, componentType);
+        if (_optionalIntervals.TryGetValue(key, out var existing))
+            return existing;
+
+        // Create presence literal: room[sectionId] == classroomId ↔ presence
+        var presence = _model.NewBoolVar(
+            $"present_{componentType.ToString().ToLowerInvariant()}_s{sectionId}_c{classroomId}");
+
+        var roomVar = componentType == ComponentType.Lecture
+            ? GetLectureRoom(sectionId)
+            : GetLabRoom(sectionId);
+        _model.Add(roomVar == classroomId).OnlyEnforceIf(presence);
+        _model.Add(roomVar != classroomId).OnlyEnforceIf(presence.Not());
+
+        // Use existing component interval's start/end as the optional interval's bounds
+        var sourceInterval = componentType == ComponentType.Lecture
+            ? GetLectureInterval(sectionId)
+            : GetLabInterval(sectionId);
+        if (sourceInterval == null)
+            throw new InvalidOperationException(
+                $"Section {sectionId} has no {componentType} interval; cannot create optional room interval.");
+
+        // Create optional interval gated by presence; same start/duration/end as source interval
+        var optInterval = _model.NewOptionalIntervalVar(
+            sourceInterval.StartExpr(),
+            LinearExpr.Constant(duration),
+            sourceInterval.EndExpr(),
+            presence,
+            $"opt_iv_{componentType.ToString().ToLowerInvariant()}_s{sectionId}_c{classroomId}");
+
+        _optionalIntervals[key] = optInterval;
+        _presenceLiterals[key] = presence;
+        return optInterval;
+    }
+
+    public IReadOnlyDictionary<(int, int, ComponentType), IntervalVar> AllOptionalIntervals => _optionalIntervals;
+    public IReadOnlyDictionary<(int, int, ComponentType), ILiteral> AllPresenceLiterals => _presenceLiterals;
 }

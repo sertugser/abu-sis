@@ -1,13 +1,14 @@
 using Google.OrTools.Sat;
+using SIS.Application.Scheduling.Solver;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// H1 — Classroom Conflict.
-/// PoC implementasyon (Plan 1 Faz 2): Aynı saat aralığında iki lecture interval'ı çakışamaz.
-/// Plan 2'de gerçek "per-classroom AddNoOverlap" modeline (optional interval + room IntVar matching) geçilecek.
-/// Not: CP-SAT 9.10 NoOverlap üzerinde OnlyEnforceIf desteklemediği için PoC'de
-/// AddNoOverlap koşulsuz uygulanır; assumption literal sadece UNSAT core registry'sinde tutulur.
+/// H1 — Classroom Conflict (Plan 2 Task 4: real implementation, replacing Plan 1 PoC).
+/// Aynı derslikte aynı zaman aralığında iki section olamaz.
+/// CP-SAT model: per-classroom optional intervals + AddNoOverlap.
+/// Presence literal per (section, classroom): room[sectionId] == classroomId.
+/// UNSAT core: per-classroom literal registered as assumption (aggregate).
 /// </summary>
 public sealed class ClassroomConflictEncoder : IConstraintEncoder
 {
@@ -20,25 +21,56 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
             return;
 
         var sections = ctx.Request.Sections;
+        var classrooms = ctx.Request.Classrooms;
 
-        for (int i = 0; i < sections.Count; i++)
+        // Group optional intervals per classroom
+        var perClassroomIntervals = new Dictionary<int, List<IntervalVar>>();
+
+        foreach (var section in sections)
         {
-            for (int j = i + 1; j < sections.Count; j++)
+            // Lecture component: create optional interval for each candidate classroom
+            if (section.TheoryHours > 0)
             {
-                var s1 = sections[i];
-                var s2 = sections[j];
-
-                if (s1.TheoryHours > 0 && s2.TheoryHours > 0)
+                foreach (var classroom in classrooms)
                 {
-                    var iv1 = ctx.Variables.GetLectureInterval(s1.Id);
-                    var iv2 = ctx.Variables.GetLectureInterval(s2.Id);
-                    if (iv1 != null && iv2 != null)
+                    var optInterval = ctx.Variables.CreateOptionalRoomInterval(
+                        section.Id, classroom.Id, ComponentType.Lecture, section.TheoryHours);
+
+                    if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
                     {
-                        // Assumption literal kayıtlı ama enforcement yok (Plan 2'de optional interval ile bağlanacak).
-                        ctx.Assumptions.Register(Code, s1.Id, s2.Id);
-                        ctx.Model.AddNoOverlap(new[] { iv1, iv2 });
+                        list = new List<IntervalVar>();
+                        perClassroomIntervals[classroom.Id] = list;
                     }
+                    list.Add(optInterval);
                 }
+            }
+
+            // Lab component: create optional interval for each candidate classroom
+            if (section.LabHours > 0)
+            {
+                foreach (var classroom in classrooms)
+                {
+                    var optInterval = ctx.Variables.CreateOptionalRoomInterval(
+                        section.Id, classroom.Id, ComponentType.Lab, section.LabHours);
+
+                    if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
+                    {
+                        list = new List<IntervalVar>();
+                        perClassroomIntervals[classroom.Id] = list;
+                    }
+                    list.Add(optInterval);
+                }
+            }
+        }
+
+        // Per classroom: AddNoOverlap on all optional intervals for that classroom
+        foreach (var (classroomId, intervals) in perClassroomIntervals)
+        {
+            if (intervals.Count >= 2)
+            {
+                ctx.Model.AddNoOverlap(intervals);
+                // Register a per-classroom assumption literal for diagnostic UNSAT core mapping
+                ctx.Assumptions.Register(Code, primarySectionId: classroomId, secondarySectionId: null);
             }
         }
     }

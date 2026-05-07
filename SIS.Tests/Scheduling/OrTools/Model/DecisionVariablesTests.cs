@@ -104,4 +104,43 @@ public class DecisionVariablesTests
 
         act.Should().Throw<KeyNotFoundException>();
     }
+
+    [Fact]
+    public void CreateOptionalRoomInterval_RegistersIntervalAndPresenceLiteral()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        var section = Section(1, theory: 3, lab: 0);
+        registry.CreateIntervalsForSection(section);
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture }
+        };
+        registry.CreateRoomVariable(1, ComponentType.Lecture, classrooms);
+
+        var optInterval = registry.CreateOptionalRoomInterval(1, 9, ComponentType.Lecture, duration: 3);
+
+        optInterval.Should().NotBeNull();
+        registry.AllOptionalIntervals.Should().ContainKey((1, 9, ComponentType.Lecture));
+        registry.AllPresenceLiterals.Should().ContainKey((1, 9, ComponentType.Lecture));
+    }
+
+    [Fact]
+    public void CreateOptionalRoomInterval_CalledTwice_ReturnsSameInterval()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        var section = Section(1, theory: 3, lab: 0);
+        registry.CreateIntervalsForSection(section);
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture }
+        };
+        registry.CreateRoomVariable(1, ComponentType.Lecture, classrooms);
+
+        var first = registry.CreateOptionalRoomInterval(1, 9, ComponentType.Lecture, duration: 3);
+        var second = registry.CreateOptionalRoomInterval(1, 9, ComponentType.Lecture, duration: 3);
+
+        second.Should().BeSameAs(first);
+    }
 }
