@@ -1,8 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using SIS.Application.Scheduling.Constraints;
+using SIS.Application.Scheduling.Solver;
 using SIS.Infrastructure.Services.Scheduling.Evaluators;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
+using SIS.Infrastructure.Services.Scheduling.OrTools;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Mapping;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
 namespace SIS.Infrastructure.Services.Scheduling;
 
@@ -60,6 +66,17 @@ public static class SchedulingServiceCollectionExtensions
 
         // Constraint snapshot / analytics
         services.AddScoped<IConstraintSnapshotService, ConstraintSnapshotService>();
+
+        // ── OR-Tools v2 Engine ───────────────────────────────────────────
+        // Encoder'lar (Faz 2 PoC: sadece H1)
+        services.AddScoped<IConstraintEncoder, ClassroomConflictEncoder>();
+
+        // Model builder + mapper
+        services.AddScoped<ScheduleModelBuilder>();
+        services.AddScoped<SolutionMapper>();
+
+        // Engine
+        services.AddScoped<ISolverEngine, CpSatSolverEngine>();
 
         return services;
     }
