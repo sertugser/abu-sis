@@ -16,6 +16,7 @@ public sealed class DecisionVariables
     private readonly Dictionary<int, IntervalVar> _labIntervals = new();
     private readonly Dictionary<int, IntVar> _lectureRooms = new();
     private readonly Dictionary<int, IntVar> _labRooms = new();
+    private readonly Dictionary<int, ILiteral> _sectionPresent = new();
 
     public DecisionVariables(CpModel model, int totalSlots)
     {
@@ -30,13 +31,23 @@ public sealed class DecisionVariables
 
     public void CreateIntervalsForSection(SectionInput section)
     {
+        // Section-level presence boolean (Plan 3 Task 3 — partial scheduling).
+        // present == 1 → solver places this section. present == 0 → section unscheduled.
+        var present = _model.NewBoolVar($"present_s{section.Id}");
+        _sectionPresent[section.Id] = present;
+
         if (section.TheoryHours > 0)
         {
             var start = _model.NewIntVar(0, _totalSlots - section.TheoryHours,
                 $"theory_start_s{section.Id}");
             var end = _model.NewIntVar(section.TheoryHours, _totalSlots,
                 $"theory_end_s{section.Id}");
-            var interval = _model.NewIntervalVar(start, section.TheoryHours, end,
+            // Optional interval gated by section presence literal
+            var interval = _model.NewOptionalIntervalVar(
+                start,
+                LinearExpr.Constant(section.TheoryHours),
+                end,
+                present,
                 $"theory_iv_s{section.Id}");
             _lectureIntervals[section.Id] = interval;
         }
@@ -47,7 +58,12 @@ public sealed class DecisionVariables
                 $"lab_start_s{section.Id}");
             var end = _model.NewIntVar(section.LabHours, _totalSlots,
                 $"lab_end_s{section.Id}");
-            var interval = _model.NewIntervalVar(start, section.LabHours, end,
+            // Optional interval gated by section presence literal
+            var interval = _model.NewOptionalIntervalVar(
+                start,
+                LinearExpr.Constant(section.LabHours),
+                end,
+                present,
                 $"lab_iv_s{section.Id}");
             _labIntervals[section.Id] = interval;
         }
@@ -110,6 +126,17 @@ public sealed class DecisionVariables
 
     public IReadOnlyDictionary<int, IntervalVar> AllLectureIntervals => _lectureIntervals;
     public IReadOnlyDictionary<int, IntervalVar> AllLabIntervals => _labIntervals;
+
+    /// <summary>
+    /// Section'ın "yerleşti mi?" boolean literal'ı. Plan 3 Task 3 partial scheduling için eklendi.
+    /// CP-SAT objective'i Maximize(sum(present)) → solver olabildiği kadar çok section yerleştirir.
+    /// </summary>
+    public ILiteral GetSectionPresent(int sectionId) =>
+        _sectionPresent.TryGetValue(sectionId, out var p)
+            ? p
+            : throw new KeyNotFoundException($"Section {sectionId} has no presence literal.");
+
+    public IReadOnlyDictionary<int, ILiteral> AllSectionPresent => _sectionPresent;
 
     private readonly Dictionary<(int sectionId, int classroomId, ComponentType type), IntervalVar> _optionalIntervals = new();
     private readonly Dictionary<(int sectionId, int classroomId, ComponentType type), ILiteral> _presenceLiterals = new();

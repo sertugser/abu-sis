@@ -143,4 +143,40 @@ public class DecisionVariablesTests
 
         second.Should().BeSameAs(first);
     }
+
+    [Fact]
+    public void CreateIntervalsForSection_RegistersPresenceLiteral()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
+
+        var present = registry.GetSectionPresent(1);
+
+        present.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void GetSectionPresent_UnregisteredSection_ThrowsKeyNotFoundException()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+
+        Action act = () => registry.GetSectionPresent(999);
+
+        act.Should().Throw<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public void AllSectionPresent_AfterRegistering_ReturnsAllSections()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
+        registry.CreateIntervalsForSection(Section(2, theory: 0, lab: 2));
+        registry.CreateIntervalsForSection(Section(3, theory: 3, lab: 2));
+
+        registry.AllSectionPresent.Should().HaveCount(3);
+        registry.AllSectionPresent.Should().ContainKeys(1, 2, 3);
+    }
 }
