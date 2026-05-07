@@ -1,3 +1,5 @@
+using SIS.Domain.Enums;
+
 namespace SIS.Application.Scheduling.Solver;
 
 public sealed record SectionInput
@@ -12,7 +14,7 @@ public sealed record SectionInput
     public required int LabHours { get; init; }
     public int? InstructorId { get; init; }
     public int? DepartmentId { get; init; }
-    public required string TeachingMethod { get; init; }   // "FaceToFace" | "Online" | "Hybrid"
+    public required TeachingMethod TeachingMethod { get; init; }
     public int? RequiredTheoryClassroomType { get; init; }
     public int? RequiredLabClassroomType { get; init; }
     public bool IsPinned { get; init; }

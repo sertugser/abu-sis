@@ -1,4 +1,5 @@
 using System;
+using SIS.Domain.Enums;
 
 namespace SIS.Application.Scheduling.Solver;
 
@@ -9,5 +10,5 @@ public sealed record TimeSlotInput
     public required int SlotOrder { get; init; }
     public required TimeOnly StartTime { get; init; }
     public required TimeOnly EndTime { get; init; }
-    public required int AllowedMode { get; init; }   // 0=Both, 1=OnlineOnly, 2=FaceToFaceOnly
+    public required TimeSlotAllowedMode AllowedMode { get; init; }
 }

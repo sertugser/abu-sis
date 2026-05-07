@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace SIS.Application.Scheduling.Solver;
 
 public sealed record Assignment
@@ -12,5 +10,5 @@ public sealed record AssignedSlot
 {
     public required int TimeSlotId { get; init; }
     public required int ClassroomId { get; init; }
-    public required string ComponentType { get; init; }   // "Lecture" | "Lab"
+    public required ComponentType ComponentType { get; init; }
 }
