@@ -43,13 +43,21 @@ public sealed class LunchBreakSoftEncoder : IConstraintEncoder
             if (lecture != null)
                 AddLunchOverlapPenalty(ctx, sectionId, "lec", lecture, lunchSlotIndices, t.S5Weight);
 
-            // Lab interval check (single + first multi-block).
-            // NOTE: Plan 9 polish — multi-block lab intervals (Plan 7b's GetLabIntervals
-            // list) are NOT iterated here; only the primary GetLabInterval is checked.
-            // Per-block S5 penalty for parallel/multi-interval labs deferred to Plan 9.
-            var lab = ctx.Variables.GetLabInterval(sectionId);
-            if (lab != null)
-                AddLunchOverlapPenalty(ctx, sectionId, "lab", lab, lunchSlotIndices, t.S5Weight);
+            // Lab interval check — iterate ALL blocks via GetLabIntervals (Plan 7b plural accessor).
+            // Single-block sections fall through the single-element fallback list; multi-block
+            // sections accrue per-block S5 penalty if any block lands in lunch window.
+            // Pattern matches ClassroomConflictEncoder + SolutionMapper.
+            try
+            {
+                var labIntervals = ctx.Variables.GetLabIntervals(sectionId);
+                for (int b = 0; b < labIntervals.Count; b++)
+                    AddLunchOverlapPenalty(
+                        ctx, sectionId, $"lab_b{b}", labIntervals[b], lunchSlotIndices, t.S5Weight);
+            }
+            catch (KeyNotFoundException)
+            {
+                // Section has no lab component (theory-only). Skip.
+            }
         }
     }
 
