@@ -688,4 +688,44 @@ public class SolverRequestBuilderTests
         req.Sections[0].Year.Should().BeNull(
             because: "SuggestedSemester=0 is excluded by builder filter (Where SuggestedSemester > 0)");
     }
+
+    // ========================================================================
+    // Plan 6 Task 3 — CurriculumConflictMode read from SchedulingAlgorithmConfigs
+    // ========================================================================
+
+    [Fact]
+    public async Task BuildAsync_ReadsCurriculumConflictModeFromSchedulingAlgorithmConfigs()
+    {
+        // Arrange — seed minimal context + add SchedulingAlgorithmConfig row.
+        await using var ctx = await SeedMinimalAsync();
+        ctx.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
+        {
+            Key = "Schedule.CurriculumConflictMode",
+            Value = "cohort",
+            Category = "Other",
+            DataType = "string",
+            Description = "test"
+        });
+        await ctx.SaveChangesAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        // Act
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        // Assert
+        req.CurriculumConflictMode.Should().Be("cohort");
+    }
+
+    [Fact]
+    public async Task BuildAsync_NoSchedulingAlgorithmConfig_DefaultsToCurriculumMode()
+    {
+        // SeedMinimalAsync seeds no SchedulingAlgorithmConfigs rows.
+        await using var ctx = await SeedMinimalAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        req.CurriculumConflictMode.Should().Be("curriculum",
+            because: "no SchedulingAlgorithmConfig row → builder falls back to 'curriculum' default");
+    }
 }

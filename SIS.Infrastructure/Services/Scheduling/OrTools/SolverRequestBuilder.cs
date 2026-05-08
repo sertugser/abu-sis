@@ -143,6 +143,14 @@ public sealed class SolverRequestBuilder
         var defaultInstructorMaxWeeklyHours = await _systemConfigProvider.GetIntAsync(
             "Schedule.DefaultInstructorMaxWeeklyHours", 30, cancellationToken);
 
+        // 8) Plan 6 Task 3 — Read curriculum conflict mode from SchedulingAlgorithmConfigs.
+        //    Defaults to "curriculum" if no row exists (legacy behavior).
+        var curriculumConflictMode = await _context.SchedulingAlgorithmConfigs
+            .AsNoTracking()
+            .Where(c => c.Key == "Schedule.CurriculumConflictMode")
+            .Select(c => c.Value)
+            .FirstOrDefaultAsync(cancellationToken) ?? "curriculum";
+
         return new SolverRequest
         {
             TermId = termId,
@@ -154,7 +162,9 @@ public sealed class SolverRequestBuilder
             TimeSlots = timeSlots,
             ConstraintFlags = constraintFlags,
             Corequisites = corequisites,
-            DefaultInstructorMaxWeeklyHours = defaultInstructorMaxWeeklyHours
+            DefaultInstructorMaxWeeklyHours = defaultInstructorMaxWeeklyHours,
+            CurriculumConflictMode = curriculumConflictMode
+            // CohortConflictPairs filled in Task 6 — leave default empty for now
         };
     }
 
