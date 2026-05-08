@@ -175,8 +175,9 @@ public sealed class SolverRequestBuilder
             .FirstOrDefaultAsync(cancellationToken) ?? "curriculum";
 
         // 9) Plan 6 Task 6 — In cohort mode, materialize CohortConflictPairs via v1 CohortBuilder.
-        //    Other modes leave the list empty (default).
+        //    Plan 8 Task 2 — assignment outer-scope'a alındı; AdjacentYearSoftPairs S20 için kullanılır.
         IReadOnlyList<(int, int)> cohortConflictPairs = [];
+        CohortAssignment? cohortAssignment = null;
         if (curriculumConflictMode == "cohort" && sections.Count > 0)
         {
             var cohortCourseIds = sections.Select(s => s.CourseId).Distinct().ToList();
@@ -193,13 +194,22 @@ public sealed class SolverRequestBuilder
             }).ToList();
 
             var cohortBuilder = new CohortBuilder();
-            var assignment = cohortBuilder.Build(sectionSnapshots, courseSemestersByDept, courseAccessibleDepts);
+            cohortAssignment = cohortBuilder.Build(sectionSnapshots, courseSemestersByDept, courseAccessibleDepts);
 
-            cohortConflictPairs = assignment.ConflictPairs
+            cohortConflictPairs = cohortAssignment.ConflictPairs
                 .Select(p => (p.SectionId1, p.SectionId2))
                 .ToList();
-            // AdjacentYearSoftPairs Plan 8'e (S20 soft penalty) ertelendi.
         }
+
+        // 10) Plan 8 Task 2 — SoftThresholds (~25 SystemConfig key) + S4 CoEnrollmentPairs (port v1)
+        //     + S20 AdjacentYearSoftPairs (cohort assignment'tan).
+        var softThresholds = await LoadSoftThresholdsAsync(cancellationToken);
+        var coEnrollmentPairs = await LoadCoEnrollmentPairsAsync(
+            termId, softThresholds.S4MinCoPairThreshold, cancellationToken);
+
+        IReadOnlyList<(int, int)> adjacentYearSoftPairs = cohortAssignment?.AdjacentYearSoftPairs
+            .Select(p => (p.SectionId1, p.SectionId2))
+            .ToList() ?? [];
 
         return new SolverRequest
         {
@@ -215,8 +225,160 @@ public sealed class SolverRequestBuilder
             DefaultInstructorMaxWeeklyHours = defaultInstructorMaxWeeklyHours,
             CurriculumConflictMode = curriculumConflictMode,
             CohortConflictPairs = cohortConflictPairs,
-            DistributionConstraints = distributionConstraints
+            DistributionConstraints = distributionConstraints,
+            SoftThresholds = softThresholds,
+            CoEnrollmentPairs = coEnrollmentPairs,
+            AdjacentYearSoftPairs = adjacentYearSoftPairs
         };
+    }
+
+    /// <summary>
+    /// Plan 8 Task 2 — SystemConfig'ten ~25 anahtar okur ve <see cref="SoftThresholds"/>
+    /// record'unu inşa eder. Eksik key fallback değere düşer (record default'larıyla aynı).
+    /// </summary>
+    private async Task<SoftThresholds> LoadSoftThresholdsAsync(CancellationToken ct)
+    {
+        // S1 Occupancy
+        var s1MinOcc = await _systemConfigProvider.GetIntAsync("Classroom.OccupancyTarget.Min", 60, ct);
+        var s1MaxOcc = await _systemConfigProvider.GetIntAsync("Classroom.OccupancyTarget.Max", 85, ct);
+        var s1Weight = await _systemConfigProvider.GetIntAsync("Schedule.S1Weight", 1, ct);
+
+        // S2 DailyLoadSoft
+        var s2MaxDaily = await _systemConfigProvider.GetIntAsync("SoftConstraint.S2.MaxDailyHours", 6, ct);
+        var s2Weight = await _systemConfigProvider.GetIntAsync("Schedule.S2Weight", 10, ct);
+
+        // S3 SlotCongestion
+        var s3MaxSec = await _systemConfigProvider.GetIntAsync("SoftConstraint.S3.MaxSectionsPerSlot", 5, ct);
+        var s3Weight = await _systemConfigProvider.GetIntAsync("Schedule.S3Weight", 5, ct);
+
+        // S4 CoEnrollment
+        var s4MinPair = await _systemConfigProvider.GetIntAsync("SoftConstraint.S4.MinCoPairThreshold", 20, ct);
+        var s4Weight = await _systemConfigProvider.GetIntAsync("Schedule.S4Weight", 1, ct);
+
+        // S5 LunchBreak
+        var s5LunchStart = await ReadTimeAsync("Schedule.LunchBreak.Start", new TimeOnly(11, 40), ct);
+        var s5LunchEnd = await ReadTimeAsync("Schedule.LunchBreak.End", new TimeOnly(12, 20), ct);
+        var s5Weight = await _systemConfigProvider.GetIntAsync("Schedule.S5Weight", 8, ct);
+
+        // S7 StudentGap
+        var s7MaxGap = await _systemConfigProvider.GetIntAsync("SoftConstraint.S7.MaxGapSlots", 3, ct);
+        var s7Weight = await _systemConfigProvider.GetIntAsync("Schedule.S7Weight", 3, ct);
+
+        // S8 InstructorDaySpread
+        var s8Weight = await _systemConfigProvider.GetIntAsync("Schedule.S8Weight", 4, ct);
+
+        // S9 EarlyLate
+        var s9Morning = await ReadTimeAsync("SoftConstraint.S9.MorningStart", new TimeOnly(8, 0), ct);
+        var s9Evening = await ReadTimeAsync("SoftConstraint.S9.EveningStart", new TimeOnly(17, 0), ct);
+        var s9Weight = await _systemConfigProvider.GetIntAsync("Schedule.S9Weight", 6, ct);
+
+        // S12 WeekdayBalance
+        var s12MaxImb = await _systemConfigProvider.GetIntAsync("SoftConstraint.S12.MaxImbalancePercent", 20, ct);
+        var s12Weight = await _systemConfigProvider.GetIntAsync("Schedule.S12Weight", 2, ct);
+
+        // S20 AdjacentYear
+        var s20Penalty = await _systemConfigProvider.GetIntAsync("SoftConstraint.S20.PenaltyPerPair", 5, ct);
+        var s20Weight = await _systemConfigProvider.GetIntAsync("Schedule.S20Weight", 1, ct);
+
+        // DIST tier weights
+        var distDiscWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistDiscouragedWeight", 50, ct);
+        var distStrongWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistStronglyDiscouragedWeight", 200, ct);
+
+        return new SoftThresholds
+        {
+            S1MinOccupancyPercent = s1MinOcc,
+            S1MaxOccupancyPercent = s1MaxOcc,
+            S1Weight = s1Weight,
+            S2MaxDailyHours = s2MaxDaily,
+            S2Weight = s2Weight,
+            S3MaxSectionsPerSlot = s3MaxSec,
+            S3Weight = s3Weight,
+            S4MinCoPairThreshold = s4MinPair,
+            S4Weight = s4Weight,
+            S5LunchBreakStart = s5LunchStart,
+            S5LunchBreakEnd = s5LunchEnd,
+            S5Weight = s5Weight,
+            S7MaxGapSlots = s7MaxGap,
+            S7Weight = s7Weight,
+            S8Weight = s8Weight,
+            S9MorningStart = s9Morning,
+            S9EveningStart = s9Evening,
+            S9Weight = s9Weight,
+            S12MaxImbalancePercent = s12MaxImb,
+            S12Weight = s12Weight,
+            S20PenaltyPerPair = s20Penalty,
+            S20Weight = s20Weight,
+            DistDiscouragedWeight = distDiscWeight,
+            DistStronglyDiscouragedWeight = distStrongWeight
+        };
+    }
+
+    /// <summary>
+    /// Plan 8 Task 2 — ISystemConfigProvider üzerinde GetTimeAsync olmadığından string okur ve
+    /// <see cref="TimeOnly"/>'a parse eder. Parse fail (boş veya geçersiz format) ⇒ default döner.
+    /// </summary>
+    private async Task<TimeOnly> ReadTimeAsync(string key, TimeOnly defaultValue, CancellationToken ct)
+    {
+        var raw = await _systemConfigProvider.GetStringAsync(key, defaultValue.ToString("HH:mm"), ct);
+        return TimeOnly.TryParse(raw, out var parsed) ? parsed : defaultValue;
+    }
+
+    /// <summary>
+    /// Plan 8 Task 2 — v1 <c>AutoScheduleEngine.LoadCoEnrollmentPairsAsync</c> portu.
+    /// Son 3 dönemde Active CourseRegistration'lar üzerinden student×course pair sayısını sayar
+    /// ve <paramref name="minThreshold"/> üstündekileri canonical (CourseId1 &lt; CourseId2) form'da
+    /// döner. CourseRegistrations boşsa empty döner (production'da default davranış).
+    /// </summary>
+    private async Task<List<CoEnrollmentPairInput>> LoadCoEnrollmentPairsAsync(
+        int currentTermId, int minThreshold, CancellationToken ct)
+    {
+        var recentTermIds = await _context.AcademicTerms
+            .AsNoTracking()
+            .Where(t => t.Id < currentTermId)
+            .OrderByDescending(t => t.Id)
+            .Take(3)
+            .Select(t => t.Id)
+            .ToListAsync(ct);
+
+        if (recentTermIds.Count == 0)
+            return new List<CoEnrollmentPairInput>();
+
+        // EF Core InMemory + AsNoTracking üzerinde nav property auto-resolve garantisi yok;
+        // Include ile relational provider'da da identity-map cache'e gerek kalmaz.
+        var registrations = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(cr => cr.CourseSection)
+            .Where(cr => cr.Status == RegistrationStatus.Active
+                         && cr.CourseSection != null
+                         && recentTermIds.Contains(cr.CourseSection.TermId))
+            .Select(cr => new
+            {
+                cr.StudentId,
+                cr.CourseSection.CourseId,
+                cr.CourseSection.TermId
+            })
+            .ToListAsync(ct);
+
+        var coPairCounts = new Dictionary<(int, int), int>();
+
+        foreach (var termGroup in registrations.GroupBy(r => (r.StudentId, r.TermId)))
+        {
+            // Canonical pair: distinct + sort ⇒ i < j ile sadece ascending pair üretilir.
+            var courseIdList = termGroup.Select(r => r.CourseId).Distinct().OrderBy(x => x).ToList();
+            for (var i = 0; i < courseIdList.Count; i++)
+            {
+                for (var j = i + 1; j < courseIdList.Count; j++)
+                {
+                    var key = (courseIdList[i], courseIdList[j]);
+                    coPairCounts[key] = coPairCounts.GetValueOrDefault(key) + 1;
+                }
+            }
+        }
+
+        return coPairCounts
+            .Where(kvp => kvp.Value >= minThreshold)
+            .Select(kvp => new CoEnrollmentPairInput(kvp.Key.Item1, kvp.Key.Item2, kvp.Value))
+            .ToList();
     }
 
     /// <summary>
