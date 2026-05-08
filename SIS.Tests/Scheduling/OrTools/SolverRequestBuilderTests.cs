@@ -594,4 +594,72 @@ public class SolverRequestBuilderTests
         req.Sections[0].InstructorMaxWeeklyHours.Should().Be(0,
             because: "no instructor => no override; encoder uses default");
     }
+
+    // ========================================================================
+    // Plan 6 Task 1 — SectionInput.Year derived from CurriculumCourse.SuggestedSemester
+    // ========================================================================
+
+    /// <summary>
+    /// Helper: extends SeedMinimalAsync with a Program + Curriculum + CurriculumCourse so the
+    /// section's course (id 100) has a curriculum mapping with a parametric SuggestedSemester.
+    /// </summary>
+    private static async Task<AppDbContext> SeedScenarioWithCurriculumAsync(int suggestedSemester)
+    {
+        var ctx = await SeedMinimalAsync();
+        // Department id 1 + Course id 100 already seeded.
+        ctx.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = 100,
+            DepartmentId = 1,
+            Code = "BM-LIS",
+            Name = "BM Lisans"
+        });
+        ctx.Curricula.Add(new Curriculum
+        {
+            Id = 100,
+            ProgramId = 100,
+            Version = "v1",
+            Name = "BM v1",
+            IsActive = true
+        });
+        ctx.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = 100,
+            CourseId = 100,
+            SuggestedSemester = suggestedSemester
+        });
+        await ctx.SaveChangesAsync();
+        return ctx;
+    }
+
+    [Fact]
+    public async Task BuildAsync_SectionInDeptCurriculumSemester3_PopulatesYear1()
+    {
+        // Arrange — Course assigned to a Curriculum, SuggestedSemester=3 → year = (3-1)/2 = 1
+        await using var ctx = await SeedScenarioWithCurriculumAsync(suggestedSemester: 3);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        // Act
+        var req = await builder.BuildAsync(termId: 1, facultyId: 1, null, null, default);
+
+        // Assert
+        req.Sections.Should().HaveCount(1);
+        req.Sections[0].Year.Should().Be(1,
+            because: "SuggestedSemester 3 maps to year (3-1)/2 = 1");
+    }
+
+    [Fact]
+    public async Task BuildAsync_SectionWithoutCurriculumMapping_LeavesYearNull()
+    {
+        // Arrange — SeedMinimalAsync seeds course but no CurriculumCourse → Year null.
+        await using var ctx = await SeedMinimalAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        // Act
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        // Assert
+        req.Sections[0].Year.Should().BeNull(
+            because: "no CurriculumCourse mapping → H5 will skip this section");
+    }
 }

@@ -19,7 +19,8 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools;
 ///   <item>TimeSlots: term-spesifik grid, day+slotOrder ordering ile deterministic.</item>
 ///   <item>ConstraintFlags: tüm ConstraintDefinitions Code → IsEnabled dictionary.</item>
 ///   <item>Corequisites: boş — Domain'de CourseRelationship entity yok (Plan 3'te entegrasyon).</item>
-///   <item>SectionInput.ProgramId / Year: null — Plan 3'te curriculum entegrasyonu.</item>
+///   <item>SectionInput.Year: CurriculumCourse.SuggestedSemester'dan türetilir (Plan 6 Task 1).</item>
+///   <item>SectionInput.ProgramId: Plan 2'de null (ileride curriculum-program mapping eklendiğinde doldurulacak).</item>
 /// </list>
 /// </summary>
 public sealed class SolverRequestBuilder
@@ -97,8 +98,27 @@ public sealed class SolverRequestBuilder
             .Where(i => instructorIds.Contains(i.Id))
             .ToDictionaryAsync(i => i.Id, i => i.MaxWeeklyHours, cancellationToken);
 
+        // Plan 6 Task 1 — Course → Year mapping from CurriculumCourses.
+        // year = (SuggestedSemester - 1) / 2 (0..3 = 1.-4. sınıf).
+        // Bir ders birden çok müfredatta olabilir; en küçük SuggestedSemester'ı seçeriz
+        // (heuristic — H5 için cohort gruplaması yeterli).
+        // null = curriculum mapping yok → H5 atlar.
+        var courseIds = sectionEntities.Select(cs => cs.CourseId).Distinct().ToList();
+
+        var courseYearMap = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => courseIds.Contains(cc.CourseId))
+            .Where(cc => cc.SuggestedSemester > 0)
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new
+            {
+                CourseId = g.Key,
+                MinSemester = g.Min(cc => cc.SuggestedSemester)
+            })
+            .ToDictionaryAsync(x => x.CourseId, x => (x.MinSemester - 1) / 2, cancellationToken);
+
         var sections = sectionEntities
-            .Select(cs => MapSection(cs, labClassroomCapacities, instructorMaxHours))
+            .Select(cs => MapSection(cs, labClassroomCapacities, instructorMaxHours, courseYearMap))
             .ToList();
 
         // 4) TimeSlots — term grid (day + slot ordering deterministic indexing için)
@@ -141,7 +161,8 @@ public sealed class SolverRequestBuilder
     private static SectionInput MapSection(
         CourseSection cs,
         IReadOnlyList<int> labClassroomCapacities,
-        IReadOnlyDictionary<int, int> instructorMaxHours) => new()
+        IReadOnlyDictionary<int, int> instructorMaxHours,
+        IReadOnlyDictionary<int, int> courseYearMap) => new()
     {
         Id = cs.Id,
         CourseId = cs.CourseId,
@@ -156,10 +177,12 @@ public sealed class SolverRequestBuilder
         TeachingMethod = cs.Course.TeachingMethod,
         IsPinned = cs.IsPinned,
         IsScheduleLocked = cs.IsScheduleLocked,
-        // ProgramId, Year — Plan 2'de null (Plan 3 curriculum entegrasyonu)
+        // ProgramId — Plan 2/Plan 6 Task 1'de null (ileride curriculum-program mapping eklendiğinde doldurulacak)
         // RequiredTheoryClassroomType / RequiredLabClassroomType — Plan 2'de null
         //   (Course üzerinde TheoryClassroomType/LabClassroomType var; bunlar Type enum
         //    int değerine ihtiyaç duyduğumuzda Plan 3'te map edilir).
+        // Plan 6 Task 1 — CurriculumCourse.SuggestedSemester'dan türetilen yıl (0..3).
+        Year = courseYearMap.TryGetValue(cs.CourseId, out var year) ? year : null,
         LabGroupCount = ComputeLabGroupCount(cs.Capacity, cs.Course.LabHours, labClassroomCapacities),
         // Plan 5 Task 1 — Instructor.MaxWeeklyHours override; 0 = default kullan.
         InstructorMaxWeeklyHours = cs.InstructorId.HasValue

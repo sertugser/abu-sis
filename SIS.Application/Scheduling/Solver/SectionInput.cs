@@ -22,6 +22,12 @@ public sealed record SectionInput
 
     // NEW (Plan 2 Task 7 — for H5 CurriculumConflictEncoder):
     public int? ProgramId { get; init; }
+
+    /// <summary>
+    /// Plan 6 — H5 curriculum çakışma kontrolü için section'ın yıl bilgisi (0..3 = 1.-4. sınıf).
+    /// SolverRequestBuilder runtime'da CurriculumCourses.SuggestedSemester'dan türetir:
+    /// year = (SuggestedSemester - 1) / 2. null = curriculum mapping yok → H5 atlar.
+    /// </summary>
     public int? Year { get; init; }
 
     /// <summary>
