@@ -124,6 +124,7 @@ public static class SchedulingServiceCollectionExtensions
         // Soft constraint encoders (Plan 3 diagnostic stubs; real penalty in Plan 4)
         services.AddScoped<IConstraintEncoder, OccupancyEncoder>();
         services.AddScoped<IConstraintEncoder, SlotCongestionEncoder>();
+        services.AddScoped<IConstraintEncoder, LunchBreakSoftEncoder>();
         services.AddScoped<IConstraintEncoder, CoEnrollmentEncoder>();
         services.AddScoped<IConstraintEncoder, StudentGapEncoder>();
         services.AddScoped<IConstraintEncoder, EarlyLateEncoder>();
