@@ -73,6 +73,7 @@ public static class SchedulingServiceCollectionExtensions
         // ── OR-Tools v2 Engine ───────────────────────────────────────────
         // Encoder'lar (Faz 2 PoC: sadece H1)
         services.AddScoped<IConstraintEncoder, ClassroomConflictEncoder>();
+        services.AddScoped<IConstraintEncoder, InstructorConflictEncoder>();
         services.AddScoped<IConstraintEncoder, CapacityEncoder>();
         services.AddScoped<IConstraintEncoder, ClassroomTypeEncoder>();
         services.AddScoped<IConstraintEncoder, CurriculumConflictEncoder>();
