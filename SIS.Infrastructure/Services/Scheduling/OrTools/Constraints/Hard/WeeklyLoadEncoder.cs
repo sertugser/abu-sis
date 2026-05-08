@@ -29,7 +29,10 @@ public sealed class WeeklyLoadEncoder : IConstraintEncoder
             var instructorId = group.Key;
             var sectionList = group.ToList();
 
-            // Resolve max hours: section override > request default > 0 (disabled)
+            // Resolve max hours: section override > request default > 0 (disabled).
+            // Invariant: SolverRequestBuilder populates InstructorMaxWeeklyHours from a single
+            // Instructor.MaxWeeklyHours field, so all sections of one instructor share the same value.
+            // Max is robust to data anomalies; if all are 0, falls through to default branch below.
             var overrideMax = sectionList.Max(s => s.InstructorMaxWeeklyHours);
             var maxHours = overrideMax > 0 ? overrideMax : ctx.Request.DefaultInstructorMaxWeeklyHours;
             if (maxHours <= 0) continue; // disabled
@@ -38,6 +41,9 @@ public sealed class WeeklyLoadEncoder : IConstraintEncoder
             var terms = new List<LinearExpr>();
             foreach (var section in sectionList)
             {
+                // GetSectionPresent always returns a BoolVar (which is IntVar) in current impl;
+                // the cast is defensive in case GetSectionPresent ever returns a non-IntVar ILiteral
+                // (e.g. negation wrapper) — skip such sections to avoid LinearExpr.Term failure.
                 if (ctx.Variables.GetSectionPresent(section.Id) is not IntVar present)
                     continue;
                 var hours = section.TheoryHours + section.LabHours;

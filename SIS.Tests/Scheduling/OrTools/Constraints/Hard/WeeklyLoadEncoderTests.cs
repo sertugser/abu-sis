@@ -94,6 +94,23 @@ public class WeeklyLoadEncoderTests
         ctx.Assumptions.Count.Should().Be(0);
     }
 
+    [Fact]
+    public void Encode_SectionZeroHours_SkipsSection()
+    {
+        // Section with no theory and no lab hours contributes nothing to the sum.
+        // terms list ends empty → constraint not registered for this instructor.
+        var sections = new[]
+        {
+            Section(1, instructorId: 5, theory: 0, lab: 0, maxWeekly: 25)
+        };
+        var encoder = new WeeklyLoadEncoder();
+        var ctx = BuildContext(sections, defaultMaxWeekly: 30);
+
+        encoder.Encode(ctx);
+
+        ctx.Assumptions.Count.Should().Be(0);
+    }
+
     private static SectionInput Section(int id, int? instructorId, int theory, int lab, int maxWeekly) => new()
     {
         Id = id,
