@@ -662,4 +662,30 @@ public class SolverRequestBuilderTests
         req.Sections[0].Year.Should().BeNull(
             because: "no CurriculumCourse mapping → H5 will skip this section");
     }
+
+    [Fact]
+    public async Task BuildAsync_SectionInCurriculumSemester1_PopulatesYear0()
+    {
+        // Boundary: semester 1 → year (1-1)/2 = 0 (1st year). Year=0 is distinct from null.
+        await using var ctx = await SeedScenarioWithCurriculumAsync(suggestedSemester: 1);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        req.Sections[0].Year.Should().Be(0,
+            because: "SuggestedSemester 1 maps to year 0 (1st year cohort), distinct from null (no mapping)");
+    }
+
+    [Fact]
+    public async Task BuildAsync_SectionInCurriculumSemester0_LeavesYearNull()
+    {
+        // Boundary: SuggestedSemester=0 (elective without fixed year) → builder excludes → Year null.
+        await using var ctx = await SeedScenarioWithCurriculumAsync(suggestedSemester: 0);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        req.Sections[0].Year.Should().BeNull(
+            because: "SuggestedSemester=0 is excluded by builder filter (Where SuggestedSemester > 0)");
+    }
 }

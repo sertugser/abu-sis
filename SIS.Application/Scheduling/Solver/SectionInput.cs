@@ -27,6 +27,7 @@ public sealed record SectionInput
     /// Plan 6 — H5 curriculum çakışma kontrolü için section'ın yıl bilgisi (0..3 = 1.-4. sınıf).
     /// SolverRequestBuilder runtime'da CurriculumCourses.SuggestedSemester'dan türetir:
     /// year = (SuggestedSemester - 1) / 2. null = curriculum mapping yok → H5 atlar.
+    /// SuggestedSemester = 0 (elective without fixed year) → excluded by builder → Year remains null.
     /// </summary>
     public int? Year { get; init; }
 
