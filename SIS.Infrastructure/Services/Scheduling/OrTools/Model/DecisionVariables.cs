@@ -31,7 +31,9 @@ public sealed class DecisionVariables
         _totalSlots = totalSlots;
     }
 
-    public void CreateIntervalsForSection(SectionInput section)
+    public void CreateIntervalsForSection(
+        SectionInput section,
+        IReadOnlyList<TimeSlotInput>? timeSlots = null)
     {
         // Section-level presence boolean (Plan 3 Task 3 — partial scheduling).
         // present == 1 → solver places this section. present == 0 → section unscheduled.
@@ -40,8 +42,11 @@ public sealed class DecisionVariables
 
         if (section.TheoryHours > 0)
         {
-            var start = _model.NewIntVar(0, _totalSlots - section.TheoryHours,
-                $"theory_start_s{section.Id}");
+            var start = CreateStartIntVar(
+                duration: section.TheoryHours,
+                timeSlots: timeSlots,
+                varName: $"theory_start_s{section.Id}",
+                presence: present);
             var end = _model.NewIntVar(section.TheoryHours, _totalSlots,
                 $"theory_end_s{section.Id}");
             // Optional interval gated by section presence literal
@@ -56,8 +61,11 @@ public sealed class DecisionVariables
 
         if (section.LabHours > 0)
         {
-            var start = _model.NewIntVar(0, _totalSlots - section.LabHours,
-                $"lab_start_s{section.Id}");
+            var start = CreateStartIntVar(
+                duration: section.LabHours,
+                timeSlots: timeSlots,
+                varName: $"lab_start_s{section.Id}",
+                presence: present);
             var end = _model.NewIntVar(section.LabHours, _totalSlots,
                 $"lab_end_s{section.Id}");
             // Optional interval gated by section presence literal
@@ -69,6 +77,37 @@ public sealed class DecisionVariables
                 $"lab_iv_s{section.Id}");
             _labIntervals[section.Id] = interval;
         }
+    }
+
+    /// <summary>
+    /// Plan 7 — Creates the component-start IntVar. If timeSlots is non-null, validates and
+    /// restricts the domain to valid block starts (cross-day + slot-gap aware). If timeSlots
+    /// is null, falls back to the legacy <c>NewIntVar(0, totalSlots - duration)</c> domain.
+    /// If validation produces an empty valid-starts list, forces presence to 0 (section drops).
+    /// </summary>
+    private IntVar CreateStartIntVar(
+        int duration,
+        IReadOnlyList<TimeSlotInput>? timeSlots,
+        string varName,
+        BoolVar presence)
+    {
+        if (timeSlots == null)
+        {
+            // Legacy backward-compat path (Plan 4-6 tests).
+            return _model.NewIntVar(0, _totalSlots - duration, varName);
+        }
+
+        var validStarts = SlotBlockValidator.ComputeValidBlockStarts(timeSlots, duration);
+        if (validStarts.Count == 0)
+        {
+            // No valid block → force presence to 0 (section drops).
+            // Start IntVar still constructed but irrelevant when present=0.
+            _model.Add(presence == 0);
+            return _model.NewIntVar(0, _totalSlots - duration, varName);
+        }
+
+        var domain = Google.OrTools.Util.Domain.FromValues(validStarts.Select(i => (long)i).ToArray());
+        return _model.NewIntVarFromDomain(domain, varName);
     }
 
     public void CreateRoomVariable(int sectionId, ComponentType componentType,

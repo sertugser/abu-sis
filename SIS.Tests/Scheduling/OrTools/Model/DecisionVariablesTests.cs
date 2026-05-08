@@ -386,4 +386,84 @@ public class DecisionVariablesTests
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*TimeSlots is empty*");
     }
+
+    // Plan 7 Task 2 — slot validation via optional timeSlots parameter
+    [Fact]
+    public void CreateIntervalsForSection_WithSlotValidation_RejectsCrossDayStart()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 3);
+        // 3-slot grid: Mon 9:00, Mon 10:00, Tue 9:00. Theory=2 slot duration.
+        // Valid starts: slot 0 only (Mon-Mon). Slot 1 invalid (Mon→Tue cross day).
+        var slots = new List<TimeSlotInput>
+        {
+            new() { Id = 1, DayOfWeek = DayOfWeek.Monday, SlotOrder = 1,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                AllowedMode = TimeSlotAllowedMode.Both },
+            new() { Id = 2, DayOfWeek = DayOfWeek.Monday, SlotOrder = 2,
+                StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(10, 50),
+                AllowedMode = TimeSlotAllowedMode.Both },
+            new() { Id = 3, DayOfWeek = DayOfWeek.Tuesday, SlotOrder = 1,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                AllowedMode = TimeSlotAllowedMode.Both }
+        };
+
+        registry.CreateIntervalsForSection(Section(1, theory: 2, lab: 0), slots);
+
+        // Force section presence and solve to verify start var domain restriction.
+        var present = (BoolVar)registry.GetSectionPresent(1);
+        model.Add(present == 1);
+
+        var solver = new CpSolver();
+        var status = solver.Solve(model);
+
+        status.Should().BeOneOf(new[] { CpSolverStatus.Optimal, CpSolverStatus.Feasible });
+        var theoryInterval = registry.GetLectureInterval(1)!;
+        var startValue = solver.Value(theoryInterval.StartExpr());
+        startValue.Should().Be(0,
+            because: "only slot 0 is a valid 2-slot start (slot 1 would cross day boundary)");
+    }
+
+    [Fact]
+    public void CreateIntervalsForSection_WithSlotValidation_NoValidBlock_PresenceForcedToZero()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 2);
+        // 2-slot grid: Mon, Tue (cross day). Theory=2 → no valid block.
+        var slots = new List<TimeSlotInput>
+        {
+            new() { Id = 1, DayOfWeek = DayOfWeek.Monday, SlotOrder = 1,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                AllowedMode = TimeSlotAllowedMode.Both },
+            new() { Id = 2, DayOfWeek = DayOfWeek.Tuesday, SlotOrder = 1,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                AllowedMode = TimeSlotAllowedMode.Both }
+        };
+
+        registry.CreateIntervalsForSection(Section(1, theory: 2, lab: 0), slots);
+
+        // Without forcing presence, solver should still find Feasible (presence=0 = section dropped).
+        var solver = new CpSolver();
+        var status = solver.Solve(model);
+
+        status.Should().BeOneOf(new[] { CpSolverStatus.Optimal, CpSolverStatus.Feasible });
+        var present = (BoolVar)registry.GetSectionPresent(1);
+        solver.Value(present).Should().Be(0,
+            because: "no valid block → section forced to drop (presence=0)");
+    }
+
+    [Fact]
+    public void CreateIntervalsForSection_WithoutSlotValidation_LegacyBehavior()
+    {
+        // Plan 4-6 backward compat: timeSlots=null → unrestricted start IntVar (0..totalSlots-duration).
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 3);
+
+        // No timeSlots parameter — null branch.
+        registry.CreateIntervalsForSection(Section(1, theory: 2, lab: 0));
+
+        var theoryInterval = registry.GetLectureInterval(1)!;
+        theoryInterval.Should().NotBeNull();
+        // Legacy: start ∈ [0, 1] without slot validation. Cross-day not enforced here.
+    }
 }
