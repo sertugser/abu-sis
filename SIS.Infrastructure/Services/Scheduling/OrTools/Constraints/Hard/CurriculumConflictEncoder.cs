@@ -1,4 +1,5 @@
 using Google.OrTools.Sat;
+using SIS.Application.Scheduling.Solver;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
@@ -79,6 +80,41 @@ public sealed class CurriculumConflictEncoder : IConstraintEncoder
 
     private void EncodeCohortMode(EncoderContext ctx)
     {
-        // Plan 6 Task 5'te implement edilecek.
+        if (ctx.Request.CohortConflictPairs.Count == 0) return;
+
+        // Pre-build dictionary: sectionId → SectionInput for fast lookup
+        var sectionDict = ctx.Request.Sections.ToDictionary(s => s.Id);
+
+        foreach (var (a, b) in ctx.Request.CohortConflictPairs)
+        {
+            if (!sectionDict.TryGetValue(a, out var sectionA)) continue;
+            if (!sectionDict.TryGetValue(b, out var sectionB)) continue;
+
+            var intervals = new List<IntervalVar>();
+            AppendSectionIntervals(ctx, sectionA, intervals);
+            AppendSectionIntervals(ctx, sectionB, intervals);
+
+            if (intervals.Count < 2) continue;
+
+            ctx.Model.AddNoOverlap(intervals);
+            ctx.Assumptions.Register(Code,
+                primarySectionId: a,
+                secondarySectionId: b);
+        }
+    }
+
+    private static void AppendSectionIntervals(EncoderContext ctx, SectionInput section,
+        List<IntervalVar> intervals)
+    {
+        if (section.TheoryHours > 0)
+        {
+            var iv = ctx.Variables.GetLectureInterval(section.Id);
+            if (iv != null) intervals.Add(iv);
+        }
+        if (section.LabHours > 0)
+        {
+            var iv = ctx.Variables.GetLabInterval(section.Id);
+            if (iv != null) intervals.Add(iv);
+        }
     }
 }

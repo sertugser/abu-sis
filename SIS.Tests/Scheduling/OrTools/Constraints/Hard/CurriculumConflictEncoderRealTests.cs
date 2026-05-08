@@ -96,6 +96,91 @@ public class CurriculumConflictEncoderRealTests
         ctx.Assumptions.Count.Should().Be(0);
     }
 
+    [Fact]
+    public void Encode_CohortMode_PairsListEmpty_NoConstraint()
+    {
+        var sections = new[]
+        {
+            Section(1, courseId: 100, deptId: 1, year: 1, theory: 2, lab: 0),
+            Section(2, courseId: 200, deptId: 1, year: 1, theory: 2, lab: 0)
+        };
+        var encoder = new CurriculumConflictEncoder();
+        var ctx = BuildContext(sections, mode: "cohort");
+        // CohortConflictPairs default empty.
+
+        encoder.Encode(ctx);
+
+        ctx.Assumptions.Count.Should().Be(0,
+            because: "cohort mode with empty pairs list does not register any constraint");
+    }
+
+    [Fact]
+    public void Encode_CohortMode_OnePair_AddsNoOverlap()
+    {
+        var sections = new[]
+        {
+            Section(1, courseId: 100, deptId: 1, year: 1, theory: 2, lab: 0),
+            Section(2, courseId: 200, deptId: 1, year: 1, theory: 2, lab: 0)
+        };
+        var encoder = new CurriculumConflictEncoder();
+        var pairs = new (int, int)[] { (1, 2) };
+        var ctx = BuildContextWithCohortPairs(sections, pairs);
+
+        encoder.Encode(ctx);
+
+        // 1 pair → 1 NoOverlap → 1 assumption
+        ctx.Assumptions.Count.Should().Be(1);
+    }
+
+    private static EncoderContext BuildContextWithCohortPairs(
+        IReadOnlyList<SectionInput> sections,
+        IReadOnlyList<(int, int)> cohortPairs)
+    {
+        var classrooms = new[]
+        {
+            new ClassroomInput { Id = 9, Name = "C", Capacity = 50, Type = ClassroomType.Lecture }
+        };
+        var slots = Enumerable.Range(0, 20).Select(i => new TimeSlotInput
+        {
+            Id = i + 1,
+            DayOfWeek = (DayOfWeek)((i / 4) + 1),
+            SlotOrder = (i % 4) + 1,
+            StartTime = new TimeOnly(9 + (i % 4), 0),
+            EndTime = new TimeOnly(9 + (i % 4), 50),
+            AllowedMode = TimeSlotAllowedMode.Both
+        }).ToList();
+        var flags = new Dictionary<string, bool> { ["H5"] = true };
+        var request = new SolverRequest
+        {
+            TermId = 1, FacultyId = 1,
+            Sections = sections, Classrooms = classrooms, TimeSlots = slots,
+            ConstraintFlags = flags,
+            CurriculumConflictMode = "cohort",
+            CohortConflictPairs = cohortPairs
+        };
+
+        var model = new CpModel();
+        var variables = new DecisionVariables(model, totalSlots: slots.Count);
+        var assumptions = new AssumptionRegistry(model);
+
+        foreach (var section in sections)
+        {
+            variables.CreateIntervalsForSection(section);
+            if (section.TheoryHours > 0)
+                variables.CreateRoomVariable(section.Id, ComponentType.Lecture, classrooms);
+            if (section.LabHours > 0)
+                variables.CreateRoomVariable(section.Id, ComponentType.Lab, classrooms,
+                    groupCount: section.LabGroupCount);
+        }
+
+        return new EncoderContext
+        {
+            Model = model, Variables = variables, Assumptions = assumptions,
+            Request = request, ConstraintFlags = flags,
+            Penalties = new List<LinearExpr>()
+        };
+    }
+
     private static SectionInput Section(int id, int courseId, int? deptId, int? year, int theory, int lab) => new()
     {
         Id = id,
