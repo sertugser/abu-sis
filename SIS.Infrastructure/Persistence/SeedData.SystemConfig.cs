@@ -51,6 +51,7 @@ public static partial class SeedData
             new() { Key = "Schedule.LunchBreakEnd", Value = "12:20", Category = "Schedule", DataType = "string", Description = "Öğle arası bitiş saati (HH:mm)." },
             new() { Key = "Schedule.MaxConsecutiveHoursPerDay", Value = "4", Category = "Schedule", DataType = "int", Description = "Hoca aynı gün içinde aralıksız bu saatten fazla ders veremez (H15 encoder, Plan 5'te real impl)." },
             new() { Key = "Schedule.DefaultInstructorMaxWeeklyHours", Value = "30", Category = "Schedule", DataType = "int", Description = "Hoca başına default haftalık maks ders saati (H-WL encoder fallback). Instructor.MaxWeeklyHours > 0 ile override edilebilir. Plan 5." },
+            new() { Key = "Schedule.MaxDailyHoursPerInstructor", Value = "9", Category = "Schedule", DataType = "int", Description = "Hoca için günlük maks ders saati (H-DL encoder, Plan 5)." },
 
             // ── Ders Açma / Aktarım Varsayılanları ───────────────
             new() { Key = "CourseOpening.DefaultCapacityPerSection", Value = "40", Category = "CourseOpening", DataType = "int", Description = "Ders açılırken / aktarımda fallback şube başı kontenjan" },

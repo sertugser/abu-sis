@@ -75,6 +75,13 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, ClassroomConflictEncoder>();
         services.AddScoped<IConstraintEncoder, InstructorConflictEncoder>();
         services.AddScoped<IConstraintEncoder, WeeklyLoadEncoder>();
+        services.AddScoped<IConstraintEncoder>(sp =>
+        {
+            // H-DL — config-driven max daily hours per instructor (sync DI factory: 5min cache → DB call rare).
+            var config = sp.GetRequiredService<ISystemConfigProvider>();
+            var maxHours = config.GetIntAsync("Schedule.MaxDailyHoursPerInstructor", 9, default).GetAwaiter().GetResult();
+            return new DailyLoadEncoder(maxHours);
+        });
         services.AddScoped<IConstraintEncoder, CapacityEncoder>();
         services.AddScoped<IConstraintEncoder, ClassroomTypeEncoder>();
         services.AddScoped<IConstraintEncoder, CurriculumConflictEncoder>();
