@@ -1,5 +1,6 @@
 using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Enums;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools;
 
@@ -16,13 +17,38 @@ public sealed class PreflightFeasibilityChecker
 {
     public PreflightResult Check(
         IReadOnlyList<SectionInput> sections,
-        IReadOnlyList<ClassroomInput> classrooms)
+        IReadOnlyList<ClassroomInput> classrooms,
+        IReadOnlyList<TimeSlotInput> timeSlots)
     {
         var feasible = new List<SectionInput>();
         var infeasible = new List<InfeasibleSection>();
 
         foreach (var section in sections)
         {
+            // Plan 7 — Slot block validity check (cross-day + slot-gap).
+            if (section.TheoryHours > 0)
+            {
+                var validStarts = SlotBlockValidator.ComputeValidBlockStarts(timeSlots, section.TheoryHours);
+                if (validStarts.Count == 0)
+                {
+                    infeasible.Add(new InfeasibleSection(section,
+                        $"{section.TheoryHours} saatlik teori için geçerli zaman aralığı yok " +
+                        $"(gün sınırı veya >10dk gap kuralları nedeniyle)."));
+                    continue;
+                }
+            }
+            if (section.LabHours > 0)
+            {
+                var validStarts = SlotBlockValidator.ComputeValidBlockStarts(timeSlots, section.LabHours);
+                if (validStarts.Count == 0)
+                {
+                    infeasible.Add(new InfeasibleSection(section,
+                        $"{section.LabHours} saatlik lab için geçerli zaman aralığı yok " +
+                        $"(gün sınırı veya >10dk gap kuralları nedeniyle)."));
+                    continue;
+                }
+            }
+
             // Lab component check — paralel split destekli (Plan 4 Task 6)
             if (section.LabHours > 0)
             {

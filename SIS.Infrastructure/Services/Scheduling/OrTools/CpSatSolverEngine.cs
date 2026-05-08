@@ -55,7 +55,7 @@ public sealed class CpSatSolverEngine : ISolverEngine
         // ── Pre-flight feasibility check (Plan 3 Task 2) ──────────────────
         // Filter out sections that have NO valid classroom; mark them as failures.
         // Prevents CP-SAT 'all-or-nothing' infeasibility on real-world data.
-        var preflight = _preflightChecker.Check(request.Sections, request.Classrooms);
+        var preflight = _preflightChecker.Check(request.Sections, request.Classrooms, request.TimeSlots);
 
         if (preflight.FeasibleSections.Count == 0)
         {

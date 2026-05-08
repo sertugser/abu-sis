@@ -109,6 +109,15 @@ public class PartialSchedulingIntegrationTest
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(9, 50),
                     AllowedMode = TimeSlotAllowedMode.Both
+                },
+                new TimeSlotInput
+                {
+                    Id = 2,
+                    DayOfWeek = DayOfWeek.Monday,
+                    SlotOrder = 2,
+                    StartTime = new TimeOnly(10, 0),
+                    EndTime = new TimeOnly(10, 50),
+                    AllowedMode = TimeSlotAllowedMode.Both
                 }
             },
             ConstraintFlags = new Dictionary<string, bool> { ["H1"] = true }
