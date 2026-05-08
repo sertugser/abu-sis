@@ -78,6 +78,24 @@ public class InstructorConflictEncoderTests
         ctx.Assumptions.Count.Should().Be(0);
     }
 
+    [Fact]
+    public void Encode_SingleSectionWithTheoryAndLab_AddsNoOverlapAndAssumption()
+    {
+        // Same instructor teaches lecture AND lab of single section. Both intervals belong to
+        // one person → must not overlap (same body cannot be in 2 places at once).
+        var encoder = new InstructorConflictEncoder();
+        var sections = new[]
+        {
+            Section(1, instructorId: 5, theory: 2, lab: 2)
+        };
+        var ctx = BuildContextWithInstructors(sections);
+
+        encoder.Encode(ctx);
+
+        // 1 instructor with 2 intervals (lecture + lab of same section) → AddNoOverlap + 1 assumption
+        ctx.Assumptions.Count.Should().Be(1);
+    }
+
     private static SectionInput Section(int id, int? instructorId, int theory, int lab) => new()
     {
         Id = id,
