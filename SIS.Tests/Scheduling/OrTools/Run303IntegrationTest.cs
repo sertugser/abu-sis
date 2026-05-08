@@ -192,6 +192,8 @@ public class Run303IntegrationTest
         mock.Setup(x => x.GetIntAsync("Schedule.OrTools.NumWorkers", It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(8);
         mock.Setup(x => x.GetIntAsync("Schedule.OrTools.RandomSeed", It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(42);
         mock.Setup(x => x.GetBoolAsync("Schedule.OrTools.LogToConsole", It.IsAny<bool>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        // Plan 5 Task 1: SolverRequestBuilder reads this; Task 4 H-WL encoder will use it as fallback when Instructor.MaxWeeklyHours == 0.
+        mock.Setup(x => x.GetIntAsync("Schedule.DefaultInstructorMaxWeeklyHours", It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(30);
         return mock;
     }
 
