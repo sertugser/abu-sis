@@ -143,8 +143,8 @@ public class ClassroomTypeAndAmphiIntegrationTest
         var preflightChecker = new PreflightFeasibilityChecker();
 
         var configMock = new Mock<ISystemConfigProvider>();
-        configMock.Setup(x => x.GetIntAsync("Classroom.AmphiThreshold", It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(amphiThreshold);
+        // Single wildcard setup serves both AmphiThreshold and any other GetIntAsync caller.
+        // (Moq last-registered-wins would shadow a separate specific-key setup anyway.)
         configMock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string k, int f, CancellationToken _) =>
                 k == "Classroom.AmphiThreshold" ? amphiThreshold : f);
