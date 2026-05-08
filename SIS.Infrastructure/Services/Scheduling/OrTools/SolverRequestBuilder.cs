@@ -288,9 +288,15 @@ public sealed class SolverRequestBuilder
         IsPinned = cs.IsPinned,
         IsScheduleLocked = cs.IsScheduleLocked,
         // ProgramId — Plan 2/Plan 6 Task 1'de null (ileride curriculum-program mapping eklendiğinde doldurulacak)
-        // RequiredTheoryClassroomType / RequiredLabClassroomType — Plan 2'de null
-        //   (Course üzerinde TheoryClassroomType/LabClassroomType var; bunlar Type enum
-        //    int değerine ihtiyaç duyduğumuzda Plan 3'te map edilir).
+        // Plan 7b Task 1 — Course üzerindeki tip gereksinimi int? olarak SectionInput'a aktarılır.
+        //   null = Course tipi belirtmemiş; encoder kısıt eklemez.
+        //   Set = ClassroomType enum int değeri; encoder uyumsuz odalara forbidden literal ekler.
+        RequiredTheoryClassroomType = cs.Course.TheoryClassroomType.HasValue
+            ? (int?)cs.Course.TheoryClassroomType.Value
+            : null,
+        RequiredLabClassroomType = cs.Course.LabClassroomType.HasValue
+            ? (int?)cs.Course.LabClassroomType.Value
+            : null,
         // Plan 6 Task 1 — CurriculumCourse.SuggestedSemester'dan türetilen yıl (0..3).
         Year = courseYearMap.TryGetValue(cs.CourseId, out var year) ? year : null,
         LabGroupCount = ComputeLabGroupCount(cs.Capacity, cs.Course.LabHours, labClassroomCapacities),

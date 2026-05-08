@@ -945,4 +945,150 @@ public class SolverRequestBuilderTests
         req.Corequisites.Should().BeEmpty(
             because: "IsCorequisite=false rows are not loaded");
     }
+
+    // ========================================================================
+    // Plan 7b Task 1 — Course.TheoryClassroomType / LabClassroomType mapped
+    // onto SectionInput.RequiredTheoryClassroomType / RequiredLabClassroomType
+    // ========================================================================
+
+    [Fact]
+    public async Task BuildAsync_CourseHasClassroomTypeSet_MapsToSectionInput()
+    {
+        // Arrange — 2 courses: one with TheoryClassroomType=Amphitheater (no lab type),
+        // one with LabClassroomType=PhysicsLab (no theory type). Each gets one Active section.
+        await using var ctx = NewInMemoryContext();
+        ctx.Faculties.Add(new Faculty { Id = 1, Code = "MUH", Name = "Mühendislik" });
+        ctx.Departments.Add(new Department { Id = 1, Code = "CENG", Name = "CENG", FacultyId = 1 });
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = 1,
+            Year = 2025,
+            TermType = TermType.Fall,
+            Name = "Fall 2025",
+            ShortName = "F25",
+            EnglishName = "Fall 2025",
+            ShortEnglishName = "F25",
+            TermStart = new DateTime(2025, 9, 15, 0, 0, 0, DateTimeKind.Utc),
+            TermEnd = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc)
+        });
+        ctx.Courses.Add(new Course
+        {
+            Id = 100,
+            Code = "CENG101",
+            Name = "Algo",
+            DepartmentId = 1,
+            Ects = 6,
+            NationalCredit = 4,
+            TheoryHours = 3,
+            LabHours = 0,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            TheoryClassroomType = ClassroomType.Amphitheater,
+            LabClassroomType = null
+        });
+        ctx.Courses.Add(new Course
+        {
+            Id = 200,
+            Code = "CENG201",
+            Name = "Physics Lab",
+            DepartmentId = 1,
+            Ects = 4,
+            NationalCredit = 3,
+            TheoryHours = 0,
+            LabHours = 2,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            TheoryClassroomType = null,
+            LabClassroomType = ClassroomType.PhysicsLab
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = 1000,
+            CourseId = 100,
+            TermId = 1,
+            SectionNumber = 1,
+            Capacity = 30,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = 1001,
+            CourseId = 200,
+            TermId = 1,
+            SectionNumber = 1,
+            Capacity = 24,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+        await ctx.SaveChangesAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        // Act
+        var request = await builder.BuildAsync(termId: 1, facultyId: 1, departmentId: null,
+            seed: null, CancellationToken.None);
+
+        // Assert
+        var theorySection = request.Sections.Single(s => s.CourseCode == "CENG101");
+        theorySection.RequiredTheoryClassroomType.Should().Be((int)ClassroomType.Amphitheater);
+        theorySection.RequiredLabClassroomType.Should().BeNull();
+
+        var labSection = request.Sections.Single(s => s.CourseCode == "CENG201");
+        labSection.RequiredTheoryClassroomType.Should().BeNull();
+        labSection.RequiredLabClassroomType.Should().Be((int)ClassroomType.PhysicsLab);
+    }
+
+    [Fact]
+    public async Task BuildAsync_CourseClassroomTypeNull_LeavesSectionFieldsNull()
+    {
+        // Arrange — single course with both classroom-type fields null.
+        await using var ctx = NewInMemoryContext();
+        ctx.Faculties.Add(new Faculty { Id = 1, Code = "MUH", Name = "Mühendislik" });
+        ctx.Departments.Add(new Department { Id = 1, Code = "CENG", Name = "CENG", FacultyId = 1 });
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = 1,
+            Year = 2025,
+            TermType = TermType.Fall,
+            Name = "Fall 2025",
+            ShortName = "F25",
+            EnglishName = "Fall 2025",
+            ShortEnglishName = "F25",
+            TermStart = new DateTime(2025, 9, 15, 0, 0, 0, DateTimeKind.Utc),
+            TermEnd = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc)
+        });
+        ctx.Courses.Add(new Course
+        {
+            Id = 100,
+            Code = "CENG999",
+            Name = "X",
+            DepartmentId = 1,
+            Ects = 6,
+            NationalCredit = 4,
+            TheoryHours = 3,
+            LabHours = 0,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            TheoryClassroomType = null,
+            LabClassroomType = null
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = 1000,
+            CourseId = 100,
+            TermId = 1,
+            SectionNumber = 1,
+            Capacity = 30,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+        await ctx.SaveChangesAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        // Act
+        var request = await builder.BuildAsync(termId: 1, facultyId: 1, departmentId: null,
+            seed: null, CancellationToken.None);
+
+        // Assert
+        var section = request.Sections.Single();
+        section.RequiredTheoryClassroomType.Should().BeNull();
+        section.RequiredLabClassroomType.Should().BeNull();
+    }
 }
