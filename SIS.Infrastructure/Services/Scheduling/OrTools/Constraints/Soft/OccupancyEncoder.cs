@@ -54,6 +54,10 @@ public sealed class OccupancyEncoder : IConstraintEncoder
                 ctx, sectionsById, roomsById, sectionId, classroomId, literal,
                 min, max, weight);
         }
+
+        // NOTE: AllPresenceLiteralsForLabBlocks (Plan 7b multi-interval lab) intentionally
+        // excluded. Multi-block labs accrue zero S1 penalty until Plan 9 polish defines
+        // per-block occupancy semantics (each block × room presence literal).
     }
 
     private static void AddPenaltyIfDeviated(
@@ -79,6 +83,6 @@ public sealed class OccupancyEncoder : IConstraintEncoder
             : 0;
 
         if (deviation > 0)
-            ctx.Penalties.Add(LinearExpr.Term(literal, deviation * weight));
+            ctx.Penalties.Add(LinearExpr.Term(literal, (long)deviation * weight));
     }
 }
