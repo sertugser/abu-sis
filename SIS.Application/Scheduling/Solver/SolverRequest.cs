@@ -56,4 +56,22 @@ public sealed record SolverRequest
     /// CpSatSolverEngine yükler.
     /// </summary>
     public int MaxLabBlockHours { get; init; } = 2;
+
+    /// <summary>
+    /// Plan 8 — Soft constraint eşik + weight'leri. SolverRequestBuilder SystemConfig'ten okur.
+    /// Tüm 10 soft encoder bu record üzerinden parametre alır.
+    /// </summary>
+    public SoftThresholds SoftThresholds { get; init; } = new();
+
+    /// <summary>
+    /// Plan 8 — S4 CoEnrollment için pair listesi. Production'da 0 (CourseRegistrations boş);
+    /// admin gerçek student verisi girince dolar. Encoder boş listede skip eder.
+    /// </summary>
+    public IReadOnlyList<CoEnrollmentPairInput> CoEnrollmentPairs { get; init; } = [];
+
+    /// <summary>
+    /// Plan 8 — S20 AdjacentYearConflict için cohort pair listesi. CurriculumConflictMode = "cohort"
+    /// modunda CohortBuilder.AdjacentYearSoftPairs'ten doldurulur.
+    /// </summary>
+    public IReadOnlyList<(int SectionA, int SectionB)> AdjacentYearSoftPairs { get; init; } = [];
 }
