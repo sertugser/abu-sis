@@ -865,4 +865,84 @@ public class SolverRequestBuilderTests
         req.CohortConflictPairs.Should().BeEmpty(
             because: "curriculum mode does not invoke CohortBuilder");
     }
+
+    // ========================================================================
+    // Plan 6 Task 8 — Corequisites loaded from CoursePrerequisites (IsCorequisite=true)
+    // ========================================================================
+
+    [Fact]
+    public async Task BuildAsync_LoadsCorequisitePairs()
+    {
+        // Arrange — minimal seed has Course 100. Add Course 200 + corequisite relation.
+        await using var ctx = await SeedMinimalAsync();
+        ctx.Courses.Add(new Course
+        {
+            Id = 200,
+            Code = "Y",
+            Name = "Y",
+            DepartmentId = 1,
+            TheoryHours = 3,
+            LabHours = 0,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            Ects = 6,
+            NationalCredit = 6
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = 1001,
+            CourseId = 200,
+            TermId = 1,
+            SectionNumber = 1,
+            Capacity = 30,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+        ctx.CoursePrerequisites.Add(new CoursePrerequisite
+        {
+            CourseId = 100,
+            RequiredCourseId = 200,
+            IsCorequisite = true
+        });
+        await ctx.SaveChangesAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        // Act
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        // Assert
+        req.Corequisites.Should().HaveCount(1);
+        req.Corequisites[0].PrimaryCourseId.Should().Be(100);
+        req.Corequisites[0].CorequisiteCourseId.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task BuildAsync_CoursePrerequisiteNotCorequisite_NotLoaded()
+    {
+        await using var ctx = await SeedMinimalAsync();
+        ctx.Courses.Add(new Course
+        {
+            Id = 200,
+            Code = "Y",
+            Name = "Y",
+            DepartmentId = 1,
+            TheoryHours = 3,
+            LabHours = 0,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            Ects = 6,
+            NationalCredit = 6
+        });
+        ctx.CoursePrerequisites.Add(new CoursePrerequisite
+        {
+            CourseId = 100,
+            RequiredCourseId = 200,
+            IsCorequisite = false  // regular prereq, not corequisite
+        });
+        await ctx.SaveChangesAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        req.Corequisites.Should().BeEmpty(
+            because: "IsCorequisite=false rows are not loaded");
+    }
 }

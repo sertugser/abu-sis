@@ -135,9 +135,17 @@ public sealed class SolverRequestBuilder
             .AsNoTracking()
             .ToDictionaryAsync(cd => cd.Code, cd => cd.IsEnabled, cancellationToken);
 
-        // 6) Corequisites — Plan 2'de boş (Domain'de CourseRelationship entity yok).
-        //    Plan 3 H11 entegrasyonu eklendiğinde buradan beslenecek.
-        var corequisites = new List<CourseRelationship>();
+        // 6) Corequisites — Plan 6 Task 8.
+        //    Filter: IsCorequisite=true AND (CourseId or RequiredCourseId in current sections' courses).
+        //    Yalnızca bu run'daki section'ların kurslarıyla ilişkili eşkoşullar yüklenir.
+        var courseIdsForCorequisites = sections.Select(s => s.CourseId).Distinct().ToList();
+        var corequisites = await _context.CoursePrerequisites
+            .AsNoTracking()
+            .Where(cp => cp.IsCorequisite)
+            .Where(cp => courseIdsForCorequisites.Contains(cp.CourseId)
+                      || courseIdsForCorequisites.Contains(cp.RequiredCourseId))
+            .Select(cp => new CourseRelationship(cp.CourseId, cp.RequiredCourseId))
+            .ToListAsync(cancellationToken);
 
         // 7) Plan 5 Task 1 — Instructor weekly-hour cap default (SystemConfig).
         var defaultInstructorMaxWeeklyHours = await _systemConfigProvider.GetIntAsync(
