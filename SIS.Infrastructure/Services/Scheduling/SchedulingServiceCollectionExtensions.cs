@@ -125,6 +125,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, OccupancyEncoder>();
         services.AddScoped<IConstraintEncoder, SlotCongestionEncoder>();
         services.AddScoped<IConstraintEncoder, LunchBreakSoftEncoder>();
+        services.AddScoped<IConstraintEncoder, DailyLoadSoftEncoder>();
         services.AddScoped<IConstraintEncoder, CoEnrollmentEncoder>();
         services.AddScoped<IConstraintEncoder, StudentGapEncoder>();
         services.AddScoped<IConstraintEncoder, EarlyLateEncoder>();
