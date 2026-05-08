@@ -4,10 +4,20 @@ namespace SIS.Application.Scheduling.Solver;
 
 /// <summary>
 /// Plan 8 — Soft constraint eşik değerleri ve per-encoder weight'leri tek noktada.
-/// SolverRequestBuilder SystemConfig'ten okuyup doldurur. Default'lar v1
-/// SchedulingConstraintConfig.FromSystemConfig paritesi (lines 92-111).
-/// Penalty formülü: penalty_term = (excess_amount) × Weight; toplanır objective'e eklenir.
+/// SolverRequestBuilder SystemConfig'ten okuyup doldurur. Penalty formülü:
+/// penalty_term = (excess_amount) × Weight; toplanır objective'e eklenir.
 /// </summary>
+/// <remarks>
+/// Default değer kaynakları farklı:
+/// <list type="bullet">
+///   <item>**Threshold defaults** (S1MinOcc, S2MaxDailyHours, S5LunchBreakStart, vs.):
+///     v1 <c>SchedulingConstraintConfig.FromSystemConfig</c> paritesi (lines 92-111).</item>
+///   <item>**Weight defaults** (S1Weight, S2Weight, vs.): v2 (Plan 8) için tasarlanmış
+///     CP-SAT'a özgü değerler. v1'de weight'ler <c>ConstraintDefinition.Weight</c>
+///     entity'sinden (default 5) gelir; Plan 8 admin-tunable per-encoder weight pattern
+///     kullanır. Plan 9'da real DB tune edilince override edilebilir.</item>
+/// </list>
+/// </remarks>
 public sealed record SoftThresholds
 {
     // S1 Occupancy
