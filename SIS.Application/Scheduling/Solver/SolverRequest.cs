@@ -20,4 +20,20 @@ public sealed record SolverRequest
     /// SectionInput.InstructorMaxWeeklyHours == 0 olan section'lar için fallback.
     /// </summary>
     public int DefaultInstructorMaxWeeklyHours { get; init; } = 30;
+
+    /// <summary>
+    /// Plan 6 — H5 müfredat çakışma kontrolü modu.
+    /// "curriculum" (default): (DepartmentId, Year) groups → AddNoOverlap.
+    /// "cohort": CohortConflictPairs üzerinden pair-level no-overlap.
+    /// "enrollment": Plan 6.5 — enrollment matrix mode.
+    /// SchedulingAlgorithmConfigs.Schedule.CurriculumConflictMode'tan okunur.
+    /// </summary>
+    public string CurriculumConflictMode { get; init; } = "curriculum";
+
+    /// <summary>
+    /// Plan 6 — cohort modunda H5 encoder'ın kullanacağı section pair'leri.
+    /// SolverRequestBuilder cohort mode aktifken v1 CohortBuilder portu ile hesaplar.
+    /// curriculum mode'da boş kalır.
+    /// </summary>
+    public IReadOnlyList<(int SectionA, int SectionB)> CohortConflictPairs { get; init; } = [];
 }
