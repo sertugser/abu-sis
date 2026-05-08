@@ -35,7 +35,7 @@ public sealed class ScheduleModelBuilder
         // 1) Decision variables
         foreach (var section in request.Sections)
         {
-            variables.CreateIntervalsForSection(section);
+            variables.CreateIntervalsForSection(section, request.TimeSlots);
             if (section.TheoryHours > 0)
                 variables.CreateRoomVariable(section.Id, ComponentType.Lecture, request.Classrooms);
             if (section.LabHours > 0)
