@@ -91,7 +91,7 @@ public sealed class AutoScheduleEngine
             await ReportAsync("v2-building-request", 10,
                 detail: "v2-ortools: SolverRequest DB'den inşa ediliyor...");
 
-            var requestBuilder = new SIS.Infrastructure.Services.Scheduling.OrTools.SolverRequestBuilder(_context);
+            var requestBuilder = new SIS.Infrastructure.Services.Scheduling.OrTools.SolverRequestBuilder(_context, _configProvider);
             var solverRequest = await requestBuilder.BuildAsync(
                 request.TermId,
                 request.FacultyId,

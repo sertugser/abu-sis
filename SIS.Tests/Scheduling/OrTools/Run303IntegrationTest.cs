@@ -29,7 +29,8 @@ public class Run303IntegrationTest
         await using var ctx = NewInMemoryContext();
         await SeedRun303ScenarioAsync(ctx);
 
-        var requestBuilder = new SolverRequestBuilder(ctx);
+        var configMock = BuildMockConfig();
+        var requestBuilder = new SolverRequestBuilder(ctx, configMock.Object);
         var request = await requestBuilder.BuildAsync(termId: 2, facultyId: 1, departmentId: null, seed: 42, default);
 
         // Sanity check the seed worked
@@ -37,7 +38,6 @@ public class Run303IntegrationTest
         request.Classrooms.Should().HaveCount(14, because: "14 MUH classrooms seeded for Term 2");
         request.TimeSlots.Should().HaveCount(50, because: "50 weekday slots (5 days × 10/day)");
 
-        var configMock = BuildMockConfig();
         var encoders = BuildAllHardEncoders();
         var modelBuilder = new ScheduleModelBuilder(encoders);
         var mapper = new SolutionMapper();

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -24,10 +25,12 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools;
 public sealed class SolverRequestBuilder
 {
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _systemConfigProvider;
 
-    public SolverRequestBuilder(AppDbContext context)
+    public SolverRequestBuilder(AppDbContext context, ISystemConfigProvider systemConfigProvider)
     {
         _context = context;
+        _systemConfigProvider = systemConfigProvider;
     }
 
     public async Task<SolverRequest> BuildAsync(
@@ -81,7 +84,22 @@ public sealed class SolverRequestBuilder
             .Select(c => c.Capacity)
             .ToList();
 
-        var sections = sectionEntities.Select(cs => MapSection(cs, labClassroomCapacities)).ToList();
+        // Plan 5 Task 1 — instructor max weekly hours override map.
+        // Section'ın hocası varsa Instructor.MaxWeeklyHours'tan yüklenir; 0 ise default kullanılır.
+        var instructorIds = sectionEntities
+            .Where(cs => cs.InstructorId.HasValue)
+            .Select(cs => cs.InstructorId!.Value)
+            .Distinct()
+            .ToList();
+
+        var instructorMaxHours = await _context.Instructors
+            .AsNoTracking()
+            .Where(i => instructorIds.Contains(i.Id))
+            .ToDictionaryAsync(i => i.Id, i => i.MaxWeeklyHours, cancellationToken);
+
+        var sections = sectionEntities
+            .Select(cs => MapSection(cs, labClassroomCapacities, instructorMaxHours))
+            .ToList();
 
         // 4) TimeSlots — term grid (day + slot ordering deterministic indexing için)
         var timeSlotEntities = await _context.TimeSlots
@@ -101,6 +119,10 @@ public sealed class SolverRequestBuilder
         //    Plan 3 H11 entegrasyonu eklendiğinde buradan beslenecek.
         var corequisites = new List<CourseRelationship>();
 
+        // 7) Plan 5 Task 1 — Instructor weekly-hour cap default (SystemConfig).
+        var defaultInstructorMaxWeeklyHours = await _systemConfigProvider.GetIntAsync(
+            "Schedule.DefaultInstructorMaxWeeklyHours", 30, cancellationToken);
+
         return new SolverRequest
         {
             TermId = termId,
@@ -111,11 +133,15 @@ public sealed class SolverRequestBuilder
             Classrooms = classrooms,
             TimeSlots = timeSlots,
             ConstraintFlags = constraintFlags,
-            Corequisites = corequisites
+            Corequisites = corequisites,
+            DefaultInstructorMaxWeeklyHours = defaultInstructorMaxWeeklyHours
         };
     }
 
-    private static SectionInput MapSection(CourseSection cs, IReadOnlyList<int> labClassroomCapacities) => new()
+    private static SectionInput MapSection(
+        CourseSection cs,
+        IReadOnlyList<int> labClassroomCapacities,
+        IReadOnlyDictionary<int, int> instructorMaxHours) => new()
     {
         Id = cs.Id,
         CourseId = cs.CourseId,
@@ -134,7 +160,11 @@ public sealed class SolverRequestBuilder
         // RequiredTheoryClassroomType / RequiredLabClassroomType — Plan 2'de null
         //   (Course üzerinde TheoryClassroomType/LabClassroomType var; bunlar Type enum
         //    int değerine ihtiyaç duyduğumuzda Plan 3'te map edilir).
-        LabGroupCount = ComputeLabGroupCount(cs.Capacity, cs.Course.LabHours, labClassroomCapacities)
+        LabGroupCount = ComputeLabGroupCount(cs.Capacity, cs.Course.LabHours, labClassroomCapacities),
+        // Plan 5 Task 1 — Instructor.MaxWeeklyHours override; 0 = default kullan.
+        InstructorMaxWeeklyHours = cs.InstructorId.HasValue
+            ? instructorMaxHours.GetValueOrDefault(cs.InstructorId.Value, 0)
+            : 0
     };
 
     /// <summary>

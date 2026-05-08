@@ -30,4 +30,12 @@ public sealed record SectionInput
     /// SolverRequestBuilder runtime'da hesaplar: ⌈capacity / max_lab_capacity⌉.
     /// </summary>
     public int LabGroupCount { get; init; } = 1;
+
+    /// <summary>
+    /// Plan 5 — Hocaya özel haftalık maksimum saat override.
+    /// 0 (default) = SolverRequest.DefaultInstructorMaxWeeklyHours kullanılır.
+    /// >0 = bu section'ın hocası için bu sayı geçerlidir (rank-based veya kişiye özel).
+    /// SolverRequestBuilder runtime'da Instructor.MaxWeeklyHours'tan yükler.
+    /// </summary>
+    public int InstructorMaxWeeklyHours { get; init; }
 }

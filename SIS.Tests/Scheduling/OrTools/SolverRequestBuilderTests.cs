@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -18,6 +20,27 @@ public class SolverRequestBuilderTests
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         return new AppDbContext(options);
+    }
+
+    /// <summary>
+    /// Plan 5 Task 1 — ISystemConfigProvider mock with configurable
+    /// "Schedule.DefaultInstructorMaxWeeklyHours" return value. All other GetIntAsync
+    /// calls fall back to the supplied fallback (passthrough).
+    /// </summary>
+    private static ISystemConfigProvider BuildConfigProviderMock(int defaultMaxWeekly = 30)
+    {
+        var mock = new Mock<ISystemConfigProvider>();
+        mock.Setup(x => x.GetIntAsync(
+                "Schedule.DefaultInstructorMaxWeeklyHours",
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(defaultMaxWeekly);
+        mock.Setup(x => x.GetIntAsync(
+                It.Is<string>(k => k != "Schedule.DefaultInstructorMaxWeeklyHours"),
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, int fallback, CancellationToken _) => fallback);
+        return mock.Object;
     }
 
     /// <summary>
@@ -131,7 +154,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange
         await using var ctx = await SeedMinimalAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(termId: 1, facultyId: 1, departmentId: null, seed: 42, default);
@@ -148,7 +171,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange
         await using var ctx = await SeedMinimalAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
@@ -173,7 +196,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange
         await using var ctx = await SeedMinimalAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
@@ -192,7 +215,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange
         await using var ctx = await SeedMinimalAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
@@ -213,7 +236,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange
         await using var ctx = await SeedMinimalAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
@@ -239,7 +262,7 @@ public class SolverRequestBuilderTests
             IsFinalized = false
         });
         await ctx.SaveChangesAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
@@ -265,7 +288,7 @@ public class SolverRequestBuilderTests
             IsFinalized = true  // ← excluded
         });
         await ctx.SaveChangesAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
@@ -304,7 +327,7 @@ public class SolverRequestBuilderTests
             IsFinalized = false
         });
         await ctx.SaveChangesAsync();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act — sadece department 1 (BM)
         var reqDept1 = await builder.BuildAsync(1, 1, departmentId: 1, null, default);
@@ -323,7 +346,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange
         await using var ctx = NewInMemoryContext();
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(termId: 1, facultyId: 1, null, null, default);
@@ -413,7 +436,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange — section capacity 40, lab room cap 50 → groupCount = 1
         await using var ctx = await SeedScenarioWithCustomCapacityAsync(sectionCapacity: 40, labRoomCapacity: 50);
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(termId: 1, facultyId: 1, null, null, default);
@@ -428,7 +451,7 @@ public class SolverRequestBuilderTests
     {
         // Arrange — section capacity 80, lab room cap 40 → groupCount = ⌈80/40⌉ = 2
         await using var ctx = await SeedScenarioWithCustomCapacityAsync(sectionCapacity: 80, labRoomCapacity: 40);
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
@@ -442,12 +465,133 @@ public class SolverRequestBuilderTests
     {
         // Arrange — 120 / 40 = 3 groups
         await using var ctx = await SeedScenarioWithCustomCapacityAsync(sectionCapacity: 120, labRoomCapacity: 40);
-        var builder = new SolverRequestBuilder(ctx);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         // Act
         var req = await builder.BuildAsync(1, 1, null, null, default);
 
         // Assert
         req.Sections[0].LabGroupCount.Should().Be(3);
+    }
+
+    // ========================================================================
+    // Plan 5 Task 1 — Instructor.MaxWeeklyHours override + SystemConfig default
+    // ========================================================================
+
+    /// <summary>
+    /// Helper: section with an Instructor whose MaxWeeklyHours is configurable.
+    /// </summary>
+    private static async Task<AppDbContext> SeedScenarioWithInstructorMaxHoursAsync(int maxHours)
+    {
+        var ctx = NewInMemoryContext();
+        ctx.Faculties.Add(new Faculty { Id = 1, Code = "MUH", Name = "M" });
+        ctx.Departments.Add(new Department { Id = 1, Code = "BM", Name = "BM", FacultyId = 1 });
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = 1,
+            Year = 2026,
+            TermType = TermType.Spring,
+            TermStart = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            TermEnd = new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc),
+            ShortEnglishName = "S26"
+        });
+        ctx.Courses.Add(new Course
+        {
+            Id = 100,
+            Code = "X",
+            Name = "X",
+            DepartmentId = 1,
+            TheoryHours = 3,
+            LabHours = 0,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            Ects = 6,
+            NationalCredit = 6
+        });
+        // Instructor entity has UserId, DepartmentId, Title, MaxWeeklyHours (no Name field).
+        ctx.Instructors.Add(new Instructor
+        {
+            Id = 7,
+            UserId = 100,
+            DepartmentId = 1,
+            Title = "Prof.",
+            MaxWeeklyHours = maxHours
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = 1000,
+            CourseId = 100,
+            TermId = 1,
+            SectionNumber = 1,
+            Capacity = 30,
+            InstructorId = 7,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+        ctx.Classrooms.Add(new Classroom
+        {
+            Id = 9,
+            Name = "C",
+            Capacity = 50,
+            Type = ClassroomType.Lecture
+        });
+        ctx.ClassroomTermAssignments.Add(new ClassroomTermAssignment
+        {
+            Id = 1,
+            TermId = 1,
+            FacultyId = 1,
+            ClassroomId = 9
+        });
+        await ctx.SaveChangesAsync();
+        return ctx;
+    }
+
+    [Fact]
+    public async Task BuildAsync_SectionWithInstructorHavingMaxHours_PopulatesOverride()
+    {
+        // Arrange
+        await using var ctx = await SeedScenarioWithInstructorMaxHoursAsync(maxHours: 25);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock(defaultMaxWeekly: 30));
+
+        // Act
+        var req = await builder.BuildAsync(termId: 1, facultyId: 1, null, null, default);
+
+        // Assert
+        req.Sections.Should().HaveCount(1);
+        req.Sections[0].InstructorMaxWeeklyHours.Should().Be(25,
+            because: "Instructor.MaxWeeklyHours override is loaded onto the SectionInput");
+        req.DefaultInstructorMaxWeeklyHours.Should().Be(30,
+            because: "SystemConfig provides the engine-wide default");
+    }
+
+    [Fact]
+    public async Task BuildAsync_SectionWithInstructorMaxHoursZero_LeavesOverrideZero()
+    {
+        // Arrange — instructor exists but MaxWeeklyHours is 0 (sentinel for "use default")
+        await using var ctx = await SeedScenarioWithInstructorMaxHoursAsync(maxHours: 0);
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock(defaultMaxWeekly: 30));
+
+        // Act
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        // Assert
+        req.Sections[0].InstructorMaxWeeklyHours.Should().Be(0,
+            because: "0 means encoder falls back to DefaultInstructorMaxWeeklyHours");
+    }
+
+    [Fact]
+    public async Task BuildAsync_NoInstructor_LeavesOverrideZero()
+    {
+        // Arrange — minimal seed has no instructor on the section
+        await using var ctx = await SeedMinimalAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock(defaultMaxWeekly: 30));
+
+        // Act
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        // Assert
+        req.Sections.Should().NotBeEmpty();
+        req.Sections[0].InstructorId.Should().BeNull();
+        req.Sections[0].InstructorMaxWeeklyHours.Should().Be(0,
+            because: "no instructor => no override; encoder uses default");
     }
 }
