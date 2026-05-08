@@ -95,9 +95,13 @@ public class Plan7bCombinedIntegrationTest
             .Select(s => s.ClassroomId).Distinct()
             .Should().BeEquivalentTo(new[] { 2 });
 
-        // 4h lab split -> 2 days
+        // 4h lab split -> 2 days. Chem has no RequiredLabClassroomType, so encoder
+        // fallback restricts to Lab|Computer types — only id=3 (Lab) qualifies.
         var chemAssignment = result.Assignments.Single(a => a.SectionId == 4);
         chemAssignment.Slots.Should().HaveCount(4);
+        chemAssignment.Slots.Select(s => s.ClassroomId).Distinct()
+            .Should().BeEquivalentTo(new[] { 3 },
+                because: "no RequiredLabClassroomType -> Lab|Computer fallback; only Lab room is id=3");
         var chemDays = chemAssignment.Slots
             .Select(s => slots.First(t => t.Id == s.TimeSlotId).DayOfWeek)
             .Distinct().Count();
