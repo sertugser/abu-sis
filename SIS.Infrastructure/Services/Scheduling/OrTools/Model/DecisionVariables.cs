@@ -320,4 +320,54 @@ public sealed class DecisionVariables
 
     public IReadOnlyDictionary<(int, int, ComponentType, int), IntervalVar> AllOptionalIntervalsForGroups => _optionalIntervalsForGroups;
     public IReadOnlyDictionary<(int, int, ComponentType, int), ILiteral> AllPresenceLiteralsForGroups => _presenceLiteralsForGroups;
+
+    private readonly Dictionary<(int sectionId, ComponentType componentType), IntVar> _componentDayVars = new();
+    private long[]? _dayPerSlotCache;
+
+    /// <summary>
+    /// Plan 5 — H-DL/H-DO/H15/H16 için ortak helper. Section'ın belirli component'inin (lecture/lab)
+    /// hangi gün başladığını temsil eden IntVar (0..6, DayOfWeek enum int değeri).
+    /// Idempotent: aynı (sectionId, componentType) için tek IntVar oluşturur.
+    /// timeSlots → day-of-week mapping array tek kez oluşturulur ve cache'lenir.
+    /// Not: timeSlots referansının DecisionVariables instance ömrü boyunca sabit olduğu varsayılır
+    /// (ScheduleModelBuilder.Build içinde tek bir solve scope'unda kullanılır).
+    /// </summary>
+    public IntVar GetOrCreateComponentDayVar(int sectionId, ComponentType componentType,
+        IReadOnlyList<TimeSlotInput> timeSlots)
+    {
+        var key = (sectionId, componentType);
+        if (_componentDayVars.TryGetValue(key, out var existing))
+            return existing;
+
+        if (timeSlots.Count == 0)
+            throw new InvalidOperationException("TimeSlots is empty; cannot create day variable.");
+
+        // Lazy-build dayPerSlot mapping array (single allocation per DecisionVariables instance).
+        if (_dayPerSlotCache == null)
+        {
+            var arr = new long[timeSlots.Count];
+            for (int i = 0; i < timeSlots.Count; i++)
+                arr[i] = (long)timeSlots[i].DayOfWeek;
+            _dayPerSlotCache = arr;
+        }
+
+        var sourceInterval = componentType == ComponentType.Lecture
+            ? GetLectureInterval(sectionId)
+            : GetLabInterval(sectionId);
+        if (sourceInterval == null)
+            throw new InvalidOperationException(
+                $"Section {sectionId} has no {componentType} interval; cannot create day var.");
+
+        var typeName = componentType.ToString().ToLowerInvariant();
+        var startIdx = _model.NewIntVar(0, timeSlots.Count - 1, $"{typeName}_start_idx_s{sectionId}");
+        _model.Add(startIdx == sourceInterval.StartExpr());
+
+        var dayVar = _model.NewIntVar(0, 6, $"{typeName}_day_s{sectionId}");
+        _model.AddElement(startIdx, _dayPerSlotCache, dayVar);
+
+        _componentDayVars[key] = dayVar;
+        return dayVar;
+    }
+
+    public IReadOnlyDictionary<(int, ComponentType), IntVar> AllComponentDayVars => _componentDayVars;
 }

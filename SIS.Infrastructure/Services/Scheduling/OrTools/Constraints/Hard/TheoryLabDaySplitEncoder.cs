@@ -1,4 +1,4 @@
-using Google.OrTools.Sat;
+using SIS.Application.Scheduling.Solver;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
@@ -10,8 +10,8 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 /// Encoder.Encode sync olduğu için eşik constructor'a enjekte edilir; DI factory ile config'ten
 /// okuma SchedulingServiceCollectionExtensions'ta yapılır.
 ///
-/// CP-SAT model: Day-of-slot mapping için pre-computed array oluşturulur, AddElement constraint
-/// ile theory/lab interval'ının startSlot indeksi üzerinden gün hesaplanır, sonra
+/// CP-SAT model: <see cref="DecisionVariables.GetOrCreateComponentDayVar"/> her component için
+/// (lecture/lab) gün IntVar'ını döndürür (idempotent, dayPerSlot cache paylaşımlı). Sonra
 /// theoryDay != labDay constraint'i assumption literal ile gated eklenir.
 /// </summary>
 public sealed class TheoryLabDaySplitEncoder : IConstraintEncoder
@@ -34,14 +34,8 @@ public sealed class TheoryLabDaySplitEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
-        // Pre-compute slot index → day-of-week int array for AddElement
-        var timeSlots = ctx.Request.TimeSlots;
-        if (timeSlots.Count == 0)
+        if (ctx.Request.TimeSlots.Count == 0)
             return;  // no slots = no day data
-
-        var dayPerSlot = new long[timeSlots.Count];
-        for (int i = 0; i < timeSlots.Count; i++)
-            dayPerSlot[i] = (long)timeSlots[i].DayOfWeek;
 
         foreach (var section in ctx.Request.Sections)
         {
@@ -54,26 +48,10 @@ public sealed class TheoryLabDaySplitEncoder : IConstraintEncoder
             if (total <= _splitThreshold)
                 continue;
 
-            var theoryInterval = ctx.Variables.GetLectureInterval(section.Id);
-            var labInterval = ctx.Variables.GetLabInterval(section.Id);
-            if (theoryInterval == null || labInterval == null)
-                continue;
-
-            // Get start IntVars from intervals (StartExpr returns LinearExpr; we need IntVar to use AddElement).
-            // Approach: create helper IntVars equal to start expressions, then map via AddElement.
-            var theoryStart = ctx.Model.NewIntVar(0, timeSlots.Count - 1, $"theory_start_idx_s{section.Id}");
-            ctx.Model.Add(theoryStart == theoryInterval.StartExpr());
-
-            var labStart = ctx.Model.NewIntVar(0, timeSlots.Count - 1, $"lab_start_idx_s{section.Id}");
-            ctx.Model.Add(labStart == labInterval.StartExpr());
-
-            // Day variables (DayOfWeek enum: 0=Sunday..6=Saturday)
-            var theoryDay = ctx.Model.NewIntVar(0, 6, $"theory_day_s{section.Id}");
-            var labDay = ctx.Model.NewIntVar(0, 6, $"lab_day_s{section.Id}");
-
-            // AddElement: dayPerSlot[theoryStart] == theoryDay
-            ctx.Model.AddElement(theoryStart, dayPerSlot, theoryDay);
-            ctx.Model.AddElement(labStart, dayPerSlot, labDay);
+            var theoryDay = ctx.Variables.GetOrCreateComponentDayVar(
+                section.Id, ComponentType.Lecture, ctx.Request.TimeSlots);
+            var labDay = ctx.Variables.GetOrCreateComponentDayVar(
+                section.Id, ComponentType.Lab, ctx.Request.TimeSlots);
 
             // Constraint: theoryDay != labDay (gated by assumption literal)
             var literal = ctx.Assumptions.Register(Code, primarySectionId: section.Id, secondarySectionId: null);

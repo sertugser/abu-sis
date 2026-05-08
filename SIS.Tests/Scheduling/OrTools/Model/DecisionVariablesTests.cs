@@ -302,4 +302,51 @@ public class DecisionVariablesTests
         act.Should().Throw<ArgumentOutOfRangeException>()
             .Where(ex => ex.ParamName == "groupIndex");
     }
+
+    // Plan 5 Task 5 — shared day-of-component helper for H-DL/H-DO/H15/H16
+    [Fact]
+    public void GetOrCreateComponentDayVar_LectureSection_ReturnsIntVar()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 20);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
+
+        var slots = Enumerable.Range(0, 20).Select(i => new TimeSlotInput
+        {
+            Id = i + 1,
+            DayOfWeek = (DayOfWeek)((i / 4) + 1),
+            SlotOrder = (i % 4) + 1,
+            StartTime = new TimeOnly(9 + (i % 4), 0),
+            EndTime = new TimeOnly(9 + (i % 4), 50),
+            AllowedMode = TimeSlotAllowedMode.Both
+        }).ToList();
+
+        var dayVar = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
+
+        dayVar.Should().NotBeNull();
+        registry.AllComponentDayVars.Should().ContainKey((1, ComponentType.Lecture));
+    }
+
+    [Fact]
+    public void GetOrCreateComponentDayVar_CalledTwice_ReturnsSameVar()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 20);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
+
+        var slots = Enumerable.Range(0, 20).Select(i => new TimeSlotInput
+        {
+            Id = i + 1,
+            DayOfWeek = (DayOfWeek)((i / 4) + 1),
+            SlotOrder = (i % 4) + 1,
+            StartTime = new TimeOnly(9 + (i % 4), 0),
+            EndTime = new TimeOnly(9 + (i % 4), 50),
+            AllowedMode = TimeSlotAllowedMode.Both
+        }).ToList();
+
+        var first = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
+        var second = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
+
+        second.Should().BeSameAs(first);
+    }
 }
