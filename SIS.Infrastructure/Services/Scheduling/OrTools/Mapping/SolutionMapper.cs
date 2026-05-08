@@ -14,6 +14,9 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Mapping;
 /// </summary>
 public sealed class SolutionMapper
 {
+    // Plan 7b — Online section sentinel: real classroom Ids start at 1 (DB convention).
+    private const int NoRoomSentinel = 0;
+
     public SolverResult MapInfeasible(
         IReadOnlyList<UnsatCoreEntry> unsatCore,
         SolverRequest request,
@@ -89,7 +92,7 @@ public sealed class SolutionMapper
                 if (lectureInterval != null)
                 {
                     var roomId = isOnline
-                        ? 0
+                        ? NoRoomSentinel
                         : (int)solver.Value(build.Variables.GetLectureRoom(section.Id));
                     var startSlotIdx = (int)solver.Value(lectureInterval.StartExpr());
                     var endSlotIdx = (int)solver.Value(lectureInterval.EndExpr());
@@ -132,7 +135,7 @@ public sealed class SolutionMapper
                                     slots.Add(new AssignedSlot
                                     {
                                         TimeSlotId = request.TimeSlots[i].Id,
-                                        ClassroomId = 0,
+                                        ClassroomId = NoRoomSentinel,
                                         ComponentType = ComponentType.Lab
                                     });
                                 }

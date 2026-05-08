@@ -38,12 +38,10 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
     private void EncodeLabComponent(EncoderContext ctx, SectionInput section)
     {
         if (section.LabHours == 0) return;
+        // Online sections have no room var (Plan 7b Task 4 — ScheduleModelBuilder skips CreateRoomVariable).
+        if (section.TeachingMethod == TeachingMethod.Online) return;
 
-        // TODO(Plan 7b Phase B): replace with TryGetLabRooms once DecisionVariables exposes
-        // a non-throwing API for Online sections (which don't allocate lab room vars).
-        IReadOnlyList<IntVar> labRooms;
-        try { labRooms = ctx.Variables.GetLabRooms(section.Id); }
-        catch (KeyNotFoundException) { return; }
+        var labRooms = ctx.Variables.GetLabRooms(section.Id);
 
         Debug.Assert(labRooms.Count == section.LabGroupCount,
             $"labRooms.Count ({labRooms.Count}) != section.LabGroupCount ({section.LabGroupCount}) for section {section.Id}");
@@ -74,12 +72,10 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
     private void EncodeTheoryComponent(EncoderContext ctx, SectionInput section)
     {
         if (section.TheoryHours == 0) return;
+        // Online sections have no room var (Plan 7b Task 4 — ScheduleModelBuilder skips CreateRoomVariable).
+        if (section.TeachingMethod == TeachingMethod.Online) return;
 
-        // TODO(Plan 7b Phase B): replace with TryGetLectureRoom once DecisionVariables exposes
-        // a non-throwing API for Online sections (which don't allocate a lecture room var).
-        IntVar lectureRoom;
-        try { lectureRoom = ctx.Variables.GetLectureRoom(section.Id); }
-        catch (KeyNotFoundException) { return; }
+        var lectureRoom = ctx.Variables.GetLectureRoom(section.Id);
 
         var amphiRequired = section.Capacity >= ctx.AmphiThreshold;
         var typeRequired = section.RequiredTheoryClassroomType.HasValue;
