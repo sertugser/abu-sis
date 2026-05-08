@@ -291,12 +291,8 @@ public sealed class SolverRequestBuilder
         // Plan 7b Task 1 — Course üzerindeki tip gereksinimi int? olarak SectionInput'a aktarılır.
         //   null = Course tipi belirtmemiş; encoder kısıt eklemez.
         //   Set = ClassroomType enum int değeri; encoder uyumsuz odalara forbidden literal ekler.
-        RequiredTheoryClassroomType = cs.Course.TheoryClassroomType.HasValue
-            ? (int?)cs.Course.TheoryClassroomType.Value
-            : null,
-        RequiredLabClassroomType = cs.Course.LabClassroomType.HasValue
-            ? (int?)cs.Course.LabClassroomType.Value
-            : null,
+        RequiredTheoryClassroomType = (int?)cs.Course.TheoryClassroomType,
+        RequiredLabClassroomType = (int?)cs.Course.LabClassroomType,
         // Plan 6 Task 1 — CurriculumCourse.SuggestedSemester'dan türetilen yıl (0..3).
         Year = courseYearMap.TryGetValue(cs.CourseId, out var year) ? year : null,
         LabGroupCount = ComputeLabGroupCount(cs.Capacity, cs.Course.LabHours, labClassroomCapacities),
