@@ -38,6 +38,10 @@ public sealed class SlotCongestionEncoder : IConstraintEncoder
 
             foreach (var (sectionId, _) in ctx.Variables.AllSectionPresent)
             {
+                // NOTE: Plan 9 — lab-only sections (TheoryHours=0, LabHours>0) currently
+                // skipped because GetLectureInterval returns null. v1 SlotCongestionEvaluator
+                // counts ALL TimeBlocks (theory + lab). Plan 9 polish will iterate lab
+                // intervals (single + parallel + multi-block) for full v1 parity.
                 var lectureInterval = ctx.Variables.GetLectureInterval(sectionId);
                 if (lectureInterval == null) continue;
 
