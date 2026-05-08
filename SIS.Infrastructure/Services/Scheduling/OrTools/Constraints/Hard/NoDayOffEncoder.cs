@@ -32,9 +32,11 @@ public sealed class NoDayOffEncoder : IConstraintEncoder
             .OrderBy(d => d)
             .ToList();
 
-        // Trivially holds: if total distinct workdays in data ≤ 4, instructor automatically has
-        // at least 1 day off (data only has ≤ 4 distinct workdays anyway).
-        if (workdays.Count <= 4)
+        // Pathological skip: 0 or 1 workday means "≥ 1 day off" is undefined or forces
+        // every instructor to have 0 sections — meaningless. ≥2 workdays: enforce normally.
+        // (Plan 5 spec originally had `<= 4` skip; revised after code review since 4-workday
+        // calendars also need H-DO enforcement.)
+        if (workdays.Count <= 1)
             return;
 
         var maxAllowedDays = workdays.Count - 1;
@@ -47,8 +49,6 @@ public sealed class NoDayOffEncoder : IConstraintEncoder
         {
             var instructorId = group.Key;
             var sectionList = group.ToList();
-            if (sectionList.Count == 0)
-                continue;
 
             var hasClassVars = new List<BoolVar>();
 

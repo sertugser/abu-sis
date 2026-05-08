@@ -55,16 +55,31 @@ public class NoDayOffEncoderTests
     }
 
     [Fact]
-    public void Encode_FewerThanFiveWorkdays_TriviallyHolds()
+    public void Encode_OneWorkday_TriviallyHolds()
     {
-        // 3 workdays → workdays.Count <= 4 → encoder skips (constraint trivially satisfied).
+        // 1 workday → encoder skips (≥ 1 day off undefined for single-day grid).
         var sections = new[] { Section(1, instructorId: 5, theory: 2, lab: 0) };
         var encoder = new NoDayOffEncoder();
-        var ctx = BuildContext(sections, workdayCount: 3);
+        var ctx = BuildContext(sections, workdayCount: 1);
 
         encoder.Encode(ctx);
 
         ctx.Assumptions.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void Encode_FourWorkdays_StillEnforced()
+    {
+        // 4-workday calendar still requires "≥ 1 day off" → constraint enforced (1 assumption).
+        // (Plan 5 spec originally skipped this case at <=4; revised after code review since
+        // 4-workday calendars also need the constraint.)
+        var sections = new[] { Section(1, instructorId: 5, theory: 2, lab: 0) };
+        var encoder = new NoDayOffEncoder();
+        var ctx = BuildContext(sections, workdayCount: 4);
+
+        encoder.Encode(ctx);
+
+        ctx.Assumptions.Count.Should().Be(1);
     }
 
     [Fact]
