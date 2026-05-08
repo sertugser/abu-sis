@@ -45,7 +45,9 @@ public static class SlotBlockValidator
             // Same day check
             if (cur.DayOfWeek != firstDay) return false;
 
-            // Gap check
+            // Slots are daytime-only; EndTime always < 24:00, so TimeOnly subtraction
+            // cannot wrap around midnight. The same-day guard above already rejects
+            // any cross-day pair before reaching this check.
             var gapMinutes = (cur.StartTime - prev.EndTime).TotalMinutes;
             if (gapMinutes < 0 || gapMinutes > MaxGapMinutes) return false;
         }

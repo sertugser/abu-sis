@@ -112,6 +112,17 @@ public class SlotBlockValidatorTests
     }
 
     [Fact]
+    public void ComputeValidBlockStarts_NegativeDuration_ReturnsEmpty()
+    {
+        var slots = Slots((DayOfWeek.Monday, 9, 0, 50));
+
+        var result = SlotBlockValidator.ComputeValidBlockStarts(slots, duration: -1);
+
+        result.Should().BeEmpty(
+            because: "duration <= 0 guard rejects negative inputs (boundary protection)");
+    }
+
+    [Fact]
     public void ComputeValidBlockStarts_EmptyTimeSlots_ReturnsEmpty()
     {
         var result = SlotBlockValidator.ComputeValidBlockStarts(
