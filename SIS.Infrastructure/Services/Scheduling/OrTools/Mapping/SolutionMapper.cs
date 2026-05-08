@@ -1,5 +1,6 @@
 using Google.OrTools.Sat;
 using SIS.Application.Scheduling.Solver;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Diagnostics;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
@@ -77,13 +78,19 @@ public sealed class SolutionMapper
 
             var slots = new List<AssignedSlot>();
 
+            // Plan 7b — Online section'lar için room IntVar yok; ClassroomId=0 sentinel emit edilir.
+            // Real classroom Id'ler 1'den başlar (DB convention) → 0 ile çakışmaz.
+            bool isOnline = section.TeachingMethod == TeachingMethod.Online;
+
             // Lecture component
             if (section.TheoryHours > 0)
             {
                 var lectureInterval = build.Variables.GetLectureInterval(section.Id);
                 if (lectureInterval != null)
                 {
-                    var roomId = (int)solver.Value(build.Variables.GetLectureRoom(section.Id));
+                    var roomId = isOnline
+                        ? 0
+                        : (int)solver.Value(build.Variables.GetLectureRoom(section.Id));
                     var startSlotIdx = (int)solver.Value(lectureInterval.StartExpr());
                     var endSlotIdx = (int)solver.Value(lectureInterval.EndExpr());
 
@@ -112,21 +119,44 @@ public sealed class SolutionMapper
                 {
                     var startSlotIdx = (int)solver.Value(labInterval.StartExpr());
                     var endSlotIdx = (int)solver.Value(labInterval.EndExpr());
-                    var labRooms = build.Variables.GetLabRooms(section.Id);
 
-                    foreach (var roomVar in labRooms)
+                    if (isOnline)
                     {
-                        var roomId = (int)solver.Value(roomVar);
-                        for (int i = startSlotIdx; i < endSlotIdx; i++)
+                        // Online: room IntVar yok; ClassroomId=0 sentinel ile LabGroupCount kez emit et.
+                        for (int g = 0; g < section.LabGroupCount; g++)
                         {
-                            if (i >= 0 && i < request.TimeSlots.Count)
+                            for (int i = startSlotIdx; i < endSlotIdx; i++)
                             {
-                                slots.Add(new AssignedSlot
+                                if (i >= 0 && i < request.TimeSlots.Count)
                                 {
-                                    TimeSlotId = request.TimeSlots[i].Id,
-                                    ClassroomId = roomId,
-                                    ComponentType = ComponentType.Lab
-                                });
+                                    slots.Add(new AssignedSlot
+                                    {
+                                        TimeSlotId = request.TimeSlots[i].Id,
+                                        ClassroomId = 0,
+                                        ComponentType = ComponentType.Lab
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var labRooms = build.Variables.GetLabRooms(section.Id);
+
+                        foreach (var roomVar in labRooms)
+                        {
+                            var roomId = (int)solver.Value(roomVar);
+                            for (int i = startSlotIdx; i < endSlotIdx; i++)
+                            {
+                                if (i >= 0 && i < request.TimeSlots.Count)
+                                {
+                                    slots.Add(new AssignedSlot
+                                    {
+                                        TimeSlotId = request.TimeSlots[i].Id,
+                                        ClassroomId = roomId,
+                                        ComponentType = ComponentType.Lab
+                                    });
+                                }
                             }
                         }
                     }

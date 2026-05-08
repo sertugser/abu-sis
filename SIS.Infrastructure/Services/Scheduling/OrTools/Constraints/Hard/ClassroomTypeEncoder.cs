@@ -39,7 +39,12 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
     {
         if (section.LabHours == 0) return;
 
-        var labRooms = ctx.Variables.GetLabRooms(section.Id);
+        // TODO(Plan 7b Phase B): replace with TryGetLabRooms once DecisionVariables exposes
+        // a non-throwing API for Online sections (which don't allocate lab room vars).
+        IReadOnlyList<IntVar> labRooms;
+        try { labRooms = ctx.Variables.GetLabRooms(section.Id); }
+        catch (KeyNotFoundException) { return; }
+
         Debug.Assert(labRooms.Count == section.LabGroupCount,
             $"labRooms.Count ({labRooms.Count}) != section.LabGroupCount ({section.LabGroupCount}) for section {section.Id}");
 

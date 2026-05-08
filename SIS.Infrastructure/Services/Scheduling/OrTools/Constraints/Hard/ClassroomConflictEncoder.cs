@@ -1,5 +1,6 @@
 using Google.OrTools.Sat;
 using SIS.Application.Scheduling.Solver;
+using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
@@ -28,6 +29,10 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
 
         foreach (var section in sections)
         {
+            // Plan 7b — Online section'ın room IntVar yok; classroom conflict tanımsız, atla.
+            if (section.TeachingMethod == TeachingMethod.Online)
+                continue;
+
             // Lecture component: create optional interval for each candidate classroom (groupIndex=0).
             if (section.TheoryHours > 0)
             {

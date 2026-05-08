@@ -1,5 +1,6 @@
 using Google.OrTools.Sat;
 using SIS.Application.Scheduling.Solver;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Diagnostics;
 
@@ -36,6 +37,11 @@ public sealed class ScheduleModelBuilder
         foreach (var section in request.Sections)
         {
             variables.CreateIntervalsForSection(section, request.TimeSlots);
+
+            // Plan 7b — Online section'lar için room IntVar oluşturulmaz; assignment'a oda eklenmez.
+            if (section.TeachingMethod == TeachingMethod.Online)
+                continue;
+
             if (section.TheoryHours > 0)
                 variables.CreateRoomVariable(section.Id, ComponentType.Lecture, request.Classrooms);
             if (section.LabHours > 0)

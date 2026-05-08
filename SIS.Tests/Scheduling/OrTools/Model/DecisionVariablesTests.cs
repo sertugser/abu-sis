@@ -466,4 +466,37 @@ public class DecisionVariablesTests
         theoryInterval.Should().NotBeNull();
         // Legacy: start ∈ [0, 1] without slot validation. Cross-day not enforced here.
     }
+
+    // Plan 7b Task 4 — Online section: room IntVar is NOT created.
+    // Defensive regression guard (NOT a TDD red→green test): even before production changes
+    // ScheduleModelBuilder skipped CreateRoomVariable for Online, GetLectureRoom would already
+    // throw KeyNotFoundException. This test pins that contract so no future change accidentally
+    // creates room vars for Online sections, breaking the ClassroomConflict / ClassroomType
+    // skip logic that relies on the dictionary absence (or the try/catch in ClassroomTypeEncoder).
+    [Fact]
+    public void CreateRoomVariable_OnlineSectionNotInvoked_LookupReturnsKeyNotFound()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 50);
+
+        var onlineSection = new SectionInput
+        {
+            Id = 1,
+            CourseId = 100,
+            CourseCode = "CENG101",
+            CourseName = "Algorithms",
+            SectionNumber = 1,
+            Capacity = 40,
+            TheoryHours = 3,
+            LabHours = 0,
+            TeachingMethod = TeachingMethod.Online
+        };
+
+        // Online section: only intervals are created, NOT the room var (mirrors ScheduleModelBuilder).
+        registry.CreateIntervalsForSection(onlineSection);
+
+        var act = () => registry.GetLectureRoom(1);
+
+        act.Should().Throw<KeyNotFoundException>();
+    }
 }
