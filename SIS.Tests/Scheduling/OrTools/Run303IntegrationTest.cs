@@ -169,8 +169,9 @@ public class Run303IntegrationTest
             }
         }
 
-        // ConstraintDefinitions: all 12 hard enabled
-        var hardCodes = new[] { "H1", "H3", "H4", "H5", "H6", "H8", "H10", "H11", "H12", "H13", "H16", "H17" };
+        // ConstraintDefinitions: all 12 hard enabled.
+        // Note (Plan 5 Task 8a): "H12"→"H16" (TheoryLabDaySplit), and "H15" added (MaxConsecutiveHours).
+        var hardCodes = new[] { "H1", "H3", "H4", "H5", "H6", "H8", "H10", "H11", "H13", "H15", "H16", "H17" };
         foreach (var code in hardCodes)
         {
             ctx.ConstraintDefinitions.Add(new ConstraintDefinition
@@ -199,8 +200,9 @@ public class Run303IntegrationTest
 
     private static IConstraintEncoder[] BuildAllHardEncoders()
     {
-        // All 12 hard encoders from Plan 2
-        // H12 needs splitThreshold (use 4 default), H13 needs lunch times, H16 needs maxHours
+        // All 12 hard encoders from Plan 2 (Plan 5 Task 8a: H12→H16, H16→H15 rename).
+        // H16 (TheoryLabDaySplit) needs splitThreshold (use 4 default), H13 needs lunch times,
+        // H15 (MaxConsecutiveHours) needs maxHours.
         return new IConstraintEncoder[]
         {
             new ClassroomConflictEncoder(),
