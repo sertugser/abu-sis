@@ -82,6 +82,7 @@ public static class SchedulingServiceCollectionExtensions
             var maxHours = config.GetIntAsync("Schedule.MaxDailyHoursPerInstructor", 9, default).GetAwaiter().GetResult();
             return new DailyLoadEncoder(maxHours);
         });
+        services.AddScoped<IConstraintEncoder, NoDayOffEncoder>();
         services.AddScoped<IConstraintEncoder, CapacityEncoder>();
         services.AddScoped<IConstraintEncoder, ClassroomTypeEncoder>();
         services.AddScoped<IConstraintEncoder, CurriculumConflictEncoder>();
