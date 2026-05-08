@@ -30,6 +30,11 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
         }
     }
 
+    // Sub-codes disambiguate UNSAT core entries when the same (section, classroom) pair
+    // is forbidden by both branches; otherwise UnsatCoreInterpreter would emit duplicates.
+    private const string LabCode = "H4_L";
+    private const string TheoryCode = "H4_T";
+
     private void EncodeLabComponent(EncoderContext ctx, SectionInput section)
     {
         if (section.LabHours == 0) return;
@@ -54,7 +59,7 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
 
             if (!isAllowed)
             {
-                var literal = ctx.Assumptions.Register(Code, section.Id, classroom.Id);
+                var literal = ctx.Assumptions.Register(LabCode, section.Id, classroom.Id);
                 foreach (var roomVar in labRooms)
                     ctx.Model.Add(roomVar != classroom.Id).OnlyEnforceIf(literal);
             }
@@ -65,7 +70,8 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
     {
         if (section.TheoryHours == 0) return;
 
-        // Skip if section has no lecture room var (Plan 7b — Online section).
+        // TODO(Plan 7b Phase B): replace with TryGetLectureRoom once DecisionVariables exposes
+        // a non-throwing API for Online sections (which don't allocate a lecture room var).
         IntVar lectureRoom;
         try { lectureRoom = ctx.Variables.GetLectureRoom(section.Id); }
         catch (KeyNotFoundException) { return; }
@@ -73,9 +79,11 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
         var amphiRequired = section.Capacity >= ctx.AmphiThreshold;
         var typeRequired = section.RequiredTheoryClassroomType.HasValue;
 
-        // No theory constraint to apply
         if (!amphiRequired && !typeRequired) return;
 
+        // AND semantics by design: when both AmphiThreshold and RequiredTheoryClassroomType
+        // apply, a classroom must satisfy BOTH. Conflicting pairs (e.g. RequiredType=PhysicsLab
+        // + capacity ≥ threshold) yield UNSAT for the section — admin must reconcile data.
         foreach (var classroom in ctx.Request.Classrooms)
         {
             bool meetsAmphi = !amphiRequired || classroom.Type == ClassroomType.Amphitheater;
@@ -84,8 +92,7 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
 
             if (meetsAmphi && meetsType) continue;
 
-            // Forbidden classroom — register one literal per (section, classroom).
-            var literal = ctx.Assumptions.Register(Code, section.Id, classroom.Id);
+            var literal = ctx.Assumptions.Register(TheoryCode, section.Id, classroom.Id);
             ctx.Model.Add(lectureRoom != classroom.Id).OnlyEnforceIf(literal);
         }
     }

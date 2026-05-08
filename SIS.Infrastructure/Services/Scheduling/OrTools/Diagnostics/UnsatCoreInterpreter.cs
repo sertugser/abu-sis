@@ -17,6 +17,8 @@ public sealed class UnsatCoreInterpreter
         ["H1"] = "Derslik çakışması",
         ["H3"] = "Kapasite",
         ["H4"] = "Derslik tipi uyuşmazlığı",
+        ["H4_L"] = "Lab derslik tipi uyuşmazlığı",
+        ["H4_T"] = "Teori derslik tipi uyuşmazlığı (kapasite veya tip kuralı)",
         ["H5"] = "Müfredat çakışması",
         ["H6"] = "Aynı section'ın teori-lab çakışması",
         ["H8"] = "Aynı dersin farklı şubeleri çakışıyor",
