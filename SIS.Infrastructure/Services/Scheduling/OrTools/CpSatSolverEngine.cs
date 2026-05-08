@@ -66,6 +66,12 @@ public sealed class CpSatSolverEngine : ISolverEngine
         // Reduce request.Sections to only feasible ones for solver
         var reducedRequest = request with { Sections = preflight.FeasibleSections };
 
+        // Plan 7b — Read AmphiThreshold from SystemConfig (default 100). Capacity ≥ threshold
+        // forces theory component into Amphitheater rooms.
+        var amphiThreshold = await _config.GetIntAsync(
+            "Classroom.AmphiThreshold", 100, cancellationToken);
+        reducedRequest = reducedRequest with { AmphiThreshold = amphiThreshold };
+
         // Read solver parameters from SystemConfig (5-min cached). Fallbacks only fire on missing keys.
         var timeLimit = await _config.GetIntAsync(
             "Schedule.OrTools.TimeLimitSeconds", FALLBACK_TIME_LIMIT_SECONDS, cancellationToken);

@@ -1,14 +1,17 @@
 using System.Diagnostics;
+using Google.OrTools.Sat;
+using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// H4 — Classroom Type. Lab component yalnızca Lab veya Computer tipi dersliklerde olur.
-/// Lecture component için tip kısıtı yok (lecture lab odasında da yapılabilir).
-/// CP-SAT model: Lab component'in HER paralel group IntVar'ı için non-lab classroom yasaklanır.
-/// Tek (sectionId, classroomId) literal'i N group'un hepsini bloklar — classroom tipi tüm
-/// group'lar için aynı şekilde uygunsuz olduğundan tek literal yeterli (H3 ile tutarlı pattern).
+/// H4 — Classroom Type. v1 paritesi:
+///   1. Lab component yalnızca Lab/Computer (default) veya Course.LabClassroomType (override) tipinde olur.
+///   2. Theory component için Course.TheoryClassroomType set ise yalnızca o tipte oda kabul edilir.
+///   3. Capacity ≥ AmphiThreshold ise theory component yalnızca Amphitheater tipinde olabilir
+///      (RequiredTheoryClassroomType ile birlikte AND uygulanır).
+/// CP-SAT model: section'ın room IntVar'ı için her uyumsuz classroom için ayrı assumption literal'i.
 /// </summary>
 public sealed class ClassroomTypeEncoder : IConstraintEncoder
 {
@@ -22,31 +25,68 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
 
         foreach (var section in ctx.Request.Sections)
         {
-            // Only sections with a lab component are constrained
-            if (section.LabHours == 0)
-                continue;
+            EncodeLabComponent(ctx, section);
+            EncodeTheoryComponent(ctx, section);
+        }
+    }
 
-            var labRooms = ctx.Variables.GetLabRooms(section.Id);
-            var groupCount = labRooms.Count;
-            // Invariant: DecisionVariables creates exactly section.LabGroupCount IntVars.
-            Debug.Assert(groupCount == section.LabGroupCount,
-                $"labRooms.Count ({groupCount}) != section.LabGroupCount ({section.LabGroupCount}) for section {section.Id}");
+    private void EncodeLabComponent(EncoderContext ctx, SectionInput section)
+    {
+        if (section.LabHours == 0) return;
 
-            foreach (var classroom in ctx.Request.Classrooms)
+        var labRooms = ctx.Variables.GetLabRooms(section.Id);
+        Debug.Assert(labRooms.Count == section.LabGroupCount,
+            $"labRooms.Count ({labRooms.Count}) != section.LabGroupCount ({section.LabGroupCount}) for section {section.Id}");
+
+        // RequiredLabClassroomType set ise yalnızca o tip izinli; aksi halde v1 fallback (Lab/Computer).
+        foreach (var classroom in ctx.Request.Classrooms)
+        {
+            bool isAllowed;
+            if (section.RequiredLabClassroomType.HasValue)
             {
-                var isLabFriendly = classroom.Type == ClassroomType.Lab
-                    || classroom.Type == ClassroomType.Computer;
-
-                if (!isLabFriendly)
-                {
-                    // Forbid lab component in non-lab classroom — for ALL groups.
-                    var literal = ctx.Assumptions.Register(Code, section.Id, classroom.Id);
-                    foreach (var roomVar in labRooms)
-                    {
-                        ctx.Model.Add(roomVar != classroom.Id).OnlyEnforceIf(literal);
-                    }
-                }
+                isAllowed = (int)classroom.Type == section.RequiredLabClassroomType.Value;
             }
+            else
+            {
+                isAllowed = classroom.Type == ClassroomType.Lab
+                         || classroom.Type == ClassroomType.Computer;
+            }
+
+            if (!isAllowed)
+            {
+                var literal = ctx.Assumptions.Register(Code, section.Id, classroom.Id);
+                foreach (var roomVar in labRooms)
+                    ctx.Model.Add(roomVar != classroom.Id).OnlyEnforceIf(literal);
+            }
+        }
+    }
+
+    private void EncodeTheoryComponent(EncoderContext ctx, SectionInput section)
+    {
+        if (section.TheoryHours == 0) return;
+
+        // Skip if section has no lecture room var (Plan 7b — Online section).
+        IntVar lectureRoom;
+        try { lectureRoom = ctx.Variables.GetLectureRoom(section.Id); }
+        catch (KeyNotFoundException) { return; }
+
+        var amphiRequired = section.Capacity >= ctx.AmphiThreshold;
+        var typeRequired = section.RequiredTheoryClassroomType.HasValue;
+
+        // No theory constraint to apply
+        if (!amphiRequired && !typeRequired) return;
+
+        foreach (var classroom in ctx.Request.Classrooms)
+        {
+            bool meetsAmphi = !amphiRequired || classroom.Type == ClassroomType.Amphitheater;
+            bool meetsType = !typeRequired
+                          || (int)classroom.Type == section.RequiredTheoryClassroomType!.Value;
+
+            if (meetsAmphi && meetsType) continue;
+
+            // Forbidden classroom — register one literal per (section, classroom).
+            var literal = ctx.Assumptions.Register(Code, section.Id, classroom.Id);
+            ctx.Model.Add(lectureRoom != classroom.Id).OnlyEnforceIf(literal);
         }
     }
 }

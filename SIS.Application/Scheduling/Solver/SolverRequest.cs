@@ -43,4 +43,10 @@ public sealed record SolverRequest
     /// Encoder Plan 6.5'a ertelendi (real impl); şu an diagnostic-only stub.
     /// </summary>
     public IReadOnlyList<DistributionConstraintInput> DistributionConstraints { get; init; } = [];
+
+    /// <summary>
+    /// Plan 7b — SystemConfig "Classroom.AmphiThreshold" (default 100). Capacity ≥ threshold
+    /// olan section'lar Amphitheater dışındaki lecture room'a yerleşemez. CpSatSolverEngine yükler.
+    /// </summary>
+    public int AmphiThreshold { get; init; } = 100;
 }

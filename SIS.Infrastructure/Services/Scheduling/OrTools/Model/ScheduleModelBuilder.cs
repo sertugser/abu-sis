@@ -51,7 +51,8 @@ public sealed class ScheduleModelBuilder
             Assumptions = assumptions,
             Request = request,
             ConstraintFlags = request.ConstraintFlags,
-            Penalties = penalties
+            Penalties = penalties,
+            AmphiThreshold = request.AmphiThreshold  // Plan 7b — read from SolverRequest
         };
 
         // 2-3) Encoder'lar — hard önce, soft sonra; her grupta Code'a göre alfabetik
