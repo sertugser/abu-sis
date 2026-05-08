@@ -100,12 +100,15 @@ public class CrossDayAndSlotGapIntegrationTest
         var engine = BuildEngine();
         var result = await engine.SolveAsync(request, CancellationToken.None);
 
-        // Section drops at preflight or solver presence=0.
+        // Section drops at preflight (all sections infeasible → engine returns early).
+        result.Status.Should().Be(SolverStatus.Infeasible,
+            because: "all sections fail preflight — engine takes the all-infeasible path, not solver Optimal/Feasible");
         result.Assignments.Should().BeEmpty(
             because: "3-saatlik theory için Mon grid'inde valid block yok (lunch 100dk gap)");
-        result.Failures.Should().HaveCount(1);
-        result.Failures[0].Reason.Should().Contain("3 saatlik",
-            because: "preflight rejection reason mentions duration");
+        result.Failures.Should().ContainSingle(
+            because: "exactly one section was rejected; future preflight extensions should not silently break this assertion")
+            .Which.Reason.Should().Contain("3 saatlik",
+                because: "preflight rejection reason mentions duration");
     }
 
     private static CpSatSolverEngine BuildEngine()
