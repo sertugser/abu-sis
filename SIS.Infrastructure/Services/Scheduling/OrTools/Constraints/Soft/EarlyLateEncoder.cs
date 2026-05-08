@@ -12,8 +12,9 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// bu indekslerden biriyle eşleşirse reified literal aktif olur ve <c>S9Weight</c> penalty
 /// objektif fonksiyona eklenir. Lab için <see cref="DecisionVariables.GetLabIntervals"/>
 /// (plural) kullanılır — multi-block lab parity için Plan 7b/Plan 8 Task 6 deseni.
-/// NOTE: Plan 9 H13 hard variant (early/late blok yasakları) bu soft encoder ile simetriktir;
-/// hard çalışırsa S9 sessizce 0 ceza üretir (early/late slot zaten yasaklı).
+/// NOTE: Plan 9 hard early/late variant (TBD code, v1'de yok — yeni hard encoder olarak
+/// eklenebilir) bu soft encoder ile simetrik olur; hard çalışırsa S9 sessizce 0 ceza
+/// üretir (early/late slot'lar zaten yasaklanır).
 /// </remarks>
 public sealed class EarlyLateEncoder : IConstraintEncoder
 {
