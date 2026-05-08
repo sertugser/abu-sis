@@ -14,6 +14,11 @@ public sealed class DecisionVariables
 
     private readonly Dictionary<int, IntervalVar> _lectureIntervals = new();
     private readonly Dictionary<int, IntervalVar> _labIntervals = new();
+    // Plan 7b Task 7 — Multi-interval lab support: N lab intervals per section
+    // (when LabHours > MaxLabBlockHours and CreateLabIntervalsForSection is called).
+    // Single-interval call sites still use _labIntervals; GetLabIntervals falls back
+    // to a single-element list for backward compat.
+    private readonly Dictionary<int, List<IntervalVar>> _labIntervalsList = new();
     private readonly Dictionary<int, IntVar> _lectureRooms = new();
     // Plan 4 Task 2 — Parallel lab support: N IntVar per section (groupCount-based).
     // Single-room sections: list with one element. Single-room callers (GetLabRoom) read [0].
@@ -33,7 +38,8 @@ public sealed class DecisionVariables
 
     public void CreateIntervalsForSection(
         SectionInput section,
-        IReadOnlyList<TimeSlotInput>? timeSlots = null)
+        IReadOnlyList<TimeSlotInput>? timeSlots = null,
+        bool createLabInterval = true)
     {
         // Section-level presence boolean (Plan 3 Task 3 — partial scheduling).
         // present == 1 → solver places this section. present == 0 → section unscheduled.
@@ -59,7 +65,10 @@ public sealed class DecisionVariables
             _lectureIntervals[section.Id] = interval;
         }
 
-        if (section.LabHours > 0)
+        // Plan 7b Task 7 — Skip single-interval lab when caller intends to use
+        // CreateLabIntervalsForSection (multi-interval split). Default true
+        // preserves backward compatibility with all existing call sites.
+        if (section.LabHours > 0 && createLabInterval)
         {
             var start = CreateStartIntVar(
                 duration: section.LabHours,
@@ -77,6 +86,92 @@ public sealed class DecisionVariables
                 $"lab_iv_s{section.Id}");
             _labIntervals[section.Id] = interval;
         }
+    }
+
+    /// <summary>
+    /// Plan 7b Task 7 — Multi-interval lab support. LabHours > maxLabBlockHours olan
+    /// section'lar için <see cref="LabBlockSplitter.SplitLabIntoBlocks"/> ile N adet
+    /// ayrı interval üretir. Her interval kendi start IntVar'ı, timeSlots ile slot-validated;
+    /// her interval için ayrı day var oluşturulur ve day vars'a AddAllDifferent uygulanır
+    /// (v1 BuildMultiLabCombinations paritesi — lab block'lar farklı günlere düşer).
+    ///
+    /// Çağıran (ScheduleModelBuilder) önce <see cref="CreateIntervalsForSection"/> ile
+    /// presence literal + (varsa) theory interval'ı oluşturmalı; lab interval'ı bu
+    /// method üretecekse <c>createLabInterval: false</c> geçilmelidir.
+    /// LabHours ≤ maxLabBlockHours ise tek-elemanlı list döner; mevcut <c>_labIntervals</c>
+    /// dict de güncellenir (backward compat: GetLabInterval / single-interval call sites çalışır).
+    /// </summary>
+    public void CreateLabIntervalsForSection(
+        SectionInput section,
+        IReadOnlyList<TimeSlotInput> timeSlots,
+        int maxLabBlockHours)
+    {
+        if (section.LabHours <= 0)
+            throw new InvalidOperationException(
+                $"Section {section.Id} has no lab component; CreateLabIntervalsForSection cannot be called.");
+
+        if (!_sectionPresent.TryGetValue(section.Id, out var presence))
+            throw new InvalidOperationException(
+                $"Section {section.Id} has no presence literal. Call CreateIntervalsForSection first.");
+
+        var blockSizes = LabBlockSplitter.SplitLabIntoBlocks(section.LabHours, maxLabBlockHours);
+        if (blockSizes.Count == 0)
+            throw new InvalidOperationException(
+                $"LabBlockSplitter returned empty for LabHours={section.LabHours}, max={maxLabBlockHours}.");
+
+        var presenceBool = (BoolVar)presence;
+        var intervals = new List<IntervalVar>(blockSizes.Count);
+        var dayVars = new List<IntVar>(blockSizes.Count);
+
+        // Lazy-build/validate dayPerSlot mapping (shared with GetOrCreateComponentDayVar).
+        if (_dayPerSlotCache == null)
+        {
+            var arr = new long[timeSlots.Count];
+            for (int i = 0; i < timeSlots.Count; i++)
+                arr[i] = (long)timeSlots[i].DayOfWeek;
+            _dayPerSlotCache = arr;
+        }
+        else if (_dayPerSlotCache.Length != timeSlots.Count)
+        {
+            throw new InvalidOperationException(
+                $"timeSlots.Count ({timeSlots.Count}) does not match cached length ({_dayPerSlotCache.Length}). " +
+                "DecisionVariables must not be reused across solves with different time-slot sets.");
+        }
+
+        for (int b = 0; b < blockSizes.Count; b++)
+        {
+            var blockHours = blockSizes[b];
+            var start = CreateStartIntVar(
+                duration: blockHours,
+                timeSlots: timeSlots,
+                varName: $"lab_start_s{section.Id}_b{b}",
+                presence: presenceBool);
+            var end = _model.NewIntVar(blockHours, _totalSlots, $"lab_end_s{section.Id}_b{b}");
+            var iv = _model.NewOptionalIntervalVar(
+                start,
+                LinearExpr.Constant(blockHours),
+                end,
+                presenceBool,
+                $"lab_iv_s{section.Id}_b{b}");
+            intervals.Add(iv);
+
+            // Per-block day var (different from GetOrCreateComponentDayVar which is one
+            // day var per (section, component) pair). Multi-interval labs need N day vars.
+            var dayVar = _model.NewIntVar(0, 6, $"lab_day_s{section.Id}_b{b}");
+            _model.AddElement(start, _dayPerSlotCache, dayVar);
+            dayVars.Add(dayVar);
+        }
+
+        // AllDifferent over day vars → each lab block lands on a different day.
+        if (dayVars.Count > 1)
+            _model.AddAllDifferent(dayVars);
+
+        _labIntervalsList[section.Id] = intervals;
+
+        // Backward-compat: _labIntervals (single-interval dict) tracks first block so
+        // GetLabInterval / Plan 4-7 callers keep working for single-interval sections.
+        // Multi-interval consumers MUST use GetLabIntervals.
+        _labIntervals[section.Id] = intervals[0];
     }
 
     /// <summary>
@@ -178,6 +273,20 @@ public sealed class DecisionVariables
         throw new KeyNotFoundException($"Section {sectionId} not registered.");
     }
 
+    /// <summary>
+    /// Plan 7b Task 7 — Multi-interval lab accessor. LabHours &gt; maxLabBlockHours ile
+    /// bölünmüş section'lar için tüm interval listesini döner.
+    /// Tek-interval section'lar için (CreateIntervalsForSection üzerinden kayıtlı)
+    /// tek-elemanlı liste döner — backward-compat için single → list shim.
+    /// </summary>
+    public IReadOnlyList<IntervalVar> GetLabIntervals(int sectionId)
+    {
+        if (_labIntervalsList.TryGetValue(sectionId, out var list)) return list;
+        if (_labIntervals.TryGetValue(sectionId, out var single))
+            return new[] { single };
+        throw new KeyNotFoundException($"No lab intervals registered for section {sectionId}.");
+    }
+
     public IntVar GetLectureRoom(int sectionId) =>
         _lectureRooms.TryGetValue(sectionId, out var v) ? v
         : throw new KeyNotFoundException($"No lecture room variable for section {sectionId}.");
@@ -203,6 +312,7 @@ public sealed class DecisionVariables
 
     public IReadOnlyDictionary<int, IntervalVar> AllLectureIntervals => _lectureIntervals;
     public IReadOnlyDictionary<int, IntervalVar> AllLabIntervals => _labIntervals;
+    public IReadOnlyDictionary<int, List<IntervalVar>> AllLabIntervalsLists => _labIntervalsList;
     public IReadOnlyDictionary<int, IReadOnlyList<IntVar>> AllLabRooms => _labRooms;
 
     /// <summary>

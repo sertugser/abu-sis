@@ -467,6 +467,100 @@ public class DecisionVariablesTests
         // Legacy: start ∈ [0, 1] without slot validation. Cross-day not enforced here.
     }
 
+    // Plan 7b Task 7 — Multi-interval lab support
+    [Fact]
+    public void CreateLabIntervalsForSection_LabHours4_MaxBlock2_CreatesTwoIntervalsDifferentDays()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 8);
+        // 8-slot grid: Mon×4 + Tue×4. LabHours=4, max=2 → 2 interval × 2 saat.
+        var slots = new List<TimeSlotInput>();
+        for (int d = 0; d < 2; d++)
+            for (int s = 0; s < 4; s++)
+                slots.Add(new TimeSlotInput
+                {
+                    Id = d * 4 + s + 1,
+                    DayOfWeek = (DayOfWeek)(d + 1),
+                    SlotOrder = s + 1,
+                    StartTime = new TimeOnly(9 + s, 0),
+                    EndTime = new TimeOnly(9 + s, 50),
+                    AllowedMode = TimeSlotAllowedMode.Both
+                });
+
+        var section = new SectionInput
+        {
+            Id = 1,
+            CourseId = 100,
+            CourseCode = "X",
+            CourseName = "X",
+            SectionNumber = 1,
+            Capacity = 30,
+            TheoryHours = 0,
+            LabHours = 4,
+            TeachingMethod = TeachingMethod.FaceToFace
+        };
+
+        // First call: skip single-interval lab; multi-interval method will create blocks.
+        registry.CreateIntervalsForSection(section, slots, createLabInterval: false);
+        registry.CreateLabIntervalsForSection(section, slots, maxLabBlockHours: 2);
+
+        var labIntervals = registry.GetLabIntervals(1);
+        labIntervals.Should().HaveCount(2,
+            because: "LabHours=4 / max=2 → 2 intervals");
+
+        // Force presence + solve → assert different days
+        var present = (BoolVar)registry.GetSectionPresent(1);
+        model.Add(present == 1);
+
+        var solver = new CpSolver();
+        var status = solver.Solve(model);
+        status.Should().BeOneOf(new[] { CpSolverStatus.Optimal, CpSolverStatus.Feasible });
+
+        var startA = (int)solver.Value(labIntervals[0].StartExpr());
+        var startB = (int)solver.Value(labIntervals[1].StartExpr());
+        var dayA = slots[startA].DayOfWeek;
+        var dayB = slots[startB].DayOfWeek;
+        dayA.Should().NotBe(dayB,
+            because: "AddAllDifferent over day vars → lab blocks span different days");
+    }
+
+    [Fact]
+    public void CreateLabIntervalsForSection_LabHoursEqualMaxBlock_SingleInterval()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 4);
+        var slots = new List<TimeSlotInput>();
+        for (int s = 0; s < 4; s++)
+            slots.Add(new TimeSlotInput
+            {
+                Id = s + 1,
+                DayOfWeek = DayOfWeek.Monday,
+                SlotOrder = s + 1,
+                StartTime = new TimeOnly(9 + s, 0),
+                EndTime = new TimeOnly(9 + s, 50),
+                AllowedMode = TimeSlotAllowedMode.Both
+            });
+
+        var section = new SectionInput
+        {
+            Id = 1,
+            CourseId = 100,
+            CourseCode = "X",
+            CourseName = "X",
+            SectionNumber = 1,
+            Capacity = 30,
+            TheoryHours = 0,
+            LabHours = 2,
+            TeachingMethod = TeachingMethod.FaceToFace
+        };
+
+        registry.CreateIntervalsForSection(section, slots, createLabInterval: false);
+        registry.CreateLabIntervalsForSection(section, slots, maxLabBlockHours: 2);
+
+        registry.GetLabIntervals(1).Should().HaveCount(1,
+            because: "LabHours=2 ≤ max=2 → single interval");
+    }
+
     // Plan 7b Task 4 — Online section: room IntVar is NOT created.
     // Defensive regression guard (NOT a TDD red→green test): even before production changes
     // ScheduleModelBuilder skipped CreateRoomVariable for Online, GetLectureRoom would already
