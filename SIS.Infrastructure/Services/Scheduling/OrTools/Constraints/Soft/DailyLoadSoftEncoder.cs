@@ -23,6 +23,14 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// (lecture) component day var'ını okur. Lab-only section'lar (TheoryHours=0) day var
 /// alınamadığı için silently skip olur.
 /// </para>
+/// <para>
+/// NOTE (v1 unit divergence — Plan 9 tune): v1 evaluator gerçek clock-hour'u
+/// (<c>slot.EndTime - slot.StartTime</c>) topluyor; bu encoder credit-hour
+/// (<c>section.TheoryHours + section.LabHours</c>) kullanıyor. 50dk slot grid'inde
+/// 3 credit-hour ≈ 2.5 clock-hour. Default cap=6 credit-hour ≈ 5 clock-hour'a denk
+/// geliyor — v1 cap=6 clock-hour'a göre daha sıkı. Admin Plan 9 sonrası real DB
+/// smoke ile <c>Schedule.S2.MaxDailyHours</c>'u credit-hour bazında tune edebilir.
+/// </para>
 /// </remarks>
 public sealed class DailyLoadSoftEncoder : IConstraintEncoder
 {
