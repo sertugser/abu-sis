@@ -101,9 +101,10 @@ public sealed class DecisionVariables
         if (validStarts.Count == 0)
         {
             // No valid block → force presence to 0 (section drops).
-            // Start IntVar still constructed but irrelevant when present=0.
+            // Return a constant placeholder (start value is irrelevant when present=0).
+            // Avoids negative-upper-bound trap when duration > _totalSlots.
             _model.Add(presence == 0);
-            return _model.NewIntVar(0, _totalSlots - duration, varName);
+            return _model.NewConstant(0);
         }
 
         var domain = Google.OrTools.Util.Domain.FromValues(validStarts.Select(i => (long)i).ToArray());
