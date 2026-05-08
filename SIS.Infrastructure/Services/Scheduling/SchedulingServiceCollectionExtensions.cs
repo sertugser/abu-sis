@@ -119,6 +119,7 @@ public static class SchedulingServiceCollectionExtensions
             return new MaxConsecutiveHoursEncoder(maxHours, breakMinutes);
         });
         services.AddScoped<IConstraintEncoder, FaceToFaceSlotEncoder>();
+        services.AddScoped<IConstraintEncoder, DistributionConstraintEncoder>();
 
         // Soft constraint encoders (Plan 3 diagnostic stubs; real penalty in Plan 4)
         services.AddScoped<IConstraintEncoder, OccupancyEncoder>();

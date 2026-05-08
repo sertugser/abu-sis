@@ -36,4 +36,11 @@ public sealed record SolverRequest
     /// curriculum mode'da boş kalır.
     /// </summary>
     public IReadOnlyList<(int SectionA, int SectionB)> CohortConflictPairs { get; init; } = [];
+
+    /// <summary>
+    /// Plan 6 Task 10 — DistributionConstraints (SameDay/DifferentDay/SameRoom/BackToBack/NotBackToBack/Precedence).
+    /// SolverRequestBuilder DistributionConstraints + DistributionConstraintCourses tablolarından yükler.
+    /// Encoder Plan 6.5'a ertelendi (real impl); şu an diagnostic-only stub.
+    /// </summary>
+    public IReadOnlyList<DistributionConstraintInput> DistributionConstraints { get; init; } = [];
 }

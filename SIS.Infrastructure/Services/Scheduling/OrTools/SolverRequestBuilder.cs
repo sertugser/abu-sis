@@ -147,6 +147,21 @@ public sealed class SolverRequestBuilder
             .Select(cp => new CourseRelationship(cp.CourseId, cp.RequiredCourseId))
             .ToListAsync(cancellationToken);
 
+        // 6b) Plan 6 Task 10 — Load distribution constraints for the term (DB has 0 rows currently;
+        //     infrastructure-only, encoder stub Plan 6.5 will implement real encoding).
+        var distributionConstraints = await _context.DistributionConstraints
+            .AsNoTracking()
+            .Where(dc => dc.TermId == termId)
+            .Select(dc => new DistributionConstraintInput(
+                dc.Id,
+                dc.DistributionType,
+                dc.PreferenceLevel,
+                dc.Courses
+                    .OrderBy(c => c.SortOrder)
+                    .Select(c => new DistributionCourseInput(c.CourseId, c.CourseSectionId, c.SortOrder))
+                    .ToList()))
+            .ToListAsync(cancellationToken);
+
         // 7) Plan 5 Task 1 — Instructor weekly-hour cap default (SystemConfig).
         var defaultInstructorMaxWeeklyHours = await _systemConfigProvider.GetIntAsync(
             "Schedule.DefaultInstructorMaxWeeklyHours", 30, cancellationToken);
@@ -199,7 +214,8 @@ public sealed class SolverRequestBuilder
             Corequisites = corequisites,
             DefaultInstructorMaxWeeklyHours = defaultInstructorMaxWeeklyHours,
             CurriculumConflictMode = curriculumConflictMode,
-            CohortConflictPairs = cohortConflictPairs
+            CohortConflictPairs = cohortConflictPairs,
+            DistributionConstraints = distributionConstraints
         };
     }
 
