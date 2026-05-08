@@ -132,6 +132,45 @@ public class CurriculumConflictEncoderRealTests
         ctx.Assumptions.Count.Should().Be(1);
     }
 
+    [Fact]
+    public void Encode_CohortMode_ThreePairs_AddsThreeAssumptions()
+    {
+        // Multi-pair coverage: 3 sections × 3 pairs (1-2, 1-3, 2-3) → 3 distinct assumptions.
+        var sections = new[]
+        {
+            Section(1, courseId: 100, deptId: 1, year: 1, theory: 2, lab: 0),
+            Section(2, courseId: 200, deptId: 1, year: 1, theory: 2, lab: 0),
+            Section(3, courseId: 300, deptId: 1, year: 1, theory: 2, lab: 0)
+        };
+        var encoder = new CurriculumConflictEncoder();
+        var pairs = new (int, int)[] { (1, 2), (1, 3), (2, 3) };
+        var ctx = BuildContextWithCohortPairs(sections, pairs);
+
+        encoder.Encode(ctx);
+
+        ctx.Assumptions.Count.Should().Be(3,
+            because: "encoder iterates each pair independently → 3 assumptions for 3 pairs");
+    }
+
+    [Fact]
+    public void Encode_CohortMode_PairReferencesUnknownSection_SkippedSilently()
+    {
+        // Defensive coverage: pair (1, 999) where section 999 doesn't exist → encoder skips
+        // via TryGetValue without throwing.
+        var sections = new[]
+        {
+            Section(1, courseId: 100, deptId: 1, year: 1, theory: 2, lab: 0)
+        };
+        var encoder = new CurriculumConflictEncoder();
+        var pairs = new (int, int)[] { (1, 999) };
+        var ctx = BuildContextWithCohortPairs(sections, pairs);
+
+        encoder.Encode(ctx);
+
+        ctx.Assumptions.Count.Should().Be(0,
+            because: "missing section in pair → defensive TryGetValue skip");
+    }
+
     private static EncoderContext BuildContextWithCohortPairs(
         IReadOnlyList<SectionInput> sections,
         IReadOnlyList<(int, int)> cohortPairs)
