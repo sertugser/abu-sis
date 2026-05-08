@@ -304,14 +304,8 @@ public class DecisionVariablesTests
     }
 
     // Plan 5 Task 5 — shared day-of-component helper for H-DL/H-DO/H15/H16
-    [Fact]
-    public void GetOrCreateComponentDayVar_LectureSection_ReturnsIntVar()
-    {
-        var model = new CpModel();
-        var registry = new DecisionVariables(model, totalSlots: 20);
-        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
-
-        var slots = Enumerable.Range(0, 20).Select(i => new TimeSlotInput
+    private static IReadOnlyList<TimeSlotInput> MakeSlots(int count = 20) =>
+        Enumerable.Range(0, count).Select(i => new TimeSlotInput
         {
             Id = i + 1,
             DayOfWeek = (DayOfWeek)((i / 4) + 1),
@@ -321,7 +315,14 @@ public class DecisionVariablesTests
             AllowedMode = TimeSlotAllowedMode.Both
         }).ToList();
 
-        var dayVar = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
+    [Fact]
+    public void GetOrCreateComponentDayVar_LectureSection_ReturnsIntVar()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 20);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
+
+        var dayVar = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, MakeSlots());
 
         dayVar.Should().NotBeNull();
         registry.AllComponentDayVars.Should().ContainKey((1, ComponentType.Lecture));
@@ -333,20 +334,56 @@ public class DecisionVariablesTests
         var model = new CpModel();
         var registry = new DecisionVariables(model, totalSlots: 20);
         registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
-
-        var slots = Enumerable.Range(0, 20).Select(i => new TimeSlotInput
-        {
-            Id = i + 1,
-            DayOfWeek = (DayOfWeek)((i / 4) + 1),
-            SlotOrder = (i % 4) + 1,
-            StartTime = new TimeOnly(9 + (i % 4), 0),
-            EndTime = new TimeOnly(9 + (i % 4), 50),
-            AllowedMode = TimeSlotAllowedMode.Both
-        }).ToList();
+        var slots = MakeSlots();
 
         var first = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
         var second = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
 
         second.Should().BeSameAs(first);
+    }
+
+    [Fact]
+    public void GetOrCreateComponentDayVar_LabSection_ReturnsDistinctVarUnderLabKey()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 20);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 2));
+        var slots = MakeSlots();
+
+        var lectureVar = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
+        var labVar = registry.GetOrCreateComponentDayVar(1, ComponentType.Lab, slots);
+
+        lectureVar.Should().NotBeSameAs(labVar);
+        registry.AllComponentDayVars.Should().ContainKey((1, ComponentType.Lecture));
+        registry.AllComponentDayVars.Should().ContainKey((1, ComponentType.Lab));
+    }
+
+    [Fact]
+    public void GetOrCreateComponentDayVar_TwoSections_ProducesDistinctVars()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 20);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
+        registry.CreateIntervalsForSection(Section(2, theory: 3, lab: 0));
+        var slots = MakeSlots();
+
+        var var1 = registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, slots);
+        var var2 = registry.GetOrCreateComponentDayVar(2, ComponentType.Lecture, slots);
+
+        var1.Should().NotBeSameAs(var2);
+        registry.AllComponentDayVars.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void GetOrCreateComponentDayVar_EmptyTimeSlots_Throws()
+    {
+        var model = new CpModel();
+        var registry = new DecisionVariables(model, totalSlots: 20);
+        registry.CreateIntervalsForSection(Section(1, theory: 3, lab: 0));
+
+        var act = () => registry.GetOrCreateComponentDayVar(1, ComponentType.Lecture, []);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*TimeSlots is empty*");
     }
 }

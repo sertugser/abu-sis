@@ -350,6 +350,15 @@ public sealed class DecisionVariables
                 arr[i] = (long)timeSlots[i].DayOfWeek;
             _dayPerSlotCache = arr;
         }
+        else if (_dayPerSlotCache.Length != timeSlots.Count)
+        {
+            // Defensive: if a future caller ever reuses this DecisionVariables instance with a
+            // different time-slot set, AddElement would silently use a stale day mapping.
+            // Fail loudly instead.
+            throw new InvalidOperationException(
+                $"timeSlots.Count ({timeSlots.Count}) does not match cached length ({_dayPerSlotCache.Length}). " +
+                "DecisionVariables must not be reused across solves with different time-slot sets.");
+        }
 
         var sourceInterval = componentType == ComponentType.Lecture
             ? GetLectureInterval(sectionId)
