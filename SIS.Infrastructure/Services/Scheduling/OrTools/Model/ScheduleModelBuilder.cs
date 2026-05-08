@@ -36,7 +36,18 @@ public sealed class ScheduleModelBuilder
         // 1) Decision variables
         foreach (var section in request.Sections)
         {
-            variables.CreateIntervalsForSection(section, request.TimeSlots);
+            // Plan 7b Task 8 — Multi-interval lab time-split:
+            // LabHours > MaxLabBlockHours olan section için lab interval'ı
+            // CreateLabIntervalsForSection ile N parçaya bölünür; aksi halde mevcut tek-interval path.
+            var needsLabSplit = section.LabHours > request.MaxLabBlockHours;
+
+            variables.CreateIntervalsForSection(section, request.TimeSlots,
+                createLabInterval: !needsLabSplit);
+
+            if (needsLabSplit)
+            {
+                variables.CreateLabIntervalsForSection(section, request.TimeSlots, request.MaxLabBlockHours);
+            }
 
             // Plan 7b — Online section'lar için room IntVar oluşturulmaz; assignment'a oda eklenmez.
             if (section.TeachingMethod == TeachingMethod.Online)

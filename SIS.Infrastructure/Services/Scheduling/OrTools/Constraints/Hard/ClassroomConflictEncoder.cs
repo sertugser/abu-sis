@@ -1,6 +1,7 @@
 using Google.OrTools.Sat;
 using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Enums;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
@@ -50,24 +51,50 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
                 }
             }
 
-            // Lab component: create optional interval per (group, classroom). Plan 4 Task 5 — paralel lab support.
-            // Single-group sections still iterate exactly once (groupCount=1).
+            // Lab component: create optional interval per (block, group, classroom).
+            // Plan 4 Task 5 paralel lab support × Plan 7b Task 8 multi-interval lab time-split:
+            //   - Single-block (LabHours ≤ MaxLabBlockHours): GetLabIntervals returns 1-elem list,
+            //     blockSizes = [LabHours]; loop runs once × LabGroupCount × Classrooms — semantically
+            //     identical to the previous Plan 4 path (uses CreateOptionalRoomIntervalForLabBlock
+            //     instead of CreateOptionalRoomIntervalForGroup but produces the same constraint shape).
+            //   - Multi-block × LabGroupCount=1: each block gets its own per-classroom interval.
+            //   - Multi-block × LabGroupCount>1: NotSupported (Plan 9).
             if (section.LabHours > 0)
             {
                 var labRooms = ctx.Variables.GetLabRooms(section.Id);
-                for (int g = 0; g < labRooms.Count; g++)
-                {
-                    foreach (var classroom in classrooms)
-                    {
-                        var optInterval = ctx.Variables.CreateOptionalRoomIntervalForGroup(
-                            section.Id, classroom.Id, ComponentType.Lab, section.LabHours, groupIndex: g);
+                var labIntervals = ctx.Variables.GetLabIntervals(section.Id);
 
-                        if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
+                if (labIntervals.Count > 1 && labRooms.Count > 1)
+                    throw new NotSupportedException(
+                        $"Section {section.Id} ({section.CourseCode}): multi-interval lab " +
+                        $"({labIntervals.Count} blocks, LabHours={section.LabHours}) × " +
+                        $"parallel rooms ({labRooms.Count} groups) is not yet supported (Plan 9). " +
+                        $"Mitigation: raise SystemConfig Schedule.MaxLabBlockHours so LabHours ≤ MaxLabBlockHours, " +
+                        $"or split the section so capacity fits a single lab room.");
+
+                var blockSizes = LabBlockSplitter.SplitLabIntoBlocks(
+                    section.LabHours, ctx.Request.MaxLabBlockHours);
+
+                for (int ivIdx = 0; ivIdx < labIntervals.Count; ivIdx++)
+                {
+                    var labIv = labIntervals[ivIdx];
+                    var blockDuration = blockSizes[ivIdx];
+
+                    for (int g = 0; g < labRooms.Count; g++)
+                    {
+                        foreach (var classroom in classrooms)
                         {
-                            list = new List<IntervalVar>();
-                            perClassroomIntervals[classroom.Id] = list;
+                            var optInterval = ctx.Variables.CreateOptionalRoomIntervalForLabBlock(
+                                section.Id, classroom.Id, blockIndex: ivIdx, groupIndex: g,
+                                sourceInterval: labIv, duration: blockDuration);
+
+                            if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
+                            {
+                                list = new List<IntervalVar>();
+                                perClassroomIntervals[classroom.Id] = list;
+                            }
+                            list.Add(optInterval);
                         }
-                        list.Add(optInterval);
                     }
                 }
             }

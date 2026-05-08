@@ -174,12 +174,15 @@ public class ClassroomConflictEncoderTests
 
         encoder.Encode(ctx);
 
-        // 2 groups × 2 classrooms = 4 lab optional intervals registered for this section
-        var labKeys = ctx.Variables.AllOptionalIntervalsForGroups
+        // Plan 7b Task 8 — encoder now writes to AllOptionalLabBlockIntervals
+        // (per-block × per-group × per-classroom). Single-block sections (LabHours ≤ MaxLabBlockHours)
+        // still produce: 1 block × 2 groups × 2 classrooms = 4 lab optional intervals.
+        var labKeys = ctx.Variables.AllOptionalLabBlockIntervals
             .Keys
-            .Where(k => k.Item1 == section.Id && k.Item3 == ComponentType.Lab)
+            .Where(k => k.Item1 == section.Id) // sectionId == 1
             .ToList();
         labKeys.Should().HaveCount(4);
+        // Item4 == groupIndex; both group 0 and group 1 must be represented.
         labKeys.Select(k => k.Item4).Distinct().Should().BeEquivalentTo(new[] { 0, 1 });
     }
 }

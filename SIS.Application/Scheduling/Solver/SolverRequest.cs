@@ -49,4 +49,11 @@ public sealed record SolverRequest
     /// olan section'lar Amphitheater dışındaki lecture room'a yerleşemez. CpSatSolverEngine yükler.
     /// </summary>
     public int AmphiThreshold { get; init; } = 100;
+
+    /// <summary>
+    /// Plan 7b — SystemConfig "Schedule.MaxLabBlockHours" (default 2). LabHours > value
+    /// olan section'lar N intervala bölünür ve farklı günlere yerleştirilir (v1 paritesi).
+    /// CpSatSolverEngine yükler.
+    /// </summary>
+    public int MaxLabBlockHours { get; init; } = 2;
 }

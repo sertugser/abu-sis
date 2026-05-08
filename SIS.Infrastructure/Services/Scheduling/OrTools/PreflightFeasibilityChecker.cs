@@ -18,7 +18,8 @@ public sealed class PreflightFeasibilityChecker
     public PreflightResult Check(
         IReadOnlyList<SectionInput> sections,
         IReadOnlyList<ClassroomInput> classrooms,
-        IReadOnlyList<TimeSlotInput> timeSlots)
+        IReadOnlyList<TimeSlotInput> timeSlots,
+        int maxLabBlockHours = 2)
     {
         var feasible = new List<SectionInput>();
         var infeasible = new List<InfeasibleSection>();
@@ -39,13 +40,35 @@ public sealed class PreflightFeasibilityChecker
             }
             if (section.LabHours > 0)
             {
-                var validStarts = SlotBlockValidator.ComputeValidBlockStarts(timeSlots, section.LabHours);
+                // Plan 7b Task 8 — Multi-interval lab time-split: when LabHours > maxLabBlockHours,
+                // each block has at most maxLabBlockHours duration. Validate using the largest block,
+                // not the full LabHours (which may be too long to fit any single contiguous range).
+                // SplitLabIntoBlocks always returns ≥1 block when LabHours > 0 (guaranteed by helper contract).
+                var blockSizes = LabBlockSplitter.SplitLabIntoBlocks(section.LabHours, maxLabBlockHours);
+                var largestBlock = blockSizes.Max();
+
+                var validStarts = SlotBlockValidator.ComputeValidBlockStarts(timeSlots, largestBlock);
                 if (validStarts.Count == 0)
                 {
                     infeasible.Add(new InfeasibleSection(section,
-                        $"{section.LabHours} saatlik lab için geçerli zaman aralığı yok " +
+                        $"{largestBlock} saatlik lab bloğu için geçerli zaman aralığı yok " +
                         $"(gün sınırı veya >10dk gap kuralları nedeniyle)."));
                     continue;
+                }
+
+                // Plan 7b Task 8 — When lab is split into N blocks, each block must land on
+                // a different day (AddAllDifferent). The slot grid must therefore offer at
+                // least N distinct days; otherwise no feasible assignment exists.
+                if (blockSizes.Count > 1)
+                {
+                    var distinctDays = timeSlots.Select(t => t.DayOfWeek).Distinct().Count();
+                    if (distinctDays < blockSizes.Count)
+                    {
+                        infeasible.Add(new InfeasibleSection(section,
+                            $"{section.LabHours} saatlik lab {blockSizes.Count} bloğa bölündü ama " +
+                            $"slot grid'inde sadece {distinctDays} farklı gün var; her blok farklı güne düşmeli."));
+                        continue;
+                    }
                 }
             }
 

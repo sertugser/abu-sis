@@ -487,6 +487,89 @@ public sealed class DecisionVariables
     public IReadOnlyDictionary<(int, int, ComponentType, int), IntervalVar> AllOptionalIntervalsForGroups => _optionalIntervalsForGroups;
     public IReadOnlyDictionary<(int, int, ComponentType, int), ILiteral> AllPresenceLiteralsForGroups => _presenceLiteralsForGroups;
 
+    private readonly Dictionary<(int sectionId, int classroomId, int blockIndex, int groupIndex), IntervalVar>
+        _optionalLabBlockIntervals = new();
+    private readonly Dictionary<(int sectionId, int classroomId, int blockIndex, int groupIndex), ILiteral>
+        _presenceLiteralsForLabBlocks = new();
+
+    /// <summary>
+    /// Plan 7b Task 8 — Multi-interval lab support. Like
+    /// <see cref="CreateOptionalRoomIntervalForGroup"/> but takes an explicit
+    /// <paramref name="sourceInterval"/> + <paramref name="duration"/>, so each block of a
+    /// time-split lab can register its own optional per-classroom interval (each block has
+    /// its own start/end). Single-block (LabHours ≤ MaxLabBlockHours) sections continue to
+    /// use <see cref="CreateOptionalRoomIntervalForGroup"/>; multi-block sections route
+    /// through this helper.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Multi-interval × LabGroupCount > 1 (parallel rooms × time-split) is deferred to Plan 9.
+    /// The encoder must guard the combination upstream — this helper itself does not, so the
+    /// per-block, per-group, per-classroom registrations remain composable when Plan 9 lands.
+    /// </para>
+    /// <para>
+    /// <b>Caller invariant:</b> <paramref name="sourceInterval"/> MUST equal
+    /// <c>GetLabIntervals(sectionId)[blockIndex]</c>. The helper does not re-look-up the
+    /// interval (to avoid repeated dictionary lookups in the encoder hot path), so passing
+    /// a different interval would silently produce an under-constrained model.
+    /// </para>
+    /// </remarks>
+    public IntervalVar CreateOptionalRoomIntervalForLabBlock(
+        int sectionId,
+        int classroomId,
+        int blockIndex,
+        int groupIndex,
+        IntervalVar sourceInterval,
+        int duration)
+    {
+        ArgumentNullException.ThrowIfNull(sourceInterval);
+        var key = (sectionId, classroomId, blockIndex, groupIndex);
+        if (_optionalLabBlockIntervals.TryGetValue(key, out var existing))
+            return existing;
+
+        if (!_sectionPresent.TryGetValue(sectionId, out var sectionPresent))
+            throw new InvalidOperationException(
+                $"Section {sectionId} has no presence literal. Call CreateIntervalsForSection first.");
+
+        // Caller invariant guard: sourceInterval must be the blockIndex'th lab interval.
+        // Debug.Assert keeps the hot path free in release builds while catching encoder bugs in tests.
+        if (_labIntervalsList.TryGetValue(sectionId, out var registered) && blockIndex < registered.Count)
+            System.Diagnostics.Debug.Assert(
+                ReferenceEquals(sourceInterval, registered[blockIndex]),
+                $"sourceInterval mismatch for section {sectionId}, blockIndex {blockIndex}: " +
+                "caller must pass GetLabIntervals(sectionId)[blockIndex].");
+
+        var labRooms = GetLabRooms(sectionId);
+        if (groupIndex < 0 || groupIndex >= labRooms.Count)
+            throw new ArgumentOutOfRangeException(nameof(groupIndex), groupIndex,
+                $"groupIndex out of range for section {sectionId} (labRooms.Count={labRooms.Count}).");
+
+        var roomVar = labRooms[groupIndex];
+        var roomEqLit = _model.NewBoolVar(
+            $"room_eq_lab_s{sectionId}_c{classroomId}_b{blockIndex}_g{groupIndex}");
+        _model.Add(roomVar == classroomId).OnlyEnforceIf(roomEqLit);
+        _model.Add(roomVar != classroomId).OnlyEnforceIf(roomEqLit.Not());
+
+        var presence = _model.NewBoolVar(
+            $"present_lab_s{sectionId}_c{classroomId}_b{blockIndex}_g{groupIndex}");
+        _model.AddBoolAnd(new ILiteral[] { sectionPresent, roomEqLit }).OnlyEnforceIf(presence);
+        _model.AddBoolOr(new ILiteral[] { sectionPresent.Not(), roomEqLit.Not() }).OnlyEnforceIf(presence.Not());
+
+        var optInterval = _model.NewOptionalIntervalVar(
+            sourceInterval.StartExpr(),
+            LinearExpr.Constant(duration),
+            sourceInterval.EndExpr(),
+            presence,
+            $"opt_iv_lab_s{sectionId}_c{classroomId}_b{blockIndex}_g{groupIndex}");
+
+        _optionalLabBlockIntervals[key] = optInterval;
+        _presenceLiteralsForLabBlocks[key] = presence;
+        return optInterval;
+    }
+
+    public IReadOnlyDictionary<(int, int, int, int), IntervalVar> AllOptionalLabBlockIntervals => _optionalLabBlockIntervals;
+    public IReadOnlyDictionary<(int, int, int, int), ILiteral> AllPresenceLiteralsForLabBlocks => _presenceLiteralsForLabBlocks;
+
     private readonly Dictionary<(int sectionId, ComponentType componentType), IntVar> _componentDayVars = new();
     private long[]? _dayPerSlotCache;
 

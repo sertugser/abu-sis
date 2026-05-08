@@ -112,20 +112,23 @@ public sealed class SolutionMapper
                 }
             }
 
-            // Lab component (Plan 4 Task 7 — paralel split: emit one AssignedSlot per group×slot).
-            // groupCount=1 (default) → outer foreach runs once → semantically identical to old shim path.
-            // groupCount>1 → N entries per slot, each with a different ClassroomId (parallel labs).
+            // Lab component (Plan 4 Task 7 paralel split × Plan 7b Task 8 multi-interval time-split).
+            // GetLabIntervals returns:
+            //   - Single-element list for backward-compat (LabHours ≤ MaxLabBlockHours).
+            //   - N-element list for time-split (LabHours > MaxLabBlockHours, different days).
+            // Online: room IntVar yok → NoRoomSentinel emit; LabGroupCount kez tekrarla.
+            // Non-Online: each (interval, labRoom) pair contributes its own slot range.
             if (section.LabHours > 0)
             {
-                var labInterval = build.Variables.GetLabInterval(section.Id);
-                if (labInterval != null)
-                {
-                    var startSlotIdx = (int)solver.Value(labInterval.StartExpr());
-                    var endSlotIdx = (int)solver.Value(labInterval.EndExpr());
+                var labIntervals = build.Variables.GetLabIntervals(section.Id);
 
-                    if (isOnline)
+                if (isOnline)
+                {
+                    foreach (var labIv in labIntervals)
                     {
-                        // Online: room IntVar yok; ClassroomId=0 sentinel ile LabGroupCount kez emit et.
+                        var startSlotIdx = (int)solver.Value(labIv.StartExpr());
+                        var endSlotIdx = (int)solver.Value(labIv.EndExpr());
+
                         for (int g = 0; g < section.LabGroupCount; g++)
                         {
                             for (int i = startSlotIdx; i < endSlotIdx; i++)
@@ -142,9 +145,15 @@ public sealed class SolutionMapper
                             }
                         }
                     }
-                    else
+                }
+                else
+                {
+                    var labRooms = build.Variables.GetLabRooms(section.Id);
+
+                    foreach (var labIv in labIntervals)
                     {
-                        var labRooms = build.Variables.GetLabRooms(section.Id);
+                        var startSlotIdx = (int)solver.Value(labIv.StartExpr());
+                        var endSlotIdx = (int)solver.Value(labIv.EndExpr());
 
                         foreach (var roomVar in labRooms)
                         {

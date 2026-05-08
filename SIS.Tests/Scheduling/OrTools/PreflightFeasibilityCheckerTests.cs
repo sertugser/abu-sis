@@ -216,6 +216,7 @@ public class PreflightFeasibilityCheckerTests
     public void Check_LabDurationFitsInDay_MarkedFeasible()
     {
         // 4-slot/gün grid → 4-saatlik lab fits.
+        // Plan 7b Task 8: explicit maxLabBlockHours=4 disables time-split so the lab stays one block.
         var checker = new PreflightFeasibilityChecker();
         var sections = new[] { Section(1, theory: 0, lab: 4, capacity: 30) };
         var classrooms = new[]
@@ -238,9 +239,43 @@ public class PreflightFeasibilityCheckerTests
                 AllowedMode = TimeSlotAllowedMode.Both }
         };
 
-        var result = checker.Check(sections, classrooms, slots);
+        var result = checker.Check(sections, classrooms, slots, maxLabBlockHours: 4);
 
         result.FeasibleSections.Should().HaveCount(1);
         result.InfeasibleSections.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Check_LabSplitRequiresMoreDaysThanAvailable_MarkedInfeasible()
+    {
+        // Plan 7b Task 8 — 4h lab + maxLabBlockHours=2 → split into [2,2]; AddAllDifferent
+        // requires 2 distinct days. Single-day grid has only 1 day → preflight infeasible.
+        var checker = new PreflightFeasibilityChecker();
+        var sections = new[] { Section(1, theory: 0, lab: 4, capacity: 30) };
+        var classrooms = new[]
+        {
+            new ClassroomInput { Id = 1, Name = "L", Capacity = 50, Type = ClassroomType.Lab }
+        };
+        var slots = new[]
+        {
+            new TimeSlotInput { Id = 1, DayOfWeek = DayOfWeek.Monday, SlotOrder = 1,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                AllowedMode = TimeSlotAllowedMode.Both },
+            new TimeSlotInput { Id = 2, DayOfWeek = DayOfWeek.Monday, SlotOrder = 2,
+                StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(10, 50),
+                AllowedMode = TimeSlotAllowedMode.Both },
+            new TimeSlotInput { Id = 3, DayOfWeek = DayOfWeek.Monday, SlotOrder = 3,
+                StartTime = new TimeOnly(11, 0), EndTime = new TimeOnly(11, 50),
+                AllowedMode = TimeSlotAllowedMode.Both },
+            new TimeSlotInput { Id = 4, DayOfWeek = DayOfWeek.Monday, SlotOrder = 4,
+                StartTime = new TimeOnly(12, 0), EndTime = new TimeOnly(12, 50),
+                AllowedMode = TimeSlotAllowedMode.Both }
+        };
+
+        var result = checker.Check(sections, classrooms, slots, maxLabBlockHours: 2);
+
+        result.InfeasibleSections.Should().HaveCount(1);
+        result.InfeasibleSections[0].Reason.Should().Contain("farklı gün",
+            because: "split into 2 blocks but only 1 distinct day available");
     }
 }

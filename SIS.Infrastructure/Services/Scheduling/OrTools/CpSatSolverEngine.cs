@@ -52,10 +52,26 @@ public sealed class CpSatSolverEngine : ISolverEngine
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Plan 7b — Read MaxLabBlockHours from SystemConfig (default 2) BEFORE preflight,
+        // because preflight uses it to validate per-block (split) lab feasibility.
+        // LabHours > value splits lab into multiple intervals on different days (v1 parity).
+        // Defensive clamp: tests/configs may inadvertently return 0 for the int; treat any
+        // non-positive value as "use default 2" to keep LabBlockSplitter's contract honored.
+        var maxLabBlockHours = await _config.GetIntAsync(
+            "Schedule.MaxLabBlockHours", 2, cancellationToken);
+        if (maxLabBlockHours <= 0)
+        {
+            _logger?.LogWarning(
+                "Schedule.MaxLabBlockHours resolved to {Value} (non-positive); using default 2.",
+                maxLabBlockHours);
+            maxLabBlockHours = 2;
+        }
+
         // ── Pre-flight feasibility check (Plan 3 Task 2) ──────────────────
         // Filter out sections that have NO valid classroom; mark them as failures.
         // Prevents CP-SAT 'all-or-nothing' infeasibility on real-world data.
-        var preflight = _preflightChecker.Check(request.Sections, request.Classrooms, request.TimeSlots);
+        var preflight = _preflightChecker.Check(
+            request.Sections, request.Classrooms, request.TimeSlots, maxLabBlockHours);
 
         if (preflight.FeasibleSections.Count == 0)
         {
@@ -64,7 +80,11 @@ public sealed class CpSatSolverEngine : ISolverEngine
         }
 
         // Reduce request.Sections to only feasible ones for solver
-        var reducedRequest = request with { Sections = preflight.FeasibleSections };
+        var reducedRequest = request with
+        {
+            Sections = preflight.FeasibleSections,
+            MaxLabBlockHours = maxLabBlockHours
+        };
 
         // Plan 7b — Read AmphiThreshold from SystemConfig (default 100). Capacity ≥ threshold
         // forces theory component into Amphitheater rooms.
