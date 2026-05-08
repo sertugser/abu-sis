@@ -18,7 +18,7 @@ public sealed class DecisionVariables
     // (when LabHours > MaxLabBlockHours and CreateLabIntervalsForSection is called).
     // Single-interval call sites still use _labIntervals; GetLabIntervals falls back
     // to a single-element list for backward compat.
-    private readonly Dictionary<int, List<IntervalVar>> _labIntervalsList = new();
+    private readonly Dictionary<int, IReadOnlyList<IntervalVar>> _labIntervalsList = new();
     private readonly Dictionary<int, IntVar> _lectureRooms = new();
     // Plan 4 Task 2 — Parallel lab support: N IntVar per section (groupCount-based).
     // Single-room sections: list with one element. Single-room callers (GetLabRoom) read [0].
@@ -312,7 +312,7 @@ public sealed class DecisionVariables
 
     public IReadOnlyDictionary<int, IntervalVar> AllLectureIntervals => _lectureIntervals;
     public IReadOnlyDictionary<int, IntervalVar> AllLabIntervals => _labIntervals;
-    public IReadOnlyDictionary<int, List<IntervalVar>> AllLabIntervalsLists => _labIntervalsList;
+    public IReadOnlyDictionary<int, IReadOnlyList<IntervalVar>> AllLabIntervalsLists => _labIntervalsList;
     public IReadOnlyDictionary<int, IReadOnlyList<IntVar>> AllLabRooms => _labRooms;
 
     /// <summary>
@@ -350,6 +350,15 @@ public sealed class DecisionVariables
         if (!_sectionPresent.TryGetValue(sectionId, out var sectionPresent))
             throw new InvalidOperationException(
                 $"Section {sectionId} has no presence literal. Call CreateIntervalsForSection first.");
+
+        // Plan 7b — guard the multi-interval × parallel-room combination (deferred to Plan 9).
+        // Single-interval optional path covers only block 0; remaining blocks would have no
+        // room constraint, silently producing an under-constrained model.
+        if (componentType == ComponentType.Lab && _labIntervalsList.TryGetValue(sectionId, out var blocks)
+            && blocks.Count > 1)
+            throw new NotSupportedException(
+                $"Section {sectionId}: parallel-room optional intervals are not yet supported for " +
+                $"multi-interval lab splits ({blocks.Count} blocks). See Plan 9 polish.");
 
         // Step 1: Reify room equality (roomEqLit ⇔ (roomVar == classroomId))
         var roomVar = componentType == ComponentType.Lecture
@@ -419,6 +428,13 @@ public sealed class DecisionVariables
         if (!_sectionPresent.TryGetValue(sectionId, out var sectionPresent))
             throw new InvalidOperationException(
                 $"Section {sectionId} has no presence literal. Call CreateIntervalsForSection first.");
+
+        // Plan 7b — same multi-interval × parallel-room guard as CreateOptionalRoomInterval.
+        if (componentType == ComponentType.Lab && _labIntervalsList.TryGetValue(sectionId, out var multiBlocks)
+            && multiBlocks.Count > 1)
+            throw new NotSupportedException(
+                $"Section {sectionId}: per-group optional intervals are not yet supported for " +
+                $"multi-interval lab splits ({multiBlocks.Count} blocks). See Plan 9 polish.");
 
         IntVar roomVar;
         if (componentType == ComponentType.Lecture)
