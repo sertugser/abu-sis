@@ -3,12 +3,15 @@ using Google.OrTools.Sat;
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// H5 — Curriculum Conflict. Aynı (ProgramId, Year) grubuna ait section'ların lecture interval'ları
-/// çakışamaz; çünkü o yılın öğrencileri tüm bu derslere kayıtlı olabilir.
-/// CP-SAT model: Per-group AddNoOverlap on lecture intervals; assumption literal per group.
-/// Scope: Plan 2 Task 7 only handles lecture intervals; lab grouping (alternative lab groups)
-/// is out of scope for now.
-/// Sections without ProgramId or Year are skipped (treated as ungrouped).
+/// H5 — Curriculum Conflict (Plan 6 real impl).
+/// CP-SAT model: dispatched on SolverRequest.CurriculumConflictMode.
+///   - "curriculum" (default): aynı (DepartmentId, Year) cohort'undaki farklı course'ların
+///     intervals'i çakışmasın. AddNoOverlap per group.
+///   - "cohort": SolverRequest.CohortConflictPairs (v1 CohortBuilder portu) → her pair için
+///     AddNoOverlap on [intervalA, intervalB]. Plan 6 Task 5'te aktive edilir.
+///   - "enrollment": Plan 6.5'a ertelendi.
+/// 1 assumption per group (curriculum) veya per pair (cohort).
+/// Same-course sections (H8 SameCourseSection handles them) are skipped to avoid duplication.
 /// </summary>
 public sealed class CurriculumConflictEncoder : IConstraintEncoder
 {
@@ -17,30 +20,65 @@ public sealed class CurriculumConflictEncoder : IConstraintEncoder
 
     public void Encode(EncoderContext ctx)
     {
-        if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
-            return;
+        if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true)) return;
 
+        switch (ctx.Request.CurriculumConflictMode)
+        {
+            case "cohort":
+                EncodeCohortMode(ctx);
+                break;
+            case "enrollment":
+                // Plan 6.5'a ertelendi
+                break;
+            default:
+                EncodeCurriculumMode(ctx);
+                break;
+        }
+    }
+
+    private void EncodeCurriculumMode(EncoderContext ctx)
+    {
+        // Group sections by (DepartmentId, Year). Skip null department or year.
         var groups = ctx.Request.Sections
-            .Where(s => s.ProgramId.HasValue && s.Year.HasValue)
-            .GroupBy(s => (s.ProgramId!.Value, s.Year!.Value));
+            .Where(s => s.DepartmentId.HasValue && s.Year.HasValue)
+            .GroupBy(s => (DeptId: s.DepartmentId!.Value, Year: s.Year!.Value));
 
         foreach (var group in groups)
         {
-            var lectureIntervals = group
-                .Where(s => s.TheoryHours > 0)
-                .Select(s => ctx.Variables.GetLectureInterval(s.Id))
-                .Where(iv => iv != null)
-                .Cast<IntervalVar>()
-                .ToList();
+            // Within a group: collect intervals from sections of DIFFERENT courses.
+            // Same-course sections handled by H8 (SameCourseSection); skip to avoid duplication.
+            var byCourse = group.GroupBy(s => s.CourseId).ToList();
+            if (byCourse.Count < 2) continue; // need at least 2 different courses to conflict
 
-            if (lectureIntervals.Count >= 2)
+            var intervals = new List<IntervalVar>();
+            foreach (var courseGroup in byCourse)
             {
-                ctx.Model.AddNoOverlap(lectureIntervals);
-                // Encode group as (ProgramId, Year) in assumption metadata
-                ctx.Assumptions.Register(Code,
-                    primarySectionId: group.Key.Item1,   // ProgramId
-                    secondarySectionId: group.Key.Item2); // Year
+                foreach (var section in courseGroup)
+                {
+                    if (section.TheoryHours > 0)
+                    {
+                        var iv = ctx.Variables.GetLectureInterval(section.Id);
+                        if (iv != null) intervals.Add(iv);
+                    }
+                    if (section.LabHours > 0)
+                    {
+                        var iv = ctx.Variables.GetLabInterval(section.Id);
+                        if (iv != null) intervals.Add(iv);
+                    }
+                }
             }
+
+            if (intervals.Count < 2) continue;
+
+            ctx.Model.AddNoOverlap(intervals);
+            ctx.Assumptions.Register(Code,
+                primarySectionId: group.Key.DeptId,
+                secondarySectionId: group.Key.Year);
         }
+    }
+
+    private void EncodeCohortMode(EncoderContext ctx)
+    {
+        // Plan 6 Task 5'te implement edilecek.
     }
 }
