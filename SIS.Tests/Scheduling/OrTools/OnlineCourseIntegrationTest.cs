@@ -51,6 +51,11 @@ public class OnlineCourseIntegrationTest
     [Fact]
     public async Task SolveAsync_OnlineSectionAndFaceToFaceMixed_BothScheduled()
     {
+        // Online and FaceToFace sections may share slots: H1 (classroom conflict) is keyed on the
+        // room IntVar, and Online sections allocate no room IntVar — so the two sections
+        // never compete for a resource and the solver may place them on the same slot range.
+        // If a future encoder (cohort/instructor conflict) is added to BuildEngine() this
+        // assumption needs revisiting.
         var sections = new[]
         {
             new SectionInput
@@ -95,12 +100,13 @@ public class OnlineCourseIntegrationTest
     }
 
     [Fact]
-    public async Task SolveAsync_OnlineSectionNoClassrooms_StillScheduled()
+    public async Task SolveAsync_OnlineSectionWithIrrelevantClassroom_StillScheduled()
     {
-        // Boundary: sıfır classroom ile online section schedule edilebilmeli.
-        // Preflight: Online section için classroom check skip edilmeli (no lecture component
-        // requirement), aksi halde infeasible. Plan 7b Task 4 PreflightFeasibilityChecker'a
-        // dokunmadı; classroom-less Online geçerse OK; geçmezse Plan 9 polish'te düzeltilir.
+        // Online section schedules even though no real lecture room is needed.
+        // PreflightFeasibilityChecker still runs its lecture-capacity check unconditionally
+        // (Plan 9 will skip it for Online), so a dummy classroom with sufficient capacity
+        // is required here to pass preflight. Once Plan 9 lands the dummy can be removed
+        // and `Classrooms = Array.Empty<ClassroomInput>()` will work.
         var section = new SectionInput
         {
             Id = 1, CourseId = 100, CourseCode = "ONLINE", CourseName = "X",
@@ -125,7 +131,7 @@ public class OnlineCourseIntegrationTest
 
         result.Status.Should().BeOneOf(new[] { SolverStatus.Optimal, SolverStatus.Feasible });
         result.Assignments.Should().HaveCount(1,
-            because: "Online section room-less placement supported");
+            because: "Online section schedules without consuming the dummy classroom (no room IntVar)");
     }
 
     private static IReadOnlyList<TimeSlotInput> BuildSlots() => new[]
