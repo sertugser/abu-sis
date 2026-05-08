@@ -28,16 +28,19 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
     public string Code => "H15";
     public bool IsHard => true;
 
-    private const int BreakDurationMinutes = 5;
-
     private readonly int _maxHoursPerDay;
+    private readonly int _breakDurationMinutes;
 
-    public MaxConsecutiveHoursEncoder(int maxHoursPerDay = 4)
+    public MaxConsecutiveHoursEncoder(int maxHoursPerDay = 4, int breakDurationMinutes = 5)
     {
         if (maxHoursPerDay <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxHoursPerDay),
                 maxHoursPerDay, "maxHoursPerDay must be positive.");
+        if (breakDurationMinutes < 0)
+            throw new ArgumentOutOfRangeException(nameof(breakDurationMinutes),
+                breakDurationMinutes, "breakDurationMinutes must be non-negative.");
         _maxHoursPerDay = maxHoursPerDay;
+        _breakDurationMinutes = breakDurationMinutes;
     }
 
     public void Encode(EncoderContext ctx)
@@ -151,7 +154,7 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
                 var prevEnd = ordered[k - 1].slot.EndTime;
                 var curStart = ordered[k].slot.StartTime;
                 var gapMinutes = (curStart - prevEnd).TotalMinutes;
-                if (gapMinutes <= BreakDurationMinutes)
+                if (gapMinutes <= _breakDurationMinutes)
                 {
                     current.Add(ordered[k].idx);
                 }

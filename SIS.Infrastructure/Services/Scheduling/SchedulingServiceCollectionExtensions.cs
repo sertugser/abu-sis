@@ -111,12 +111,12 @@ public static class SchedulingServiceCollectionExtensions
         });
         services.AddScoped<IConstraintEncoder>(sp =>
         {
-            // H15 — config-driven max consecutive hours per instructor per day.
-            // Plan 2: diagnostic-only (no cumulative constraint added).
-            // Plan 3 will read same config and add real sliding-window cumulative constraint.
+            // H15 — Plan 5 Task 8b: slot coverage matrix sliding-window cumulative constraint.
+            // Reads max consecutive hours + break duration (between-slots gap threshold) from SystemConfig.
             var config = sp.GetRequiredService<ISystemConfigProvider>();
             var maxHours = config.GetIntAsync("Schedule.MaxConsecutiveHoursPerDay", 4, default).GetAwaiter().GetResult();
-            return new MaxConsecutiveHoursEncoder(maxHours);
+            var breakMinutes = config.GetIntAsync("Schedule.BreakBetweenSlotsMinutes", 5, default).GetAwaiter().GetResult();
+            return new MaxConsecutiveHoursEncoder(maxHours, breakMinutes);
         });
         services.AddScoped<IConstraintEncoder, FaceToFaceSlotEncoder>();
 
