@@ -728,4 +728,141 @@ public class SolverRequestBuilderTests
         req.CurriculumConflictMode.Should().Be("curriculum",
             because: "no SchedulingAlgorithmConfig row → builder falls back to 'curriculum' default");
     }
+
+    // ========================================================================
+    // Plan 6 Task 6 — CohortConflictPairs computed via v1 CohortBuilder reuse
+    // ========================================================================
+
+    /// <summary>
+    /// Helper: 2 sections in same dept, both at semester 3 → year 1 → cohort builder
+    /// produces 1 hard conflict pair (same dept + year, different courses).
+    /// </summary>
+    private static async Task<AppDbContext> SeedScenarioWithTwoCohortCoursesAsync()
+    {
+        var ctx = NewInMemoryContext();
+        ctx.Faculties.Add(new Faculty { Id = 1, Code = "MUH", Name = "M" });
+        ctx.Departments.Add(new Department { Id = 1, Code = "BM", Name = "BM", FacultyId = 1 });
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = 1,
+            Year = 2026,
+            TermType = TermType.Spring,
+            Name = "S26",
+            ShortName = "S26",
+            EnglishName = "S26",
+            ShortEnglishName = "S26",
+            TermStart = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            TermEnd = new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc)
+        });
+        ctx.Courses.AddRange(
+            new Course
+            {
+                Id = 100,
+                Code = "X1",
+                Name = "X1",
+                DepartmentId = 1,
+                TheoryHours = 3,
+                LabHours = 0,
+                TeachingMethod = TeachingMethod.FaceToFace,
+                Ects = 6,
+                NationalCredit = 6
+            },
+            new Course
+            {
+                Id = 200,
+                Code = "X2",
+                Name = "X2",
+                DepartmentId = 1,
+                TheoryHours = 3,
+                LabHours = 0,
+                TeachingMethod = TeachingMethod.FaceToFace,
+                Ects = 6,
+                NationalCredit = 6
+            });
+        ctx.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = 100,
+            DepartmentId = 1,
+            Code = "BM-LIS",
+            Name = "BM Lisans"
+        });
+        ctx.Curricula.Add(new Curriculum
+        {
+            Id = 100,
+            ProgramId = 100,
+            Version = "v1",
+            Name = "BM v1",
+            IsActive = true
+        });
+        ctx.CurriculumCourses.AddRange(
+            new CurriculumCourse { CurriculumId = 100, CourseId = 100, SuggestedSemester = 3 },
+            new CurriculumCourse { CurriculumId = 100, CourseId = 200, SuggestedSemester = 3 });
+        ctx.CourseSections.AddRange(
+            new CourseSection
+            {
+                Id = 1000,
+                CourseId = 100,
+                TermId = 1,
+                SectionNumber = 1,
+                Capacity = 30,
+                Status = CourseSectionStatus.Active,
+                IsFinalized = false
+            },
+            new CourseSection
+            {
+                Id = 1001,
+                CourseId = 200,
+                TermId = 1,
+                SectionNumber = 1,
+                Capacity = 30,
+                Status = CourseSectionStatus.Active,
+                IsFinalized = false
+            });
+        ctx.Classrooms.Add(new Classroom { Id = 9, Name = "C", Capacity = 50, Type = ClassroomType.Lecture });
+        ctx.ClassroomTermAssignments.Add(new ClassroomTermAssignment
+        {
+            Id = 1,
+            TermId = 1,
+            FacultyId = 1,
+            ClassroomId = 9
+        });
+        await ctx.SaveChangesAsync();
+        return ctx;
+    }
+
+    [Fact]
+    public async Task BuildAsync_CohortMode_TwoCohortCourses_ComputesCohortConflictPairs()
+    {
+        // Two sections same dept+year, different courses → cohort builder produces 1 pair.
+        await using var ctx = await SeedScenarioWithTwoCohortCoursesAsync();
+        ctx.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
+        {
+            Key = "Schedule.CurriculumConflictMode",
+            Value = "cohort",
+            Category = "Other",
+            DataType = "string",
+            Description = "test"
+        });
+        await ctx.SaveChangesAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        req.CurriculumConflictMode.Should().Be("cohort");
+        req.CohortConflictPairs.Should().HaveCount(1,
+            because: "2 sections same (dept, year), different courses → 1 cohort pair");
+    }
+
+    [Fact]
+    public async Task BuildAsync_CurriculumMode_LeavesCohortPairsEmpty()
+    {
+        await using var ctx = await SeedMinimalAsync();
+        var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
+
+        var req = await builder.BuildAsync(1, 1, null, null, default);
+
+        req.CurriculumConflictMode.Should().Be("curriculum");
+        req.CohortConflictPairs.Should().BeEmpty(
+            because: "curriculum mode does not invoke CohortBuilder");
+    }
 }

@@ -151,6 +151,33 @@ public sealed class SolverRequestBuilder
             .Select(c => c.Value)
             .FirstOrDefaultAsync(cancellationToken) ?? "curriculum";
 
+        // 9) Plan 6 Task 6 — In cohort mode, materialize CohortConflictPairs via v1 CohortBuilder.
+        //    Other modes leave the list empty (default).
+        IReadOnlyList<(int, int)> cohortConflictPairs = [];
+        if (curriculumConflictMode == "cohort" && sections.Count > 0)
+        {
+            var cohortCourseIds = sections.Select(s => s.CourseId).Distinct().ToList();
+            var (courseSemestersByDept, courseAccessibleDepts) =
+                await LoadCohortMetadataAsync(cohortCourseIds, cancellationToken);
+
+            // Project SectionInput → SectionSnapshot for v1 CohortBuilder reuse.
+            var sectionSnapshots = sections.Select(s => new SectionSnapshot
+            {
+                SectionId = s.Id,
+                SectionNumber = s.SectionNumber,
+                CourseId = s.CourseId,
+                CourseCode = s.CourseCode
+            }).ToList();
+
+            var cohortBuilder = new CohortBuilder();
+            var assignment = cohortBuilder.Build(sectionSnapshots, courseSemestersByDept, courseAccessibleDepts);
+
+            cohortConflictPairs = assignment.ConflictPairs
+                .Select(p => (p.SectionId1, p.SectionId2))
+                .ToList();
+            // AdjacentYearSoftPairs Plan 8'e (S20 soft penalty) ertelendi.
+        }
+
         return new SolverRequest
         {
             TermId = termId,
@@ -163,9 +190,58 @@ public sealed class SolverRequestBuilder
             ConstraintFlags = constraintFlags,
             Corequisites = corequisites,
             DefaultInstructorMaxWeeklyHours = defaultInstructorMaxWeeklyHours,
-            CurriculumConflictMode = curriculumConflictMode
-            // CohortConflictPairs filled in Task 6 — leave default empty for now
+            CurriculumConflictMode = curriculumConflictMode,
+            CohortConflictPairs = cohortConflictPairs
         };
+    }
+
+    /// <summary>
+    /// Plan 6 Task 6 — cohort metadata for v1 CohortBuilder reuse.
+    /// courseSemestersByDept[courseId][deptId] = semester (1-8 typical for 4-year).
+    /// courseAccessibleDepts[courseId] = set of dept ids that share this course in their curriculum.
+    /// Plan 9'da v1 silindiğinde tek source olarak burada kalır.
+    /// </summary>
+    private async Task<(Dictionary<int, Dictionary<int, int>> courseSemestersByDept,
+                        Dictionary<int, HashSet<int>> courseAccessibleDepts)>
+        LoadCohortMetadataAsync(IReadOnlyList<int> courseIds, CancellationToken ct)
+    {
+        var courseSemestersByDept = new Dictionary<int, Dictionary<int, int>>();
+        var courseAccessibleDepts = new Dictionary<int, HashSet<int>>();
+
+        var rows = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Curriculum)
+                .ThenInclude(c => c.Program)
+            .Where(cc => courseIds.Contains(cc.CourseId))
+            .Where(cc => cc.SuggestedSemester > 0)
+            .Select(cc => new
+            {
+                cc.CourseId,
+                DeptId = cc.Curriculum.Program.DepartmentId,
+                cc.SuggestedSemester
+            })
+            .ToListAsync(ct);
+
+        foreach (var row in rows)
+        {
+            if (!courseSemestersByDept.TryGetValue(row.CourseId, out var perDept))
+            {
+                perDept = new Dictionary<int, int>();
+                courseSemestersByDept[row.CourseId] = perDept;
+            }
+            // Same course in multiple curricula of the same dept → keep smallest semester.
+            if (!perDept.ContainsKey(row.DeptId) || row.SuggestedSemester < perDept[row.DeptId])
+                perDept[row.DeptId] = row.SuggestedSemester;
+
+            if (!courseAccessibleDepts.TryGetValue(row.CourseId, out var depts))
+            {
+                depts = new HashSet<int>();
+                courseAccessibleDepts[row.CourseId] = depts;
+            }
+            depts.Add(row.DeptId);
+        }
+
+        return (courseSemestersByDept, courseAccessibleDepts);
     }
 
     private static SectionInput MapSection(
