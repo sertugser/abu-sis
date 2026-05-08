@@ -51,12 +51,19 @@ public class MaxConsecutiveHoursEncoderTests
     }
 
     [Fact]
-    public void Code_IsH16_AndIsHard()
+    public void Code_IsH15_AndIsHard()
     {
         var encoder = new MaxConsecutiveHoursEncoder(maxHoursPerDay: 4);
 
-        encoder.Code.Should().Be("H16");
+        encoder.Code.Should().Be("H15");
         encoder.IsHard.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Code_IsH15_NotH16()
+    {
+        var encoder = new MaxConsecutiveHoursEncoder();
+        encoder.Code.Should().Be("H15");
     }
 
     [Fact]
@@ -65,7 +72,7 @@ public class MaxConsecutiveHoursEncoderTests
         var encoder = new MaxConsecutiveHoursEncoder(maxHoursPerDay: 4);
         var ctx = BuildContext(
             new[] { Section(1, instructorId: 100) },
-            flags: new Dictionary<string, bool> { ["H16"] = false });
+            flags: new Dictionary<string, bool> { ["H15"] = false });
 
         encoder.Encode(ctx);
 
@@ -78,7 +85,7 @@ public class MaxConsecutiveHoursEncoderTests
         var encoder = new MaxConsecutiveHoursEncoder(maxHoursPerDay: 4);
         var ctx = BuildContext(
             new[] { Section(1, instructorId: null) },  // no instructor assigned
-            flags: new Dictionary<string, bool> { ["H16"] = true });
+            flags: new Dictionary<string, bool> { ["H15"] = true });
 
         encoder.Encode(ctx);
 
@@ -96,7 +103,7 @@ public class MaxConsecutiveHoursEncoderTests
                 Section(2, instructorId: 100),
                 Section(3, instructorId: 100)
             },
-            flags: new Dictionary<string, bool> { ["H16"] = true });
+            flags: new Dictionary<string, bool> { ["H15"] = true });
 
         encoder.Encode(ctx);
 
@@ -115,7 +122,7 @@ public class MaxConsecutiveHoursEncoderTests
                 Section(2, instructorId: 200),
                 Section(3, instructorId: 300)
             },
-            flags: new Dictionary<string, bool> { ["H16"] = true });
+            flags: new Dictionary<string, bool> { ["H15"] = true });
 
         encoder.Encode(ctx);
 
@@ -134,7 +141,7 @@ public class MaxConsecutiveHoursEncoderTests
                 Section(3, instructorId: 100),
                 Section(4, instructorId: 200)
             },
-            flags: new Dictionary<string, bool> { ["H16"] = true });
+            flags: new Dictionary<string, bool> { ["H15"] = true });
 
         encoder.Encode(ctx);
 

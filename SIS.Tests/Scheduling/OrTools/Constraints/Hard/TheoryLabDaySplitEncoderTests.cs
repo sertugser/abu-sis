@@ -76,12 +76,19 @@ public class TheoryLabDaySplitEncoderTests
     }
 
     [Fact]
-    public void Code_IsH12_AndIsHard()
+    public void Code_IsH16_AndIsHard()
     {
         var encoder = new TheoryLabDaySplitEncoder(splitThreshold: 4);
 
-        encoder.Code.Should().Be("H12");
+        encoder.Code.Should().Be("H16");
         encoder.IsHard.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Code_IsH16_NotH12()
+    {
+        var encoder = new TheoryLabDaySplitEncoder();
+        encoder.Code.Should().Be("H16");
     }
 
     [Fact]
@@ -90,7 +97,7 @@ public class TheoryLabDaySplitEncoderTests
         var encoder = new TheoryLabDaySplitEncoder(splitThreshold: 4);
         var ctx = BuildContext(
             new[] { Section(1, theory: 3, lab: 2) },
-            flags: new Dictionary<string, bool> { ["H12"] = false });
+            flags: new Dictionary<string, bool> { ["H16"] = false });
 
         encoder.Encode(ctx);
 
@@ -103,7 +110,7 @@ public class TheoryLabDaySplitEncoderTests
         var encoder = new TheoryLabDaySplitEncoder(splitThreshold: 4);
         var ctx = BuildContext(
             new[] { Section(1, theory: 2, lab: 2) },  // total 4 = threshold (NOT greater)
-            flags: new Dictionary<string, bool> { ["H12"] = true });
+            flags: new Dictionary<string, bool> { ["H16"] = true });
 
         encoder.Encode(ctx);
 
@@ -116,7 +123,7 @@ public class TheoryLabDaySplitEncoderTests
         var encoder = new TheoryLabDaySplitEncoder(splitThreshold: 4);
         var ctx = BuildContext(
             new[] { Section(1, theory: 3, lab: 2) },  // total 5 > 4
-            flags: new Dictionary<string, bool> { ["H12"] = true });
+            flags: new Dictionary<string, bool> { ["H16"] = true });
 
         encoder.Encode(ctx);
 
@@ -129,7 +136,7 @@ public class TheoryLabDaySplitEncoderTests
         var encoder = new TheoryLabDaySplitEncoder(splitThreshold: 4);
         var ctx = BuildContext(
             new[] { Section(1, theory: 5, lab: 0) },
-            flags: new Dictionary<string, bool> { ["H12"] = true });
+            flags: new Dictionary<string, bool> { ["H16"] = true });
 
         encoder.Encode(ctx);
 
@@ -143,7 +150,7 @@ public class TheoryLabDaySplitEncoderTests
         var encoder = new TheoryLabDaySplitEncoder(splitThreshold: 4);
         var ctx = BuildContext(
             new[] { Section(1, theory: 0, lab: 5) },
-            flags: new Dictionary<string, bool> { ["H12"] = true });
+            flags: new Dictionary<string, bool> { ["H16"] = true });
 
         encoder.Encode(ctx);
 
@@ -164,7 +171,7 @@ public class TheoryLabDaySplitEncoderTests
                 Section(4, theory: 1, lab: 1),  // 2 < 4 → 0
                 Section(5, theory: 5, lab: 0)   // no lab → 0
             },
-            flags: new Dictionary<string, bool> { ["H12"] = true });
+            flags: new Dictionary<string, bool> { ["H16"] = true });
 
         encoder.Encode(ctx);
 

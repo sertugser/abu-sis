@@ -3,7 +3,7 @@ using SIS.Application.Scheduling.Solver;
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// H12 — Theory-Lab Day Split. Section'ın teori+lab toplam saati eşiği aşıyorsa,
+/// H16 — Theory-Lab Day Split. Section'ın teori+lab toplam saati eşiği aşıyorsa,
 /// teori ve lab farklı günlerde olmalı (öğrenci/hoca yorulmasın).
 ///
 /// Eşik (splitThreshold) SystemConfig.Schedule.TheoryLabSplitThreshold'tan okunur (default 4).
@@ -16,7 +16,7 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 /// </summary>
 public sealed class TheoryLabDaySplitEncoder : IConstraintEncoder
 {
-    public string Code => "H12";
+    public string Code => "H16";
     public bool IsHard => true;
 
     private readonly int _splitThreshold;

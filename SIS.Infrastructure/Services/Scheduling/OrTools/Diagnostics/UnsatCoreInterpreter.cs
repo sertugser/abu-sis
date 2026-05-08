@@ -22,9 +22,9 @@ public sealed class UnsatCoreInterpreter
         ["H8"] = "Aynı dersin farklı şubeleri çakışıyor",
         ["H10"] = "Fakülte derslik kısıtlaması",
         ["H11"] = "Eşkoşul",
-        ["H12"] = "Teori-lab gün ayrımı",
         ["H13"] = "Öğle arası",
-        ["H16"] = "Maksimum ardışık saat",
+        ["H15"] = "Maksimum ardışık saat",
+        ["H16"] = "Teori-lab gün ayrımı",
         ["H17"] = "Yüz-yüze ders online slot'a düşüyor"
     };
 

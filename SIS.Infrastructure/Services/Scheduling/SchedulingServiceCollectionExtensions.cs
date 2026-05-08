@@ -92,7 +92,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, CorequisiteEncoder>();
         services.AddScoped<IConstraintEncoder>(sp =>
         {
-            // H12 — config-driven splitThreshold (sync DI factory: heavy 5min cache → DB call rare).
+            // H16 — config-driven splitThreshold (sync DI factory: heavy 5min cache → DB call rare).
             var config = sp.GetRequiredService<ISystemConfigProvider>();
             var threshold = config.GetIntAsync("Schedule.TheoryLabSplitThreshold", 4, default).GetAwaiter().GetResult();
             return new TheoryLabDaySplitEncoder(threshold);
@@ -111,7 +111,7 @@ public static class SchedulingServiceCollectionExtensions
         });
         services.AddScoped<IConstraintEncoder>(sp =>
         {
-            // H16 — config-driven max consecutive hours per instructor per day.
+            // H15 — config-driven max consecutive hours per instructor per day.
             // Plan 2: diagnostic-only (no cumulative constraint added).
             // Plan 3 will read same config and add real sliding-window cumulative constraint.
             var config = sp.GetRequiredService<ISystemConfigProvider>();

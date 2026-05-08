@@ -1,27 +1,27 @@
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// H16 — Maximum Consecutive Hours per Instructor per Day.
+/// H15 — Maximum Consecutive Hours per Instructor per Day.
 /// Hoca aynı gün içinde aralıksız <see cref="_maxHoursPerDay"/> saatten fazla ders veremez.
 ///
 /// PLAN 2 SCOPE: Diagnostic-only — registers per-instructor assumption literals so UNSAT core
-/// can attribute infeasibilities to H16. Does NOT add actual cumulative/sliding-window
+/// can attribute infeasibilities to H15. Does NOT add actual cumulative/sliding-window
 /// constraints to the CP-SAT model.
 ///
 /// PLAN 3 SCOPE: Real cumulative implementation. Requires:
-/// - Day-of-slot mapping (similar to H12 AddElement pattern)
+/// - Day-of-slot mapping (similar to H16 AddElement pattern)
 /// - Per-(instructor, day) sliding window analysis
 /// - Performance benchmark (sliding-window constraints can blow up model size)
 ///
 /// Until Plan 3 lands, v1 legacy <c>MaxConsecutiveHoursEvaluator</c> continues to enforce this
-/// constraint when v1 engine is selected. v2 engine produces schedules that may violate H16
+/// constraint when v1 engine is selected. v2 engine produces schedules that may violate H15
 /// — acceptable for Plan 2 PoC stage.
 ///
 /// <c>_maxHoursPerDay</c> SystemConfig.Schedule.MaxConsecutiveHoursPerDay'tan okunur (default 4).
 /// </summary>
 public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
 {
-    public string Code => "H16";
+    public string Code => "H15";
     public bool IsHard => true;
 
     private readonly int _maxHoursPerDay;
