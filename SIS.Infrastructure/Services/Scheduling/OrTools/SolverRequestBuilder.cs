@@ -285,6 +285,18 @@ public sealed class SolverRequestBuilder
         var distDiscWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistDiscouragedWeight", 50, ct);
         var distStrongWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistStronglyDiscouragedWeight", 200, ct);
 
+        // Plan 10 Phase 5 — Toggleable hard kuralların Soft tarafı için weight'ler.
+        // Admin UI weight slider bu key'lere yazıyor (ConstraintParameterMapping.ResolveWeightKey).
+        // Default'lar SoftThresholds field default'larıyla aynı (geriye uyum).
+        var h4Weight = await _systemConfigProvider.GetIntAsync("Schedule.H4Weight", 5, ct);
+        var h5Weight = await _systemConfigProvider.GetIntAsync("Schedule.H5Weight", 10, ct);
+        var h8Weight = await _systemConfigProvider.GetIntAsync("Schedule.H8Weight", 8, ct);
+        var h10Weight = await _systemConfigProvider.GetIntAsync("Schedule.H10Weight", 5, ct);
+        var h15Weight = await _systemConfigProvider.GetIntAsync("Schedule.H15Weight", 6, ct);
+        var h16Weight = await _systemConfigProvider.GetIntAsync("Schedule.H16Weight", 5, ct);
+        var hwlWeight = await _systemConfigProvider.GetIntAsync("Schedule.HWLWeight", 8, ct);
+        var hdoWeight = await _systemConfigProvider.GetIntAsync("Schedule.HDOWeight", 7, ct);
+
         return new SoftThresholds
         {
             S1MinOccupancyPercent = s1MinOcc,
@@ -307,7 +319,15 @@ public sealed class SolverRequestBuilder
             S20PenaltyPerPair = s20Penalty,
             S20Weight = s20Weight,
             DistDiscouragedWeight = distDiscWeight,
-            DistStronglyDiscouragedWeight = distStrongWeight
+            DistStronglyDiscouragedWeight = distStrongWeight,
+            H4Weight = h4Weight,
+            H5Weight = h5Weight,
+            H8Weight = h8Weight,
+            H10Weight = h10Weight,
+            H15Weight = h15Weight,
+            H16Weight = h16Weight,
+            HWLWeight = hwlWeight,
+            HDOWeight = hdoWeight,
         };
     }
 

@@ -340,10 +340,20 @@ public class ConstraintController : ControllerBase
         if (def == null)
             return NotFound(new { error = "Constraint tanimi bulunamadi." });
 
+        // Plan 10 — Weight'i hem ConstraintDefinitions.Weight (UI display) hem
+        // SystemConfigs.Schedule.<Code>Weight'a (encoder source of truth) yazıyoruz.
+        // Encoder SystemConfigs'ten okur; ConstraintDefinitions.Weight kullanılmaz.
         def.Weight = request.Weight;
         def.UpdatedAt = DateTime.UtcNow;
+
+        var weightKey = ConstraintParameterMapping.ResolveWeightKey(def.Code);
+        if (weightKey != null)
+        {
+            await UpsertSystemConfigAsync(weightKey, request.Weight.ToString(), "int", ct);
+        }
+
         await _context.SaveChangesAsync(ct);
 
-        return Ok(new { def.Id, def.Weight });
+        return Ok(new { def.Id, def.Weight, SystemConfigKey = weightKey });
     }
 }

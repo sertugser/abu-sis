@@ -119,4 +119,39 @@ public static class ConstraintParameterMapping
     {
         return CategoryMap.TryGetValue(code, out var cap) ? cap : CategoryCapability.HardOnly;
     }
+
+    /// <summary>
+    /// Plan 10 — Constraint Code → SystemConfigs Weight key. Admin UI weight slider
+    /// (ConstraintController.UpdateWeight) bu key'e UPSERT yapıyor; SolverRequestBuilder
+    /// SoftThresholds field'larını bu key'lerden okuyor. ConstraintDefinitions.Weight
+    /// kolonu UI display için güncellenmeye devam eder ama encoder bunu okumaz.
+    /// </summary>
+    private static readonly Dictionary<string, string> WeightKeyMap = new()
+    {
+        // ── Toggleable kuralların Soft tarafı için weight ──
+        ["H4"] = "Schedule.H4Weight",
+        ["H5"] = "Schedule.H5Weight",
+        ["H8"] = "Schedule.H8Weight",
+        ["H10"] = "Schedule.H10Weight",
+        ["H13"] = "Schedule.S5Weight",      // H13 Soft = legacy S5Weight (geriye uyum)
+        ["H15"] = "Schedule.H15Weight",
+        ["H16"] = "Schedule.H16Weight",
+        ["H-WL"] = "Schedule.HWLWeight",
+        ["H-DL"] = "Schedule.S2Weight",     // H-DL Soft = legacy S2Weight (geriye uyum)
+        ["H-DO"] = "Schedule.HDOWeight",
+
+        // ── Doğası Soft kurallar için weight ──
+        ["S1"] = "Schedule.S1Weight",
+        ["S3"] = "Schedule.S3Weight",
+        ["S4"] = "Schedule.S4Weight",
+        ["S7"] = "Schedule.S7Weight",
+        ["S8"] = "Schedule.S8Weight",
+        ["S12"] = "Schedule.S12Weight",
+        ["S20"] = "Schedule.S20Weight",
+    };
+
+    public static string? ResolveWeightKey(string constraintCode)
+    {
+        return WeightKeyMap.TryGetValue(constraintCode, out var key) ? key : null;
+    }
 }
