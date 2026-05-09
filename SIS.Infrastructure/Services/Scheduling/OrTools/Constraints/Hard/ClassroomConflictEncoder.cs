@@ -60,31 +60,15 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
             // Lab component: create optional interval per (block, group, classroom).
             // Plan 4 Task 5 paralel lab support × Plan 7b Task 8 multi-interval lab time-split:
             //   - Single-block (LabHours ≤ MaxLabBlockHours): GetLabIntervals returns 1-elem list,
-            //     blockSizes = [LabHours]; loop runs once × LabGroupCount × Classrooms — semantically
-            //     identical to the previous Plan 4 path (uses CreateOptionalRoomIntervalForLabBlock
-            //     instead of CreateOptionalRoomIntervalForGroup but produces the same constraint shape).
+            //     blockSizes = [LabHours]; loop runs once × LabGroupCount × Classrooms.
             //   - Multi-block × LabGroupCount=1: each block gets its own per-classroom interval.
-            //   - Multi-block × LabGroupCount>1: NotSupported (Plan 9).
+            //   - Multi-block × LabGroupCount>1: Plan 10 Task 1 — full per (block, group, classroom)
+            //     iteration supported. CreateOptionalRoomIntervalForLabBlock + AddAllDifferent
+            //     (CreateRoomVariable Lab branch) zaten composable; eski Plan 9 Issue 2 guard kalktı.
             if (section.LabHours > 0)
             {
                 var labRooms = ctx.Variables.GetLabRooms(section.Id);
                 var labIntervals = ctx.Variables.GetLabIntervals(section.Id);
-
-                // Plan 9 Issue 2 — Multi-interval × parallel-rooms graceful skip.
-                // Real DB Term 6 (BM 102, 1889 sections) used to crash the entire solve via
-                // NotSupportedException → HTTP 500. We now record the section as unsupported
-                // and skip the lab branch; SolutionMapper surfaces it through Failures while
-                // the remaining sections still schedule. Mitigation guidance is identical to
-                // the v1 message so admins know how to unblock.
-                if (labIntervals.Count > 1 && labRooms.Count > 1)
-                {
-                    ctx.Variables.MarkUnsupported(section.Id,
-                        $"multi-interval lab ({labIntervals.Count} blocks, LabHours={section.LabHours}) × " +
-                        $"parallel rooms ({labRooms.Count} groups) not supported. " +
-                        "Mitigation: raise Schedule.MaxLabBlockHours so LabHours ≤ MaxLabBlockHours, " +
-                        "or split the section so capacity fits a single lab room.");
-                    continue;
-                }
 
                 var blockSizes = LabBlockSplitter.SplitLabIntoBlocks(
                     section.LabHours, ctx.Request.MaxLabBlockHours);

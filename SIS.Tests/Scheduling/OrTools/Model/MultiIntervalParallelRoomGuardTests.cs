@@ -14,24 +14,24 @@ using Xunit;
 namespace SIS.Tests.Scheduling.OrTools.Model;
 
 /// <summary>
-/// Plan 9 Issue 2 — Multi-interval × parallel-rooms graceful skip.
+/// Plan 10 Task 1 — Multi-interval × parallel-rooms encoder support.
 ///
-/// Plan 7b Task 7/8 introduced two NotSupportedException guards in DecisionVariables /
-/// ClassroomConflictEncoder for the combination
+/// Plan 7b Task 7/8 introduced NotSupportedException guards for
 ///   LabHours &gt; MaxLabBlockHours (multi-interval split) × LabGroupCount &gt; 1 (parallel rooms).
-/// Real DB Term 6 contained at least one such section (BM 102) which made the entire solve
-/// crash with HTTP 500. Plan 9 Issue 2 replaces those throws with a graceful skip:
-/// the section ends up in <see cref="SolverResult.Failures"/> with a mitigation message,
-/// and the rest of the schedule still solves.
+/// Plan 9 Issue 2 replaced the throws with graceful skip + Failure entry.
+/// Plan 10 Task 1 removes the encoder guard entirely — the helper composition
+/// (CreateOptionalRoomIntervalForLabBlock + AddAllDifferent in CreateRoomVariable Lab branch)
+/// already supports the combination. Section schedules feasibly, no Failure expected.
 /// </summary>
 public class MultiIntervalParallelRoomGuardTests
 {
     [Fact]
-    public async Task MultiBlock_ParallelRoom_Section_AppearsInFailures_NotException()
+    public async Task MultiBlock_ParallelRoom_Section_NowSchedulesFeasibly()
     {
-        // Arrange — a single section that triggers the multi-interval × parallel-rooms combo:
+        // Arrange — a single section that previously triggered the multi-interval × parallel-rooms guard:
         //   LabHours=4, MaxLabBlockHours=2 → 2-block split.
         //   Capacity=60, lab capacity=30 → LabGroupCount=2 (parallel rooms).
+        // Plan 10 Task 1: artık feasibly schedule olmalı — Failure listesinde OLMAMALI.
         var section = new SectionInput
         {
             Id = 1889,
@@ -66,11 +66,11 @@ public class MultiIntervalParallelRoomGuardTests
         // Act
         var act = async () => await engine.SolveAsync(request, CancellationToken.None);
 
-        // Assert — no exception, instead a Failure entry with the mitigation hint.
+        // Assert — no exception, section feasibly scheduled (NOT in Failures).
         var result = await act.Should().NotThrowAsync();
-        result.Subject.Failures.Should().Contain(f => f.SectionId == 1889);
-        var failure = result.Subject.Failures.First(f => f.SectionId == 1889);
-        failure.Reason.Should().Contain("multi-interval lab");
+        result.Subject.Failures.Should().NotContain(f => f.SectionId == 1889,
+            because: "Plan 10 Task 1 — multi-interval × parallel-rooms artık supported");
+        result.Subject.Status.Should().BeOneOf(SolverStatus.Feasible, SolverStatus.Optimal);
     }
 
     private static IReadOnlyList<TimeSlotInput> BuildFiveDayFourSlotGrid()
