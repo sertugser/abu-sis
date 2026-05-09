@@ -220,4 +220,49 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
 
         return new WhatIfResultDto(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList(), warnings, CalculateQualityScore(warnings));
     }
+
+    public static WhatIfResultDto RecalculateEvents(
+        IReadOnlyList<GeneratedCalendarEventDto> currentEvents,
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        string draftEventId,
+        DateTime startDate,
+        DateTime? endDate,
+        bool? propagateChanges = null)
+    {
+        var events = currentEvents.ToList();
+        var target = events.FirstOrDefault(e => e.DraftEventId == draftEventId)
+            ?? throw new KeyNotFoundException($"Draft event not found: {draftEventId}");
+        if (target.IsHoliday)
+            throw new InvalidOperationException("Resmi tatil ve bloklayici ozel gunler icin tarih degisikligi yapilamaz.");
+
+        var newStart = EnsureUtcDate(startDate);
+        var newEnd = EnsureUtcDate(endDate ?? startDate);
+
+        events = events.Select(e => e.DraftEventId == draftEventId
+                ? e with { StartDate = newStart, EndDate = newStart.Date == newEnd.Date ? null : newEnd }
+                : e)
+            .ToList();
+
+        var shouldPropagate = IsCriticalEvent(target.EventType) || propagateChanges != false;
+        if (shouldPropagate)
+            events = Propagate(events, draftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
+
+        events = NormalizeCalendarEvents(events, holidays);
+        events = AlignClassesEndToWeekday(events);
+
+        var warnings = new List<CalendarWarningDto>
+        {
+            new(
+                "WHAT_IF",
+                "Info",
+                shouldPropagate
+                    ? "Bu sonuc zincirleme kaydirma dahil hesaplandi."
+                    : "Bu sonuc sadece secili etkinlik degistirilerek hesaplandi.",
+                draftEventId)
+        };
+        ValidateChronology(events, warnings);
+        warnings.AddRange(ValidateRegulationRules(events, holidays));
+
+        return new WhatIfResultDto(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList(), warnings, CalculateQualityScore(warnings));
+    }
 }

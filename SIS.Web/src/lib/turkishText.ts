@@ -69,21 +69,89 @@ const TURKISH_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bBayrami\b/g, 'Bayram\u0131'],
 ];
 
+const WINDOWS_1252_REVERSE_BYTES = new Map<string, number>([
+  ['€', 0x80],
+  ['‚', 0x82],
+  ['ƒ', 0x83],
+  ['„', 0x84],
+  ['…', 0x85],
+  ['†', 0x86],
+  ['‡', 0x87],
+  ['ˆ', 0x88],
+  ['‰', 0x89],
+  ['Š', 0x8a],
+  ['‹', 0x8b],
+  ['Œ', 0x8c],
+  ['Ž', 0x8e],
+  ['‘', 0x91],
+  ['’', 0x92],
+  ['“', 0x93],
+  ['”', 0x94],
+  ['•', 0x95],
+  ['–', 0x96],
+  ['—', 0x97],
+  ['˜', 0x98],
+  ['™', 0x99],
+  ['š', 0x9a],
+  ['›', 0x9b],
+  ['œ', 0x9c],
+  ['ž', 0x9e],
+  ['Ÿ', 0x9f],
+]);
+
+const TURKISH_MOJIBAKE_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/Ã„Å¾/g, 'Ğ'],
+  [/Ã„Å¸/g, 'ğ'],
+  [/Ã„Â°/g, 'İ'],
+  [/Ã„Â±/g, 'ı'],
+  [/Ã…Å¾/g, 'Ş'],
+  [/Ã…Å¸/g, 'ş'],
+  [/Ãƒâ€¡/g, 'Ç'],
+  [/ÃƒÂ‡/g, 'Ç'],
+  [/ÃƒÂ§/g, 'ç'],
+  [/Ãƒâ€“/g, 'Ö'],
+  [/ÃƒÂ–/g, 'Ö'],
+  [/ÃƒÂ¶/g, 'ö'],
+  [/ÃƒÅ“/g, 'Ü'],
+  [/ÃƒÂœ/g, 'Ü'],
+  [/ÃƒÂ¼/g, 'ü'],
+  [/Äž/g, 'Ğ'],
+  [/ÄŸ/g, 'ğ'],
+  [/Ä°/g, 'İ'],
+  [/Ä±/g, 'ı'],
+  [/Åž/g, 'Ş'],
+  [/ÅŸ/g, 'ş'],
+  [/Ã‡/g, 'Ç'],
+  [/Ã§/g, 'ç'],
+  [/Ã–/g, 'Ö'],
+  [/Ã¶/g, 'ö'],
+  [/Ãœ/g, 'Ü'],
+  [/Ã¼/g, 'ü'],
+];
+
+function replaceTurkishMojibake(value: string) {
+  return TURKISH_MOJIBAKE_REPLACEMENTS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value);
+}
+
 function decodeUtf8Mojibake(value: string) {
   if (!/[ÃÄÅÂ]/.test(value))
     return value;
 
   try {
     const bytes = Uint8Array.from(Array.from(value), char => {
+      const windows1252Byte = WINDOWS_1252_REVERSE_BYTES.get(char);
+      if (windows1252Byte !== undefined)
+        return windows1252Byte;
+
       const code = char.charCodeAt(0);
       if (code > 0xff)
         throw new Error('Non-Latin-1 character encountered');
       return code;
     });
 
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return replaceTurkishMojibake(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch {
-    return value;
+    return replaceTurkishMojibake(value);
   }
 }
 

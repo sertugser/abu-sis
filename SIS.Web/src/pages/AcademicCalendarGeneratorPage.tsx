@@ -151,6 +151,16 @@ const CRITICAL_EVENT_TYPES = new Set([
   'SummerSchoolExam',
   'SummerSchoolGradePublication',
 ]);
+const MONDAY_START_EVENT_TYPES = new Set([
+  'ClassesStart',
+  'CourseRegistration',
+  'AddDrop',
+  'MidtermExam',
+  'FinalExam',
+  'MakeupExam',
+  'PrepSchoolExam',
+  'SummerSchoolExam',
+]);
 
 function defaultAcademicYear() {
   const now = new Date();
@@ -372,10 +382,11 @@ function getDraftId(calendar: CalendarView | null, selectedDraftId: number | nul
 }
 
 function getErrorMessage(error: unknown) {
-  const fallback = 'Islem tamamlanamadi.';
+  const fallback = 'İşlem tamamlanamadı.';
   if (!error || typeof error !== 'object') return fallback;
   const maybe = error as { response?: { data?: { message?: string; error?: string } }; message?: string };
-  return maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? fallback;
+  const message = maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? fallback;
+  return displayTurkishText(message);
 }
 
 function isCriticalEvent(ev: GeneratedCalendarEventDto | null) {
@@ -390,6 +401,10 @@ function isExamDraftEvent(ev: GeneratedCalendarEventDto) {
   return calendarEventCategory(ev.eventType, ev.title, ev.templateItemKey) === 'exam';
 }
 
+function mustStartOnMonday(eventType: string) {
+  return MONDAY_START_EVENT_TYPES.has(eventType);
+}
+
 function validateDraftEventDateEdit(ev: GeneratedCalendarEventDto, startDate: string, endDate: string) {
   if (!startDate)
     return 'Baslangic tarihi secilmelidir.';
@@ -397,8 +412,11 @@ function validateDraftEventDateEdit(ev: GeneratedCalendarEventDto, startDate: st
   if (endDate < startDate)
     return 'Bitis tarihi baslangic tarihinden once olamaz.';
 
+  const parsedStart = parseUtcDisplayDate(startDate);
+  if (mustStartOnMonday(ev.eventType) && parsedStart?.getUTCDay() !== 1)
+    return 'Bu etkinlik Pazartesi günü başlamalıdır.';
+
   if (isExamDraftEvent(ev)) {
-    const parsedStart = parseUtcDisplayDate(startDate);
     const parsedEnd = parseUtcDisplayDate(endDate);
     if ((parsedStart && isWeekend(parsedStart)) || (parsedEnd && isWeekend(parsedEnd)))
       return 'Sinav tarihleri hafta sonuna denk gelemez. Lutfen sadece hafta ici gunleri secin.';

@@ -1,10 +1,14 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AcademicCalendar.DTOs;
 using SIS.Application.AcademicCalendar.Services;
+using SIS.Application.CalendarGenerator.DTOs;
 using SIS.Application.Common.Time;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services.CalendarGenerator;
 
 namespace SIS.Infrastructure.Services;
 
@@ -136,17 +140,23 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (startDate < window.Start || endDate > window.End)
             throw new InvalidOperationException("Etkinlik yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
 
+        if (RequiresMondayStart(calendarEvent.EventType) && !StartsOnMonday(startDate))
+            throw new InvalidOperationException("Bu etkinlik Pazartesi günü başlamalıdır.");
+
         if (RequiresWeekdayOnly(calendarEvent.EventType) && StartsOnWeekend(startDate))
             throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
 
-        EnsureNoBlockingOverlap(term.CalendarEvents, calendarEvent.Id, startDate, endDate);
+        var recalculation = CalendarGeneratorService.RecalculateEvents(
+            term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList(),
+            BuildResolvedHolidays(term.CalendarEvents),
+            calendarEvent.Id.ToString(CultureInfo.InvariantCulture),
+            startDate,
+            endDate,
+            dto.PropagateChanges);
 
-        calendarEvent.StartDate = startDate;
-        calendarEvent.EndDate = startDate == endDate ? null : endDate;
-
-        var changedEventIds = new HashSet<int> { calendarEvent.Id };
-        if (dto.PropagateChanges != false)
-            ApplyDependentEventRules(term, calendarEvent, changedEventIds);
+        ThrowIfGeneratorRejected(recalculation);
+        var changedEventIds = ApplyRecalculatedEvents(term, recalculation.Events);
+        changedEventIds.Add(calendarEvent.Id);
 
         ValidateCalendarEventGraph(term, changedEventIds);
 
@@ -328,11 +338,124 @@ public class AcademicCalendarService : IAcademicCalendarService
         calendarEvent.BlocksAcademicEvents
         || calendarEvent.EventType is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday or CalendarEventType.ImportantDay;
 
+    private static GeneratedCalendarEventDto ToGeneratedEvent(AcademicTerm term, TermCalendarEvent calendarEvent) =>
+        new(
+            calendarEvent.Id.ToString(CultureInfo.InvariantCulture),
+            SemesterFromTerm(term),
+            term.Id.ToString(CultureInfo.InvariantCulture),
+            calendarEvent.EventType,
+            CalendarEventTypeLabels.GetLabel(calendarEvent.EventType),
+            calendarEvent.Title,
+            EnsureUtcDate(calendarEvent.StartDate),
+            calendarEvent.EndDate.HasValue ? EnsureUtcDate(calendarEvent.EndDate.Value) : null,
+            string.IsNullOrWhiteSpace(calendarEvent.ChainCode) ? "PUBLISHED" : calendarEvent.ChainCode,
+            calendarEvent.TemplateItemKey,
+            calendarEvent.IsPublic,
+            IsLockedCalendarEvent(calendarEvent),
+            calendarEvent.BlocksAcademicEvents,
+            false,
+            calendarEvent.Note);
+
+    private static SemesterType SemesterFromTerm(AcademicTerm term) =>
+        term.TermType switch
+        {
+            TermType.Spring or TermType.SpringResit or TermType.SpringOther => SemesterType.Spring,
+            TermType.Summer or TermType.SummerResit or TermType.SummerOther => SemesterType.Summer,
+            _ => SemesterType.Fall
+        };
+
+    private static IReadOnlyList<ResolvedHolidayDto> BuildResolvedHolidays(IEnumerable<TermCalendarEvent> events) =>
+        events
+            .Where(IsLockedCalendarEvent)
+            .Select(ToResolvedHoliday)
+            .ToList();
+
+    private static ResolvedHolidayDto ToResolvedHoliday(TermCalendarEvent calendarEvent)
+    {
+        var startDate = EnsureUtcDate(calendarEvent.StartDate);
+        var endDate = EnsureUtcDate(calendarEvent.EndDate ?? calendarEvent.StartDate);
+        var blocksAcademicEvents = calendarEvent.BlocksAcademicEvents
+            || calendarEvent.EventType is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday;
+
+        return new ResolvedHolidayDto(
+            calendarEvent.Title,
+            calendarEvent.Title,
+            HolidayTypeFromEvent(calendarEvent.EventType),
+            startDate,
+            endDate,
+            (decimal)((endDate.Date - startDate.Date).TotalDays + 1),
+            calendarEvent.EventType is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday,
+            blocksAcademicEvents,
+            false,
+            "AcademicCalendar");
+    }
+
+    private static HolidayType HolidayTypeFromEvent(CalendarEventType eventType) =>
+        eventType switch
+        {
+            CalendarEventType.ReligiousHoliday => HolidayType.HijriCalculated,
+            CalendarEventType.ImportantDay => HolidayType.ImportantDay,
+            _ => HolidayType.Fixed
+        };
+
+    private static void ThrowIfGeneratorRejected(WhatIfResultDto recalculation)
+    {
+        if (recalculation.Events.Any(e => e.IsFailed))
+            throw new InvalidOperationException("Takvim kurallari saglanamadigi icin bazi etkinlikler yerlestirilemedi.");
+
+        var blockingWarnings = recalculation.Warnings
+            .Where(w => string.Equals(w.Severity, "Error", StringComparison.OrdinalIgnoreCase))
+            .Select(w => w.Message)
+            .Distinct()
+            .ToList();
+        if (blockingWarnings.Count > 0)
+            throw new InvalidOperationException("Takvim kurallari saglanamadi: " + string.Join(" | ", blockingWarnings));
+    }
+
+    private static HashSet<int> ApplyRecalculatedEvents(AcademicTerm term, IReadOnlyList<GeneratedCalendarEventDto> events)
+    {
+        var changedEventIds = new HashSet<int>();
+        var byId = term.CalendarEvents.ToDictionary(e => e.Id);
+
+        foreach (var generatedEvent in events)
+        {
+            if (!int.TryParse(generatedEvent.DraftEventId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var eventId))
+                continue;
+            if (!byId.TryGetValue(eventId, out var calendarEvent))
+                continue;
+
+            var nextStartDate = EnsureUtcDate(generatedEvent.StartDate);
+            var nextEndDate = generatedEvent.EndDate.HasValue ? EnsureUtcDate(generatedEvent.EndDate.Value) : (DateTime?)null;
+            if (calendarEvent.StartDate.Date == nextStartDate.Date
+                && (calendarEvent.EndDate?.Date) == (nextEndDate?.Date))
+                continue;
+
+            calendarEvent.StartDate = nextStartDate;
+            calendarEvent.EndDate = nextEndDate;
+            changedEventIds.Add(calendarEvent.Id);
+        }
+
+        return changedEventIds;
+    }
+
+    private static bool CanOverlapBlockingHoliday(CalendarEventType eventType) =>
+        eventType is CalendarEventType.CourseRegistration or CalendarEventType.AddDrop;
+
     private static bool RequiresWeekdayOnly(CalendarEventType eventType) =>
         eventType is CalendarEventType.MidtermExam
             or CalendarEventType.FinalExam
             or CalendarEventType.MakeupExam
             or CalendarEventType.ExcuseExam
+            or CalendarEventType.PrepSchoolExam
+            or CalendarEventType.SummerSchoolExam;
+
+    private static bool RequiresMondayStart(CalendarEventType eventType) =>
+        eventType is CalendarEventType.ClassesStart
+            or CalendarEventType.CourseRegistration
+            or CalendarEventType.AddDrop
+            or CalendarEventType.MidtermExam
+            or CalendarEventType.FinalExam
+            or CalendarEventType.MakeupExam
             or CalendarEventType.PrepSchoolExam
             or CalendarEventType.SummerSchoolExam;
 
@@ -490,10 +613,14 @@ public class AcademicCalendarService : IAcademicCalendarService
             if (startDate < window.Start || endDate > window.End)
                 throw new InvalidOperationException($"{calendarEvent.Title} yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
 
+            if (RequiresMondayStart(calendarEvent.EventType) && !StartsOnMonday(startDate))
+                throw new InvalidOperationException($"{calendarEvent.Title} Pazartesi günü başlamalıdır.");
+
             if (RequiresWeekdayOnly(calendarEvent.EventType) && StartsOnWeekend(startDate))
                 throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
 
-            EnsureNoBlockingOverlap(term.CalendarEvents, calendarEvent.Id, startDate, endDate);
+            if (!CanOverlapBlockingHoliday(calendarEvent.EventType))
+                EnsureNoBlockingOverlap(term.CalendarEvents, calendarEvent.Id, startDate, endDate);
         }
 
         EnsureEventOrder(FindEventByKeyOrType(term, "classes_start", CalendarEventType.ClassesStart),
@@ -615,6 +742,9 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     private static bool StartsOnWeekend(DateTime date) =>
         date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+    private static bool StartsOnMonday(DateTime date) =>
+        date.DayOfWeek == DayOfWeek.Monday;
 
     private static bool IsBusinessDay(DateTime date, IEnumerable<TermCalendarEvent> events)
     {

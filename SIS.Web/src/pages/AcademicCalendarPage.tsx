@@ -20,6 +20,16 @@ import {
 
 const NON_DRAGGABLE_EVENT_TYPES = new Set(['NationalHoliday', 'ReligiousHoliday', 'ImportantDay']);
 const EXAM_EVENT_TYPES = new Set(['MidtermExam', 'FinalExam', 'MakeupExam', 'ExcuseExam', 'PrepSchoolExam', 'SummerSchoolExam']);
+const MONDAY_START_EVENT_TYPES = new Set([
+  'ClassesStart',
+  'CourseRegistration',
+  'AddDrop',
+  'MidtermExam',
+  'FinalExam',
+  'MakeupExam',
+  'PrepSchoolExam',
+  'SummerSchoolExam',
+]);
 const EDIT_CALENDAR_PERMISSION_KEYS = [
   'menu.akademik-takvim-olusturma.edit',
   'menu.akademik-takvim-olusturma.generate',
@@ -103,16 +113,8 @@ function isWeekendDate(value: string) {
   return day === 0 || day === 6;
 }
 
-function rangesOverlap(leftStart: string, leftEnd: string, rightStart: string, rightEnd: string) {
-  return leftStart <= rightEnd && rightStart <= leftEnd;
-}
-
-function eventEndDate(event: TermCalendarEventDto) {
-  return isoToDateStr(event.endDate) ?? isoToDateStr(event.startDate) ?? '';
-}
-
-function eventStartDate(event: TermCalendarEventDto) {
-  return isoToDateStr(event.startDate) ?? '';
+function isMondayDate(value: string) {
+  return parseDateValue(value).getUTCDay() === 1;
 }
 
 function calendarEditWindow(calendar: StudentAcademicCalendarDto) {
@@ -120,25 +122,6 @@ function calendarEditWindow(calendar: StudentAcademicCalendarDto) {
     start: `${calendar.year}-06-01`,
     end: `${calendar.year + 1}-09-30`,
   };
-}
-
-function countBusinessDaysAfter(fromExclusive: string, toInclusive: string, calendar: StudentAcademicCalendarDto) {
-  let count = 0;
-  const cursor = parseDateValue(fromExclusive);
-  const end = parseDateValue(toInclusive);
-  while (cursor < end) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-    const value = cursor.toISOString().substring(0, 10);
-    if (isWeekendDate(value))
-      continue;
-
-    const isBlocked = calendar.events.some(event =>
-      event.blocksAcademicEvents && rangesOverlap(value, value, eventStartDate(event), eventEndDate(event)));
-    if (!isBlocked)
-      count++;
-  }
-
-  return count;
 }
 
 function buildVisualizerEventId(termId: number, eventId: number) {
@@ -156,64 +139,14 @@ function canDragCalendarEvent(event: TermCalendarEventDto) {
   return event.isPublic && !event.blocksAcademicEvents && !NON_DRAGGABLE_EVENT_TYPES.has(event.eventType);
 }
 
-function matchesTemplate(event: TermCalendarEventDto, templateItemKey: string) {
-  return event.templateItemKey?.toLowerCase() === templateItemKey.toLowerCase();
-}
-
-function findCalendarEvent(calendar: StudentAcademicCalendarDto, templateItemKey: string, eventType: string) {
-  return calendar.events.find(event => matchesTemplate(event, templateItemKey))
-    ?? calendar.events.find(event => event.eventType === eventType);
-}
-
-function movingEventRecalculatesMidtermPublication(event: TermCalendarEventDto) {
-  const title = displayTurkishText(event.title).toLocaleLowerCase('tr-TR');
-  return matchesTemplate(event, 'midterm_exam')
-    || matchesTemplate(event, 'midterm_excuse_exam')
-    || event.eventType === 'ExcuseExam'
-    || (event.eventType === 'MidtermExam' && !title.includes('mazeret'))
-    || (event.eventType === 'MidtermExam' && title.includes('mazeret'));
-}
-
-function eventRangeForValidation(event: TermCalendarEventDto, movingEventId: number, nextStartDate: string, nextEndDate: string) {
-  if (event.id === movingEventId)
-    return { start: nextStartDate, end: nextEndDate };
-
-  return { start: eventStartDate(event), end: eventEndDate(event) };
-}
-
-function validateChronologyForDrop(calendar: StudentAcademicCalendarDto, event: TermCalendarEventDto, nextStartDate: string, nextEndDate: string): string | null {
-  const rangeOf = (candidate: TermCalendarEventDto | undefined) =>
-    candidate ? eventRangeForValidation(candidate, event.id, nextStartDate, nextEndDate) : null;
-  const classesStart = rangeOf(findCalendarEvent(calendar, 'classes_start', 'ClassesStart'));
-  const classesEnd = rangeOf(findCalendarEvent(calendar, 'classes_end', 'ClassesEnd'));
-  const midterm = rangeOf(findCalendarEvent(calendar, 'midterm_exam', 'MidtermExam'));
-  const finalExam = rangeOf(findCalendarEvent(calendar, 'final_exam', 'FinalExam'));
-  const midtermPublication = rangeOf(findCalendarEvent(calendar, 'midterm_publication', 'MidtermGradePublication'));
-
-  if (classesStart && classesEnd && classesStart.start > classesEnd.start)
-    return 'Ders başlangıcı ders bitişinden sonra olamaz.';
-
-  if (midterm && finalExam && midterm.end > finalExam.start)
-    return 'Ara sınavlar final sınavlarından sonra gelemez.';
-
-  if (classesEnd && finalExam && classesEnd.start > finalExam.start)
-    return 'Final sınavı ders bitişinden önce başlayamaz.';
-
-  if (!movingEventRecalculatesMidtermPublication(event) && midterm && midtermPublication && midtermPublication.start <= midterm.end)
-    return 'Ara sınav ilanı ara sınavlardan sonra olmalıdır.';
-
-  if (!movingEventRecalculatesMidtermPublication(event) && midterm && midtermPublication && countBusinessDaysAfter(midterm.end, midtermPublication.start, calendar) > 10)
-    return 'Ara sınav ilanı 10 iş günü sınırını aşar.';
-
-  return null;
-}
-
 function getErrorMessage(error: unknown) {
+  const fallback = 'İşlem tamamlanamadı.';
   if (!error || typeof error !== 'object')
-    return 'Islem tamamlanamadi.';
+    return fallback;
 
   const maybe = error as { response?: { data?: { message?: string; error?: string } }; message?: string };
-  return maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? 'Islem tamamlanamadi.';
+  const message = maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? fallback;
+  return displayTurkishText(message);
 }
 
 function eventToVisualizerEvent(termId: number, event: TermCalendarEventDto, allowDrag: boolean): VisualizerEvent | null {
@@ -425,9 +358,11 @@ export default function AcademicCalendarPage() {
         propagateChanges: true,
       },
     }, {
-      onSuccess: () => {
+      onSuccess: updatedCalendar => {
+        const movedEvent = updatedCalendar.events.find(item => item.id === parsed.eventId);
+        const actualStartDate = isoToDateStr(movedEvent?.startDate) ?? nextStartDate;
         setErrorNotice(null);
-        setNotice(`Etkinlik ${fmtDate(`${nextStartDate}T00:00:00.000Z`)} tarihine tasindi; bagli olaylar yeniden hesaplandi.`);
+        setNotice(`Etkinlik ${fmtDate(`${actualStartDate}T00:00:00.000Z`)} tarihine tasindi; taslak kurallariyla bagli olaylar yeniden hesaplandi.`);
       },
       onError: error => showErrorNotice(getErrorMessage(error)),
     });
@@ -454,21 +389,13 @@ export default function AcademicCalendarPage() {
     if (nextStartDate < window.start || nextEndDate > window.end)
       return { allowed: false, reason: 'Akademik yıl düzenleme aralığı dışında.' };
 
+    if (MONDAY_START_EVENT_TYPES.has(event.eventType) && !isMondayDate(nextStartDate))
+      return { allowed: false, reason: 'Bu etkinlik Pazartesi günü başlamalıdır.' };
+
     if (EXAM_EVENT_TYPES.has(event.eventType) && isWeekendDate(nextStartDate))
       return { allowed: false, reason: 'Sınav etkinlikleri hafta sonu başlayamaz.' };
 
-    const blockingEvent = calendar.events.find(candidate =>
-      candidate.id !== event.id
-      && candidate.blocksAcademicEvents
-      && rangesOverlap(nextStartDate, nextEndDate, eventStartDate(candidate), eventEndDate(candidate)));
-    if (blockingEvent)
-      return { allowed: false, reason: `${displayTurkishText(blockingEvent.title)} ile çakışıyor.` };
-
-    const chronologyError = validateChronologyForDrop(calendar, event, nextStartDate, nextEndDate);
-    if (chronologyError)
-      return { allowed: false, reason: chronologyError };
-
-    return { allowed: true, reason: 'Uygun hedef. Bağlı olaylar otomatik ayarlanır.' };
+    return { allowed: true, reason: 'Uygun hedef. Bırakınca taslak kurallarıyla yeniden hesaplanır.' };
   }, [calendars]);
 
   const handleInvalidEventDrop = useCallback(({ reason }: DropFeedbackRequest & { reason?: string }) => {

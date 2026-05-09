@@ -59,7 +59,7 @@ public partial class CalendarGeneratorService
                 warnings.Add(new(
                     "CHRONOLOGY",
                     "Error",
-                    $"{SemesterLabel(group.Key)}: {withdrawal.Title} etkinliÄŸi {midterm.Title} baÅŸlamadan Ã¶nce olamaz.",
+                    $"{SemesterLabel(group.Key)}: {withdrawal.Title} etkinliği {midterm.Title} başlamadan önce olamaz.",
                     withdrawal.DraftEventId));
             }
         }
@@ -74,7 +74,7 @@ public partial class CalendarGeneratorService
         if (firstEvent == null || secondEvent == null) return;
 
         if ((firstEvent.EndDate ?? firstEvent.StartDate).Date > secondEvent.StartDate.Date)
-            warnings.Add(new("CHRONOLOGY", "Error", $"{SemesterLabel(semester)}: {firstEvent.Title} etkinliÄŸi {secondEvent.Title} etkinliÄŸinden sonra bitiyor.", secondEvent.DraftEventId));
+            warnings.Add(new("CHRONOLOGY", "Error", $"{SemesterLabel(semester)}: {firstEvent.Title} etkinliği {secondEvent.Title} etkinliğinden sonra bitiyor.", secondEvent.DraftEventId));
     }
 
     private static IEnumerable<CalendarWarningDto> ValidateRegulationRules(IReadOnlyList<GeneratedCalendarEventDto> events, IReadOnlyList<ResolvedHolidayDto> holidays)
@@ -99,7 +99,7 @@ public partial class CalendarGeneratorService
 
         if (classesStart == null || classesEnd == null || finalExam == null)
         {
-            yield return new CalendarWarningDto("REG_REQUIRED_EVENT", "Error", $"{SemesterLabel(semester)}: YÃ¶netmelik kontrolÃ¼ iÃ§in ders baÅŸlangÄ±cÄ±, ders bitiÅŸi ve final sÄ±navÄ± bulunmalÄ±dÄ±r.");
+            yield return new CalendarWarningDto("REG_REQUIRED_EVENT", "Error", $"{SemesterLabel(semester)}: Yönetmelik kontrolü için ders başlangıcı, ders bitişi ve final sınavı bulunmalıdır.");
             yield break;
         }
 
@@ -110,7 +110,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_MIN_TEACHING_WEEKS",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 21 gereÄŸi kayÄ±t ve sÄ±navlar hariÃ§ ders sÃ¼resi en az 14 hafta olmalÄ±dÄ±r ({teachingPeriodDays} gÃ¼n).",
+                $"{SemesterLabel(semester)}: Madde 21 gereği kayıt ve sınavlar hariç ders süresi en az 14 hafta olmalıdır ({teachingPeriodDays} gün).",
                 classesEnd.DraftEventId);
         }
 
@@ -120,7 +120,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_MIN_SEMESTER_WEEKS",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 7 gereÄŸi yarÄ±yÄ±l sÄ±navlar dahil en az 16 hafta olmalÄ±dÄ±r ({semesterWithExamsDays} gÃ¼n).",
+                $"{SemesterLabel(semester)}: Madde 7 gereği yarıyıl sınavlar dahil en az 16 hafta olmalıdır ({semesterWithExamsDays} gün).",
                 finalExam.DraftEventId);
         }
 
@@ -140,7 +140,7 @@ public partial class CalendarGeneratorService
 
         if (classesStart == null || classesEnd == null || summerExam == null)
         {
-            yield return new CalendarWarningDto("REG_SUMMER_REQUIRED_EVENT", "Error", "Yaz: YÃ¶netmelik kontrolÃ¼ iÃ§in ders baÅŸlangÄ±cÄ±, ders bitiÅŸi ve yaz okulu sÄ±navÄ± bulunmalÄ±dÄ±r.");
+            yield return new CalendarWarningDto("REG_SUMMER_REQUIRED_EVENT", "Error", "Yaz: Yönetmelik kontrolü için ders başlangıcı, ders bitişi ve yaz okulu sınavı bulunmalıdır.");
             yield break;
         }
 
@@ -151,7 +151,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_SUMMER_TEACHING_WEEKS",
                 "Error",
-                $"Yaz: Madde 22 gereÄŸi yaz okulu sÄ±navlar hariÃ§ 7 haftalÄ±k ders sÃ¼resini kapsamalÄ±dÄ±r ({teachingWeekdays} hafta iÃ§i gÃ¼n).",
+                $"Yaz: Madde 22 gereği yaz okulu sınavları hariç 7 haftalık ders süresini kapsamalıdır ({teachingWeekdays} hafta içi gün).",
                 classesEnd.DraftEventId);
         }
 
@@ -160,7 +160,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_SUMMER_EXAM_ORDER",
                 "Error",
-                "Yaz: Madde 22 gereÄŸi yaz okulu sÄ±navlarÄ± ders sÃ¼resi tamamlandÄ±ktan sonra baÅŸlamalÄ±dÄ±r.",
+                "Yaz: Madde 22 gereği yaz okulu sınavları ders süresi tamamlandıktan sonra başlamalıdır.",
                 summerExam.DraftEventId);
         }
 
@@ -192,7 +192,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_GRADE_PUBLICATION",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 36 gereÄŸi {publication.Title} sÄ±nav dÃ¶nemini izleyen en geÃ§ 10 iÅŸ gÃ¼nÃ¼ iÃ§inde ilan edilmelidir ({businessDays} iÅŸ gÃ¼nÃ¼).",
+                $"{SemesterLabel(semester)}: Madde 36 gereği {publication.Title} sınav dönemini izleyen en geç 10 iş günü içinde ilan edilmelidir ({businessDays} iş günü).",
                 publication.DraftEventId);
         }
     }
@@ -368,9 +368,9 @@ public partial class CalendarGeneratorService
     private static void EnsureEditable(GeneratedCalendarDraft draft)
     {
         if (draft.Status != GeneratedCalendarDraftStatus.Draft)
-            throw new InvalidOperationException("Sadece taslak durumundaki takvim dÃ¼zenlenebilir.");
+            throw new InvalidOperationException("Sadece taslak durumundaki takvim düzenlenebilir.");
         if (draft.ExpiresAt < DateTime.UtcNow)
-            throw new InvalidOperationException("Takvim taslaÄŸÄ±nÄ±n saklama sÃ¼resi dolmuÅŸ.");
+            throw new InvalidOperationException("Takvim taslağının saklama süresi dolmuş.");
     }
 
     private static int CalculateQualityScore(IReadOnlyList<CalendarWarningDto> warnings) =>
@@ -470,7 +470,10 @@ public partial class CalendarGeneratorService
         && !holidays.Any(h => h.BlocksAcademicEvents && DateRangesOverlap(start, start, h.StartDate, h.EndDate));
 
     private static bool MustStartOnMonday(CalendarEventType eventType) =>
-        eventType is CalendarEventType.MidtermExam
+        eventType is CalendarEventType.ClassesStart
+            or CalendarEventType.CourseRegistration
+            or CalendarEventType.AddDrop
+            or CalendarEventType.MidtermExam
             or CalendarEventType.FinalExam
             or CalendarEventType.MakeupExam
             or CalendarEventType.PrepSchoolExam
