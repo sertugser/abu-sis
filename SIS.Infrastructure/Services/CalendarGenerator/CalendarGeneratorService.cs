@@ -221,6 +221,20 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         return new WhatIfResultDto(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList(), warnings, CalculateQualityScore(warnings));
     }
 
+    public static WhatIfResultDto EvaluateEvents(
+        IReadOnlyList<GeneratedCalendarEventDto> currentEvents,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var events = NormalizeCalendarEvents(currentEvents, holidays);
+        events = AlignClassesEndToWeekday(events);
+
+        var warnings = new List<CalendarWarningDto>();
+        ValidateChronology(events, warnings);
+        warnings.AddRange(ValidateRegulationRules(events, holidays));
+
+        return new WhatIfResultDto(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList(), warnings, CalculateQualityScore(warnings));
+    }
+
     public static WhatIfResultDto RecalculateEvents(
         IReadOnlyList<GeneratedCalendarEventDto> currentEvents,
         IReadOnlyList<ResolvedHolidayDto> holidays,

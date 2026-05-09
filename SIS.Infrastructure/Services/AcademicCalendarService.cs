@@ -131,44 +131,92 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (IsLockedCalendarEvent(calendarEvent))
             throw new InvalidOperationException("Resmi tatiller ve bloklayıcı özel günler sürükle-bırak ile taşınamaz.");
 
-        var startDate = EnsureUtcDate(dto.StartDate);
-        var endDate = EnsureUtcDate(dto.EndDate ?? dto.StartDate);
-        if (startDate > endDate)
-            throw new InvalidOperationException("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
-
-        var window = CalendarEditWindow(term);
-        if (startDate < window.Start || endDate > window.End)
-            throw new InvalidOperationException("Etkinlik yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
-
-        if (RequiresMondayStart(calendarEvent.EventType) && !StartsOnMonday(startDate))
-            throw new InvalidOperationException("Bu etkinlik Pazartesi günü başlamalıdır.");
-
-        if (RequiresWeekdayOnly(calendarEvent.EventType) && StartsOnWeekend(startDate))
-            throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
-
-        var recalculation = CalendarGeneratorService.RecalculateEvents(
-            term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList(),
-            BuildResolvedHolidays(term.CalendarEvents),
-            calendarEvent.Id.ToString(CultureInfo.InvariantCulture),
-            startDate,
-            endDate,
-            dto.PropagateChanges);
-
-        ThrowIfGeneratorRejected(recalculation);
-        var changedEventIds = ApplyRecalculatedEvents(term, recalculation.Events);
-        changedEventIds.Add(calendarEvent.Id);
-
-        ValidateCalendarEventGraph(term, changedEventIds);
+        var changedEventIds = RecalculateEventMove(term, calendarEvent.Id, dto.StartDate, dto.EndDate, dto.PropagateChanges);
 
         if (term.AcademicCalendar is not null)
         {
             SyncAcademicCalendarFromEvents(term);
-            Validate(BuildUpsertDto(term.AcademicCalendar), term);
+            if (term.CalendarEvents.Any(e => changedEventIds.Contains(e.Id) && AffectsAcademicCalendarSummary(e.EventType)))
+                Validate(BuildUpsertDto(term.AcademicCalendar), term);
             term.AcademicCalendar.UpdatedAt = _clock.UtcNow;
         }
 
         await _ctx.SaveChangesAsync(ct);
         return BuildStudentDto(term, _clock.UtcNow);
+    }
+
+    public async Task<StudentAcademicCalendarDto> PreviewEventMoveAsync(int termId, int eventId, PreviewTermCalendarEventMoveDto dto, CancellationToken ct = default)
+    {
+        var term = await _ctx.AcademicTerms
+            .AsNoTracking()
+            .Include(t => t.AcademicCalendar)
+            .Include(t => t.CalendarEvents)
+            .FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new KeyNotFoundException($"Term {termId} not found.");
+
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Iptal edilmis donemde etkinlik tasinamaz.");
+
+        ApplyClientEvents(term, dto.Events);
+        RecalculateEventMove(term, eventId, dto.StartDate, dto.EndDate, dto.PropagateChanges);
+        if (term.AcademicCalendar is not null)
+            SyncAcademicCalendarFromEvents(term);
+
+        return BuildStudentDto(term, _clock.UtcNow);
+    }
+
+    public async Task<IReadOnlyList<StudentAcademicCalendarDto>> SaveEventChangesAsync(SaveAcademicCalendarChangesDto dto, CancellationToken ct = default)
+    {
+        if (dto.Calendars.Count == 0)
+            throw new InvalidOperationException("Kaydedilecek takvim degisikligi bulunamadi.");
+
+        var termIds = dto.Calendars.Select(c => c.TermId).Distinct().ToList();
+        var terms = await _ctx.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .Include(t => t.CalendarEvents)
+            .Where(t => termIds.Contains(t.Id))
+            .ToListAsync(ct);
+        if (terms.Count != termIds.Count)
+            throw new KeyNotFoundException("Kaydedilecek donemlerden biri bulunamadi.");
+
+        await using var tx = _ctx.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory"
+            ? null
+            : await _ctx.Database.BeginTransactionAsync(ct);
+
+        try
+        {
+            foreach (var stagedCalendar in dto.Calendars)
+            {
+                var term = terms.First(t => t.Id == stagedCalendar.TermId);
+                if (term.IsCancelled)
+                    throw new InvalidOperationException("Iptal edilmis donemde takvim kaydedilemez.");
+
+                ApplyClientEvents(term, stagedCalendar.Events);
+            }
+
+            foreach (var term in terms)
+                ValidateTermReadyToSave(term);
+
+            var now = _clock.UtcNow;
+            foreach (var term in terms)
+            {
+                term.UpdatedAt = now;
+                if (term.AcademicCalendar is not null)
+                    term.AcademicCalendar.UpdatedAt = now;
+            }
+
+            await _ctx.SaveChangesAsync(ct);
+            if (tx is not null)
+                await tx.CommitAsync(ct);
+
+            return terms.OrderBy(t => t.TermStart).Select(t => BuildStudentDto(t, now)).ToList();
+        }
+        catch
+        {
+            if (tx is not null)
+                await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<AcademicCalendarTermSummaryDto>> ListTermsAsync(CancellationToken ct = default)
@@ -193,6 +241,53 @@ public class AcademicCalendarService : IAcademicCalendarService
             TermStart:    t.TermStart,
             TermEnd:      t.TermEnd
         )).ToList();
+    }
+
+    private static HashSet<int> RecalculateEventMove(AcademicTerm term, int eventId, DateTime requestedStartDate, DateTime? requestedEndDate, bool? propagateChanges)
+    {
+        var calendarEvent = term.CalendarEvents.FirstOrDefault(e => e.Id == eventId)
+            ?? throw new KeyNotFoundException($"Calendar event {eventId} not found.");
+
+        if (!calendarEvent.IsPublic)
+            throw new InvalidOperationException("Sadece akademik takvimde gorunur etkinlikler tasinabilir.");
+
+        if (IsLockedCalendarEvent(calendarEvent))
+            throw new InvalidOperationException("Resmi tatiller ve bloklayici ozel gunler surukle-birak ile tasinamaz.");
+
+        var startDate = EnsureUtcDate(requestedStartDate);
+        var endDate = EnsureUtcDate(requestedEndDate ?? requestedStartDate);
+        if (startDate > endDate)
+            throw new InvalidOperationException("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
+
+        var window = CalendarEditWindow(term);
+        if (startDate < window.Start || endDate > window.End)
+            throw new InvalidOperationException("Etkinlik yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
+
+        if (RequiresMondayStart(calendarEvent.EventType) && !StartsOnMonday(startDate))
+            throw new InvalidOperationException("Bu etkinlik Pazartesi günü başlamalıdır.");
+
+        if (RequiresWeekdayOnly(calendarEvent.EventType) && StartsOnWeekend(startDate))
+            throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
+
+        var currentEvents = term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList();
+        var holidays = BuildResolvedHolidays(term.CalendarEvents);
+        var baseline = CalendarGeneratorService.EvaluateEvents(currentEvents, holidays);
+        var recalculation = CalendarGeneratorService.RecalculateEvents(
+            currentEvents,
+            holidays,
+            calendarEvent.Id.ToString(CultureInfo.InvariantCulture),
+            startDate,
+            endDate,
+            propagateChanges);
+
+        var changedDraftEventIds = GetChangedDraftEventIds(currentEvents, recalculation.Events);
+        changedDraftEventIds.Add(calendarEvent.Id.ToString(CultureInfo.InvariantCulture));
+        ThrowIfGeneratorRejected(recalculation, baseline, changedDraftEventIds);
+        var changedEventIds = ApplyRecalculatedEvents(term, recalculation.Events);
+        changedEventIds.Add(calendarEvent.Id);
+
+        ValidateCalendarEventGraph(term, changedEventIds);
+        return changedEventIds;
     }
 
     // ── Public (öğrenci / hoca) ───────────────────────────────────────
@@ -338,6 +433,58 @@ public class AcademicCalendarService : IAcademicCalendarService
         calendarEvent.BlocksAcademicEvents
         || calendarEvent.EventType is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday or CalendarEventType.ImportantDay;
 
+    private static void ApplyClientEvents(AcademicTerm term, IReadOnlyList<TermCalendarEventDto> clientEvents)
+    {
+        if (clientEvents.Count == 0)
+            throw new InvalidOperationException("Takvim etkinligi bulunamadi.");
+
+        var termEventsById = term.CalendarEvents.ToDictionary(e => e.Id);
+        var clientEventsById = clientEvents
+            .GroupBy(e => e.Id)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var unknownEventId = clientEventsById.Keys.FirstOrDefault(id => !termEventsById.ContainsKey(id));
+        if (unknownEventId != 0)
+            throw new InvalidOperationException($"Takvim etkinligi bu doneme ait degil: {unknownEventId}.");
+
+        foreach (var calendarEvent in term.CalendarEvents)
+        {
+            if (!clientEventsById.TryGetValue(calendarEvent.Id, out var clientEvent))
+                continue;
+            if (IsLockedCalendarEvent(calendarEvent))
+                continue;
+
+            var startDate = EnsureUtcDate(clientEvent.StartDate);
+            var endDate = EnsureUtcDate(clientEvent.EndDate ?? clientEvent.StartDate);
+            if (startDate > endDate)
+                throw new InvalidOperationException($"{calendarEvent.Title} icin baslangic tarihi bitis tarihinden sonra olamaz.");
+
+            calendarEvent.StartDate = startDate;
+            calendarEvent.EndDate = startDate == endDate ? null : endDate;
+        }
+    }
+
+    private static void ValidateTermReadyToSave(AcademicTerm term)
+    {
+        var events = term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList();
+        var evaluation = CalendarGeneratorService.EvaluateEvents(events, BuildResolvedHolidays(term.CalendarEvents));
+        ThrowIfAnyGeneratorRejected(evaluation);
+        ApplyRecalculatedEvents(term, evaluation.Events);
+
+        ValidateCalendarEventGraph(
+            term,
+            term.CalendarEvents
+                .Where(e => e.IsPublic && !IsLockedCalendarEvent(e))
+                .Select(e => e.Id)
+                .ToHashSet());
+
+        if (term.AcademicCalendar is not null)
+        {
+            SyncAcademicCalendarFromEvents(term);
+            Validate(BuildUpsertDto(term.AcademicCalendar), term);
+        }
+    }
+
     private static GeneratedCalendarEventDto ToGeneratedEvent(AcademicTerm term, TermCalendarEvent calendarEvent) =>
         new(
             calendarEvent.Id.ToString(CultureInfo.InvariantCulture),
@@ -398,18 +545,69 @@ public class AcademicCalendarService : IAcademicCalendarService
             _ => HolidayType.Fixed
         };
 
-    private static void ThrowIfGeneratorRejected(WhatIfResultDto recalculation)
+    private static void ThrowIfGeneratorRejected(
+        WhatIfResultDto recalculation,
+        WhatIfResultDto baseline,
+        IReadOnlySet<string> changedDraftEventIds)
     {
-        if (recalculation.Events.Any(e => e.IsFailed))
+        if (recalculation.Events.Any(e => e.IsFailed && changedDraftEventIds.Contains(e.DraftEventId)))
             throw new InvalidOperationException("Takvim kurallari saglanamadigi icin bazi etkinlikler yerlestirilemedi.");
 
+        var baselineErrors = baseline.Warnings
+            .Where(IsErrorWarning)
+            .Select(WarningFingerprint)
+            .ToHashSet(StringComparer.Ordinal);
         var blockingWarnings = recalculation.Warnings
-            .Where(w => string.Equals(w.Severity, "Error", StringComparison.OrdinalIgnoreCase))
+            .Where(IsErrorWarning)
+            .Where(w => IsChangedDraftWarning(w, changedDraftEventIds) || !baselineErrors.Contains(WarningFingerprint(w)))
             .Select(w => w.Message)
             .Distinct()
             .ToList();
         if (blockingWarnings.Count > 0)
             throw new InvalidOperationException("Takvim kurallari saglanamadi: " + string.Join(" | ", blockingWarnings));
+    }
+
+    private static void ThrowIfAnyGeneratorRejected(WhatIfResultDto evaluation)
+    {
+        if (evaluation.Events.Any(e => e.IsFailed))
+            throw new InvalidOperationException("Takvim kurallari saglanamadigi icin bazi etkinlikler yerlestirilemedi.");
+
+        var blockingWarnings = evaluation.Warnings
+            .Where(IsErrorWarning)
+            .Select(w => w.Message)
+            .Distinct()
+            .ToList();
+        if (blockingWarnings.Count > 0)
+            throw new InvalidOperationException("Takvim kaydedilemedi. Once tum hatalari duzeltin: " + string.Join(" | ", blockingWarnings));
+    }
+
+    private static bool IsErrorWarning(CalendarWarningDto warning) =>
+        string.Equals(warning.Severity, "Error", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsChangedDraftWarning(CalendarWarningDto warning, IReadOnlySet<string> changedDraftEventIds) =>
+        !string.IsNullOrWhiteSpace(warning.DraftEventId) && changedDraftEventIds.Contains(warning.DraftEventId);
+
+    private static string WarningFingerprint(CalendarWarningDto warning) =>
+        $"{warning.Code}|{warning.DraftEventId}|{warning.Message}";
+
+    private static HashSet<string> GetChangedDraftEventIds(
+        IReadOnlyList<GeneratedCalendarEventDto> currentEvents,
+        IReadOnlyList<GeneratedCalendarEventDto> recalculatedEvents)
+    {
+        var currentById = currentEvents.ToDictionary(e => e.DraftEventId, StringComparer.Ordinal);
+        var changedIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var recalculatedEvent in recalculatedEvents)
+        {
+            if (!currentById.TryGetValue(recalculatedEvent.DraftEventId, out var currentEvent))
+                continue;
+
+            if (currentEvent.StartDate.Date != recalculatedEvent.StartDate.Date
+                || (currentEvent.EndDate?.Date) != (recalculatedEvent.EndDate?.Date))
+                changedIds.Add(recalculatedEvent.DraftEventId);
+        }
+
+        return changedIds;
     }
 
     private static HashSet<int> ApplyRecalculatedEvents(AcademicTerm term, IReadOnlyList<GeneratedCalendarEventDto> events)
@@ -440,6 +638,24 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     private static bool CanOverlapBlockingHoliday(CalendarEventType eventType) =>
         eventType is CalendarEventType.CourseRegistration or CalendarEventType.AddDrop;
+
+    private static bool AffectsAcademicCalendarSummary(CalendarEventType eventType) =>
+        eventType is CalendarEventType.CourseRegistration
+            or CalendarEventType.NewStudentRegistration
+            or CalendarEventType.GraduateRegistration
+            or CalendarEventType.TransferRegistration
+            or CalendarEventType.SummerSchoolRegistration
+            or CalendarEventType.AddDrop
+            or CalendarEventType.AddDropApproval
+            or CalendarEventType.CourseWithdrawal
+            or CalendarEventType.AdvisorWithdrawal
+            or CalendarEventType.MidtermGradeEntry
+            or CalendarEventType.FinalGradeEntry
+            or CalendarEventType.MakeupGradeEntry
+            or CalendarEventType.MidtermGradePublication
+            or CalendarEventType.FinalGradePublication
+            or CalendarEventType.MakeupGradePublication
+            or CalendarEventType.SummerSchoolGradePublication;
 
     private static bool RequiresWeekdayOnly(CalendarEventType eventType) =>
         eventType is CalendarEventType.MidtermExam
@@ -625,18 +841,20 @@ public class AcademicCalendarService : IAcademicCalendarService
 
         EnsureEventOrder(FindEventByKeyOrType(term, "classes_start", CalendarEventType.ClassesStart),
             FindEventByKeyOrType(term, "classes_end", CalendarEventType.ClassesEnd),
-            "Derslerin baslangici derslerin bitisinden sonra olamaz.");
+            "Derslerin baslangici derslerin bitisinden sonra olamaz.",
+            changedEventIds);
 
         EnsureEventOrder(FindMidtermExam(term),
             FindEventByKeyOrType(term, "final_exam", CalendarEventType.FinalExam),
-            "Ara sinavlar donem sonu sinavlarindan sonra olamaz.");
+            "Ara sinavlar donem sonu sinavlarindan sonra olamaz.",
+            changedEventIds);
 
         var midterm = FindMidtermExam(term);
         var midtermExcuse = FindMidtermExcuseExam(term);
         var midtermPublication = FindEventByKeyOrType(term, "midterm_publication", CalendarEventType.MidtermGradePublication);
-        EnsureEventOrder(midterm, midtermExcuse, "Mazeret sinavi ara sinavlardan once olamaz.");
-        EnsureEventOrder(midtermExcuse, midtermPublication, "Ara sinav ilan tarihi mazeret sinavindan once olamaz.");
-        if (midterm is not null && midtermPublication is not null)
+        EnsureEventOrder(midterm, midtermExcuse, "Mazeret sinavi ara sinavlardan once olamaz.", changedEventIds);
+        EnsureEventOrder(midtermExcuse, midtermPublication, "Ara sinav ilan tarihi mazeret sinavindan once olamaz.", changedEventIds);
+        if (midterm is not null && midtermPublication is not null && EventsImpacted(changedEventIds, midterm, midtermPublication))
         {
             var businessDays = CountBusinessDaysAfter(EventEnd(midterm), midtermPublication.StartDate, term.CalendarEvents);
             if (businessDays > GradePublicationBusinessDayLimit)
@@ -647,19 +865,25 @@ public class AcademicCalendarService : IAcademicCalendarService
         var finalPublication = FindEventByKeyOrType(term, "final_publication", CalendarEventType.FinalGradePublication);
         var makeupExam = FindMakeupExam(term);
         var makeupPublication = FindEventByKeyOrType(term, "makeup_publication", CalendarEventType.MakeupGradePublication);
-        EnsureEventOrder(finalExam, finalPublication, "Final ilan tarihi final sinavindan once olamaz.");
-        EnsureEventOrder(finalPublication, makeupExam, "Butunleme sinavi final ilanindan once olamaz.");
-        EnsureEventOrder(makeupExam, makeupPublication, "Butunleme ilan tarihi butunleme sinavindan once olamaz.");
+        EnsureEventOrder(finalExam, finalPublication, "Final ilan tarihi final sinavindan once olamaz.", changedEventIds);
+        EnsureEventOrder(finalPublication, makeupExam, "Butunleme sinavi final ilanindan once olamaz.", changedEventIds);
+        EnsureEventOrder(makeupExam, makeupPublication, "Butunleme ilan tarihi butunleme sinavindan once olamaz.", changedEventIds);
     }
 
-    private static void EnsureEventOrder(TermCalendarEvent? first, TermCalendarEvent? second, string message)
+    private static void EnsureEventOrder(TermCalendarEvent? first, TermCalendarEvent? second, string message, IReadOnlySet<int> changedEventIds)
     {
         if (first is null || second is null)
+            return;
+
+        if (!EventsImpacted(changedEventIds, first, second))
             return;
 
         if (EventEnd(first).Date > second.StartDate.Date)
             throw new InvalidOperationException(message);
     }
+
+    private static bool EventsImpacted(IReadOnlySet<int> changedEventIds, params TermCalendarEvent?[] events) =>
+        events.Any(e => e is not null && changedEventIds.Contains(e.Id));
 
     private static TermCalendarEvent? FindMidtermExam(AcademicTerm term) =>
         term.CalendarEvents

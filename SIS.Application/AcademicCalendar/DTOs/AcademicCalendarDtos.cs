@@ -54,6 +54,22 @@ public record UpdateTermCalendarEventDto(
     bool? PropagateChanges = true
 );
 
+public record PreviewTermCalendarEventMoveDto(
+    IReadOnlyList<TermCalendarEventDto> Events,
+    DateTime StartDate,
+    DateTime? EndDate,
+    bool? PropagateChanges = true
+);
+
+public record SaveAcademicCalendarTermEventsDto(
+    int TermId,
+    IReadOnlyList<TermCalendarEventDto> Events
+);
+
+public record SaveAcademicCalendarChangesDto(
+    IReadOnlyList<SaveAcademicCalendarTermEventsDto> Calendars
+);
+
 public record StudentAcademicCalendarDto(
     int TermId,
     string TermName,

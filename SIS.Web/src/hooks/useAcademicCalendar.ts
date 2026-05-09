@@ -60,6 +60,19 @@ export interface UpdateAcademicCalendarEventDto {
   propagateChanges?: boolean;
 }
 
+export interface PreviewAcademicCalendarEventMoveDto extends UpdateAcademicCalendarEventDto {
+  events: TermCalendarEventDto[];
+}
+
+export interface SaveAcademicCalendarTermEventsDto {
+  termId: number;
+  events: TermCalendarEventDto[];
+}
+
+export interface SaveAcademicCalendarChangesDto {
+  calendars: SaveAcademicCalendarTermEventsDto[];
+}
+
 // ── Admin hooks ─────────────────────────────────────────────────
 
 // ── Public hooks ─────────────────────────────────────────────────
@@ -128,6 +141,38 @@ export function useMoveAcademicCalendarEvent() {
       ]);
 
       queryClient.setQueryData(QUERY_KEYS.studentAcademicCalendar(variables.termId, true), calendar);
+    },
+  });
+}
+
+export function usePreviewAcademicCalendarEventMove() {
+  return useMutation({
+    mutationFn: async ({ termId, eventId, dto }: { termId: number; eventId: number; dto: PreviewAcademicCalendarEventMoveDto }) => {
+      const { data } = await apiClient.post<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}/events/${eventId}/preview-move`, dto);
+      return data;
+    },
+  });
+}
+
+export function useSaveAcademicCalendarChanges() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (dto: SaveAcademicCalendarChangesDto) => {
+      const { data } = await apiClient.put<StudentAcademicCalendarDto[]>(`${PUBLIC}/events`, dto);
+      return data;
+    },
+    onSuccess: async calendars => {
+      await Promise.all([
+        ...calendars.flatMap(calendar => [
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(calendar.termId) }),
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(calendar.termId, true) }),
+        ]),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive }),
+      ]);
+
+      for (const calendar of calendars)
+        queryClient.setQueryData(QUERY_KEYS.studentAcademicCalendar(calendar.termId, true), calendar);
     },
   });
 }

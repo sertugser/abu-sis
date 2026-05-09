@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, FileDown, LogOut, RefreshCw, Repeat2, UserPlus } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, FileDown, LogOut, RefreshCw, Repeat2, Save, Undo2, UserPlus, X } from 'lucide-react';
 import { CalendarVisualizer, type DropFeedback, type DropFeedbackRequest, type VisualizerEvent } from '@/components/CalendarVisualizer';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,7 +12,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import {
   useAcademicCalendarTerms,
   useAcademicYearCalendars,
-  useMoveAcademicCalendarEvent,
+  usePreviewAcademicCalendarEventMove,
+  useSaveAcademicCalendarChanges,
   type AcademicCalendarTermSummaryDto,
   type StudentAcademicCalendarDto,
   type TermCalendarEventDto,
@@ -139,6 +140,21 @@ function canDragCalendarEvent(event: TermCalendarEventDto) {
   return event.isPublic && !event.blocksAcademicEvents && !NON_DRAGGABLE_EVENT_TYPES.has(event.eventType);
 }
 
+type DraftCalendarMap = Record<number, StudentAcademicCalendarDto>;
+
+function cloneCalendar(calendar: StudentAcademicCalendarDto): StudentAcademicCalendarDto {
+  return {
+    ...calendar,
+    events: calendar.events.map(event => ({ ...event })),
+  };
+}
+
+function cloneDraftCalendarMap(map: DraftCalendarMap): DraftCalendarMap {
+  return Object.fromEntries(
+    Object.entries(map).map(([termId, calendar]) => [Number(termId), cloneCalendar(calendar)]),
+  ) as DraftCalendarMap;
+}
+
 function getErrorMessage(error: unknown) {
   const fallback = 'İşlem tamamlanamadı.';
   if (!error || typeof error !== 'object')
@@ -254,11 +270,14 @@ function PhaseCard({
 export default function AcademicCalendarPage() {
   const terms = useAcademicCalendarTerms();
   const { hasAnyPermission } = usePermissions();
-  const moveCalendarEvent = useMoveAcademicCalendarEvent();
+  const previewCalendarEventMove = usePreviewAcademicCalendarEventMove();
+  const saveCalendarChanges = useSaveAcademicCalendarChanges();
   const [explicitYear, setExplicitYear] = useState<number | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [draftCalendars, setDraftCalendars] = useState<DraftCalendarMap>({});
+  const [draftHistory, setDraftHistory] = useState<DraftCalendarMap[]>([]);
   const canEditCalendar = hasAnyPermission(EDIT_CALENDAR_PERMISSION_KEYS);
 
   const academicYears = useMemo(() => {
@@ -269,6 +288,11 @@ export default function AcademicCalendarPage() {
   const activeTerm = terms.data?.find(term => term.isActive && !term.isCancelled);
   const selectedYear = explicitYear ?? (activeTerm ? academicYearForTerm(activeTerm) : null) ?? academicYears[0] ?? null;
 
+  useEffect(() => {
+    setDraftCalendars({});
+    setDraftHistory([]);
+  }, [selectedYear]);
+
   const selectedYearTerms = useMemo(
     () => (terms.data ?? [])
       .filter(term => academicYearForTerm(term) === selectedYear)
@@ -277,11 +301,17 @@ export default function AcademicCalendarPage() {
   );
 
   const calendarQueries = useAcademicYearCalendars(selectedYearTerms.map(term => term.termId), canEditCalendar);
-  const calendars = calendarQueries
+  const serverCalendars = calendarQueries
     .map(query => query.data)
     .filter((calendar): calendar is StudentAcademicCalendarDto => Boolean(calendar));
+  const calendars = useMemo(
+    () => serverCalendars.map(calendar => draftCalendars[calendar.termId] ?? calendar),
+    [draftCalendars, serverCalendars],
+  );
   const isLoading = terms.isLoading || calendarQueries.some(query => query.isLoading);
   const missingCalendarTerms = selectedYearTerms.filter(term => !term.isCancelled && !term.hasCalendar);
+  const hasDraftChanges = Object.keys(draftCalendars).length > 0;
+  const isCalendarMutating = previewCalendarEventMove.isPending || saveCalendarChanges.isPending;
 
   const visualizerEvents = useMemo(
     () => calendars.flatMap(calendar => {
@@ -332,12 +362,18 @@ export default function AcademicCalendarPage() {
     sourceEndDate: string;
     dragAnchorDate: string;
   }) => {
-    if (moveCalendarEvent.isPending)
+    if (isCalendarMutating)
       return;
 
     const parsed = parseVisualizerEventId(eventId);
     if (!parsed) {
       showErrorNotice('Tasınan etkinlik kimligi çözümlenemedi.');
+      return;
+    }
+
+    const calendar = calendars.find(item => item.termId === parsed.termId);
+    if (!calendar) {
+      showErrorNotice('Takvim bulunamadi.');
       return;
     }
 
@@ -349,10 +385,11 @@ export default function AcademicCalendarPage() {
     const nextEndDate = shiftDateValue(sourceEndDate, shiftDays);
 
     setNotice(null);
-    moveCalendarEvent.mutate({
+    previewCalendarEventMove.mutate({
       termId: parsed.termId,
       eventId: parsed.eventId,
       dto: {
+        events: calendar.events,
         startDate: `${nextStartDate}T00:00:00.000Z`,
         endDate: nextEndDate === nextStartDate ? null : `${nextEndDate}T00:00:00.000Z`,
         propagateChanges: true,
@@ -361,12 +398,14 @@ export default function AcademicCalendarPage() {
       onSuccess: updatedCalendar => {
         const movedEvent = updatedCalendar.events.find(item => item.id === parsed.eventId);
         const actualStartDate = isoToDateStr(movedEvent?.startDate) ?? nextStartDate;
+        setDraftHistory(prev => [...prev, cloneDraftCalendarMap(draftCalendars)]);
+        setDraftCalendars(prev => ({ ...prev, [updatedCalendar.termId]: cloneCalendar(updatedCalendar) }));
         setErrorNotice(null);
-        setNotice(`Etkinlik ${fmtDate(`${actualStartDate}T00:00:00.000Z`)} tarihine tasindi; taslak kurallariyla bagli olaylar yeniden hesaplandi.`);
+        setNotice(`Etkinlik ${fmtDate(`${actualStartDate}T00:00:00.000Z`)} tarihine taslakta tasindi. Kaydetmeden akademik takvime yazilmaz.`);
       },
       onError: error => showErrorNotice(getErrorMessage(error)),
     });
-  }, [moveCalendarEvent, showErrorNotice]);
+  }, [calendars, draftCalendars, isCalendarMutating, previewCalendarEventMove, showErrorNotice]);
 
   const getDropFeedback = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: DropFeedbackRequest): DropFeedback => {
     const parsed = parseVisualizerEventId(eventId);
@@ -401,6 +440,45 @@ export default function AcademicCalendarPage() {
   const handleInvalidEventDrop = useCallback(({ reason }: DropFeedbackRequest & { reason?: string }) => {
     showErrorNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
   }, [showErrorNotice]);
+
+  const handleUndoDraftChange = useCallback(() => {
+    setDraftHistory(prev => {
+      const last = prev[prev.length - 1];
+      if (!last)
+        return prev;
+
+      setDraftCalendars(cloneDraftCalendarMap(last));
+      return prev.slice(0, -1);
+    });
+    setNotice('Son taslak degisikligi geri alindi.');
+  }, []);
+
+  const handleCancelDraftChanges = useCallback(() => {
+    setDraftCalendars({});
+    setDraftHistory([]);
+    setNotice('Taslak degisiklikleri iptal edildi.');
+  }, []);
+
+  const handleSaveDraftChanges = useCallback(() => {
+    const stagedCalendars = Object.values(draftCalendars);
+    if (stagedCalendars.length === 0)
+      return;
+
+    saveCalendarChanges.mutate({
+      calendars: stagedCalendars.map(calendar => ({
+        termId: calendar.termId,
+        events: calendar.events,
+      })),
+    }, {
+      onSuccess: () => {
+        setDraftCalendars({});
+        setDraftHistory([]);
+        setErrorNotice(null);
+        setNotice('Akademik takvim kaydedildi.');
+      },
+      onError: error => showErrorNotice(getErrorMessage(error)),
+    });
+  }, [draftCalendars, saveCalendarChanges, showErrorNotice]);
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-hidden">
@@ -512,21 +590,53 @@ export default function AcademicCalendarPage() {
             inlineYearView
             filterableLegend
             headerActions={(
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDownloadPdf}
-                disabled={isDownloadingPdf || moveCalendarEvent.isPending || pdfSections.length === 0}
-              >
-                {isDownloadingPdf ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                {isDownloadingPdf ? 'PDF hazirlaniyor' : 'PDF indir'}
-              </Button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {hasDraftChanges && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleUndoDraftChange}
+                      disabled={isCalendarMutating || draftHistory.length === 0}
+                    >
+                      <Undo2 className="h-4 w-4" />
+                      Geri al
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelDraftChanges}
+                      disabled={isCalendarMutating}
+                    >
+                      <X className="h-4 w-4" />
+                      Iptal
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleSaveDraftChanges}
+                      disabled={isCalendarMutating}
+                    >
+                      {saveCalendarChanges.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      Kaydet
+                    </Button>
+                  </>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloadingPdf || isCalendarMutating || pdfSections.length === 0}
+                >
+                  {isDownloadingPdf ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                  {isDownloadingPdf ? 'PDF hazirlaniyor' : 'PDF indir'}
+                </Button>
+              </div>
             )}
             academicYearStart={selectedYear ?? undefined}
             onEventDrop={canEditCalendar ? handleEventDrop : undefined}
             getDropFeedback={canEditCalendar ? getDropFeedback : undefined}
             onInvalidEventDrop={handleInvalidEventDrop}
-            dragDisabled={moveCalendarEvent.isPending}
+            dragDisabled={isCalendarMutating}
           />
         </div>
       )}

@@ -66,6 +66,44 @@ public class AcademicCalendarController : ControllerBase
         }
     }
 
+    [HttpPost("academic-calendar/{termId:int}/events/{eventId:int}/preview-move")]
+    [Authorize]
+    [RequireAnyPermission("menu.akademik-takvim-olusturma.edit", "menu.akademik-takvim-olusturma.generate")]
+    public async Task<IActionResult> PreviewEventMove(int termId, int eventId, [FromBody] PreviewTermCalendarEventMoveDto dto, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _svc.PreviewEventMoveAsync(termId, eventId, dto, ct));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("academic-calendar/events")]
+    [Authorize]
+    [RequireAnyPermission("menu.akademik-takvim-olusturma.edit", "menu.akademik-takvim-olusturma.generate")]
+    public async Task<IActionResult> SaveEventChanges([FromBody] SaveAcademicCalendarChangesDto dto, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _svc.SaveEventChangesAsync(dto, ct));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     private async Task<bool> CanIncludeAllEventsAsync(bool requested, CancellationToken ct)
     {
         if (!requested)
