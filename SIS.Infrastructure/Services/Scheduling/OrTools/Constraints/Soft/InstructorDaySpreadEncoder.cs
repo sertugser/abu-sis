@@ -47,8 +47,10 @@ public sealed class InstructorDaySpreadEncoder : IConstraintEncoder
         if (t.S8Weight <= 0 || t.S2MaxDailyHours <= 0) return;
 
         // Group sections by InstructorId (skip null instructors).
+        // TheoryHours > 0 filter: lab-only sections have no Lecture interval, and
+        // GetOrCreateComponentDayVar(Lecture, ...) would throw — match S2's filter exactly.
         var sectionsByInstructor = ctx.Request.Sections
-            .Where(s => s.InstructorId.HasValue)
+            .Where(s => s.InstructorId.HasValue && s.TheoryHours > 0)
             .GroupBy(s => s.InstructorId!.Value)
             .ToList();
 
@@ -81,8 +83,6 @@ public sealed class InstructorDaySpreadEncoder : IConstraintEncoder
                     ctx.Model.Add(dayVar != day).OnlyEnforceIf(lit.Not());
                     perSectionDayLits.Add(lit);
                 }
-
-                if (perSectionDayLits.Count == 0) continue;
 
                 var dayUsed = ctx.Model.NewBoolVar($"s8_i{grp.Key}_d{day}_used");
                 // dayUsed → OR(perSectionDayLits)
