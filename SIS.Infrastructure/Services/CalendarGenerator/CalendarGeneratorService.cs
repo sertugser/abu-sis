@@ -159,6 +159,9 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, draftEventId, oldStart, oldEnd, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
+        var blockingHolidayError = BlockingHolidayOverlapError(target.Title, target.EventType, newStart, newEnd, holidays);
+        if (blockingHolidayError is not null)
+            throw new InvalidOperationException(blockingHolidayError);
         events = NormalizeCalendarEvents(events, holidays);
         events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
@@ -203,6 +206,9 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, request.DraftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
+        var blockingHolidayError = BlockingHolidayOverlapError(target.Title, target.EventType, newStart, newEnd, holidays);
+        if (blockingHolidayError is not null)
+            throw new InvalidOperationException(blockingHolidayError);
         events = NormalizeCalendarEvents(events, holidays);
         events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
@@ -263,6 +269,9 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
             events = Propagate(events, draftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
 
         var pinnedDraftEventIds = new HashSet<string>(StringComparer.Ordinal) { draftEventId };
+        var blockingHolidayError = BlockingHolidayOverlapError(target.Title, target.EventType, newStart, newEnd, holidays);
+        if (blockingHolidayError is not null)
+            throw new InvalidOperationException(blockingHolidayError);
         events = NormalizeCalendarEvents(events, holidays, pinnedDraftEventIds);
         events = AlignClassesEndToWeekday(events, pinnedDraftEventIds);
 

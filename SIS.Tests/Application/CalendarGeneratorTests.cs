@@ -219,6 +219,28 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Generator_AllowsLongAdministrativeWindow_ToOverlapSingleDayHoliday()
+    {
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var graduateApplication = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "fall_graduate_app");
+        var zaferBayrami = result.Holidays.First(h => h.Name == "Zafer Bayramı" && h.StartDate == Utc(2025, 8, 30));
+
+        graduateApplication.StartDate.Should().Be(Utc(2025, 8, 4));
+        graduateApplication.EndDate.Should().Be(Utc(2025, 9, 11));
+        graduateApplication.IsFailed.Should().BeFalse();
+        graduateApplication.StartDate.Should().BeOnOrBefore(zaferBayrami.StartDate);
+        (graduateApplication.EndDate ?? graduateApplication.StartDate).Should().BeOnOrAfter(zaferBayrami.EndDate);
+    }
+
+    [Fact]
     public async Task Generator_PlacesClassesEnd_OnWeekday()
     {
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
@@ -1012,6 +1034,28 @@ public class CalendarGeneratorTests : IDisposable
         unchangedRegistration.StartDate.Should().Be(registration.StartDate);
         unchangedRegistration.EndDate.Should().Be(registration.EndDate);
         whatIf.Warnings.Should().Contain(w => w.Code == "WHAT_IF" && w.Message.Contains("sadece seçili etkinlik"));
+    }
+
+    [Fact]
+    public async Task WhatIf_RejectsCriticalEvent_WhenMovedOntoBlockingHoliday()
+    {
+        var generated = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var final = generated.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "final_exam");
+
+        var act = () => _generatorService.WhatIfAsync(
+            generated.DraftId,
+            new WhatIfRequestDto(final.DraftEventId, Utc(2026, 1, 1), Utc(2026, 1, 12)));
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*taşınamaz*");
     }
 
     [Fact]

@@ -20,6 +20,7 @@ public partial class CalendarGeneratorService
     private const int ExcuseExamMinBusinessDays = 3;
     private const int ExcuseExamMaxBusinessDays = 10;
     private const int FinalPreparationTeachingWeeks = 7;
+    private const int FlexibleHolidayOverlapMinDays = 10;
 
     private static List<GeneratedCalendarEventDto> Propagate(List<GeneratedCalendarEventDto> events, string changedEventId, DateTime oldStart, DateTime oldEnd, DateTime newStart, DateTime newEnd)
     {
@@ -515,8 +516,47 @@ public partial class CalendarGeneratorService
             or CalendarEventType.SummerSchoolRegistration or CalendarEventType.SummerSchoolExam
             or CalendarEventType.SummerSchoolGradePublication;
 
-    private static bool CanOverlapBlockingHoliday(CalendarEventType type) =>
-        type is CalendarEventType.CourseRegistration or CalendarEventType.AddDrop;
+    private static bool CanOverlapBlockingHoliday(
+        CalendarEventType type,
+        DateTime start,
+        DateTime end,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        if (type is CalendarEventType.CourseRegistration or CalendarEventType.AddDrop)
+            return true;
+
+        if (IsCriticalEvent(type) || InclusiveDays(start, end) < FlexibleHolidayOverlapMinDays)
+            return false;
+
+        var overlaps = holidays
+            .Where(h => h.BlocksAcademicEvents && DateRangesOverlap(start, end, h.StartDate, h.EndDate))
+            .ToList();
+        return overlaps.Count > 0 && overlaps.All(h => h.StartDate.Date == h.EndDate.Date);
+    }
+
+    private static string? BlockingHolidayOverlapError(
+        string title,
+        CalendarEventType type,
+        DateTime start,
+        DateTime end,
+        IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var overlaps = holidays
+            .Where(h => h.BlocksAcademicEvents && DateRangesOverlap(start, end, h.StartDate, h.EndDate))
+            .OrderBy(h => h.StartDate)
+            .ThenBy(h => h.Name)
+            .ToList();
+        if (overlaps.Count == 0)
+            return null;
+
+        if (CanOverlapBlockingHoliday(type, start, end, holidays))
+            return null;
+
+        var overlapLabel = overlaps[0].StartDate.Date == overlaps[0].EndDate.Date
+            ? "resmi tatil veya bloklayıcı önemli gün"
+            : "çok günlük resmi tatil veya bloklayıcı gün aralığı";
+        return $"{title} {overlapLabel} üzerine taşınamaz.";
+    }
 
     private static bool RequiresSequenceAwareHolidayPlacement(CalendarEventType type) =>
         type is CalendarEventType.MidtermExam;
@@ -731,7 +771,7 @@ public partial class CalendarGeneratorService
         foreach (var ev in events.Where(e =>
             !e.IsHoliday
             && !IsPinned(e, pinnedDraftEventIds)
-            && !CanOverlapBlockingHoliday(e.EventType)
+            && !CanOverlapBlockingHoliday(e.EventType, e.StartDate, e.EndDate ?? e.StartDate, holidays)
             && !RequiresSequenceAwareHolidayPlacement(e.EventType)))
         {
             var shifted = ShiftEventOffBlockingHolidays(ev, holidays);

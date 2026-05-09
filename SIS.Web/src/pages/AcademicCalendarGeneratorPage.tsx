@@ -162,6 +162,7 @@ const MONDAY_START_EVENT_TYPES = new Set([
   'PrepSchoolExam',
   'SummerSchoolExam',
 ]);
+const FLEXIBLE_HOLIDAY_OVERLAP_MIN_DAYS = 10;
 
 function defaultAcademicYear() {
   const now = new Date();
@@ -473,6 +474,41 @@ function validateDraftEventConstraints(
 
   const pinnedRange = pinnedStartDate === pinnedEndDate ? pinnedStartDate : `${pinnedStartDate} - ${pinnedEndDate}`;
   return `${displayText(ev.title)} ${pinnedRange} tarihine sabitlenmis; Pin kisiti nedeniyle tasinamaz.`;
+}
+
+function validateDraftEventHolidayOverlap(
+  ev: GeneratedCalendarEventDto,
+  startDate: string,
+  endDate: string,
+  holidays: CalendarView['holidays'],
+) {
+  const start = parseUtcDisplayDate(startDate);
+  const end = parseUtcDisplayDate(endDate);
+  if (!start || !end)
+    return null;
+
+  const overlaps = holidays.filter(holiday => {
+    if (!holiday.blocksAcademicEvents)
+      return false;
+
+    const holidayStart = parseUtcDisplayDate(holiday.startDate);
+    const holidayEnd = parseUtcDisplayDate(holiday.endDate);
+    return !!holidayStart && !!holidayEnd && rangesOverlap(start, end, holidayStart, holidayEnd);
+  });
+  if (overlaps.length === 0)
+    return null;
+
+  const durationDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  const allowsSingleDayHolidayOverlap = !CRITICAL_EVENT_TYPES.has(ev.eventType)
+    && durationDays >= FLEXIBLE_HOLIDAY_OVERLAP_MIN_DAYS
+    && overlaps.every(holiday => dateInput(holiday.startDate) === dateInput(holiday.endDate));
+  if (allowsSingleDayHolidayOverlap)
+    return null;
+
+  const hasMultiDayHoliday = overlaps.some(holiday => dateInput(holiday.startDate) !== dateInput(holiday.endDate));
+  return hasMultiDayHoliday
+    ? `${displayText(ev.title)} çok günlük resmi tatil veya bloklayıcı gün aralığı üzerine taşınamaz.`
+    : `${displayText(ev.title)} resmi tatil veya bloklayıcı önemli gün üzerine taşınamaz.`;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -1316,6 +1352,14 @@ export default function AcademicCalendarGeneratorPage() {
       return;
     }
 
+    const holidayOverlapError = calendar
+      ? validateDraftEventHolidayOverlap(ev, nextStartDate, nextEndDate, calendar.holidays)
+      : null;
+    if (holidayOverlapError) {
+      setNotice(holidayOverlapError);
+      return;
+    }
+
     setSelectedSemester(ev.semester);
     setSelectedEventId(ev.draftEventId);
     setEditForm({
@@ -1420,6 +1464,12 @@ export default function AcademicCalendarGeneratorPage() {
     const constraintError = validateDraftEventConstraints(ev, resolved.nextStartDate, resolved.nextEndDate, constraints);
     if (constraintError)
       return { allowed: false, reason: constraintError };
+
+    const holidayOverlapError = calendar
+      ? validateDraftEventHolidayOverlap(ev, resolved.nextStartDate, resolved.nextEndDate, calendar.holidays)
+      : null;
+    if (holidayOverlapError)
+      return { allowed: false, reason: holidayOverlapError };
 
     return { allowed: true, reason: 'Uygun hedef. Bırakınca taslak güncellemesi onaylanır.' };
   }
@@ -2580,3 +2630,4 @@ export default function AcademicCalendarGeneratorPage() {
     </div>
   );
 }
+
