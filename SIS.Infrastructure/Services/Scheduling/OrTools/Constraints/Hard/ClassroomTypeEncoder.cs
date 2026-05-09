@@ -6,17 +6,24 @@ using SIS.Domain.Enums;
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// H4 — Classroom Type. v1 paritesi:
+/// H4 — Classroom Type:
 ///   1. Lab component yalnızca Lab/Computer (default) veya Course.LabClassroomType (override) tipinde olur.
 ///   2. Theory component için Course.TheoryClassroomType set ise yalnızca o tipte oda kabul edilir.
 ///   3. Capacity ≥ AmphiThreshold ise theory component yalnızca Amphitheater tipinde olabilir
 ///      (RequiredTheoryClassroomType ile birlikte AND uygulanır).
+///   4. (2026-05-09) RequiredTheoryClassroomType set DEĞİL ise theory component lab-kategori
+///      dersliklere (Lab, Computer, PhysicsLab, ChemistryLab, BiologyLab, ElectronicsLab,
+///      DesignStudio) yerleşemez — scarce lab kaynağı yalnızca lab dersleri için ayrılır.
+///      Admin Course.TheoryClassroomType="Lab" set ederse override (ama
+///      ClassroomTypeRequirementEnabled flag'i de açık olmalı, yoksa bu override ignore edilir).
 /// CP-SAT model: section'ın room IntVar'ı için her uyumsuz classroom için ayrı assumption literal'i.
 ///
 /// Plan 9 gating:
 ///   - <see cref="EncoderContext.AmphiThresholdEnabled"/> (Issue 1) → kapalıyken kural 3 devre dışı.
 ///   - <see cref="EncoderContext.ClassroomTypeRequirementEnabled"/> (Issue 6) → kapalıyken kural 1'in
 ///     RequiredLabClassroomType override'ı ve kural 2'nin tamamı devre dışı (Lab default fallback hâlâ aktif).
+///   - Kural 4 her zaman aktif (default davranış); admin override ister
+///     ClassroomTypeRequirementEnabled flag'iyle yapar.
 /// </summary>
 public sealed class ClassroomTypeEncoder : IConstraintEncoder
 {
@@ -94,22 +101,27 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
         // Plan 9 Issue 1 — Schedule.AmphiThresholdEnabled flag-gated. False (default) suppresses
         // the capacity-based amphi rule entirely so Term 5 (0 Amphitheater inventory) does not UNSAT.
         // Plan 9 Issue 6 — Schedule.ClassroomTypeRequirementEnabled gates RequiredTheoryClassroomType.
-        // Both default false; admin UI (Plan 10) will let admins opt in once production data is reconciled.
+        // Both default false; admin UI (Plan 10) lets admins opt in once production data is reconciled.
         var amphiRequired = ctx.AmphiThresholdEnabled && section.Capacity >= ctx.AmphiThreshold;
         var typeRequired = ctx.ClassroomTypeRequirementEnabled && section.RequiredTheoryClassroomType.HasValue;
 
-        if (!amphiRequired && !typeRequired) return;
+        // 2026-05-09 — Symmetric lab-reservation rule: a theory block defaults to non-lab classrooms.
+        // Suppressed when admin override is active (RequiredTheoryClassroomType=Lab is a deliberate choice).
+        var lectureOnly = !typeRequired;
 
-        // AND semantics by design: when both AmphiThreshold and RequiredTheoryClassroomType
-        // apply, a classroom must satisfy BOTH. Conflicting pairs (e.g. RequiredType=PhysicsLab
-        // + capacity ≥ threshold) yield UNSAT for the section — admin must reconcile data.
+        if (!amphiRequired && !typeRequired && !lectureOnly) return;
+
+        // AND semantics by design: when AmphiThreshold + RequiredTheoryClassroomType + lectureOnly
+        // overlap, a classroom must satisfy ALL active subrules. Conflicting pairs
+        // (e.g. RequiredType=PhysicsLab + capacity ≥ threshold) yield UNSAT for the section.
         foreach (var classroom in ctx.Request.Classrooms)
         {
             bool meetsAmphi = !amphiRequired || classroom.Type == ClassroomType.Amphitheater;
             bool meetsType = !typeRequired
                           || (int)classroom.Type == section.RequiredTheoryClassroomType!.Value;
+            bool meetsLectureOnly = !lectureOnly || !classroom.Type.IsLabCategory();
 
-            if (meetsAmphi && meetsType) continue;
+            if (meetsAmphi && meetsType && meetsLectureOnly) continue;
 
             var literal = ctx.Assumptions.Register(TheoryCode, section.Id, classroom.Id);
             ctx.Model.Add(lectureRoom != classroom.Id).OnlyEnforceIf(literal);

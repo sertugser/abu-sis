@@ -41,6 +41,9 @@ public record CourseDetailDto(
     bool ShowInInfoPackage,
     int? ApplicationHours,
     CourseOpenType? OpenType,
+    // Plan 10 — Derslik tipi tercihleri (H4 ClassroomType encoder bunları okuyor)
+    ClassroomType? TheoryClassroomType = null,
+    ClassroomType? LabClassroomType = null,
     CourseStatsDto? Stats = null,
     List<PrerequisiteChainNodeDto>? PrerequisiteChain = null
 );
@@ -70,7 +73,10 @@ public record CreateCourseDto(
     string? AlternativeName = null,
     bool ShowInInfoPackage = true,
     int? ApplicationHours = null,
-    CourseOpenType? OpenType = null
+    CourseOpenType? OpenType = null,
+    // Plan 10 — Derslik tipi tercihleri (opsiyonel — null ise H4 kuralı kuralı bypass)
+    ClassroomType? TheoryClassroomType = null,
+    ClassroomType? LabClassroomType = null
 );
 
 public record UpdateCourseDto(
@@ -90,7 +96,10 @@ public record UpdateCourseDto(
     string? AlternativeName = null,
     bool ShowInInfoPackage = true,
     int? ApplicationHours = null,
-    CourseOpenType? OpenType = null
+    CourseOpenType? OpenType = null,
+    // Plan 10 — Derslik tipi tercihleri (opsiyonel — null ise H4 kuralı bypass)
+    ClassroomType? TheoryClassroomType = null,
+    ClassroomType? LabClassroomType = null
 );
 
 public record CourseStatsDto(

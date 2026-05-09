@@ -200,8 +200,10 @@ public class ClassroomTypeEncoderTests
     }
 
     [Fact]
-    public void Encode_LectureOnlySection_NoAssumptionRegardlessOfRoomType()
+    public void Encode_LectureOnlySection_BansLabCategoryRooms()
     {
+        // 2026-05-09 — symmetric lab-reservation rule: a TheoryHours>0 / LabHours=0 section
+        // cannot land in lab-category rooms (Lab, Computer, …). Lecture is allowed.
         var encoder = new ClassroomTypeEncoder();
         var classrooms = new List<ClassroomInput>
         {
@@ -216,8 +218,63 @@ public class ClassroomTypeEncoderTests
 
         encoder.Encode(ctx);
 
-        // Lecture-only sections have no type restriction → 0 assumptions
+        // 2 lab-category rooms (Lab + Computer) → 2 ban literals; Lecture room allowed.
+        ctx.Assumptions.Count.Should().Be(2);
+    }
+
+    [Fact]
+    public void Encode_LectureOnlySection_AllNonLabRooms_NoAssumption()
+    {
+        // Sanity: when only lecture-likes are present, the new symmetric rule emits 0 literals.
+        var encoder = new ClassroomTypeEncoder();
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture },
+            new() { Id = 10, Name = "S1", Capacity = 40, Type = ClassroomType.Seminar },
+            new() { Id = 11, Name = "A1", Capacity = 200, Type = ClassroomType.Amphitheater }
+        };
+        var ctx = BuildContextWithRooms(
+            new[] { Section(1, theory: 3, lab: 0) },
+            classrooms,
+            flags: new Dictionary<string, bool> { ["H4"] = true });
+
+        encoder.Encode(ctx);
         ctx.Assumptions.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void Encode_LectureOnlySection_RequiredTheoryClassroomTypeOverride_AllowsLabRoom()
+    {
+        // Admin override: Course.TheoryClassroomType=Lab + ClassroomTypeRequirementEnabled=true
+        // suppresses the symmetric ban; only the override's positive constraint applies.
+        var encoder = new ClassroomTypeEncoder();
+        var classrooms = new List<ClassroomInput>
+        {
+            new() { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture },
+            new() { Id = 10, Name = "L139", Capacity = 30, Type = ClassroomType.Lab }
+        };
+        var section = new SectionInput
+        {
+            Id = 1, CourseId = 100, CourseCode = "X", CourseName = "X",
+            SectionNumber = 1, Capacity = 30,
+            TheoryHours = 3, LabHours = 0,
+            TeachingMethod = TeachingMethod.FaceToFace,
+            RequiredTheoryClassroomType = (int)ClassroomType.Lab
+        };
+        var ctx = BuildContextWithRooms(new[] { section }, classrooms,
+            flags: new Dictionary<string, bool> { ["H4"] = true });
+
+        encoder.Encode(ctx);
+        ctx.Assumptions.RegisterAllAsAssumptions();
+
+        // With override active: lectureOnly suppressed, only typeRequired applies.
+        // → Lecture room banned (not equal Lab), Lab allowed → 1 ban literal.
+        ctx.Variables.GetSectionPresent(1).Let(p => ctx.Model.Add((BoolVar)p == 1));
+        var solver = new CpSolver();
+        var status = solver.Solve(ctx.Model);
+        status.Should().BeOneOf(new[] { CpSolverStatus.Optimal, CpSolverStatus.Feasible });
+        solver.Value(ctx.Variables.GetLectureRoom(1)).Should().Be(10,
+            because: "Admin override RequiredTheoryClassroomType=Lab forces Lab room");
     }
 
     [Fact]

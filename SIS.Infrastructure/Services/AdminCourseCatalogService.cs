@@ -250,6 +250,9 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             course.ShowInInfoPackage,
             course.ApplicationHours,
             course.OpenType,
+            // Plan 10 — Derslik tipi tercihleri
+            course.TheoryClassroomType,
+            course.LabClassroomType,
             stats,
             chain
         );
@@ -440,7 +443,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             AlternativeName = dto.AlternativeName,
             ShowInInfoPackage = dto.ShowInInfoPackage,
             ApplicationHours = dto.ApplicationHours,
-            OpenType = dto.OpenType
+            OpenType = dto.OpenType,
+            // Plan 10 — Derslik tipi tercihleri
+            TheoryClassroomType = dto.TheoryClassroomType,
+            LabClassroomType = dto.LabClassroomType
         };
         db.Courses.Add(course);
         await db.SaveChangesAsync();
@@ -487,6 +493,9 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         course.ShowInInfoPackage = dto.ShowInInfoPackage;
         course.ApplicationHours = dto.ApplicationHours;
         course.OpenType = dto.OpenType;
+        // Plan 10 — Derslik tipi tercihleri
+        course.TheoryClassroomType = dto.TheoryClassroomType;
+        course.LabClassroomType = dto.LabClassroomType;
         await db.SaveChangesAsync();
         return (await GetCourseByIdAsync(id))!;
     }

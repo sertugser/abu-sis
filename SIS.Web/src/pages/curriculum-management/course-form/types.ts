@@ -17,6 +17,9 @@ export interface CourseScheduleState {
   theoryHours: number;
   labHours: number;
   applicationHours: number | null;
+  // Plan 10 — Derslik tipi tercihleri (opsiyonel; null = scheduler otomatik seçsin)
+  theoryClassroomType: import('@/hooks/useAdminCourseCatalog').ClassroomTypeValue | null;
+  labClassroomType: import('@/hooks/useAdminCourseCatalog').ClassroomTypeValue | null;
 }
 
 export interface CourseClassificationState {

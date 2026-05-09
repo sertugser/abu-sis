@@ -53,6 +53,9 @@ import {
   type CreateCourseDto,
   type PrerequisiteChainNodeDto,
   type BulkDeleteResultItem,
+  type ClassroomTypeValue,
+  CLASSROOM_TYPE_LABELS,
+  CLASSROOM_TYPE_OPTIONS,
 } from '../hooks/useAdminCourseCatalog';
 import {
   useAdminFaculties,
@@ -115,6 +118,9 @@ function emptyCourseForm(): CreateCourseDto {
     showInInfoPackage: true,
     applicationHours: null,
     openType: null,
+    // Plan 10 — Derslik tipi tercihleri (opsiyonel; null = scheduler otomatik seçsin)
+    theoryClassroomType: null,
+    labClassroomType: null,
   };
 }
 
@@ -409,6 +415,53 @@ function KrediSaatSection({ form, onChange, disabled = false }: CourseFormFields
             disabled={disabled} placeholder="—" className={READ_MODE_CLASS} />
         </div>
       </div>
+      {/* Plan 10 — Derslik tipi tercihleri (opsiyonel; H4 ClassroomType encoder okuyor) */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4 pt-4 border-t border-border/60">
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Teori Sınıf Tipi
+            <span className="text-muted-foreground ml-1 text-[10px] font-normal">(opsiyonel)</span>
+          </Label>
+          <NativeSelect
+            value={form.theoryClassroomType ?? '__auto__'}
+            onChange={v => onChange({
+              ...form,
+              theoryClassroomType: v === '__auto__' ? null : (v as ClassroomTypeValue),
+            })}
+            disabled={disabled || form.theoryHours <= 0}
+          >
+            <option value="__auto__">— Otomatik (kısıt yok) —</option>
+            {CLASSROOM_TYPE_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>{CLASSROOM_TYPE_LABELS[opt]}</option>
+            ))}
+          </NativeSelect>
+          <p className="text-[10px] text-muted-foreground">
+            Seçilirse teori bu tipte derslikte yerleşir; boş ise otomatik seçim.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Lab Sınıf Tipi
+            <span className="text-muted-foreground ml-1 text-[10px] font-normal">(opsiyonel)</span>
+          </Label>
+          <NativeSelect
+            value={form.labClassroomType ?? '__auto__'}
+            onChange={v => onChange({
+              ...form,
+              labClassroomType: v === '__auto__' ? null : (v as ClassroomTypeValue),
+            })}
+            disabled={disabled || form.labHours <= 0}
+          >
+            <option value="__auto__">— Otomatik (kısıt yok) —</option>
+            {CLASSROOM_TYPE_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>{CLASSROOM_TYPE_LABELS[opt]}</option>
+            ))}
+          </NativeSelect>
+          <p className="text-[10px] text-muted-foreground">
+            Seçilirse lab bu tipte derslikte yerleşir; boş ise otomatik seçim.
+          </p>
+        </div>
+      </div>
     </FieldSection>
   );
 }
@@ -613,6 +666,9 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
       showInInfoPackage: detail.showInInfoPackage,
       applicationHours: detail.applicationHours,
       openType: detail.openType,
+      // Plan 10 — Derslik tipi tercihleri
+      theoryClassroomType: detail.theoryClassroomType,
+      labClassroomType: detail.labClassroomType,
     };
   }, [detail]);
 

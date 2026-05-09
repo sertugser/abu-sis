@@ -74,6 +74,38 @@ export interface PrerequisiteChainNodeDto {
 
 export type CourseOpenTypeValue = 'Standart' | 'Closed' | 'PendingApproval';
 
+// Plan 10 — ClassroomType enum (SIS.Domain.Enums.ClassroomType ile birebir).
+// Backend numeric (int) bekliyor; UI'da admin'e Türkçe label gösteriyoruz.
+export type ClassroomTypeValue =
+  | 'Lecture'
+  | 'Lab'
+  | 'Seminar'
+  | 'Computer'
+  | 'Amphitheater'
+  | 'PhysicsLab'
+  | 'ChemistryLab'
+  | 'BiologyLab'
+  | 'ElectronicsLab'
+  | 'DesignStudio';
+
+export const CLASSROOM_TYPE_LABELS: Record<ClassroomTypeValue, string> = {
+  Lecture: 'Sınıf (Genel)',
+  Lab: 'Laboratuvar',
+  Seminar: 'Seminer Salonu',
+  Computer: 'Bilgisayar Lab',
+  Amphitheater: 'Amfi',
+  PhysicsLab: 'Fizik Lab',
+  ChemistryLab: 'Kimya Lab',
+  BiologyLab: 'Biyoloji Lab',
+  ElectronicsLab: 'Elektronik Lab',
+  DesignStudio: 'Tasarım Stüdyosu',
+};
+
+export const CLASSROOM_TYPE_OPTIONS: ClassroomTypeValue[] = [
+  'Lecture', 'Amphitheater', 'Seminar',
+  'Lab', 'Computer', 'PhysicsLab', 'ChemistryLab', 'BiologyLab', 'ElectronicsLab', 'DesignStudio',
+];
+
 export interface CourseDetailDto {
   id: number;
   code: string;
@@ -105,6 +137,9 @@ export interface CourseDetailDto {
   showInInfoPackage: boolean;
   applicationHours: number | null;
   openType: CourseOpenTypeValue | null;
+  // Plan 10 — Derslik tipi tercihleri (H4 ClassroomType encoder okuyor)
+  theoryClassroomType: ClassroomTypeValue | null;
+  labClassroomType: ClassroomTypeValue | null;
   stats: CourseStatsDto | null;
   prerequisiteChain: PrerequisiteChainNodeDto[] | null;
 }
@@ -144,6 +179,9 @@ export interface CreateCourseDto {
   showInInfoPackage?: boolean;
   applicationHours?: number | null;
   openType?: CourseOpenTypeValue | null;
+  // Plan 10 — Derslik tipi tercihleri (opsiyonel)
+  theoryClassroomType?: ClassroomTypeValue | null;
+  labClassroomType?: ClassroomTypeValue | null;
 }
 
 export function useAdminCourses(filter?: CourseFilterParams) {

@@ -7,6 +7,7 @@ import {
   useAdminCourseDetail,
   useUpdateCourse,
   useCourseCurriculumUsage,
+  CLASSROOM_TYPE_LABELS,
 } from '../../hooks/useAdminCourseCatalog';
 import { useUpdateCurriculumCourse } from '../../hooks/useCurriculumManagement';
 import type { CurriculumCourseItemDto } from '../../types/curriculumManagement';
@@ -59,6 +60,7 @@ export default function CurriculumCourseEditDialog({
   });
   const [schedule, setSchedule] = useState<CourseScheduleState>({
     ects: 0, nationalCredit: 0, theoryHours: 0, labHours: 0, applicationHours: null,
+    theoryClassroomType: null, labClassroomType: null,
   });
   const [classification, setClassification] = useState<CourseClassificationState>({
     language: 'Turkish',
@@ -117,6 +119,8 @@ export default function CurriculumCourseEditDialog({
       theoryHours: courseDetail.theoryHours,
       labHours: courseDetail.labHours,
       applicationHours: courseDetail.applicationHours,
+      theoryClassroomType: courseDetail.theoryClassroomType ?? null,
+      labClassroomType: courseDetail.labClassroomType ?? null,
     });
     // CourseDetailDto types language/teachingMethod/status/level as number, but with
     // JsonStringEnumConverter the runtime values are strings ("Turkish", "FaceToFace", …).
@@ -220,6 +224,19 @@ export default function CurriculumCourseEditDialog({
         oldValue: courseDetail.openType ?? '—',
         newValue: classification.openType ?? '—',
       });
+    // Plan 10 — Derslik tipi tercihleri (shared, scheduler okuyor)
+    if ((schedule.theoryClassroomType ?? null) !== (courseDetail.theoryClassroomType ?? null))
+      c.push({
+        label: 'Teori Sınıf Tipi',
+        oldValue: courseDetail.theoryClassroomType ? CLASSROOM_TYPE_LABELS[courseDetail.theoryClassroomType] : '— (otomatik)',
+        newValue: schedule.theoryClassroomType ? CLASSROOM_TYPE_LABELS[schedule.theoryClassroomType] : '— (otomatik)',
+      });
+    if ((schedule.labClassroomType ?? null) !== (courseDetail.labClassroomType ?? null))
+      c.push({
+        label: 'Lab Sınıf Tipi',
+        oldValue: courseDetail.labClassroomType ? CLASSROOM_TYPE_LABELS[courseDetail.labClassroomType] : '— (otomatik)',
+        newValue: schedule.labClassroomType ? CLASSROOM_TYPE_LABELS[schedule.labClassroomType] : '— (otomatik)',
+      });
     return c;
   }
 
@@ -273,6 +290,9 @@ export default function CurriculumCourseEditDialog({
           minEctsRequired: courseDetail.minEctsRequired,
           requiresNoFailedLowerCourses: courseDetail.requiresNoFailedLowerCourses,
           canBeTakenStandalone: courseDetail.canBeTakenStandalone,
+          // Plan 10 — Derslik tipi tercihleri
+          theoryClassroomType: schedule.theoryClassroomType,
+          labClassroomType: schedule.labClassroomType,
         }),
       );
     }
