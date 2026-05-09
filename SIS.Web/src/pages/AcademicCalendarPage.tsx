@@ -165,7 +165,12 @@ function getErrorMessage(error: unknown) {
   if (!error || typeof error !== 'object')
     return fallback;
 
-  const maybe = error as { response?: { data?: { message?: string; error?: string } }; message?: string };
+  const maybe = error as { response?: { status?: number; data?: { message?: string; error?: string } }; message?: string };
+  if (maybe.response?.status === 401)
+    return 'Oturum süreniz doldu. Lütfen tekrar giriş yapın.';
+  if (maybe.response?.status === 403)
+    return 'Bu işlem için yetkiniz bulunmuyor.';
+
   const message = maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? fallback;
   return displayTurkishText(message);
 }
