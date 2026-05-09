@@ -182,7 +182,79 @@ public sealed class DistributionConstraintEncoder : IConstraintEncoder
             ctx.Penalties.Add(LinearExpr.Term(diffLit, (long)softWeight.Value));
         }
     }
-    private static void EncodeBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
-    private static void EncodeNotBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    /// <summary>
+    /// BackToBack: lecture component'leri ardışık olmalı — <c>endA == startB</c> OR <c>endB == startA</c>.
+    /// Reified literal: <c>btbLit ⇔ aThenB ∨ bThenA</c>.
+    /// Hard (softWeight==null): <c>btbLit == 1</c>.
+    /// Soft: penalty = <c>btbLit.Not() × softWeight</c> (not-adjacent → fire).
+    /// TheoryHours==0 olan section (lab-only) lecture interval alamaz → guard ile skip.
+    /// </summary>
+    private static void EncodeBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight)
+    {
+        if (a.TheoryHours == 0 || b.TheoryHours == 0) return;
+
+        var ivA = ctx.Variables.GetLectureInterval(a.Id);
+        var ivB = ctx.Variables.GetLectureInterval(b.Id);
+        if (ivA == null || ivB == null) return;
+
+        var aThenB = ctx.Model.NewBoolVar($"dist{distId}_bb_aThenB_{a.Id}_{b.Id}");
+        ctx.Model.Add(ivA.EndExpr() == ivB.StartExpr()).OnlyEnforceIf(aThenB);
+        ctx.Model.Add(ivA.EndExpr() != ivB.StartExpr()).OnlyEnforceIf(aThenB.Not());
+
+        var bThenA = ctx.Model.NewBoolVar($"dist{distId}_bb_bThenA_{a.Id}_{b.Id}");
+        ctx.Model.Add(ivB.EndExpr() == ivA.StartExpr()).OnlyEnforceIf(bThenA);
+        ctx.Model.Add(ivB.EndExpr() != ivA.StartExpr()).OnlyEnforceIf(bThenA.Not());
+
+        var btbLit = ctx.Model.NewBoolVar($"dist{distId}_bb_any_{a.Id}_{b.Id}");
+        ctx.Model.AddBoolOr(new ILiteral[] { aThenB, bThenA }).OnlyEnforceIf(btbLit);
+        ctx.Model.AddBoolAnd(new ILiteral[] { aThenB.Not(), bThenA.Not() }).OnlyEnforceIf(btbLit.Not());
+
+        if (softWeight == null)
+        {
+            ctx.Model.Add(btbLit == 1);
+        }
+        else
+        {
+            ctx.Penalties.Add(LinearExpr.Term(btbLit.Not(), (long)softWeight.Value));
+        }
+    }
+
+    /// <summary>
+    /// NotBackToBack: lecture component'leri ardışık OLMAMALI — <c>endA != startB</c> AND <c>endB != startA</c>.
+    /// Reified literal aynı (BackToBack ile identical formula); constraint inverted.
+    /// Hard (softWeight==null): <c>btbLit == 0</c>.
+    /// Soft: penalty = <c>btbLit × softWeight</c> (adjacent → fire).
+    /// TheoryHours==0 olan section (lab-only) lecture interval alamaz → guard ile skip.
+    /// </summary>
+    private static void EncodeNotBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight)
+    {
+        if (a.TheoryHours == 0 || b.TheoryHours == 0) return;
+
+        var ivA = ctx.Variables.GetLectureInterval(a.Id);
+        var ivB = ctx.Variables.GetLectureInterval(b.Id);
+        if (ivA == null || ivB == null) return;
+
+        var aThenB = ctx.Model.NewBoolVar($"dist{distId}_nbb_aThenB_{a.Id}_{b.Id}");
+        ctx.Model.Add(ivA.EndExpr() == ivB.StartExpr()).OnlyEnforceIf(aThenB);
+        ctx.Model.Add(ivA.EndExpr() != ivB.StartExpr()).OnlyEnforceIf(aThenB.Not());
+
+        var bThenA = ctx.Model.NewBoolVar($"dist{distId}_nbb_bThenA_{a.Id}_{b.Id}");
+        ctx.Model.Add(ivB.EndExpr() == ivA.StartExpr()).OnlyEnforceIf(bThenA);
+        ctx.Model.Add(ivB.EndExpr() != ivA.StartExpr()).OnlyEnforceIf(bThenA.Not());
+
+        var btbLit = ctx.Model.NewBoolVar($"dist{distId}_nbb_any_{a.Id}_{b.Id}");
+        ctx.Model.AddBoolOr(new ILiteral[] { aThenB, bThenA }).OnlyEnforceIf(btbLit);
+        ctx.Model.AddBoolAnd(new ILiteral[] { aThenB.Not(), bThenA.Not() }).OnlyEnforceIf(btbLit.Not());
+
+        if (softWeight == null)
+        {
+            ctx.Model.Add(btbLit == 0);
+        }
+        else
+        {
+            ctx.Penalties.Add(LinearExpr.Term(btbLit, (long)softWeight.Value));
+        }
+    }
+
     private static void EncodePrecedencePair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
 }
