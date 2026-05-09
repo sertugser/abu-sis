@@ -33,7 +33,9 @@ export const CATEGORY_CAPABILITY: Record<string, CategoryCapability> = {
   'H-WL': 'toggleable',  // Haftalık yük limit tercihi
   'H-DL': 'toggleable',  // Günlük yük limit tercihi
   'H-DO': 'toggleable',  // Boş gün tercihi
-  'DIST': 'toggleable',  // Distribution kural tercihi
+  // Plan 10 Phase 4: DIST per-row PreferenceLevel ile zaten Hard/Soft seçimi yapıyor;
+  // üst-seviyede Category toggle anlamsız. IsEnabled toggle ile tüm DIST kapatılabilir.
+  'DIST': 'hard-only',
 
   // ── Doğası SOFT (penalty-bazlı, Hard yapılamaz) ──────
   // Plan 10 Phase 2: S2 kaldırıldı, H-DL Category toggle ile yönetiliyor.

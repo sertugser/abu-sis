@@ -101,7 +101,9 @@ public static class ConstraintParameterMapping
         ["H-WL"] = CategoryCapability.Toggleable,
         ["H-DL"] = CategoryCapability.Toggleable,
         ["H-DO"] = CategoryCapability.Toggleable,
-        ["DIST"] = CategoryCapability.Toggleable,
+        // Plan 10 Phase 4: DIST per-row PreferenceLevel ile Hard/Soft seçimi zaten var.
+        // Üst-seviyede Category toggle anlamsız.
+        ["DIST"] = CategoryCapability.HardOnly,
 
         // Soft-only (Plan 10 Phase 2: S2 kaldırıldı, H-DL Category toggle ile yönetiliyor)
         ["S1"] = CategoryCapability.SoftOnly,
