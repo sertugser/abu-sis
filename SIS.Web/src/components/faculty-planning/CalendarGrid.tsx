@@ -1,10 +1,10 @@
 import { Fragment, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { parseScheduleSummary, dayNumberToTurkish, weekOrderKey } from '@/lib/scheduleUtils';
+import { dayNumberToTurkish, weekOrderKey } from '@/lib/scheduleUtils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Plus, User, Users, Clock, Coffee } from 'lucide-react';
-import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
+import type { FacultyPlanningSection, FacultyPlanningTimeSlot, ScheduleBlock, ScheduleBlockType } from '../../types/facultyPlanning';
 import { useScheduleSettings } from '../../hooks/useScheduleSettings';
 import { STATUS_CONFIG } from './sectionUtils';
 
@@ -47,22 +47,46 @@ interface ParsedBlock {
   day: number;
   startTime: string;
   endTime: string;
+  blockType: ScheduleBlockType;
+  classroomName: string | null;
 }
 
 function parseSectionSchedule(section: FacultyPlanningSection): ParsedBlock[] {
-  const slots = parseScheduleSummary(section.scheduleSummary);
-  return slots.map(slot => ({
+  // Backend authoritative payload: each ScheduleBlock keeps BlockType + per-block classroom.
+  return (section.schedules ?? []).map(b => ({
     sectionId: section.sectionId,
     section,
-    day: slot.day,
-    startTime: slot.startTime,
-    endTime: slot.endTime,
+    day: b.day,
+    startTime: b.startTime.slice(0, 5),
+    endTime: b.endTime.slice(0, 5),
+    blockType: b.blockType,
+    classroomName: b.classroomName,
   }));
 }
 
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
+}
+
+/** Compact T/L pill — semantic colors (green=Theory, indigo=Lab). */
+function BlockTypeBadge({ blockType, className }: { blockType: ScheduleBlockType; className?: string }) {
+  const isTheory = blockType === 'Theory';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center justify-center rounded font-mono font-bold text-[9px] leading-none px-1 py-0.5 border',
+        isTheory
+          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+          : 'bg-indigo-100 text-indigo-800 border-indigo-300',
+        className,
+      )}
+      title={isTheory ? 'Teori' : 'Lab/Uygulama'}
+      aria-label={isTheory ? 'Teori' : 'Lab/Uygulama'}
+    >
+      {isTheory ? 'T' : 'L'}
+    </span>
+  );
 }
 
 /* ── Plain CalendarCell ── */
@@ -92,6 +116,12 @@ function SectionPopoverContent({
   color: typeof COURSE_COLORS[0];
 }) {
   const statusCfg = STATUS_CONFIG[section.status];
+  const blocks = section.schedules ?? [];
+  // Heuristic: when theory and lab share a single classroom (or no per-block override), the
+  // section-level Derslik line is informative; mixed sections with per-block override get the
+  // classroom inside the Program list and we suppress the redundant single-classroom line.
+  const distinctRooms = new Set(blocks.map(b => b.classroomName ?? '').filter(n => n !== ''));
+  const showSectionRoom = distinctRooms.size <= 1;
   return (
     <div className="space-y-3 p-1">
       <div>
@@ -124,11 +154,13 @@ function SectionPopoverContent({
           <span className="text-slate-500">Kapasite:</span>
           <span className="text-slate-700 font-medium ml-auto">{section.capacity}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <MapPin className="h-3.5 w-3.5 text-slate-400" />
-          <span className="text-slate-500">Derslik:</span>
-          <span className="text-slate-700 font-medium ml-auto">{section.classroomName ?? '—'}</span>
-        </div>
+        {showSectionRoom && (
+          <div className="flex items-center gap-2">
+            <MapPin className="h-3.5 w-3.5 text-slate-400" />
+            <span className="text-slate-500">Derslik:</span>
+            <span className="text-slate-700 font-medium ml-auto">{section.classroomName ?? '—'}</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <User className="h-3.5 w-3.5 text-slate-400" />
           <span className="text-slate-500">Hoca:</span>
@@ -136,10 +168,22 @@ function SectionPopoverContent({
             {section.instructorName ?? '—'}
           </span>
         </div>
-        {section.scheduleSummary && (
+        {blocks.length > 0 && (
           <div className="pt-1 border-t border-slate-100">
             <span className="text-slate-500 text-xs">Program</span>
-            <p className="mt-0.5 font-mono text-xs text-slate-700">{section.scheduleSummary}</p>
+            <ul className="mt-1 space-y-1">
+              {blocks.map((b, i) => (
+                <li key={`${b.day}-${b.startTime}-${i}`} className="flex items-center gap-2 text-xs">
+                  <BlockTypeBadge blockType={b.blockType} />
+                  <span className="font-mono text-slate-700">
+                    {dayNumberToTurkish(b.day).slice(0, 3)} {b.startTime.slice(0, 5)}–{b.endTime.slice(0, 5)}
+                  </span>
+                  {!showSectionRoom && b.classroomName && (
+                    <span className="ml-auto text-slate-500 truncate max-w-[140px]">{b.classroomName}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
@@ -149,9 +193,11 @@ function SectionPopoverContent({
 
 /* ── Tek ders bloğu ── */
 function SectionBlock({
-  section, rowSpan, isContinuation,
+  section, block, rowSpan, isContinuation,
 }: {
   section: FacultyPlanningSection;
+  /** The specific schedule block (theory or lab) this card represents in the grid. */
+  block: ParsedBlock;
   rowSpan: number;
   isContinuation: boolean;
 }) {
@@ -161,6 +207,9 @@ function SectionBlock({
   const continuationClass = isContinuation
     ? 'opacity-60 border-t border-dashed'
     : '';
+
+  // Block-level classroom (mixed dersde teori/lab odası farklı olabilir).
+  const cardClassroomName = block.classroomName ?? section.classroomName;
 
   const cardInner = (
     <div
@@ -177,22 +226,24 @@ function SectionBlock({
         <div className="flex items-center gap-1">
           <span className="font-mono font-semibold text-xs">{section.courseCode}</span>
           <span className="text-[10px] font-mono opacity-70">·{section.sectionIndex}</span>
+          <BlockTypeBadge blockType={block.blockType} className="ml-auto" />
         </div>
       ) : (
         <>
           <div className="flex items-baseline gap-1 leading-tight">
             <span className="font-mono font-bold text-sm">{section.courseCode}</span>
             <span className="text-[10px] font-mono opacity-70">·{section.sectionIndex}</span>
+            <BlockTypeBadge blockType={block.blockType} className="ml-auto self-center" />
           </div>
           {rowSpan >= 2 && (
             <div className="text-[11px] leading-tight mt-0.5 opacity-80 truncate">{section.courseName}</div>
           )}
           {rowSpan >= 2 && (
             <div className="flex items-center gap-2 mt-0.5 text-[10px] opacity-70">
-              {section.classroomName && (
+              {cardClassroomName && (
                 <span className="flex items-center gap-0.5">
                   <MapPin className="h-2.5 w-2.5" />
-                  {section.classroomName}
+                  {cardClassroomName}
                 </span>
               )}
               {section.instructorName && (
@@ -300,7 +351,10 @@ export function CalendarGrid({
         if (blockStart < rowEnd && blockEnd > rowStart) {
           const key = `${block.day}-${row.startTime}`;
           const arr = map.get(key) ?? [];
-          if (!arr.some(b => b.sectionId === block.sectionId)) {
+          // De-dup by (sectionId + blockType + startTime) so a mixed section with theory and
+          // lab blocks both appearing in the same row (rare) still renders as two cards.
+          const dedupKey = `${block.sectionId}-${block.blockType}-${block.startTime}`;
+          if (!arr.some(b => `${b.sectionId}-${b.blockType}-${b.startTime}` === dedupKey)) {
             arr.push(block);
           }
           map.set(key, arr);
@@ -329,11 +383,13 @@ export function CalendarGrid({
       }
       if (spanRows.length > 0) {
         const firstRow = timeRows[spanRows[0]];
-        const startKey = `${block.sectionId}-${block.day}-${firstRow.startTime}`;
+        // Include startTime + blockType so the same section's theory and lab blocks track
+        // their own rowSpan when both fall on the same day at different times.
+        const startKey = `${block.sectionId}-${block.day}-${firstRow.startTime}-${block.blockType}`;
         if (!starts.has(startKey)) {
           starts.set(startKey, { block, rowSpan: spanRows.length });
           for (let k = 1; k < spanRows.length; k++) {
-            covered.add(`${block.sectionId}-${block.day}-${timeRows[spanRows[k]].startTime}`);
+            covered.add(`${block.sectionId}-${block.day}-${timeRows[spanRows[k]].startTime}-${block.blockType}`);
           }
         }
       }
@@ -461,14 +517,15 @@ export function CalendarGrid({
                           onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime, slot!.allowedMode) : undefined}
                         >
                           {cellBlocks.map(b => {
-                            const startKey = `${b.sectionId}-${b.day}-${row.startTime}`;
+                            const startKey = `${b.sectionId}-${b.day}-${row.startTime}-${b.blockType}`;
                             const isContinuation = blockStartCells.covered.has(startKey);
                             const startInfo = blockStartCells.starts.get(startKey);
 
                             return (
                               <SectionBlock
-                                key={b.sectionId}
+                                key={`${b.sectionId}-${b.blockType}-${b.startTime}`}
                                 section={b.section}
+                                block={b}
                                 rowSpan={startInfo?.rowSpan ?? 1}
                                 isContinuation={isContinuation}
                               />

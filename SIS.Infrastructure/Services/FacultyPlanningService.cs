@@ -237,11 +237,14 @@ public partial class FacultyPlanningService : IFacultyPlanningService
         var instructorIds = allSections.Where(s => s.InstructorId.HasValue).Select(s => s.InstructorId!.Value).Distinct();
         var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, ct);
 
-        // Load SectionSchedule records for schedule display
+        // Load SectionSchedule records for schedule display.
+        // Include Classroom so block-level classroom name/type can surface in DTO.Schedules
+        // (mixed courses may pin theory and lab to different rooms).
         var sectionPageIds = allSections.Select(s => s.Id).ToList();
         var sectionPageSchedules = await _context.SectionSchedules
             .AsNoTracking()
             .Include(ss => ss.TimeSlot)
+            .Include(ss => ss.Classroom)
             .Where(ss => sectionPageIds.Contains(ss.CourseSectionId))
             .ToListAsync(ct);
         var sectionPageScheduleMap = sectionPageSchedules
@@ -301,6 +304,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
                         ? instructorNameMap.GetValueOrDefault(s.InstructorId.Value)
                         : null,
                     ScheduleSummary = ScheduleHelper.FormatScheduleSummary(sectionScheds),
+                    Schedules = ScheduleHelper.BuildScheduleBlocks(sectionScheds),
                     Status = sectionStatus,
                     TheoryHours = s.Course.TheoryHours,
                     LabHours = s.Course.LabHours,

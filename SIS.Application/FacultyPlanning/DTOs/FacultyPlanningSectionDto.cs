@@ -17,6 +17,7 @@ public class FacultyPlanningSectionDto
     public int? InstructorId { get; set; }
     public string? InstructorName { get; set; }
     public string ScheduleSummary { get; set; } = string.Empty;
+    public List<ScheduleBlockDto> Schedules { get; set; } = new();
     public string Status { get; set; } = string.Empty;
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
@@ -24,6 +25,17 @@ public class FacultyPlanningSectionDto
     public bool IsPinned { get; set; }
     public int SuggestedSemester { get; set; }
     public TeachingMethod TeachingMethod { get; set; } = TeachingMethod.FaceToFace;
+}
+
+public class ScheduleBlockDto
+{
+    public DayOfWeek Day { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public ScheduleBlockType BlockType { get; set; }
+    public int? ClassroomId { get; set; }
+    public string? ClassroomName { get; set; }
+    public string? ClassroomType { get; set; }
 }
 
 
