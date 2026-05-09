@@ -13,6 +13,17 @@ public sealed record SolverRequest
     public IReadOnlyList<TimeSlotInput> TimeSlots { get; init; } = [];
     public IReadOnlyDictionary<string, bool> ConstraintFlags { get; init; } =
         new Dictionary<string, bool>();
+
+    /// <summary>
+    /// Plan 10 — admin Category toggle (Hard ↔ Soft) encoder pipeline'a wire'lı.
+    /// Code → "Hard" | "Soft". Bir kural "Soft" ise hard encoder skip eder, soft encoder
+    /// (penalty) çalışır; "Hard" ise tersi. Eski `ConstraintFlags[code]` IsEnabled kontrolü
+    /// devam eder — false ise her iki davranış da skip.
+    /// Pilot: H13/S5 LunchBreak pair (S5 ConstraintDefinition kaldırıldı).
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ConstraintCategories { get; init; } =
+        new Dictionary<string, string>();
+
     public IReadOnlyList<CourseRelationship> Corequisites { get; init; } = [];
 
     /// <summary>

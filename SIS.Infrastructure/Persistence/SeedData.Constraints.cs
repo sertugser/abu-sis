@@ -231,17 +231,10 @@ public static partial class SeedData
                 Parameters = """{"S4MinCoPairThreshold": 20}""",
                 SortOrder = 104
             },
-            new()
-            {
-                Code = "S5",
-                Name = "Öğle Arası Tercihi",
-                Description = "Öğle arası saatlerine ders atanmamasını tercih eder (soft mod).",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"Weight": 2}""",
-                SortOrder = 105
-            },
+            // Plan 10 — S5 ConstraintDefinition kaldırıldı.
+            // H13 "Öğle Arası Koruması" Category toggle (Hard/Soft) ile iki davranışı yönetiyor:
+            //   - Hard (Zorunlu): LunchBreakEncoder yasaklar.
+            //   - Soft (Tercihli): LunchBreakSoftEncoder S5Weight ile penalty üretir.
             new()
             {
                 Code = "S7",

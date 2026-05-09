@@ -35,6 +35,12 @@ public sealed class LunchBreakEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
+        // Plan 10 — Category toggle: admin H13'ü "Tercihli" (Soft) yaparsa hard ban
+        // skip edilir; LunchBreakSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         // Find slot indices whose start time falls within [lunchStart, lunchEnd)
         var lunchSlotIndices = new List<int>();
         for (int i = 0; i < ctx.Request.TimeSlots.Count; i++)

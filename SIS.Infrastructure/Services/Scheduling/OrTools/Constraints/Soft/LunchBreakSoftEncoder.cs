@@ -4,24 +4,35 @@ using SIS.Application.Scheduling.Solver;
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 
 /// <summary>
-/// S5 — LunchBreakSoft. Lunch penceresine (default 11:40-12:20) denk düşen
-/// her section start slotu için S5Weight penalty. v1 LunchBreakSoftEvaluator.cs:30-37 portu.
+/// LunchBreakSoftEncoder — H13 ConstraintDefinition'ın Category="Soft" (Tercihli) modu.
+/// Lunch penceresine (default 11:40-12:20) denk düşen her section start slotu için
+/// S5Weight penalty. v1 LunchBreakSoftEvaluator.cs:30-37 portu.
 /// </summary>
 /// <remarks>
-/// Yalnızca H13 LunchBreak hard değilse anlamlıdır (v1 davranışı). v2'de H13 hard
-/// ise lunch slot'larına yerleşim zaten yasaktır; S5 sessizce 0 ceza üretir.
+/// Plan 10 — Category-aware encoder pipeline. Eski tasarımda S5 ayrı ConstraintDefinition
+/// idi; Plan 10'da S5 row kaldırıldı, H13 toggle (Hard/Soft) bu encoder'ı yönetiyor:
+///   - H13 IsEnabled=true + Category="Hard" → LunchBreakEncoder (yasak) çalışır, bu skip.
+///   - H13 IsEnabled=true + Category="Soft" → bu encoder çalışır (penalty), hard skip.
+///   - H13 IsEnabled=false → her ikisi de skip.
 /// Pre-compute lunch-overlap-flagged slot indeksleri. Section start IntVar'ı bu
 /// indekslerden biriyle eşleşirse reified literal aktif olur ve <c>S5Weight</c>
 /// penalty objektif fonksiyona eklenir.
 /// </remarks>
 public sealed class LunchBreakSoftEncoder : IConstraintEncoder
 {
-    public string Code => "S5";
+    // Plan 10 — Code "S5" → "H13": tek ConstraintDefinition (H13) iki davranışı yönetir.
+    public string Code => "H13";
     public bool IsHard => false;
 
     public void Encode(EncoderContext ctx)
     {
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true)) return;
+
+        // Plan 10 — Category="Soft" (Tercihli) ise penalty modu. Default Hard → skip.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Soft", StringComparison.OrdinalIgnoreCase))
+            return;
+
         var t = ctx.Request.SoftThresholds;
         if (t.S5Weight <= 0) return;
 

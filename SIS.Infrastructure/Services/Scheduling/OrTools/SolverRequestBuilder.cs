@@ -130,10 +130,13 @@ public sealed class SolverRequestBuilder
             .ToListAsync(cancellationToken);
         var timeSlots = timeSlotEntities.Select(MapTimeSlot).ToList();
 
-        // 5) Constraint flags — Code → IsEnabled
-        var constraintFlags = await _context.ConstraintDefinitions
+        // 5) Constraint flags — Code → IsEnabled, ayrıca Category (Plan 10 — Hard/Soft toggle)
+        var constraintRows = await _context.ConstraintDefinitions
             .AsNoTracking()
-            .ToDictionaryAsync(cd => cd.Code, cd => cd.IsEnabled, cancellationToken);
+            .Select(cd => new { cd.Code, cd.IsEnabled, cd.Category })
+            .ToListAsync(cancellationToken);
+        var constraintFlags = constraintRows.ToDictionary(r => r.Code, r => r.IsEnabled);
+        var constraintCategories = constraintRows.ToDictionary(r => r.Code, r => r.Category);
 
         // 6) Corequisites — Plan 6 Task 8.
         //    Filter: IsCorequisite=true AND (CourseId or RequiredCourseId in current sections' courses).
@@ -221,6 +224,7 @@ public sealed class SolverRequestBuilder
             Classrooms = classrooms,
             TimeSlots = timeSlots,
             ConstraintFlags = constraintFlags,
+            ConstraintCategories = constraintCategories,
             Corequisites = corequisites,
             DefaultInstructorMaxWeeklyHours = defaultInstructorMaxWeeklyHours,
             CurriculumConflictMode = curriculumConflictMode,

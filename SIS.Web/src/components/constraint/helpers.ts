@@ -46,7 +46,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'time',
     label: 'Zaman & Dağılım Kısıtlamaları',
     icon: 'Clock',
-    codes: ['H13', 'H17', 'S3', 'S5', 'S7', 'S12', 'DIST'],
+    codes: ['H13', 'H17', 'S3', 'S7', 'S12', 'DIST'],
   },
 ];
 
@@ -123,7 +123,6 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'S4': [
     { key: 'S4MinCoPairThreshold', label: 'Min. Birlikte Kayıt Eşiği', type: 'number', suffix: 'öğrenci', min: 1 },
   ],
-  'S5': [],
   'S7': [
     { key: 'S7MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 },
   ],

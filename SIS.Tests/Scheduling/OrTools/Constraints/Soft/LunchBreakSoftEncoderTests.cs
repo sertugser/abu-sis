@@ -46,6 +46,8 @@ public class LunchBreakSoftEncoderTests
 
     private static (CpModel, EncoderContext) BuildScenario(bool s5Enabled, bool sectionStartsLunch)
     {
+        // Plan 10 — S5 ConstraintDefinition kaldırıldı; LunchBreakSoftEncoder artık
+        // H13 (Code) + Category="Soft" (ConstraintCategories) ile yönetiliyor.
         var model = new CpModel();
         var slots = new[]
         {
@@ -63,7 +65,8 @@ public class LunchBreakSoftEncoderTests
         {
             TermId = 1, FacultyId = 1,
             Sections = new[] { section }, Classrooms = new[] { room }, TimeSlots = slots,
-            ConstraintFlags = new Dictionary<string, bool>(),
+            ConstraintFlags = new Dictionary<string, bool> { ["H13"] = s5Enabled },
+            ConstraintCategories = new Dictionary<string, string> { ["H13"] = "Soft" },
             SoftThresholds = new SoftThresholds
             {
                 S5LunchBreakStart = new TimeOnly(11, 40),
@@ -85,7 +88,7 @@ public class LunchBreakSoftEncoderTests
             Model = model, Variables = variables,
             Assumptions = new AssumptionRegistry(model),
             Request = request,
-            ConstraintFlags = new Dictionary<string, bool> { ["S5"] = s5Enabled },
+            ConstraintFlags = request.ConstraintFlags,
             Penalties = new List<LinearExpr>()
         };
         return (model, ctx);
