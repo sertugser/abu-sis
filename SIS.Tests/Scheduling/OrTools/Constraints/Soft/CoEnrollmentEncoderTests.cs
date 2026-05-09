@@ -48,6 +48,23 @@ public class CoEnrollmentEncoderTests
         solver.ObjectiveValue.Should().Be(19985);
     }
 
+    [Fact]
+    public void Encode_PairSectionsNonOverlapping_NoPenaltyInObjective()
+    {
+        // 2 sections forced to non-overlapping slots (A at 0, B at 3 in 4-slot Monday grid).
+        // Reified overlap literal must resolve to 0 → no penalty in objective.
+        // Defensive coverage of the NOT side of the bidirectional overlap reification.
+        var pairs = new[] { new CoEnrollmentPairInput(1, 2, 30) };
+        var (model, ctx) = BuildScenario(s4Enabled: true, pairs: pairs,
+            forcedStartA: 0, forcedStartB: 3);
+        new CoEnrollmentEncoder().Encode(ctx);
+        FinishModel(model, ctx);
+        var solver = new CpSolver();
+        solver.Solve(model);
+        solver.ObjectiveValue.Should().Be(20000,
+            because: "no overlap → reified literal = 0 → penalty term contributes 0 to objective");
+    }
+
     private static (CpModel, EncoderContext) BuildScenario(
         bool s4Enabled,
         IReadOnlyList<CoEnrollmentPairInput> pairs,

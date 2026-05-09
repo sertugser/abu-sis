@@ -56,9 +56,11 @@ public sealed class CoEnrollmentEncoder : IConstraintEncoder
             if (!sectionsByCourse.TryGetValue(pair.CourseId1, out var sectionsA)) continue;
             if (!sectionsByCourse.TryGetValue(pair.CourseId2, out var sectionsB)) continue;
 
-            // v1 formula: pair.StudentCount × Weight × 0.5 → integer port: Max(1, n × w / 2)
+            // v1 formula: pair.StudentCount × Weight × 0.5 → integer port: Max(1, n × w / 2).
             // Min-1 floor protects the (n × w) == 1 edge from collapsing to zero penalty.
-            var penaltyCoeff = Math.Max(1, pair.StudentCount * t.S4Weight / 2);
+            // Promote to long BEFORE multiplication to avoid int overflow on extreme tuning
+            // (e.g. StudentCount=5000 × Weight=500 = 2.5B > int.MaxValue).
+            var penaltyCoeff = Math.Max(1L, (long)pair.StudentCount * t.S4Weight / 2);
 
             foreach (var a in sectionsA)
             {
@@ -88,7 +90,7 @@ public sealed class CoEnrollmentEncoder : IConstraintEncoder
                         .OnlyEnforceIf(lit.Not());
 
                     // (long) cast: overflow safety for large StudentCount × Weight values.
-                    ctx.Penalties.Add(LinearExpr.Term(lit, (long)penaltyCoeff));
+                    ctx.Penalties.Add(LinearExpr.Term(lit, penaltyCoeff));
                 }
             }
         }
