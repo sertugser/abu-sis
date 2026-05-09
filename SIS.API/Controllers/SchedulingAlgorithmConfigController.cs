@@ -46,7 +46,6 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
         ["Classroom.AmphiThreshold"] = (0, 500),
         ["Schedule.MaxConsecutiveHours"] = (1, 12),
 
-        ["Scheduling.MaxBacktrackingDepth"] = (0, 20),
         ["Schedule.TheoryLabSplitThreshold"] = (1, 20),
         // V1 algoritma limit'leri (Schedule.SA.*, LNS.*, MRV.*, Construction.*, Candidate.*)
         // Plan 9 V1 silinmesi sonrası atıl olduğu için 2026-05-10'da migration ile kaldırıldı.

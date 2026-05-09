@@ -1,11 +1,11 @@
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
-  batchAutoSchedule, getClassroomDashboard, getSchedulingConflicts,
+  getClassroomDashboard, getSchedulingConflicts,
   getClassroomFilterOptions, searchAvailableClassrooms,
   type ClassroomDashboardParams,
 } from '../api/scheduling.api';
 import type {
-  BatchAutoScheduleRequest, ClassroomDashboard, SchedulingConflict,
+  ClassroomDashboard, SchedulingConflict,
   ClassroomFilterOptions, AvailableClassroomResult, AvailableClassroomSearchParams,
 } from '../types/scheduling';
 
@@ -22,20 +22,6 @@ export function useSchedulingConflicts(termId?: number) {
     queryKey: ['schedulingConflicts', termId],
     queryFn: () => getSchedulingConflicts(termId),
     enabled: !!termId,
-  });
-}
-
-export function useBatchAutoSchedule() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (request: BatchAutoScheduleRequest) => batchAutoSchedule(request),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['departmentClassLists'] }),
-        queryClient.invalidateQueries({ queryKey: ['academicPlanningSummary'] }),
-      ]);
-    },
   });
 }
 

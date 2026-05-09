@@ -35,30 +35,6 @@ export interface ScheduleValidationResult {
   notes: string[];
 }
 
-export interface BatchAutoScheduleRequest {
-  termId?: number | null;
-  departmentId?: number | null;
-}
-
-export interface BatchAutoScheduleResult {
-  totalSections: number;
-  scheduledCount: number;
-  failedCount: number;
-  skippedCount: number;
-  results: BatchAutoScheduleItem[];
-  notes: string[];
-}
-
-export interface BatchAutoScheduleItem {
-  sectionId: number;
-  courseCode: string;
-  courseName: string;
-  success: boolean;
-  classroomName: string | null;
-  slots: ScheduleSlot[] | null;
-  failureReason: string | null;
-}
-
 export interface ScheduleSuggestion {
   isFeasible: boolean;
   sectionId: number;

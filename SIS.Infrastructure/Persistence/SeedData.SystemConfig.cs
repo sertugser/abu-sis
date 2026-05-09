@@ -74,8 +74,9 @@ public static partial class SeedData
             new() { Key = "Schedule.AllowSameCourseSectionOverlap", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: aynı dersin farklı şubeleri aynı slotta paralel açılabilir (H8 kapalı). KAPALI (varsayılan): şubeler farklı slotta olmalı." },
 
             // V1 silindiğinde 19 atıl key migration `RemoveAtilV1AlgorithmKeys` ile DB'den kaldırıldı
-            // (2026-05-10). Geriye kalan key'ler V2/scheduler tarafından hâlâ okunan canlı ayarlar.
-            new() { Key = "Scheduling.MaxBacktrackingDepth", Value = "3", Category = "Other", DataType = "int", Description = "Eski /scheduling/batch-auto-schedule endpoint'inde backtracking derinliği. V2 Faculty Planning yolu okumaz." },
+            // (2026-05-10). Bonus: aynı gün BatchAuto.cs ölü kod silinmesi sonrası
+            // Scheduling.MaxBacktrackingDepth de migration `RemoveBatchAutoConfigKey` ile düştü.
+            // Geriye kalan key'ler V2 scheduler tarafından hâlâ okunan canlı ayarlar.
             new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Other", DataType = "string", Description = "Bir derslik yetmediğinde hangi tip dersler aynı saatte iki ayrı dersliğe bölünebilir." },
             new() { Key = "Schedule.Lab.MaxBlockHours", Value = "2", Category = "Other", DataType = "int", Description = "Lab dersi kaç saatlik bloklara bölünsün." },
             new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "H5 müfredat çakışma kontrolü modu. 'cohort' önerilen — section'ların alternatif olduğunu bilir." },
