@@ -48,24 +48,8 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
 
         ["Scheduling.MaxBacktrackingDepth"] = (0, 20),
         ["Schedule.TheoryLabSplitThreshold"] = (1, 20),
-
-        ["Schedule.SA.MaxIterations"] = (1, 1_000_000),
-        ["Schedule.SA.InitialTemperature"] = (1, 10_000),
-        ["Schedule.SA.TimeoutSeconds"] = (5, 3600),
-        ["Schedule.SA.StagnationLimit"] = (1, 100_000),
-        ["Schedule.SA.BacktrackLimit"] = (1, 10_000),
-        ["Schedule.SA.RelocateWeight"] = (0, 100),
-        ["Schedule.SA.SwapWeight"] = (0, 100),
-        ["Schedule.SA.ChainWeight"] = (0, 100),
-
-        ["Schedule.LNS.MaxIterations"] = (1, 100_000),
-        ["Schedule.LNS.TimeoutSeconds"] = (5, 600),
-        ["Schedule.LNS.DestroySize"] = (1, 50),
-
-        ["Schedule.MRV.ClassroomWeight"] = (0, 100),
-        ["Schedule.MRV.SlotWeight"] = (0, 100),
-        ["Schedule.MRV.LabWeight"] = (0, 100),
-        ["Schedule.MRV.CapacityWeight"] = (0, 100),
+        // V1 algoritma limit'leri (Schedule.SA.*, LNS.*, MRV.*, Construction.*, Candidate.*)
+        // Plan 9 V1 silinmesi sonrası atıl olduğu için 2026-05-10'da migration ile kaldırıldı.
     };
 
     // Eski SchedulingAlgorithmConfigGroups tablosu kaldırıldı (2026-05-09); UI metadatası burada hardcoded.

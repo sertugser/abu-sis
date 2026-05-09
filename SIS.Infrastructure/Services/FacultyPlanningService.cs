@@ -531,8 +531,9 @@ public partial class FacultyPlanningService : IFacultyPlanningService
 
         foreach (var slot in scheduleSlots)
         {
+            var slotDay = (DayOfWeek)slot.Day;
             var matchingTimeSlots = termTimeSlots
-                .Where(ts => ts.DayOfWeek == slot.Day
+                .Where(ts => ts.DayOfWeek == slotDay
                     && ts.StartTime < slot.EndTime
                     && slot.StartTime < ts.EndTime)
                 .OrderBy(ts => ts.SlotOrder)
@@ -541,7 +542,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
             if (matchingTimeSlots.Count == 0)
             {
                 throw new InvalidOperationException(
-                    $"{DayLabel(slot.Day)} {slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm} araligi donem zaman slotlari ile eslesmiyor.");
+                    $"{DayLabel(slotDay)} {slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm} araligi donem zaman slotlari ile eslesmiyor.");
             }
 
             // Online section için slot.ClassroomId ve classroomId ikisi de null olabilir — bu kabul
@@ -564,6 +565,14 @@ public partial class FacultyPlanningService : IFacultyPlanningService
 
         var enforceClassroomConflict = await IsConstraintEnabledAsHardAsync("H1", defaultIsHard: true, ct);
 
+        // 2026-05-10: Daha önce SectionSchedule yazılırken BlockType set edilmiyordu →
+        // DB'de tüm satırlar default Theory=0 kalıyordu (T/L badge UI'da hep T gösteriyordu).
+        // SchedulingService.cs:430 mantığının aynısı: slot sırasında ilk TheoryHours adet
+        // slot Theory, sonrası Lab (solver bu sırada üretir + WriteSectionScheduleRecordsAsync
+        // allMatchedSlots'u OrderBy(slot.Day, slot.SlotOrder) ile alır).
+        var theoryHours = section.Course.TheoryHours;
+        var slotIndex = 0;
+
         // Write with hard guard against classroom double-booking (online section'lar: ClassroomId null → çakışma kontrolü yok)
         foreach (var (timeSlot, effectiveCrId) in allMatchedSlots)
         {
@@ -581,12 +590,18 @@ public partial class FacultyPlanningService : IFacultyPlanningService
                 }
             }
 
+            var blockType = slotIndex < theoryHours
+                ? ScheduleBlockType.Theory
+                : ScheduleBlockType.Lab;
+
             _context.SectionSchedules.Add(new SectionSchedule
             {
                 CourseSectionId = sectionId,
                 TimeSlotId = timeSlot.Id,
-                ClassroomId = effectiveCrId
+                ClassroomId = effectiveCrId,
+                BlockType = blockType,
             });
+            slotIndex++;
         }
     }
 

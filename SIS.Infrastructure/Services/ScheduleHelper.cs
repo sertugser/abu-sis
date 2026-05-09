@@ -90,7 +90,7 @@ public static class ScheduleHelper
         var blocks = BuildScheduleBlocks(schedules);
         if (blocks.Count == 0) return "Zamanlanmamis";
         return string.Join(", ", blocks.Select(b =>
-            $"{DayOfWeekToTurkishShort(b.Day)} {b.StartTime:HH:mm}-{b.EndTime:HH:mm}"));
+            $"{DayOfWeekToTurkishShort((DayOfWeek)b.Day)} {b.StartTime:HH:mm}-{b.EndTime:HH:mm}"));
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ public static class ScheduleHelper
                 var last = blocks[^1];
                 // Merge contiguous slots only when day + classroom + block type all match.
                 // Theory→Lab transitions on the same day stay split.
-                if (last.Day == day
+                if (last.Day == (int)day
                     && last.ClassroomId == classroomId
                     && last.BlockType == blockType
                     && start <= last.EndTime.AddMinutes(10))
@@ -131,7 +131,7 @@ public static class ScheduleHelper
 
             blocks.Add(new ScheduleBlockDto
             {
-                Day = day,
+                Day = (int)day,
                 StartTime = start,
                 EndTime = end,
                 BlockType = blockType,

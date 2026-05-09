@@ -234,7 +234,7 @@ public class SchedulingServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(15, 0),
                     EndTime = new TimeOnly(19, 0)
                 }
@@ -273,7 +273,7 @@ public class SchedulingServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(11, 0)
                 }
@@ -311,7 +311,7 @@ public class SchedulingServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(15, 55)
                 }
@@ -357,7 +357,7 @@ public class SchedulingServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(11, 0)
                 }
@@ -387,7 +387,7 @@ public class SchedulingServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(11, 0)
                 }
@@ -422,7 +422,7 @@ public class SchedulingServiceTests : IDisposable
         result.IsFeasible.Should().BeTrue();
         result.SuggestedClassroomId.Should().Be(bestFitClassroom.Id);
         result.SuggestedSlots.Should().ContainSingle();
-        result.SuggestedSlots[0].Day.Should().Be(DayOfWeek.Monday);
+        result.SuggestedSlots[0].Day.Should().Be((int)DayOfWeek.Monday);
         result.SuggestedSlots[0].StartTime.Should().Be(new TimeOnly(9, 0));
         result.SuggestedSlots[0].EndTime.Should().Be(new TimeOnly(10, 50));
     }

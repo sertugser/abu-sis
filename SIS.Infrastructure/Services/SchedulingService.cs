@@ -78,7 +78,7 @@ public partial class SchedulingService : ISchedulingService
 
         var slots = request.ScheduleSlots.Select(s => new TimeBlock
         {
-            Day = s.Day,
+            Day = (DayOfWeek)s.Day,
             StartTime = s.StartTime,
             EndTime = s.EndTime,
         }).ToList();
@@ -562,7 +562,7 @@ public partial class SchedulingService : ISchedulingService
     private static ScheduleSlotDto MapTimeBlock(TimeBlock slot) =>
         new()
         {
-            Day = slot.Day,
+            Day = (int)slot.Day,
             StartTime = slot.StartTime,
             EndTime = slot.EndTime
         };

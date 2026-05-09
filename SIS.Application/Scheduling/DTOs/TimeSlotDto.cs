@@ -2,10 +2,14 @@ using SIS.Domain.Enums;
 
 namespace SIS.Application.Scheduling.DTOs;
 
+/// <summary>
+/// TimeSlot DTO. DayOfWeek is exposed as int (0=Sun, 1=Mon, …) to match frontend wire format.
+/// JsonStringEnumConverter would otherwise serialize as "Monday" string.
+/// </summary>
 public sealed record TimeSlotDto(
     int Id,
     int TermId,
-    DayOfWeek DayOfWeek,
+    int DayOfWeek,
     TimeOnly StartTime,
     TimeOnly EndTime,
     int SlotOrder,
@@ -14,13 +18,13 @@ public sealed record TimeSlotDto(
 
 public sealed record CreateTimeSlotDto(
     int TermId,
-    DayOfWeek DayOfWeek,
+    int DayOfWeek,
     TimeOnly StartTime,
     TimeOnly EndTime,
     TimeSlotAllowedMode AllowedMode);
 
 public sealed record UpdateTimeSlotDto(
-    DayOfWeek DayOfWeek,
+    int DayOfWeek,
     TimeOnly StartTime,
     TimeOnly EndTime,
     TimeSlotAllowedMode AllowedMode);

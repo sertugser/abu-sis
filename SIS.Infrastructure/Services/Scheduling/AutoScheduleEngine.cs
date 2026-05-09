@@ -127,7 +127,7 @@ public sealed class AutoScheduleEngine
                     var crName = classroomLookup.TryGetValue(s.ClassroomId, out var c) ? c.Name : "?";
                     return new ScheduleSlotDto
                     {
-                        Day = ts?.DayOfWeek ?? DayOfWeek.Monday,
+                        Day = (int)(ts?.DayOfWeek ?? DayOfWeek.Monday),
                         StartTime = ts?.StartTime ?? TimeOnly.MinValue,
                         EndTime = ts?.EndTime ?? TimeOnly.MinValue,
                         ClassroomId = s.ClassroomId,

@@ -29,7 +29,11 @@ public class FacultyPlanningSectionDto
 
 public class ScheduleBlockDto
 {
-    public DayOfWeek Day { get; set; }
+    /// <summary>
+    /// .NET DayOfWeek as integer (0=Sunday, 1=Monday, …, 6=Saturday). Mirrors
+    /// FacultyPlanningTimeSlotDto.Day so frontend grid + this list can be matched.
+    /// </summary>
+    public int Day { get; set; }
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
     public ScheduleBlockType BlockType { get; set; }

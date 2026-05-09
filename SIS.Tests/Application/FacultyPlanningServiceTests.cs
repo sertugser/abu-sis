@@ -63,7 +63,7 @@ public class FacultyPlanningServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(11, 0)
                 }
@@ -116,7 +116,7 @@ public class FacultyPlanningServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(16, 0),
                     EndTime = new TimeOnly(17, 45)
                 }
@@ -153,7 +153,7 @@ public class FacultyPlanningServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(11, 0)
                 }

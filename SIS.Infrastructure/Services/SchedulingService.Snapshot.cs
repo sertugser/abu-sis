@@ -239,7 +239,7 @@ public partial class SchedulingService
             var overrideValidation = ValidateTimeBlocks(scheduleSlotOverrides
                 .Select(dto => new TimeBlock
                 {
-                    Day = dto.Day,
+                    Day = (DayOfWeek)dto.Day,
                     StartTime = dto.StartTime,
                     EndTime = dto.EndTime
                 })

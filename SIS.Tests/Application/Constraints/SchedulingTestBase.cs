@@ -309,7 +309,7 @@ public abstract class SchedulingTestBase : IDisposable
         return slots
             .Select(slot => new ScheduleSlotDto
             {
-                Day = slot.Day,
+                Day = (int)slot.Day,
                 StartTime = new TimeOnly(slot.StartHour, slot.StartMinute),
                 EndTime = new TimeOnly(slot.EndHour, slot.EndMinute)
             })

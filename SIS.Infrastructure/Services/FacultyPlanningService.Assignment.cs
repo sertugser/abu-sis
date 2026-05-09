@@ -143,7 +143,7 @@ public partial class FacultyPlanningService
                     foreach (var day in requestDays)
                     {
                         var existingHours = existingInstructorSchedules
-                            .Where(ss => ss.TimeSlot.DayOfWeek == day)
+                            .Where(ss => (int)ss.TimeSlot.DayOfWeek == day)
                             .Sum(ss => (ss.TimeSlot.EndTime - ss.TimeSlot.StartTime).TotalHours);
                         var newHours = request.ScheduleSlots
                             .Where(s => s.Day == day)

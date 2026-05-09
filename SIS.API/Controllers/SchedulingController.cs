@@ -264,14 +264,14 @@ public class SchedulingController : ControllerBase
         var slotsSource2 = request.SwapSlots ? swapSchedules1 : swapSchedules2;
         var slots1 = slotsSource1.Select(ss => new ScheduleSlotDto
         {
-            Day = ss.TimeSlot.DayOfWeek,
+            Day = (int)ss.TimeSlot.DayOfWeek,
             StartTime = ss.TimeSlot.StartTime,
             EndTime = ss.TimeSlot.EndTime,
             ClassroomId = ss.ClassroomId
         }).ToList();
         var slots2 = slotsSource2.Select(ss => new ScheduleSlotDto
         {
-            Day = ss.TimeSlot.DayOfWeek,
+            Day = (int)ss.TimeSlot.DayOfWeek,
             StartTime = ss.TimeSlot.StartTime,
             EndTime = ss.TimeSlot.EndTime,
             ClassroomId = ss.ClassroomId
@@ -434,7 +434,7 @@ public class SchedulingController : ControllerBase
             {
                 entries.Add(new TimetableEntryDto
                 {
-                    Day = ss.TimeSlot.DayOfWeek,
+                    Day = (int)ss.TimeSlot.DayOfWeek,
                     StartTime = ss.TimeSlot.StartTime,
                     EndTime = ss.TimeSlot.EndTime,
                     CourseCode = section.Course.Code,
