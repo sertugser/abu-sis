@@ -22,6 +22,13 @@ public sealed class NoDayOffEncoder : IConstraintEncoder
     {
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
+
+        // Plan 10 — Category toggle: admin H-DO'yu "Tercihli" (Soft) yaparsa hard ban skip;
+        // NoDayOffSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         if (ctx.Request.TimeSlots.Count == 0)
             return;
 

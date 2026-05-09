@@ -28,6 +28,12 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
+        // Plan 10 — Category toggle: admin H4'ü "Tercihli" (Soft) yaparsa hard ban
+        // skip edilir; ClassroomTypeSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         foreach (var section in ctx.Request.Sections)
         {
             EncodeLabComponent(ctx, section);

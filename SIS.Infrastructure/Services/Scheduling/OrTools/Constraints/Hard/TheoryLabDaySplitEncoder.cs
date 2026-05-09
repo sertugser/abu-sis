@@ -34,6 +34,12 @@ public sealed class TheoryLabDaySplitEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
+        // Plan 10 — Category toggle: admin H16'yı "Tercihli" (Soft) yaparsa hard ban skip;
+        // TheoryLabDaySplitSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         if (ctx.Request.TimeSlots.Count == 0)
             return;  // no slots = no day data
 

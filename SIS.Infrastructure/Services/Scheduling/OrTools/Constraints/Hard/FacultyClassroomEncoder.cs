@@ -20,6 +20,14 @@ public sealed class FacultyClassroomEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
+        // Plan 10 — Category toggle: admin H10'u "Tercihli" (Soft) yaparsa diagnostic marker
+        // skip edilir (room var domain restriction zaten CreateRoomVariable'da uygulandı —
+        // gerçek soft mode için DecisionVariables'ı genişletmek gerekir, bu encoder'da
+        // çağrılan domain expansion karmaşık olduğu için FacultyClassroomSoftEncoder şu anda STUB).
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         // Per-section diagnostic marker. No actual constraint added — domain restriction in
         // CreateRoomVariable handles enforcement; this just exposes the constraint code to UNSAT core.
         foreach (var section in ctx.Request.Sections)

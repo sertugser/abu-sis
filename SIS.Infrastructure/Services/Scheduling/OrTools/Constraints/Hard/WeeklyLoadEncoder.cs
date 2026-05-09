@@ -20,6 +20,12 @@ public sealed class WeeklyLoadEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
+        // Plan 10 — Category toggle: admin H-WL'ı "Tercihli" (Soft) yaparsa hard ban skip;
+        // WeeklyLoadSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         var byInstructor = ctx.Request.Sections
             .Where(s => s.InstructorId.HasValue)
             .GroupBy(s => s.InstructorId!.Value);

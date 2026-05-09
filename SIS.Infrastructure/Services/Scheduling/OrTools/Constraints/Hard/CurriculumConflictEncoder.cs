@@ -23,6 +23,12 @@ public sealed class CurriculumConflictEncoder : IConstraintEncoder
     {
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true)) return;
 
+        // Plan 10 — Category toggle: admin H5'i "Tercihli" (Soft) yaparsa hard ban skip;
+        // CurriculumConflictSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         switch (ctx.Request.CurriculumConflictMode)
         {
             case "cohort":

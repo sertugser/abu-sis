@@ -131,6 +131,23 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, WeekdayBalanceEncoder>();
         services.AddScoped<IConstraintEncoder, AdjacentYearEncoder>();
 
+        // Plan 10 Phase 3 — Soft variants for Hard→Soft toggleable rules.
+        // Default Category="Hard" → these stay no-op; admin "Tercihli" toggle activates penalty mode.
+        services.AddScoped<IConstraintEncoder, ClassroomTypeSoftEncoder>();        // H4 STUB
+        services.AddScoped<IConstraintEncoder, CurriculumConflictSoftEncoder>();   // H5
+        services.AddScoped<IConstraintEncoder, SameCourseSectionSoftEncoder>();    // H8
+        services.AddScoped<IConstraintEncoder, FacultyClassroomSoftEncoder>();     // H10 STUB
+        services.AddScoped<IConstraintEncoder>(sp =>
+        {
+            // H15 soft uses same MaxConsecutiveHours config as hard encoder.
+            var config = sp.GetRequiredService<ISystemConfigProvider>();
+            var maxHours = config.GetIntAsync("Schedule.MaxConsecutiveHoursPerDay", 4, default).GetAwaiter().GetResult();
+            return new MaxConsecutiveHoursSoftEncoder(maxHours);
+        });
+        services.AddScoped<IConstraintEncoder, TheoryLabDaySplitSoftEncoder>();    // H16
+        services.AddScoped<IConstraintEncoder, WeeklyLoadSoftEncoder>();           // H-WL
+        services.AddScoped<IConstraintEncoder, NoDayOffSoftEncoder>();             // H-DO
+
         // Diagnostics
         services.AddScoped<UnsatCoreInterpreter>();
 

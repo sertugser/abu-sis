@@ -63,4 +63,16 @@ public sealed record SoftThresholds
     // DIST soft tier
     public int DistDiscouragedWeight { get; init; } = 50;
     public int DistStronglyDiscouragedWeight { get; init; } = 200;
+
+    // Plan 10 Phase 3 — Hard→Soft toggle weights for previously hard-only rules.
+    // Defaults are conservative ("light penalty"). Admin tunes per Schedule.<Code>.Weight
+    // SystemConfig keys when toggling Category to "Tercihli".
+    public int H4Weight { get; init; } = 5;     // ClassroomType (theory/lab type mismatch per assignment)
+    public int H5Weight { get; init; } = 10;    // CurriculumConflict (cohort overlap)
+    public int H8Weight { get; init; } = 8;     // SameCourseSection (same-course sections overlap)
+    public int H10Weight { get; init; } = 5;    // FacultyClassroom (faculty boundary cross — STUB)
+    public int H15Weight { get; init; } = 6;    // MaxConsecutiveHours (excess hours per window)
+    public int H16Weight { get; init; } = 5;    // TheoryLabDaySplit (theory + lab on same day above threshold)
+    public int HWLWeight { get; init; } = 8;    // WeeklyLoad (instructor weekly excess hours)
+    public int HDOWeight { get; init; } = 7;    // NoDayOff (instructor with no day off)
 }

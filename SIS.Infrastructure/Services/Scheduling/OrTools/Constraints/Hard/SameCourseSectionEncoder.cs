@@ -19,6 +19,12 @@ public sealed class SameCourseSectionEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
+        // Plan 10 — Category toggle: admin H8'i "Tercihli" (Soft) yaparsa hard ban skip;
+        // SameCourseSectionSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         var byCourse = ctx.Request.Sections.GroupBy(s => s.CourseId);
 
         foreach (var courseGroup in byCourse)

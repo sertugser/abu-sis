@@ -47,6 +47,13 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
     {
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
+
+        // Plan 10 — Category toggle: admin H15'i "Tercihli" (Soft) yaparsa hard sliding-window
+        // ban skip edilir; MaxConsecutiveHoursSoftEncoder devreye girer (penalty mod). Default Hard.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
+            return;
+
         if (ctx.Request.TimeSlots.Count == 0)
             return;
 
