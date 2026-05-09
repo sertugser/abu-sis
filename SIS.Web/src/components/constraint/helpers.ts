@@ -6,6 +6,49 @@ export const CATEGORY_LABELS: Record<string, string> = {
   Soft: 'Tercihli',
 };
 
+// ─── Category Toggle Capability ─────────────────────────────────
+// Plan 10 — her kuralın Hard/Soft toggle yapabilirliği:
+//   - 'toggleable': Hem Hard hem Soft encoder var, admin değiştirebilir
+//   - 'hard-only': Mantıken/fiziksel olarak Hard zorunlu, toggle anlamsız
+//   - 'soft-only': Doğası soft (penalty-bazlı), Hard yapılamaz
+export type CategoryCapability = 'toggleable' | 'hard-only' | 'soft-only';
+
+export const CATEGORY_CAPABILITY: Record<string, CategoryCapability> = {
+  // ── Zorunlu HARD (fizik/mantık kuralı) ────────────────
+  'H1':   'hard-only',   // Aynı oda + saat = fizik
+  'H2':   'hard-only',   // Aynı hoca + saat = fizik
+  'H3':   'hard-only',   // Section ≤ classroom kapasitesi
+  'H6':   'hard-only',   // Same-section component overlap = mantıksal
+  'H11':  'hard-only',   // Eşkoşul = öğrenci ikisini de almalı
+  'H17':  'hard-only',   // Slot mode kuralı (AllowedMode)
+
+  // ── Toggleable (Hard ↔ Soft her ikisi mantıklı) ──────
+  'H4':   'toggleable',  // Derslik tipi tercihi
+  'H5':   'toggleable',  // Müfredat çakışması esnekliği
+  'H8':   'toggleable',  // Aynı ders şube tercihi
+  'H10':  'toggleable',  // Fakülte derslik esnekliği
+  'H13':  'toggleable',  // Öğle arası tercihi
+  'H15':  'toggleable',  // Ardışık limit tercihi
+  'H16':  'toggleable',  // Theory-Lab sıra tercihi
+  'H-WL': 'toggleable',  // Haftalık yük limit tercihi
+  'H-DL': 'toggleable',  // Günlük yük limit tercihi
+  'H-DO': 'toggleable',  // Boş gün tercihi
+  'DIST': 'toggleable',  // Distribution kural tercihi
+
+  // ── Doğası SOFT (penalty-bazlı, Hard yapılamaz) ──────
+  'S1':   'soft-only',
+  'S3':   'soft-only',
+  'S4':   'soft-only',
+  'S7':   'soft-only',
+  'S8':   'soft-only',
+  'S12':  'soft-only',
+  'S20':  'soft-only',
+};
+
+export function getCategoryCapability(code: string): CategoryCapability {
+  return CATEGORY_CAPABILITY[code] ?? 'hard-only';
+}
+
 export const SCOPE_LABELS: Record<string, string> = {
   Schedule: 'Ders Programı',
   Scheduling: 'Ders Programı',

@@ -28,7 +28,7 @@ import {
 } from '../hooks/useConstraints';
 import { useAdminTerms } from '../hooks/useAdminTerms';
 import {
-  CATEGORY_LABELS, CONSTRAINT_GROUPS, PARAMETER_SCHEMAS,
+  CATEGORY_LABELS, CONSTRAINT_GROUPS, PARAMETER_SCHEMAS, getCategoryCapability,
 } from '../components/constraint/helpers';
 import { useUpdateConstraintParameters } from '../hooks/useConstraints';
 import { Input } from '@/components/ui/input';
@@ -200,17 +200,20 @@ function ConstraintEditDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Aktif / Pasif */}
+          {/* Aktif / Pasif — Plan 10: kritik geçişlerde onay */}
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Durum</label>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant={constraint.isEnabled ? 'default' : 'outline'}
-                onClick={() => !constraint.isEnabled && toggleMutation.mutate(constraint.id, {
-                  onSuccess: () => notifySuccess(`${constraint.name} aktif edildi.`),
-                  onError: (e) => notifyError(e, 'Durum değiştirilemedi.'),
-                })}
+                onClick={() => {
+                  if (constraint.isEnabled) return;
+                  toggleMutation.mutate(constraint.id, {
+                    onSuccess: () => notifySuccess(`${constraint.name} aktif edildi.`),
+                    onError: (e) => notifyError(e, 'Durum değiştirilemedi.'),
+                  });
+                }}
                 disabled={!isAdmin || toggleMutation.isPending || constraint.isEnabled}
               >
                 Aktif
@@ -218,10 +221,19 @@ function ConstraintEditDialog({
               <Button
                 type="button"
                 variant={!constraint.isEnabled ? 'default' : 'outline'}
-                onClick={() => constraint.isEnabled && toggleMutation.mutate(constraint.id, {
-                  onSuccess: () => notifySuccess(`${constraint.name} pasif edildi.`),
-                  onError: (e) => notifyError(e, 'Durum değiştirilemedi.'),
-                })}
+                onClick={() => {
+                  if (!constraint.isEnabled) return;
+                  const ok = window.confirm(
+                    `"${constraint.name}" kuralını PASİF yapmak üzeresiniz.\n\n` +
+                    `Bu kural artık çalışmayacak; ihlaller engellenmeyecek veya cezalandırılmayacak.\n\n` +
+                    `Devam edilsin mi?`
+                  );
+                  if (!ok) return;
+                  toggleMutation.mutate(constraint.id, {
+                    onSuccess: () => notifySuccess(`${constraint.name} pasif edildi.`),
+                    onError: (e) => notifyError(e, 'Durum değiştirilemedi.'),
+                  });
+                }}
                 disabled={!isAdmin || toggleMutation.isPending || !constraint.isEnabled}
               >
                 Pasif
@@ -229,46 +241,86 @@ function ConstraintEditDialog({
             </div>
           </div>
 
-          {/* Zorunlu / Tercihli */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kategori</label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant={constraint.category === 'Hard' ? 'default' : 'outline'}
-                onClick={() => constraint.category !== 'Hard' && categoryMutation.mutate(
-                  { id: constraint.id, category: 'Hard' },
-                  {
-                    onSuccess: () => notifySuccess(`${constraint.name} → Zorunlu yapıldı.`),
-                    onError: (e) => notifyError(e, 'Kategori değiştirilemedi.'),
-                  },
-                )}
-                disabled={!isAdmin || categoryMutation.isPending || constraint.category === 'Hard'}
-                className={constraint.category === 'Hard' ? 'bg-red-600 hover:bg-red-700' : ''}
-              >
-                Zorunlu
-              </Button>
-              <Button
-                type="button"
-                variant={constraint.category === 'Soft' ? 'default' : 'outline'}
-                onClick={() => constraint.category !== 'Soft' && categoryMutation.mutate(
-                  { id: constraint.id, category: 'Soft' },
-                  {
-                    onSuccess: () => notifySuccess(`${constraint.name} → Tercihli yapıldı.`),
-                    onError: (e) => notifyError(e, 'Kategori değiştirilemedi.'),
-                  },
-                )}
-                disabled={!isAdmin || categoryMutation.isPending || constraint.category === 'Soft'}
-                className={constraint.category === 'Soft' ? 'bg-amber-500 hover:bg-amber-600' : ''}
-              >
-                Tercihli
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              <strong>Zorunlu:</strong> ihlal edilemez (program oluşmaz).{' '}
-              <strong>Tercihli:</strong> ihlal edilebilir, ceza alır.
-            </p>
-          </div>
+          {/* Zorunlu / Tercihli — Plan 10: capability-aware + onay */}
+          {(() => {
+            const capability = getCategoryCapability(constraint.code);
+            // hard-only / soft-only kurallarda toggle anlamsız, sadece bilgi göster.
+            if (capability !== 'toggleable') {
+              const fixedLabel = capability === 'hard-only' ? 'Zorunlu (sabit)' : 'Tercihli (sabit)';
+              const fixedExplain = capability === 'hard-only'
+                ? 'Bu kural fizik/mantık gereği değiştirilemez (örn. aynı oda + saat = imkansız).'
+                : 'Bu kural doğası gereği yumuşak (penalty-bazlı), Zorunlu yapılamaz.';
+              return (
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kategori</label>
+                  <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                    <span className="font-semibold">{fixedLabel}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{fixedExplain}</p>
+                </div>
+              );
+            }
+            // toggleable — Hard ↔ Soft geçişi mümkün, kritik geçişlerde onay.
+            return (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kategori</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={constraint.category === 'Hard' ? 'default' : 'outline'}
+                    onClick={() => {
+                      if (constraint.category === 'Hard') return;
+                      const ok = window.confirm(
+                        `"${constraint.name}" kuralını ZORUNLU (Hard) moda almak üzeresiniz.\n\n` +
+                        `Bu modda kural ihlali otomatik programla sırasında YASAK olur — ihlal eden ` +
+                        `atamalar mümkün değil. Bazı dersler yerleşemeyebilir.\n\nDevam edilsin mi?`
+                      );
+                      if (!ok) return;
+                      categoryMutation.mutate(
+                        { id: constraint.id, category: 'Hard' },
+                        {
+                          onSuccess: () => notifySuccess(`${constraint.name} → Zorunlu yapıldı.`),
+                          onError: (e) => notifyError(e, 'Kategori değiştirilemedi.'),
+                        },
+                      );
+                    }}
+                    disabled={!isAdmin || categoryMutation.isPending || constraint.category === 'Hard'}
+                    className={constraint.category === 'Hard' ? 'bg-red-600 hover:bg-red-700' : ''}
+                  >
+                    Zorunlu
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={constraint.category === 'Soft' ? 'default' : 'outline'}
+                    onClick={() => {
+                      if (constraint.category === 'Soft') return;
+                      const ok = window.confirm(
+                        `"${constraint.name}" kuralını TERCİHLİ (Soft) moda almak üzeresiniz.\n\n` +
+                        `Bu modda kural ihlali yasak değil — ders yerleşebilir ama programa ceza ` +
+                        `puanı eklenir. Çözücü bu cezayı minimize etmeye çalışır.\n\nDevam edilsin mi?`
+                      );
+                      if (!ok) return;
+                      categoryMutation.mutate(
+                        { id: constraint.id, category: 'Soft' },
+                        {
+                          onSuccess: () => notifySuccess(`${constraint.name} → Tercihli yapıldı.`),
+                          onError: (e) => notifyError(e, 'Kategori değiştirilemedi.'),
+                        },
+                      );
+                    }}
+                    disabled={!isAdmin || categoryMutation.isPending || constraint.category === 'Soft'}
+                    className={constraint.category === 'Soft' ? 'bg-amber-500 hover:bg-amber-600' : ''}
+                  >
+                    Tercihli
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  <strong>Zorunlu:</strong> ihlal edilemez (yerleşemez).{' '}
+                  <strong>Tercihli:</strong> ihlal edilebilir, ceza alır.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Ağırlık (Tercihli için) */}
           {constraint.category === 'Soft' && (

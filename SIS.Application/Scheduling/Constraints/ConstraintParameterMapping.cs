@@ -73,4 +73,50 @@ public static class ConstraintParameterMapping
     {
         return Map.TryGetValue((constraintCode, uiKey), out var sysKey) ? sysKey : null;
     }
+
+    /// <summary>
+    /// Plan 10 — Kategori toggle yapılabilirliği. UI capability map'i ile uyumlu.
+    /// 'toggleable': Hard/Soft her ikisi mantıklı, encoder pipeline'da pair var.
+    /// 'hard-only': Fizik/mantık gereği zorunlu Hard, Soft yapılamaz.
+    /// 'soft-only': Doğası penalty-bazlı, Hard yapılamaz.
+    /// </summary>
+    public enum CategoryCapability { Toggleable, HardOnly, SoftOnly }
+
+    private static readonly Dictionary<string, CategoryCapability> CategoryMap = new()
+    {
+        // Hard-only (fizik/mantık)
+        ["H1"] = CategoryCapability.HardOnly,
+        ["H2"] = CategoryCapability.HardOnly,
+        ["H3"] = CategoryCapability.HardOnly,
+        ["H6"] = CategoryCapability.HardOnly,
+        ["H11"] = CategoryCapability.HardOnly,
+        ["H17"] = CategoryCapability.HardOnly,
+
+        // Toggleable
+        ["H4"] = CategoryCapability.Toggleable,
+        ["H5"] = CategoryCapability.Toggleable,
+        ["H8"] = CategoryCapability.Toggleable,
+        ["H10"] = CategoryCapability.Toggleable,
+        ["H13"] = CategoryCapability.Toggleable,
+        ["H15"] = CategoryCapability.Toggleable,
+        ["H16"] = CategoryCapability.Toggleable,
+        ["H-WL"] = CategoryCapability.Toggleable,
+        ["H-DL"] = CategoryCapability.Toggleable,
+        ["H-DO"] = CategoryCapability.Toggleable,
+        ["DIST"] = CategoryCapability.Toggleable,
+
+        // Soft-only
+        ["S1"] = CategoryCapability.SoftOnly,
+        ["S3"] = CategoryCapability.SoftOnly,
+        ["S4"] = CategoryCapability.SoftOnly,
+        ["S7"] = CategoryCapability.SoftOnly,
+        ["S8"] = CategoryCapability.SoftOnly,
+        ["S12"] = CategoryCapability.SoftOnly,
+        ["S20"] = CategoryCapability.SoftOnly,
+    };
+
+    public static CategoryCapability GetCategoryCapability(string code)
+    {
+        return CategoryMap.TryGetValue(code, out var cap) ? cap : CategoryCapability.HardOnly;
+    }
 }

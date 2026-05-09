@@ -129,6 +129,13 @@ public class ConstraintController : ControllerBase
         if (definition == null)
             return NotFound(new { error = "Constraint tanimi bulunamadi." });
 
+        // Plan 10 — Capability validation: hard-only / soft-only kurallarda toggle reddedilir.
+        var capability = ConstraintParameterMapping.GetCategoryCapability(definition.Code);
+        if (capability == ConstraintParameterMapping.CategoryCapability.HardOnly && request.Category == "Soft")
+            return BadRequest(new { error = $"'{definition.Code}' kuralı fizik/mantık gereği yalnız Zorunlu (Hard) modda çalışır; Tercihli yapılamaz." });
+        if (capability == ConstraintParameterMapping.CategoryCapability.SoftOnly && request.Category == "Hard")
+            return BadRequest(new { error = $"'{definition.Code}' kuralı doğası gereği Tercihli (Soft) modda çalışır; Zorunlu yapılamaz." });
+
         definition.Category = request.Category;
         definition.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
