@@ -14,10 +14,17 @@ public partial class SchedulingService
 {
     internal async Task<Dictionary<string, string>> LoadSystemConfigAsync(CancellationToken ct)
     {
-        // Otomatik programlama algoritma ayarları artık ayrı tabloda
-        // (SchedulingAlgorithmConfigs). Genel SystemConfig (Attendance, GPA, vs.)
-        // bu factory ile karıştırılmasın diye buradan okunmuyor.
-        return await _context.SchedulingAlgorithmConfigs.AsNoTracking()
+        // 2026-05-09: Eski SchedulingAlgorithmConfigs tablosu SystemConfigs'e merge edildi.
+        // Tek tablo, scheduling-related kategorilerle filtrele (HardThreshold, SA, MRV, LNS,
+        // Other, Soft, Schedule). Attendance/GPA/Registration vs. ihtiyaç olmadığı için dahil edilmiyor.
+        return await _context.SystemConfigs.AsNoTracking()
+            .Where(c => c.Category == "HardThreshold"
+                     || c.Category == "SA"
+                     || c.Category == "MRV"
+                     || c.Category == "LNS"
+                     || c.Category == "Other"
+                     || c.Category == "Soft"
+                     || c.Category == "Schedule")
             .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
     }
 

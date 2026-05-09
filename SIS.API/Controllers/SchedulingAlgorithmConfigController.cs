@@ -13,9 +13,12 @@ public record UpdateSchedulingAlgorithmConfigDto(string Value);
 public record SchedulingAlgorithmConfigGroupDto(string Category, string DisplayName, string? Description, string? BadgeClass, int SortOrder);
 
 /// <summary>
-/// Otomatik programlama algoritmasını etkileyen ayarlar (SA, MRV, LNS, kısıt eşikleri).
-/// /ders-programi-kisitlamalari sayfasındaki "Algoritma Parametreleri" sekmesinden yönetilir.
-/// SystemConfig'den ayrı bir tablo (SchedulingAlgorithmConfigs) — domain ayrımı için.
+/// Otomatik programlama algoritmasını etkileyen ayarlar (kısıt eşikleri, soft constraint
+/// katsayıları, eski V1 algoritma parametreleri). /ders-programi-kisitlamalari sayfasındaki
+/// "Algoritma Parametreleri" sekmesinden yönetilir.
+///
+/// Tek tablo: SystemConfigs (2026-05-09 dual-table merge). Filter: <see cref="SchedulingCategories"/>
+/// içindeki kategoriler. Solver da SystemConfigs'i okuduğu için admin değişikliği anında etkili olur.
 /// </summary>
 [ApiController]
 [Route("api/admin/scheduling-algorithm-config")]
@@ -25,7 +28,13 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
     private readonly AppDbContext _context = context;
     private readonly ISystemConfigProvider _configProvider = configProvider;
 
-    // HH:mm formatında saat değeri bekleyen string key'ler.
+    // Bu panelde görünecek SystemConfigs.Category değerleri. Genel "Schedule" kategorisi
+    // (örn. SlotDurationMinutes, MorningStartTime) sistem ayarları sayfasında ayrıca yönetilir.
+    private static readonly HashSet<string> SchedulingCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "HardThreshold", "SA", "MRV", "LNS", "Other", "Soft"
+    };
+
     private static readonly HashSet<string> TimeKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "Schedule.LunchBreakStart",
@@ -34,15 +43,12 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
 
     private static readonly Dictionary<string, (decimal? Min, decimal? Max)> NumericLimits = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Hard thresholds (paylaşılan / mod değiştirici)
         ["Classroom.AmphiThreshold"] = (0, 500),
         ["Schedule.MaxConsecutiveHours"] = (1, 12),
 
-        // Other
         ["Scheduling.MaxBacktrackingDepth"] = (0, 20),
         ["Schedule.TheoryLabSplitThreshold"] = (1, 20),
 
-        // Simulated Annealing
         ["Schedule.SA.MaxIterations"] = (1, 1_000_000),
         ["Schedule.SA.InitialTemperature"] = (1, 10_000),
         ["Schedule.SA.TimeoutSeconds"] = (5, 3600),
@@ -52,23 +58,45 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
         ["Schedule.SA.SwapWeight"] = (0, 100),
         ["Schedule.SA.ChainWeight"] = (0, 100),
 
-        // LNS
         ["Schedule.LNS.MaxIterations"] = (1, 100_000),
         ["Schedule.LNS.TimeoutSeconds"] = (5, 600),
         ["Schedule.LNS.DestroySize"] = (1, 50),
 
-        // MRV
         ["Schedule.MRV.ClassroomWeight"] = (0, 100),
         ["Schedule.MRV.SlotWeight"] = (0, 100),
         ["Schedule.MRV.LabWeight"] = (0, 100),
         ["Schedule.MRV.CapacityWeight"] = (0, 100),
     };
 
+    // Eski SchedulingAlgorithmConfigGroups tablosu kaldırıldı (2026-05-09); UI metadatası burada hardcoded.
+    private static readonly SchedulingAlgorithmConfigGroupDto[] Groups =
+    [
+        new("HardThreshold", "Paylaşılan Kısıt Eşikleri",
+            "Birden fazla kısıdı etkileyen ortak eşikler (H4, H13, H15). Kısıda özel eşikler ilgili kısıt kartından düzenleniyor.",
+            "bg-orange-100 text-orange-800 border-orange-200", 1),
+        new("SA", "Ana Optimizasyon Motoru",
+            "Programı iyileştiren ana motor — kaç deneme yapsın, ne kadar süre çalışsın, hangi hamlelere ağırlık versin.",
+            "bg-blue-100 text-blue-800 border-blue-200", 2),
+        new("MRV", "Çözüm Önceliği (Başlangıç)",
+            "İlk programı kurarken hangi tür kısıtların öncelikli olduğunu belirler — uygun derslik az olan dersler önce, vb.",
+            "bg-indigo-100 text-indigo-800 border-indigo-200", 3),
+        new("LNS", "Sıkışma Çözümü (Yedek Motor)",
+            "Ana motor takıldığında devreye giren yan motor — bir kerede kaç dersi yıkıp yeniden çözer.",
+            "bg-emerald-100 text-emerald-800 border-emerald-200", 4),
+        new("Other", "Diğer Algoritma Ayarları",
+            "Genel scheduling motoru ayarları.",
+            "bg-slate-100 text-slate-800 border-slate-200", 5),
+        new("Soft", "Soft Constraint Katsayıları",
+            "Soft kısıtların ağırlık ve eşik değerleri (örn. S20 komşu yıl çakışma cezası).",
+            "bg-amber-100 text-amber-800 border-amber-200", 6),
+    ];
+
     [HttpGet]
     [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        var configs = await _context.SchedulingAlgorithmConfigs.AsNoTracking()
+        var configs = await _context.SystemConfigs.AsNoTracking()
+            .Where(c => SchedulingCategories.Contains(c.Category))
             .OrderBy(c => c.Category).ThenBy(c => c.Key)
             .Select(c => new SchedulingAlgorithmConfigDto(c.Id, c.Key, c.Value, c.Description, c.Category, c.DataType))
             .ToListAsync(ct);
@@ -78,22 +106,14 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
 
     [HttpGet("groups")]
     [RequirePermission("menu.ders-programi-kisitlamalari.view")]
-    public async Task<IActionResult> GetGroups(CancellationToken ct)
-    {
-        var groups = await _context.SchedulingAlgorithmConfigGroups.AsNoTracking()
-            .OrderBy(g => g.SortOrder)
-            .Select(g => new SchedulingAlgorithmConfigGroupDto(g.Category, g.DisplayName, g.Description, g.BadgeClass, g.SortOrder))
-            .ToListAsync(ct);
-
-        return Ok(groups);
-    }
+    public IActionResult GetGroups() => Ok(Groups);
 
     [HttpGet("{id:int}")]
     [RequirePermission("menu.ders-programi-kisitlamalari.view")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
-        var config = await _context.SchedulingAlgorithmConfigs.AsNoTracking()
-            .Where(c => c.Id == id)
+        var config = await _context.SystemConfigs.AsNoTracking()
+            .Where(c => c.Id == id && SchedulingCategories.Contains(c.Category))
             .Select(c => new SchedulingAlgorithmConfigDto(c.Id, c.Key, c.Value, c.Description, c.Category, c.DataType))
             .FirstOrDefaultAsync(ct);
 
@@ -119,7 +139,8 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
     [RequirePermission("menu.ders-programi-kisitlamalari.edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSchedulingAlgorithmConfigDto dto, CancellationToken ct)
     {
-        var config = await _context.SchedulingAlgorithmConfigs.FirstOrDefaultAsync(c => c.Id == id, ct);
+        var config = await _context.SystemConfigs.FirstOrDefaultAsync(
+            c => c.Id == id && SchedulingCategories.Contains(c.Category), ct);
 
         if (config == null)
             return NotFound(new { error = "Algoritma ayarı bulunamadı." });
@@ -138,8 +159,6 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
             return Conflict(new { error = "Bu ayar başka bir kullanıcı tarafından değiştirildi. Sayfayı yenileyip tekrar deneyin." });
         }
 
-        // SystemConfig provider'ı invalidate edelim — bu key'ler farklı tabloda olsa da
-        // cache'i paylaşıyor olabilir.
         _configProvider.InvalidateCache(config.Key);
 
         return Ok(new SchedulingAlgorithmConfigDto(config.Id, config.Key, config.Value, config.Description, config.Category, config.DataType));
@@ -183,6 +202,29 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
                     }
                 }
                 normalizedValue = intValue.ToString(CultureInfo.InvariantCulture);
+                return true;
+
+            case "decimal":
+            case "double":
+                if (!decimal.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var decValue))
+                {
+                    error = "Geçerli bir ondalık sayı girilmelidir.";
+                    return false;
+                }
+                if (NumericLimits.TryGetValue(key, out var decLimit))
+                {
+                    if (decLimit.Min.HasValue && decValue < decLimit.Min.Value)
+                    {
+                        error = $"Bu ayar en az {decLimit.Min} olmalıdır.";
+                        return false;
+                    }
+                    if (decLimit.Max.HasValue && decValue > decLimit.Max.Value)
+                    {
+                        error = $"Bu ayar en fazla {decLimit.Max} olabilir.";
+                        return false;
+                    }
+                }
+                normalizedValue = decValue.ToString(CultureInfo.InvariantCulture);
                 return true;
 
             case "bool":

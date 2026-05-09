@@ -23,6 +23,17 @@ public sealed class CorequisiteEncoder : IConstraintEncoder
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true))
             return;
 
+        // 2026-05-09: corequisite real enforcement (non-conflicting pair must exist) henüz
+        // yapılmadı — Plan 6.5'a ertelendi. Production'da DB'de 0 corequisite çifti olduğu için
+        // bu sessizce no-op'tu. Admin DB'ye corequisite çifti eklerse bu encoder pair'in
+        // çakışmamasını GARANTİ ETMEZ → sessiz veri hatası riski. Net hata fırlat.
+        if (ctx.Request.Corequisites.Count > 0)
+        {
+            throw new NotSupportedException(
+                $"Corequisite encoder real enforcement henüz yapılmadı, ancak {ctx.Request.Corequisites.Count} corequisite çifti DB'de tanımlı. " +
+                "Sessiz veri hatasını önlemek için scheduler bloklandı. Çözüm: corequisite çiftlerini geçici olarak kaldırın veya manuel atama yapın.");
+        }
+
         foreach (var rel in ctx.Request.Corequisites)
         {
             ctx.Assumptions.Register(Code,

@@ -25,6 +25,11 @@ public sealed class SameCourseSectionEncoder : IConstraintEncoder
         if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
             return;
 
+        // SystemConfig "Schedule.AllowSameCourseSectionOverlap" — admin "şubeler aynı slotta paralel
+        // açılabilsin" derse H8 tamamen kapalı (default false → kural aktif).
+        if (ctx.AllowSameCourseSectionOverlap)
+            return;
+
         var byCourse = ctx.Request.Sections.GroupBy(s => s.CourseId);
 
         foreach (var courseGroup in byCourse)

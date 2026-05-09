@@ -114,11 +114,17 @@ public sealed class CpSatSolverEngine : ISolverEngine
         var classroomTypeRequirementEnabled = await _config.GetBoolAsync(
             "Schedule.ClassroomTypeRequirementEnabled", false, cancellationToken);
 
+        // Schedule.AllowSameCourseSectionOverlap (default false). True iken H8 kuralı kapalı —
+        // admin "aynı dersin şubeleri aynı slotta paralel açılsın" diyebilir.
+        var allowSameCourseSectionOverlap = await _config.GetBoolAsync(
+            "Schedule.AllowSameCourseSectionOverlap", false, cancellationToken);
+
         reducedRequest = reducedRequest with
         {
             AmphiThreshold = amphiThreshold,
             AmphiThresholdEnabled = amphiThresholdEnabled,
-            ClassroomTypeRequirementEnabled = classroomTypeRequirementEnabled
+            ClassroomTypeRequirementEnabled = classroomTypeRequirementEnabled,
+            AllowSameCourseSectionOverlap = allowSameCourseSectionOverlap
         };
 
         // Read solver parameters from SystemConfig (5-min cached). Fallbacks only fire on missing keys.

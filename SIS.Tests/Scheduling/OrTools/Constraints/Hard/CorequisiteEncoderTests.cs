@@ -91,21 +91,25 @@ public class CorequisiteEncoderTests
     }
 
     [Fact]
-    public void Encode_OneCorequisite_RegistersOneAssumption()
+    public void Encode_OneCorequisite_ThrowsNotSupported()
     {
+        // 2026-05-09: H11 real enforcement henüz yapılmadı (Plan 6.5'a ertelendi). Eski "enumerate-only"
+        // davranış sessiz bug yaratıyordu — corequisite çiftleri DB'de varsa scheduler bunu garanti etmez.
+        // Guard: 0 corequisite → no-op (production'da 0 satır olduğu için bloklamaz);
+        //        1+ corequisite → NotSupportedException (admin görür, manuel atama yapar).
         var encoder = new CorequisiteEncoder();
         var ctx = BuildContext(
             new[] { Section(1) },
             new[] { new CourseRelationship(100, 200) },
             flags: new Dictionary<string, bool> { ["H11"] = true });
 
-        encoder.Encode(ctx);
-
-        ctx.Assumptions.Count.Should().Be(1);
+        Action act = () => encoder.Encode(ctx);
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*corequisite*");
     }
 
     [Fact]
-    public void Encode_ThreeCorequisites_RegistersThreeAssumptions()
+    public void Encode_ThreeCorequisites_ThrowsNotSupported()
     {
         var encoder = new CorequisiteEncoder();
         var ctx = BuildContext(
@@ -118,8 +122,8 @@ public class CorequisiteEncoderTests
             },
             flags: new Dictionary<string, bool> { ["H11"] = true });
 
-        encoder.Encode(ctx);
-
-        ctx.Assumptions.Count.Should().Be(3);
+        Action act = () => encoder.Encode(ctx);
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*3 corequisite*");
     }
 }

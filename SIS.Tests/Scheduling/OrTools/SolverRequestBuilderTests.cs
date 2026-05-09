@@ -690,15 +690,15 @@ public class SolverRequestBuilderTests
     }
 
     // ========================================================================
-    // Plan 6 Task 3 — CurriculumConflictMode read from SchedulingAlgorithmConfigs
+    // Plan 6 Task 3 — CurriculumConflictMode read from SystemConfigs (2026-05-09 dual-table merge)
     // ========================================================================
 
     [Fact]
-    public async Task BuildAsync_ReadsCurriculumConflictModeFromSchedulingAlgorithmConfigs()
+    public async Task BuildAsync_ReadsCurriculumConflictModeFromSystemConfigs()
     {
-        // Arrange — seed minimal context + add SchedulingAlgorithmConfig row.
+        // Arrange — seed minimal context + add SystemConfig row.
         await using var ctx = await SeedMinimalAsync();
-        ctx.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
+        ctx.SystemConfigs.Add(new SystemConfig
         {
             Key = "Schedule.CurriculumConflictMode",
             Value = "cohort",
@@ -717,16 +717,16 @@ public class SolverRequestBuilderTests
     }
 
     [Fact]
-    public async Task BuildAsync_NoSchedulingAlgorithmConfig_DefaultsToCurriculumMode()
+    public async Task BuildAsync_NoSystemConfigRow_DefaultsToCurriculumMode()
     {
-        // SeedMinimalAsync seeds no SchedulingAlgorithmConfigs rows.
+        // SeedMinimalAsync seeds no Schedule.CurriculumConflictMode row.
         await using var ctx = await SeedMinimalAsync();
         var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
         var req = await builder.BuildAsync(1, 1, null, null, default);
 
         req.CurriculumConflictMode.Should().Be("curriculum",
-            because: "no SchedulingAlgorithmConfig row → builder falls back to 'curriculum' default");
+            because: "no SystemConfig row → builder falls back to 'curriculum' default");
     }
 
     // ========================================================================
@@ -835,7 +835,7 @@ public class SolverRequestBuilderTests
     {
         // Two sections same dept+year, different courses → cohort builder produces 1 pair.
         await using var ctx = await SeedScenarioWithTwoCohortCoursesAsync();
-        ctx.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
+        ctx.SystemConfigs.Add(new SystemConfig
         {
             Key = "Schedule.CurriculumConflictMode",
             Value = "cohort",

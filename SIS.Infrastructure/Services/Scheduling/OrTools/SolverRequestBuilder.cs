@@ -169,9 +169,9 @@ public sealed class SolverRequestBuilder
         var defaultInstructorMaxWeeklyHours = await _systemConfigProvider.GetIntAsync(
             "Schedule.DefaultInstructorMaxWeeklyHours", 30, cancellationToken);
 
-        // 8) Plan 6 Task 3 — Read curriculum conflict mode from SchedulingAlgorithmConfigs.
+        // 8) Plan 6 Task 3 — Read curriculum conflict mode from SystemConfigs (2026-05-09 dual-table merge).
         //    Defaults to "curriculum" if no row exists (legacy behavior).
-        var curriculumConflictMode = await _context.SchedulingAlgorithmConfigs
+        var curriculumConflictMode = await _context.SystemConfigs
             .AsNoTracking()
             .Where(c => c.Key == "Schedule.CurriculumConflictMode")
             .Select(c => c.Value)

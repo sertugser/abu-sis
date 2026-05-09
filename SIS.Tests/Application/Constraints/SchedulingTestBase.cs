@@ -224,41 +224,22 @@ public abstract class SchedulingTestBase : IDisposable
             return;
         }
 
-        if (AlgorithmConfigKeys.Contains(key))
+        // 2026-05-09: Tek tablo (SystemConfigs) — eski SchedulingAlgorithmConfigs/SystemConfigs duality kaldırıldı.
+        var category = AlgorithmConfigKeys.Contains(key) ? "Other" : "Scheduling";
+        var config = Context.SystemConfigs.SingleOrDefault(item => item.Key == key);
+        if (config == null)
         {
-            var existing = Context.SchedulingAlgorithmConfigs.SingleOrDefault(item => item.Key == key);
-            if (existing == null)
+            Context.SystemConfigs.Add(new SystemConfig
             {
-                Context.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
-                {
-                    Key = key,
-                    Value = value,
-                    Category = "Test",
-                    DataType = "string"
-                });
-            }
-            else
-            {
-                existing.Value = value;
-            }
+                Key = key,
+                Value = value,
+                Category = category,
+                DataType = "string"
+            });
         }
         else
         {
-            var config = Context.SystemConfigs.SingleOrDefault(item => item.Key == key);
-            if (config == null)
-            {
-                Context.SystemConfigs.Add(new SystemConfig
-                {
-                    Key = key,
-                    Value = value,
-                    Category = "Scheduling",
-                    DataType = "string"
-                });
-            }
-            else
-            {
-                config.Value = value;
-            }
+            config.Value = value;
         }
 
         Context.SaveChanges();
@@ -529,26 +510,14 @@ public abstract class SchedulingTestBase : IDisposable
 
     private void AddConfig(string key, string value)
     {
-        if (AlgorithmConfigKeys.Contains(key))
+        // 2026-05-09: Tek tablo (SystemConfigs).
+        Context.SystemConfigs.Add(new SystemConfig
         {
-            Context.SchedulingAlgorithmConfigs.Add(new SchedulingAlgorithmConfig
-            {
-                Key = key,
-                Value = value,
-                Category = "Test",
-                DataType = "string"
-            });
-        }
-        else
-        {
-            Context.SystemConfigs.Add(new SystemConfig
-            {
-                Key = key,
-                Value = value,
-                Category = "Scheduling",
-                DataType = "string"
-            });
-        }
+            Key = key,
+            Value = value,
+            Category = AlgorithmConfigKeys.Contains(key) ? "Other" : "Scheduling",
+            DataType = "string"
+        });
     }
 
     private TimeSlot FindOrCreateTimeSlot(

@@ -22,8 +22,6 @@ public static partial class SeedData
         // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı
         // SystemConfig önce seed edilmeli: TimeSlot generate'i Schedule.* anahtarlarını okuyor (özellikle FaceToFaceCutoffTime + WeekendOnlineOnly için AllowedMode damgalama)
         await SeedSystemConfigAsync(context);
-        await SeedSchedulingAlgorithmConfigAsync(context);
-        await SeedSchedulingAlgorithmConfigGroupAsync(context);
         await SeedWebModuleSettingsAsync(context);
         await SeedTimeSlotsAsync(context);
         await SeedConstraintDefinitionsAsync(context);

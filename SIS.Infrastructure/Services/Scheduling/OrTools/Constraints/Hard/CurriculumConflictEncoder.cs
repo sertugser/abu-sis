@@ -35,8 +35,12 @@ public sealed class CurriculumConflictEncoder : IConstraintEncoder
                 EncodeCohortMode(ctx);
                 break;
             case "enrollment":
-                // Plan 6.5'a ertelendi
-                break;
+                // 2026-05-09: enrollment encoder henüz yapılmadı (Plan 9 Phase 3'te skip edildi —
+                // production'da `cohort` mode aktif, 0 etki). Admin "enrollment" seçerse bu sessizce
+                // no-op olmasın, çünkü H5 müfredat çakışma kontrolü kritik. Net uyarı fırlat.
+                throw new NotSupportedException(
+                    "Schedule.CurriculumConflictMode='enrollment' modu henüz desteklenmiyor. " +
+                    "Geçici olarak 'cohort' veya 'curriculum' modunu kullanın.");
             default:
                 EncodeCurriculumMode(ctx);
                 break;
