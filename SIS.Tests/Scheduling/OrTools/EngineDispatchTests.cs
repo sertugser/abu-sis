@@ -20,30 +20,6 @@ namespace SIS.Tests.Scheduling.OrTools;
 public class EngineDispatchTests
 {
     [Fact]
-    public async Task RunAsync_EngineFlagV1Mrv_DoesNotCallSolverEngine()
-    {
-        var (engine, solverEngineMock, _) = BuildAutoScheduleEngine(engineFlag: "v1-mrv");
-
-        // v1 yolu boş DB'de erken dönüş yapar (sections == 0 → return). Solver çağrılmamalı.
-        try
-        {
-            await engine.RunAsync(
-                new AutoScheduleRequest { TermId = 1, FacultyId = 1 },
-                userId: null,
-                CancellationToken.None);
-        }
-        catch
-        {
-            // v1 başka bir nedenle başarısız olursa umurumuzda değil — sadece v2 dispatch'in
-            // tetiklenmediğini doğruluyoruz.
-        }
-
-        solverEngineMock.Verify(
-            x => x.SolveAsync(It.IsAny<SolverRequest>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
     public async Task RunAsync_EngineFlagV2OrTools_CallsSolverEngineSolveAsync()
     {
         var (engine, solverEngineMock, _) = BuildAutoScheduleEngine(
@@ -214,16 +190,9 @@ public class EngineDispatchTests
             .Callback<SolverRequest, CancellationToken>((req, _) => captureRequest?.Invoke(req))
             .ReturnsAsync(solverResult ?? BuildEmptySuccessResult());
 
-        // ConstraintEvaluationService — v2 path bu servisi kullanmaz, ama ctor null reddeder.
-        // Boş evaluator listesiyle minimum geçerli instance.
-        var constraintService = new ConstraintEvaluationService(
-            Array.Empty<IConstraintEvaluator>(),
-            context,
-            NullLogger<ConstraintEvaluationService>.Instance);
-
+        // Plan 9 sonrası AutoScheduleEngine v2-only — ConstraintEvaluationService bağımlılığı kaldırıldı.
         var engine = new AutoScheduleEngine(
             context,
-            constraintService,
             configMock.Object,
             solverMock.Object);
 

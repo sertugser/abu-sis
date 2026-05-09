@@ -57,8 +57,8 @@ public static partial class SeedData
             new() { Key = "CourseOpening.DefaultCapacityPerSection", Value = "40", Category = "CourseOpening", DataType = "int", Description = "Ders açılırken / aktarımda fallback şube başı kontenjan" },
             new() { Key = "CourseOpening.MaxSectionsPerCourse",       Value = "20", Category = "CourseOpening", DataType = "int", Description = "Bir ders için tek seferde açılabilecek max şube sayısı" },
 
-            // ── OR-Tools CP-SAT Engine (v2) ──────────────────────
-            new() { Key = "Schedule.Engine", Value = "v1-mrv", Category = "Schedule", DataType = "string", Description = "Otomatik program çekirdeği: 'v1-mrv' (mevcut MRV+SA+LNS) veya 'v2-ortools' (Google OR-Tools CP-SAT). Default v1, admin manuel v2'ye çekebilir." },
+            // ── OR-Tools CP-SAT Engine (Plan 9 sonrası tek path) ─
+            new() { Key = "Schedule.Engine", Value = "v2-ortools", Category = "Schedule", DataType = "string", Description = "Otomatik program çekirdeği. Plan 9 sonrası tek-path: 'v2-ortools' (Google OR-Tools CP-SAT). Eski 'v1-mrv' (MRV+SA+LNS) silindi." },
             new() { Key = "Schedule.OrTools.TimeLimitSeconds", Value = "30", Category = "Schedule", DataType = "int", Description = "CP-SAT max çözüm süresi (saniye). Bu süre dolduğunda solver son bulduğu çözümü döner." },
             new() { Key = "Schedule.OrTools.NumWorkers", Value = "8", Category = "Schedule", DataType = "int", Description = "CP-SAT parallel portfolio search worker sayısı. CPU çekirdek sayınızdan fazla yapmak fayda vermez." },
             new() { Key = "Schedule.OrTools.RandomSeed", Value = "42", Category = "Schedule", DataType = "int", Description = "Determinizm için CP-SAT random seed. Aynı seed = aynı çözüm." },

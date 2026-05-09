@@ -35,76 +35,15 @@ public class FacultyPlanningServiceTests : IDisposable
 
         _context = new AppDbContext(options);
         var constraintService = CreateConstraintEvaluationService();
-        var autoScheduleEngine = new AutoScheduleEngine(_context, constraintService, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
+        var autoScheduleEngine = new AutoScheduleEngine(_context, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
         _service = new FacultyPlanningService(_context, new SchedulingService(_context, constraintService), new HttpContextAccessor(), autoScheduleEngine);
 
         SeedBaseData();
     }
 
-    [Fact]
-    public async Task AutoSchedulePreviewAsync_PrefersHigherScoringPrimeTimeSlotOverFirstAvailable()
-    {
-        SeedMondayTimeSlots(); // Real 50-min slots needed for auto-scheduler
-        AddClassroom(1, "C101", 30);
-        var course = AddCourse(1, "CENG101", theoryHours: 2);
-        AddSection(1, course.Id, instructorId: null, capacity: 25);
-
-        var result = await _service.AutoSchedulePreviewAsync(new AutoScheduleRequest
-        {
-            FacultyId = FacultyId,
-            TermId = TermId
-        }, "1");
-
-        result.SuccessCount.Should().Be(1);
-        result.Assignments.Should().ContainSingle();
-
-        var assignment = result.Assignments[0];
-        assignment.ScheduleSlots.Should().ContainSingle();
-        assignment.ScheduleSlots[0].Day.Should().Be(DayOfWeek.Monday);
-        // Real slots: slot 1 = 09:00-09:50, slot 2 = 09:55-10:45
-        assignment.ScheduleSlots[0].StartTime.Should().Be(new TimeOnly(9, 0));
-        assignment.ScheduleSlots[0].EndTime.Should().Be(new TimeOnly(10, 45));
-        // AutoScheduleEngine does not yet compute per-section FitScore (always 0)
-        assignment.FitScore.Should().BeGreaterThanOrEqualTo(0);
-        assignment.FitScore.Should().BeLessThanOrEqualTo(1);
-    }
-
-    [Fact]
-    public async Task AutoSchedulePreviewAsync_DoesNotDoubleCountPreviewInstructorHours()
-    {
-        SeedMondayTimeSlots(); // Real 50-min slots needed for auto-scheduler
-        AddClassroom(1, "C101", 50);
-        var instructor = AddInstructor(1, 101);
-        var longCourse = AddCourse(1, "CENG201", theoryHours: 4);
-        var shortCourse = AddCourse(2, "CENG202", theoryHours: 2);
-
-        AddSection(1, longCourse.Id, instructor.Id, capacity: 40);
-        AddSection(2, shortCourse.Id, instructor.Id, capacity: 30);
-
-        var result = await _service.AutoSchedulePreviewAsync(new AutoScheduleRequest
-        {
-            FacultyId = FacultyId,
-            TermId = TermId
-        }, "1");
-
-        result.SuccessCount.Should().Be(2);
-        result.FailedCount.Should().Be(0);
-
-        var firstAssignment = result.Assignments.Single(a => a.SectionId == 1);
-        var secondAssignment = result.Assignments.Single(a => a.SectionId == 2);
-
-        firstAssignment.ScheduleSlots.Should().ContainSingle();
-        secondAssignment.ScheduleSlots.Should().ContainSingle();
-
-        // 4-slot course: slots 1-4 = 09:00-12:20 (skips lunch gap, takes morning slots)
-        // But with lunch gap at 11:40, only 3 consecutive morning slots available (09:00-11:40)
-        // So 4-slot course must span across lunch or start after lunch
-        // The algorithm should find 4 consecutive slots that fit
-        firstAssignment.ScheduleSlots[0].Day.Should().Be(DayOfWeek.Monday);
-
-        // Both should be scheduled (no double-counting of instructor hours)
-        secondAssignment.ScheduleSlots.Should().ContainSingle();
-    }
+    // Plan 9 sonrası v1 engine silindi. AutoSchedulePreviewAsync v2-only (CP-SAT) artık;
+    // bu testler v1 path'in deterministik MRV+SA placement davranışını assert ediyordu —
+    // v2 testleri OR-Tools test paketinde (EngineDispatchTests, Plan9CombinedIntegrationTest, vd.).
 
     [Fact]
     public async Task AssignSectionAsync_WritesSectionSchedules_AndMarksSectionAsScheduled()
