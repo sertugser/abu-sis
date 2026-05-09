@@ -65,12 +65,19 @@ public sealed class LunchBreakEncoder : IConstraintEncoder
 
             if (section.LabHours > 0)
             {
-                var iv = ctx.Variables.GetLabInterval(section.Id);
-                if (iv != null)
+                // Plan 9 Issue 3 — multi-block lab parity (Plan 7b Task 7 plural API).
+                // Pre-fix used singular GetLabInterval which only returns block 0; non-primary
+                // blocks (LabHours > MaxLabBlockHours, e.g. LabHours=4 / max=2 → 2 blocks)
+                // could land in lunch slots. Iterate ALL blocks via GetLabIntervals so every
+                // block start avoids each lunch slot index. Pattern matches LunchBreakSoftEncoder
+                // (Plan 8 Task 6) and ClassroomConflictEncoder (Plan 7b Task 7).
+                var labIntervals = ctx.Variables.GetLabIntervals(section.Id);
+                foreach (var iv in labIntervals)
                 {
                     foreach (var lunchIdx in lunchSlotIndices)
                     {
-                        var literal = ctx.Assumptions.Register(Code, primarySectionId: section.Id, secondarySectionId: lunchIdx);
+                        var literal = ctx.Assumptions.Register(Code,
+                            primarySectionId: section.Id, secondarySectionId: lunchIdx);
                         ctx.Model.Add(iv.StartExpr() != lunchIdx).OnlyEnforceIf(literal);
                     }
                 }
