@@ -30,7 +30,7 @@ public class SchedulingServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        _service = new SchedulingService(_context, CreateConstraintEvaluationService());
+        _service = new SchedulingService(_context, CreateConstraintEvaluationService(), new ScheduleWriter(_context));
 
         SeedBaseData();
     }

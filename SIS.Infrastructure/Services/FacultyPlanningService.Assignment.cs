@@ -192,7 +192,7 @@ public partial class FacultyPlanningService
 
                 if (isNewSchedule || classroomChanged || isOnlineCourse)
                 {
-                    await WriteSectionScheduleRecordsAsync(
+                    await _scheduleWriter.WriteAsync(
                         section.Id,
                         section.TermId,
                         request.ClassroomId ?? section.ClassroomId,

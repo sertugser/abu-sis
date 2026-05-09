@@ -23,11 +23,16 @@ public partial class SchedulingService : ISchedulingService
 {
     private readonly AppDbContext _context;
     private readonly ConstraintEvaluationService _constraintEvaluation;
+    private readonly IScheduleWriter _scheduleWriter;
 
-    public SchedulingService(AppDbContext context, ConstraintEvaluationService constraintEvaluation)
+    public SchedulingService(
+        AppDbContext context,
+        ConstraintEvaluationService constraintEvaluation,
+        IScheduleWriter scheduleWriter)
     {
         _context = context;
         _constraintEvaluation = constraintEvaluation;
+        _scheduleWriter = scheduleWriter;
     }
 
     public async Task<List<SchedulingConflictDto>> GetConflictsAsync(int? termId = null, CancellationToken cancellationToken = default)
@@ -76,17 +81,11 @@ public partial class SchedulingService : ISchedulingService
             };
         }
 
-        var slots = request.ScheduleSlots.Select(s => new TimeBlock
-        {
-            Day = (DayOfWeek)s.Day,
-            StartTime = s.StartTime,
-            EndTime = s.EndTime,
-        }).ToList();
-
         section.ClassroomId = request.ClassroomId;
 
         // Write SectionSchedule records (the authoritative schedule store)
-        await WriteSectionScheduleRecordsAsync(section.Id, section.TermId, request.ClassroomId, slots, cancellationToken);
+        await _scheduleWriter.WriteAsync(
+            section.Id, section.TermId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -372,79 +371,8 @@ public partial class SchedulingService : ISchedulingService
     }
 
     /// <summary>
-    /// Writes SectionSchedule records.
-    /// Deletes existing records for this section first, then creates new ones
-    /// by matching each TimeBlock to TimeSlots in the term.
-    /// BlockType heuristic: course.TheoryHours kadar ilk slot Theory, kalanı Lab.
-    /// </summary>
-    private async Task WriteSectionScheduleRecordsAsync(
-        int sectionId,
-        int termId,
-        int? classroomId,
-        IReadOnlyList<TimeBlock> slots,
-        CancellationToken cancellationToken)
-    {
-        // Remove old SectionSchedule records for this section
-        var existing = await _context.SectionSchedules
-            .Where(ss => ss.CourseSectionId == sectionId)
-            .ToListAsync(cancellationToken);
-
-        if (existing.Count > 0)
-        {
-            _context.SectionSchedules.RemoveRange(existing);
-        }
-
-        if (!classroomId.HasValue || slots.Count == 0)
-        {
-            return;
-        }
-
-        // Load term time slots for matching
-        var termTimeSlots = await _context.TimeSlots
-            .AsNoTracking()
-            .Where(ts => ts.TermId == termId)
-            .ToListAsync(cancellationToken);
-
-        // Dersin teorik/uygulama saat dağılımını yükle — BlockType heuristic'i için
-        var courseHours = await _context.CourseSections
-            .AsNoTracking()
-            .Where(cs => cs.Id == sectionId)
-            .Select(cs => new { cs.Course.TheoryHours, cs.Course.LabHours })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var theoryHours = courseHours?.TheoryHours ?? 0;
-        var slotIndex = 0;
-
-        foreach (var slot in slots)
-        {
-            // Find all TimeSlots that overlap with this TimeBlock on the same day
-            var matchingTimeSlots = termTimeSlots
-                .Where(ts => ts.DayOfWeek == slot.Day
-                    && ts.StartTime < slot.EndTime
-                    && slot.StartTime < ts.EndTime)
-                .OrderBy(ts => ts.SlotOrder)
-                .ToList();
-
-            foreach (var ts in matchingTimeSlots)
-            {
-                // İlk theoryHours kadar slot Theory, sonrası Lab.
-                // Scheduler CandidateGenerator'ı Theory bloklarını Lab bloklarından önce üretir,
-                // dolayısıyla slot sırası teorik→uygulama düzenindedir.
-                var blockType = slotIndex < theoryHours
-                    ? ScheduleBlockType.Theory
-                    : ScheduleBlockType.Lab;
-
-                _context.SectionSchedules.Add(new SectionSchedule
-                {
-                    CourseSectionId = sectionId,
-                    TimeSlotId = ts.Id,
-                    ClassroomId = classroomId.Value,
-                    BlockType = blockType,
-                });
-                slotIndex++;
-            }
-        }
-    }
+    // 2026-05-10: WriteSectionScheduleRecordsAsync kaldırıldı — IScheduleWriter'a taşındı.
+    // FacultyPlanningService'teki ikiz duplicate ile birlikte tek implementasyona birleşti.
 
     // ── Shared slot helpers ──────────────────────────────────────────────
 

@@ -43,7 +43,7 @@ public abstract class SchedulingTestBase : IDisposable
 
         Context = new AppDbContext(options);
         ConstraintService = CreateConstraintEvaluationService();
-        Service = new SchedulingService(Context, ConstraintService);
+        Service = new SchedulingService(Context, ConstraintService, new ScheduleWriter(Context));
 
         SeedBaseData();
         SeedSchedulingDefaults();

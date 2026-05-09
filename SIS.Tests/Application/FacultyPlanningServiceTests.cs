@@ -36,7 +36,13 @@ public class FacultyPlanningServiceTests : IDisposable
         _context = new AppDbContext(options);
         var constraintService = CreateConstraintEvaluationService();
         var autoScheduleEngine = new AutoScheduleEngine(_context, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
-        _service = new FacultyPlanningService(_context, new SchedulingService(_context, constraintService), new HttpContextAccessor(), autoScheduleEngine);
+        var scheduleWriter = new ScheduleWriter(_context);
+        _service = new FacultyPlanningService(
+            _context,
+            new SchedulingService(_context, constraintService, scheduleWriter),
+            new HttpContextAccessor(),
+            autoScheduleEngine,
+            scheduleWriter);
 
         SeedBaseData();
     }

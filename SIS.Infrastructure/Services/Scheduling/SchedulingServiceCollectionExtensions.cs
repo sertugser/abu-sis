@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
+using SIS.Application.Scheduling.Services;
 using SIS.Application.Scheduling.Solver;
 using SIS.Infrastructure.Services.Scheduling.Evaluators;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
@@ -59,6 +60,9 @@ public static class SchedulingServiceCollectionExtensions
 
         // Auto-schedule engine
         services.AddScoped<AutoScheduleEngine>();
+
+        // Single canonical SectionSchedule writer (replaces 2 duplicate impls — 2026-05-10)
+        services.AddScoped<IScheduleWriter, ScheduleWriter>();
 
         // Approval workflow
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();

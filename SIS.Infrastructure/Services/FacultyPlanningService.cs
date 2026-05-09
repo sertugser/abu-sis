@@ -25,17 +25,24 @@ public partial class FacultyPlanningService : IFacultyPlanningService
     private readonly ISchedulingService _schedulingService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly AutoScheduleEngine _autoScheduleEngine;
+    private readonly IScheduleWriter _scheduleWriter;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    public FacultyPlanningService(AppDbContext context, ISchedulingService schedulingService, IHttpContextAccessor httpContextAccessor, AutoScheduleEngine autoScheduleEngine)
+    public FacultyPlanningService(
+        AppDbContext context,
+        ISchedulingService schedulingService,
+        IHttpContextAccessor httpContextAccessor,
+        AutoScheduleEngine autoScheduleEngine,
+        IScheduleWriter scheduleWriter)
     {
         _context = context;
         _schedulingService = schedulingService;
         _httpContextAccessor = httpContextAccessor;
         _autoScheduleEngine = autoScheduleEngine;
+        _scheduleWriter = scheduleWriter;
     }
 
     public async Task<int> ResolveFacultyForUserAsync(string userId, CancellationToken ct = default)
@@ -509,128 +516,9 @@ public partial class FacultyPlanningService : IFacultyPlanningService
         }
     }
 
-    private async Task WriteSectionScheduleRecordsAsync(
-        int sectionId,
-        int termId,
-        int? classroomId,
-        IReadOnlyList<ScheduleSlotDto> scheduleSlots,
-        CancellationToken ct)
-    {
-        await ClearSectionScheduleRecordsAsync(sectionId, ct);
-
-        if (scheduleSlots.Count == 0)
-            return;
-
-        var termTimeSlots = await _context.TimeSlots
-            .AsNoTracking()
-            .Where(ts => ts.TermId == termId)
-            .ToListAsync(ct);
-
-        // Resolve which academic time slots are covered by the requested ranges
-        var allMatchedSlots = new List<(TimeSlot timeSlot, int? classroomId)>();
-
-        foreach (var slot in scheduleSlots)
-        {
-            var slotDay = (DayOfWeek)slot.Day;
-            var matchingTimeSlots = termTimeSlots
-                .Where(ts => ts.DayOfWeek == slotDay
-                    && ts.StartTime < slot.EndTime
-                    && slot.StartTime < ts.EndTime)
-                .OrderBy(ts => ts.SlotOrder)
-                .ToList();
-
-            if (matchingTimeSlots.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    $"{DayLabel(slotDay)} {slot.StartTime:HH\\:mm}-{slot.EndTime:HH\\:mm} araligi donem zaman slotlari ile eslesmiyor.");
-            }
-
-            // Online section için slot.ClassroomId ve classroomId ikisi de null olabilir — bu kabul
-            var effectiveClassroomId = slot.ClassroomId ?? classroomId;
-            foreach (var ts in matchingTimeSlots)
-                allMatchedSlots.Add((ts, effectiveClassroomId));
-        }
-
-        // Validate total slot count matches course hours
-        var section = await _context.CourseSections
-            .AsNoTracking()
-            .Include(cs => cs.Course)
-            .FirstAsync(cs => cs.Id == sectionId, ct);
-        var expectedSlotCount = section.Course.TheoryHours + section.Course.LabHours;
-        if (expectedSlotCount > 0 && allMatchedSlots.Count != expectedSlotCount)
-        {
-            throw new InvalidOperationException(
-                $"Slot sayisi uyumsuz: {section.Course.Code} icin {expectedSlotCount} slot gerekli, {allMatchedSlots.Count} slot secildi.");
-        }
-
-        var enforceClassroomConflict = await IsConstraintEnabledAsHardAsync("H1", defaultIsHard: true, ct);
-
-        // 2026-05-10: Daha önce SectionSchedule yazılırken BlockType set edilmiyordu →
-        // DB'de tüm satırlar default Theory=0 kalıyordu (T/L badge UI'da hep T gösteriyordu).
-        // SchedulingService.cs:430 mantığının aynısı: slot sırasında ilk TheoryHours adet
-        // slot Theory, sonrası Lab (solver bu sırada üretir + WriteSectionScheduleRecordsAsync
-        // allMatchedSlots'u OrderBy(slot.Day, slot.SlotOrder) ile alır).
-        var theoryHours = section.Course.TheoryHours;
-        var slotIndex = 0;
-
-        // Write with hard guard against classroom double-booking (online section'lar: ClassroomId null → çakışma kontrolü yok)
-        foreach (var (timeSlot, effectiveCrId) in allMatchedSlots)
-        {
-            if (enforceClassroomConflict && effectiveCrId.HasValue)
-            {
-                var alreadyOccupied = await _context.SectionSchedules
-                    .AnyAsync(ss => ss.ClassroomId == effectiveCrId.Value
-                        && ss.TimeSlotId == timeSlot.Id
-                        && ss.CourseSectionId != sectionId, ct);
-
-                if (alreadyOccupied)
-                {
-                    throw new InvalidOperationException(
-                        $"Derslik cakismasi: {DayLabel(timeSlot.DayOfWeek)} {timeSlot.StartTime:HH\\:mm}-{timeSlot.EndTime:HH\\:mm} slotunda derslik zaten dolu.");
-                }
-            }
-
-            var blockType = slotIndex < theoryHours
-                ? ScheduleBlockType.Theory
-                : ScheduleBlockType.Lab;
-
-            _context.SectionSchedules.Add(new SectionSchedule
-            {
-                CourseSectionId = sectionId,
-                TimeSlotId = timeSlot.Id,
-                ClassroomId = effectiveCrId,
-                BlockType = blockType,
-            });
-            slotIndex++;
-        }
-    }
-
-    private async Task<bool> IsConstraintEnabledAsHardAsync(string code, bool defaultIsHard, CancellationToken ct)
-    {
-        var definition = await _context.ConstraintDefinitions
-            .AsNoTracking()
-            .Where(d => d.Code == code)
-            .Select(d => new { d.IsEnabled, d.Category })
-            .FirstOrDefaultAsync(ct);
-
-        if (definition == null)
-            return defaultIsHard;
-
-        if (!definition.IsEnabled)
-            return false;
-
-        return string.Equals(definition.Category, "Hard", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string DayLabel(DayOfWeek day) => day switch
-    {
-        DayOfWeek.Monday => "Pzt",
-        DayOfWeek.Tuesday => "Sal",
-        DayOfWeek.Wednesday => "Car",
-        DayOfWeek.Thursday => "Per",
-        DayOfWeek.Friday => "Cum",
-        _ => day.ToString()
-    };
+    // 2026-05-10: WriteSectionScheduleRecordsAsync + IsConstraintEnabledAsHardAsync + DayLabel
+    // helper'ları IScheduleWriter (Infrastructure/Services/Scheduling/ScheduleWriter.cs) içine
+    // konsolide edildi. Caller artık `_scheduleWriter.WriteAsync(...)` çağırıyor.
 
     private async Task<List<object>> GetCurrentScheduleSlotPayloadAsync(int sectionId, CancellationToken ct)
     {
