@@ -155,7 +155,11 @@ public partial class FacultyPlanningService
                 }
             }
 
-            if (request.ClassroomId.HasValue || request.InstructorId.HasValue || request.ScheduleSlots is { Count: > 0 })
+            // Plan 10 — V2 apply path SkipHardValidation=true geçerse evaluator bypass.
+            // V2 zaten encoder'larla enforce etti; paralel-lab section'larında V1 evaluator
+            // section-level ClassroomId üzerinden bakıp false-positive "çakışma" üretiyor.
+            if (!request.SkipHardValidation
+                && (request.ClassroomId.HasValue || request.InstructorId.HasValue || request.ScheduleSlots is { Count: > 0 }))
             {
                 var validation = await _schedulingService.ValidateAsync(new ScheduleValidationRequestDto
                 {
@@ -374,7 +378,10 @@ public partial class FacultyPlanningService
                     SectionId = item.SectionId,
                     ClassroomId = item.ClassroomId,
                     ScheduleSlots = item.ScheduleSlots,
-                    InstructorId = item.InstructorId
+                    InstructorId = item.InstructorId,
+                    // Plan 10 — V2 auto-schedule output'u apply ederken V1 evaluator
+                    // bypass: V2 encoder'ları zaten hard kısıtları enforce etmişti.
+                    SkipHardValidation = true,
                 }, userId, ct);
 
                 if (assignResult.Conflicts.Count > 0)
