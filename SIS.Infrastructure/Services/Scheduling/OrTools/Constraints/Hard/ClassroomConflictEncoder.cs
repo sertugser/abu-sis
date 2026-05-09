@@ -42,6 +42,12 @@ public sealed class ClassroomConflictEncoder : IConstraintEncoder
                     var optInterval = ctx.Variables.CreateOptionalRoomIntervalForGroup(
                         section.Id, classroom.Id, ComponentType.Lecture, section.TheoryHours, groupIndex: 0);
 
+                    // Plan 9 review polish: defense-in-depth null guard. Lecture branch never triggers
+                    // the helper's multi-interval × parallel-rooms safety net (component is Lecture, not Lab),
+                    // but if a future caller passes ComponentType.Lab here the helper returns null! and we
+                    // must not corrupt perClassroomIntervals.
+                    if (optInterval == null) continue;
+
                     if (!perClassroomIntervals.TryGetValue(classroom.Id, out var list))
                     {
                         list = new List<IntervalVar>();
