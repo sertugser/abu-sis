@@ -43,7 +43,7 @@ public class SoftEncodersTests
         yield return new object[] { new OccupancyEncoder(), "S1" };
         yield return new object[] { new SlotCongestionEncoder(), "S3" };
         yield return new object[] { new CoEnrollmentEncoder(), "S4" };
-        yield return new object[] { new StudentGapEncoder(), "S5_S7" };
+        yield return new object[] { new StudentGapEncoder(), "S7" };
         yield return new object[] { new EarlyLateEncoder(), "S9" };
         yield return new object[] { new WeekdayBalanceEncoder(), "S12" };
         yield return new object[] { new AdjacentYearEncoder(), "S20" };
