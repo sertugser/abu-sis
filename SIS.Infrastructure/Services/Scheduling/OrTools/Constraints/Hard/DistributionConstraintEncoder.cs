@@ -20,6 +20,12 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 /// Production'da DistributionConstraints tablosu boş; admin feature'ı kullanmaya başlayınca
 /// gerçek section seçim algoritması (multi-section enumeration / cohort eşleşmesi) Plan 9'da
 /// değerlendirilecek.
+///
+/// NOTE (Plan 9 polish): Lab-only section guard — tüm per-type Encode*Pair method'ları
+/// <c>TheoryHours == 0</c> (a veya b) olduğunda silently skip eder (lecture day var / lecture
+/// room var oluşmadığından crash önlenir). Bu durum DIST constraint'in lab-only çiftlerde
+/// hiç enforce edilmediği anlamına gelir. Multi-block lab (Plan 7b) day/room var'ları için
+/// per-type semantik Plan 9'da ele alınacak.
 /// </summary>
 public sealed class DistributionConstraintEncoder : IConstraintEncoder
 {
