@@ -16,7 +16,7 @@ import {
   type DragStartEvent,
   type UniqueIdentifier,
 } from '@dnd-kit/core';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { calendarEventCategory, type CalendarEventCategory } from '@/lib/calendarEventTypes';
 import { cn } from '@/lib/utils';
@@ -117,6 +117,7 @@ export interface CalendarVisualizerProps {
   multiMonth?: boolean;
   inlineYearView?: boolean;
   filterableLegend?: boolean;
+  headerActions?: ReactNode;
   /** Academic year start (e.g. 2025 for 2025-2026). When provided, the year view shows Sep of this year through Aug of the next. */
   academicYearStart?: number;
   onEventDrop?: (event: {
@@ -181,6 +182,21 @@ function trDate(iso: string) {
 
 function dateOnly(value?: string | null) {
   return value ? value.slice(0, 10) : '';
+}
+
+function parseDateValue(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function shiftDateValue(value: string, days: number) {
+  const shifted = parseDateValue(value);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().substring(0, 10);
+}
+
+function dayDifference(target: string, source: string) {
+  return Math.round((parseDateValue(target).getTime() - parseDateValue(source).getTime()) / (24 * 60 * 60 * 1000));
 }
 
 function eventDateRange(event: VisualizerEvent) {
@@ -352,6 +368,21 @@ function buildAcademicYearMonths(events: VisualizerEvent[], fallbackAnchor: View
   return Array.from({ length: 12 }, (_, index) => addMonths(start, index));
 }
 
+function collectDropTargetDates(months: ViewMonth[]) {
+  const dates = new Set<string>();
+
+  for (const month of months) {
+    const weeks = buildGrid(month.y, month.m);
+    for (const week of weeks) {
+      for (const day of week) {
+        dates.add(day.str);
+      }
+    }
+  }
+
+  return Array.from(dates);
+}
+
 function CalendarDropCell({
   id,
   targetDate,
@@ -461,6 +492,7 @@ export function CalendarVisualizer({
   multiMonth = false,
   inlineYearView = false,
   filterableLegend = false,
+  headerActions,
   academicYearStart: explicitAcademicYearStart,
   onEventDrop,
   getDropFeedback,
@@ -470,10 +502,10 @@ export function CalendarVisualizer({
   const initialMonth = useMemo<ViewMonth>(() => ({ y: TODAY.getFullYear(), m: TODAY.getMonth() }), []);
   const [vm, setVm] = useState<ViewMonth>(initialMonth);
   const [showYearView, setShowYearView] = useState(false);
+  const [expandedMonth, setExpandedMonth] = useState<ViewMonth | null>(null);
   const [activeCategory, setActiveCategory] = useState<CalendarEventCategory | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
-  const [activeDropFeedback, setActiveDropFeedback] = useState<DropFeedback | null>(null);
   const [activeDragOverlay, setActiveDragOverlay] = useState<CalendarDragData | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -566,6 +598,10 @@ export function CalendarVisualizer({
     if (!multiMonth || renderedEvents.length === 0) return [{ y: vm.y, m: vm.m }];
     return allMonths;
   }, [allMonths, renderedEvents.length, multiMonth, vm]);
+  const dropFeedbackMonths = useMemo(
+    () => (inlineYearView || showYearView ? academicYearMonths : viewMonths),
+    [academicYearMonths, inlineYearView, showYearView, viewMonths],
+  );
 
   const scrollToMonth = useCallback((month: ViewMonth) => {
     if (multiMonth) programmaticScrollRef.current = true;
@@ -629,7 +665,6 @@ export function CalendarVisualizer({
     dragStateRef.current = null;
     setDragState(null);
     setDragOverDate(null);
-    setActiveDropFeedback(null);
     setActiveDragOverlay(null);
   }, []);
 
@@ -641,15 +676,40 @@ export function CalendarVisualizer({
     dragAnchorDate: currentDragState.dragAnchorDate,
   }), []);
 
+  const visibleDropFeedbackByDate = useMemo(() => {
+    if (!dragState || !onEventDrop || dragDisabled)
+      return {} as Record<string, DropFeedback>;
+
+    const feedbackByDate: Record<string, DropFeedback> = {};
+    for (const targetDate of collectDropTargetDates(dropFeedbackMonths)) {
+      feedbackByDate[targetDate] = getDropFeedback?.(buildDropRequest(dragState, targetDate)) ?? { allowed: true };
+    }
+
+    return feedbackByDate;
+  }, [buildDropRequest, dragDisabled, dragState, dropFeedbackMonths, getDropFeedback, onEventDrop]);
+  const activeDropRange = useMemo(() => {
+    if (!dragState || !dragOverDate)
+      return null;
+
+    const shiftDays = dayDifference(dragOverDate, dragState.dragAnchorDate);
+    return {
+      start: shiftDateValue(dragState.sourceStartDate, shiftDays),
+      end: shiftDateValue(dragState.sourceEndDate, shiftDays),
+    };
+  }, [dragOverDate, dragState]);
+  const activeDropFeedback = dragOverDate ? visibleDropFeedbackByDate[dragOverDate] ?? null : null;
+
   const getDropFeedbackClass = useCallback((feedback: DropFeedback | null, targetDate: string) => {
     if (!dragState || !feedback)
       return null;
 
-    const isActive = dragOverDate === targetDate;
-    return feedback.allowed
-      ? cn('bg-emerald-50 ring-1 ring-inset ring-emerald-300', isActive && 'bg-emerald-100 ring-2 ring-emerald-500')
-      : cn('bg-rose-50 ring-1 ring-inset ring-rose-300', isActive && 'bg-rose-100 ring-2 ring-rose-500');
-  }, [dragOverDate, dragState]);
+    const isInActiveRange = !!activeDropRange && targetDate >= activeDropRange.start && targetDate <= activeDropRange.end;
+    const rangeFeedback = isInActiveRange && activeDropFeedback ? activeDropFeedback : feedback;
+
+    return rangeFeedback.allowed
+      ? cn('bg-emerald-50 ring-1 ring-inset ring-emerald-300', isInActiveRange && 'bg-emerald-100 ring-2 ring-emerald-500')
+      : cn('bg-rose-50 ring-1 ring-inset ring-rose-300', isInActiveRange && 'bg-rose-100 ring-2 ring-rose-500');
+  }, [activeDropFeedback, activeDropRange, dragState]);
 
   const handleDndDragStart = useCallback(({ active }: DragStartEvent) => {
     if (!onEventDrop || dragDisabled)
@@ -668,19 +728,9 @@ export function CalendarVisualizer({
   const updateActiveDropTarget = useCallback((over: DragOverEvent['over']) => {
     const dropData = over?.data.current;
     const targetDate = isCalendarDropData(dropData) ? dropData.targetDate : null;
-    const currentDragState = dragStateRef.current;
 
     setDragOverDate(current => current === targetDate ? current : targetDate);
-
-    if (!targetDate || !currentDragState || !onEventDrop || dragDisabled) {
-      setActiveDropFeedback(current => current === null ? current : null);
-      return;
-    }
-
-    const feedback = getDropFeedback?.(buildDropRequest(currentDragState, targetDate)) ?? { allowed: true };
-    setActiveDropFeedback(current =>
-      current?.allowed === feedback.allowed && current?.reason === feedback.reason ? current : feedback);
-  }, [buildDropRequest, dragDisabled, getDropFeedback, onEventDrop]);
+  }, []);
 
   const handleDndDragMove = useCallback(({ over }: DragMoveEvent) => {
     updateActiveDropTarget(over);
@@ -733,7 +783,16 @@ export function CalendarVisualizer({
     return (
       <div key={`year-${y}-${m}`} className="min-h-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-center justify-between bg-[#003366] px-3 py-1.5 text-white">
-          <h3 className="text-sm font-bold leading-none">{MONTH_NAMES[m]} {y}</h3>
+          <button
+            type="button"
+            onClick={() => setExpandedMonth({ y, m })}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm font-bold leading-none transition hover:text-white/85 focus:outline-none focus:ring-2 focus:ring-white/70"
+            aria-label={`${MONTH_NAMES[m]} ${y} ayını büyüt`}
+            title={`${MONTH_NAMES[m]} ${y}`}
+          >
+            <span className="truncate">{MONTH_NAMES[m]} {y}</span>
+            <Maximize2 className="h-3.5 w-3.5 shrink-0 opacity-80" />
+          </button>
           {sameMonth({ y, m }, vm) && (
             <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-bold text-white">
               GÖRÜNEN
@@ -759,7 +818,7 @@ export function CalendarVisualizer({
             <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
               <div className="grid grid-cols-7">
                 {week.map((day, di) => {
-                  const dropFeedback = dragOverDate === day.str ? activeDropFeedback : null;
+                  const dropFeedback = visibleDropFeedbackByDate[day.str] ?? null;
                   return (
                     <CalendarDropCell
                       id={`calendar-day:year:${y}-${m}:${wi}-${di}:${day.str}`}
@@ -876,7 +935,7 @@ export function CalendarVisualizer({
             <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
               <div className="grid grid-cols-7">
                 {week.map((day, di) => {
-                  const dropFeedback = dragOverDate === day.str ? activeDropFeedback : null;
+                  const dropFeedback = visibleDropFeedbackByDate[day.str] ?? null;
                   return (
                     <CalendarDropCell
                       id={`calendar-day:month:${y}-${m}:${wi}-${di}:${day.str}`}
@@ -1025,28 +1084,69 @@ export function CalendarVisualizer({
   function renderInlineYearView() {
     const firstMonth = academicYearMonths[0];
     const lastMonth = academicYearMonths[11];
+    const expandedMonthTitle = expandedMonth ? `${MONTH_NAMES[expandedMonth.m]} ${expandedMonth.y}` : '';
 
     return (
-      <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Akademik yıl</p>
-            <h2 className="text-xl font-bold text-[#003366] sm:text-2xl">
-              {firstMonth && MONTH_NAMES[firstMonth.m]} {firstMonth?.y}
-              {' - '}
-              {lastMonth && MONTH_NAMES[lastMonth.m]} {lastMonth?.y}
-            </h2>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {renderLegend('inline-year-legend')}
+      <>
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Akademik yıl</p>
+              <h2 className="text-xl font-bold text-[#003366] sm:text-2xl">
+                {firstMonth && MONTH_NAMES[firstMonth.m]} {firstMonth?.y}
+                {' - '}
+                {lastMonth && MONTH_NAMES[lastMonth.m]} {lastMonth?.y}
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {renderLegend('inline-year-legend')}
+              </div>
+            </div>
+            {headerActions && (
+              <div className="flex shrink-0 self-end sm:self-center">
+                {headerActions}
+              </div>
+            )}
+          </div>
+          <div className="bg-slate-50 p-2">
+            <div className="grid min-h-0 gap-2 lg:grid-cols-4">
+              {academicYearMonths.map(month => renderYearMonth(month.y, month.m))}
             </div>
           </div>
         </div>
-        <div className="bg-slate-50 p-2">
-          <div className="grid min-h-0 gap-2 lg:grid-cols-4">
-            {academicYearMonths.map(month => renderYearMonth(month.y, month.m))}
+
+        {expandedMonth && (
+          <div
+            className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-2 sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="expanded-calendar-month-title"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setExpandedMonth(null);
+            }}
+          >
+            <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-6">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Ay görünümü</p>
+                  <h2 id="expanded-calendar-month-title" className="text-xl font-bold text-[#003366] sm:text-2xl">
+                    {expandedMonthTitle}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedMonth(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                >
+                  Kapat
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto bg-slate-50 p-2 sm:p-4">
+                {renderMonth(expandedMonth.y, expandedMonth.m)}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+      </>
     );
   }
 

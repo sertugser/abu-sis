@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CalendarVisualizer, type DropFeedback, type DropFeedbackRequest, type VisualizerEvent } from '@/components/CalendarVisualizer';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -900,6 +901,7 @@ export default function AcademicCalendarGeneratorPage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', startDate: '', endDate: '', note: '' });
   const [notice, setNotice] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [showDraftHistory, setShowDraftHistory] = useState(false);
   const defaultStartDates = useMemo(() => {
@@ -1399,8 +1401,13 @@ export default function AcademicCalendarGeneratorPage() {
     return { allowed: true, reason: 'Uygun hedef. Bırakınca taslak güncellemesi onaylanır.' };
   }
 
+  function showErrorNotice(message: string) {
+    setNotice(null);
+    setErrorNotice(message);
+  }
+
   function handleInvalidDraftEventDrop({ reason }: DropFeedbackRequest & { reason?: string }) {
-    setNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
+    showErrorNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
   }
 
   async function addPinConstraint() {
@@ -2485,6 +2492,25 @@ export default function AcademicCalendarGeneratorPage() {
             </Button>
           </div>
         </div>
+
+        <Dialog open={!!errorNotice} onOpenChange={(open) => !open && setErrorNotice(null)}>
+          <DialogContent className="max-w-md border-red-200">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-900">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                Hata
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-6 text-slate-700">
+                {errorNotice}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" onClick={() => setErrorNotice(null)}>
+                Tamam
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {notice && (
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">

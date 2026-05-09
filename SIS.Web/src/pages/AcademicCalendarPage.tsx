@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AlertTriangle, CalendarDays, FileDown, LogOut, RefreshCw, Repeat2, UserPlus } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, FileDown, LogOut, RefreshCw, Repeat2, UserPlus } from 'lucide-react';
 import { CalendarVisualizer, type DropFeedback, type DropFeedbackRequest, type VisualizerEvent } from '@/components/CalendarVisualizer';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { downloadAcademicCalendarPdf, type AcademicCalendarPdfSection } from '@/lib/academicCalendarPdf';
 import { cn } from '@/lib/utils';
@@ -324,6 +325,7 @@ export default function AcademicCalendarPage() {
   const [explicitYear, setExplicitYear] = useState<number | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const canEditCalendar = hasAnyPermission(EDIT_CALENDAR_PERMISSION_KEYS);
 
   const academicYears = useMemo(() => {
@@ -385,6 +387,11 @@ export default function AcademicCalendarPage() {
     }
   }
 
+  const showErrorNotice = useCallback((message: string) => {
+    setNotice(null);
+    setErrorNotice(message);
+  }, []);
+
   const handleEventDrop = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: {
     eventId: VisualizerEvent['id'];
     targetDate: string;
@@ -397,7 +404,7 @@ export default function AcademicCalendarPage() {
 
     const parsed = parseVisualizerEventId(eventId);
     if (!parsed) {
-      setNotice('Tasınan etkinlik kimligi çözümlenemedi.');
+      showErrorNotice('Tasınan etkinlik kimligi çözümlenemedi.');
       return;
     }
 
@@ -419,11 +426,12 @@ export default function AcademicCalendarPage() {
       },
     }, {
       onSuccess: () => {
+        setErrorNotice(null);
         setNotice(`Etkinlik ${fmtDate(`${nextStartDate}T00:00:00.000Z`)} tarihine tasindi; bagli olaylar yeniden hesaplandi.`);
       },
-      onError: error => setNotice(getErrorMessage(error)),
+      onError: error => showErrorNotice(getErrorMessage(error)),
     });
-  }, [moveCalendarEvent]);
+  }, [moveCalendarEvent, showErrorNotice]);
 
   const getDropFeedback = useCallback(({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: DropFeedbackRequest): DropFeedback => {
     const parsed = parseVisualizerEventId(eventId);
@@ -464,16 +472,48 @@ export default function AcademicCalendarPage() {
   }, [calendars]);
 
   const handleInvalidEventDrop = useCallback(({ reason }: DropFeedbackRequest & { reason?: string }) => {
-    setNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
-  }, []);
+    showErrorNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
+  }, [showErrorNotice]);
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-hidden">
-      {notice && (
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-          {notice}
-        </div>
-      )}
+      <Dialog open={!!errorNotice} onOpenChange={(open) => !open && setErrorNotice(null)}>
+        <DialogContent className="max-w-md border-red-200">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-900">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Hata
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-6 text-slate-700">
+              {errorNotice}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setErrorNotice(null)}>
+              Tamam
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!notice} onOpenChange={(open) => !open && setNotice(null)}>
+        <DialogContent className="max-w-md border-emerald-200">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-900">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              İşlem tamamlandı
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-6 text-slate-700">
+              {notice}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setNotice(null)}>
+              Tamam
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-col lg:flex-row lg:items-stretch border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
         <div className="lg:w-72 lg:flex-shrink-0 bg-slate-50 lg:border-r border-slate-200">
@@ -540,29 +580,21 @@ export default function AcademicCalendarPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            {canEditCalendar ? (
-              <p className="text-sm text-slate-500">
-                Düzenlenebilir etkinlikleri yeni güne sürükleyebilirsiniz. Yeşil alanlar uygun, kırmızı alanlar kısıtlıdır; bağlı olaylar otomatik hesaplanır.
-              </p>
-            ) : (
-              <span />
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleDownloadPdf}
-              disabled={isDownloadingPdf || moveCalendarEvent.isPending || pdfSections.length === 0}
-            >
-              {isDownloadingPdf ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {isDownloadingPdf ? 'PDF hazirlaniyor' : 'PDF indir'}
-            </Button>
-          </div>
-
           <CalendarVisualizer
             events={visualizerEvents}
             inlineYearView
             filterableLegend
+            headerActions={(
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf || moveCalendarEvent.isPending || pdfSections.length === 0}
+              >
+                {isDownloadingPdf ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                {isDownloadingPdf ? 'PDF hazirlaniyor' : 'PDF indir'}
+              </Button>
+            )}
             academicYearStart={selectedYear ?? undefined}
             onEventDrop={canEditCalendar ? handleEventDrop : undefined}
             getDropFeedback={canEditCalendar ? getDropFeedback : undefined}
