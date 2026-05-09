@@ -140,7 +140,48 @@ public sealed class DistributionConstraintEncoder : IConstraintEncoder
             ctx.Penalties.Add(LinearExpr.Term(sameLit, (long)softWeight.Value));
         }
     }
-    private static void EncodeSameRoomPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    /// <summary>
+    /// SameRoom: lecture component'leri aynı dersliğe düşmeli.
+    /// Hard (softWeight==null): <c>roomA == roomB</c>.
+    /// Soft: reified <c>diffLit ⇔ (roomA != roomB)</c>; penalty = <c>diffLit × softWeight</c>.
+    /// Guards:
+    ///  - Online section'larda lecture room IntVar yok (Plan 7b Task 4) → silently skip.
+    ///  - TheoryHours==0 olan section (lab-only) lecture room var alamaz → skip.
+    ///  - <c>GetLectureRoom</c> KeyNotFoundException atabilir (defansif) — try/catch ile yakalanır
+    ///    (ClassroomTypeEncoder'daki Plan 7b polish pattern'ı).
+    /// </summary>
+    private static void EncodeSameRoomPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight)
+    {
+        if (a.TeachingMethod == TeachingMethod.Online || b.TeachingMethod == TeachingMethod.Online) return;
+        if (a.TheoryHours == 0 || b.TheoryHours == 0) return;
+
+        IntVar roomA;
+        IntVar roomB;
+        try
+        {
+            roomA = ctx.Variables.GetLectureRoom(a.Id);
+            roomB = ctx.Variables.GetLectureRoom(b.Id);
+        }
+        catch (KeyNotFoundException)
+        {
+            // Defensive: room var missing despite guards (e.g. registration order issue).
+            return;
+        }
+
+        if (softWeight == null)
+        {
+            // Hard: same room enforced.
+            ctx.Model.Add(roomA == roomB);
+        }
+        else
+        {
+            // Soft: penalty when different.
+            var diffLit = ctx.Model.NewBoolVar($"dist{distId}_sr_diff_{a.Id}_{b.Id}");
+            ctx.Model.Add(roomA != roomB).OnlyEnforceIf(diffLit);
+            ctx.Model.Add(roomA == roomB).OnlyEnforceIf(diffLit.Not());
+            ctx.Penalties.Add(LinearExpr.Term(diffLit, (long)softWeight.Value));
+        }
+    }
     private static void EncodeBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
     private static void EncodeNotBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
     private static void EncodePrecedencePair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
