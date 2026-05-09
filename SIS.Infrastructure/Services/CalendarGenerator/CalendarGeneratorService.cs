@@ -223,10 +223,11 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
 
     public static WhatIfResultDto EvaluateEvents(
         IReadOnlyList<GeneratedCalendarEventDto> currentEvents,
-        IReadOnlyList<ResolvedHolidayDto> holidays)
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
-        var events = NormalizeCalendarEvents(currentEvents, holidays);
-        events = AlignClassesEndToWeekday(events);
+        var events = NormalizeCalendarEvents(currentEvents, holidays, pinnedDraftEventIds);
+        events = AlignClassesEndToWeekday(events, pinnedDraftEventIds);
 
         var warnings = new List<CalendarWarningDto>();
         ValidateChronology(events, warnings);
@@ -261,8 +262,9 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (shouldPropagate)
             events = Propagate(events, draftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
 
-        events = NormalizeCalendarEvents(events, holidays);
-        events = AlignClassesEndToWeekday(events);
+        var pinnedDraftEventIds = new HashSet<string>(StringComparer.Ordinal) { draftEventId };
+        events = NormalizeCalendarEvents(events, holidays, pinnedDraftEventIds);
+        events = AlignClassesEndToWeekday(events, pinnedDraftEventIds);
 
         var warnings = new List<CalendarWarningDto>
         {

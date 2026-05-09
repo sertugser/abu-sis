@@ -603,7 +603,8 @@ public partial class CalendarGeneratorService
 
     private static List<GeneratedCalendarEventDto> ApplyDependentExamScheduling(
         IReadOnlyList<GeneratedCalendarEventDto> events,
-        IReadOnlyList<ResolvedHolidayDto> holidays)
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
         var updated = events.ToList();
 
@@ -627,13 +628,20 @@ public partial class CalendarGeneratorService
             var makeupStart = MaxDate(fifthBusinessDay, resultsBufferDate);
             makeupStart = AlignMakeupStart(makeupStart, holidays);
 
-            updated = ReplaceEvent(updated, makeupExam with
+            if (IsPinned(makeupExam, pinnedDraftEventIds))
             {
-                StartDate = makeupStart,
-                EndDate = makeupStart.AddDays(MakeupExamDurationDays - 1)
-            });
+                makeupStart = makeupExam.StartDate;
+            }
+            else
+            {
+                updated = ReplaceEvent(updated, makeupExam with
+                {
+                    StartDate = makeupStart,
+                    EndDate = makeupStart.AddDays(MakeupExamDurationDays - 1)
+                });
+            }
 
-            if (makeupApplication != null)
+            if (makeupApplication != null && !IsPinned(makeupApplication, pinnedDraftEventIds))
             {
                 var applicationDeadline = PreviousBusinessDayBefore(makeupStart, holidays);
                 updated = ReplaceEvent(updated, makeupApplication with
@@ -649,7 +657,8 @@ public partial class CalendarGeneratorService
 
     private static List<GeneratedCalendarEventDto> NormalizeCalendarEvents(
         IReadOnlyList<GeneratedCalendarEventDto> events,
-        IReadOnlyList<ResolvedHolidayDto> holidays)
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
         var normalized = events.ToList();
 
@@ -657,12 +666,12 @@ public partial class CalendarGeneratorService
         {
             var before = DateFingerprint(normalized);
 
-            normalized = ApplyHolidayOverflowShifts(normalized, holidays);
-            normalized = ApplyRegularSemesterSequenceRules(normalized, holidays);
-            normalized = ApplyGradePublicationSequenceRules(normalized, holidays);
-            normalized = ApplyDependentExamScheduling(normalized, holidays);
-            normalized = ApplyHolidayOverflowShifts(normalized, holidays);
-            normalized = ApplyGradePublicationSequenceRules(normalized, holidays);
+            normalized = ApplyHolidayOverflowShifts(normalized, holidays, pinnedDraftEventIds);
+            normalized = ApplyRegularSemesterSequenceRules(normalized, holidays, pinnedDraftEventIds);
+            normalized = ApplyGradePublicationSequenceRules(normalized, holidays, pinnedDraftEventIds);
+            normalized = ApplyDependentExamScheduling(normalized, holidays, pinnedDraftEventIds);
+            normalized = ApplyHolidayOverflowShifts(normalized, holidays, pinnedDraftEventIds);
+            normalized = ApplyGradePublicationSequenceRules(normalized, holidays, pinnedDraftEventIds);
 
             if (DateFingerprint(normalized) == before)
                 break;
@@ -673,19 +682,20 @@ public partial class CalendarGeneratorService
 
     private static List<GeneratedCalendarEventDto> ApplyGradePublicationSequenceRules(
         IReadOnlyList<GeneratedCalendarEventDto> events,
-        IReadOnlyList<ResolvedHolidayDto> holidays)
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
         var updated = events.ToList();
 
         foreach (var semester in new[] { SemesterType.Fall, SemesterType.Spring })
         {
-            updated = EnsurePublicationAfterEvent(updated, semester, "midterm_excuse_exam", "midterm_publication", holidays);
-            updated = EnsurePublicationAfterEvent(updated, semester, "final_exam", "final_publication", holidays);
-            updated = EnsurePublicationAfterEvent(updated, semester, "makeup_exam", "makeup_publication", holidays);
+            updated = EnsurePublicationAfterEvent(updated, semester, "midterm_excuse_exam", "midterm_publication", holidays, pinnedDraftEventIds);
+            updated = EnsurePublicationAfterEvent(updated, semester, "final_exam", "final_publication", holidays, pinnedDraftEventIds);
+            updated = EnsurePublicationAfterEvent(updated, semester, "makeup_exam", "makeup_publication", holidays, pinnedDraftEventIds);
         }
 
-        updated = EnsurePublicationAfterEvent(updated, SemesterType.Summer, "summer_excuse_exam", "summer_publication", holidays);
-        updated = EnsurePublicationAfterEvent(updated, SemesterType.Summer, "summer_exam", "summer_publication", holidays);
+        updated = EnsurePublicationAfterEvent(updated, SemesterType.Summer, "summer_excuse_exam", "summer_publication", holidays, pinnedDraftEventIds);
+        updated = EnsurePublicationAfterEvent(updated, SemesterType.Summer, "summer_exam", "summer_publication", holidays, pinnedDraftEventIds);
 
         return updated;
     }
@@ -695,13 +705,16 @@ public partial class CalendarGeneratorService
         SemesterType semester,
         string sourceKey,
         string publicationKey,
-        IReadOnlyList<ResolvedHolidayDto> holidays)
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
         var source = events.SingleOrDefault(e =>
             e.Semester == semester && string.Equals(e.TemplateItemKey, sourceKey, StringComparison.OrdinalIgnoreCase));
         var publication = events.SingleOrDefault(e =>
             e.Semester == semester && string.Equals(e.TemplateItemKey, publicationKey, StringComparison.OrdinalIgnoreCase));
         if (source == null || publication == null)
+            return events;
+        if (IsPinned(publication, pinnedDraftEventIds))
             return events;
 
         var sourceEnd = source.EndDate ?? source.StartDate;
@@ -715,12 +728,14 @@ public partial class CalendarGeneratorService
 
     private static List<GeneratedCalendarEventDto> ApplyHolidayOverflowShifts(
         IReadOnlyList<GeneratedCalendarEventDto> events,
-        IReadOnlyList<ResolvedHolidayDto> holidays)
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
         var updated = events.ToList();
 
         foreach (var ev in events.Where(e =>
             !e.IsHoliday
+            && !IsPinned(e, pinnedDraftEventIds)
             && !CanOverlapBlockingHoliday(e.EventType)
             && !RequiresSequenceAwareHolidayPlacement(e.EventType)))
         {
@@ -732,11 +747,13 @@ public partial class CalendarGeneratorService
         return updated;
     }
 
-    private static List<GeneratedCalendarEventDto> AlignClassesEndToWeekday(IReadOnlyList<GeneratedCalendarEventDto> events)
+    private static List<GeneratedCalendarEventDto> AlignClassesEndToWeekday(
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
         var updated = events.ToList();
 
-        foreach (var classesEnd in events.Where(e => !e.IsHoliday && e.EventType == CalendarEventType.ClassesEnd))
+        foreach (var classesEnd in events.Where(e => !e.IsHoliday && e.EventType == CalendarEventType.ClassesEnd && !IsPinned(e, pinnedDraftEventIds)))
         {
             var alignedDate = WeekdayOnOrBefore(classesEnd.StartDate);
             if (alignedDate.Date != classesEnd.StartDate.Date)
@@ -789,7 +806,8 @@ public partial class CalendarGeneratorService
 
     private static List<GeneratedCalendarEventDto> ApplyRegularSemesterSequenceRules(
         IReadOnlyList<GeneratedCalendarEventDto> events,
-        IReadOnlyList<ResolvedHolidayDto> holidays)
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
     {
         var updated = events.ToList();
 
@@ -806,7 +824,8 @@ public partial class CalendarGeneratorService
 
             var heavyWeeks = GetHeavyReligiousHolidayWeeks(classesStart.StartDate, finalExam.StartDate, holidays);
             var selectedMidterm = SelectMidtermPlacement(midterm, classesStart, finalExam, heavyWeeks, holidays);
-            if (selectedMidterm.StartDate != midterm.StartDate || selectedMidterm.EndDate != midterm.EndDate)
+            if (!IsPinned(midterm, pinnedDraftEventIds)
+                && (selectedMidterm.StartDate != midterm.StartDate || selectedMidterm.EndDate != midterm.EndDate))
             {
                 midterm = selectedMidterm;
                 updated = ReplaceEvent(updated, midterm);
@@ -821,7 +840,8 @@ public partial class CalendarGeneratorService
                     EndDate = midterm.EndDate?.AddDays(-7)
                 };
 
-                if (!OverlapsBlockingHoliday(candidate.StartDate, candidate.EndDate ?? candidate.StartDate, holidays))
+                if (!IsPinned(midterm, pinnedDraftEventIds)
+                    && !OverlapsBlockingHoliday(candidate.StartDate, candidate.EndDate ?? candidate.StartDate, holidays))
                 {
                     midterm = candidate;
                     updated = ReplaceEvent(updated, midterm);
@@ -832,17 +852,17 @@ public partial class CalendarGeneratorService
 
             var withdrawal = updated.SingleOrDefault(e =>
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "withdrawal_deadline", StringComparison.OrdinalIgnoreCase));
-            if (withdrawal != null && withdrawal.StartDate.Date < midterm.StartDate.Date)
+            if (withdrawal != null && !IsPinned(withdrawal, pinnedDraftEventIds) && withdrawal.StartDate.Date < midterm.StartDate.Date)
                 updated = ReplaceEvent(updated, withdrawal with { StartDate = midterm.StartDate, EndDate = null });
 
             var freeze = updated.SingleOrDefault(e =>
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "freeze_deadline", StringComparison.OrdinalIgnoreCase));
-            if (freeze != null && freeze.StartDate.Date < midterm.StartDate.Date)
+            if (freeze != null && !IsPinned(freeze, pinnedDraftEventIds) && freeze.StartDate.Date < midterm.StartDate.Date)
                 updated = ReplaceEvent(updated, freeze with { StartDate = midterm.StartDate, EndDate = null });
 
             var excuseApplication = updated.SingleOrDefault(e =>
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_application", StringComparison.OrdinalIgnoreCase));
-            if (excuseApplication != null)
+            if (excuseApplication != null && !IsPinned(excuseApplication, pinnedDraftEventIds))
             {
                 var desiredApplicationStart = NextBusinessDayAfter(midtermEnd, holidays);
                 if (excuseApplication.StartDate.Date != desiredApplicationStart.Date || excuseApplication.EndDate != null)
@@ -851,7 +871,7 @@ public partial class CalendarGeneratorService
 
             var excuseExam = updated.SingleOrDefault(e =>
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_exam", StringComparison.OrdinalIgnoreCase));
-            if (excuseExam != null)
+            if (excuseExam != null && !IsPinned(excuseExam, pinnedDraftEventIds))
             {
                 var desiredStart = NthBusinessDayAfter(midtermEnd, ExcuseExamMinBusinessDays, holidays);
                 var durationDays = ((excuseExam.EndDate ?? excuseExam.StartDate).Date - excuseExam.StartDate.Date).Days;
@@ -864,7 +884,7 @@ public partial class CalendarGeneratorService
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_publication", StringComparison.OrdinalIgnoreCase));
             var refreshedExcuseExam = updated.SingleOrDefault(e =>
                 e.Semester == semester && string.Equals(e.TemplateItemKey, "midterm_excuse_exam", StringComparison.OrdinalIgnoreCase));
-            if (midtermPublication != null && refreshedExcuseExam != null)
+            if (midtermPublication != null && refreshedExcuseExam != null && !IsPinned(midtermPublication, pinnedDraftEventIds))
             {
                 var excuseEnd = refreshedExcuseExam.EndDate ?? refreshedExcuseExam.StartDate;
                 var earliestPublication = NextBusinessDayAfter(excuseEnd, holidays);
@@ -945,6 +965,9 @@ public partial class CalendarGeneratorService
 
     private static List<GeneratedCalendarEventDto> ReplaceEvent(List<GeneratedCalendarEventDto> events, GeneratedCalendarEventDto replacement) =>
         events.Select(e => e.DraftEventId == replacement.DraftEventId ? replacement : e).ToList();
+
+    private static bool IsPinned(GeneratedCalendarEventDto ev, IReadOnlySet<string>? pinnedDraftEventIds) =>
+        pinnedDraftEventIds?.Contains(ev.DraftEventId) == true;
 
     private static string DateFingerprint(IReadOnlyList<GeneratedCalendarEventDto> events) =>
         string.Join("|", events

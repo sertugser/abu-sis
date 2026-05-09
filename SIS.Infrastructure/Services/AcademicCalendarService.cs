@@ -263,29 +263,39 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (startDate < window.Start || endDate > window.End)
             throw new InvalidOperationException("Etkinlik yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
 
-        if (RequiresMondayStart(calendarEvent.EventType) && !StartsOnMonday(startDate))
+        if (RequiresMondayStart(calendarEvent) && !StartsOnMonday(startDate))
             throw new InvalidOperationException("Bu etkinlik Pazartesi günü başlamalıdır.");
 
-        if (RequiresWeekdayOnly(calendarEvent.EventType) && StartsOnWeekend(startDate))
+        if (RequiresWeekdayOnly(calendarEvent) && StartsOnWeekend(startDate))
             throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
 
         var currentEvents = term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList();
         var holidays = BuildResolvedHolidays(term.CalendarEvents);
         var baseline = CalendarGeneratorService.EvaluateEvents(currentEvents, holidays);
+        var draftEventId = calendarEvent.Id.ToString(CultureInfo.InvariantCulture);
+        var pinnedDraftEventIds = new HashSet<string>(StringComparer.Ordinal) { draftEventId };
         var recalculation = CalendarGeneratorService.RecalculateEvents(
             currentEvents,
             holidays,
-            calendarEvent.Id.ToString(CultureInfo.InvariantCulture),
+            draftEventId,
             startDate,
             endDate,
             propagateChanges);
 
-        var changedDraftEventIds = GetChangedDraftEventIds(currentEvents, recalculation.Events);
-        changedDraftEventIds.Add(calendarEvent.Id.ToString(CultureInfo.InvariantCulture));
-        ThrowIfGeneratorRejected(recalculation, baseline, changedDraftEventIds);
         var changedEventIds = ApplyRecalculatedEvents(term, recalculation.Events);
         changedEventIds.Add(calendarEvent.Id);
 
+        RepairMovedEventDependencies(term, calendarEvent.Id, changedEventIds, holidays, pinnedDraftEventIds);
+        var finalEvents = term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList();
+        var finalEvaluation = CalendarGeneratorService.EvaluateEvents(finalEvents, holidays, pinnedDraftEventIds);
+        foreach (var changedId in ApplyRecalculatedEvents(term, finalEvaluation.Events))
+            changedEventIds.Add(changedId);
+
+        var changedDraftEventIds = GetChangedDraftEventIds(currentEvents, finalEvaluation.Events);
+        changedDraftEventIds.Add(draftEventId);
+        foreach (var changedId in changedEventIds)
+            changedDraftEventIds.Add(changedId.ToString(CultureInfo.InvariantCulture));
+        ThrowIfGeneratorRejected(finalEvaluation, baseline, changedDraftEventIds);
         ValidateCalendarEventGraph(term, changedEventIds);
         return changedEventIds;
     }
@@ -665,6 +675,9 @@ public class AcademicCalendarService : IAcademicCalendarService
             or CalendarEventType.PrepSchoolExam
             or CalendarEventType.SummerSchoolExam;
 
+    private static bool RequiresWeekdayOnly(TermCalendarEvent calendarEvent) =>
+        !IsMakeupApplication(calendarEvent) && RequiresWeekdayOnly(calendarEvent.EventType);
+
     private static bool RequiresMondayStart(CalendarEventType eventType) =>
         eventType is CalendarEventType.ClassesStart
             or CalendarEventType.CourseRegistration
@@ -674,6 +687,13 @@ public class AcademicCalendarService : IAcademicCalendarService
             or CalendarEventType.MakeupExam
             or CalendarEventType.PrepSchoolExam
             or CalendarEventType.SummerSchoolExam;
+
+    private static bool RequiresMondayStart(TermCalendarEvent calendarEvent) =>
+        !IsMakeupApplication(calendarEvent) && RequiresMondayStart(calendarEvent.EventType);
+
+    private static bool IsMakeupApplication(TermCalendarEvent calendarEvent) =>
+        MatchesKey(calendarEvent, "makeup_application")
+        || calendarEvent.EventType == CalendarEventType.MakeupExam && TitleContainsAny(calendarEvent, "Basvuru", "BaÅŸvuru", "Başvuru");
 
     private static bool ContainsWeekend(DateTime startDate, DateTime endDate)
     {
@@ -700,6 +720,39 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     private static bool RangesOverlap(DateTime leftStart, DateTime leftEnd, DateTime rightStart, DateTime rightEnd) =>
         leftStart <= rightEnd && rightStart <= leftEnd;
+
+    private static void RepairMovedEventDependencies(
+        AcademicTerm term,
+        int movedEventId,
+        ISet<int> changedEventIds,
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string> pinnedDraftEventIds)
+    {
+        var movedEvent = term.CalendarEvents.FirstOrDefault(e => e.Id == movedEventId);
+        if (movedEvent is null)
+            return;
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var before = TermDateFingerprint(term);
+            ApplyDependentEventRules(term, movedEvent, changedEventIds);
+
+            var evaluation = CalendarGeneratorService.EvaluateEvents(
+                term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList(),
+                holidays,
+                pinnedDraftEventIds);
+            foreach (var changedId in ApplyRecalculatedEvents(term, evaluation.Events))
+                changedEventIds.Add(changedId);
+
+            if (TermDateFingerprint(term) == before)
+                break;
+        }
+    }
+
+    private static string TermDateFingerprint(AcademicTerm term) =>
+        string.Join("|", term.CalendarEvents
+            .OrderBy(e => e.Id)
+            .Select(e => $"{e.Id}:{e.StartDate:yyyyMMdd}:{(e.EndDate.HasValue ? e.EndDate.Value.ToString("yyyyMMdd", CultureInfo.InvariantCulture) : string.Empty)}"));
 
     private static void ApplyDependentEventRules(AcademicTerm term, TermCalendarEvent movedEvent, ISet<int> changedEventIds)
     {
@@ -829,10 +882,10 @@ public class AcademicCalendarService : IAcademicCalendarService
             if (startDate < window.Start || endDate > window.End)
                 throw new InvalidOperationException($"{calendarEvent.Title} yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
 
-            if (RequiresMondayStart(calendarEvent.EventType) && !StartsOnMonday(startDate))
+            if (RequiresMondayStart(calendarEvent) && !StartsOnMonday(startDate))
                 throw new InvalidOperationException($"{calendarEvent.Title} Pazartesi günü başlamalıdır.");
 
-            if (RequiresWeekdayOnly(calendarEvent.EventType) && StartsOnWeekend(startDate))
+            if (RequiresWeekdayOnly(calendarEvent) && StartsOnWeekend(startDate))
                 throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
 
             if (!CanOverlapBlockingHoliday(calendarEvent.EventType))

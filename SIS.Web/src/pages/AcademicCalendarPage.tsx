@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { downloadAcademicCalendarPdf, type AcademicCalendarPdfSection } from '@/lib/academicCalendarPdf';
+import { resolveCalendarEventType } from '@/lib/calendarEventTypes';
 import { cn } from '@/lib/utils';
 import { displayTurkishText } from '@/lib/turkishText';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -138,6 +139,10 @@ function parseVisualizerEventId(value: string | number) {
 
 function canDragCalendarEvent(event: TermCalendarEventDto) {
   return event.isPublic && !event.blocksAcademicEvents && !NON_DRAGGABLE_EVENT_TYPES.has(event.eventType);
+}
+
+function schedulingRuleEventType(event: TermCalendarEventDto) {
+  return resolveCalendarEventType(event.eventType, event.title, event.templateItemKey);
 }
 
 type DraftCalendarMap = Record<number, StudentAcademicCalendarDto>;
@@ -398,10 +403,18 @@ export default function AcademicCalendarPage() {
       onSuccess: updatedCalendar => {
         const movedEvent = updatedCalendar.events.find(item => item.id === parsed.eventId);
         const actualStartDate = isoToDateStr(movedEvent?.startDate) ?? nextStartDate;
+        const changedEventCount = updatedCalendar.events.filter(item => {
+          const previous = calendar.events.find(event => event.id === item.id);
+          return previous
+            && (isoToDateStr(previous.startDate) !== isoToDateStr(item.startDate)
+              || isoToDateStr(previous.endDate) !== isoToDateStr(item.endDate));
+        }).length;
         setDraftHistory(prev => [...prev, cloneDraftCalendarMap(draftCalendars)]);
         setDraftCalendars(prev => ({ ...prev, [updatedCalendar.termId]: cloneCalendar(updatedCalendar) }));
         setErrorNotice(null);
-        setNotice(`Etkinlik ${fmtDate(`${actualStartDate}T00:00:00.000Z`)} tarihine taslakta tasindi. Kaydetmeden akademik takvime yazilmaz.`);
+        setNotice(changedEventCount > 1
+          ? `Etkinlik ${fmtDate(`${actualStartDate}T00:00:00.000Z`)} tarihine taslakta tasindi; bagli etkinlikler kurallara gore ayarlandi. Kaydetmeden akademik takvime yazilmaz.`
+          : `Etkinlik ${fmtDate(`${actualStartDate}T00:00:00.000Z`)} tarihine taslakta tasindi. Kaydetmeden akademik takvime yazilmaz.`);
       },
       onError: error => showErrorNotice(getErrorMessage(error)),
     });
@@ -424,14 +437,15 @@ export default function AcademicCalendarPage() {
     const nextStartDate = shiftDateValue(sourceStartDate, shiftDays);
     const nextEndDate = shiftDateValue(sourceEndDate, shiftDays);
     const window = calendarEditWindow(calendar);
+    const ruleEventType = schedulingRuleEventType(event);
 
     if (nextStartDate < window.start || nextEndDate > window.end)
       return { allowed: false, reason: 'Akademik yıl düzenleme aralığı dışında.' };
 
-    if (MONDAY_START_EVENT_TYPES.has(event.eventType) && !isMondayDate(nextStartDate))
+    if (MONDAY_START_EVENT_TYPES.has(ruleEventType) && !isMondayDate(nextStartDate))
       return { allowed: false, reason: 'Bu etkinlik Pazartesi günü başlamalıdır.' };
 
-    if (EXAM_EVENT_TYPES.has(event.eventType) && isWeekendDate(nextStartDate))
+    if (EXAM_EVENT_TYPES.has(ruleEventType) && isWeekendDate(nextStartDate))
       return { allowed: false, reason: 'Sınav etkinlikleri hafta sonu başlayamaz.' };
 
     return { allowed: true, reason: 'Uygun hedef. Bırakınca taslak kurallarıyla yeniden hesaplanır.' };
