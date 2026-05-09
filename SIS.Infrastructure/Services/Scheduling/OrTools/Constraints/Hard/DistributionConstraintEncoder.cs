@@ -256,5 +256,33 @@ public sealed class DistributionConstraintEncoder : IConstraintEncoder
         }
     }
 
-    private static void EncodePrecedencePair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    /// <summary>
+    /// Precedence: section A lecture starts before section B lecture — <c>startA &lt; startB</c>.
+    /// Aynı gün veya farklı gün fark etmez; time index sıralı.
+    /// Hard (softWeight==null): <c>startA &lt; startB</c>.
+    /// Soft: reified <c>violLit ⇔ (startA &gt;= startB)</c>; penalty = <c>violLit × softWeight</c>.
+    /// TheoryHours==0 olan section (lab-only) lecture interval alamaz → guard ile skip.
+    /// </summary>
+    private static void EncodePrecedencePair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight)
+    {
+        if (a.TheoryHours == 0 || b.TheoryHours == 0) return;
+
+        var ivA = ctx.Variables.GetLectureInterval(a.Id);
+        var ivB = ctx.Variables.GetLectureInterval(b.Id);
+        if (ivA == null || ivB == null) return;
+
+        if (softWeight == null)
+        {
+            // Hard: A strictly before B in time index.
+            ctx.Model.Add(ivA.StartExpr() < ivB.StartExpr());
+        }
+        else
+        {
+            // Soft: penalty when A is NOT strictly before B (i.e. startA >= startB).
+            var violLit = ctx.Model.NewBoolVar($"dist{distId}_prec_viol_{a.Id}_{b.Id}");
+            ctx.Model.Add(ivA.StartExpr() >= ivB.StartExpr()).OnlyEnforceIf(violLit);
+            ctx.Model.Add(ivA.StartExpr() < ivB.StartExpr()).OnlyEnforceIf(violLit.Not());
+            ctx.Penalties.Add(LinearExpr.Term(violLit, (long)softWeight.Value));
+        }
+    }
 }
