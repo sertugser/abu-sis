@@ -123,7 +123,7 @@ type SemesterWeekAnalysis = {
 };
 
 const SEMESTERS: { value: SemesterType; label: string }[] = [
-  { value: 'Fall', label: 'Güz' },
+  { value: 'Fall', label: 'GÃƒÂ¼z' },
   { value: 'Spring', label: 'Bahar' },
   { value: 'Summer', label: 'Yaz' },
 ];
@@ -162,7 +162,7 @@ const MONDAY_START_EVENT_TYPES = new Set([
   'PrepSchoolExam',
   'SummerSchoolExam',
 ]);
-const FLEXIBLE_HOLIDAY_OVERLAP_MIN_DAYS = 10;
+const FLEXIBLE_HOLIDAY_OVERLAP_MIN_DAYS = 15;
 
 function defaultAcademicYear() {
   const now = new Date();
@@ -300,7 +300,7 @@ function isAtaturkMemorialHoliday(holiday: HolidayDefinitionDto) {
     && holiday.fixedDay === 10
     && (
       holiday.englishName.toLocaleLowerCase('en-US').includes('ataturk memorial')
-      || displayText(holiday.name).toLocaleLowerCase('tr-TR').includes('atatürk')
+      || displayText(holiday.name).toLocaleLowerCase('tr-TR').includes('atatÃƒÂ¼rk')
     );
 }
 
@@ -384,13 +384,13 @@ function getDraftId(calendar: CalendarView | null, selectedDraftId: number | nul
 }
 
 function getErrorMessage(error: unknown) {
-  const fallback = 'İşlem tamamlanamadı.';
+  const fallback = 'Ã„Â°Ã…Å¸lem tamamlanamadÃ„Â±.';
   if (!error || typeof error !== 'object') return fallback;
   const maybe = error as { response?: { status?: number; data?: { message?: string; error?: string } }; message?: string };
   if (maybe.response?.status === 401)
-    return 'Oturum süreniz doldu. Lütfen tekrar giriş yapın.';
+    return 'Oturum sÃƒÂ¼reniz doldu. LÃƒÂ¼tfen tekrar giriÃ…Å¸ yapÃ„Â±n.';
   if (maybe.response?.status === 403)
-    return 'Bu işlem için yetkiniz bulunmuyor.';
+    return 'Bu iÃ…Å¸lem iÃƒÂ§in yetkiniz bulunmuyor.';
 
   const message = maybe.response?.data?.message ?? maybe.response?.data?.error ?? maybe.message ?? fallback;
   return displayTurkishText(message);
@@ -421,7 +421,7 @@ function validateDraftEventDateEdit(ev: GeneratedCalendarEventDto, startDate: st
 
   const parsedStart = parseUtcDisplayDate(startDate);
   if (mustStartOnMonday(ev.eventType) && parsedStart?.getUTCDay() !== 1)
-    return 'Bu etkinlik Pazartesi günü başlamalıdır.';
+    return 'Bu etkinlik Pazartesi gÃƒÂ¼nÃƒÂ¼ baÃ…Å¸lamalÃ„Â±dÃ„Â±r.';
 
   if (isExamDraftEvent(ev)) {
     if (parsedStart && isWeekend(parsedStart))
@@ -499,25 +499,25 @@ function validateDraftEventHolidayOverlap(
     return null;
 
   const durationDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-  const allowsSingleDayHolidayOverlap = !CRITICAL_EVENT_TYPES.has(ev.eventType)
+  const allowsHolidayOverlap = !CRITICAL_EVENT_TYPES.has(ev.eventType)
     && durationDays >= FLEXIBLE_HOLIDAY_OVERLAP_MIN_DAYS
-    && overlaps.every(holiday => dateInput(holiday.startDate) === dateInput(holiday.endDate));
-  if (allowsSingleDayHolidayOverlap)
+    && overlaps.every(holiday => holiday.type !== 'HijriCalculated');
+  if (allowsHolidayOverlap)
     return null;
 
-  const hasMultiDayHoliday = overlaps.some(holiday => dateInput(holiday.startDate) !== dateInput(holiday.endDate));
-  return hasMultiDayHoliday
-    ? `${displayText(ev.title)} çok günlük resmi tatil veya bloklayıcı gün aralığı üzerine taşınamaz.`
-    : `${displayText(ev.title)} resmi tatil veya bloklayıcı önemli gün üzerine taşınamaz.`;
+  const hasReligiousHoliday = overlaps.some(holiday => holiday.type === 'HijriCalculated');
+  return hasReligiousHoliday
+    ? `${displayText(ev.title)} dini bayram Ã¼zerine taÅŸÄ±namaz.`
+    : `${displayText(ev.title)} resmi tatil veya bloklayÄ±cÄ± Ã¶nemli gÃ¼n Ã¼zerine taÅŸÄ±namaz.`;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  exam: 'Sınav',
-  registration: 'Kayıt',
+  exam: 'SÃ„Â±nav',
+  registration: 'KayÃ„Â±t',
   holiday: 'Tatil',
-  deadline: 'Son Gün',
-  result: 'İlan',
-  application: 'Başvuru',
+  deadline: 'Son GÃƒÂ¼n',
+  result: 'Ã„Â°lan',
+  application: 'BaÃ…Å¸vuru',
   academic: 'Akademik',
 };
 
@@ -602,22 +602,22 @@ function isShiftWarning(warning: CalendarWarningDto) {
 
 function warningBadge(warning: CalendarWarningDto) {
   if (isShiftWarning(warning) || warning.code === 'DOMINO' || warning.code === 'SINGLE_EVENT_UPDATE')
-    return { label: 'Değiştirildi', variant: 'success' as const };
+    return { label: 'DeÃ„Å¸iÃ…Å¸tirildi', variant: 'success' as const };
 
   if (warning.code === 'WHAT_IF')
-    return { label: 'Önizleme', variant: 'info' as const };
+    return { label: 'Ãƒâ€“nizleme', variant: 'info' as const };
 
   if (warning.severity === 'Error')
     return { label: 'Hata', variant: 'destructive' as const };
 
   if (warning.severity === 'Warning')
-    return { label: 'Uyarı', variant: 'warning' as const };
+    return { label: 'UyarÃ„Â±', variant: 'warning' as const };
 
   return { label: 'Bilgi', variant: 'secondary' as const };
 }
 
 function parseShiftDays(message: string) {
-  const match = displayText(message).match(/(\d+)\s*g[üu]n/i);
+  const match = displayText(message).match(/(\d+)\s*g[ÃƒÂ¼u]n/i);
   if (!match) return null;
   const value = Number(match[1]);
   return Number.isFinite(value) && value > 0 ? value : null;
@@ -704,7 +704,7 @@ function reconstructLegacyHolidayReasons(current: CalendarView, event: Generated
 function extractShiftReason(message: string, title: string) {
   const text = displayText(message).replace(displayText(title), '').trim();
   const [reason] = text.split(/\s+nedeniyle\s+/i);
-  return reason?.trim() || 'takvim çakışması';
+  return reason?.trim() || 'takvim ÃƒÂ§akÃ„Â±Ã…Å¸masÃ„Â±';
 }
 
 function joinedTitles(titles: string[]) {
@@ -732,9 +732,9 @@ function readableShiftReason(reason: string) {
 
   if (otherReason) {
     parts.push(
-      otherReason === 'yasak aralık'
-        ? 'tanımlı yasak aralıkla çakışması'
-        : `${otherReason} ile çakışması`
+      otherReason === 'yasak aralÃ„Â±k'
+        ? 'tanÃ„Â±mlÃ„Â± yasak aralÃ„Â±kla ÃƒÂ§akÃ„Â±Ã…Å¸masÃ„Â±'
+        : `${otherReason} ile ÃƒÂ§akÃ„Â±Ã…Å¸masÃ„Â±`
     );
   }
 
@@ -746,7 +746,7 @@ function shiftWarningMessage(row: ShiftWarningRow) {
   const cause = row.titles.length === 1
     ? readableShiftReason(row.reason)
     : `tarihlerinin ${readableShiftReason(row.reason)}`;
-  return `${row.semester} döneminde ${subject}, ${cause} nedeniyle ${row.newDate} tarihine kaydırıldı.`;
+  return `${row.semester} dÃƒÂ¶neminde ${subject}, ${cause} nedeniyle ${row.newDate} tarihine kaydÃ„Â±rÃ„Â±ldÃ„Â±.`;
 }
 
 function buildShiftWarningRow(current: CalendarView, warning: CalendarWarningDto, event: GeneratedCalendarEventDto): ShiftWarningRow | null {
@@ -756,9 +756,9 @@ function buildShiftWarningRow(current: CalendarView, warning: CalendarWarningDto
 
   const title = displayText(event.title);
   const reason = warning.code === 'HOLIDAY_SHIFT' && shiftDays
-    ? reconstructLegacyHolidayReasons(current, event, shiftDays).join(', ') || 'takvim çakışması'
+    ? reconstructLegacyHolidayReasons(current, event, shiftDays).join(', ') || 'takvim ÃƒÂ§akÃ„Â±Ã…Å¸masÃ„Â±'
     : extractShiftReason(warning.message, title);
-  const shiftText = shiftDays ? `${shiftDays} gün kaydırıldı` : 'kaydırıldı';
+  const shiftText = shiftDays ? `${shiftDays} gÃƒÂ¼n kaydÃ„Â±rÃ„Â±ldÃ„Â±` : 'kaydÃ„Â±rÃ„Â±ldÃ„Â±';
   const semester = semesterLabel(event.semester);
   const newDate = daySpan(event);
   const key = `${warning.severity}::${warning.code}::${event.semester}::${reason}::${shiftText}::${newDate}`;
@@ -783,9 +783,9 @@ function buildShiftWarningRow(current: CalendarView, warning: CalendarWarningDto
 function legacyShiftMessage(current: CalendarView, warning: CalendarWarningDto, event: GeneratedCalendarEventDto) {
   const shiftDays = parseShiftDays(warning.message);
   const reason = warning.code === 'HOLIDAY_SHIFT' && shiftDays
-    ? reconstructLegacyHolidayReasons(current, event, shiftDays).join(', ') || 'takvim çakışması'
-    : 'yasak aralık';
-  return `${semesterLabel(event.semester)} döneminde ${displayText(event.title)}, ${reason} nedeniyle ${daySpan(event)} tarihine kaydırıldı.`;
+    ? reconstructLegacyHolidayReasons(current, event, shiftDays).join(', ') || 'takvim ÃƒÂ§akÃ„Â±Ã…Å¸masÃ„Â±'
+    : 'yasak aralÃ„Â±k';
+  return `${semesterLabel(event.semester)} dÃƒÂ¶neminde ${displayText(event.title)}, ${reason} nedeniyle ${daySpan(event)} tarihine kaydÃ„Â±rÃ„Â±ldÃ„Â±.`;
 }
 
 function warningRows(current: CalendarView) {
@@ -824,7 +824,7 @@ function warningRows(current: CalendarView) {
     if (!message)
       return rows;
 
-    const detail = event ? `Etkinlik: ${semesterLabel(event.semester)} · ${daySpan(event)}` : null;
+    const detail = event ? `Etkinlik: ${semesterLabel(event.semester)} Ã‚Â· ${daySpan(event)}` : null;
     const key = `${warning.severity}::${warning.code}::${message}`;
     const badge = warningBadge(warning);
     if (seen.has(key)) return rows;
@@ -870,7 +870,7 @@ function SearchableProcessSelect({
   selectedKey,
   onChange,
   disabled,
-  placeholder = 'Etkinlik seçin',
+  placeholder = 'Etkinlik seÃƒÂ§in',
 }: {
   options: CalendarProcessOption[];
   selectedKey: string;
@@ -919,7 +919,7 @@ function SearchableProcessSelect({
           />
           <div className="mt-2 max-h-64 overflow-auto">
             {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-slate-500">Sonuç bulunamadı.</div>
+              <div className="px-3 py-2 text-sm text-slate-500">SonuÃƒÂ§ bulunamadÃ„Â±.</div>
             ) : filtered.map(option => (
               <button
                 key={option.key}
@@ -1029,7 +1029,7 @@ export default function AcademicCalendarGeneratorPage() {
       expectedSemesters,
       existingSemesters,
       message: hasMismatch
-        ? `${calendar.academicYear} taslağı Dönem İşleri sayfasındaki dönemlerle uyuşmuyor. Beklenen: ${semesterListText(expectedSemesters)}. Bulunan: ${semesterListText(existingSemesters)}. Önce Dönem İşleri sayfasındaki dönemleri düzeltin.`
+        ? `${calendar.academicYear} taslaÃ„Å¸Ã„Â± DÃƒÂ¶nem Ã„Â°Ã…Å¸leri sayfasÃ„Â±ndaki dÃƒÂ¶nemlerle uyuÃ…Å¸muyor. Beklenen: ${semesterListText(expectedSemesters)}. Bulunan: ${semesterListText(existingSemesters)}. Ãƒâ€“nce DÃƒÂ¶nem Ã„Â°Ã…Å¸leri sayfasÃ„Â±ndaki dÃƒÂ¶nemleri dÃƒÂ¼zeltin.`
         : null,
     };
   }, [adminTerms.data, calendar]);
@@ -1092,7 +1092,7 @@ export default function AcademicCalendarGeneratorPage() {
       const endDate = readString(parameters?.endDate) ?? startDate;
       const title = option
         ? processOptionLabel(option)
-        : constraint.description ?? CALENDAR_EVENT_LABELS[constraint.targetEventType ?? ''] ?? 'Kısıt';
+        : constraint.description ?? CALENDAR_EVENT_LABELS[constraint.targetEventType ?? ''] ?? 'KÃ„Â±sÃ„Â±t';
       const dateSummary = startDate
         ? dateInput(startDate) === dateInput(endDate)
           ? fmt(startDate)
@@ -1104,13 +1104,13 @@ export default function AcademicCalendarGeneratorPage() {
         badgeLabel: constraint.constraintType,
         badgeVariant: constraint.isHard ? 'destructive' : 'secondary',
         title,
-        summary: constraint.description ?? `${title} için kısıt tanımlandı.`,
+        summary: constraint.description ?? `${title} iÃƒÂ§in kÃ„Â±sÃ„Â±t tanÃ„Â±mlandÃ„Â±.`,
         detailLines: [
-          option ? `Süreç: ${processOptionLabel(option)}` : null,
-          semester ? `Dönem: ${semesterLabel(semester)}` : null,
-          dateSummary ? `Sabit aralık: ${dateSummary}` : null,
+          option ? `SÃƒÂ¼reÃƒÂ§: ${processOptionLabel(option)}` : null,
+          semester ? `DÃƒÂ¶nem: ${semesterLabel(semester)}` : null,
+          dateSummary ? `Sabit aralÃ„Â±k: ${dateSummary}` : null,
           constraint.targetChainCode ? `Zincir: ${constraint.targetChainCode}` : null,
-          constraint.targetEventType ? `Etkinlik türü: ${CALENDAR_EVENT_LABELS[constraint.targetEventType] ?? constraint.targetEventType}` : null,
+          constraint.targetEventType ? `Etkinlik tÃƒÂ¼rÃƒÂ¼: ${CALENDAR_EVENT_LABELS[constraint.targetEventType] ?? constraint.targetEventType}` : null,
         ].filter((line): line is string => !!line),
         removeKind: 'constraint',
         removeIndex: index,
@@ -1123,15 +1123,15 @@ export default function AcademicCalendarGeneratorPage() {
 
       settings.push({
         key: `duration:${key}`,
-        badgeLabel: 'Süre',
+        badgeLabel: 'SÃƒÂ¼re',
         badgeVariant: 'info',
         title: option ? processOptionLabel(option) : key,
-        summary: `${days} gün olarak ayarlandı.`,
+        summary: `${days} gÃƒÂ¼n olarak ayarlandÃ„Â±.`,
         detailLines: [
-          option ? `Süreç: ${processOptionLabel(option)}` : null,
-          option ? `Varsayılan süre: ${option.defaultDurationDays} gün` : null,
-          `Yeni süre: ${days} gün`,
-          delta !== null ? `Değişim: ${delta > 0 ? `+${delta}` : delta} gün` : null,
+          option ? `SÃƒÂ¼reÃƒÂ§: ${processOptionLabel(option)}` : null,
+          option ? `VarsayÃ„Â±lan sÃƒÂ¼re: ${option.defaultDurationDays} gÃƒÂ¼n` : null,
+          `Yeni sÃƒÂ¼re: ${days} gÃƒÂ¼n`,
+          delta !== null ? `DeÃ„Å¸iÃ…Å¸im: ${delta > 0 ? `+${delta}` : delta} gÃƒÂ¼n` : null,
         ].filter((line): line is string => !!line),
         removeKind: 'duration',
         removeKey: key,
@@ -1172,10 +1172,10 @@ export default function AcademicCalendarGeneratorPage() {
   );
   const hasActiveEventTypeFilter = selectedEventTypeFilters.length > 0;
   const eventTypeFilterSummary = selectedEventTypeFilters.length === 1
-    ? eventTypeFilterOptions.find(option => option.value === selectedEventTypeFilters[0])?.label ?? 'Tür'
+    ? eventTypeFilterOptions.find(option => option.value === selectedEventTypeFilters[0])?.label ?? 'TÃƒÂ¼r'
     : hasActiveEventTypeFilter
-      ? `${selectedEventTypeFilters.length} tür`
-      : 'Tür';
+      ? `${selectedEventTypeFilters.length} tÃƒÂ¼r`
+      : 'TÃƒÂ¼r';
 
   const selectedEvent = useMemo(
     () => filteredSemesterEvents.find(e => e.draftEventId === selectedEventId) ?? null,
@@ -1199,12 +1199,12 @@ export default function AcademicCalendarGeneratorPage() {
     return oldStart !== nextStartDate || oldEnd !== nextEndDate;
   }
 
-  // PinDate range dışındaysa temizle (adjust state during render)
+  // PinDate range dÃ„Â±Ã…Å¸Ã„Â±ndaysa temizle (adjust state during render)
   if (pinDate && !isDateValueWithinRange(pinDate, pinSelectionRange)) {
     setPinDate('');
   }
 
-  // PinEndDate range dışındaysa temizle; PinDate'den önceyse PinDate'e eşitle
+  // PinEndDate range dÃ„Â±Ã…Å¸Ã„Â±ndaysa temizle; PinDate'den ÃƒÂ¶nceyse PinDate'e eÃ…Å¸itle
   if (pinEndDate) {
     if (!isDateValueWithinRange(pinEndDate, pinSelectionRange)) {
       setPinEndDate('');
@@ -1213,7 +1213,7 @@ export default function AcademicCalendarGeneratorPage() {
     }
   }
 
-  // Filtre seçeneklerinden çıkarılan event türlerini filtrelenmiş listeden temizle
+  // Filtre seÃƒÂ§eneklerinden ÃƒÂ§Ã„Â±karÃ„Â±lan event tÃƒÂ¼rlerini filtrelenmiÃ…Å¸ listeden temizle
   const availableEventTypeFilterValues = useMemo(
     () => new Set(eventTypeFilterOptions.map(option => option.value)),
     [eventTypeFilterOptions],
@@ -1289,7 +1289,7 @@ export default function AcademicCalendarGeneratorPage() {
     if (isCriticalEvent(ev)) {
       await askConfirm({
         title: 'Kritik olay',
-        message: `${actionLabel}: Bu kritik akademik olay değiştiğinde takvim sırası korunmak için bağımlı sonraki olaylar da kaydırılır.`,
+        message: `${actionLabel}: Bu kritik akademik olay deÃ„Å¸iÃ…Å¸tiÃ„Å¸inde takvim sÃ„Â±rasÃ„Â± korunmak iÃƒÂ§in baÃ„Å¸Ã„Â±mlÃ„Â± sonraki olaylar da kaydÃ„Â±rÃ„Â±lÃ„Â±r.`,
         confirmLabel: 'Tamam',
         showCancel: false,
         tone: 'info',
@@ -1298,12 +1298,12 @@ export default function AcademicCalendarGeneratorPage() {
     }
 
     return askConfirm({
-      title: 'Zincirleme kaydırma uygulansın mı?',
+      title: 'Zincirleme kaydÃ„Â±rma uygulansÃ„Â±n mÃ„Â±?',
       message:
         `${actionLabel}: ${displayText(ev.title)} tarihi ${daySpan(ev)} -> ${fmt(utcDate(nextStartDate))}${nextEndDate && nextEndDate !== nextStartDate ? ` - ${fmt(utcDate(nextEndDate))}` : ''} olacak.\n\n` +
-        'Bağımlı sonraki olaylar da aynı fark kadar kaydırılsın mı?',
-      confirmLabel: 'Evet, zincirleme kaydır',
-      cancelLabel: 'Hayır, sadece bu etkinlik',
+        'BaÃ„Å¸Ã„Â±mlÃ„Â± sonraki olaylar da aynÃ„Â± fark kadar kaydÃ„Â±rÃ„Â±lsÃ„Â±n mÃ„Â±?',
+      confirmLabel: 'Evet, zincirleme kaydÃ„Â±r',
+      cancelLabel: 'HayÃ„Â±r, sadece bu etkinlik',
       tone: 'info',
     });
   }
@@ -1377,14 +1377,14 @@ export default function AcademicCalendarGeneratorPage() {
 
     const propagateChanges = await askCascadeShiftPreference(ev, actionLabel, nextStartDate, nextEndDate);
     const shouldUpdate = await askConfirm({
-      title: 'Taslağa yazılsın mı?',
+      title: 'TaslaÃ„Å¸a yazÃ„Â±lsÃ„Â±n mÃ„Â±?',
       message:
         `${displayText(ev.title)} taslakta guncellenecek.\n\n` +
         `Yeni tarih: ${nextStartDate}${nextEndDate !== nextStartDate ? ` - ${nextEndDate}` : ''}\n` +
         `Zincirleme kaydirma: ${propagateChanges ? 'uygulanacak' : 'uygulanmayacak'}\n\n` +
         'Bu islem taslagi degistirir ama gercek akademik takvime henuz yazmaz. Devam edilsin mi?',
-      confirmLabel: 'Evet, taslağa yaz',
-      cancelLabel: 'Vazgeç',
+      confirmLabel: 'Evet, taslaÃ„Å¸a yaz',
+      cancelLabel: 'VazgeÃƒÂ§',
     });
     if (!shouldUpdate) {
       setNotice('Taslak guncelleme islemi iptal edildi.');
@@ -1423,36 +1423,36 @@ export default function AcademicCalendarGeneratorPage() {
   }) {
     const ev = findDraftEvent(eventId);
     if (!ev) {
-      setNotice('Tasınan etkinlik kimliği çözümlenemedi.');
+      setNotice('TasÃ„Â±nan etkinlik kimliÃ„Å¸i ÃƒÂ§ÃƒÂ¶zÃƒÂ¼mlenemedi.');
       return;
     }
 
     const resolved = resolveDroppedDates(targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
     if (!resolved) {
-      setNotice('Bırakılan tarih okunamadı.');
+      setNotice('BÃ„Â±rakÃ„Â±lan tarih okunamadÃ„Â±.');
       return;
     }
 
     if (resolved.shiftDays === 0)
       return;
 
-    await updateDraftEventDates(ev, resolved.nextStartDate, resolved.nextEndDate, 'Sürükle-bırak ile tarih düzenleme');
+    await updateDraftEventDates(ev, resolved.nextStartDate, resolved.nextEndDate, 'SÃƒÂ¼rÃƒÂ¼kle-bÃ„Â±rak ile tarih dÃƒÂ¼zenleme');
   }
 
   function getDraftDropFeedback({ eventId, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate }: DropFeedbackRequest): DropFeedback {
     if (!activeDraftId)
-      return { allowed: false, reason: 'Açık taslak bulunamadı.' };
+      return { allowed: false, reason: 'AÃƒÂ§Ã„Â±k taslak bulunamadÃ„Â±.' };
 
     const ev = findDraftEvent(eventId);
     if (!ev)
-      return { allowed: false, reason: 'Etkinlik bulunamadı.' };
+      return { allowed: false, reason: 'Etkinlik bulunamadÃ„Â±.' };
 
     if (!isEditableDraftEvent(ev))
-      return { allowed: false, reason: 'Bu etkinlik sürükle-bırak ile değiştirilemez.' };
+      return { allowed: false, reason: 'Bu etkinlik sÃƒÂ¼rÃƒÂ¼kle-bÃ„Â±rak ile deÃ„Å¸iÃ…Å¸tirilemez.' };
 
     const resolved = resolveDroppedDates(targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
     if (!resolved)
-      return { allowed: false, reason: 'Bırakılan tarih okunamadı.' };
+      return { allowed: false, reason: 'BÃ„Â±rakÃ„Â±lan tarih okunamadÃ„Â±.' };
 
     if (resolved.shiftDays === 0)
       return { allowed: false, reason: 'Etkinlik zaten bu tarihte.' };
@@ -1471,7 +1471,7 @@ export default function AcademicCalendarGeneratorPage() {
     if (holidayOverlapError)
       return { allowed: false, reason: holidayOverlapError };
 
-    return { allowed: true, reason: 'Uygun hedef. Bırakınca taslak güncellemesi onaylanır.' };
+    return { allowed: true, reason: 'Uygun hedef. BÃ„Â±rakÃ„Â±nca taslak gÃƒÂ¼ncellemesi onaylanÃ„Â±r.' };
   }
 
   function showErrorNotice(message: string) {
@@ -1480,18 +1480,18 @@ export default function AcademicCalendarGeneratorPage() {
   }
 
   function handleInvalidDraftEventDrop({ reason }: DropFeedbackRequest & { reason?: string }) {
-    showErrorNotice(reason ?? 'Bu alana bırakma takvim kuralları nedeniyle uygulanamaz.');
+    showErrorNotice(reason ?? 'Bu alana bÃ„Â±rakma takvim kurallarÃ„Â± nedeniyle uygulanamaz.');
   }
 
   async function addPinConstraint() {
     if (!pinDate || !selectedPinOption) return;
     const resolvedEndDate = pinEndDate || pinDate;
     if (resolvedEndDate < pinDate) {
-      setNotice('Bitiş tarihi başlangıç tarihinden önce olamaz.');
+      setNotice('BitiÃ…Å¸ tarihi baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihinden ÃƒÂ¶nce olamaz.');
       return;
     }
     if (!isDateValueWithinRange(pinDate, pinSelectionRange) || !isDateValueWithinRange(resolvedEndDate, pinSelectionRange)) {
-      setNotice(`Seçilen süreç için izin verilen tarih aralığı ${pinSelectionRange.label}.`);
+      setNotice(`SeÃƒÂ§ilen sÃƒÂ¼reÃƒÂ§ iÃƒÂ§in izin verilen tarih aralÃ„Â±Ã„Å¸Ã„Â± ${pinSelectionRange.label}.`);
       return;
     }
     const label = processOptionLabel(selectedPinOption);
@@ -1500,15 +1500,15 @@ export default function AcademicCalendarGeneratorPage() {
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(pinDate);
       if (parsedStart && isWeekend(parsedStart)) {
-        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
+        setNotice('SÃ„Â±nav baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihi hafta sonuna denk gelemez.');
         return;
       }
     }
     const shouldAdd = await askConfirm({
       title: 'Tarih sabitlensin mi?',
-      message: `${label} etkinliği ${pinDate}${pinEndDate ? ` - ${pinEndDate}` : ''} tarihine sabitlenecek.\n\nBu kısıt bir sonraki taslak üretiminde dikkate alınacak. Devam edilsin mi?`,
+      message: `${label} etkinliÃ„Å¸i ${pinDate}${pinEndDate ? ` - ${pinEndDate}` : ''} tarihine sabitlenecek.\n\nBu kÃ„Â±sÃ„Â±t bir sonraki taslak ÃƒÂ¼retiminde dikkate alÃ„Â±nacak. Devam edilsin mi?`,
       confirmLabel: 'Evet, ekle',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: 'VazgeÃƒÂ§',
     });
     if (!shouldAdd)
       return;
@@ -1525,11 +1525,11 @@ export default function AcademicCalendarGeneratorPage() {
       }),
       isHard: true,
       priority: 1,
-      description: `${label} ${pinDate}${resolvedEndDate !== pinDate ? ` - ${resolvedEndDate}` : ''} aralığına sabitlendi`,
+      description: `${label} ${pinDate}${resolvedEndDate !== pinDate ? ` - ${resolvedEndDate}` : ''} aralÃ„Â±Ã„Å¸Ã„Â±na sabitlendi`,
     }]);
     setPinDate('');
     setPinEndDate('');
-    setNotice(`${label} için tarih sabitleme kısıtı eklendi.`);
+    setNotice(`${label} iÃƒÂ§in tarih sabitleme kÃ„Â±sÃ„Â±tÃ„Â± eklendi.`);
   }
 
   async function addDurationOverride() {
@@ -1537,25 +1537,25 @@ export default function AcademicCalendarGeneratorPage() {
 
     const days = Number(durationDays);
     if (!Number.isInteger(days) || days <= 0) {
-      setNotice('Süre ayarı en az 1 tam gün olmalı.');
+      setNotice('SÃƒÂ¼re ayarÃ„Â± en az 1 tam gÃƒÂ¼n olmalÃ„Â±.');
       return;
     }
 
     const label = processOptionLabel(selectedDurationOption);
     const shouldAdd = await askConfirm({
-      title: 'Süre ayarı eklensin mi?',
+      title: 'SÃƒÂ¼re ayarÃ„Â± eklensin mi?',
       message:
-        `${label} süresi bu taslak üretiminde ${selectedDurationOption.defaultDurationDays} gün yerine ${days} gün olacak.\n\n` +
-        'Bu ayar sadece yeni taslak üretirken kullanılır; mevcut takvime hemen yazılmaz.',
-      confirmLabel: 'Evet, süreyi ayarla',
-      cancelLabel: 'Vazgeç',
+        `${label} sÃƒÂ¼resi bu taslak ÃƒÂ¼retiminde ${selectedDurationOption.defaultDurationDays} gÃƒÂ¼n yerine ${days} gÃƒÂ¼n olacak.\n\n` +
+        'Bu ayar sadece yeni taslak ÃƒÂ¼retirken kullanÃ„Â±lÃ„Â±r; mevcut takvime hemen yazÃ„Â±lmaz.',
+      confirmLabel: 'Evet, sÃƒÂ¼reyi ayarla',
+      cancelLabel: 'VazgeÃƒÂ§',
       tone: 'info',
     });
     if (!shouldAdd)
       return;
 
     setDurationOverrides(prev => ({ ...prev, [selectedDurationOption.key]: days }));
-    setNotice(`${label} için süre ayarı ${days} gün olarak eklendi.`);
+    setNotice(`${label} iÃƒÂ§in sÃƒÂ¼re ayarÃ„Â± ${days} gÃƒÂ¼n olarak eklendi.`);
   }
 
   function removeDurationOverride(key: string) {
@@ -1564,7 +1564,7 @@ export default function AcademicCalendarGeneratorPage() {
       delete next[key];
       return next;
     });
-    setNotice('Süre ayarı kaldırıldı.');
+    setNotice('SÃƒÂ¼re ayarÃ„Â± kaldÃ„Â±rÃ„Â±ldÃ„Â±.');
   }
 
   function openDraftFromHistory(summary: CalendarDraftSummaryDto) {
@@ -1574,7 +1574,7 @@ export default function AcademicCalendarGeneratorPage() {
     setSelectedSemester('Fall');
     setActiveTab('draft');
     setShowDraftHistory(false);
-    setNotice(`Taslak #${summary.id} açıldı.`);
+    setNotice(`Taslak #${summary.id} aÃƒÂ§Ã„Â±ldÃ„Â±.`);
   }
 
   async function deleteDraftFromHistory(summary: CalendarDraftSummaryDto) {
@@ -1582,9 +1582,9 @@ export default function AcademicCalendarGeneratorPage() {
       title: 'Taslak silinsin mi?',
       message:
         `Taslak #${summary.id} (${summary.academicYear}) silinecek.\n\n` +
-        'Bu işlem sadece taslak kaydını kaldırır. Daha önce gerçek akademik takvime uygulanmış etkinlikler silinmez; ancak bu taslak üzerinden geri alma yapılamaz.',
+        'Bu iÃ…Å¸lem sadece taslak kaydÃ„Â±nÃ„Â± kaldÃ„Â±rÃ„Â±r. Daha ÃƒÂ¶nce gerÃƒÂ§ek akademik takvime uygulanmÃ„Â±Ã…Å¸ etkinlikler silinmez; ancak bu taslak ÃƒÂ¼zerinden geri alma yapÃ„Â±lamaz.',
       confirmLabel: 'Evet, sil',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: 'VazgeÃƒÂ§',
       tone: 'danger',
     });
     if (!shouldDelete)
@@ -1609,12 +1609,12 @@ export default function AcademicCalendarGeneratorPage() {
       return;
 
     const shouldDelete = await askConfirm({
-      title: 'Tüm taslaklar silinsin mi?',
+      title: 'TÃƒÂ¼m taslaklar silinsin mi?',
       message:
         `${summaries.length} taslak silinecek.\n\n` +
-        'Bu işlem sadece taslak kayıtlarını kaldırır. Daha önce gerçek akademik takvime uygulanmış etkinlikler silinmez; ancak silinen taslaklar üzerinden geri alma yapılamaz.',
-      confirmLabel: 'Evet, tümünü sil',
-      cancelLabel: 'Vazgeç',
+        'Bu iÃ…Å¸lem sadece taslak kayÃ„Â±tlarÃ„Â±nÃ„Â± kaldÃ„Â±rÃ„Â±r. Daha ÃƒÂ¶nce gerÃƒÂ§ek akademik takvime uygulanmÃ„Â±Ã…Å¸ etkinlikler silinmez; ancak silinen taslaklar ÃƒÂ¼zerinden geri alma yapÃ„Â±lamaz.',
+      confirmLabel: 'Evet, tÃƒÂ¼mÃƒÂ¼nÃƒÂ¼ sil',
+      cancelLabel: 'VazgeÃƒÂ§',
       tone: 'danger',
     });
     if (!shouldDelete)
@@ -1642,21 +1642,21 @@ export default function AcademicCalendarGeneratorPage() {
     setNotice(null);
     const durationOverrideCount = Object.keys(durationOverrides).length;
     const shouldGenerate = await askConfirm({
-      title: 'Taslak üretilecek',
+      title: 'Taslak ÃƒÂ¼retilecek',
       message:
-        `${academicYear} akademik yılı için yeni bir taslak üretilecek.\n\n` +
-        `Güz başlangıcı: ${fallStartDate}\n` +
-        `Bahar başlangıcı: ${springStartDate}\n` +
-        `Yaz okulu: ${includeSummer ? 'dahil' : 'dahil değil'}\n` +
-        `Ek kısıt: ${constraints.length}\n` +
-        `Süre ayarı: ${durationOverrideCount}\n\n` +
-        'Bu işlem gerçek akademik takvime yazmaz; sadece 30 gün saklanan bir taslak oluşturur. Devam edilsin mi?',
-      confirmLabel: 'Evet, üret',
-      cancelLabel: 'Vazgeç',
+        `${academicYear} akademik yÃ„Â±lÃ„Â± iÃƒÂ§in yeni bir taslak ÃƒÂ¼retilecek.\n\n` +
+        `GÃƒÂ¼z baÃ…Å¸langÃ„Â±cÃ„Â±: ${fallStartDate}\n` +
+        `Bahar baÃ…Å¸langÃ„Â±cÃ„Â±: ${springStartDate}\n` +
+        `Yaz okulu: ${includeSummer ? 'dahil' : 'dahil deÃ„Å¸il'}\n` +
+        `Ek kÃ„Â±sÃ„Â±t: ${constraints.length}\n` +
+        `SÃƒÂ¼re ayarÃ„Â±: ${durationOverrideCount}\n\n` +
+        'Bu iÃ…Å¸lem gerÃƒÂ§ek akademik takvime yazmaz; sadece 30 gÃƒÂ¼n saklanan bir taslak oluÃ…Å¸turur. Devam edilsin mi?',
+      confirmLabel: 'Evet, ÃƒÂ¼ret',
+      cancelLabel: 'VazgeÃƒÂ§',
       tone: 'info',
     });
     if (!shouldGenerate) {
-      setNotice('Taslak üretme işlemi iptal edildi.');
+      setNotice('Taslak ÃƒÂ¼retme iÃ…Å¸lemi iptal edildi.');
       return;
     }
     generate.mutate({
@@ -1674,10 +1674,10 @@ export default function AcademicCalendarGeneratorPage() {
         setSelectedSemester('Fall');
         setSelectedEventId(null);
         setActiveTab('draft');
-        const successNotice = `Taslak #${data.draftId} oluşturuldu. Bu aşamada akademik takvim sayfasına yazılmaz; aktarmak için "Onayla ve kaydet" kullanın.`;
+        const successNotice = `Taslak #${data.draftId} oluÃ…Å¸turuldu. Bu aÃ…Å¸amada akademik takvim sayfasÃ„Â±na yazÃ„Â±lmaz; aktarmak iÃƒÂ§in "Onayla ve kaydet" kullanÃ„Â±n.`;
         setNotice(
           failedEventCount > 0
-            ? `Taslak #${data.draftId} oluşturuldu ancak program seçtiğiniz kısıtlardan dolayı oluşturulamadı. Yerleşemeyen ${failedEventCount} etkinlik için taslak uyarılarını kontrol edin.`
+            ? `Taslak #${data.draftId} oluÃ…Å¸turuldu ancak program seÃƒÂ§tiÃ„Å¸iniz kÃ„Â±sÃ„Â±tlardan dolayÃ„Â± oluÃ…Å¸turulamadÃ„Â±. YerleÃ…Å¸emeyen ${failedEventCount} etkinlik iÃƒÂ§in taslak uyarÃ„Â±larÃ„Â±nÃ„Â± kontrol edin.`
             : successNotice,
         );
       },
@@ -1695,12 +1695,12 @@ export default function AcademicCalendarGeneratorPage() {
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(editForm.startDate);
       if (parsedStart && isWeekend(parsedStart)) {
-        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
+        setNotice('SÃ„Â±nav baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihi hafta sonuna denk gelemez.');
         return;
       }
     }
 
-    const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'Zincirleme kaydırma ön izlemesi');
+    const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'Zincirleme kaydÃ„Â±rma ÃƒÂ¶n izlemesi');
     whatIf.mutate({
       draftId: activeDraftId,
       dto: {
@@ -1710,7 +1710,7 @@ export default function AcademicCalendarGeneratorPage() {
         propagateChanges,
       },
     }, {
-      onSuccess: () => setNotice(`What-if hesaplandı. ${propagateChanges ? 'Zincirleme kaydırma dahil edildi.' : 'Sadece seçili etkinlik denendi.'}`),
+      onSuccess: () => setNotice(`What-if hesaplandÃ„Â±. ${propagateChanges ? 'Zincirleme kaydÃ„Â±rma dahil edildi.' : 'Sadece seÃƒÂ§ili etkinlik denendi.'}`),
       onError: error => setNotice(getErrorMessage(error)),
     });
   }
@@ -1725,24 +1725,24 @@ export default function AcademicCalendarGeneratorPage() {
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(editForm.startDate);
       if (parsedStart && isWeekend(parsedStart)) {
-        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
+        setNotice('SÃ„Â±nav baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihi hafta sonuna denk gelemez.');
         return;
       }
     }
 
-    const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'Taslağa yaz');
+    const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'TaslaÃ„Å¸a yaz');
     const shouldUpdate = await askConfirm({
-      title: 'Taslağa yazılsın mı?',
+      title: 'TaslaÃ„Å¸a yazÃ„Â±lsÃ„Â±n mÃ„Â±?',
       message:
-        `${displayText(selectedEvent.title)} taslakta güncellenecek.\n\n` +
+        `${displayText(selectedEvent.title)} taslakta gÃƒÂ¼ncellenecek.\n\n` +
         `Yeni tarih: ${editForm.startDate}${editForm.endDate && editForm.endDate !== editForm.startDate ? ` - ${editForm.endDate}` : ''}\n` +
-        `Zincirleme kaydırma: ${propagateChanges ? 'uygulanacak' : 'uygulanmayacak'}\n\n` +
-        'Bu işlem taslağı değiştirir ama gerçek akademik takvime henüz yazmaz. Devam edilsin mi?',
-      confirmLabel: 'Evet, taslağa yaz',
-      cancelLabel: 'Vazgeç',
+        `Zincirleme kaydÃ„Â±rma: ${propagateChanges ? 'uygulanacak' : 'uygulanmayacak'}\n\n` +
+        'Bu iÃ…Å¸lem taslaÃ„Å¸Ã„Â± deÃ„Å¸iÃ…Å¸tirir ama gerÃƒÂ§ek akademik takvime henÃƒÂ¼z yazmaz. Devam edilsin mi?',
+      confirmLabel: 'Evet, taslaÃ„Å¸a yaz',
+      cancelLabel: 'VazgeÃƒÂ§',
     });
     if (!shouldUpdate) {
-      setNotice('Taslak güncelleme işlemi iptal edildi.');
+      setNotice('Taslak gÃƒÂ¼ncelleme iÃ…Å¸lemi iptal edildi.');
       return;
     }
     updateDraftEvent.mutate({
@@ -1761,8 +1761,8 @@ export default function AcademicCalendarGeneratorPage() {
         setSelectedDraftId(data.id);
         setSelectedEventId(null);
         setNotice(propagateChanges
-          ? 'Taslak etkinliği güncellendi; bağımlı tarihler yeniden hesaplandı.'
-          : 'Taslak etkinliği güncellendi; zincirleme kaydırma uygulanmadı, sadece seçili etkinlik değişti.');
+          ? 'Taslak etkinliÃ„Å¸i gÃƒÂ¼ncellendi; baÃ„Å¸Ã„Â±mlÃ„Â± tarihler yeniden hesaplandÃ„Â±.'
+          : 'Taslak etkinliÃ„Å¸i gÃƒÂ¼ncellendi; zincirleme kaydÃ„Â±rma uygulanmadÃ„Â±, sadece seÃƒÂ§ili etkinlik deÃ„Å¸iÃ…Å¸ti.');
       },
       onError: error => setNotice(getErrorMessage(error)),
     });
@@ -1771,28 +1771,28 @@ export default function AcademicCalendarGeneratorPage() {
   async function handleApply() {
     if (!activeDraftId) return;
     if (adminTerms.isLoading) {
-      setNotice('Dönem uyumu kontrol ediliyor. Lütfen birkaç saniye sonra tekrar deneyin.');
+      setNotice('DÃƒÂ¶nem uyumu kontrol ediliyor. LÃƒÂ¼tfen birkaÃƒÂ§ saniye sonra tekrar deneyin.');
       return;
     }
     const shouldApply = await askConfirm({
       title: 'Akademik takvime kaydedilsin mi?',
       message:
-        `Taslak #${activeDraftId} gerçek akademik takvime uygulanacak.\n\n` +
-        'Sonuç: ilgili dönemlerin mevcut takvim işaretleri temizlenir ve bu taslaktaki etkinlikler yazılır.\n' +
-        `${forceOverwrite ? 'Yayınlanmış dönemlerin üzerine yazma açık; sistem sadece kapalı/arşivlenmiş dönemleri engeller.' : 'Yayınlanmış veya daha ileri durumda bir dönem varsa işlem reddedilir; önce üzerine yazma izni açılmalıdır.'}\n\n` +
+        `Taslak #${activeDraftId} gerÃƒÂ§ek akademik takvime uygulanacak.\n\n` +
+        'SonuÃƒÂ§: ilgili dÃƒÂ¶nemlerin mevcut takvim iÃ…Å¸aretleri temizlenir ve bu taslaktaki etkinlikler yazÃ„Â±lÃ„Â±r.\n' +
+        `${forceOverwrite ? 'YayÃ„Â±nlanmÃ„Â±Ã…Å¸ dÃƒÂ¶nemlerin ÃƒÂ¼zerine yazma aÃƒÂ§Ã„Â±k; sistem sadece kapalÃ„Â±/arÃ…Å¸ivlenmiÃ…Å¸ dÃƒÂ¶nemleri engeller.' : 'YayÃ„Â±nlanmÃ„Â±Ã…Å¸ veya daha ileri durumda bir dÃƒÂ¶nem varsa iÃ…Å¸lem reddedilir; ÃƒÂ¶nce ÃƒÂ¼zerine yazma izni aÃƒÂ§Ã„Â±lmalÃ„Â±dÃ„Â±r.'}\n\n` +
         'Devam etmek istiyor musunuz?',
       confirmLabel: 'Evet, onayla ve kaydet',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: 'VazgeÃƒÂ§',
       tone: forceOverwrite ? 'danger' : 'default',
     });
     if (!shouldApply) {
-      setNotice('Onayla ve kaydet işlemi iptal edildi.');
+      setNotice('Onayla ve kaydet iÃ…Å¸lemi iptal edildi.');
       return;
     }
     applyDraft.mutate({ draftId: activeDraftId, forceOverwrite }, {
       onSuccess: result => {
         const terms = result.termIds.length > 0 ? result.termIds.join(', ') : 'yok';
-        setNotice(`${result.message} Akademik takvim sayfası yenilendi. Güncellenen dönemler: ${terms}.`);
+        setNotice(`${result.message} Akademik takvim sayfasÃ„Â± yenilendi. GÃƒÂ¼ncellenen dÃƒÂ¶nemler: ${terms}.`);
       },
       onError: error => setNotice(getErrorMessage(error)),
     });
@@ -1801,21 +1801,21 @@ export default function AcademicCalendarGeneratorPage() {
   async function handleRollback() {
     if (!activeDraftId) return;
     const shouldRollback = await askConfirm({
-      title: 'Geri alınsın mı?',
+      title: 'Geri alÃ„Â±nsÃ„Â±n mÃ„Â±?',
       message:
-        `Taslak #${activeDraftId} geri alınacak.\n\n` +
-        'Sonuç: uygulanmış taslağın önceki snapshot verisi geri yüklenir. Kapalı dönemler değiştirilmez.\n\n' +
+        `Taslak #${activeDraftId} geri alÃ„Â±nacak.\n\n` +
+        'SonuÃƒÂ§: uygulanmÃ„Â±Ã…Å¸ taslaÃ„Å¸Ã„Â±n ÃƒÂ¶nceki snapshot verisi geri yÃƒÂ¼klenir. KapalÃ„Â± dÃƒÂ¶nemler deÃ„Å¸iÃ…Å¸tirilmez.\n\n' +
         'Devam etmek istiyor musunuz?',
       confirmLabel: 'Evet, geri al',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: 'VazgeÃƒÂ§',
       tone: 'danger',
     });
     if (!shouldRollback) {
-      setNotice('Geri alma işlemi iptal edildi.');
+      setNotice('Geri alma iÃ…Å¸lemi iptal edildi.');
       return;
     }
     rollbackDraft.mutate(activeDraftId, {
-      onSuccess: result => setNotice(`${result.message} Dönemler: ${result.termIds.join(', ')}`),
+      onSuccess: result => setNotice(`${result.message} DÃƒÂ¶nemler: ${result.termIds.join(', ')}`),
       onError: error => setNotice(getErrorMessage(error)),
     });
   }
@@ -1826,23 +1826,23 @@ export default function AcademicCalendarGeneratorPage() {
           <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <div className="grid gap-3 md:grid-cols-4">
             <label className="space-y-0.5 text-sm font-medium text-slate-700">
-              Akademik yıl
+              Akademik yÃ„Â±l
               <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="icon" onClick={() => handleAcademicYearShift(-1)} aria-label="Önceki akademik yıl">
+                <Button type="button" variant="outline" size="icon" onClick={() => handleAcademicYearShift(-1)} aria-label="Ãƒâ€“nceki akademik yÃ„Â±l">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <Input value={academicYear} onChange={e => setAcademicYear(e.target.value)} placeholder="2025-2026" />
-                <Button type="button" variant="outline" size="icon" onClick={() => handleAcademicYearShift(1)} aria-label="Sonraki akademik yıl">
+                <Button type="button" variant="outline" size="icon" onClick={() => handleAcademicYearShift(1)} aria-label="Sonraki akademik yÃ„Â±l">
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </label>
             <label className="space-y-0.5 text-sm font-medium text-slate-700">
-              Güz ders başlangıcı
+              GÃƒÂ¼z ders baÃ…Å¸langÃ„Â±cÃ„Â±
               <Input type="date" value={fallStartDate} onChange={e => setFallStartDate(e.target.value)} />
             </label>
             <label className="space-y-0.5 text-sm font-medium text-slate-700">
-              Bahar ders başlangıcı
+              Bahar ders baÃ…Å¸langÃ„Â±cÃ„Â±
               <Input type="date" value={springStartDate} onChange={e => setSpringStartDate(e.target.value)} />
             </label>
             <div className="flex items-end">
@@ -1860,7 +1860,7 @@ export default function AcademicCalendarGeneratorPage() {
                 Tarih Sabitleme
               </div>
               <p className="text-xs text-slate-500">
-                Belirli bir etkinliğin tarihini sabitlemek için seçin ve başlangıç / bitiş tarihini girin.
+                Belirli bir etkinliÃ„Å¸in tarihini sabitlemek iÃƒÂ§in seÃƒÂ§in ve baÃ…Å¸langÃ„Â±ÃƒÂ§ / bitiÃ…Å¸ tarihini girin.
               </p>
               <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,1.5fr)_140px_140px]">
                 <SearchableProcessSelect
@@ -1868,7 +1868,7 @@ export default function AcademicCalendarGeneratorPage() {
                   selectedKey={activePinEventKey}
                   onChange={handlePinEventChange}
                   disabled={templates.isLoading || durationOptions.length === 0}
-                  placeholder={templates.isLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
+                  placeholder={templates.isLoading ? 'YÃƒÂ¼kleniyor...' : 'Etkinlik seÃƒÂ§in'}
                 />
                 <Input
                   type="date"
@@ -1886,23 +1886,23 @@ export default function AcademicCalendarGeneratorPage() {
                 />
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                Seçilebilir tarih aralığı: {pinSelectionRange.label}
+                SeÃƒÂ§ilebilir tarih aralÃ„Â±Ã„Å¸Ã„Â±: {pinSelectionRange.label}
               </p>
               {selectedPinOption && (
                 <p className="mt-1 text-xs font-medium text-slate-700">
-                  Seçilen: {processOptionLabel(selectedPinOption)}. Yalnızca seçilen dönem için.
+                  SeÃƒÂ§ilen: {processOptionLabel(selectedPinOption)}. YalnÃ„Â±zca seÃƒÂ§ilen dÃƒÂ¶nem iÃƒÂ§in.
                 </p>
               )}
               <Button type="button" size="sm" className="mt-2" onClick={addPinConstraint} disabled={!activePinEventKey || !selectedPinOption}>
-                Kısıt Ekle
+                KÃ„Â±sÃ„Â±t Ekle
               </Button>
             </div>
           </div>
 
           <div className="mt-3 rounded-lg border border-slate-200 p-2.5">
-            <div className="text-sm font-semibold text-slate-800">Süre Ayarları</div>
+            <div className="text-sm font-semibold text-slate-800">SÃƒÂ¼re AyarlarÃ„Â±</div>
             <p className="text-xs text-slate-500">
-              Bir etkinliğin varsayılan süresini değiştirmek için seçin ve yeni gün sayısını girin.
+              Bir etkinliÃ„Å¸in varsayÃ„Â±lan sÃƒÂ¼resini deÃ„Å¸iÃ…Å¸tirmek iÃƒÂ§in seÃƒÂ§in ve yeni gÃƒÂ¼n sayÃ„Â±sÃ„Â±nÃ„Â± girin.
             </p>
 
             <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,1.5fr)_140px_auto]">
@@ -1911,28 +1911,28 @@ export default function AcademicCalendarGeneratorPage() {
                 selectedKey={activeDurationEventKey}
                 onChange={handleDurationEventChange}
                 disabled={templates.isLoading || durationOptions.length === 0}
-                placeholder={templates.isLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
+                placeholder={templates.isLoading ? 'YÃƒÂ¼kleniyor...' : 'Etkinlik seÃƒÂ§in'}
               />
               <Input
                 type="number"
                 min={1}
                 value={durationDays}
                 onChange={e => setDurationDays(e.target.value)}
-                placeholder="Gün"
+                placeholder="GÃƒÂ¼n"
               />
               <Button type="button" size="sm" onClick={addDurationOverride} disabled={!selectedDurationOption}>
-                Süre ayarı ekle
+                SÃƒÂ¼re ayarÃ„Â± ekle
               </Button>
             </div>
             {selectedDurationOption && (
               <p className="mt-1 text-xs font-medium text-slate-700">
-                Seçilen: {processOptionLabel(selectedDurationOption)}. Varsayılan: {selectedDurationOption.defaultDurationDays} gün.
+                SeÃƒÂ§ilen: {processOptionLabel(selectedDurationOption)}. VarsayÃ„Â±lan: {selectedDurationOption.defaultDurationDays} gÃƒÂ¼n.
               </p>
             )}
 
             <div className="mt-2 space-y-1.5">
               {Object.keys(durationOverrides).length === 0 ? (
-                <p className="text-xs text-slate-500">Henüz süre ayarı yok.</p>
+                <p className="text-xs text-slate-500">HenÃƒÂ¼z sÃƒÂ¼re ayarÃ„Â± yok.</p>
               ) : Object.entries(durationOverrides).map(([key, days]) => {
                 const option = durationOptions.find(item => item.key === key);
                 return (
@@ -1940,7 +1940,7 @@ export default function AcademicCalendarGeneratorPage() {
                     <div>
                       <div className="font-medium text-slate-800">{option ? processOptionLabel(option) : key}</div>
                       <div className="text-xs text-slate-500">
-                        {option ? `${option.defaultDurationDays} gün yerine ` : ''}{days} gün
+                        {option ? `${option.defaultDurationDays} gÃƒÂ¼n yerine ` : ''}{days} gÃƒÂ¼n
                       </div>
                     </div>
                     <Button type="button" size="sm" variant="ghost" onClick={() => removeDurationOverride(key)}>
@@ -1955,7 +1955,7 @@ export default function AcademicCalendarGeneratorPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={handleGenerate} disabled={generate.isPending}>
               {generate.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-              Taslak Üret
+              Taslak ÃƒÅ“ret
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => {
               setConstraints([]);
@@ -1965,20 +1965,20 @@ export default function AcademicCalendarGeneratorPage() {
               setPinEventKey('');
               setPinDate('');
               setPinEndDate('');
-              setNotice('Tüm kısıtlar ve süre ayarları sıfırlandı.');
+              setNotice('TÃƒÂ¼m kÃ„Â±sÃ„Â±tlar ve sÃƒÂ¼re ayarlarÃ„Â± sÃ„Â±fÃ„Â±rlandÃ„Â±.');
             }}>
               <Trash2 className="h-4 w-4" />
-              Sıfırla
+              SÃ„Â±fÃ„Â±rla
             </Button>
-            <span className="text-xs text-slate-500">Taslaklar 30 gün saklanır.</span>
+            <span className="text-xs text-slate-500">Taslaklar 30 gÃƒÂ¼n saklanÃ„Â±r.</span>
           </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Aktif Kısıtlar</h2>
+          <h2 className="text-sm font-semibold text-slate-900">Aktif KÃ„Â±sÃ„Â±tlar</h2>
           <div className="mt-2 space-y-1.5">
             {activeGeneratorSettings.length === 0 ? (
-              <p className="text-sm text-slate-500">Henüz ek kısıt yok.</p>
+              <p className="text-sm text-slate-500">HenÃƒÂ¼z ek kÃ„Â±sÃ„Â±t yok.</p>
             ) : activeGeneratorSettings.map(setting => (
               <div key={setting.key} className="rounded-lg border border-slate-200 px-2.5 py-2">
                 <div className="flex items-start justify-between gap-2">
@@ -2015,10 +2015,10 @@ export default function AcademicCalendarGeneratorPage() {
           </div>
 
           <div className="mt-3 border-t border-cyan-200 pt-2 text-sm text-cyan-900">
-            <div className="text-xs font-semibold">Yönetmelik Kontrolü</div>
+            <div className="text-xs font-semibold">YÃƒÂ¶netmelik KontrolÃƒÂ¼</div>
             <div className="mt-1 space-y-0.5 text-[11px]">
-              <div>Normal: 14 hafta ders, sınavlarla 16 hafta. Yaz: 7 hafta.</div>
-              <div>Çekilme/dondurma: 7. hafta. Sınav sonuçları: 10 iş günü.</div>
+              <div>Normal: 14 hafta ders, sÃ„Â±navlarla 16 hafta. Yaz: 7 hafta.</div>
+              <div>Ãƒâ€¡ekilme/dondurma: 7. hafta. SÃ„Â±nav sonuÃƒÂ§larÃ„Â±: 10 iÃ…Å¸ gÃƒÂ¼nÃƒÂ¼.</div>
             </div>
           </div>
         </div>
@@ -2030,7 +2030,7 @@ export default function AcademicCalendarGeneratorPage() {
     if (!calendar) {
       return (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          Henüz taslak yok. "Kısıtlar & Üret" sekmesinden bir taslak oluşturun.
+          HenÃƒÂ¼z taslak yok. "KÃ„Â±sÃ„Â±tlar & ÃƒÅ“ret" sekmesinden bir taslak oluÃ…Å¸turun.
         </div>
       );
     }
@@ -2046,8 +2046,8 @@ export default function AcademicCalendarGeneratorPage() {
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">Taslak #{activeDraftId}</h2>
                   <p className="text-xs text-slate-500">
-                    {calendar.academicYear} için {calendar.events.length} etkinlik üretildi.
-                    {hasActiveEventTypeFilter ? ` Görünen: ${filteredSemesterEvents.length}/${semesterEvents.length}.` : ''}
+                    {calendar.academicYear} iÃƒÂ§in {calendar.events.length} etkinlik ÃƒÂ¼retildi.
+                    {hasActiveEventTypeFilter ? ` GÃƒÂ¶rÃƒÂ¼nen: ${filteredSemesterEvents.length}/${semesterEvents.length}.` : ''}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -2085,9 +2085,9 @@ export default function AcademicCalendarGeneratorPage() {
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuLabel>Tür filtresi</DropdownMenuLabel>
+                        <DropdownMenuLabel>TÃƒÂ¼r filtresi</DropdownMenuLabel>
                         <DropdownMenuCheckboxItem checked={!hasActiveEventTypeFilter} onCheckedChange={() => setSelectedEventTypeFilters([])}>
-                          Tüm türler
+                          TÃƒÂ¼m tÃƒÂ¼rler
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuSeparator />
                         {eventTypeFilterOptions.map(option => (
@@ -2109,7 +2109,7 @@ export default function AcademicCalendarGeneratorPage() {
                 <div className="flex-1 overflow-auto min-h-[320px]">
                   {filteredSemesterEvents.length === 0 ? (
                     <div className="px-4 py-10 text-center text-sm text-slate-500">
-                      <p>{hasActiveEventTypeFilter ? 'Seçilen tür filtresine uygun etkinlik bulunamadı.' : 'Bu dönem için etkinlik yok.'}</p>
+                      <p>{hasActiveEventTypeFilter ? 'SeÃƒÂ§ilen tÃƒÂ¼r filtresine uygun etkinlik bulunamadÃ„Â±.' : 'Bu dÃƒÂ¶nem iÃƒÂ§in etkinlik yok.'}</p>
                       {hasActiveEventTypeFilter && (
                         <div className="mt-3">
                           <Button type="button" size="sm" variant="outline" onClick={() => setSelectedEventTypeFilters([])}>
@@ -2156,9 +2156,9 @@ export default function AcademicCalendarGeneratorPage() {
 
           <div className="space-y-3">
               <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900">Tarih Düzenleme</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Tarih DÃƒÂ¼zenleme</h2>
               {!selectedEvent ? (
-                <p className="mt-2 text-sm text-slate-500">Bir etkinlik seçin, tarihi değiştirin ve zincirleme kaydırmayı ön izleyin.</p>
+                <p className="mt-2 text-sm text-slate-500">Bir etkinlik seÃƒÂ§in, tarihi deÃ„Å¸iÃ…Å¸tirin ve zincirleme kaydÃ„Â±rmayÃ„Â± ÃƒÂ¶n izleyin.</p>
               ) : !canEditSelectedEvent ? (
                 <div className="mt-3 space-y-3">
                   <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
@@ -2178,16 +2178,16 @@ export default function AcademicCalendarGeneratorPage() {
               ) : (
                 <div className="mt-2 space-y-2">
                   <label className="block space-y-0.5 text-sm font-medium text-slate-700">
-                    Başlık
+                    BaÃ…Å¸lÃ„Â±k
                     <Input value={editForm.title} onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))} />
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="block space-y-0.5 text-sm font-medium text-slate-700">
-                      Başlangıç
+                      BaÃ…Å¸langÃ„Â±ÃƒÂ§
                       <Input type="date" value={editForm.startDate} onChange={e => setEditForm(prev => ({ ...prev, startDate: e.target.value }))} />
                     </label>
                     <label className="block space-y-1 text-sm font-medium text-slate-700">
-                      Bitiş
+                      BitiÃ…Å¸
                       <Input type="date" value={editForm.endDate} onChange={e => setEditForm(prev => ({ ...prev, endDate: e.target.value }))} />
                     </label>
                   </div>
@@ -2198,11 +2198,11 @@ export default function AcademicCalendarGeneratorPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="outline" onClick={handleWhatIf} disabled={whatIf.isPending}>
                       <GitBranch className="h-4 w-4" />
-                      Zincirleme Önizle
+                      Zincirleme Ãƒâ€“nizle
                     </Button>
                     <Button type="button" size="sm" onClick={handleUpdateEvent} disabled={updateDraftEvent.isPending}>
                       <Save className="h-4 w-4" />
-                      Taslağa Yaz
+                      TaslaÃ„Å¸a Yaz
                     </Button>
                   </div>
                 </div>
@@ -2220,7 +2220,7 @@ export default function AcademicCalendarGeneratorPage() {
       <>
         {termAlignment.hasMismatch && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 shadow-sm">
-            <h2 className="text-sm font-semibold text-red-900">Dönem uyumsuzluğu</h2>
+            <h2 className="text-sm font-semibold text-red-900">DÃƒÂ¶nem uyumsuzluÃ„Å¸u</h2>
             <p className="mt-1 text-xs leading-5 text-red-800">
               {termAlignment.message}
             </p>
@@ -2228,9 +2228,9 @@ export default function AcademicCalendarGeneratorPage() {
         )}
 
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Zincirleme Kaydırma Farkı</h2>
+          <h2 className="text-sm font-semibold text-slate-900">Zincirleme KaydÃ„Â±rma FarkÃ„Â±</h2>
           {whatIfDiffs.length === 0 ? (
-            <p className="mt-1 text-xs text-slate-500">Hesaplanmış fark yok.</p>
+            <p className="mt-1 text-xs text-slate-500">HesaplanmÃ„Â±Ã…Å¸ fark yok.</p>
           ) : (
             <div className="mt-3 space-y-2">
               {whatIfDiffs.map(({ next, prev }) => (
@@ -2250,12 +2250,12 @@ export default function AcademicCalendarGeneratorPage() {
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Onayla ve kaydet</h2>
               <p className="mt-0.5 max-w-md text-xs leading-5 text-slate-600">
-                Taslak onaylandığında eski takvim oluşturucu kayıtları temizlenir, bu etkinlikler yazılır.
-                {forceOverwrite ? ' Yayınlanmış dönemlerin üzerine yazma açık.' : ' Yayınlanmış dönem varsa işlem reddedilir.'}
+                Taslak onaylandÃ„Â±Ã„Å¸Ã„Â±nda eski takvim oluÃ…Å¸turucu kayÃ„Â±tlarÃ„Â± temizlenir, bu etkinlikler yazÃ„Â±lÃ„Â±r.
+                {forceOverwrite ? ' YayÃ„Â±nlanmÃ„Â±Ã…Å¸ dÃƒÂ¶nemlerin ÃƒÂ¼zerine yazma aÃƒÂ§Ã„Â±k.' : ' YayÃ„Â±nlanmÃ„Â±Ã…Å¸ dÃƒÂ¶nem varsa iÃ…Å¸lem reddedilir.'}
               </p>
               {termAlignment.hasMismatch && (
                 <p className="mt-1 max-w-md text-xs font-medium text-red-700">
-                  Uyarı: {termAlignment.message}
+                  UyarÃ„Â±: {termAlignment.message}
                 </p>
               )}
             </div>
@@ -2315,7 +2315,7 @@ export default function AcademicCalendarGeneratorPage() {
 
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900 mb-3">Takvim Görünümü</h2>
+        <h2 className="text-sm font-semibold text-slate-900 mb-3">Takvim GÃƒÂ¶rÃƒÂ¼nÃƒÂ¼mÃƒÂ¼</h2>
         <CalendarVisualizer
           events={eventsToRender}
           compact={true}
@@ -2337,18 +2337,18 @@ export default function AcademicCalendarGeneratorPage() {
 
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900 mb-3">Dönem Özeti</h2>
+        <h2 className="text-sm font-semibold text-slate-900 mb-3">DÃƒÂ¶nem Ãƒâ€“zeti</h2>
         <div className="overflow-x-auto rounded-md border border-slate-200">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="px-3 py-2 font-medium">Dönem</th>
+                <th className="px-3 py-2 font-medium">DÃƒÂ¶nem</th>
                 <th className="px-3 py-2 font-medium">Tarihler</th>
-                <th className="px-3 py-2 font-medium">Ders / Tatil / Sınav (Gün)</th>
-                <th className="px-3 py-2 font-medium">Vize Öncesi</th>
-                <th className="px-3 py-2 font-medium">Vize Haftası</th>
-                <th className="px-3 py-2 font-medium">Vize Sonrası</th>
-                <th className="px-3 py-2 font-medium">Final Haftası</th>
+                <th className="px-3 py-2 font-medium">Ders / Tatil / SÃ„Â±nav (GÃƒÂ¼n)</th>
+                <th className="px-3 py-2 font-medium">Vize Ãƒâ€“ncesi</th>
+                <th className="px-3 py-2 font-medium">Vize HaftasÃ„Â±</th>
+                <th className="px-3 py-2 font-medium">Vize SonrasÃ„Â±</th>
+                <th className="px-3 py-2 font-medium">Final HaftasÃ„Â±</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
@@ -2371,7 +2371,7 @@ export default function AcademicCalendarGeneratorPage() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2">
                       {isSummer || !analysis ? '-' : (
-                        <span title={analysis.midtermStart ? `Vize Başlangıcı: ${fmt(utcDate(analysis.midtermStart))}` : 'Tarih yok'} className={analysis.midtermStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
+                        <span title={analysis.midtermStart ? `Vize BaÃ…Å¸langÃ„Â±cÃ„Â±: ${fmt(utcDate(analysis.midtermStart))}` : 'Tarih yok'} className={analysis.midtermStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
                           {analysis.weeksBeforeMidterm ?? '-'} hafta
                         </span>
                       )}
@@ -2385,7 +2385,7 @@ export default function AcademicCalendarGeneratorPage() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2">
                       {isSummer || !analysis ? '-' : (
-                        <span title={analysis.finalStart ? `Final Başlangıcı: ${fmt(utcDate(analysis.finalStart))}` : 'Tarih yok'} className={analysis.finalStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
+                        <span title={analysis.finalStart ? `Final BaÃ…Å¸langÃ„Â±cÃ„Â±: ${fmt(utcDate(analysis.finalStart))}` : 'Tarih yok'} className={analysis.finalStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
                           {analysis.weeksAfterMidterm ?? '-'} hafta
                         </span>
                       )}
@@ -2412,18 +2412,18 @@ export default function AcademicCalendarGeneratorPage() {
     const failedEvents = current.events.filter(event => event.isFailed);
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Uyarılar</h2>
+        <h2 className="text-sm font-semibold text-slate-900">UyarÃ„Â±lar</h2>
         <div className="mt-2 space-y-1.5">
           {failedEvents.length > 0 && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              <div className="font-semibold">Program seçtiğiniz kısıtlardan dolayı oluşturulamadı.</div>
+              <div className="font-semibold">Program seÃƒÂ§tiÃ„Å¸iniz kÃ„Â±sÃ„Â±tlardan dolayÃ„Â± oluÃ…Å¸turulamadÃ„Â±.</div>
               <div className="mt-1 text-xs">
-                Yerleşemeyen etkinlikler: {failedEvents.map(event => `${semesterLabel(event.semester)} - ${displayText(event.title)}`).join(', ')}
+                YerleÃ…Å¸emeyen etkinlikler: {failedEvents.map(event => `${semesterLabel(event.semester)} - ${displayText(event.title)}`).join(', ')}
               </div>
             </div>
           )}
           {rows.length === 0 && failedEvents.length === 0 ? (
-            <p className="text-sm text-slate-500">Uyarı yok.</p>
+            <p className="text-sm text-slate-500">UyarÃ„Â± yok.</p>
           ) : rows.map(row => (
             <div key={row.key} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
               <Badge variant={row.badgeVariant}>
@@ -2443,26 +2443,26 @@ export default function AcademicCalendarGeneratorPage() {
   function renderHolidaysTab() {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Tatil tanımları</h2>
-        <p className="text-xs text-slate-600">Sabit resmi tatiller, dini bayramlar ve bloklayıcı önemli günler.</p>
+        <h2 className="text-sm font-semibold text-slate-900">Tatil tanÃ„Â±mlarÃ„Â±</h2>
+        <p className="text-xs text-slate-600">Sabit resmi tatiller, dini bayramlar ve bloklayÃ„Â±cÃ„Â± ÃƒÂ¶nemli gÃƒÂ¼nler.</p>
         <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {holidays.isLoading ? (
-            <p className="text-sm text-slate-500">Yükleniyor...</p>
+            <p className="text-sm text-slate-500">YÃƒÂ¼kleniyor...</p>
           ) : visibleHolidayDefinitions.length === 0 ? (
-            <p className="text-sm text-slate-500">Gösterilecek tatil tanımı yok.</p>
+            <p className="text-sm text-slate-500">GÃƒÂ¶sterilecek tatil tanÃ„Â±mÃ„Â± yok.</p>
           ) : visibleHolidayDefinitions.map(holiday => (
             <div key={holiday.id} className="rounded-lg border border-slate-200 px-3 py-3 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-slate-800">{displayText(holiday.name)}</span>
                 {holiday.type === 'HijriCalculated' && (
-                  <Badge variant="default">Hicri hesaplandı</Badge>
+                  <Badge variant="default">Hicri hesaplandÃ„Â±</Badge>
                 )}
               </div>
               <div className="mt-2 font-medium text-slate-700">
                 {holidayDateText(holiday)}
               </div>
               <div className="mt-1 text-xs text-slate-600">
-                Süre: {holiday.durationDays} gün
+                SÃƒÂ¼re: {holiday.durationDays} gÃƒÂ¼n
               </div>
               {holiday.overrides.length > 0 && (
                 <div className="mt-1 text-xs text-slate-500">
@@ -2484,9 +2484,9 @@ export default function AcademicCalendarGeneratorPage() {
         <div className="w-full max-w-4xl rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Taslak geçmişi</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Taslak geÃƒÂ§miÃ…Å¸i</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Önceden üretilen taslakları açabilir veya artık gerek olmayanları silebilirsin.
+                Ãƒâ€“nceden ÃƒÂ¼retilen taslaklarÃ„Â± aÃƒÂ§abilir veya artÃ„Â±k gerek olmayanlarÃ„Â± silebilirsin.
               </p>
             </div>
             <div className="flex gap-2">
@@ -2500,7 +2500,7 @@ export default function AcademicCalendarGeneratorPage() {
                 onClick={deleteAllDraftsFromHistory}
                 disabled={deleteDraft.isPending || drafts.isLoading || (drafts.data?.length ?? 0) === 0}
               >
-                Tümünü Sil
+                TÃƒÂ¼mÃƒÂ¼nÃƒÂ¼ Sil
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => setShowDraftHistory(false)}>
                 Kapat
@@ -2510,9 +2510,9 @@ export default function AcademicCalendarGeneratorPage() {
 
           <div className="mt-4 max-h-[70vh] overflow-auto">
             {drafts.isLoading ? (
-              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">Taslaklar yükleniyor...</p>
+              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">Taslaklar yÃƒÂ¼kleniyor...</p>
             ) : (drafts.data?.length ?? 0) === 0 ? (
-              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">Henüz taslak yok.</p>
+              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">HenÃƒÂ¼z taslak yok.</p>
             ) : (
               <div className="space-y-2">
                 {drafts.data?.map(summary => (
@@ -2523,15 +2523,15 @@ export default function AcademicCalendarGeneratorPage() {
                         <Badge variant={draftStatusBadgeVariant(summary.status)}>{summary.status}</Badge>
                       </div>
                       <div className="mt-2 text-slate-700">
-                        {summary.academicYear} · {summary.eventCount} etkinlik · {summary.warningCount} uyarı
+                        {summary.academicYear} Ã‚Â· {summary.eventCount} etkinlik Ã‚Â· {summary.warningCount} uyarÃ„Â±
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
-                        Güncelleme: {fmt(summary.updatedAt)} · Saklama bitişi: {fmt(summary.expiresAt)}
+                        GÃƒÂ¼ncelleme: {fmt(summary.updatedAt)} Ã‚Â· Saklama bitiÃ…Å¸i: {fmt(summary.expiresAt)}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 md:justify-end">
                       <Button type="button" size="sm" variant="outline" onClick={() => openDraftFromHistory(summary)}>
-                        Aç
+                        AÃƒÂ§
                       </Button>
                       <Button type="button" size="sm" variant="destructive" onClick={() => deleteDraftFromHistory(summary)} disabled={deleteDraft.isPending}>
                         Sil
@@ -2552,13 +2552,13 @@ export default function AcademicCalendarGeneratorPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsList className="bg-white">
-            <TabsTrigger value="generator">Kısıtlar & Üret</TabsTrigger>
+            <TabsTrigger value="generator">KÃ„Â±sÃ„Â±tlar & ÃƒÅ“ret</TabsTrigger>
             <TabsTrigger value="draft">Taslak & Zincirleme</TabsTrigger>
-            <TabsTrigger value="holidays">Tatil Tanımları</TabsTrigger>
+            <TabsTrigger value="holidays">Tatil TanÃ„Â±mlarÃ„Â±</TabsTrigger>
           </TabsList>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => setShowDraftHistory(true)}>
-              Taslak geçmişi
+              Taslak geÃƒÂ§miÃ…Å¸i
             </Button>
           </div>
         </div>
@@ -2612,7 +2612,7 @@ export default function AcademicCalendarGeneratorPage() {
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               {pendingConfirm.showCancel !== false && (
                 <Button type="button" variant="outline" onClick={() => closeConfirm(false)}>
-                  {pendingConfirm.cancelLabel ?? 'Vazgeç'}
+                  {pendingConfirm.cancelLabel ?? 'VazgeÃƒÂ§'}
                 </Button>
               )}
               <Button

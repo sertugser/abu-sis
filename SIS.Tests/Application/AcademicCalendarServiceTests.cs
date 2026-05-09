@@ -465,6 +465,27 @@ public class AcademicCalendarServiceTests
     }
 
     [Fact]
+    public async Task UpdateEventAsync_AllowsLongApplicationWindow_OnNonReligiousMultiDayHoliday()
+    {
+        using var ctx = CreateContext();
+        var term = SeedTerm(ctx);
+        var svc = CreateService(ctx);
+
+        await svc.UpsertAsync(term.Id, ValidDto(term));
+        ctx.TermCalendarEvents.AddRange(
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.GraduateApplication, Title = "Lisansustu Program Basvurulari", StartDate = Utc(2025, 10, 1), EndDate = Utc(2025, 10, 20), IsPublic = true, ChainCode = "ADMISSIONS", TemplateItemKey = "fall_graduate_app" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.NationalHoliday, Title = "Cumhuriyet Bayrami", StartDate = Utc(2025, 10, 28), EndDate = Utc(2025, 10, 29), IsPublic = true, ChainCode = "HOLIDAY", BlocksAcademicEvents = true });
+        await ctx.SaveChangesAsync();
+
+        var graduateApplication = ctx.TermCalendarEvents.Single(e => e.TemplateItemKey == "fall_graduate_app");
+
+        var result = await svc.UpdateEventAsync(term.Id, graduateApplication.Id, new UpdateTermCalendarEventDto(Utc(2025, 10, 20), Utc(2025, 11, 7), false));
+
+        result.Events.Single(e => e.TemplateItemKey == "fall_graduate_app").StartDate.Should().Be(Utc(2025, 10, 20));
+        result.Events.Single(e => e.TemplateItemKey == "fall_graduate_app").EndDate.Should().Be(Utc(2025, 11, 7));
+    }
+
+    [Fact]
     public async Task UpdateEventAsync_RejectsFinalExam_OnBlockingHoliday()
     {
         using var ctx = CreateContext();

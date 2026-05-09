@@ -20,7 +20,7 @@ public partial class CalendarGeneratorService
     private const int ExcuseExamMinBusinessDays = 3;
     private const int ExcuseExamMaxBusinessDays = 10;
     private const int FinalPreparationTeachingWeeks = 7;
-    private const int FlexibleHolidayOverlapMinDays = 10;
+    private const int FlexibleHolidayOverlapMinDays = 15;
 
     private static List<GeneratedCalendarEventDto> Propagate(List<GeneratedCalendarEventDto> events, string changedEventId, DateTime oldStart, DateTime oldEnd, DateTime newStart, DateTime newEnd)
     {
@@ -60,7 +60,7 @@ public partial class CalendarGeneratorService
                 warnings.Add(new(
                     "CHRONOLOGY",
                     "Error",
-                    $"{SemesterLabel(group.Key)}: {withdrawal.Title} etkinliği {midterm.Title} başlamadan önce olamaz.",
+                    $"{SemesterLabel(group.Key)}: {withdrawal.Title} etkinliÃ„Å¸i {midterm.Title} baÃ…Å¸lamadan ÃƒÂ¶nce olamaz.",
                     withdrawal.DraftEventId));
             }
         }
@@ -75,7 +75,7 @@ public partial class CalendarGeneratorService
         if (firstEvent == null || secondEvent == null) return;
 
         if ((firstEvent.EndDate ?? firstEvent.StartDate).Date > secondEvent.StartDate.Date)
-            warnings.Add(new("CHRONOLOGY", "Error", $"{SemesterLabel(semester)}: {firstEvent.Title} etkinliği {secondEvent.Title} etkinliğinden sonra bitiyor.", secondEvent.DraftEventId));
+            warnings.Add(new("CHRONOLOGY", "Error", $"{SemesterLabel(semester)}: {firstEvent.Title} etkinliÃ„Å¸i {secondEvent.Title} etkinliÃ„Å¸inden sonra bitiyor.", secondEvent.DraftEventId));
     }
 
     private static IEnumerable<CalendarWarningDto> ValidateRegulationRules(IReadOnlyList<GeneratedCalendarEventDto> events, IReadOnlyList<ResolvedHolidayDto> holidays)
@@ -100,7 +100,7 @@ public partial class CalendarGeneratorService
 
         if (classesStart == null || classesEnd == null || finalExam == null)
         {
-            yield return new CalendarWarningDto("REG_REQUIRED_EVENT", "Error", $"{SemesterLabel(semester)}: Yönetmelik kontrolü için ders başlangıcı, ders bitişi ve final sınavı bulunmalıdır.");
+            yield return new CalendarWarningDto("REG_REQUIRED_EVENT", "Error", $"{SemesterLabel(semester)}: YÃƒÂ¶netmelik kontrolÃƒÂ¼ iÃƒÂ§in ders baÃ…Å¸langÃ„Â±cÃ„Â±, ders bitiÃ…Å¸i ve final sÃ„Â±navÃ„Â± bulunmalÃ„Â±dÃ„Â±r.");
             yield break;
         }
 
@@ -111,7 +111,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_MIN_TEACHING_WEEKS",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 21 gereği kayıt ve sınavlar hariç ders süresi en az 14 hafta olmalıdır ({teachingPeriodDays} gün).",
+                $"{SemesterLabel(semester)}: Madde 21 gereÃ„Å¸i kayÃ„Â±t ve sÃ„Â±navlar hariÃƒÂ§ ders sÃƒÂ¼resi en az 14 hafta olmalÃ„Â±dÃ„Â±r ({teachingPeriodDays} gÃƒÂ¼n).",
                 classesEnd.DraftEventId);
         }
 
@@ -121,7 +121,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_MIN_SEMESTER_WEEKS",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 7 gereği yarıyıl sınavlar dahil en az 16 hafta olmalıdır ({semesterWithExamsDays} gün).",
+                $"{SemesterLabel(semester)}: Madde 7 gereÃ„Å¸i yarÃ„Â±yÃ„Â±l sÃ„Â±navlar dahil en az 16 hafta olmalÃ„Â±dÃ„Â±r ({semesterWithExamsDays} gÃƒÂ¼n).",
                 finalExam.DraftEventId);
         }
 
@@ -141,7 +141,7 @@ public partial class CalendarGeneratorService
 
         if (classesStart == null || classesEnd == null || summerExam == null)
         {
-            yield return new CalendarWarningDto("REG_SUMMER_REQUIRED_EVENT", "Error", "Yaz: Yönetmelik kontrolü için ders başlangıcı, ders bitişi ve yaz okulu sınavı bulunmalıdır.");
+            yield return new CalendarWarningDto("REG_SUMMER_REQUIRED_EVENT", "Error", "Yaz: YÃƒÂ¶netmelik kontrolÃƒÂ¼ iÃƒÂ§in ders baÃ…Å¸langÃ„Â±cÃ„Â±, ders bitiÃ…Å¸i ve yaz okulu sÃ„Â±navÃ„Â± bulunmalÃ„Â±dÃ„Â±r.");
             yield break;
         }
 
@@ -152,7 +152,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_SUMMER_TEACHING_WEEKS",
                 "Error",
-                $"Yaz: Madde 22 gereği yaz okulu sınavları hariç 7 haftalık ders süresini kapsamalıdır ({teachingWeekdays} hafta içi gün).",
+                $"Yaz: Madde 22 gereÃ„Å¸i yaz okulu sÃ„Â±navlarÃ„Â± hariÃƒÂ§ 7 haftalÃ„Â±k ders sÃƒÂ¼resini kapsamalÃ„Â±dÃ„Â±r ({teachingWeekdays} hafta iÃƒÂ§i gÃƒÂ¼n).",
                 classesEnd.DraftEventId);
         }
 
@@ -161,7 +161,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_SUMMER_EXAM_ORDER",
                 "Error",
-                "Yaz: Madde 22 gereği yaz okulu sınavları ders süresi tamamlandıktan sonra başlamalıdır.",
+                "Yaz: Madde 22 gereÃ„Å¸i yaz okulu sÃ„Â±navlarÃ„Â± ders sÃƒÂ¼resi tamamlandÃ„Â±ktan sonra baÃ…Å¸lamalÃ„Â±dÃ„Â±r.",
                 summerExam.DraftEventId);
         }
 
@@ -193,7 +193,7 @@ public partial class CalendarGeneratorService
             yield return new CalendarWarningDto(
                 "REG_GRADE_PUBLICATION",
                 "Error",
-                $"{SemesterLabel(semester)}: Madde 36 gereği {publication.Title} sınav dönemini izleyen en geç 10 iş günü içinde ilan edilmelidir ({businessDays} iş günü).",
+                $"{SemesterLabel(semester)}: Madde 36 gereÃ„Å¸i {publication.Title} sÃ„Â±nav dÃƒÂ¶nemini izleyen en geÃƒÂ§ 10 iÃ…Å¸ gÃƒÂ¼nÃƒÂ¼ iÃƒÂ§inde ilan edilmelidir ({businessDays} iÃ…Å¸ gÃƒÂ¼nÃƒÂ¼).",
                 publication.DraftEventId);
         }
     }
@@ -283,7 +283,7 @@ public partial class CalendarGeneratorService
     private static string SemesterLabel(SemesterType semester) =>
         semester switch
         {
-            SemesterType.Fall => "Güz",
+            SemesterType.Fall => "GÃƒÂ¼z",
             SemesterType.Spring => "Bahar",
             SemesterType.Summer => "Yaz",
             _ => semester.ToString()
@@ -369,9 +369,9 @@ public partial class CalendarGeneratorService
     private static void EnsureEditable(GeneratedCalendarDraft draft)
     {
         if (draft.Status != GeneratedCalendarDraftStatus.Draft)
-            throw new InvalidOperationException("Sadece taslak durumundaki takvim düzenlenebilir.");
+            throw new InvalidOperationException("Sadece taslak durumundaki takvim dÃƒÂ¼zenlenebilir.");
         if (draft.ExpiresAt < DateTime.UtcNow)
-            throw new InvalidOperationException("Takvim taslağının saklama süresi dolmuş.");
+            throw new InvalidOperationException("Takvim taslaÃ„Å¸Ã„Â±nÃ„Â±n saklama sÃƒÂ¼resi dolmuÃ…Å¸.");
     }
 
     private static int CalculateQualityScore(IReadOnlyList<CalendarWarningDto> warnings) =>
@@ -531,7 +531,7 @@ public partial class CalendarGeneratorService
         var overlaps = holidays
             .Where(h => h.BlocksAcademicEvents && DateRangesOverlap(start, end, h.StartDate, h.EndDate))
             .ToList();
-        return overlaps.Count > 0 && overlaps.All(h => h.StartDate.Date == h.EndDate.Date);
+        return overlaps.Count > 0 && overlaps.All(h => h.Type is not HolidayType.HijriCalculated);
     }
 
     private static string? BlockingHolidayOverlapError(
@@ -552,10 +552,10 @@ public partial class CalendarGeneratorService
         if (CanOverlapBlockingHoliday(type, start, end, holidays))
             return null;
 
-        var overlapLabel = overlaps[0].StartDate.Date == overlaps[0].EndDate.Date
-            ? "resmi tatil veya bloklayıcı önemli gün"
-            : "çok günlük resmi tatil veya bloklayıcı gün aralığı";
-        return $"{title} {overlapLabel} üzerine taşınamaz.";
+        var overlapLabel = overlaps.Any(h => h.Type == HolidayType.HijriCalculated)
+            ? "dini bayram"
+            : "resmi tatil veya bloklayÄ±cÄ± Ã¶nemli gÃ¼n";
+        return $"{title} {overlapLabel} Ã¼zerine taÅŸÄ±namaz.";
     }
 
     private static bool RequiresSequenceAwareHolidayPlacement(CalendarEventType type) =>

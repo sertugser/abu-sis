@@ -19,7 +19,7 @@ public class AcademicCalendarService : IAcademicCalendarService
     private const int ExcuseExamMinBusinessDays = 3;
     private const int MakeupExamMinBusinessDays = 5;
     private const int MakeupAfterPublicationBufferDays = 4;
-    private const int FlexibleHolidayOverlapMinDays = 10;
+    private const int FlexibleHolidayOverlapMinDays = 15;
 
     private readonly AppDbContext _ctx;
     private readonly IDateTimeProvider _clock;
@@ -30,7 +30,7 @@ public class AcademicCalendarService : IAcademicCalendarService
         _clock = clock;
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Admin Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Admin ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     public async Task<AcademicCalendarDto?> GetByTermIdAsync(int termId, CancellationToken ct = default)
     {
@@ -53,7 +53,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             ?? throw new KeyNotFoundException($"Term {termId} not found.");
 
         if (term.IsCancelled)
-            throw new InvalidOperationException("Bu dÃƒÂ¶nem iptal edilmiÃ…Å¸; takvim oluÃ…Å¸turulamaz.");
+            throw new InvalidOperationException("Bu dÃƒÆ’Ã‚Â¶nem iptal edilmiÃƒâ€¦Ã…Â¸; takvim oluÃƒâ€¦Ã…Â¸turulamaz.");
 
         Validate(dto, term);
 
@@ -92,10 +92,10 @@ public class AcademicCalendarService : IAcademicCalendarService
             ?? throw new KeyNotFoundException($"Term {termId} not found.");
 
         if (term.IsCancelled)
-            throw new InvalidOperationException("Ã„Â°ptal edilmiÃ…Å¸ dÃƒÂ¶nemde override deÃ„Å¸iÃ…Å¸tirilemez.");
+            throw new InvalidOperationException("Ãƒâ€Ã‚Â°ptal edilmiÃƒâ€¦Ã…Â¸ dÃƒÆ’Ã‚Â¶nemde override deÃƒâ€Ã…Â¸iÃƒâ€¦Ã…Â¸tirilemez.");
 
         var cal = term.AcademicCalendar
-            ?? throw new InvalidOperationException("Bu dÃƒÂ¶nem iÃƒÂ§in henÃƒÂ¼z akademik takvim oluÃ…Å¸turulmamÃ„Â±Ã…Å¸.");
+            ?? throw new InvalidOperationException("Bu dÃƒÆ’Ã‚Â¶nem iÃƒÆ’Ã‚Â§in henÃƒÆ’Ã‚Â¼z akademik takvim oluÃƒâ€¦Ã…Â¸turulmamÃƒâ€Ã‚Â±Ãƒâ€¦Ã…Â¸.");
 
         switch (dto.Phase)
         {
@@ -104,8 +104,8 @@ public class AcademicCalendarService : IAcademicCalendarService
             case "Withdrawal":   cal.WithdrawalOverride   = dto.Value; break;
             case "GradeEntry":   cal.GradeEntryOverride   = dto.Value; break;
             default:
-                throw new ArgumentException($"GeÃƒÂ§ersiz faz: '{dto.Phase}'. " +
-                    "GeÃƒÂ§erli deÃ„Å¸erler: Registration, AddDrop, Withdrawal, GradeEntry.");
+                throw new ArgumentException($"GeÃƒÆ’Ã‚Â§ersiz faz: '{dto.Phase}'. " +
+                    "GeÃƒÆ’Ã‚Â§erli deÃƒâ€Ã…Â¸erler: Registration, AddDrop, Withdrawal, GradeEntry.");
         }
 
         cal.UpdatedAt = _clock.UtcNow;
@@ -121,16 +121,16 @@ public class AcademicCalendarService : IAcademicCalendarService
             ?? throw new KeyNotFoundException($"Term {termId} not found.");
 
         if (term.IsCancelled)
-            throw new InvalidOperationException("Ã„Â°ptal edilmiÃ…Å¸ dÃƒÂ¶nemde etkinlik taÃ…Å¸Ã„Â±namaz.");
+            throw new InvalidOperationException("Ãƒâ€Ã‚Â°ptal edilmiÃƒâ€¦Ã…Â¸ dÃƒÆ’Ã‚Â¶nemde etkinlik taÃƒâ€¦Ã…Â¸Ãƒâ€Ã‚Â±namaz.");
 
         var calendarEvent = term.CalendarEvents.FirstOrDefault(e => e.Id == eventId)
             ?? throw new KeyNotFoundException($"Calendar event {eventId} not found.");
 
         if (!calendarEvent.IsPublic)
-            throw new InvalidOperationException("Sadece akademik takvimde gÃƒÂ¶rÃƒÂ¼nÃƒÂ¼r etkinlikler taÃ…Å¸Ã„Â±nabilir.");
+            throw new InvalidOperationException("Sadece akademik takvimde gÃƒÆ’Ã‚Â¶rÃƒÆ’Ã‚Â¼nÃƒÆ’Ã‚Â¼r etkinlikler taÃƒâ€¦Ã…Â¸Ãƒâ€Ã‚Â±nabilir.");
 
         if (IsLockedCalendarEvent(calendarEvent))
-            throw new InvalidOperationException("Resmi tatiller ve bloklayÃ„Â±cÃ„Â± ÃƒÂ¶zel gÃƒÂ¼nler sÃƒÂ¼rÃƒÂ¼kle-bÃ„Â±rak ile taÃ…Å¸Ã„Â±namaz.");
+            throw new InvalidOperationException("Resmi tatiller ve bloklayÃƒâ€Ã‚Â±cÃƒâ€Ã‚Â± ÃƒÆ’Ã‚Â¶zel gÃƒÆ’Ã‚Â¼nler sÃƒÆ’Ã‚Â¼rÃƒÆ’Ã‚Â¼kle-bÃƒâ€Ã‚Â±rak ile taÃƒâ€¦Ã…Â¸Ãƒâ€Ã‚Â±namaz.");
 
         var changedEventIds = RecalculateEventMove(term, calendarEvent.Id, dto.StartDate, dto.EndDate, dto.PropagateChanges);
 
@@ -156,7 +156,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             ?? throw new KeyNotFoundException($"Term {termId} not found.");
 
         if (term.IsCancelled)
-            throw new InvalidOperationException("Ã„Â°ptal edilmiÃ…Å¸ dÃƒÂ¶nemde etkinlik taÃ…Å¸Ã„Â±namaz.");
+            throw new InvalidOperationException("Ãƒâ€Ã‚Â°ptal edilmiÃƒâ€¦Ã…Â¸ dÃƒÆ’Ã‚Â¶nemde etkinlik taÃƒâ€¦Ã…Â¸Ãƒâ€Ã‚Â±namaz.");
 
         ApplyClientEvents(term, dto.Events);
         RecalculateEventMove(term, eventId, dto.StartDate, dto.EndDate, dto.PropagateChanges);
@@ -190,7 +190,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             {
                 var term = terms.First(t => t.Id == stagedCalendar.TermId);
                 if (term.IsCancelled)
-                    throw new InvalidOperationException("Ã„Â°ptal edilmiÃ…Å¸ dÃƒÂ¶nemde takvim kaydedilemez.");
+                    throw new InvalidOperationException("Ãƒâ€Ã‚Â°ptal edilmiÃƒâ€¦Ã…Â¸ dÃƒÆ’Ã‚Â¶nemde takvim kaydedilemez.");
 
                 ApplyClientEvents(term, stagedCalendar.Events);
             }
@@ -258,14 +258,14 @@ public class AcademicCalendarService : IAcademicCalendarService
         var startDate = EnsureUtcDate(requestedStartDate);
         var endDate = EnsureUtcDate(requestedEndDate ?? requestedStartDate);
         if (startDate > endDate)
-            throw new InvalidOperationException("BaÃ…Å¸langÃ„Â±ÃƒÂ§ tarihi bitiÃ…Å¸ tarihinden sonra olamaz.");
+            throw new InvalidOperationException("BaÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±ÃƒÆ’Ã‚Â§ tarihi bitiÃƒâ€¦Ã…Â¸ tarihinden sonra olamaz.");
 
         var window = CalendarEditWindow(term);
         if (startDate < window.Start || endDate > window.End)
             throw new InvalidOperationException("Etkinlik yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
 
         if (RequiresMondayStart(calendarEvent) && !StartsOnMonday(startDate))
-            throw new InvalidOperationException("Bu etkinlik Pazartesi gÃƒÂ¼nÃƒÂ¼ baÃ…Å¸lamalÃ„Â±dÃ„Â±r.");
+            throw new InvalidOperationException("Bu etkinlik Pazartesi gÃƒÆ’Ã‚Â¼nÃƒÆ’Ã‚Â¼ baÃƒâ€¦Ã…Â¸lamalÃƒâ€Ã‚Â±dÃƒâ€Ã‚Â±r.");
 
         if (RequiresWeekdayOnly(calendarEvent) && StartsOnWeekend(startDate))
             throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
@@ -275,7 +275,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             .Where(e => RangesOverlap(startDate, endDate, e.StartDate.Date, (e.EndDate ?? e.StartDate).Date))
             .ToList();
         if (requestedBlockingEvents.Count > 0 && !CanOverlapBlockingHoliday(calendarEvent, startDate, endDate, requestedBlockingEvents))
-            throw new InvalidOperationException($"{calendarEvent.Title} resmi tatil veya bloklayıcı önemli gün üzerine taşınamaz.");
+            throw new InvalidOperationException(requestedBlockingEvents.Any(e => e.EventType == CalendarEventType.ReligiousHoliday) ? $"{calendarEvent.Title} dini bayram üzerine taşınamaz." : $"{calendarEvent.Title} resmi tatil veya bloklayıcı önemli gün üzerine taşınamaz.");
 
         var currentEvents = term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList();
         var holidays = BuildResolvedHolidays(term.CalendarEvents);
@@ -319,7 +319,7 @@ public class AcademicCalendarService : IAcademicCalendarService
         return changedEventIds;
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Public (ÃƒÂ¶Ã„Å¸renci / hoca) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Public (ÃƒÆ’Ã‚Â¶Ãƒâ€Ã…Â¸renci / hoca) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     public async Task<StudentAcademicCalendarDto?> GetStudentViewAsync(int termId, bool includeAllEvents = false, CancellationToken ct = default)
     {
@@ -352,45 +352,45 @@ public class AcademicCalendarService : IAcademicCalendarService
         return BuildStudentDto(term, now);
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Helpers ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     private static void Validate(UpsertAcademicCalendarDto dto, AcademicTerm term)
     {
-        // Ã¢â€â‚¬Ã¢â€â‚¬ AynÃ„Â± faz iÃƒÂ§i tutarlÃ„Â±lÃ„Â±k Ã¢â€â‚¬Ã¢â€â‚¬
+        // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ AynÃƒâ€Ã‚Â± faz iÃƒÆ’Ã‚Â§i tutarlÃƒâ€Ã‚Â±lÃƒâ€Ã‚Â±k ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
         if (dto.RegistrationStart >= dto.RegistrationEnd)
-            throw new InvalidOperationException("KayÃ„Â±t baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihi bitiÃ…Å¸ tarihinden ÃƒÂ¶nce olmalÃ„Â±dÃ„Â±r.");
+            throw new InvalidOperationException("KayÃƒâ€Ã‚Â±t baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±ÃƒÆ’Ã‚Â§ tarihi bitiÃƒâ€¦Ã…Â¸ tarihinden ÃƒÆ’Ã‚Â¶nce olmalÃƒâ€Ã‚Â±dÃƒâ€Ã‚Â±r.");
 
         if (dto.AddDropStart >= dto.AddDropEnd)
-            throw new InvalidOperationException("Ders ekleme/bÃ„Â±rakma baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihi bitiÃ…Å¸ tarihinden ÃƒÂ¶nce olmalÃ„Â±dÃ„Â±r.");
+            throw new InvalidOperationException("Ders ekleme/bÃƒâ€Ã‚Â±rakma baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±ÃƒÆ’Ã‚Â§ tarihi bitiÃƒâ€¦Ã…Â¸ tarihinden ÃƒÆ’Ã‚Â¶nce olmalÃƒâ€Ã‚Â±dÃƒâ€Ã‚Â±r.");
 
         if (dto.GradeEntryStart >= dto.GradeEntryEnd)
-            throw new InvalidOperationException("Not giriÃ…Å¸i baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihi bitiÃ…Å¸ tarihinden ÃƒÂ¶nce olmalÃ„Â±dÃ„Â±r.");
+            throw new InvalidOperationException("Not giriÃƒâ€¦Ã…Â¸i baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±ÃƒÆ’Ã‚Â§ tarihi bitiÃƒâ€¦Ã…Â¸ tarihinden ÃƒÆ’Ã‚Â¶nce olmalÃƒâ€Ã‚Â±dÃƒâ€Ã‚Â±r.");
 
-        // Ã¢â€â‚¬Ã¢â€â‚¬ DÃƒÂ¶nem sÃ„Â±nÃ„Â±rÃ„Â± Ã¢â€â‚¬Ã¢â€â‚¬
+        // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ DÃƒÆ’Ã‚Â¶nem sÃƒâ€Ã‚Â±nÃƒâ€Ã‚Â±rÃƒâ€Ã‚Â± ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
         if (dto.RegistrationEnd > term.TermEnd)
-            throw new InvalidOperationException("KayÃ„Â±t bitiÃ…Å¸ tarihi dÃƒÂ¶nem bitiÃ…Å¸ tarihinden sonra olamaz.");
+            throw new InvalidOperationException("KayÃƒâ€Ã‚Â±t bitiÃƒâ€¦Ã…Â¸ tarihi dÃƒÆ’Ã‚Â¶nem bitiÃƒâ€¦Ã…Â¸ tarihinden sonra olamaz.");
 
         if (dto.AddDropEnd > term.TermEnd)
-            throw new InvalidOperationException("Ders ekleme/bÃ„Â±rakma bitiÃ…Å¸ tarihi dÃƒÂ¶nem bitiÃ…Å¸ tarihinden sonra olamaz.");
+            throw new InvalidOperationException("Ders ekleme/bÃƒâ€Ã‚Â±rakma bitiÃƒâ€¦Ã…Â¸ tarihi dÃƒÆ’Ã‚Â¶nem bitiÃƒâ€¦Ã…Â¸ tarihinden sonra olamaz.");
 
         if (dto.WithdrawalDeadline > term.TermEnd)
-            throw new InvalidOperationException("Ãƒâ€¡ekilme tarihi dÃƒÂ¶nem bitiÃ…Å¸ tarihinden sonra olamaz.");
+            throw new InvalidOperationException("ÃƒÆ’Ã¢â‚¬Â¡ekilme tarihi dÃƒÆ’Ã‚Â¶nem bitiÃƒâ€¦Ã…Â¸ tarihinden sonra olamaz.");
 
         if (dto.WithdrawalDeadline < term.TermStart)
-            throw new InvalidOperationException("Ãƒâ€¡ekilme tarihi dÃƒÂ¶nem baÃ…Å¸langÃ„Â±ÃƒÂ§ tarihinden ÃƒÂ¶nce olamaz.");
+            throw new InvalidOperationException("ÃƒÆ’Ã¢â‚¬Â¡ekilme tarihi dÃƒÆ’Ã‚Â¶nem baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±ÃƒÆ’Ã‚Â§ tarihinden ÃƒÆ’Ã‚Â¶nce olamaz.");
 
-        // Ã¢â€â‚¬Ã¢â€â‚¬ Faz sÃ„Â±ralamasÃ„Â± (yeni kurallar Ã¢â‚¬â€ mantÃ„Â±ksal ÃƒÂ§eliÃ…Å¸kiyi engelle) Ã¢â€â‚¬Ã¢â€â‚¬
+        // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Faz sÃƒâ€Ã‚Â±ralamasÃƒâ€Ã‚Â± (yeni kurallar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mantÃƒâ€Ã‚Â±ksal ÃƒÆ’Ã‚Â§eliÃƒâ€¦Ã…Â¸kiyi engelle) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
         if (dto.RegistrationEnd > dto.AddDropStart)
             throw new InvalidOperationException(
-                "Ekle-bÃ„Â±rak, kayÃ„Â±t bitmeden baÃ…Å¸layamaz. KayÃ„Â±t bitiÃ…Å¸ini ekle-bÃ„Â±rak baÃ…Å¸langÃ„Â±cÃ„Â±ndan ÃƒÂ¶nce olacak Ã…Å¸ekilde ayarlayÃ„Â±n.");
+                "Ekle-bÃƒâ€Ã‚Â±rak, kayÃƒâ€Ã‚Â±t bitmeden baÃƒâ€¦Ã…Â¸layamaz. KayÃƒâ€Ã‚Â±t bitiÃƒâ€¦Ã…Â¸ini ekle-bÃƒâ€Ã‚Â±rak baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±cÃƒâ€Ã‚Â±ndan ÃƒÆ’Ã‚Â¶nce olacak Ãƒâ€¦Ã…Â¸ekilde ayarlayÃƒâ€Ã‚Â±n.");
 
         if (dto.AddDropEnd > dto.GradeEntryStart)
             throw new InvalidOperationException(
-                "Not giriÃ…Å¸i, ekle-bÃ„Â±rak bitmeden baÃ…Å¸layamaz. Ekle-bÃ„Â±rak bitiÃ…Å¸ini not giriÃ…Å¸i baÃ…Å¸langÃ„Â±cÃ„Â±ndan ÃƒÂ¶nce olacak Ã…Å¸ekilde ayarlayÃ„Â±n.");
+                "Not giriÃƒâ€¦Ã…Â¸i, ekle-bÃƒâ€Ã‚Â±rak bitmeden baÃƒâ€¦Ã…Â¸layamaz. Ekle-bÃƒâ€Ã‚Â±rak bitiÃƒâ€¦Ã…Â¸ini not giriÃƒâ€¦Ã…Â¸i baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±cÃƒâ€Ã‚Â±ndan ÃƒÆ’Ã‚Â¶nce olacak Ãƒâ€¦Ã…Â¸ekilde ayarlayÃƒâ€Ã‚Â±n.");
 
         if (dto.GradeEntryStart < term.TermStart)
             throw new InvalidOperationException(
-                "Not giriÃ…Å¸i, dÃƒÂ¶nem baÃ…Å¸lamadan baÃ…Å¸layamaz. Not giriÃ…Å¸i baÃ…Å¸langÃ„Â±cÃ„Â±nÃ„Â± dÃƒÂ¶nem baÃ…Å¸langÃ„Â±cÃ„Â±na veya sonrasÃ„Â±na ayarlayÃ„Â±n.");
+                "Not giriÃƒâ€¦Ã…Â¸i, dÃƒÆ’Ã‚Â¶nem baÃƒâ€¦Ã…Â¸lamadan baÃƒâ€¦Ã…Â¸layamaz. Not giriÃƒâ€¦Ã…Â¸i baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±cÃƒâ€Ã‚Â±nÃƒâ€Ã‚Â± dÃƒÆ’Ã‚Â¶nem baÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±cÃƒâ€Ã‚Â±na veya sonrasÃƒâ€Ã‚Â±na ayarlayÃƒâ€Ã‚Â±n.");
     }
 
     private static UpsertAcademicCalendarDto BuildUpsertDto(TermAcademicCalendar calendar) =>
@@ -680,7 +680,7 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (RequiresWeekdayOnly(calendarEvent) || IsStrictHolidayBlocked(calendarEvent.EventType) || InclusiveDays(startDate, endDate) < FlexibleHolidayOverlapMinDays)
             return false;
 
-        return blockingEvents.Count > 0 && blockingEvents.All(e => e.StartDate.Date == EventEnd(e));
+        return blockingEvents.Count > 0 && blockingEvents.All(e => e.EventType != CalendarEventType.ReligiousHoliday);
     }
 
     private static bool IsStrictHolidayBlocked(CalendarEventType eventType) =>
@@ -744,7 +744,7 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     private static bool IsMakeupApplication(TermCalendarEvent calendarEvent) =>
         MatchesKey(calendarEvent, "makeup_application")
-        || calendarEvent.EventType == CalendarEventType.MakeupExam && TitleContainsAny(calendarEvent, "Basvuru", "BaÃƒâ€¦Ã…Â¸vuru", "BaÃ…Å¸vuru");
+        || calendarEvent.EventType == CalendarEventType.MakeupExam && TitleContainsAny(calendarEvent, "Basvuru", "BaÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸vuru", "BaÃƒâ€¦Ã…Â¸vuru");
 
     private static bool ContainsWeekend(DateTime startDate, DateTime endDate)
     {
@@ -769,7 +769,7 @@ public class AcademicCalendarService : IAcademicCalendarService
         if (CanOverlapBlockingHoliday(movingEvent, startDate, endDate, [blockingEvent]))
             return;
 
-        throw new InvalidOperationException($"{movingEvent.Title} resmi tatil veya bloklayÄ±cÄ± Ã¶nemli gÃ¼n Ã¼zerine taÅŸÄ±namaz.");
+        throw new InvalidOperationException(blockingEvent.EventType == CalendarEventType.ReligiousHoliday ? $"{movingEvent.Title} dini bayram üzerine taşınamaz." : $"{movingEvent.Title} resmi tatil veya bloklayıcı önemli gün üzerine taşınamaz.");
     }
 
     private static bool RangesOverlap(DateTime leftStart, DateTime leftEnd, DateTime rightStart, DateTime rightEnd) =>
@@ -957,7 +957,7 @@ public class AcademicCalendarService : IAcademicCalendarService
                 throw new InvalidOperationException($"{calendarEvent.Title} yalnizca akademik yil duzenleme araligi icinde tasinabilir.");
 
             if (RequiresMondayStart(calendarEvent) && !StartsOnMonday(startDate))
-                throw new InvalidOperationException($"{calendarEvent.Title} Pazartesi gÃƒÂ¼nÃƒÂ¼ baÃ…Å¸lamalÃ„Â±dÃ„Â±r.");
+                throw new InvalidOperationException($"{calendarEvent.Title} Pazartesi gÃƒÆ’Ã‚Â¼nÃƒÆ’Ã‚Â¼ baÃƒâ€¦Ã…Â¸lamalÃƒâ€Ã‚Â±dÃƒâ€Ã‚Â±r.");
 
             if (RequiresWeekdayOnly(calendarEvent) && StartsOnWeekend(startDate))
                 throw new InvalidOperationException("Sinav etkinlikleri hafta sonu baslayamaz.");
@@ -1021,7 +1021,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             .FirstOrDefault(IsMidtermExamEvent);
 
     private static TermCalendarEvent? FindMidtermExcuseApplication(AcademicTerm term) =>
-        FindEventByKeyOrType(term, "midterm_excuse_application", CalendarEventType.ExcuseExamApplication, "Mazeret", "Basvuru", "BaÃ…Å¸vuru");
+        FindEventByKeyOrType(term, "midterm_excuse_application", CalendarEventType.ExcuseExamApplication, "Mazeret", "Basvuru", "BaÃƒâ€¦Ã…Â¸vuru");
 
     private static TermCalendarEvent? FindMidtermExcuseExam(AcademicTerm term) =>
         term.CalendarEvents
@@ -1030,11 +1030,11 @@ public class AcademicCalendarService : IAcademicCalendarService
             .FirstOrDefault(IsMidtermExcuseExamEvent);
 
     private static TermCalendarEvent? FindMakeupApplication(AcademicTerm term) =>
-        FindEventByKeyOrType(term, "makeup_application", CalendarEventType.MakeupExamApplication, "Basvuru", "BaÃ…Å¸vuru")
+        FindEventByKeyOrType(term, "makeup_application", CalendarEventType.MakeupExamApplication, "Basvuru", "BaÃƒâ€¦Ã…Â¸vuru")
         ?? term.CalendarEvents
             .Where(e => e.IsPublic)
             .OrderBy(e => e.StartDate)
-            .FirstOrDefault(e => e.EventType == CalendarEventType.MakeupExam && (e.EndDate is null || TitleContainsAny(e, "Basvuru", "BaÃ…Å¸vuru")));
+            .FirstOrDefault(e => e.EventType == CalendarEventType.MakeupExam && (e.EndDate is null || TitleContainsAny(e, "Basvuru", "BaÃƒâ€¦Ã…Â¸vuru")));
 
     private static TermCalendarEvent? FindMakeupExam(AcademicTerm term) =>
         term.CalendarEvents
@@ -1060,7 +1060,7 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     private static bool IsMakeupExamEvent(TermCalendarEvent calendarEvent) =>
         MatchesKey(calendarEvent, "makeup_exam")
-        || (calendarEvent.EventType == CalendarEventType.MakeupExam && calendarEvent.EndDate is not null && !TitleContainsAny(calendarEvent, "Basvuru", "BaÃ…Å¸vuru"));
+        || (calendarEvent.EventType == CalendarEventType.MakeupExam && calendarEvent.EndDate is not null && !TitleContainsAny(calendarEvent, "Basvuru", "BaÃƒâ€¦Ã…Â¸vuru"));
 
     private static bool MatchesKey(TermCalendarEvent calendarEvent, string templateItemKey) =>
         string.Equals(calendarEvent.TemplateItemKey, templateItemKey, StringComparison.OrdinalIgnoreCase);

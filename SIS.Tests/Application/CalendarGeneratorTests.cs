@@ -241,6 +241,29 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task WhatIf_AllowsLongAdministrativeWindow_OnNonReligiousMultiDayHoliday()
+    {
+        var generated = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var graduateApplication = generated.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "fall_graduate_app");
+
+        var whatIf = await _generatorService.WhatIfAsync(
+            generated.DraftId,
+            new WhatIfRequestDto(graduateApplication.DraftEventId, Utc(2025, 10, 20), Utc(2025, 11, 7), false));
+
+        var moved = whatIf.Events.Single(e => e.DraftEventId == graduateApplication.DraftEventId);
+        moved.StartDate.Should().Be(Utc(2025, 10, 20));
+        moved.EndDate.Should().Be(Utc(2025, 11, 7));
+    }
+
+    [Fact]
     public async Task Generator_PlacesClassesEnd_OnWeekday()
     {
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
@@ -1054,8 +1077,8 @@ public class CalendarGeneratorTests : IDisposable
             generated.DraftId,
             new WhatIfRequestDto(final.DraftEventId, Utc(2026, 1, 1), Utc(2026, 1, 12)));
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*taşınamaz*");
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should().Contain("resmi tatil");
     }
 
     [Fact]
