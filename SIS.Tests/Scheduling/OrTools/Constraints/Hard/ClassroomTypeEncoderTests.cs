@@ -54,7 +54,10 @@ public class ClassroomTypeEncoderTests
                 TimeSlots = new List<TimeSlotInput>()
             },
             ConstraintFlags = flags ?? new Dictionary<string, bool>(),
-            Penalties = new List<LinearExpr>()
+            Penalties = new List<LinearExpr>(),
+            // Plan 9 Issue 6 — these tests assert RequiredTheory/Lab classroom type rules fire; opt in.
+            // Tests without RequiredXxxClassroomType set are unaffected (default Lab|Computer fallback path).
+            ClassroomTypeRequirementEnabled = true
         };
     }
 
@@ -420,7 +423,10 @@ public class ClassroomTypeEncoderTests
             Penalties = new List<LinearExpr>(),
             AmphiThreshold = amphiThreshold,
             // Plan 9 Issue 1 — these tests assert AmphiThreshold rule fires; opt in.
-            AmphiThresholdEnabled = true
+            AmphiThresholdEnabled = true,
+            // Plan 9 Issue 6 — RequiredTheory/Lab classroom type rules opted in so existing
+            // assertions (e.g. Encode_TheoryRequiresAmphitheater_*) preserve original intent.
+            ClassroomTypeRequirementEnabled = true
         };
     }
 }

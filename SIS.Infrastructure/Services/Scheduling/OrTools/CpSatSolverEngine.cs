@@ -107,10 +107,18 @@ public sealed class CpSatSolverEngine : ISolverEngine
         var amphiThresholdEnabled = await _config.GetBoolAsync(
             "Schedule.AmphiThresholdEnabled", false, cancellationToken);
 
+        // Plan 9 Issue 6 — Schedule.ClassroomTypeRequirementEnabled (default false) gates
+        // Course.RequiredTheoryClassroomType + Course.RequiredLabClassroomType rules.
+        // Production seeds these fields (e.g. AutoScheduleTestData → Amphitheater) but no
+        // admin UI exists (Plan 10 will add it) — flag false avoids UNSAT cascades.
+        var classroomTypeRequirementEnabled = await _config.GetBoolAsync(
+            "Schedule.ClassroomTypeRequirementEnabled", false, cancellationToken);
+
         reducedRequest = reducedRequest with
         {
             AmphiThreshold = amphiThreshold,
-            AmphiThresholdEnabled = amphiThresholdEnabled
+            AmphiThresholdEnabled = amphiThresholdEnabled,
+            ClassroomTypeRequirementEnabled = classroomTypeRequirementEnabled
         };
 
         // Read solver parameters from SystemConfig (5-min cached). Fallbacks only fire on missing keys.

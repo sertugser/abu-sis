@@ -149,9 +149,14 @@ public class ClassroomTypeAndAmphiIntegrationTest
             .ReturnsAsync((string k, int f, CancellationToken _) =>
                 k == "Classroom.AmphiThreshold" ? amphiThreshold : f);
         // Plan 9 Issue 1 — opt in to AmphiThreshold rule so these tests preserve original intent.
+        // Plan 9 Issue 6 — opt in to ClassroomTypeRequirement rule (RequiredTheoryClassroomType test).
         configMock.Setup(x => x.GetBoolAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string k, bool f, CancellationToken _) =>
-                k == "Schedule.AmphiThresholdEnabled" ? true : f);
+            .ReturnsAsync((string k, bool f, CancellationToken _) => k switch
+            {
+                "Schedule.AmphiThresholdEnabled" => true,
+                "Schedule.ClassroomTypeRequirementEnabled" => true,
+                _ => f
+            });
 
         return new CpSatSolverEngine(modelBuilder, mapper, configMock.Object, unsatInterpreter, preflightChecker);
     }

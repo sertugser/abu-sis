@@ -12,6 +12,11 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 ///   3. Capacity ≥ AmphiThreshold ise theory component yalnızca Amphitheater tipinde olabilir
 ///      (RequiredTheoryClassroomType ile birlikte AND uygulanır).
 /// CP-SAT model: section'ın room IntVar'ı için her uyumsuz classroom için ayrı assumption literal'i.
+///
+/// Plan 9 gating:
+///   - <see cref="EncoderContext.AmphiThresholdEnabled"/> (Issue 1) → kapalıyken kural 3 devre dışı.
+///   - <see cref="EncoderContext.ClassroomTypeRequirementEnabled"/> (Issue 6) → kapalıyken kural 1'in
+///     RequiredLabClassroomType override'ı ve kural 2'nin tamamı devre dışı (Lab default fallback hâlâ aktif).
 /// </summary>
 public sealed class ClassroomTypeEncoder : IConstraintEncoder
 {
@@ -47,10 +52,13 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
             $"labRooms.Count ({labRooms.Count}) != section.LabGroupCount ({section.LabGroupCount}) for section {section.Id}");
 
         // RequiredLabClassroomType set ise yalnızca o tip izinli; aksi halde v1 fallback (Lab/Computer).
+        // Plan 9 Issue 6 — ClassroomTypeRequirementEnabled flag kapalıyken RequiredLabClassroomType
+        // override'ı ignore edilir; default Lab|Computer fallback uygulanır (admin UI yok, alan seed'den
+        // gelse bile devre dışı). Plan 10 admin UI'sı yapınca flag açılacak.
         foreach (var classroom in ctx.Request.Classrooms)
         {
             bool isAllowed;
-            if (section.RequiredLabClassroomType.HasValue)
+            if (ctx.ClassroomTypeRequirementEnabled && section.RequiredLabClassroomType.HasValue)
             {
                 isAllowed = (int)classroom.Type == section.RequiredLabClassroomType.Value;
             }
@@ -79,9 +87,10 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
 
         // Plan 9 Issue 1 — Schedule.AmphiThresholdEnabled flag-gated. False (default) suppresses
         // the capacity-based amphi rule entirely so Term 5 (0 Amphitheater inventory) does not UNSAT.
-        // RequiredTheoryClassroomType remains independent of this toggle.
+        // Plan 9 Issue 6 — Schedule.ClassroomTypeRequirementEnabled gates RequiredTheoryClassroomType.
+        // Both default false; admin UI (Plan 10) will let admins opt in once production data is reconciled.
         var amphiRequired = ctx.AmphiThresholdEnabled && section.Capacity >= ctx.AmphiThreshold;
-        var typeRequired = section.RequiredTheoryClassroomType.HasValue;
+        var typeRequired = ctx.ClassroomTypeRequirementEnabled && section.RequiredTheoryClassroomType.HasValue;
 
         if (!amphiRequired && !typeRequired) return;
 

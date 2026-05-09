@@ -60,6 +60,15 @@ public sealed record SolverRequest
     public bool AmphiThresholdEnabled { get; init; } = false;
 
     /// <summary>
+    /// Plan 9 Issue 6 — SystemConfig "Schedule.ClassroomTypeRequirementEnabled" (default false).
+    /// <see cref="SectionInput.RequiredTheoryClassroomType"/> ve <see cref="SectionInput.RequiredLabClassroomType"/>
+    /// kurallarını gate eder. Production'da bu alanlar (Course tarafında) seed edilmiş olabiliyor
+    /// ama admin UI'sı yok (Plan 10 ekleyecek) — flag false iken kural devre dışı, AutoScheduleTestData
+    /// gibi senaryolar UNSAT üretmiyor. True iken Plan 7b davranışı (Theory tip zorunluluğu + Lab override).
+    /// </summary>
+    public bool ClassroomTypeRequirementEnabled { get; init; } = false;
+
+    /// <summary>
     /// Plan 7b — SystemConfig "Schedule.MaxLabBlockHours" (default 2). LabHours > value
     /// olan section'lar N intervala bölünür ve farklı günlere yerleştirilir (v1 paritesi).
     /// CpSatSolverEngine yükler.

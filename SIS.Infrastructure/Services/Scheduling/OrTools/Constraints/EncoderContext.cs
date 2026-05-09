@@ -25,4 +25,11 @@ public sealed class EncoderContext
     /// False iken AmphiThreshold kuralı tamamen kapalı (Term 5 UNSAT fix). True iken normal Plan 7b davranışı.
     /// </summary>
     public bool AmphiThresholdEnabled { get; init; } = false;
+
+    /// <summary>
+    /// Plan 9 Issue 6 — SystemConfig "Schedule.ClassroomTypeRequirementEnabled" (default false).
+    /// False iken Course.RequiredTheoryClassroomType + Course.RequiredLabClassroomType kuralları
+    /// devre dışı (admin UI yok — Plan 10). True iken Plan 7b davranışı (Theory tip zorunluluğu + Lab override).
+    /// </summary>
+    public bool ClassroomTypeRequirementEnabled { get; init; } = false;
 }

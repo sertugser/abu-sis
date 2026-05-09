@@ -24,6 +24,12 @@ public static partial class SeedData
             // dersliği eklendikten sonra true yaparak kuralı aktive eder.
             new() { Key = "Schedule.AmphiThresholdEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: kontenjan ≥ amfi eşiği olan derslere amfi zorunlu (H4). KAPALI: kural devre dışı (varsayılan — amfi envanteri olmayan ortamda UNSAT'i önler)." },
 
+            // Plan 9 Issue 6 — Course.RequiredTheoryClassroomType + Course.RequiredLabClassroomType
+            // kurallarının açık/kapalı flag'i. False (default): production'da bu alanlar (Course tarafında)
+            // seed'den gelse bile devre dışı — admin UI yok (Plan 10 ekleyecek). Term 5/6 UNSAT
+            // cascade'ini önler. Admin UI tamamlanınca true yapılarak kural aktive edilir.
+            new() { Key = "Schedule.ClassroomTypeRequirementEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: dersin RequiredTheoryClassroomType / RequiredLabClassroomType alanları zorunlu (H4). KAPALI: kural devre dışı (varsayılan — admin UI gelene kadar Plan 10)." },
+
             // ── Simulated Annealing Parametreleri ────────────────
             new() { Key = "Schedule.SA.MaxIterations", Value = "10000", Category = "SA", DataType = "int", Description = "Motor en fazla kaç iyileştirme denemesi yapsın. Artırırsan daha iyi program, ama daha yavaş çalışır. Öneri: 10000." },
             new() { Key = "Schedule.SA.InitialTemperature", Value = "100", Category = "SA", DataType = "int", Description = "Motorun başlangıçta ne kadar cesur olacağı (geniş arama). Zamanla soğur ve daha titiz olur. Öneri: 100." },

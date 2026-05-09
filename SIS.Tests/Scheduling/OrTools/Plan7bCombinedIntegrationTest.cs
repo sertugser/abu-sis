@@ -147,9 +147,14 @@ public class Plan7bCombinedIntegrationTest
                 _ => f
             });
         // Plan 9 Issue 1 — opt in to AmphiThreshold rule (this test asserts Capacity 120 → Amphitheater).
+        // Plan 9 Issue 6 — opt in to ClassroomTypeRequirement rule (RequiredLabClassroomType=PhysicsLab).
         configMock.Setup(x => x.GetBoolAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string k, bool f, CancellationToken _) =>
-                k == "Schedule.AmphiThresholdEnabled" ? true : f);
+            .ReturnsAsync((string k, bool f, CancellationToken _) => k switch
+            {
+                "Schedule.AmphiThresholdEnabled" => true,
+                "Schedule.ClassroomTypeRequirementEnabled" => true,
+                _ => f
+            });
 
         return new CpSatSolverEngine(modelBuilder, mapper, configMock.Object, unsatInterpreter, preflightChecker);
     }
