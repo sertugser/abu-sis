@@ -76,6 +76,11 @@ public sealed class WeekdayBalanceEncoder : IConstraintEncoder
             dayCountVars[day] = count;
         }
 
+        // NOTE (Plan 9): All 7 days iterated unconditionally. On weekday-only grids
+        // (Mon-Fri), Sat/Sun count IntVars are trivially 0, so min=0 always → diff=max
+        // → encoder produces persistent penalty even on perfectly balanced Mon-Fri grids.
+        // v1 evaluator has the same structural bias. Plan 9 fix: filter dayCountVars to
+        // active grid days (TimeSlots.DayOfWeek distinct) before Min/Max equality.
         var maxV = ctx.Model.NewIntVar(0, maxSections, "s12_max");
         var minV = ctx.Model.NewIntVar(0, maxSections, "s12_min");
         ctx.Model.AddMaxEquality(maxV, dayCountVars);
