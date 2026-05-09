@@ -41,10 +41,11 @@ public class AdminBenchmarkController : ControllerBase
             "spring2025" => (2025, TermType.Spring),
             "spring2026" => (2026, TermType.Spring),
             "fall2026" => (2026, TermType.Fall),
+            "fall2027" => (2027, TermType.Fall),  // Plan 10 user test scenario
             _ => (0, TermType.Fall),
         };
         if (year == 0)
-            return BadRequest(new { error = "Term must be one of: fall2024, spring2025, spring2026, fall2026." });
+            return BadRequest(new { error = "Term must be one of: fall2024, spring2025, spring2026, fall2026, fall2027." });
 
         var faculty = await _context.Faculties.FirstOrDefaultAsync(f => f.Code == "MUH", ct);
         if (faculty == null)
