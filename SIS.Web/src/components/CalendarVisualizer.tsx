@@ -189,6 +189,11 @@ function parseDateValue(value: string) {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
+function isWeekendDateValue(value: string) {
+  const day = parseDateValue(value).getUTCDay();
+  return day === 0 || day === 6;
+}
+
 function shiftDateValue(value: string, days: number) {
   const shifted = parseDateValue(value);
   shifted.setUTCDate(shifted.getUTCDate() + days);
@@ -801,8 +806,8 @@ export function CalendarVisualizer({
         </div>
 
         <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-[9px] font-bold uppercase tracking-wide text-gray-400">
-          {WEEKDAYS.map(day => (
-            <div key={day} className="border-r border-gray-100 py-1 last:border-r-0">
+          {WEEKDAYS.map((day, index) => (
+            <div key={day} className={cn('border-r border-gray-100 py-1 last:border-r-0', index >= 5 && 'text-rose-500')}>
               {day.substring(0, 2)}
             </div>
           ))}
@@ -819,6 +824,7 @@ export function CalendarVisualizer({
               <div className="grid grid-cols-7">
                 {week.map((day, di) => {
                   const dropFeedback = visibleDropFeedbackByDate[day.str] ?? null;
+                  const isWeekend = isWeekendDateValue(day.str);
                   return (
                     <CalendarDropCell
                       id={`calendar-day:year:${y}-${m}:${wi}-${di}:${day.str}`}
@@ -828,7 +834,9 @@ export function CalendarVisualizer({
                       disabled={!onEventDrop || dragDisabled}
                       className={cn(
                         'border-r border-gray-100 px-1 pt-1 text-[10px] leading-none last:border-r-0 transition-colors duration-75',
-                        !day.isMonth && 'bg-gray-50/60',
+                        isWeekend && day.isMonth && 'bg-rose-50/70',
+                        isWeekend && !day.isMonth && 'bg-rose-50/40',
+                        !isWeekend && !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
                       style={{ minHeight: `${cellMinHeight}px` }}
@@ -837,8 +845,8 @@ export function CalendarVisualizer({
                         className={cn(
                           'inline-flex h-4 w-4 items-center justify-center rounded-full',
                           day.isToday && 'bg-[#003366] text-white font-bold',
-                          !day.isToday && day.isMonth && 'text-gray-800 font-medium',
-                          !day.isMonth && 'text-gray-300',
+                          !day.isToday && day.isMonth && (isWeekend ? 'text-rose-700 font-semibold' : 'text-gray-800 font-medium'),
+                          !day.isToday && !day.isMonth && (isWeekend ? 'text-rose-300' : 'text-gray-300'),
                         )}
                       >
                         {day.day}
@@ -916,8 +924,8 @@ export function CalendarVisualizer({
         )}
 
         <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-          {WEEKDAYS.map(d => (
-            <div key={d} className="text-center text-[9px] sm:text-[11px] font-bold text-gray-400 uppercase tracking-wider py-1.5 sm:py-3 border-r border-gray-100 last:border-r-0">
+          {WEEKDAYS.map((d, index) => (
+            <div key={d} className={cn('text-center text-[9px] sm:text-[11px] font-bold text-gray-400 uppercase tracking-wider py-1.5 sm:py-3 border-r border-gray-100 last:border-r-0', index >= 5 && 'text-rose-500')}>
               {d.substring(0, 3)}
             </div>
           ))}
@@ -936,6 +944,7 @@ export function CalendarVisualizer({
               <div className="grid grid-cols-7">
                 {week.map((day, di) => {
                   const dropFeedback = visibleDropFeedbackByDate[day.str] ?? null;
+                  const isWeekend = isWeekendDateValue(day.str);
                   return (
                     <CalendarDropCell
                       id={`calendar-day:month:${y}-${m}:${wi}-${di}:${day.str}`}
@@ -945,7 +954,9 @@ export function CalendarVisualizer({
                       disabled={!onEventDrop || dragDisabled}
                       className={cn(
                         'border-r border-gray-100 last:border-r-0 px-1 pt-1 transition-colors duration-75 sm:px-2 sm:pt-2',
-                        !day.isMonth && 'bg-gray-50/60',
+                        isWeekend && day.isMonth && 'bg-rose-50/70',
+                        isWeekend && !day.isMonth && 'bg-rose-50/40',
+                        !isWeekend && !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
                       style={{ minHeight: `${cellMinHeight}px` }}
@@ -954,8 +965,8 @@ export function CalendarVisualizer({
                         className={cn(
                           'inline-flex items-center justify-center w-5 h-5 sm:w-7 sm:h-7 text-xs sm:text-sm rounded-full',
                           day.isToday && 'bg-[#003366] text-white font-bold',
-                          !day.isToday && day.isMonth && 'text-gray-800 font-medium',
-                          !day.isMonth && 'text-gray-300',
+                          !day.isToday && day.isMonth && (isWeekend ? 'text-rose-700 font-semibold' : 'text-gray-800 font-medium'),
+                          !day.isToday && !day.isMonth && (isWeekend ? 'text-rose-300' : 'text-gray-300'),
                         )}
                       >
                         {day.day}

@@ -27,7 +27,7 @@ public partial class CalendarGeneratorService
     {
         var duration = ApplyDurationConstraint(Math.Max(1, item.DefaultDurationDays), item, chainCode, semester, constraints);
         var start = termStart.AddDays(item.OffsetDays);
-        var end = IsExamEvent(item.EventType) ? NthBusinessDayAfter(start, duration - 1, holidays) : start.AddDays(duration - 1);
+        var end = CalculateTemplateEndDate(start, duration);
 
         var pin = FindPinConstraint(item, chainCode, semester, constraints);
         var isPinnedEnd = false;
@@ -41,7 +41,7 @@ public partial class CalendarGeneratorService
             }
             else
             {
-                end = IsExamEvent(item.EventType) ? NthBusinessDayAfter(start, duration - 1, holidays) : start.AddDays(duration - 1);
+                end = CalculateTemplateEndDate(start, duration);
             }
         }
 
@@ -50,7 +50,7 @@ public partial class CalendarGeneratorService
             var alignedStart = MondayOnOrAfter(start);
             var alignmentDelta = (alignedStart.Date - start.Date).Days;
             start = alignedStart;
-            end = isPinnedEnd ? end.AddDays(alignmentDelta) : (IsExamEvent(item.EventType) ? NthBusinessDayAfter(start, duration - 1, holidays) : start.AddDays(duration - 1));
+            end = isPinnedEnd ? end.AddDays(alignmentDelta) : CalculateTemplateEndDate(start, duration);
         }
 
         var prohibited = FindProhibitionOverlap(start, end, constraints);
@@ -64,7 +64,7 @@ public partial class CalendarGeneratorService
                 delta += (alignedStart.Date - start.Date).Days;
                 start = alignedStart;
             }
-            end = isPinnedEnd ? end.AddDays(delta) : (IsExamEvent(item.EventType) ? NthBusinessDayAfter(start, duration - 1, holidays) : start.AddDays(duration - 1));
+            end = isPinnedEnd ? end.AddDays(delta) : CalculateTemplateEndDate(start, duration);
             var prohibitionText = string.IsNullOrWhiteSpace(prohibited.Value.Description)
                 ? "yasak aralık"
                 : prohibited.Value.Description.Trim();
@@ -92,7 +92,7 @@ public partial class CalendarGeneratorService
                 start = shiftBackwardForWeekend ? start.AddDays(-shiftDays) : start.AddDays(shiftDays);
                 end = isPinnedEnd
                     ? (shiftBackwardForWeekend ? end.AddDays(-shiftDays) : end.AddDays(shiftDays))
-                    : (IsExamEvent(item.EventType) ? NthBusinessDayAfter(start, duration - 1, holidays) : start.AddDays(duration - 1));
+                    : CalculateTemplateEndDate(start, duration);
                 attempts += shiftDays;
             }
 
@@ -111,6 +111,9 @@ public partial class CalendarGeneratorService
 
         return BuildEvent(academicYear, semester, item, chainCode, start, end, false, null);
     }
+
+    private static DateTime CalculateTemplateEndDate(DateTime start, int durationDays) =>
+        start.AddDays(Math.Max(1, durationDays) - 1);
 
     private static GeneratedCalendarEventDto BuildEvent(string academicYear, SemesterType semester, CalendarTemplateItemDto item, string chainCode, DateTime start, DateTime end, bool isFailed, string? note) =>
         new(

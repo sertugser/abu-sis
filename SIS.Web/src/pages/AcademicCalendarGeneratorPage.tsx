@@ -158,6 +158,7 @@ const MONDAY_START_EVENT_TYPES = new Set([
   'MidtermExam',
   'FinalExam',
   'MakeupExam',
+  'ExcuseExam',
   'PrepSchoolExam',
   'SummerSchoolExam',
 ]);
@@ -422,9 +423,8 @@ function validateDraftEventDateEdit(ev: GeneratedCalendarEventDto, startDate: st
     return 'Bu etkinlik Pazartesi günü başlamalıdır.';
 
   if (isExamDraftEvent(ev)) {
-    const parsedEnd = parseUtcDisplayDate(endDate);
-    if ((parsedStart && isWeekend(parsedStart)) || (parsedEnd && isWeekend(parsedEnd)))
-      return 'Sinav tarihleri hafta sonuna denk gelemez. Lutfen sadece hafta ici gunleri secin.';
+    if (parsedStart && isWeekend(parsedStart))
+      return 'Sinav baslangic tarihi hafta sonuna denk gelemez.';
   }
 
   return null;
@@ -1449,9 +1449,8 @@ export default function AcademicCalendarGeneratorPage() {
     const isExam = calendarEventCategory(selectedPinOption.eventType, selectedPinOption.title, selectedPinOption.templateItemKey) === 'exam';
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(pinDate);
-      const parsedEnd = parseUtcDisplayDate(resolvedEndDate);
-      if ((parsedStart && isWeekend(parsedStart)) || (parsedEnd && isWeekend(parsedEnd))) {
-        setNotice('Sınav tarihleri hafta sonuna denk gelemez. Lütfen sadece hafta içi günleri seçin.');
+      if (parsedStart && isWeekend(parsedStart)) {
+        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
         return;
       }
     }
@@ -1645,9 +1644,8 @@ export default function AcademicCalendarGeneratorPage() {
     const isExam = calendarEventCategory(selectedEvent.eventType, selectedEvent.title, selectedEvent.templateItemKey) === 'exam';
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(editForm.startDate);
-      const parsedEnd = parseUtcDisplayDate(editForm.endDate || editForm.startDate);
-      if ((parsedStart && isWeekend(parsedStart)) || (parsedEnd && isWeekend(parsedEnd))) {
-        setNotice('Sınav tarihleri hafta sonuna denk gelemez. Lütfen sadece hafta içi günleri seçin.');
+      if (parsedStart && isWeekend(parsedStart)) {
+        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
         return;
       }
     }
@@ -1676,9 +1674,8 @@ export default function AcademicCalendarGeneratorPage() {
     const isExam = calendarEventCategory(selectedEvent.eventType, selectedEvent.title, selectedEvent.templateItemKey) === 'exam';
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(editForm.startDate);
-      const parsedEnd = parseUtcDisplayDate(editForm.endDate || editForm.startDate);
-      if ((parsedStart && isWeekend(parsedStart)) || (parsedEnd && isWeekend(parsedEnd))) {
-        setNotice('Sınav tarihleri hafta sonuna denk gelemez. Lütfen sadece hafta içi günleri seçin.');
+      if (parsedStart && isWeekend(parsedStart)) {
+        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
         return;
       }
     }

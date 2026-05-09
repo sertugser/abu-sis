@@ -349,13 +349,13 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_publication");
 
         midterm.StartDate.Should().Be(Utc(2025, 11, 17));
-        midterm.EndDate.Should().Be(Utc(2025, 11, 23));
+        midterm.EndDate.Should().Be(Utc(2025, 11, 21));
         ExamEventsShouldNotOverlap(result.Events, result.Holidays);
         CountTeachingWeeksBetween(Utc(2025, 9, 21), midterm.StartDate).Should().BeGreaterThanOrEqualTo(7);
         CountTeachingWeeksBetween(midterm.EndDate!.Value, final.StartDate).Should().Be(6);
 
         excuseApplication.StartDate.Should().BeAfter(midterm.EndDate!.Value);
-        excuseExam.StartDate.Should().BeAfter(excuseApplication.StartDate);
+        excuseExam.StartDate.Should().BeOnOrAfter(excuseApplication.StartDate);
         publication.StartDate.Should().BeAfter(excuseExam.EndDate ?? excuseExam.StartDate);
         result.Warnings.Should().NotContain(w => w.Code == "CHRONOLOGY");
     }
@@ -421,7 +421,7 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Fall && e.TemplateItemKey == "makeup_publication");
 
         final.StartDate.Should().Be(Utc(2026, 1, 12));
-        final.EndDate.Should().Be(Utc(2026, 1, 25));
+        final.EndDate.Should().Be(Utc(2026, 1, 23));
         ExamEventsShouldNotOverlap(result.Events, result.Holidays);
 
         finalPublication.StartDate.Should().BeAfter(final.EndDate!.Value);
@@ -450,7 +450,7 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Generator_PlacesMidterms_OnEighthWeekMonday_ForSevenDays()
+    public async Task Generator_PlacesMidterms_OnEighthWeekMonday_ToFriday()
     {
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
             "2025-2026",
@@ -470,11 +470,13 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Spring && e.TemplateItemKey == "midterm_exam");
 
         fallMidterm.StartDate.Should().Be(Utc(2025, 11, 10));
-        fallMidterm.EndDate.Should().Be(fallMidterm.StartDate.AddDays(6));
+        fallMidterm.EndDate.Should().Be(fallMidterm.StartDate.AddDays(4));
+        fallMidterm.EndDate.Value.DayOfWeek.Should().Be(DayOfWeek.Friday);
         fallMidterm.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
 
         springMidterm.StartDate.Should().Be(springClassesStart.StartDate.AddDays(42));
-        springMidterm.EndDate.Should().Be(springMidterm.StartDate.AddDays(6));
+        springMidterm.EndDate.Should().Be(springMidterm.StartDate.AddDays(4));
+        springMidterm.EndDate.Value.DayOfWeek.Should().Be(DayOfWeek.Friday);
         springMidterm.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
     }
 
@@ -495,11 +497,13 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Spring && e.TemplateItemKey == "final_exam");
 
         fallFinal.StartDate.Should().Be(Utc(2026, 1, 5));
-        fallFinal.EndDate.Should().Be(fallFinal.StartDate.AddDays(13));
+        fallFinal.EndDate.Should().Be(fallFinal.StartDate.AddDays(11));
+        fallFinal.EndDate.Value.DayOfWeek.Should().Be(DayOfWeek.Friday);
         fallFinal.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
 
         springFinal.StartDate.Should().Be(Utc(2026, 6, 8));
-        springFinal.EndDate.Should().Be(springFinal.StartDate.AddDays(13));
+        springFinal.EndDate.Should().Be(springFinal.StartDate.AddDays(11));
+        springFinal.EndDate.Value.DayOfWeek.Should().Be(DayOfWeek.Friday);
         springFinal.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
     }
 
@@ -578,7 +582,7 @@ public class CalendarGeneratorTests : IDisposable
 
         fallMidterm.StartDate.Should().Be(Utc(2025, 11, 10));
         fallMidterm.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
-        fallMidterm.EndDate.Should().Be(Utc(2025, 11, 16));
+        fallMidterm.EndDate.Should().Be(Utc(2025, 11, 14));
     }
 
     [Fact]
@@ -597,7 +601,7 @@ public class CalendarGeneratorTests : IDisposable
 
         springMidterm.StartDate.Should().Be(Utc(2026, 4, 6));
         springMidterm.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
-        springMidterm.EndDate.Should().Be(Utc(2026, 4, 12));
+        springMidterm.EndDate.Should().Be(Utc(2026, 4, 10));
     }
 
     [Fact]

@@ -480,14 +480,6 @@ public partial class CalendarGeneratorService
             or CalendarEventType.PrepSchoolExam
             or CalendarEventType.SummerSchoolExam;
 
-    private static bool IsExamEvent(CalendarEventType eventType) =>
-        eventType is CalendarEventType.MidtermExam
-            or CalendarEventType.FinalExam
-            or CalendarEventType.MakeupExam
-            or CalendarEventType.PrepSchoolExam
-            or CalendarEventType.SummerSchoolExam
-            or CalendarEventType.ExcuseExam;
-
     private static DateTime MondayOnOrAfter(DateTime date)
     {
         var current = date.Date;

@@ -152,10 +152,10 @@ public class CalendarTemplateService : ICalendarTemplateService
 
             var requiresMainAlignment =
                 midterm == null
-                || midterm.DefaultDurationDays != 7
+                || midterm.DefaultDurationDays != 5
                 || midterm.OffsetDays != 49
                 || final == null
-                || final.DefaultDurationDays != 14
+                || final.DefaultDurationDays != 12
                 || final.OffsetDays != 105
                 || addDrop == null
                 || addDrop.DefaultDurationDays != 7;
@@ -372,12 +372,12 @@ public class CalendarTemplateService : ICalendarTemplateService
             Item("add_drop", CalendarEventType.AddDrop, "Ders Ekleme - Bırakma, Geç Kayıtlar ve Danışman Onayları", 7, 7, null, SemesterType.Fall, SemesterType.Spring),
             Item("withdrawal_deadline", CalendarEventType.CourseWithdrawal, "Dersten Çekilme Başvurularının Son Günü", 1, 40, null, SemesterType.Fall, SemesterType.Spring),
             Item("freeze_deadline", CalendarEventType.RegistrationFreezeDeadline, "Kayıt Dondurma Başvurularının Son Günü", 1, 40, null, SemesterType.Fall, SemesterType.Spring),
-            Item("midterm_exam", CalendarEventType.MidtermExam, "Ara Sınavlar", 7, 49, null, SemesterType.Fall, SemesterType.Spring),
+            Item("midterm_exam", CalendarEventType.MidtermExam, "Ara Sınavlar", 5, 49, null, SemesterType.Fall, SemesterType.Spring),
             Item("midterm_excuse_application", CalendarEventType.ExcuseExamApplication, "Mazeret Sınav Başvurularının Son Günü (Ara Sınav)", 1, 50, null, SemesterType.Fall, SemesterType.Spring),
             Item("midterm_excuse_exam", CalendarEventType.ExcuseExam, "Mazeret Sınavları (Ara Sınav)", 3, 52, null, SemesterType.Fall, SemesterType.Spring),
             Item("midterm_publication", CalendarEventType.MidtermGradePublication, "Ara Sınavların İlanının Son Günü", 1, 60, null, SemesterType.Fall, SemesterType.Spring),
             Item("classes_end", CalendarEventType.ClassesEnd, "Derslerin Sona Ermesi", 1, 102, null, SemesterType.Fall, SemesterType.Spring),
-            Item("final_exam", CalendarEventType.FinalExam, "Dönem Sonu Sınavları", 14, 105, null, SemesterType.Fall, SemesterType.Spring),
+            Item("final_exam", CalendarEventType.FinalExam, "Dönem Sonu Sınavları", 12, 105, null, SemesterType.Fall, SemesterType.Spring),
             Item("prep_final_exam", CalendarEventType.PrepSchoolExam, "Hazırlık (İngilizce) Muafiyet Sınavları", 4, 112, null, SemesterType.Fall, SemesterType.Spring),
             Item("final_publication", CalendarEventType.FinalGradePublication, "Dönem Sonu Sınav Sonuçlarının İlanı", 1, 121, null, SemesterType.Fall, SemesterType.Spring),
             Item("makeup_application", CalendarEventType.MakeupExamApplication, "Bütünleme Sınavlarının Başvurularının Son Günü (Dönem Sonu)", 1, 123, null, SemesterType.Fall, SemesterType.Spring),
