@@ -107,12 +107,19 @@ public class DailyLoadSoftEncoderTests
             model.Add(lec.StartExpr() == 0);  // overlap allowed by H1 only if no overlap encoder; we don't run H1 here.
         }
 
+        // Plan 10 Phase 2 — S2 ConstraintDefinition kaldırıldı; DailyLoadSoftEncoder artık
+        // H-DL (Code) + Category="Soft" (ConstraintCategories) ile yönetiliyor.
+        var requestWithCat = request with
+        {
+            ConstraintFlags = new Dictionary<string, bool> { ["H-DL"] = s2Enabled },
+            ConstraintCategories = new Dictionary<string, string> { ["H-DL"] = "Soft" },
+        };
         return (model, new EncoderContext
         {
             Model = model, Variables = variables,
             Assumptions = new AssumptionRegistry(model),
-            Request = request,
-            ConstraintFlags = new Dictionary<string, bool> { ["S2"] = s2Enabled },
+            Request = requestWithCat,
+            ConstraintFlags = requestWithCat.ConstraintFlags,
             Penalties = new List<LinearExpr>()
         });
     }

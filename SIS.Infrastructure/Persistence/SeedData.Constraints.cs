@@ -198,17 +198,10 @@ public static partial class SeedData
                 Parameters = """{"S1MinOccupancy": 60, "S1MaxOccupancy": 85}""",
                 SortOrder = 101
             },
-            new()
-            {
-                Code = "S2",
-                Name = "Günlük Yük Dengeleme",
-                Description = "Öğretim üyesinin günlük ders saatlerinin dengeli dağılmasını teşvik eder.",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"S2MaxDailyHours": 6}""",
-                SortOrder = 102
-            },
+            // Plan 10 Phase 2 — S2 ConstraintDefinition kaldırıldı.
+            // H-DL "Günlük Yük Limiti" Category toggle (Hard/Soft) ile iki davranışı yönetiyor:
+            //   - Hard (Zorunlu): DailyLoadEncoder yasaklar (limit aşımı kabul edilmez).
+            //   - Soft (Tercihli): DailyLoadSoftEncoder S2Weight ile penalty üretir.
             new()
             {
                 Code = "S3",

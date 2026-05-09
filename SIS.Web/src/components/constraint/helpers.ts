@@ -36,6 +36,7 @@ export const CATEGORY_CAPABILITY: Record<string, CategoryCapability> = {
   'DIST': 'toggleable',  // Distribution kural tercihi
 
   // ── Doğası SOFT (penalty-bazlı, Hard yapılamaz) ──────
+  // Plan 10 Phase 2: S2 kaldırıldı, H-DL Category toggle ile yönetiliyor.
   'S1':   'soft-only',
   'S3':   'soft-only',
   'S4':   'soft-only',
@@ -77,7 +78,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'instructor',
     label: 'Öğretim Üyesi Kısıtlamaları',
     icon: 'GraduationCap',
-    codes: ['H2', 'H-WL', 'H-DL', 'H-DO', 'H15', 'S2', 'S8'],
+    codes: ['H2', 'H-WL', 'H-DL', 'H-DO', 'H15', 'S8'],
   },
   {
     key: 'curriculum',
@@ -157,9 +158,7 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
     { key: 'S1MinOccupancy', label: 'Min. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
     { key: 'S1MaxOccupancy', label: 'Maks. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
   ],
-  'S2': [
-    { key: 'S2MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
-  ],
+  // Plan 10 Phase 2 — S2 kaldırıldı, H-DL Category toggle ile yönetiliyor.
   'S3': [
     { key: 'S3MaxSectionsPerSlot', label: 'Slot Başına Maks. Şube', type: 'number', min: 1, max: 50 },
   ],

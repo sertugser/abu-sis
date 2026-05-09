@@ -57,9 +57,14 @@ public class Plan8CombinedIntegrationTest
             ConstraintFlags = new Dictionary<string, bool>
             {
                 ["H1"] = true,
-                ["S2"] = true,
-                ["S5"] = true,
+                ["H-DL"] = true,  // Plan 10 Phase 2: S2 → H-DL Soft
+                ["H13"] = true,   // Plan 10: S5 → H13 Soft
                 ["S8"] = true,
+            },
+            ConstraintCategories = new Dictionary<string, string>
+            {
+                ["H-DL"] = "Soft",  // S2 davranışı
+                ["H13"] = "Soft",   // S5 davranışı
             },
             SoftThresholds = new SoftThresholds(),  // defaults
         };

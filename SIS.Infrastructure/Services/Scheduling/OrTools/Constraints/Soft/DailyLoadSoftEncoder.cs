@@ -37,12 +37,19 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// </remarks>
 public sealed class DailyLoadSoftEncoder : IConstraintEncoder
 {
-    public string Code => "S2";
+    // Plan 10 — Code "S2" → "H-DL": tek ConstraintDefinition (H-DL) iki davranışı yönetir.
+    public string Code => "H-DL";
     public bool IsHard => false;
 
     public void Encode(EncoderContext ctx)
     {
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true)) return;
+
+        // Plan 10 — Category="Soft" (Tercihli) ise penalty modu. Default Hard → skip.
+        var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
+        if (!string.Equals(category, "Soft", StringComparison.OrdinalIgnoreCase))
+            return;
+
         var t = ctx.Request.SoftThresholds;
         if (t.S2Weight <= 0) return;
 

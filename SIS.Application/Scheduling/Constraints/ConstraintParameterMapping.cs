@@ -42,15 +42,13 @@ public static class ConstraintParameterMapping
         // ── H16: Theory-Lab Sıra (deprecated parametre — semantik değişti, geriye uyum için)
         [("H16", "TheoryLabSplitThreshold")] = new("Schedule.TheoryLabSplitThreshold", "int"),
 
-        // ── H-DL: Günlük Hoca Yükü
+        // ── H-DL: Günlük Hoca Yükü (Plan 10 Phase 2: S2 ile merge — Category toggle yönetir)
         [("H-DL", "MaxDailyHours")] = new("Schedule.MaxDailyHoursPerInstructor", "int"),
+        [("H-DL", "S2MaxDailyHours")] = new("SoftConstraint.S2.MaxDailyHours", "int"),
 
         // ── S1: Doluluk Oranı
         [("S1", "S1MinOccupancy")] = new("Classroom.OccupancyTarget.Min", "int"),
         [("S1", "S1MaxOccupancy")] = new("Classroom.OccupancyTarget.Max", "int"),
-
-        // ── S2: Günlük Yük (soft)
-        [("S2", "S2MaxDailyHours")] = new("SoftConstraint.S2.MaxDailyHours", "int"),
 
         // ── S3: Slot Yoğunluk
         [("S3", "S3MaxSectionsPerSlot")] = new("SoftConstraint.S3.MaxSectionsPerSlot", "int"),
@@ -105,7 +103,7 @@ public static class ConstraintParameterMapping
         ["H-DO"] = CategoryCapability.Toggleable,
         ["DIST"] = CategoryCapability.Toggleable,
 
-        // Soft-only
+        // Soft-only (Plan 10 Phase 2: S2 kaldırıldı, H-DL Category toggle ile yönetiliyor)
         ["S1"] = CategoryCapability.SoftOnly,
         ["S3"] = CategoryCapability.SoftOnly,
         ["S4"] = CategoryCapability.SoftOnly,
