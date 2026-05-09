@@ -1,33 +1,89 @@
 using SIS.Application.Scheduling.Solver;
+using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// DIST — Distribution Constraints (Plan 6 Task 10 stub).
-/// 6 distribution type (SameDay/DifferentDay/SameRoom/BackToBack/NotBackToBack/Precedence).
-/// 2 tier (Hard=Unavailable, Soft=Discouraged/StronglyDiscouraged).
+/// DIST — DistributionConstraints encoder (Plan 8 real impl, Task 14 dispatch shell).
+/// 6 type (SameDay/DifferentDay/SameRoom/BackToBack/NotBackToBack/Precedence)
+/// × 2 tier (Unavailable=hard / Discouraged|StronglyDiscouraged=soft).
+/// Iterates over <c>SolverRequest.DistributionConstraints</c>; PreferenceLevel switch'e göre
+/// hard veya soft path. Helper method'lar pair-wise tekrarlanır (Tasks 15-19'da doldurulur).
 ///
-/// Plan 6 Task 10: infrastructure-only. SolverRequest.DistributionConstraints loaded from DB
-/// but encoder body diagnostic-only — real CP-SAT enforcement deferred to Plan 6.5
-/// (DB has 0 rows currently; multi-type/multi-tier logic non-trivial).
-/// 1 assumption per constraint instance for future UnsatCore attribution.
+/// NOTE (Plan 9 polish): <c>PreferenceLevel.Preferred</c> ve <c>StronglyPreferred</c> şu anda
+/// <c>_ => -1</c> arm'ında atlanıyor. Plan 9'da pozitif bonus tier eklenirse switch
+/// genişletilecek (negatif penalty / objective bonus).
+///
+/// NOTE (Plan 9 polish): <c>FirstOrDefault per CourseId</c> section anchor basitleştirmesi —
+/// aynı kurs için birden fazla section varsa yalnızca ilki dist constraint'e katılır.
+/// Production'da DistributionConstraints tablosu boş; admin feature'ı kullanmaya başlayınca
+/// gerçek section seçim algoritması (multi-section enumeration / cohort eşleşmesi) Plan 9'da
+/// değerlendirilecek.
 /// </summary>
 public sealed class DistributionConstraintEncoder : IConstraintEncoder
 {
     public string Code => "DIST";
-    public bool IsHard => true; // Unavailable tier; soft tier (Discouraged) Plan 8 (penalties)
+    public bool IsHard => true;
 
     public void Encode(EncoderContext ctx)
     {
         if (!ctx.ConstraintFlags.GetValueOrDefault(Code, true)) return;
 
-        // Plan 6 Task 10 stub: register 1 assumption per constraint, no actual constraints added.
-        // Plan 6.5 will read DistributionType + PreferenceLevel and add real CP-SAT constraints.
+        var t = ctx.Request.SoftThresholds;
+
         foreach (var dist in ctx.Request.DistributionConstraints)
         {
-            ctx.Assumptions.Register(Code,
-                primarySectionId: dist.Id,
-                secondarySectionId: null);
+            int? softWeight = dist.PreferenceLevel switch
+            {
+                PreferenceLevel.Unavailable => null,            // hard
+                PreferenceLevel.Discouraged => t.DistDiscouragedWeight,
+                PreferenceLevel.StronglyDiscouraged => t.DistStronglyDiscouragedWeight,
+                _ => -1,                                         // skip Preferred/StronglyPreferred (Plan 9)
+            };
+            if (softWeight == -1) continue;
+
+            // Resolve sections from courses (CourseId-based; FirstOrDefault per CourseId anchor).
+            var sectionsForDist = dist.Courses
+                .Select(c => ctx.Request.Sections.FirstOrDefault(s => s.CourseId == c.CourseId))
+                .Where(s => s != null)
+                .Cast<SectionInput>()
+                .ToList();
+            if (sectionsForDist.Count < 2) continue;
+
+            // Pair-wise iteration — every (i, j) with i < j.
+            for (int i = 0; i < sectionsForDist.Count; i++)
+            {
+                for (int j = i + 1; j < sectionsForDist.Count; j++)
+                {
+                    var a = sectionsForDist[i];
+                    var b = sectionsForDist[j];
+                    EncodePair(ctx, dist.Id, dist.DistributionType, a, b, softWeight);
+                }
+            }
+
+            ctx.Assumptions.Register(Code, primarySectionId: dist.Id, secondarySectionId: null);
         }
     }
+
+    private static void EncodePair(EncoderContext ctx, int distId, DistributionType type,
+        SectionInput a, SectionInput b, int? softWeight)
+    {
+        switch (type)
+        {
+            case DistributionType.SameDay: EncodeSameDayPair(ctx, distId, a, b, softWeight); break;
+            case DistributionType.DifferentDay: EncodeDifferentDayPair(ctx, distId, a, b, softWeight); break;
+            case DistributionType.SameRoom: EncodeSameRoomPair(ctx, distId, a, b, softWeight); break;
+            case DistributionType.BackToBack: EncodeBackToBackPair(ctx, distId, a, b, softWeight); break;
+            case DistributionType.NotBackToBack: EncodeNotBackToBackPair(ctx, distId, a, b, softWeight); break;
+            case DistributionType.Precedence: EncodePrecedencePair(ctx, distId, a, b, softWeight); break;
+        }
+    }
+
+    // Tasks 15-19'da doldurulacak — şimdilik no-op pair encoder'ları.
+    private static void EncodeSameDayPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    private static void EncodeDifferentDayPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    private static void EncodeSameRoomPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    private static void EncodeBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    private static void EncodeNotBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    private static void EncodePrecedencePair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
 }

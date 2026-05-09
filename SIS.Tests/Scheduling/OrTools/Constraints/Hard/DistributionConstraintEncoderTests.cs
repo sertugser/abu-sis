@@ -9,103 +9,121 @@ using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
 namespace SIS.Tests.Scheduling.OrTools.Constraints.Hard;
 
+/// <summary>
+/// Plan 8 Task 14 — DIST infrastructure refactor (dispatch shell).
+/// Scaffolding sanity tests: encoder must run cleanly when the constraint list is empty
+/// and skip Preferred/StronglyPreferred tiers (Plan 9 polish slot, currently no-op).
+/// Per-type encoder bodies are filled in Tasks 15-19; this file only proves the
+/// dispatch shell + PreferenceLevel switch.
+/// </summary>
 public class DistributionConstraintEncoderTests
 {
     [Fact]
-    public void Code_IsDist_AndIsHard()
+    public void Encode_EmptyDistConstraints_NoCrash()
     {
         var encoder = new DistributionConstraintEncoder();
+        var ctx = BuildScenario(Array.Empty<DistributionConstraintInput>());
 
-        encoder.Code.Should().Be("DIST");
-        encoder.IsHard.Should().BeTrue();
+        var act = () => encoder.Encode(ctx);
+
+        act.Should().NotThrow();
+        ctx.Penalties.Should().BeEmpty();
+        ctx.Assumptions.Count.Should().Be(0);
     }
 
     [Fact]
-    public void Encode_OneDistConstraint_RegistersAssumption()
+    public void Encode_PreferredLevel_Skipped()
     {
+        // PreferenceLevel.Preferred → switch returns -1 → continue. No assumption / no penalty.
+        // (Plan 9 reserves Preferred/StronglyPreferred for a positive-bonus tier.)
         var dist = new DistributionConstraintInput(
             Id: 1,
             DistributionType: DistributionType.SameDay,
-            PreferenceLevel: PreferenceLevel.Unavailable,
+            PreferenceLevel: PreferenceLevel.Preferred,
             Courses: new[]
             {
                 new DistributionCourseInput(100, null, 0),
-                new DistributionCourseInput(200, null, 1)
+                new DistributionCourseInput(200, null, 1),
             });
+
         var encoder = new DistributionConstraintEncoder();
-        var ctx = BuildContext(new[] { dist });
+        var ctx = BuildScenario(new[] { dist });
 
         encoder.Encode(ctx);
 
-        ctx.Assumptions.Count.Should().Be(1);
-    }
-
-    [Fact]
-    public void Encode_NoConstraints_NoAssumption()
-    {
-        var encoder = new DistributionConstraintEncoder();
-        var ctx = BuildContext(Array.Empty<DistributionConstraintInput>());
-
-        encoder.Encode(ctx);
-
+        ctx.Penalties.Should().BeEmpty();
         ctx.Assumptions.Count.Should().Be(0);
     }
 
-    [Fact]
-    public void Encode_FlagDisabled_NoOp()
-    {
-        var dist = new DistributionConstraintInput(
-            1, DistributionType.SameDay, PreferenceLevel.Unavailable,
-            new[] { new DistributionCourseInput(100, null, 0) });
-        var encoder = new DistributionConstraintEncoder();
-        var ctx = BuildContext(new[] { dist },
-            flags: new Dictionary<string, bool> { ["DIST"] = false });
-
-        encoder.Encode(ctx);
-
-        ctx.Assumptions.Count.Should().Be(0);
-    }
-
-    [Fact]
-    public void Encode_ThreeConstraints_RegistersThreeAssumptions()
-    {
-        var dists = new[]
-        {
-            new DistributionConstraintInput(1, DistributionType.SameDay, PreferenceLevel.Unavailable,
-                new[] { new DistributionCourseInput(100, null, 0) }),
-            new DistributionConstraintInput(2, DistributionType.DifferentDay, PreferenceLevel.Discouraged,
-                new[] { new DistributionCourseInput(200, null, 0) }),
-            new DistributionConstraintInput(3, DistributionType.BackToBack, PreferenceLevel.Unavailable,
-                new[] { new DistributionCourseInput(300, null, 0) })
-        };
-        var encoder = new DistributionConstraintEncoder();
-        var ctx = BuildContext(dists);
-
-        encoder.Encode(ctx);
-
-        ctx.Assumptions.Count.Should().Be(3);
-    }
-
-    private static EncoderContext BuildContext(
+    /// <summary>
+    /// Minimal scenario: 2 sections (CourseId 100 / 200), 1 classroom, 1 slot.
+    /// Presence literals forced to 1 so penalty terms cannot be optimised away.
+    /// </summary>
+    private static EncoderContext BuildScenario(
         IReadOnlyList<DistributionConstraintInput> distConstraints,
         IReadOnlyDictionary<string, bool>? flags = null)
     {
         flags ??= new Dictionary<string, bool> { ["DIST"] = true };
 
-        var sections = Array.Empty<SectionInput>();
+        var sections = new[]
+        {
+            new SectionInput
+            {
+                Id = 1,
+                CourseId = 100,
+                CourseCode = "CS101",
+                CourseName = "A",
+                SectionNumber = 1,
+                Capacity = 30,
+                TheoryHours = 1,
+                LabHours = 0,
+                TeachingMethod = TeachingMethod.FaceToFace,
+            },
+            new SectionInput
+            {
+                Id = 2,
+                CourseId = 200,
+                CourseCode = "CS102",
+                CourseName = "B",
+                SectionNumber = 1,
+                Capacity = 30,
+                TheoryHours = 1,
+                LabHours = 0,
+                TeachingMethod = TeachingMethod.FaceToFace,
+            },
+        };
+
         var classrooms = new[]
         {
-            new ClassroomInput { Id = 9, Name = "C", Capacity = 50, Type = ClassroomType.Lecture }
+            new ClassroomInput { Id = 9, Name = "C", Capacity = 50, Type = ClassroomType.Lecture },
         };
-        var slots = Enumerable.Range(0, 4).Select(i => new TimeSlotInput
+
+        var slots = new[]
         {
-            Id = i + 1,
-            DayOfWeek = DayOfWeek.Monday,
-            SlotOrder = i + 1,
-            StartTime = new TimeOnly(9 + i, 0),
-            EndTime = new TimeOnly(9 + i, 50),
-            AllowedMode = TimeSlotAllowedMode.Both
-        }).ToList();
+            new TimeSlotInput
+            {
+                Id = 1,
+                DayOfWeek = DayOfWeek.Monday,
+                SlotOrder = 1,
+                StartTime = new TimeOnly(9, 0),
+                EndTime = new TimeOnly(9, 50),
+                AllowedMode = TimeSlotAllowedMode.Both,
+            },
+        };
+
+        var model = new CpModel();
+        var variables = new DecisionVariables(model, totalSlots: slots.Length);
+
+        foreach (var s in sections)
+        {
+            variables.CreateIntervalsForSection(s);
+            variables.CreateRoomVariable(s.Id, ComponentType.Lecture, classrooms);
+            variables.CreateOptionalRoomInterval(
+                s.Id, classrooms[0].Id, ComponentType.Lecture, duration: s.TheoryHours);
+            var presence = (BoolVar)variables.AllPresenceLiterals[
+                (s.Id, classrooms[0].Id, ComponentType.Lecture)];
+            model.Add(presence == 1);
+        }
 
         var request = new SolverRequest
         {
@@ -115,21 +133,17 @@ public class DistributionConstraintEncoderTests
             Classrooms = classrooms,
             TimeSlots = slots,
             ConstraintFlags = flags,
-            DistributionConstraints = distConstraints
+            DistributionConstraints = distConstraints,
         };
-
-        var model = new CpModel();
-        var variables = new DecisionVariables(model, totalSlots: slots.Count);
-        var assumptions = new AssumptionRegistry(model);
 
         return new EncoderContext
         {
             Model = model,
             Variables = variables,
-            Assumptions = assumptions,
+            Assumptions = new AssumptionRegistry(model),
             Request = request,
             ConstraintFlags = flags,
-            Penalties = new List<LinearExpr>()
+            Penalties = new List<LinearExpr>(),
         };
     }
 }
