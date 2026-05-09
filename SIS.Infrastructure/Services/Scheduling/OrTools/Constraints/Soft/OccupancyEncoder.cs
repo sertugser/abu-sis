@@ -55,9 +55,18 @@ public sealed class OccupancyEncoder : IConstraintEncoder
                 min, max, weight);
         }
 
-        // NOTE: AllPresenceLiteralsForLabBlocks (Plan 7b multi-interval lab) intentionally
-        // excluded. Multi-block labs accrue zero S1 penalty until Plan 9 polish defines
-        // per-block occupancy semantics (each block × room presence literal).
+        // Plan 9 Issue 4a — multi-block lab presence literals (Plan 7b time-split).
+        // Per-(section, classroom, block, group) penalty contribution. Each block lands in
+        // its own classroom assignment; rate = section.Capacity × 100 / classroom.Capacity
+        // is identical for every block of a given (section, classroom) pair, so the
+        // accumulated penalty scales with block count (matches v1 OccupancyEvaluator
+        // behaviour where each scheduled block contributes its own deviation term).
+        foreach (var ((sectionId, classroomId, _, _), literal) in ctx.Variables.AllPresenceLiteralsForLabBlocks)
+        {
+            AddPenaltyIfDeviated(
+                ctx, sectionsById, roomsById, sectionId, classroomId, literal,
+                min, max, weight);
+        }
     }
 
     private static void AddPenaltyIfDeviated(
