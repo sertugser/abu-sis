@@ -1,3 +1,4 @@
+using Google.OrTools.Sat;
 using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Enums;
 
@@ -79,8 +80,33 @@ public sealed class DistributionConstraintEncoder : IConstraintEncoder
         }
     }
 
-    // Tasks 15-19'da doldurulacak — şimdilik no-op pair encoder'ları.
-    private static void EncodeSameDayPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    /// <summary>
+    /// SameDay: lecture component'leri aynı güne düşmeli.
+    /// Hard (softWeight==null): <c>dayA == dayB</c>.
+    /// Soft: reified <c>diffLit ⇔ (dayA != dayB)</c>; penalty = <c>diffLit × softWeight</c>.
+    /// TheoryHours==0 olan section (lab-only) lecture day var alamaz → guard ile skip.
+    /// </summary>
+    private static void EncodeSameDayPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight)
+    {
+        if (a.TheoryHours == 0 || b.TheoryHours == 0) return;
+
+        var dayA = ctx.Variables.GetOrCreateComponentDayVar(a.Id, ComponentType.Lecture, ctx.Request.TimeSlots);
+        var dayB = ctx.Variables.GetOrCreateComponentDayVar(b.Id, ComponentType.Lecture, ctx.Request.TimeSlots);
+
+        if (softWeight == null)
+        {
+            // Hard: same day enforced.
+            ctx.Model.Add(dayA == dayB);
+        }
+        else
+        {
+            // Soft: penalty when different.
+            var diffLit = ctx.Model.NewBoolVar($"dist{distId}_sd_diff_{a.Id}_{b.Id}");
+            ctx.Model.Add(dayA != dayB).OnlyEnforceIf(diffLit);
+            ctx.Model.Add(dayA == dayB).OnlyEnforceIf(diffLit.Not());
+            ctx.Penalties.Add(LinearExpr.Term(diffLit, (long)softWeight.Value));
+        }
+    }
     private static void EncodeDifferentDayPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
     private static void EncodeSameRoomPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
     private static void EncodeBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
