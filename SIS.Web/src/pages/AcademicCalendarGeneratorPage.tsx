@@ -1745,7 +1745,7 @@ export default function AcademicCalendarGeneratorPage() {
     applyDraft.mutate({ draftId: activeDraftId, forceOverwrite }, {
       onSuccess: result => {
         const terms = result.termIds.length > 0 ? result.termIds.join(', ') : 'yok';
-        setNotice(`Applied. ${result.message} Güz, Bahar ve varsa Yaz dönemleri Dönem İşleri sayfasına aktarıldı. Güncellenen dönemler: ${terms}.`);
+        setNotice(`${result.message} Akademik takvim sayfası yenilendi. Güncellenen dönemler: ${terms}.`);
       },
       onError: error => setNotice(getErrorMessage(error)),
     });

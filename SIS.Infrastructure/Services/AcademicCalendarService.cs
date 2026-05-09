@@ -155,7 +155,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             ?? throw new KeyNotFoundException($"Term {termId} not found.");
 
         if (term.IsCancelled)
-            throw new InvalidOperationException("Iptal edilmis donemde etkinlik tasinamaz.");
+            throw new InvalidOperationException("İptal edilmiş dönemde etkinlik taşınamaz.");
 
         ApplyClientEvents(term, dto.Events);
         RecalculateEventMove(term, eventId, dto.StartDate, dto.EndDate, dto.PropagateChanges);
@@ -189,7 +189,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             {
                 var term = terms.First(t => t.Id == stagedCalendar.TermId);
                 if (term.IsCancelled)
-                    throw new InvalidOperationException("Iptal edilmis donemde takvim kaydedilemez.");
+                    throw new InvalidOperationException("İptal edilmiş dönemde takvim kaydedilemez.");
 
                 ApplyClientEvents(term, stagedCalendar.Events);
             }
@@ -280,16 +280,27 @@ public class AcademicCalendarService : IAcademicCalendarService
             draftEventId,
             startDate,
             endDate,
-            propagateChanges);
+            false);
 
         var changedEventIds = ApplyRecalculatedEvents(term, recalculation.Events);
         changedEventIds.Add(calendarEvent.Id);
 
         RepairMovedEventDependencies(term, calendarEvent.Id, changedEventIds, holidays, pinnedDraftEventIds);
-        var finalEvents = term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList();
-        var finalEvaluation = CalendarGeneratorService.EvaluateEvents(finalEvents, holidays, pinnedDraftEventIds);
-        foreach (var changedId in ApplyRecalculatedEvents(term, finalEvaluation.Events))
-            changedEventIds.Add(changedId);
+        NormalizeChangedDependentEvents(term, calendarEvent.Id, changedEventIds);
+
+        WhatIfResultDto finalEvaluation = null!;
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var before = TermDateFingerprint(term);
+            var finalEvents = term.CalendarEvents.Select(e => ToGeneratedEvent(term, e)).ToList();
+            finalEvaluation = CalendarGeneratorService.EvaluateEvents(finalEvents, holidays, pinnedDraftEventIds);
+            foreach (var changedId in ApplyRecalculatedEvents(term, finalEvaluation.Events))
+                changedEventIds.Add(changedId);
+
+            NormalizeChangedDependentEvents(term, calendarEvent.Id, changedEventIds);
+            if (TermDateFingerprint(term) == before)
+                break;
+        }
 
         var changedDraftEventIds = GetChangedDraftEventIds(currentEvents, finalEvaluation.Events);
         changedDraftEventIds.Add(draftEventId);
@@ -440,8 +451,10 @@ public class AcademicCalendarService : IAcademicCalendarService
         DateTime.SpecifyKind(value, DateTimeKind.Utc).Date;
 
     private static bool IsLockedCalendarEvent(TermCalendarEvent calendarEvent) =>
-        calendarEvent.BlocksAcademicEvents
-        || calendarEvent.EventType is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday or CalendarEventType.ImportantDay;
+        IsBlockingCalendarEvent(calendarEvent);
+
+    private static bool IsBlockingCalendarEvent(TermCalendarEvent calendarEvent) =>
+        calendarEvent.EventType is CalendarEventType.NationalHoliday or CalendarEventType.ReligiousHoliday or CalendarEventType.ImportantDay;
 
     private static void ApplyClientEvents(AcademicTerm term, IReadOnlyList<TermCalendarEventDto> clientEvents)
     {
@@ -523,7 +536,7 @@ public class AcademicCalendarService : IAcademicCalendarService
 
     private static IReadOnlyList<ResolvedHolidayDto> BuildResolvedHolidays(IEnumerable<TermCalendarEvent> events) =>
         events
-            .Where(IsLockedCalendarEvent)
+            .Where(IsBlockingCalendarEvent)
             .Select(ToResolvedHoliday)
             .ToList();
 
@@ -569,7 +582,8 @@ public class AcademicCalendarService : IAcademicCalendarService
             .ToHashSet(StringComparer.Ordinal);
         var blockingWarnings = recalculation.Warnings
             .Where(IsErrorWarning)
-            .Where(w => IsChangedDraftWarning(w, changedDraftEventIds) || !baselineErrors.Contains(WarningFingerprint(w)))
+            .Where(w => IsChangedDraftWarning(w, changedDraftEventIds)
+                || (string.IsNullOrWhiteSpace(w.DraftEventId) && !baselineErrors.Contains(WarningFingerprint(w))))
             .Select(w => w.Message)
             .Distinct()
             .ToList();
@@ -709,7 +723,7 @@ public class AcademicCalendarService : IAcademicCalendarService
     private static void EnsureNoBlockingOverlap(IEnumerable<TermCalendarEvent> events, int movingEventId, DateTime startDate, DateTime endDate)
     {
         var blockingEvent = events
-            .Where(e => e.Id != movingEventId && e.BlocksAcademicEvents)
+            .Where(e => e.Id != movingEventId && IsBlockingCalendarEvent(e) && e.BlocksAcademicEvents)
             .FirstOrDefault(e => RangesOverlap(startDate, endDate, e.StartDate.Date, (e.EndDate ?? e.StartDate).Date));
 
         if (blockingEvent is null)
@@ -746,6 +760,26 @@ public class AcademicCalendarService : IAcademicCalendarService
 
             if (TermDateFingerprint(term) == before)
                 break;
+        }
+    }
+
+    private static void NormalizeChangedDependentEvents(AcademicTerm term, int movedEventId, ISet<int> changedEventIds)
+    {
+        foreach (var calendarEvent in term.CalendarEvents
+            .Where(e => e.Id != movedEventId && e.IsPublic && !IsLockedCalendarEvent(e) && changedEventIds.Contains(e.Id))
+            .OrderBy(e => e.StartDate)
+            .ThenBy(e => e.Id))
+        {
+            var startDate = calendarEvent.StartDate.Date;
+            DateTime? alignedStart = null;
+
+            if (RequiresMondayStart(calendarEvent) && !StartsOnMonday(startDate))
+                alignedStart = MondayOnOrAfter(startDate);
+            else if (RequiresWeekdayOnly(calendarEvent) && StartsOnWeekend(startDate))
+                alignedStart = NextBusinessDayOnOrAfter(startDate, term.CalendarEvents);
+
+            if (alignedStart.HasValue && alignedStart.Value.Date != startDate)
+                SetPreservingSpan(calendarEvent, alignedStart.Value, changedEventIds);
         }
     }
 
@@ -1023,12 +1057,31 @@ public class AcademicCalendarService : IAcademicCalendarService
     private static bool StartsOnMonday(DateTime date) =>
         date.DayOfWeek == DayOfWeek.Monday;
 
+    private static DateTime MondayOnOrAfter(DateTime date)
+    {
+        var current = date.Date;
+        while (!StartsOnMonday(current))
+            current = current.AddDays(1);
+
+        return EnsureUtcDate(current);
+    }
+
     private static bool IsBusinessDay(DateTime date, IEnumerable<TermCalendarEvent> events)
     {
         if (StartsOnWeekend(date))
             return false;
 
-        return !events.Any(e => e.BlocksAcademicEvents && RangesOverlap(date.Date, date.Date, e.StartDate.Date, EventEnd(e)));
+        return !events.Any(e => IsBlockingCalendarEvent(e) && e.BlocksAcademicEvents && RangesOverlap(date.Date, date.Date, e.StartDate.Date, EventEnd(e)));
+    }
+
+    private static DateTime NextBusinessDayOnOrAfter(DateTime date, IEnumerable<TermCalendarEvent> events)
+    {
+        var eventList = events.ToList();
+        var day = date.Date;
+        while (!IsBusinessDay(day, eventList))
+            day = day.AddDays(1);
+
+        return EnsureUtcDate(day);
     }
 
     private static DateTime NextBusinessDayAfter(DateTime fromExclusive, IEnumerable<TermCalendarEvent> events) =>

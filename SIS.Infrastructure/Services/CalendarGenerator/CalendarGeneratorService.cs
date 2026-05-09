@@ -258,7 +258,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
                 : e)
             .ToList();
 
-        var shouldPropagate = IsCriticalEvent(target.EventType) || propagateChanges != false;
+        var shouldPropagate = propagateChanges == true || (propagateChanges is null && IsCriticalEvent(target.EventType));
         if (shouldPropagate)
             events = Propagate(events, draftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
 

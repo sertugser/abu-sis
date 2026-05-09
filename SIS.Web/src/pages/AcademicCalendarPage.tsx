@@ -138,7 +138,7 @@ function parseVisualizerEventId(value: string | number) {
 }
 
 function canDragCalendarEvent(event: TermCalendarEventDto) {
-  return event.isPublic && !event.blocksAcademicEvents && !NON_DRAGGABLE_EVENT_TYPES.has(event.eventType);
+  return event.isPublic && !NON_DRAGGABLE_EVENT_TYPES.has(event.eventType);
 }
 
 function schedulingRuleEventType(event: TermCalendarEventDto) {
@@ -326,7 +326,7 @@ export default function AcademicCalendarPage() {
   const visualizerEvents = useMemo(
     () => calendars.flatMap(calendar => {
       const publicEvents = calendar.events
-        .map(event => eventToVisualizerEvent(calendar.termId, event, canEditCalendar))
+        .map(event => eventToVisualizerEvent(calendar.termId, event, canEditCalendar && !calendar.isCancelled))
         .filter((event): event is VisualizerEvent => event !== null);
 
       return publicEvents.length > 0 ? publicEvents : fallbackPhaseEvents(calendar);
@@ -387,6 +387,11 @@ export default function AcademicCalendarPage() {
       return;
     }
 
+    if (calendar.isCancelled) {
+      showErrorNotice('İptal edilmiş dönemde etkinlik taşınamaz.');
+      return;
+    }
+
     const shiftDays = dayDifference(targetDate, dragAnchorDate);
     if (shiftDays === 0)
       return;
@@ -434,6 +439,9 @@ export default function AcademicCalendarPage() {
     const event = calendar?.events.find(item => item.id === parsed.eventId);
     if (!calendar || !event)
       return { allowed: false, reason: 'Etkinlik bulunamadı.' };
+
+    if (calendar.isCancelled)
+      return { allowed: false, reason: 'İptal edilmiş dönemde etkinlik taşınamaz.' };
 
     if (!canDragCalendarEvent(event))
       return { allowed: false, reason: 'Bu etkinlik sürükle-bırak ile değiştirilemez.' };

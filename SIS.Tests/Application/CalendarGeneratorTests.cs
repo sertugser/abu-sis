@@ -283,6 +283,48 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Generator_PlacesMidtermExcuseExam_OnNextMondayAfterMidterm_WithoutWeekend()
+    {
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var midterm = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_exam");
+        var excuseExam = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_excuse_exam");
+
+        var expectedStart = MondayOnOrAfter((midterm.EndDate ?? midterm.StartDate).AddDays(1));
+        excuseExam.StartDate.Should().Be(expectedStart);
+        EventContainsWeekend(excuseExam).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Generator_PlacesSummerExcuseExam_OnNextMondayAfterSummerExam_WithoutWeekend()
+    {
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: true,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var summerExam = result.Events.Single(e =>
+            e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_exam");
+        var excuseExam = result.Events.Single(e =>
+            e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_excuse_exam");
+
+        var expectedStart = MondayOnOrAfter((summerExam.EndDate ?? summerExam.StartDate).AddDays(1));
+        excuseExam.StartDate.Should().Be(expectedStart);
+        EventContainsWeekend(excuseExam).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Generator_ChoosesNextMidtermWeek_WhenPreviousWeekWouldSacrificePreMidtermWeeks()
     {
         await AddBlockingHolidayAsync("Ara Sınav Haftası Test Tatili", "Midterm Week Test Holiday", 11, 12);
@@ -824,6 +866,60 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Apply_SkipsCancelledTerms_AndAppliesRemainingTerms()
+    {
+        var fallTerm = new AcademicTerm
+        {
+            Name = "2025-2026 Güz",
+            ShortName = "25-26 Güz",
+            EnglishName = "Fall 2025-2026",
+            Year = 2025,
+            TermType = TermType.Fall,
+            TermStart = Utc(2025, 9, 22),
+            TermEnd = Utc(2026, 1, 2),
+            IsCancelled = true
+        };
+        var springTerm = new AcademicTerm
+        {
+            Name = "2025-2026 Bahar",
+            ShortName = "25-26 Bahar",
+            EnglishName = "Spring 2025-2026",
+            Year = 2025,
+            TermType = TermType.Spring,
+            TermStart = Utc(2026, 2, 23),
+            TermEnd = Utc(2026, 6, 5)
+        };
+        _context.AcademicTerms.AddRange(fallTerm, springTerm);
+        await _context.SaveChangesAsync();
+
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var applied = await _generatorService.ApplyAsync(result.DraftId, new ApplyCalendarDraftRequestDto(), userId: null);
+
+        applied.Success.Should().BeTrue();
+        applied.TermIds.Should().ContainSingle().Which.Should().Be(springTerm.Id);
+        applied.Message.Should().Contain("Güz");
+        applied.Message.Should().Contain("iptal");
+
+        var fallEvents = await _context.TermCalendarEvents
+            .Where(e => e.TermId == fallTerm.Id)
+            .ToListAsync();
+        fallEvents.Should().BeEmpty();
+
+        var springTitles = await _context.TermCalendarEvents
+            .Where(e => e.TermId == springTerm.Id)
+            .Select(e => e.Title)
+            .ToListAsync();
+        springTitles.Should().Contain("Derslerin Başlaması");
+    }
+
+    [Fact]
     public async Task WhatIf_ShiftsDependentMakeupEvents_WhenFinalExamMoves()
     {
         var generated = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
@@ -877,9 +973,10 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Spring && e.TemplateItemKey == "midterm_publication");
 
         excuseApplication.StartDate.Should().Be(Utc(2026, 4, 8));
-        excuseExam.StartDate.Should().Be(Utc(2026, 4, 10));
-        excuseExam.EndDate.Should().Be(Utc(2026, 4, 12));
-        publication.StartDate.Should().Be(Utc(2026, 4, 15));
+        excuseExam.StartDate.Should().Be(MondayOnOrAfter(Utc(2026, 4, 8)));
+        EventContainsWeekend(excuseExam).Should().BeFalse();
+        publication.StartDate.Should().BeAfter(excuseExam.EndDate ?? excuseExam.StartDate);
+        publication.StartDate.Should().BeOnOrBefore(Utc(2026, 4, 21));
         whatIf.Warnings.Should().NotContain(w => w.Code == "REG_GRADE_PUBLICATION");
     }
 
@@ -1072,6 +1169,18 @@ public class CalendarGeneratorTests : IDisposable
             current = current.AddDays(1);
 
         return Utc(current.Year, current.Month, current.Day);
+    }
+
+    private static bool EventContainsWeekend(GeneratedCalendarEventDto ev)
+    {
+        var end = ev.EndDate ?? ev.StartDate;
+        for (var day = ev.StartDate.Date; day <= end.Date; day = day.AddDays(1))
+        {
+            if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                return true;
+        }
+
+        return false;
     }
 
     public void Dispose()
