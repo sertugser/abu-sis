@@ -158,7 +158,8 @@ public sealed class CpSatSolverEngine : ISolverEngine
             CpSolverStatus.Infeasible => _mapper.MapInfeasible(
                 unsatCore: ExtractUnsatCore(solver, build.Assumptions, reducedRequest),
                 reducedRequest,
-                elapsedSeconds),
+                elapsedSeconds,
+                build.Variables),
             CpSolverStatus.Optimal or CpSolverStatus.Feasible => BuildSuccessResult(
                 solver, build, reducedRequest, elapsedSeconds, status),
             _ => BuildTimeoutResult(solver, build, reducedRequest, elapsedSeconds)

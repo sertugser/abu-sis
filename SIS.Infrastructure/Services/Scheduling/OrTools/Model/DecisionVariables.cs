@@ -315,6 +315,33 @@ public sealed class DecisionVariables
     public IReadOnlyDictionary<int, IReadOnlyList<IntervalVar>> AllLabIntervalsLists => _labIntervalsList;
     public IReadOnlyDictionary<int, IReadOnlyList<IntVar>> AllLabRooms => _labRooms;
 
+    // Plan 9 Issue 2 — Multi-interval × parallel-rooms graceful skip.
+    // Plan 7b Task 7/8 introduced two NotSupportedException sites for the
+    //   (LabHours > MaxLabBlockHours) × (LabGroupCount > 1)
+    // combination. A real-world Term 6 section (BM 102) hit them and aborted the
+    // entire solve with HTTP 500. Plan 9 records the unsupported section here and
+    // returns null!/continue from the affected encoder paths, so the solver still
+    // schedules the remaining sections. SolutionMapper folds these entries into
+    // SolverResult.Failures alongside the dropped/preflight failures.
+    private readonly Dictionary<int, string> _unsupportedSections = new();
+
+    /// <summary>
+    /// Plan 9 Issue 2 — Marks a section as unsupported by the current encoder pipeline.
+    /// Idempotent: if already marked, the latest reason wins (encoders may reach the
+    /// guard from multiple paths but the message is structurally identical).
+    /// </summary>
+    public void MarkUnsupported(int sectionId, string reason)
+    {
+        _unsupportedSections[sectionId] = reason;
+    }
+
+    /// <summary>
+    /// Plan 9 Issue 2 — Read-only view of unsupported sections. Consumed by
+    /// <see cref="Mapping.SolutionMapper"/> when folding results into
+    /// <c>SolverResult.Failures</c>.
+    /// </summary>
+    public IReadOnlyDictionary<int, string> GetUnsupportedSections() => _unsupportedSections;
+
     /// <summary>
     /// Section'ın "yerleşti mi?" boolean literal'ı. Plan 3 Task 3 partial scheduling için eklendi.
     /// CP-SAT objective'i Maximize(sum(present)) → solver olabildiği kadar çok section yerleştirir.
@@ -351,14 +378,20 @@ public sealed class DecisionVariables
             throw new InvalidOperationException(
                 $"Section {sectionId} has no presence literal. Call CreateIntervalsForSection first.");
 
-        // Plan 7b — guard the multi-interval × parallel-room combination (deferred to Plan 9).
+        // Plan 9 Issue 2 — guard the multi-interval × parallel-room combination.
         // Single-interval optional path covers only block 0; remaining blocks would have no
-        // room constraint, silently producing an under-constrained model.
+        // room constraint, silently producing an under-constrained model. Instead of throwing,
+        // mark the section as unsupported and return null! — the caller (encoder) MUST detect
+        // the prior MarkUnsupported call and skip the section. SolutionMapper surfaces the
+        // entry as a Failure so the rest of the schedule still solves.
         if (componentType == ComponentType.Lab && _labIntervalsList.TryGetValue(sectionId, out var blocks)
             && blocks.Count > 1)
-            throw new NotSupportedException(
-                $"Section {sectionId}: parallel-room optional intervals are not yet supported for " +
-                $"multi-interval lab splits ({blocks.Count} blocks). See Plan 9 polish.");
+        {
+            MarkUnsupported(sectionId,
+                $"multi-interval lab ({blocks.Count} blocks) × parallel rooms not supported. " +
+                "Mitigation: raise Schedule.MaxLabBlockHours, or set LabGroupCount=1.");
+            return null!;
+        }
 
         // Step 1: Reify room equality (roomEqLit ⇔ (roomVar == classroomId))
         var roomVar = componentType == ComponentType.Lecture
@@ -429,12 +462,18 @@ public sealed class DecisionVariables
             throw new InvalidOperationException(
                 $"Section {sectionId} has no presence literal. Call CreateIntervalsForSection first.");
 
-        // Plan 7b — same multi-interval × parallel-room guard as CreateOptionalRoomInterval.
+        // Plan 9 Issue 2 — same multi-interval × parallel-room guard as CreateOptionalRoomInterval.
+        // Mark unsupported and return null!; the caller must skip the section. See companion
+        // MarkUnsupported call in the encoder for the canonical mitigation message surfaced
+        // through SolverResult.Failures.
         if (componentType == ComponentType.Lab && _labIntervalsList.TryGetValue(sectionId, out var multiBlocks)
             && multiBlocks.Count > 1)
-            throw new NotSupportedException(
-                $"Section {sectionId}: per-group optional intervals are not yet supported for " +
-                $"multi-interval lab splits ({multiBlocks.Count} blocks). See Plan 9 polish.");
+        {
+            MarkUnsupported(sectionId,
+                $"multi-interval lab ({multiBlocks.Count} blocks) × parallel rooms not supported. " +
+                "Mitigation: raise Schedule.MaxLabBlockHours, or set LabGroupCount=1.");
+            return null!;
+        }
 
         IntVar roomVar;
         if (componentType == ComponentType.Lecture)

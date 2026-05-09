@@ -20,9 +20,18 @@ public sealed class SolutionMapper
     public SolverResult MapInfeasible(
         IReadOnlyList<UnsatCoreEntry> unsatCore,
         SolverRequest request,
-        double elapsedSeconds)
+        double elapsedSeconds,
+        DecisionVariables? variables = null)
     {
+        // Plan 9 Issue 2 — When the model build flagged unsupported sections (e.g. multi-interval
+        // lab × parallel rooms), surface them with the encoder-supplied mitigation message and
+        // exclude them from the generic "Çözüm bulunamadı" fallback so admins see the actionable
+        // reason instead of a UNSAT-core-derived placeholder.
+        var unsupported = variables?.GetUnsupportedSections()
+            ?? (IReadOnlyDictionary<int, string>)new Dictionary<int, string>();
+
         var failures = request.Sections
+            .Where(s => !unsupported.ContainsKey(s.Id))
             .Select(s => new Failure
             {
                 SectionId = s.Id,
@@ -32,6 +41,8 @@ public sealed class SolutionMapper
                 RelatedConstraints = unsatCore
             })
             .ToList();
+
+        AppendUnsupportedFailures(failures, unsupported);
 
         return new SolverResult
         {
@@ -51,6 +62,25 @@ public sealed class SolutionMapper
     }
 
     /// <summary>
+    /// Plan 9 Issue 2 — Adds <c>DecisionVariables.GetUnsupportedSections</c> entries to the
+    /// failure list, skipping any section that already has a Failure entry from another path
+    /// (preflight, partial scheduling drop, infeasibility) to avoid double-reporting.
+    /// </summary>
+    private static void AppendUnsupportedFailures(
+        List<Failure> failures,
+        IReadOnlyDictionary<int, string> unsupported)
+    {
+        if (unsupported.Count == 0) return;
+
+        var existing = new HashSet<int>(failures.Select(f => f.SectionId));
+        foreach (var (sectionId, reason) in unsupported)
+        {
+            if (existing.Contains(sectionId)) continue;
+            failures.Add(new Failure { SectionId = sectionId, Reason = reason });
+        }
+    }
+
+    /// <summary>
     /// CP-SAT Optimal/Feasible çözümü Assignment record listesine dönüştürür.
     /// Solver'dan interval start/end ve room IntVar değerlerini okur, slot index → TimeSlot.Id mapping yapar.
     /// Plan 3 Task 4: presence == 0 olan section'ları Failures listesine ekler (partial scheduling).
@@ -65,8 +95,17 @@ public sealed class SolutionMapper
         var assignments = new List<Assignment>();
         var failures = new List<Failure>();
 
+        // Plan 9 Issue 2 — Snapshot unsupported map up front so we can skip the per-section
+        // assignment loop for them (their lab rooms / intervals exist in the model but no
+        // per-classroom interval was created, so reading solver values would emit a half-baked
+        // assignment). They surface only through AppendUnsupportedFailures below.
+        var unsupported = build.Variables.GetUnsupportedSections();
+
         foreach (var section in request.Sections)
         {
+            if (unsupported.ContainsKey(section.Id))
+                continue;
+
             // Plan 3 Task 4: Solver bu section'ı drop ettiyse (present == 0) failures'a ekle
             bool isPresent = ReadPresenceValue(solver, build, section.Id);
             if (!isPresent)
@@ -181,6 +220,11 @@ public sealed class SolutionMapper
             }
         }
 
+        // Plan 9 Issue 2 — Fold encoder-flagged unsupported sections (e.g. multi-interval lab
+        // × parallel rooms) into the failure list. They never had per-classroom intervals so
+        // the solver never tried to place them; without this fold they would silently disappear.
+        AppendUnsupportedFailures(failures, unsupported);
+
         return new SolverResult
         {
             Status = status == CpSolverStatus.Optimal ? SolverStatus.Optimal : SolverStatus.Feasible,
@@ -229,11 +273,18 @@ public sealed class SolutionMapper
         SolverRequest request,
         double elapsedSeconds)
     {
-        var failures = request.Sections.Select(s => new Failure
-        {
-            SectionId = s.Id,
-            Reason = $"Çözücü {elapsedSeconds:F1} saniyede çözüm bulamadı (timeout). Daha uzun süre veya farklı seed ile tekrar deneyin."
-        }).ToList();
+        // Plan 9 Issue 2 — Skip already-flagged unsupported sections from the generic timeout
+        // failure so they keep their actionable mitigation message.
+        var unsupported = build.Variables.GetUnsupportedSections();
+        var failures = request.Sections
+            .Where(s => !unsupported.ContainsKey(s.Id))
+            .Select(s => new Failure
+            {
+                SectionId = s.Id,
+                Reason = $"Çözücü {elapsedSeconds:F1} saniyede çözüm bulamadı (timeout). Daha uzun süre veya farklı seed ile tekrar deneyin."
+            }).ToList();
+
+        AppendUnsupportedFailures(failures, unsupported);
 
         return new SolverResult
         {
