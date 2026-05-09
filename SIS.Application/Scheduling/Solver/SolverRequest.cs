@@ -51,6 +51,15 @@ public sealed record SolverRequest
     public int AmphiThreshold { get; init; } = 100;
 
     /// <summary>
+    /// Plan 9 Issue 1 — SystemConfig "Schedule.AmphiThresholdEnabled" (default false).
+    /// Production'da DB'de 0 Amphitheater varken AmphiThreshold kuralı UNSAT üretiyordu (Term 5 blocker).
+    /// Default false: Capacity ≥ AmphiThreshold kuralı kapalı; admin Amphitheater classroom ekledikten
+    /// sonra true yaparak kuralı aktive eder. <see cref="SectionInput.RequiredTheoryClassroomType"/>
+    /// (course-spesifik tip zorunluluğu) bu flag'tan bağımsız çalışır.
+    /// </summary>
+    public bool AmphiThresholdEnabled { get; init; } = false;
+
+    /// <summary>
     /// Plan 7b — SystemConfig "Schedule.MaxLabBlockHours" (default 2). LabHours > value
     /// olan section'lar N intervala bölünür ve farklı günlere yerleştirilir (v1 paritesi).
     /// CpSatSolverEngine yükler.

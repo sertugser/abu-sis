@@ -90,7 +90,18 @@ public sealed class CpSatSolverEngine : ISolverEngine
         // forces theory component into Amphitheater rooms.
         var amphiThreshold = await _config.GetIntAsync(
             "Classroom.AmphiThreshold", 100, cancellationToken);
-        reducedRequest = reducedRequest with { AmphiThreshold = amphiThreshold };
+
+        // Plan 9 Issue 1 — Schedule.AmphiThresholdEnabled (default false) gates the rule.
+        // Production has 0 Amphitheater rooms today → flag false avoids UNSAT (Term 5 blocker).
+        // Admin sets to true after seeding amphi inventory.
+        var amphiThresholdEnabled = await _config.GetBoolAsync(
+            "Schedule.AmphiThresholdEnabled", false, cancellationToken);
+
+        reducedRequest = reducedRequest with
+        {
+            AmphiThreshold = amphiThreshold,
+            AmphiThresholdEnabled = amphiThresholdEnabled
+        };
 
         // Read solver parameters from SystemConfig (5-min cached). Fallbacks only fire on missing keys.
         var timeLimit = await _config.GetIntAsync(

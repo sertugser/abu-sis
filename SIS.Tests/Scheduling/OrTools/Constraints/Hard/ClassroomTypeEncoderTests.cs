@@ -418,7 +418,9 @@ public class ClassroomTypeEncoderTests
             },
             ConstraintFlags = flags ?? new Dictionary<string, bool>(),
             Penalties = new List<LinearExpr>(),
-            AmphiThreshold = amphiThreshold
+            AmphiThreshold = amphiThreshold,
+            // Plan 9 Issue 1 — these tests assert AmphiThreshold rule fires; opt in.
+            AmphiThresholdEnabled = true
         };
     }
 }

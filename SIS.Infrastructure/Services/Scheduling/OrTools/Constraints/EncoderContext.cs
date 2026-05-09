@@ -19,4 +19,10 @@ public sealed class EncoderContext
     /// olan section'lar yalnızca Amphitheater tipinde lecture room kullanabilir.
     /// </summary>
     public int AmphiThreshold { get; init; } = 100;
+
+    /// <summary>
+    /// Plan 9 Issue 1 — SystemConfig "Schedule.AmphiThresholdEnabled" (default false).
+    /// False iken AmphiThreshold kuralı tamamen kapalı (Term 5 UNSAT fix). True iken normal Plan 7b davranışı.
+    /// </summary>
+    public bool AmphiThresholdEnabled { get; init; } = false;
 }

@@ -69,7 +69,8 @@ public sealed class ScheduleModelBuilder
             Request = request,
             ConstraintFlags = request.ConstraintFlags,
             Penalties = penalties,
-            AmphiThreshold = request.AmphiThreshold  // Plan 7b — read from SolverRequest
+            AmphiThreshold = request.AmphiThreshold,             // Plan 7b — read from SolverRequest
+            AmphiThresholdEnabled = request.AmphiThresholdEnabled // Plan 9 Issue 1 — flag-gated rule
         };
 
         // 2-3) Encoder'lar — hard önce, soft sonra; her grupta Code'a göre alfabetik

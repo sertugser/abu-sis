@@ -77,7 +77,10 @@ public sealed class ClassroomTypeEncoder : IConstraintEncoder
 
         var lectureRoom = ctx.Variables.GetLectureRoom(section.Id);
 
-        var amphiRequired = section.Capacity >= ctx.AmphiThreshold;
+        // Plan 9 Issue 1 — Schedule.AmphiThresholdEnabled flag-gated. False (default) suppresses
+        // the capacity-based amphi rule entirely so Term 5 (0 Amphitheater inventory) does not UNSAT.
+        // RequiredTheoryClassroomType remains independent of this toggle.
+        var amphiRequired = ctx.AmphiThresholdEnabled && section.Capacity >= ctx.AmphiThreshold;
         var typeRequired = section.RequiredTheoryClassroomType.HasValue;
 
         if (!amphiRequired && !typeRequired) return;

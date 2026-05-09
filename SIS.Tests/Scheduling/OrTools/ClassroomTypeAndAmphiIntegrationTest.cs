@@ -148,8 +148,10 @@ public class ClassroomTypeAndAmphiIntegrationTest
         configMock.Setup(x => x.GetIntAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string k, int f, CancellationToken _) =>
                 k == "Classroom.AmphiThreshold" ? amphiThreshold : f);
+        // Plan 9 Issue 1 — opt in to AmphiThreshold rule so these tests preserve original intent.
         configMock.Setup(x => x.GetBoolAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string k, bool f, CancellationToken _) => f);
+            .ReturnsAsync((string k, bool f, CancellationToken _) =>
+                k == "Schedule.AmphiThresholdEnabled" ? true : f);
 
         return new CpSatSolverEngine(modelBuilder, mapper, configMock.Object, unsatInterpreter, preflightChecker);
     }

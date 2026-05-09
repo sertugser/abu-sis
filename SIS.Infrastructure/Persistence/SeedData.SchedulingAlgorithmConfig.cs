@@ -19,6 +19,11 @@ public static partial class SeedData
             // JSON'una taşındı — admin ilgili kısıt kartından düzenliyor (tek otorite).
             new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: öğle arasına ders koyulamaz (zorunlu). KAPALI: koyulabilir ama ceza alır (tercihli)." },
 
+            // Plan 9 Issue 1 — Capacity ≥ AmphiThreshold kuralının açık/kapalı flag'i. False (default):
+            // Term 5 UNSAT regression için kural kapalı (production'da 0 amfi var). Admin amfi
+            // dersliği eklendikten sonra true yaparak kuralı aktive eder.
+            new() { Key = "Schedule.AmphiThresholdEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: kontenjan ≥ amfi eşiği olan derslere amfi zorunlu (H4). KAPALI: kural devre dışı (varsayılan — amfi envanteri olmayan ortamda UNSAT'i önler)." },
+
             // ── Simulated Annealing Parametreleri ────────────────
             new() { Key = "Schedule.SA.MaxIterations", Value = "10000", Category = "SA", DataType = "int", Description = "Motor en fazla kaç iyileştirme denemesi yapsın. Artırırsan daha iyi program, ama daha yavaş çalışır. Öneri: 10000." },
             new() { Key = "Schedule.SA.InitialTemperature", Value = "100", Category = "SA", DataType = "int", Description = "Motorun başlangıçta ne kadar cesur olacağı (geniş arama). Zamanla soğur ve daha titiz olur. Öneri: 100." },
