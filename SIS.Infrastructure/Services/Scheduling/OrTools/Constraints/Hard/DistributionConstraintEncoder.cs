@@ -113,7 +113,33 @@ public sealed class DistributionConstraintEncoder : IConstraintEncoder
             ctx.Penalties.Add(LinearExpr.Term(diffLit, (long)softWeight.Value));
         }
     }
-    private static void EncodeDifferentDayPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
+    /// <summary>
+    /// DifferentDay: lecture component'leri farklı günlere düşmeli.
+    /// Hard (softWeight==null): <c>dayA != dayB</c>.
+    /// Soft: reified <c>sameLit ⇔ (dayA == dayB)</c>; penalty = <c>sameLit × softWeight</c>.
+    /// TheoryHours==0 olan section (lab-only) lecture day var alamaz → guard ile skip.
+    /// </summary>
+    private static void EncodeDifferentDayPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight)
+    {
+        if (a.TheoryHours == 0 || b.TheoryHours == 0) return;
+
+        var dayA = ctx.Variables.GetOrCreateComponentDayVar(a.Id, ComponentType.Lecture, ctx.Request.TimeSlots);
+        var dayB = ctx.Variables.GetOrCreateComponentDayVar(b.Id, ComponentType.Lecture, ctx.Request.TimeSlots);
+
+        if (softWeight == null)
+        {
+            // Hard: different day enforced.
+            ctx.Model.Add(dayA != dayB);
+        }
+        else
+        {
+            // Soft: penalty when same.
+            var sameLit = ctx.Model.NewBoolVar($"dist{distId}_dd_same_{a.Id}_{b.Id}");
+            ctx.Model.Add(dayA == dayB).OnlyEnforceIf(sameLit);
+            ctx.Model.Add(dayA != dayB).OnlyEnforceIf(sameLit.Not());
+            ctx.Penalties.Add(LinearExpr.Term(sameLit, (long)softWeight.Value));
+        }
+    }
     private static void EncodeSameRoomPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
     private static void EncodeBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
     private static void EncodeNotBackToBackPair(EncoderContext ctx, int distId, SectionInput a, SectionInput b, int? softWeight) { }
