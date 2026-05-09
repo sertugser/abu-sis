@@ -46,7 +46,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'time',
     label: 'Zaman & Dağılım Kısıtlamaları',
     icon: 'Clock',
-    codes: ['H13', 'H17', 'S3', 'S5', 'S7', 'S9', 'S12', 'DIST'],
+    codes: ['H13', 'H17', 'S3', 'S5', 'S7', 'S12', 'DIST'],
   },
 ];
 
@@ -128,7 +128,6 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
     { key: 'S7MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 },
   ],
   'S8': [],
-  'S9': [],
   'S12': [
     { key: 'S12MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
   ],

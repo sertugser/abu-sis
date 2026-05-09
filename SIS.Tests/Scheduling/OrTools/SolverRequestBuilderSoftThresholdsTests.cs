@@ -141,9 +141,6 @@ public class SolverRequestBuilderSoftThresholdsTests
         t.S7MaxGapSlots.Should().Be(3);
         t.S7Weight.Should().Be(3);
         t.S8Weight.Should().Be(4);
-        t.S9MorningStart.Should().Be(new TimeOnly(8, 0));
-        t.S9EveningStart.Should().Be(new TimeOnly(17, 0));
-        t.S9Weight.Should().Be(6);
         t.S12MaxImbalancePercent.Should().Be(20);
         t.S12Weight.Should().Be(2);
         t.S20PenaltyPerPair.Should().Be(5);
@@ -166,8 +163,6 @@ public class SolverRequestBuilderSoftThresholdsTests
         provider.Ints["SoftConstraint.S4.MinCoPairThreshold"] = 25;
         provider.Strings["Schedule.LunchBreak.Start"] = "12:00";
         provider.Strings["Schedule.LunchBreak.End"] = "13:00";
-        provider.Strings["SoftConstraint.S9.MorningStart"] = "07:30";
-        provider.Strings["SoftConstraint.S9.EveningStart"] = "18:00";
         provider.Ints["Schedule.DistDiscouragedWeight"] = 100;
         provider.Ints["Schedule.DistStronglyDiscouragedWeight"] = 500;
         var builder = new SolverRequestBuilder(ctx, provider);
@@ -185,8 +180,6 @@ public class SolverRequestBuilderSoftThresholdsTests
         t.S4MinCoPairThreshold.Should().Be(25);
         t.S5LunchBreakStart.Should().Be(new TimeOnly(12, 0));
         t.S5LunchBreakEnd.Should().Be(new TimeOnly(13, 0));
-        t.S9MorningStart.Should().Be(new TimeOnly(7, 30));
-        t.S9EveningStart.Should().Be(new TimeOnly(18, 0));
         t.DistDiscouragedWeight.Should().Be(100);
         t.DistStronglyDiscouragedWeight.Should().Be(500);
     }

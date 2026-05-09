@@ -269,11 +269,6 @@ public sealed class SolverRequestBuilder
         // S8 InstructorDaySpread
         var s8Weight = await _systemConfigProvider.GetIntAsync("Schedule.S8Weight", 4, ct);
 
-        // S9 EarlyLate
-        var s9Morning = await ReadTimeAsync("SoftConstraint.S9.MorningStart", new TimeOnly(8, 0), ct);
-        var s9Evening = await ReadTimeAsync("SoftConstraint.S9.EveningStart", new TimeOnly(17, 0), ct);
-        var s9Weight = await _systemConfigProvider.GetIntAsync("Schedule.S9Weight", 6, ct);
-
         // S12 WeekdayBalance
         var s12MaxImb = await _systemConfigProvider.GetIntAsync("SoftConstraint.S12.MaxImbalancePercent", 20, ct);
         var s12Weight = await _systemConfigProvider.GetIntAsync("Schedule.S12Weight", 2, ct);
@@ -303,9 +298,6 @@ public sealed class SolverRequestBuilder
             S7MaxGapSlots = s7MaxGap,
             S7Weight = s7Weight,
             S8Weight = s8Weight,
-            S9MorningStart = s9Morning,
-            S9EveningStart = s9Evening,
-            S9Weight = s9Weight,
             S12MaxImbalancePercent = s12MaxImb,
             S12Weight = s12Weight,
             S20PenaltyPerPair = s20Penalty,

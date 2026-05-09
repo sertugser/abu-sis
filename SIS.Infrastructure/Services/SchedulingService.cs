@@ -145,9 +145,6 @@ public partial class SchedulingService : ISchedulingService
             S7Enabled = soft.S7Enabled,
             S7MaxGapSlots = soft.S7MaxGapSlots,
             S8Enabled = soft.S8Enabled,
-            S9Enabled = soft.S9Enabled,
-            S9MorningStart = soft.S9MorningStart,
-            S9EveningStart = soft.S9EveningStart,
             S12Enabled = soft.S12Enabled,
             S12MaxImbalancePercent = soft.S12MaxImbalancePercent,
         };

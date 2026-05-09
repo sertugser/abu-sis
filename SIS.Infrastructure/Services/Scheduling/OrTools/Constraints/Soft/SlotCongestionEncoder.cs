@@ -59,7 +59,7 @@ public sealed class SlotCongestionEncoder : IConstraintEncoder
                 // (TheoryHours=0) ve multi-block lab section'lar v1 paritesi için
                 // her block bağımsız reified literal olarak count'a girer.
                 // Pattern: ctx.Variables.GetLabIntervals throws when section has no lab
-                // component → catch + skip (matches LunchBreakSoftEncoder + EarlyLateEncoder).
+                // component → catch + skip (matches LunchBreakSoftEncoder).
                 try
                 {
                     var labIvs = ctx.Variables.GetLabIntervals(sectionId);

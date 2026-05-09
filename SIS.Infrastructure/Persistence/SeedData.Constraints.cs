@@ -266,17 +266,6 @@ public static partial class SeedData
             },
             new()
             {
-                Code = "S9",
-                Name = "Erken/Geç Saat Kontrolü",
-                Description = "Erken sabah ve geç akşam saatlerine ders atanmasına ceza uygular.",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"Weight": 1}""",
-                SortOrder = 108
-            },
-            new()
-            {
                 Code = "S12",
                 Name = "Hafta İçi Denge",
                 Description = "Derslerin hafta içi günlere dengeli dağılmasını teşvik eder.",
@@ -361,7 +350,6 @@ public static partial class SeedData
                     {
                         "S1" => """{"MinOccupancy": 40, "MaxOccupancy": 95, "Weight": 2}""",
                         "H-DL" => """{"MaxDailyHours": 10}""",
-                        "S9" => null,
                         _ => d.Parameters,
                     },
                 }).ToList(),

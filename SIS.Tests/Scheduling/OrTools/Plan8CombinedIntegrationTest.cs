@@ -15,7 +15,7 @@ namespace SIS.Tests.Scheduling.OrTools;
 
 /// <summary>
 /// Plan 8 Task 21 — Combined integration test exercising multiple Plan 8 soft encoders
-/// together (S2 DailyLoadSoft + S5 LunchBreakSoft + S8 InstructorDaySpread + S9 EarlyLate)
+/// together (S2 DailyLoadSoft + S5 LunchBreakSoft + S8 InstructorDaySpread)
 /// alongside Plan 7b hard encoders. Senaryo: 4 section, 2 hoca (X=1 + Y=2, herbirine 2 section),
 /// no co-enrollment, no DIST, no AdjacentYear; 2-day grid (Mon+Tue) lunch slot dahil.
 /// Solver tüm 4 section'ı yerleştirmeli ve ObjectiveValue presence reward
@@ -60,7 +60,6 @@ public class Plan8CombinedIntegrationTest
                 ["S2"] = true,
                 ["S5"] = true,
                 ["S8"] = true,
-                ["S9"] = true,
             },
             SoftThresholds = new SoftThresholds(),  // defaults
         };
@@ -134,7 +133,7 @@ public class Plan8CombinedIntegrationTest
     {
         // H1 (ClassroomConflict) for room non-overlap.
         // Plan 8 soft encoders: S1 (Occupancy), S3 (SlotCongestion), S5 (LunchBreakSoft),
-        // S9 (EarlyLate), S2 (DailyLoadSoft), S8 (InstructorDaySpread).
+        // S2 (DailyLoadSoft), S8 (InstructorDaySpread).
         // S1 + S3 registered for completeness; activated only if flag set (here: not set → no-op).
         var encoders = new IConstraintEncoder[]
         {
@@ -142,7 +141,6 @@ public class Plan8CombinedIntegrationTest
             new OccupancyEncoder(),
             new SlotCongestionEncoder(),
             new LunchBreakSoftEncoder(),
-            new EarlyLateEncoder(),
             new DailyLoadSoftEncoder(),
             new InstructorDaySpreadEncoder(),
         };

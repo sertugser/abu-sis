@@ -35,7 +35,6 @@ public partial class SchedulingService
             c.S5Enabled,
             c.S7Enabled, c.S7MaxGapSlots,
             c.S8Enabled,
-            c.S9Enabled, c.S9MorningStart, c.S9EveningStart,
             c.S12Enabled, c.S12MaxImbalancePercent);
     }
 
@@ -133,7 +132,6 @@ public partial class SchedulingService
         bool S5Enabled,
         bool S7Enabled, int S7MaxGapSlots,
         bool S8Enabled,
-        bool S9Enabled, TimeOnly S9MorningStart, TimeOnly S9EveningStart,
         bool S12Enabled, int S12MaxImbalancePercent);
 
     internal record HardConstraintConfig(

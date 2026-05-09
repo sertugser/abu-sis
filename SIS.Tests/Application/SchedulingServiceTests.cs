@@ -791,7 +791,6 @@ public class SchedulingServiceTests : IDisposable
             new LunchBreakSoftEvaluator(),
             new StudentGapEvaluator(),
             new InstructorDaySpreadEvaluator(),
-            new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
         };
         return new ConstraintEvaluationService(evaluators, _context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);

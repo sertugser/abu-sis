@@ -479,7 +479,6 @@ public abstract class SchedulingTestBase : IDisposable
         AddConfig("SoftConstraint.S5.Enabled", "false");
         AddConfig("SoftConstraint.S7.Enabled", "false");
         AddConfig("SoftConstraint.S8.Enabled", "false");
-        AddConfig("SoftConstraint.S9.Enabled", "false");
         AddConfig("SoftConstraint.S12.Enabled", "false");
         AddConfig("Classroom.OccupancyTarget.Min", "60");
         AddConfig("Classroom.OccupancyTarget.Max", "85");
@@ -617,7 +616,6 @@ public abstract class SchedulingTestBase : IDisposable
             new LunchBreakSoftEvaluator(),
             new StudentGapEvaluator(),
             new InstructorDaySpreadEvaluator(),
-            new EarlyLateEvaluator(),
             new WeekdayBalanceEvaluator(),
             new DistributionConstraintEvaluator(),
         };

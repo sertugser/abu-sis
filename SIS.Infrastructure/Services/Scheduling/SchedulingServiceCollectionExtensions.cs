@@ -49,7 +49,6 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEvaluator, LunchBreakSoftEvaluator>();
         services.AddScoped<IConstraintEvaluator, StudentGapEvaluator>();
         services.AddScoped<IConstraintEvaluator, InstructorDaySpreadEvaluator>();
-        services.AddScoped<IConstraintEvaluator, EarlyLateEvaluator>();
         services.AddScoped<IConstraintEvaluator, WeekdayBalanceEvaluator>();
         services.AddScoped<IConstraintEvaluator, AdjacentYearConflictEvaluator>();
         // Distribution constraint evaluator (hard/soft depending on preference level)
@@ -129,7 +128,6 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, InstructorDaySpreadEncoder>();
         services.AddScoped<IConstraintEncoder, CoEnrollmentEncoder>();
         services.AddScoped<IConstraintEncoder, StudentGapEncoder>();
-        services.AddScoped<IConstraintEncoder, EarlyLateEncoder>();
         services.AddScoped<IConstraintEncoder, WeekdayBalanceEncoder>();
         services.AddScoped<IConstraintEncoder, AdjacentYearEncoder>();
 

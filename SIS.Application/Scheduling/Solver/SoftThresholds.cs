@@ -52,11 +52,6 @@ public sealed record SoftThresholds
     // S8 InstructorDaySpread
     public int S8Weight { get; init; } = 4;
 
-    // S9 EarlyLate
-    public TimeOnly S9MorningStart { get; init; } = new(8, 0);
-    public TimeOnly S9EveningStart { get; init; } = new(17, 0);
-    public int S9Weight { get; init; } = 6;
-
     // S12 WeekdayBalance
     public int S12MaxImbalancePercent { get; init; } = 20;
     public int S12Weight { get; init; } = 2;

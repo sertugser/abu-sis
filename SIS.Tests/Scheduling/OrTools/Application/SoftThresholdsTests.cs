@@ -36,10 +36,6 @@ public class SoftThresholdsTests
 
         s.S8Weight.Should().Be(4);
 
-        s.S9MorningStart.Should().Be(new TimeOnly(8, 0));
-        s.S9EveningStart.Should().Be(new TimeOnly(17, 0));
-        s.S9Weight.Should().Be(6);
-
         s.S12MaxImbalancePercent.Should().Be(20);
         s.S12Weight.Should().Be(2);
 

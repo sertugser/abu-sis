@@ -42,9 +42,6 @@ public sealed class SchedulingConstraintConfig
     public bool S7Enabled { get; set; }
     public int S7MaxGapSlots { get; set; }
     public bool S8Enabled { get; set; }
-    public bool S9Enabled { get; set; }
-    public TimeOnly S9MorningStart { get; set; }
-    public TimeOnly S9EveningStart { get; set; }
     public bool S12Enabled { get; set; }
     public int S12MaxImbalancePercent { get; set; }
 
@@ -102,9 +99,6 @@ public sealed class SchedulingConstraintConfig
             S7Enabled = true,
             S7MaxGapSlots = GetInt(config, "SoftConstraint.S7.MaxGapSlots", 3),
             S8Enabled = true,
-            S9Enabled = true,
-            S9MorningStart = GetTime(config, "SoftConstraint.S9.MorningStart", new TimeOnly(8, 0)),
-            S9EveningStart = GetTime(config, "SoftConstraint.S9.EveningStart", new TimeOnly(17, 0)),
             S12Enabled = true,
             S12MaxImbalancePercent = GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20),
             S20Enabled = true,
@@ -122,9 +116,6 @@ public sealed class SchedulingConstraintConfig
 
     private static double GetDouble(IReadOnlyDictionary<string, string> config, string key, double defaultValue) =>
         config.TryGetValue(key, out var v) && double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var r) ? r : defaultValue;
-
-    private static TimeOnly GetTime(IReadOnlyDictionary<string, string> config, string key, TimeOnly defaultValue) =>
-        config.TryGetValue(key, out var v) && TimeOnly.TryParse(v, out var r) ? r : defaultValue;
 
     private static HashSet<BlockType> ParseSplittableBlockTypes(string value)
     {

@@ -60,7 +60,7 @@ public class Plan9CombinedIntegrationTest
             ConstraintFlags = new Dictionary<string, bool>
             {
                 ["H1"] = true, ["H6"] = true, ["H13"] = true, ["H17"] = true,
-                ["S1"] = true, ["S3"] = true, ["S5"] = true, ["S9"] = true,
+                ["S1"] = true, ["S3"] = true, ["S5"] = true,
             },
             SoftThresholds = new SoftThresholds(),
         };
@@ -202,7 +202,6 @@ public class Plan9CombinedIntegrationTest
             new OccupancyEncoder(),                          // S1 (multi-block presence Plan 9 Task 5)
             new SlotCongestionEncoder(),                     // S3 (lab interval iter Plan 9 Task 6)
             new LunchBreakSoftEncoder(),                     // S5
-            new EarlyLateEncoder(),                          // S9
         };
         var modelBuilder = new ScheduleModelBuilder(encoders);
         var mapper = new SolutionMapper();

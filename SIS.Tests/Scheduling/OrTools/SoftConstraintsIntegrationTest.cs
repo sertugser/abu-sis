@@ -58,7 +58,7 @@ public class SoftConstraintsIntegrationTest
             {
                 ["H1"] = true, ["H8"] = true,
                 ["S1"] = true, ["S3"] = true, ["S4"] = true,
-                ["S7"] = true, ["S9"] = true, ["S12"] = true, ["S20"] = true
+                ["S7"] = true, ["S12"] = true, ["S20"] = true
             }
         };
 
@@ -70,7 +70,6 @@ public class SoftConstraintsIntegrationTest
             new SlotCongestionEncoder(),
             new CoEnrollmentEncoder(),
             new StudentGapEncoder(),
-            new EarlyLateEncoder(),
             new WeekdayBalanceEncoder(),
             new AdjacentYearEncoder()
         };
