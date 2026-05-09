@@ -88,8 +88,18 @@ public sealed class CpSatSolverEngine : ISolverEngine
 
         // Plan 7b — Read AmphiThreshold from SystemConfig (default 100). Capacity ≥ threshold
         // forces theory component into Amphitheater rooms.
+        // Defensive clamp (Plan 9 review polish, MaxLabBlockHours parity): a misconfigured
+        // value of 0 or negative would mean every section forces Amphitheater when the flag
+        // is later enabled — silent UNSAT. Treat non-positive as "use default 100".
         var amphiThreshold = await _config.GetIntAsync(
             "Classroom.AmphiThreshold", 100, cancellationToken);
+        if (amphiThreshold <= 0)
+        {
+            _logger?.LogWarning(
+                "Classroom.AmphiThreshold resolved to {Value} (non-positive); using default 100.",
+                amphiThreshold);
+            amphiThreshold = 100;
+        }
 
         // Plan 9 Issue 1 — Schedule.AmphiThresholdEnabled (default false) gates the rule.
         // Production has 0 Amphitheater rooms today → flag false avoids UNSAT (Term 5 blocker).
