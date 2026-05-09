@@ -244,7 +244,9 @@ public sealed class SolverRequestBuilder
         var s1Weight = await _systemConfigProvider.GetIntAsync("Schedule.S1Weight", 1, ct);
 
         // S2 DailyLoadSoft
-        var s2MaxDaily = await _systemConfigProvider.GetIntAsync("SoftConstraint.S2.MaxDailyHours", 6, ct);
+        // Plan 9 Issue 5 — credit-hour cap (was 6). DB seed'i 6 olarak migration üzerinden
+        // kalıyor; admin DB değiştirmemişse fallback default 7 = SoftThresholds default ile parite.
+        var s2MaxDaily = await _systemConfigProvider.GetIntAsync("SoftConstraint.S2.MaxDailyHours", 7, ct);
         var s2Weight = await _systemConfigProvider.GetIntAsync("Schedule.S2Weight", 10, ct);
 
         // S3 SlotCongestion

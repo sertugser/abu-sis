@@ -15,7 +15,10 @@ public class SoftThresholdsTests
         s.S1MaxOccupancyPercent.Should().Be(85);
         s.S1Weight.Should().Be(1);
 
-        s.S2MaxDailyHours.Should().Be(6);
+        // Plan 9 Issue 5 — credit-hour cap (was 6). v1 evaluator clock-hour topluyor;
+        // v2 encoder credit-hour kullanıyor. 50dk slot grid'inde 7 credit ≈ 5.8 clock ≈
+        // v1 default 6 clock. Default-parity tune, admin DB'den override edebilir.
+        s.S2MaxDailyHours.Should().Be(7);
         s.S2Weight.Should().Be(10);
 
         s.S3MaxSectionsPerSlot.Should().Be(5);

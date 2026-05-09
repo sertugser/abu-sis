@@ -26,7 +26,10 @@ public sealed record SoftThresholds
     public int S1Weight { get; init; } = 1;
 
     // S2 DailyLoadSoft
-    public int S2MaxDailyHours { get; init; } = 6;
+    // Plan 9 Issue 5 — credit-hour cap. v1 evaluator clock-hour topluyor; v2 encoder
+    // credit-hour kullanıyor. 50dk slot grid'inde 7 credit ≈ 5.8 clock ≈ v1 default 6 clock.
+    // Admin gerektiğinde Schedule.S2.MaxDailyHours'u real DB tune sonrası override eder.
+    public int S2MaxDailyHours { get; init; } = 7;
     public int S2Weight { get; init; } = 10;
 
     // S3 SlotCongestion
