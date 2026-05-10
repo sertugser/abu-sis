@@ -13,7 +13,7 @@ export default function FeaturePlaceholderPage({
   title,
   description,
   message,
-  statusLabel = 'Yakında',
+  statusLabel = 'YakÄ±nda',
 }: FeaturePlaceholderPageProps) {
   return (
     <div className="container mx-auto p-6">
@@ -30,3 +30,4 @@ export default function FeaturePlaceholderPage({
     </div>
   );
 }
+

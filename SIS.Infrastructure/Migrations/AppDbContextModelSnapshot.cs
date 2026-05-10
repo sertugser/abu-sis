@@ -2325,12 +2325,37 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("CourseId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ExamType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("Other");
+
+                    b.Property<bool>("IsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<decimal?>("MinimumScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("Order")
                         .HasColumnType("integer");
+
+                    b.Property<int?>("PrerequisiteGradeComponentId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RequiresAttendanceEligibility")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<decimal>("Weight")
                         .HasPrecision(5, 2)
@@ -2339,6 +2364,8 @@ namespace SIS.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AcademicTermId");
+
+                    b.HasIndex("PrerequisiteGradeComponentId");
 
                     b.HasIndex("CourseId", "AcademicTermId", "Name")
                         .IsUnique();
@@ -2371,6 +2398,13 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int>("CCMin")
                         .HasColumnType("integer");
+
+                    b.Property<string>("CalculationMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Absolute");
 
                     b.Property<int>("CourseId")
                         .HasColumnType("integer");
@@ -4309,9 +4343,16 @@ namespace SIS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SIS.Domain.Entities.GradeComponent", "PrerequisiteGradeComponent")
+                        .WithMany("DependentComponents")
+                        .HasForeignKey("PrerequisiteGradeComponentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AcademicTerm");
 
                     b.Navigation("Course");
+
+                    b.Navigation("PrerequisiteGradeComponent");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.GradingCriteria", b =>
@@ -4714,6 +4755,8 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
                 {
+                    b.Navigation("DependentComponents");
+
                     b.Navigation("StudentGrades");
                 });
 
