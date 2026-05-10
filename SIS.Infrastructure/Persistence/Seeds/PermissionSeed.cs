@@ -219,7 +219,7 @@ public static class PermissionSeed
         ("menu.ders-programi-olusturma.assign",          PermissionCategory.Menu, "Section ataması"),
         ("menu.ders-programi-olusturma.unassign",        PermissionCategory.Menu, "Section atama iptali"),
         ("menu.ders-programi-olusturma.reset-all",       PermissionCategory.Menu, "Faculty/term reset-all"),
-        ("menu.ders-programi-olusturma.auto-schedule",   PermissionCategory.Menu, "Otomatik schedule (faculty + batch)"),
+        ("menu.ders-programi-olusturma.auto-schedule",   PermissionCategory.Menu, "Otomatik schedule (Faculty Planning V2)"),
         ("menu.ders-programi-olusturma.apply",           PermissionCategory.Menu, "Schedule uygulama"),
         ("menu.ders-programi-olusturma.validate",        PermissionCategory.Menu, "Schedule validate (existing + new)"),
         ("menu.ders-programi-olusturma.suggest",         PermissionCategory.Menu, "Schedule önerisi"),

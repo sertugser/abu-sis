@@ -23,7 +23,7 @@ export interface PoolCandidateDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
-  nationalCredit: number | null;
+  nationalCredit: number;
   ects: number;
   alreadyOpened: boolean;
   existingSectionCount: number;
@@ -55,6 +55,8 @@ export interface OpenedCourseSectionDto {
   departmentId: number | null;
   departmentName: string | null;
   crossListGroupId: number | null;
+  /** Z (zorunlu) / S (seçmeli) — bölümün aktif müfredatından alınır. */
+  isCompulsory: boolean;
 }
 
 export interface OpenedCourseListDto {
@@ -79,7 +81,7 @@ export interface CurriculumCourseForOpeningDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
-  nationalCredit?: number | null;
+  nationalCredit: number;
   ects: number;
   suggestedSemester: number;
   isCompulsory: boolean;
@@ -133,9 +135,20 @@ export interface BulkOpenCoursesRequest {
   courses: OpenCourseRequest[];
 }
 
+export interface OpenedCourseSummaryDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  sectionCount: number;
+  sectionNumbers: number[];
+  totalCapacity: number;
+  instructorName: string | null;
+}
+
 export interface BulkOpenCoursesResultDto {
   totalCoursesOpened: number;
   totalSectionsCreated: number;
+  openedCourses: OpenedCourseSummaryDto[];
   errors: string[];
 }
 

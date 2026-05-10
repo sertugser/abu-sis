@@ -38,13 +38,8 @@ const SELECT_CLASS =
 export function CurriculumPanelFilters(props: CurriculumPanelFiltersProps) {
   return (
     <div className="border-b border-gray-200">
-      {/* Proliz tarzı başlık çubuğu */}
-      <div className="bg-slate-600 text-white text-center text-xs font-semibold py-1.5 tracking-wide">
-        Referans Alınacak Müfredat Dersleri
-      </div>
-
-      {/* 2-sütun grid: label | input */}
-      <div className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1.5 px-3 py-2.5 bg-slate-50/60">
+      {/* 2-sütun grid: label | input — Hareket sayfasıyla aynı ölçü (64px label) */}
+      <div className="grid grid-cols-[64px_1fr] gap-x-2 gap-y-1.5 px-3 py-2 bg-muted/30">
         <AcademicHierarchyFilter
           faculties={props.faculties}
           structureDepartments={props.structureDepartments}

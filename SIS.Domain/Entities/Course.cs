@@ -32,7 +32,12 @@ public class Course
     public CourseStatus Status { get; set; } = CourseStatus.Active;
     public string? Description { get; set; }
     public CourseLevel Level { get; set; } = CourseLevel.Undergraduate;
-    public int? NationalCredit { get; set; }
+    /// <summary>
+    /// Ulusal Kredi (Yerel Kredi) — YÖKSİS raporlamada her ders için zorunlu.
+    /// Geleneksel Türk eğitim sisteminde Theory + Lab/2 formülüyle hesaplanır
+    /// ancak manuel girilebilir (örn. seminer/staj/uygulama dersleri için kural farklı).
+    /// </summary>
+    public int NationalCredit { get; set; }
 
     // Proliz "Diğer Ön Koşul Tanımları" — kayıt anında uygulanan kural alanları.
     // Hepsi opt-in: null/false ise ilgili kontrol atlanır.

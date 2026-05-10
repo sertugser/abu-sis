@@ -30,6 +30,7 @@ import {
   type ScheduleSettings,
 } from '../hooks/useScheduleSettings';
 import { SELECT_CLS } from '../components/academic-structure/shared-constants';
+import { TemplateSettingsDialog } from '../components/time-slot/TemplateSettingsDialog';
 
 interface SlotFormState {
   dayOfWeek: DayOfWeekName;
@@ -78,6 +79,7 @@ export default function TimeSlotManagementPage() {
   const regenerateSlots = useRegenerateTimeSlots();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [templateSettingsOpen, setTemplateSettingsOpen] = useState(false);
   const [editItem, setEditItem] = useState<TimeSlotDto | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ slot: TimeSlotDto; dependentCount: number } | null>(null);
   const [regenerateConfirm, setRegenerateConfirm] = useState<{ dependentCount: number } | null>(null);
@@ -320,6 +322,14 @@ export default function TimeSlotManagementPage() {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => setTemplateSettingsOpen(true)}
+          >
+            <Settings className="h-3.5 w-3.5 mr-1.5" />
+            Şablon Ayarları
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             disabled={!isTermEditable || regenerateSlots.isPending}
             onClick={handleRegenerateClick}
           >
@@ -331,6 +341,8 @@ export default function TimeSlotManagementPage() {
           </Button>
         </div>
       </div>
+
+      <TemplateSettingsDialog open={templateSettingsOpen} onOpenChange={setTemplateSettingsOpen} />
 
       {!isTermEditable && selectedTerm?.isCancelled && (
         <div className="shrink-0 mb-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">

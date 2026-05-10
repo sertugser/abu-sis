@@ -1,8 +1,10 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { cn } from '@/lib/utils';
-import { Plus, Search, Sparkles } from 'lucide-react';
+import { HelpCircle, Plus, Search, Sparkles } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type {
   CurriculumCourseForOpeningDto,
   PoolSlotForOpeningDto,
@@ -35,7 +37,7 @@ interface Props {
 }
 
 const HEADER_GRID =
-  'grid grid-cols-[28px_100px_1fr_32px_48px_52px_40px_80px_32px] items-center gap-2 px-3 py-2';
+  'grid grid-cols-[28px_100px_1fr_32px_48px_52px_40px_80px_32px] items-center gap-2 px-2 py-2';
 
 type ListItem =
   | { kind: 'course'; data: CurriculumCourseForOpeningDto; sortSemester: number; sortKey: string }
@@ -140,6 +142,19 @@ export function CurriculumPanel({
     });
   }, [filteredCourses, filteredSlots]);
 
+  // ── Sayfalama ───────────────────────────────────────────────────────────
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+  const safePage = Math.min(page, totalPages);
+  const pageItems = useMemo(
+    () => items.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [items, safePage, pageSize],
+  );
+
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -151,23 +166,84 @@ export function CurriculumPanel({
 
   return (
     <div className="flex flex-col min-h-0 h-full overflow-hidden">
-      {/* Filtreler — parent'tan render edilen filter bar */}
-      {filtersSlot && <div className="shrink-0">{filtersSlot}</div>}
+      {/* Üst başlık barı — Hareket tarzı: title + ? tooltip + aksiyon butonları */}
+      <div className="border-b bg-muted/30 shrink-0">
+        <div className="px-3 py-1.5 flex items-center gap-2 border-b border-border/40">
+          <h3 className="text-sm font-semibold">Referans Alınacak Müfredat Dersleri</h3>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Bu panel hakkında bilgi"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="max-w-sm text-xs leading-relaxed">
+                <p className="font-semibold mb-1.5">Müfredattaki dersleri seçip aktif döneme açmak için bu panel kullanılır.</p>
+                <ol className="list-decimal pl-4 space-y-0.5">
+                  <li>Aşağıdaki filtrelerden <strong>fakülte / bölüm / program / müfredat</strong> seç.</li>
+                  <li>Açmak istediğin dersleri kutucukla işaretle.</li>
+                  <li>Sağ üstteki <strong>Seçilenleri Aç</strong> butonuyla şube oluştur.</li>
+                </ol>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  İpucu: <strong>İntibakı Yapılmayanlar</strong> seçili olursa müfredat dışı dersler de listelenir.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {onOpenFreeCourseDialog && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 gap-1 ml-auto text-xs text-amber-700 hover:bg-amber-50"
+              onClick={onOpenFreeCourseDialog}
+              disabled={freeDialogDisabled}
+              title={freeDialogDisabled ? 'Aktif dönem gerekli' : 'Müfredatta olmayan bir dersi serbest aç'}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Serbest Ders Aç
+            </Button>
+          )}
+          <Button
+            size="sm"
+            className="h-7 text-xs px-3"
+            onClick={onOpenSelected}
+            disabled={selectableCount === 0}
+            title="Seçili dersleri aktif döneme aç"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Seçilenleri Aç
+            {selectableCount > 0 && (
+              <span className="ml-1.5 rounded bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums">
+                {selectableCount}
+              </span>
+            )}
+          </Button>
+        </div>
 
-      {/* Tablo başlığı — Proliz tarzı kolon başlıkları */}
+        {/* Filtreler — parent'tan render edilen filter bar */}
+        {filtersSlot}
+      </div>
+
+      {/* Tablo başlığı — kolon başlıkları (Hareket tarzı normal harf) */}
       <div
         className={cn(
           HEADER_GRID,
-          'shrink-0 bg-slate-100 border-b border-gray-200 text-xs font-semibold text-gray-700 uppercase tracking-wide',
+          'shrink-0 bg-muted/50 border-b border-gray-200 text-xs font-semibold text-gray-700',
+          '!py-1.5',
         )}
       >
         <span />
         <span className="text-left">Kod</span>
         <span className="text-left">Ders Adı</span>
         <span className="text-center" title="Zorunlu (Z) / Seçmeli (S)">Z/S</span>
-        <span className="text-center" title="Kredi">KRD</span>
+        <span className="text-center" title="Kredi">Krd</span>
         <span className="text-center">AKTS</span>
-        <span className="text-center" title="Sınıf">Snf</span>
+        <span className="text-center" title="Sınıf">Sn</span>
         <span className="text-center">Grup</span>
         <span />
       </div>
@@ -189,12 +265,12 @@ export function CurriculumPanel({
               ))}
             </div>
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center py-16 text-gray-400">
-              <Search className="h-8 w-8 mb-2" />
-              <p className="text-sm">Eşleşen ders bulunamadı.</p>
+            <div className="h-full flex flex-col items-center justify-center py-12 text-gray-400">
+              <Search className="h-9 w-9 mb-2 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">Eşleşen ders bulunamadı.</p>
             </div>
           ) : (
-            items.map((item) =>
+            pageItems.map((item) =>
               item.kind === 'course' ? (
                 <CurriculumCourseRow
                   key={`c-${item.data.courseId}`}
@@ -218,41 +294,29 @@ export function CurriculumPanel({
         />
       </div>
 
-      {/* Bottom action bar — Proliz tarzı geniş butonlar (h-14) */}
-      <div
-        className={cn(
-          'shrink-0 h-14 border-t px-3 flex items-center gap-2 transition-colors z-10',
-          selectableCount > 0 ? 'bg-blue-50 border-blue-200' : 'bg-white',
-        )}
-      >
-        <Button
-          variant="default"
-          disabled={selectableCount === 0}
-          className="h-9 px-3 gap-1.5 rounded-md"
-          onClick={onOpenSelected}
-        >
-          <Plus className="h-4 w-4" />
-          Seçilenleri Aç
-          {selectableCount > 0 && (
-            <span className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums">
-              {selectableCount}
-            </span>
-          )}
-        </Button>
-
-        {onOpenFreeCourseDialog && (
-          <Button
-            variant="outline"
-            className="h-9 px-3 gap-1.5 rounded-md ml-auto"
-            onClick={onOpenFreeCourseDialog}
-            disabled={freeDialogDisabled}
-            title={freeDialogDisabled ? 'Aktif dönem gerekli' : 'Müfredatta olmayan bir dersi serbest aç'}
-          >
-            <Sparkles className="h-4 w-4" />
-            Serbest Ders Aç
-          </Button>
-        )}
-      </div>
+      {/* Sayfalama — Hareket sayfasıyla aynı; daima dipte sticky */}
+      {items.length > 0 && (
+        <div className="shrink-0 mt-auto">
+          <TablePagination
+            totalCount={items.length}
+            page={safePage}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(s) => {
+              setPageSize(s);
+              setPage(1);
+            }}
+            itemLabel="ders"
+            extraInfo={
+              selectableCount > 0 ? (
+                <>
+                  · <strong className="text-foreground">{selectableCount}</strong> seçili
+                </>
+              ) : undefined
+            }
+          />
+        </div>
+      )}
     </div>
   );
 }

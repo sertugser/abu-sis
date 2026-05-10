@@ -39,12 +39,7 @@ const SELECT_CLASS =
 export function OpenedCoursesPanelFilters(props: OpenedCoursesPanelFiltersProps) {
   return (
     <div className="border-b border-gray-200">
-      {/* Proliz tarzı başlık çubuğu */}
-      <div className="bg-slate-600 text-white text-center text-xs font-semibold py-1.5 tracking-wide">
-        Açılan Dersler
-      </div>
-
-      <div className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1.5 px-3 py-2.5 bg-slate-50/60">
+      <div className="grid grid-cols-[64px_1fr] gap-x-2 gap-y-1.5 px-3 py-2 bg-muted/30">
         <span className="text-xs font-semibold text-gray-600 self-center">Dönem</span>
         <div className="flex items-center gap-2">
           <select

@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { Layers } from 'lucide-react';
+import { CheckSquare, Square } from 'lucide-react';
 import type { OpenedCourseSectionDto } from '../../types/courseOpening';
 import type { CourseDemandForecastDto } from '../../types/forecast';
 
@@ -35,15 +35,14 @@ export function OpenedCourseRow({
   onOpenManagement,
 }: Props) {
   const totCap = sections.reduce((s, sec) => s + sec.capacity, 0);
-  const totEnr = sections.reduce((s, sec) => s + sec.enrolledCount, 0);
   const rec = forecast?.recommendedSectionCount ?? 0;
-  const fillRatio = totCap > 0 ? totEnr / totCap : 0;
-  const demandWarning = forecast && forecast.totalPredictedDemand > totCap;
+  // Z/S, Krd, AKTS bilgileri ders bazında uniform → ilk şubeden alınır
+  const firstSection = sections[0];
 
   return (
     <div
       className={cn(
-        'grid grid-cols-[20px_100px_1fr_60px_72px_60px_60px_100px_60px] items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors border-b border-gray-100 last:border-b-0',
+        'grid grid-cols-[28px_100px_1fr_32px_48px_52px_72px_60px] items-center gap-2 px-2 py-2 text-xs cursor-pointer transition-colors border-b border-gray-100 last:border-b-0',
         selected ? 'bg-amber-50 hover:bg-amber-100/80' : 'hover:bg-gray-50',
       )}
       onClick={() => onSelect?.(courseId)}
@@ -53,10 +52,16 @@ export function OpenedCourseRow({
       }}
       title="Çift tıkla: ders yönetim ekranı"
     >
-      {/* Boş — sol panel chevron yerine */}
-      <span />
+      {/* Seçim göstergesi (sol panel checkbox sütunuyla simetri) */}
+      <div className="text-center">
+        {selected ? (
+          <CheckSquare className="h-3.5 w-3.5 text-primary mx-auto" />
+        ) : (
+          <Square className="h-3.5 w-3.5 text-muted-foreground/50 mx-auto" />
+        )}
+      </div>
 
-      <span className="font-mono text-slate-800 font-semibold truncate" title={courseCode}>
+      <span className="font-mono text-slate-800 font-medium truncate" title={courseCode}>
         {courseCode}
       </span>
 
@@ -64,56 +69,25 @@ export function OpenedCourseRow({
         {courseName}
       </span>
 
-      {/* Şube sayısı */}
-      <span className="text-center tabular-nums text-gray-700 inline-flex items-center justify-center gap-1">
-        <Layers className="h-3 w-3 text-gray-400" />
-        {sections.length}
+      {/* Z/S — bölüm müfredatından */}
+      <span
+        className={cn(
+          'text-center font-semibold',
+          firstSection?.isCompulsory ? 'text-red-600' : 'text-emerald-600',
+        )}
+        title={firstSection?.isCompulsory ? 'Zorunlu' : 'Seçmeli'}
+      >
+        {firstSection?.isCompulsory ? 'Z' : 'S'}
       </span>
+
+      {/* Krd */}
+      <span className="text-center tabular-nums text-gray-700">{firstSection?.credits ?? '—'}</span>
+
+      {/* AKTS */}
+      <span className="text-center tabular-nums text-gray-700">{firstSection?.ects ?? '—'}</span>
 
       {/* Kontenjan */}
       <span className="text-center tabular-nums text-gray-700">{totCap}</span>
-
-      {/* Kayıt */}
-      <span
-        className={cn(
-          'text-center tabular-nums',
-          totEnr > 0 ? 'text-gray-700 font-medium' : 'text-gray-400',
-        )}
-      >
-        {totEnr}
-      </span>
-
-      {/* Talep */}
-      <span
-        className={cn(
-          'text-center tabular-nums',
-          demandWarning ? 'text-red-600 font-medium' : 'text-gray-500',
-        )}
-      >
-        {forecast ? forecast.totalPredictedDemand : '—'}
-      </span>
-
-      {/* Doluluk mini progress + % */}
-      <div className="flex items-center gap-1.5">
-        {totCap > 0 ? (
-          <>
-            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden min-w-[40px]">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all',
-                  fillRatio > 0.9 ? 'bg-red-500' : fillRatio > 0.7 ? 'bg-amber-500' : 'bg-blue-500',
-                )}
-                style={{ width: `${Math.min(fillRatio * 100, 100)}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-gray-400 tabular-nums w-7 text-right">
-              %{Math.round(fillRatio * 100)}
-            </span>
-          </>
-        ) : (
-          <span className="text-xs text-gray-300 mx-auto">—</span>
-        )}
-      </div>
 
       {/* Önerilen şube oranı badge */}
       <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>

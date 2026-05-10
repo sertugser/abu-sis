@@ -31,6 +31,7 @@ public static partial class SeedData
     /// </summary>
     public static async Task<List<TimeSlot>> GenerateTimeSlotsFromConfigAsync(AppDbContext context, int termId)
     {
+        // 2026-05-09: Tüm scheduling key'leri SystemConfigs'e merge edildi (eski dual-table fix).
         var configs = await context.SystemConfigs.ToDictionaryAsync(c => c.Key, c => c.Value);
 
         var slotDuration = GetConfigInt(configs, "Schedule.SlotDurationMinutes", 50);

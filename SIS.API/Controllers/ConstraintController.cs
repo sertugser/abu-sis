@@ -129,6 +129,13 @@ public class ConstraintController : ControllerBase
         if (definition == null)
             return NotFound(new { error = "Constraint tanimi bulunamadi." });
 
+        // Plan 10 — Capability validation: hard-only / soft-only kurallarda toggle reddedilir.
+        var capability = ConstraintParameterMapping.GetCategoryCapability(definition.Code);
+        if (capability == ConstraintParameterMapping.CategoryCapability.HardOnly && request.Category == "Soft")
+            return BadRequest(new { error = $"'{definition.Code}' kuralı fizik/mantık gereği yalnız Zorunlu (Hard) modda çalışır; Tercihli yapılamaz." });
+        if (capability == ConstraintParameterMapping.CategoryCapability.SoftOnly && request.Category == "Hard")
+            return BadRequest(new { error = $"'{definition.Code}' kuralı doğası gereği Tercihli (Soft) modda çalışır; Zorunlu yapılamaz." });
+
         definition.Category = request.Category;
         definition.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
@@ -145,9 +152,10 @@ public class ConstraintController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Parameters))
             return BadRequest(new { error = "Parameters alani bos olamaz." });
 
+        JsonDocument doc;
         try
         {
-            JsonDocument.Parse(request.Parameters);
+            doc = JsonDocument.Parse(request.Parameters);
         }
         catch (JsonException)
         {
@@ -158,11 +166,64 @@ public class ConstraintController : ControllerBase
         if (definition == null)
             return NotFound(new { error = "Constraint tanimi bulunamadi." });
 
+        // Plan 10 — Constraint UI parametreleri tek source of truth: SystemConfigs.
+        // ConstraintParameterMapping üzerinden her UI key'i SystemConfigs key+DataType'ına çevirip
+        // SystemConfigs tablosunda UPSERT yapıyoruz. V2 encoder + V1 evaluator zaten oradan okuyor.
+        // ConstraintDefinition.Parameters JSON yine güncellenir (geriye uyum + ExceptionOverride
+        // mantığı), ama V2/V1 davranışını SystemConfigs belirler.
+        var unmapped = new List<string>();
+        foreach (var prop in doc.RootElement.EnumerateObject())
+        {
+            var sysKey = ConstraintParameterMapping.Resolve(definition.Code, prop.Name);
+            if (sysKey == null)
+            {
+                unmapped.Add(prop.Name);
+                continue;
+            }
+
+            var rawValue = prop.Value.ValueKind switch
+            {
+                JsonValueKind.String => prop.Value.GetString() ?? string.Empty,
+                JsonValueKind.Number => prop.Value.GetRawText(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => prop.Value.GetRawText()
+            };
+
+            await UpsertSystemConfigAsync(sysKey.Key, rawValue, sysKey.DataType, ct);
+        }
+
+        // Geriye uyum: Parameters JSON'u güncel tut (ExceptionOverride merge mantığı için).
+        // V2 encoder bunu okumuyor; tek source of truth SystemConfigs.
         definition.Parameters = request.Parameters;
         definition.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
 
-        return Ok(new { definition.Id, definition.Parameters });
+        return Ok(new { definition.Id, definition.Parameters, UnmappedKeys = unmapped });
+    }
+
+    /// <summary>
+    /// SystemConfig key UPSERT (var ise UPDATE, yok ise INSERT).
+    /// </summary>
+    private async Task UpsertSystemConfigAsync(string key, string value, string dataType, CancellationToken ct)
+    {
+        var existing = await _context.SystemConfigs.FirstOrDefaultAsync(c => c.Key == key, ct);
+        if (existing != null)
+        {
+            existing.Value = value;
+            existing.DataType = dataType;
+        }
+        else
+        {
+            _context.SystemConfigs.Add(new SystemConfig
+            {
+                Key = key,
+                Value = value,
+                DataType = dataType,
+                Category = "Schedule",
+                Description = $"Constraint UI parametresi (ConstraintParameterMapping üzerinden)."
+            });
+        }
     }
 
     // ── POST /api/constraints/{id}/exceptions ────────────────────────────
@@ -279,10 +340,20 @@ public class ConstraintController : ControllerBase
         if (def == null)
             return NotFound(new { error = "Constraint tanimi bulunamadi." });
 
+        // Plan 10 — Weight'i hem ConstraintDefinitions.Weight (UI display) hem
+        // SystemConfigs.Schedule.<Code>Weight'a (encoder source of truth) yazıyoruz.
+        // Encoder SystemConfigs'ten okur; ConstraintDefinitions.Weight kullanılmaz.
         def.Weight = request.Weight;
         def.UpdatedAt = DateTime.UtcNow;
+
+        var weightKey = ConstraintParameterMapping.ResolveWeightKey(def.Code);
+        if (weightKey != null)
+        {
+            await UpsertSystemConfigAsync(weightKey, request.Weight.ToString(), "int", ct);
+        }
+
         await _context.SaveChangesAsync(ct);
 
-        return Ok(new { def.Id, def.Weight });
+        return Ok(new { def.Id, def.Weight, SystemConfigKey = weightKey });
     }
 }

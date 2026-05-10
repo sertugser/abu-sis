@@ -260,6 +260,32 @@ public class CourseOpeningController(
         }
     }
 
+    /// <summary>
+    /// Hard-delete: Dersin tüm şubelerini DB'den fiziksel siler (geri alınamaz).
+    /// Aktif/Tamamlanmış kayıt, değerlendirme veya yoklama varsa reddedilir.
+    /// </summary>
+    [HttpDelete("course/{courseId}/hard")]
+    [RequirePermission("menu.ders-acma-islemleri.close-all")]
+    public async Task<IActionResult> DeleteAllSectionsHard(int courseId, [FromQuery] int termId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == courseId, ct);
+        if (course == null) return NotFound(new { error = "Ders bulunamadı." });
+        if (course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            var result = await _lifecycleService.DeleteAllSectionsHardAsync(courseId, termId, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPut("section/{id}/reactivate")]
     [RequirePermission("menu.ders-acma-islemleri.reactivate")]
     public async Task<IActionResult> ReactivateSection(int id, CancellationToken ct)

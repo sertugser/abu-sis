@@ -9,7 +9,15 @@ public record CourseListItemDto(
     int? DepartmentId, string? DepartmentName,
     int PrerequisiteCount, int EquivalencyCount,
     CourseLanguage Language, TeachingMethod TeachingMethod,
-    CourseStatus Status, CourseLevel Level
+    CourseStatus Status, CourseLevel Level,
+    // Müfredat agregatları (Proliz tarzı tablo için)
+    int NationalCredit,
+    int? SemesterMin,
+    int? SemesterMax,
+    string RequirementType,  // "Compulsory" | "Elective" | "Mixed" | "None"
+    // Aktif dönem section bilgisi (KO/DO/Kon + Öğretim Üyesi sütunları için)
+    bool IsOpenInActiveTerm,
+    string? ActiveTermInstructorName
 );
 
 public record CourseDetailDto(
@@ -22,7 +30,7 @@ public record CourseDetailDto(
     List<CurriculumAssignmentDto> CurriculumAssignments,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit,
+    CourseLevel Level, int NationalCredit,
     // Proliz "Diğer Ön Koşul Tanımları"
     int? MinCreditsRequired,
     int? MinEctsRequired,
@@ -33,6 +41,9 @@ public record CourseDetailDto(
     bool ShowInInfoPackage,
     int? ApplicationHours,
     CourseOpenType? OpenType,
+    // Plan 10 — Derslik tipi tercihleri (H4 ClassroomType encoder bunları okuyor)
+    ClassroomType? TheoryClassroomType = null,
+    ClassroomType? LabClassroomType = null,
     CourseStatsDto? Stats = null,
     List<PrerequisiteChainNodeDto>? PrerequisiteChain = null
 );
@@ -52,7 +63,7 @@ public record CreateCourseDto(
     int? DepartmentId,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit,
+    CourseLevel Level, int NationalCredit,
     // Proliz "Diğer Ön Koşul Tanımları" (opsiyonel — default değerler kullanılır)
     int? MinCreditsRequired = null,
     int? MinEctsRequired = null,
@@ -62,7 +73,10 @@ public record CreateCourseDto(
     string? AlternativeName = null,
     bool ShowInInfoPackage = true,
     int? ApplicationHours = null,
-    CourseOpenType? OpenType = null
+    CourseOpenType? OpenType = null,
+    // Plan 10 — Derslik tipi tercihleri (opsiyonel — null ise H4 kuralı kuralı bypass)
+    ClassroomType? TheoryClassroomType = null,
+    ClassroomType? LabClassroomType = null
 );
 
 public record UpdateCourseDto(
@@ -72,7 +86,7 @@ public record UpdateCourseDto(
     int? DepartmentId,
     CourseLanguage Language, TeachingMethod TeachingMethod,
     CourseStatus Status, string? Description,
-    CourseLevel Level, int? NationalCredit,
+    CourseLevel Level, int NationalCredit,
     // Proliz "Diğer Ön Koşul Tanımları"
     int? MinCreditsRequired = null,
     int? MinEctsRequired = null,
@@ -82,7 +96,10 @@ public record UpdateCourseDto(
     string? AlternativeName = null,
     bool ShowInInfoPackage = true,
     int? ApplicationHours = null,
-    CourseOpenType? OpenType = null
+    CourseOpenType? OpenType = null,
+    // Plan 10 — Derslik tipi tercihleri (opsiyonel — null ise H4 kuralı bypass)
+    ClassroomType? TheoryClassroomType = null,
+    ClassroomType? LabClassroomType = null
 );
 
 public record CourseStatsDto(

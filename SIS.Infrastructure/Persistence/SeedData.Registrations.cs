@@ -284,16 +284,19 @@ public static partial class SeedData
             }
         }
 
-        // All sections full or none exist — create new
-        var instructor = instructors[instrIdx % instructors.Count];
-        instrIdx++;
+        // All sections full or none exist — create new.
+        // Hoca atanmaz (InstructorId = null) — admin UI'dan elle atayacak.
+        // Round-robin instructor atama eskiden burada yapılıyordu, ama bu otomatik
+        // programlamanın değil seed'in işiydi ve 'Sıfırla' temizlemiyordu;
+        // sezgisel olmadığı için kaldırıldı. instructors/instrIdx parametreleri
+        // imzada kaldı (geriye uyumluluk); gelecekte temizlenebilir.
 
         var section = new CourseSection
         {
             CourseId = courseId,
             TermId = termId,
             SectionNumber = nextSectionNumber,
-            InstructorId = instructor.Id,
+            InstructorId = null,
             Capacity = 40,
             EnrolledCount = 1,
             Status = CourseSectionStatus.Draft,

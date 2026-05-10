@@ -30,10 +30,22 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         int? DepartmentId, string? DepartmentName,
         string? Description,
         bool IsActive, DateTime CreatedAt,
-        List<ElectiveGroupCourseDto> Courses);
+        List<ElectiveGroupCourseDto> Courses,
+        List<ElectiveGroupUsageDto> Usages);
 
     public record ElectiveGroupCourseDto(
         int CourseId, string CourseCode, string CourseName, int Ects);
+
+    /** Bu seçmeli grubun bağlı olduğu müfredat slotları —
+     * "Bu havuz nerede kullanılıyor?" sorusuna cevap. */
+    public record ElectiveGroupUsageDto(
+        int PoolId,
+        int CurriculumId, string CurriculumName, string CurriculumVersion,
+        int ProgramId, string ProgramName,
+        string SlotName,
+        int SuggestedSemesterStart, int SuggestedSemesterEnd,
+        int RequiredCourseCount, int RequiredEcts,
+        int? EctsPerCourse);
 
     public record CreateElectiveGroupRequest(
         string Name, string Code,
@@ -110,6 +122,24 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
         if (group is null)
             return NotFound(new { message = "Seçmeli ders grubu bulunamadı." });
 
+        // "Bu havuz nerede kullanılıyor?" — müfredata bağlı pool slotları.
+        var usages = await context.CurriculumElectivePools
+            .AsNoTracking()
+            .Where(p => p.ElectiveGroupId == id)
+            .Include(p => p.Curriculum).ThenInclude(c => c.Program)
+            .OrderBy(p => p.Curriculum.Program.Name)
+            .ThenBy(p => p.Curriculum.Version)
+            .ThenBy(p => p.SlotName)
+            .Select(p => new ElectiveGroupUsageDto(
+                p.Id,
+                p.CurriculumId, p.Curriculum.Name, p.Curriculum.Version,
+                p.Curriculum.ProgramId, p.Curriculum.Program.Name,
+                p.SlotName,
+                p.SuggestedSemesterStart, p.SuggestedSemesterEnd,
+                p.RequiredCourseCount, p.RequiredEcts,
+                p.EctsPerCourse))
+            .ToListAsync(ct);
+
         var dto = new ElectiveGroupDetailDto(
             group.Id, group.Name, group.Code,
             group.ElectiveSubtypeId,
@@ -121,7 +151,8 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
                 .OrderBy(c => c.Course.Code)
                 .Select(c => new ElectiveGroupCourseDto(
                     c.CourseId, c.Course.Code, c.Course.Name, c.Course.Ects))
-                .ToList());
+                .ToList(),
+            usages);
 
         return Ok(dto);
     }

@@ -112,7 +112,7 @@ export function PoolCandidatesDialog({
             </Alert>
           ) : (
             candidates.map((c) => {
-              const credit = c.nationalCredit ?? c.theoryHours + c.labHours;
+              const credit = c.nationalCredit;
               const disabled = !c.canOpen || c.alreadyOpened;
               const selected = selectedIds.has(c.courseId);
               return (

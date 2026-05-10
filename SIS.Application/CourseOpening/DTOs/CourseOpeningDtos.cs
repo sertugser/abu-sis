@@ -27,6 +27,8 @@ public class OpenedCourseSectionDto
     public string? DepartmentName { get; set; }
     /// <summary>Cross-list grup ID'si (null = tek başına).</summary>
     public int? CrossListGroupId { get; set; }
+    /// <summary>Z (Zorunlu) / S (Seçmeli) — bölümün aktif müfredatından alınır.</summary>
+    public bool IsCompulsory { get; set; }
 }
 
 public class OpenedCourseListDto
@@ -46,7 +48,7 @@ public class CurriculumCourseForOpeningDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
-    public int? NationalCredit { get; set; }
+    public int NationalCredit { get; set; }
     public int Ects { get; set; }
     public int SuggestedSemester { get; set; }
     public bool IsCompulsory { get; set; }
@@ -116,7 +118,7 @@ public class PoolCandidateDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
-    public int? NationalCredit { get; set; }
+    public int NationalCredit { get; set; }
     public int Ects { get; set; }
     public bool AlreadyOpened { get; set; }
     public int ExistingSectionCount { get; set; }
@@ -175,7 +177,25 @@ public class BulkOpenCoursesResultDto
 {
     public int TotalCoursesOpened { get; set; }
     public int TotalSectionsCreated { get; set; }
+    /// <summary>
+    /// Başarıyla açılan dersler için özet liste — modal'da satır satır gösterilir.
+    /// Hata olursa transaction rollback'i ile bu liste de temizlenir (boş döner).
+    /// </summary>
+    public List<OpenedCourseSummaryDto> OpenedCourses { get; set; } = [];
     public List<string> Errors { get; set; } = [];
+}
+
+public class OpenedCourseSummaryDto
+{
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int SectionCount { get; set; }
+    /// <summary>Açılan şubelerin numaraları — kullanıcıya "Şube 1, 2, 3" şeklinde gösterilir.</summary>
+    public List<int> SectionNumbers { get; set; } = [];
+    public int TotalCapacity { get; set; }
+    /// <summary>Tüm şubelerde aynı hoca varsa adı, farklıysa null.</summary>
+    public string? InstructorName { get; set; }
 }
 
 public class UpdateOpenedSectionRequest
@@ -294,6 +314,8 @@ public class TransferCourseResultItem
 }
 
 public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);
+
+public record DeleteAllSectionsResultDto(int DeletedSectionCount, int DeletedRegistrationCount, int DeletedAccessPolicyCount);
 
 // ── External Courses (opened by other departments but in our curriculum) ──
 

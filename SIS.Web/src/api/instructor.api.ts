@@ -11,6 +11,18 @@ export interface InstructorProfile {
   maxWeeklyHours: number;
 }
 
+export interface InstructorScheduleBlock {
+  /** .NET DayOfWeek: 0=Sun, 1=Mon, … */
+  day: number;
+  /** "HH:mm:ss" */
+  startTime: string;
+  endTime: string;
+  blockType: 'Theory' | 'Lab';
+  classroomId: number | null;
+  classroomName: string | null;
+  classroomType: string | null;
+}
+
 export interface InstructorSection {
   sectionId: number;
   sectionNumber: number;
@@ -23,7 +35,10 @@ export interface InstructorSection {
   enrolledCount: number;
   availableSeats: number;
   classroomName: string;
+  /** Display-only Türkçe summary string (geriye uyumluluk için tutuluyor; UI rendering schedules[] kullanıyor). */
   schedule: string;
+  /** 2026-05-10 — Plan E: structured per-block list, replaces frontend parsing of `schedule` string. */
+  schedules: InstructorScheduleBlock[];
   isActive: boolean;
   isFinalized: boolean;
   activeStudents: number;

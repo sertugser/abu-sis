@@ -97,6 +97,14 @@ export async function closeAllSections(courseId: number, termId: number): Promis
   return data;
 }
 
+export async function deleteAllSectionsHard(
+  courseId: number,
+  termId: number,
+): Promise<{ deletedSectionCount: number; deletedRegistrationCount: number; deletedAccessPolicyCount: number }> {
+  const { data } = await apiClient.delete(`/course-opening/course/${courseId}/hard`, { params: { termId } });
+  return data;
+}
+
 export async function reactivateSection(sectionId: number): Promise<void> {
   await apiClient.put(`/course-opening/section/${sectionId}/reactivate`);
 }

@@ -1,7 +1,7 @@
 // SIS.Web/src/components/faculty-planning/AutoScheduleTab.tsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SlotAssignSheet } from './SlotAssignSheet';
+import { SlotAssignDialog } from './SlotAssignDialog';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,6 +17,7 @@ import {
 import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { CalendarGrid } from './CalendarGrid';
 import { ScheduleResultModal } from './ScheduleResultModal';
+import { AutoScheduleProgressModal } from './AutoScheduleProgressModal';
 import InlineConfirmButton from './InlineConfirmButton';
 import { cn } from '@/lib/utils';
 
@@ -54,6 +55,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
     slotOrder: number;
     startTime: string;
     endTime: string;
+    allowedMode: FacultyPlanningTimeSlot['allowedMode'];
   } | null>(null);
 
   const selectedRunId = previewMutation.data
@@ -372,11 +374,22 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
         <CalendarGrid
           sections={sections}
           timeSlots={timeSlots}
-          onEmptyCellClick={(day, slotOrder, startTime, endTime) => {
-            setAssignSlot({ day, slotOrder, startTime, endTime });
+          onEmptyCellClick={(day, slotOrder, startTime, endTime, allowedMode) => {
+            setAssignSlot({ day, slotOrder, startTime, endTime, allowedMode });
           }}
         />
       </div>
+
+      {/* ── Canlı progress modalı — algoritma çalışırken gösterilir ── */}
+      <AutoScheduleProgressModal
+        open={isPending}
+        onCancel={() => {
+          // Backend Hub.Cancel() zaten CancellationTokenSource'u tetikledi.
+          // Mutation'ı reset edip UI state'i temizliyoruz; preview hata olarak
+          // OperationCanceledException dönecek ve isPending false olacak.
+          previewMutation.reset();
+        }}
+      />
 
       {/* ── Sonuç Modalı — hesaplama bitince otomatik açılır ── */}
       {previewData && (
@@ -391,13 +404,14 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
       )}
 
       {assignSlot && termId && (
-        <SlotAssignSheet
+        <SlotAssignDialog
           open={!!assignSlot}
           onOpenChange={(open) => { if (!open) setAssignSlot(null); }}
           day={assignSlot.day}
           slotOrder={assignSlot.slotOrder}
           startTime={assignSlot.startTime}
           endTime={assignSlot.endTime}
+          allowedMode={assignSlot.allowedMode}
           termId={termId}
           sections={sections}
         />

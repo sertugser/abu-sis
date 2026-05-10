@@ -41,6 +41,21 @@ function usePageTitleMap(): Record<string, string> {
   }, [modules]);
 }
 
+/**
+ * Tam path eşleşmezse parent path'lere geri çekilerek arar.
+ * Örn: `/secmeli-yapilandirma/gruplar` → `/secmeli-yapilandirma` menü kaydını yakalar.
+ * Bu sayede tab tabanlı sayfalarda alt route'a inildiğinde başlık "Sayfa"'ya düşmez.
+ */
+function resolvePageTitle(pathname: string, map: Record<string, string>): string {
+  if (map[pathname]) return map[pathname];
+  const segments = pathname.split('/').filter(Boolean);
+  for (let i = segments.length - 1; i > 0; i--) {
+    const parent = '/' + segments.slice(0, i).join('/');
+    if (map[parent]) return map[parent];
+  }
+  return 'Sayfa';
+}
+
 export default function TopBar() {
   const { data: term } = useActiveTerm();
   const location = useLocation();
@@ -50,7 +65,7 @@ export default function TopBar() {
   const isHome = location.pathname === '/';
   const pageTitle = location.pathname.startsWith('/not-girisi/')
     ? 'Not Girişi'
-    : pageTitleMap[location.pathname] || 'Sayfa';
+    : resolvePageTitle(location.pathname, pageTitleMap);
 
   return (
     <header className="sticky top-0 z-30 flex h-20 items-center gap-4 border-b border-border/70 bg-white/90 shadow-[0_10px_35px_rgba(15,23,42,0.05)] backdrop-blur-xl px-6 lg:px-8">

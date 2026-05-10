@@ -147,7 +147,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             .Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
         var passedCredits = allPastRegistrations
             .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
-            .Sum(r => r.CourseSection.Course.NationalCredit ?? 0);
+            .Sum(r => r.CourseSection.Course.NationalCredit);
 
         // Per-section checks
         foreach (var section in sections)

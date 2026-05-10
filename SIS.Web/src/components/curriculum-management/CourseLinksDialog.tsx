@@ -160,7 +160,7 @@ export default function CourseLinksDialog({ mode, open, courseId, courseLabel, o
 
   // Course header bilgisi (Proliz "Seçilen Ders: ENG 102 Academic English-II Kredi:2 AKTS:2")
   const headerInfo = course
-    ? `Seçilen Ders: ${course.code} ${course.name}  Kredi:${course.nationalCredit ?? '-'}  AKTS:${course.ects}`
+    ? `Seçilen Ders: ${course.code} ${course.name}  Kredi:${course.nationalCredit}  AKTS:${course.ects}`
     : courseLabel;
 
   return (

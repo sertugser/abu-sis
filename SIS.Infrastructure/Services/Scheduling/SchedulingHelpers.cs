@@ -107,7 +107,7 @@ public static class SchedulingHelpers
             InstructorName = section.InstructorName,
             ClassroomId = section.ClassroomId,
             ClassroomName = section.ClassroomName,
-            Day = slot?.Day,
+            Day = slot is null ? null : (int)slot.Day,
             StartTime = slot?.StartTime,
             EndTime = slot?.EndTime,
             Message = message

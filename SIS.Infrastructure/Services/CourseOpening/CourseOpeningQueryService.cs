@@ -68,6 +68,14 @@ public class CourseOpeningQueryService(
             .Select(g => new { CourseId = g.Key, Semester = g.Min(cc => cc.SuggestedSemester) })
             .ToDictionaryAsync(x => x.CourseId, x => x.Semester, ct);
 
+        // Z/S — bölümün aktif müfredatlarında dersin tanımı; çoklu eşleşmede HERHANGİ biri zorunlu ise Z kabul edilir
+        var compulsoryFlags = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => courseIds.Contains(cc.CourseId) && cc.Curriculum.Program.DepartmentId == departmentId && cc.Curriculum.IsActive)
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new { CourseId = g.Key, IsCompulsory = g.Any(cc => cc.IsCompulsory) })
+            .ToDictionaryAsync(x => x.CourseId, x => x.IsCompulsory, ct);
+
         var sectionNumberMap = new Dictionary<int, int>();
         var courseGroupCounters = new Dictionary<int, int>();
         foreach (var s in sections)
@@ -85,6 +93,7 @@ public class CourseOpeningQueryService(
             registeredCounts.TryGetValue(s.Id, out var regCount);
             draftOrPendingCounts.TryGetValue(s.Id, out var draftOrPendingCount);
             suggestedSemesters.TryGetValue(s.CourseId, out var sugSem);
+            compulsoryFlags.TryGetValue(s.CourseId, out var isCompulsory);
 
             return new OpenedCourseSectionDto
             {
@@ -109,6 +118,7 @@ public class CourseOpeningQueryService(
                 IsActive = s.IsActive,
                 DepartmentId = s.Course.DepartmentId,
                 DepartmentName = s.Course.Department?.Name,
+                IsCompulsory = isCompulsory,
             };
         }).ToList();
 

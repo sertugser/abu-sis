@@ -195,7 +195,19 @@ export function FreeCourseOpenDialog({ departmentId, termId, onClose }: Props) {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Ders açılamadı</AlertTitle>
             <AlertDescription>
-              {(openMutation.error as { message?: string })?.message ?? 'Bilinmeyen hata.'}
+              {(() => {
+                const e = openMutation.error as {
+                  response?: { data?: { error?: string; detail?: string; title?: string } };
+                  message?: string;
+                };
+                return (
+                  e?.response?.data?.error ??
+                  e?.response?.data?.detail ??
+                  e?.response?.data?.title ??
+                  e?.message ??
+                  'Bilinmeyen hata.'
+                );
+              })()}
             </AlertDescription>
           </Alert>
         )}

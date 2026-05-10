@@ -23,8 +23,8 @@
   --color-muted: oklch(0.96 0.005 250);
   --color-muted-foreground: oklch(0.55 0.02 260);
 
-  /* ── Accent — Institutional Teal (university branding) ── */
-  --color-accent: oklch(0.65 0.14 188);
+  /* ── Accent — Açık lacivert (primary ile aynı hue, marka uyumlu) ── */
+  --color-accent: oklch(0.94 0.04 260);
   --color-accent-foreground: oklch(0.18 0.04 260);
 
   /* ── Popover ── */
