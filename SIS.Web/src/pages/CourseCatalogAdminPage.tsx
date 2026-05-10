@@ -1691,14 +1691,24 @@ export default function CourseCatalogAdminPage() {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 ref={searchInputRef}
-                className="pl-8 pr-14 h-8 text-sm"
+                className="pl-8 pr-8 h-8 text-sm"
                 placeholder="Kod veya isimle ara..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
-              <kbd className="absolute right-2 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center gap-0.5 rounded border bg-muted/60 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground pointer-events-none">
-                Ctrl K
-              </kbd>
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-5 w-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  aria-label="Aramayı temizle"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Filtreler — tek buton, popover içinde tüm filtreler */}
