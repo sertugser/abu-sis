@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertCircle, Loader2, Search, ShieldAlert, UserCheck, Users, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,6 +59,8 @@ export default function BulkAdvisorAssignmentPage() {
   // Atama modu: 'single' = tek hoca tümüne, 'per-student' = her öğrenci için ayrı
   const [assignmentMode, setAssignmentMode] = useState<'single' | 'per-student'>('single');
   const [perStudentAdvisorIds, setPerStudentAdvisorIds] = useState<Record<number, number>>({});
+  // Önizleme dialog'u — runAssignment'tan önce kullanıcı onayı
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
@@ -361,6 +367,58 @@ export default function BulkAdvisorAssignmentPage() {
     ? getAcademicOperationsErrorMessage(assignmentMutation.error, 'Danışman ataması tamamlanamadı.')
     : null;
 
+  // Önizleme: hangi hoca → kaç öğrenci, kapasite aşımı var mı
+  const assignmentPreview = useMemo(() => {
+    const groups = new Map<number, { advisor: InstructorOptionDto; studentIds: number[] }>();
+    if (assignmentMode === 'single') {
+      if (!selectedAdvisor) return { groups: [], skippedCount: 0, capacityWarnings: [] as string[] };
+      groups.set(selectedAdvisor.instructorId, {
+        advisor: selectedAdvisor,
+        studentIds: [...selectedStudentIds],
+      });
+    } else {
+      let skipped = 0;
+      for (const studentId of selectedStudentIds) {
+        const advisorId = perStudentAdvisorIds[studentId];
+        if (!advisorId) { skipped++; continue; }
+        const advisor = instructors.find(i => i.instructorId === advisorId);
+        if (!advisor) { skipped++; continue; }
+        const existing = groups.get(advisorId);
+        if (existing) existing.studentIds.push(studentId);
+        else groups.set(advisorId, { advisor, studentIds: [studentId] });
+      }
+      const warnings: string[] = [];
+      for (const [, group] of groups) {
+        const capacityRaw = capacityOverrides[group.advisor.instructorId];
+        const capacity = capacityRaw && capacityRaw.trim() !== '' ? Number(capacityRaw) : null;
+        if (capacity !== null && Number.isFinite(capacity) && capacity > 0) {
+          const projected = group.advisor.currentStudentCount + group.studentIds.length;
+          if (projected > capacity) {
+            warnings.push(`${group.advisor.fullName}: ${projected}/${capacity} (aşım)`);
+          }
+        }
+      }
+      return {
+        groups: [...groups.values()],
+        skippedCount: skipped,
+        capacityWarnings: warnings,
+      };
+    }
+    // Single mode capacity check
+    const warnings: string[] = [];
+    for (const [, group] of groups) {
+      const capacityRaw = capacityOverrides[group.advisor.instructorId];
+      const capacity = capacityRaw && capacityRaw.trim() !== '' ? Number(capacityRaw) : null;
+      if (capacity !== null && Number.isFinite(capacity) && capacity > 0) {
+        const projected = group.advisor.currentStudentCount + group.studentIds.length;
+        if (projected > capacity) {
+          warnings.push(`${group.advisor.fullName}: ${projected}/${capacity} (aşım)`);
+        }
+      }
+    }
+    return { groups: [...groups.values()], skippedCount: 0, capacityWarnings: warnings };
+  }, [assignmentMode, selectedAdvisor, selectedStudentIds, perStudentAdvisorIds, instructors, capacityOverrides]);
+
   return (
     <DepartmentOperationsLayout
       icon={UserCheck}
@@ -555,7 +613,7 @@ export default function BulkAdvisorAssignmentPage() {
                   </Button>
                   <Button
                     className="h-8 flex-1 text-xs"
-                    onClick={runAssignment}
+                    onClick={() => setPreviewOpen(true)}
                     disabled={
                       !canAssignAdvisors
                       || assignmentMutation.isPending
@@ -569,11 +627,7 @@ export default function BulkAdvisorAssignmentPage() {
                       ? 'Atama Yetkisi Yok'
                       : assignmentMutation.isPending
                         ? 'Atanıyor'
-                        : assignmentMode === 'per-student'
-                          ? 'Per-Öğrenci Ata'
-                          : replaceExisting
-                            ? 'Seçili Öğrencileri Yeniden Ata'
-                            : 'Danışmansızlara Ata'}
+                        : 'Önizle ve Ata'}
                   </Button>
                 </div>
               </div>
@@ -619,6 +673,77 @@ export default function BulkAdvisorAssignmentPage() {
 
         <BulkOperationResultPanel result={lastResult ?? null} title="Son Danışman Atama Sonucu" />
       </div>
+
+      <AlertDialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Atama Önizlemesi</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  <strong>{assignmentPreview.groups.reduce((sum, g) => sum + g.studentIds.length, 0)}</strong> öğrenci,{' '}
+                  <strong>{assignmentPreview.groups.length}</strong> hocaya atanacak.
+                  {assignmentPreview.skippedCount > 0 && (
+                    <>{' '}<span className="text-amber-700">{assignmentPreview.skippedCount} öğrenci hoca seçimi olmadığı için atlanacak.</span></>
+                  )}
+                </p>
+
+                {assignmentPreview.capacityWarnings.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <div className="font-medium mb-1">Kapasite aşımı:</div>
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {assignmentPreview.capacityWarnings.map(warning => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="rounded-md border max-h-[280px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40 sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">Hoca</th>
+                        <th className="text-center px-3 py-2 font-medium w-20">Mevcut</th>
+                        <th className="text-center px-3 py-2 font-medium w-24">Bu Atamada</th>
+                        <th className="text-center px-3 py-2 font-medium w-20">Toplam</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assignmentPreview.groups.map(group => (
+                        <tr key={group.advisor.instructorId} className="border-t">
+                          <td className="px-3 py-2 font-medium">{group.advisor.fullName}</td>
+                          <td className="px-3 py-2 text-center tabular-nums">{group.advisor.currentStudentCount}</td>
+                          <td className="px-3 py-2 text-center tabular-nums font-semibold">+{group.studentIds.length}</td>
+                          <td className="px-3 py-2 text-center tabular-nums">{group.advisor.currentStudentCount + group.studentIds.length}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {replaceExisting && (
+                  <p className="text-amber-700 text-xs">
+                    ⚠ "Yeniden Ata" modunda — mevcut danışmanı olan öğrencilerin danışmanı değişecek.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setPreviewOpen(false); runAssignment(); }}
+              disabled={assignmentPreview.groups.length === 0}
+            >
+              Onayla ve Ata
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DepartmentOperationsLayout>
   );
 }
