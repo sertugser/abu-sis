@@ -52,6 +52,9 @@ export default function BulkAdvisorAssignmentPage() {
   // Hoca bazlı kapasite ve dahil/değil overrides — initial value backend'den, kullanıcı override edebilir
   const [capacityOverrides, setCapacityOverrides] = useState<Record<number, string>>({});
   const [excludedAdvisors, setExcludedAdvisors] = useState<Record<number, boolean>>({});
+  // Atama modu: 'single' = tek hoca tümüne, 'per-student' = her öğrenci için ayrı
+  const [assignmentMode, setAssignmentMode] = useState<'single' | 'per-student'>('single');
+  const [perStudentAdvisorIds, setPerStudentAdvisorIds] = useState<Record<number, number>>({});
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
@@ -297,23 +300,61 @@ export default function BulkAdvisorAssignmentPage() {
   }
 
   function runAssignment() {
-    if (!canAssignAdvisors || departmentId === null || selectedAdvisor === null || selectedStudentIds.size === 0) return;
+    if (!canAssignAdvisors || departmentId === null || selectedStudentIds.size === 0) return;
 
-    assignmentMutation.mutate(
-      {
-        departmentId,
-        advisorId: selectedAdvisor.instructorId,
-        replaceExisting,
-        studentIds: [...selectedStudentIds],
-      },
-      {
-        onSuccess: result => {
-          setLastResult(result);
-          const failedIds = result.results.filter(item => !item.success).map(item => item.studentId);
-          setSelectedStudentIds(new Set(failedIds));
+    if (assignmentMode === 'single') {
+      if (selectedAdvisor === null) return;
+      assignmentMutation.mutate(
+        {
+          departmentId,
+          advisorId: selectedAdvisor.instructorId,
+          replaceExisting,
+          studentIds: [...selectedStudentIds],
         },
-      },
-    );
+        {
+          onSuccess: result => {
+            setLastResult(result);
+            const failedIds = result.results.filter(item => !item.success).map(item => item.studentId);
+            setSelectedStudentIds(new Set(failedIds));
+          },
+        },
+      );
+      return;
+    }
+
+    // Per-student modu: aynı hocaya gidenleri grupla, her grup için ayrı API çağrısı
+    const groups = new Map<number, number[]>();
+    for (const studentId of selectedStudentIds) {
+      const advisorId = perStudentAdvisorIds[studentId];
+      if (!advisorId) continue;
+      const list = groups.get(advisorId) ?? [];
+      list.push(studentId);
+      groups.set(advisorId, list);
+    }
+    if (groups.size === 0) return;
+
+    Promise.all(
+      [...groups.entries()].map(([advisorId, studentIds]) =>
+        assignmentMutation.mutateAsync({
+          departmentId,
+          advisorId,
+          replaceExisting,
+          studentIds,
+        }),
+      ),
+    ).then(results => {
+      // Tüm sonuçları birleştir
+      const merged: BulkAcademicOperationResult = {
+        requestedCount: results.reduce((sum, r) => sum + r.requestedCount, 0),
+        successCount: results.reduce((sum, r) => sum + r.successCount, 0),
+        failedCount: results.reduce((sum, r) => sum + r.failedCount, 0),
+        results: results.flatMap(r => r.results),
+        errors: results.flatMap(r => r.errors ?? []),
+      };
+      setLastResult(merged);
+      const failedIds = merged.results.filter(item => !item.success).map(item => item.studentId);
+      setSelectedStudentIds(new Set(failedIds));
+    });
   }
 
   const mutationError = assignmentMutation.isError
@@ -429,21 +470,59 @@ export default function BulkAdvisorAssignmentPage() {
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2">
-                <FilterSelect
-                  label="Yeni danışman"
-                  value={selectedAdvisorId}
-                  onValueChange={setSelectedAdvisorId}
-                  disabled={!canAssignAdvisors}
-                  options={[
-                    { value: 'none', label: 'Danışman seçin' },
-                    ...instructors
-                      .filter(instructor => !excludedAdvisors[instructor.instructorId])
-                      .map(instructor => ({
-                        value: String(instructor.instructorId),
-                        label: instructor.fullName,
-                      })),
-                  ]}
-                />
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-xs">Atama Modu</Label>
+                  <div className="flex h-8 rounded-md border bg-background overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setAssignmentMode('single')}
+                      disabled={!canAssignAdvisors}
+                      className={`flex-1 text-xs font-medium px-3 transition-colors ${
+                        assignmentMode === 'single'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      Tek Hoca, Tümüne Uygula
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssignmentMode('per-student')}
+                      disabled={!canAssignAdvisors}
+                      className={`flex-1 text-xs font-medium px-3 transition-colors border-l ${
+                        assignmentMode === 'per-student'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      Her Öğrenciye Ayrı
+                    </button>
+                  </div>
+                </div>
+                {assignmentMode === 'single' ? (
+                  <FilterSelect
+                    label="Yeni danışman"
+                    value={selectedAdvisorId}
+                    onValueChange={setSelectedAdvisorId}
+                    disabled={!canAssignAdvisors}
+                    options={[
+                      { value: 'none', label: 'Danışman seçin' },
+                      ...instructors
+                        .filter(instructor => !excludedAdvisors[instructor.instructorId])
+                        .map(instructor => ({
+                          value: String(instructor.instructorId),
+                          label: instructor.fullName,
+                        })),
+                    ]}
+                  />
+                ) : (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Danışman Seçimi</Label>
+                    <div className="flex h-8 items-center rounded-md border border-dashed px-2.5 text-xs text-muted-foreground">
+                      Tabloda her öğrenci için ayrı seçilir
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex min-h-[52px] items-end">
                   <div className="flex h-8 w-full items-center justify-between rounded-md border px-2.5">
@@ -480,7 +559,8 @@ export default function BulkAdvisorAssignmentPage() {
                     disabled={
                       !canAssignAdvisors
                       || assignmentMutation.isPending
-                      || selectedAdvisor === null
+                      || (assignmentMode === 'single' && selectedAdvisor === null)
+                      || (assignmentMode === 'per-student' && [...selectedStudentIds].every(id => !perStudentAdvisorIds[id]))
                       || selectedStudentIds.size === 0
                     }
                   >
@@ -489,9 +569,11 @@ export default function BulkAdvisorAssignmentPage() {
                       ? 'Atama Yetkisi Yok'
                       : assignmentMutation.isPending
                         ? 'Atanıyor'
-                        : replaceExisting
-                          ? 'Seçili Öğrencileri Yeniden Ata'
-                          : 'Danışmansızlara Ata'}
+                        : assignmentMode === 'per-student'
+                          ? 'Per-Öğrenci Ata'
+                          : replaceExisting
+                            ? 'Seçili Öğrencileri Yeniden Ata'
+                            : 'Danışmansızlara Ata'}
                   </Button>
                 </div>
               </div>
@@ -518,6 +600,11 @@ export default function BulkAdvisorAssignmentPage() {
           canSelectStudent={canSelectStudent}
           onToggleStudent={toggleStudent}
           onToggleVisible={toggleVisibleStudents}
+          perStudentMode={assignmentMode === 'per-student'}
+          availableAdvisors={instructors.filter(i => !excludedAdvisors[i.instructorId])}
+          perStudentAdvisorIds={perStudentAdvisorIds}
+          onPerStudentAdvisorChange={(studentId, advisorId) =>
+            setPerStudentAdvisorIds(prev => ({ ...prev, [studentId]: advisorId }))}
           paginationFooter={
             <TablePagination
               totalCount={filteredStudents.length}
@@ -587,6 +674,10 @@ function StudentTable({
   onToggleStudent,
   onToggleVisible,
   paginationFooter,
+  perStudentMode = false,
+  availableAdvisors = [],
+  perStudentAdvisorIds = {},
+  onPerStudentAdvisorChange,
 }: {
   students: DepartmentStudentListItem[];
   loading: boolean;
@@ -597,6 +688,10 @@ function StudentTable({
   onToggleStudent: (studentId: number) => void;
   onToggleVisible: () => void;
   paginationFooter?: ReactNode;
+  perStudentMode?: boolean;
+  availableAdvisors?: InstructorOptionDto[];
+  perStudentAdvisorIds?: Record<number, number>;
+  onPerStudentAdvisorChange?: (studentId: number, advisorId: number) => void;
 }) {
   const hasSelectableStudents = students.some(canSelectStudent);
 
@@ -637,6 +732,7 @@ function StudentTable({
               <TableHead>Program / Müfredat</TableHead>
               <TableHead className="w-[90px]">Sınıf</TableHead>
               <TableHead>Mevcut danışman</TableHead>
+              {perStudentMode && <TableHead className="w-[220px]">Atanacak danışman</TableHead>}
               <TableHead className="w-[140px]">Öğrenci durumu</TableHead>
               <TableHead className="w-[120px] text-right">GNO</TableHead>
             </TableRow>
@@ -675,6 +771,23 @@ function StudentTable({
                   <TableCell>
                     {student.advisorName ? student.advisorName : <span className="text-muted-foreground">Atanmamış</span>}
                   </TableCell>
+                  {perStudentMode && (
+                    <TableCell>
+                      <select
+                        value={perStudentAdvisorIds[student.studentId] ?? ''}
+                        onChange={event => onPerStudentAdvisorChange?.(student.studentId, Number(event.target.value))}
+                        disabled={!studentSelectable}
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                      >
+                        <option value="">Seçiniz...</option>
+                        {availableAdvisors.map(advisor => (
+                          <option key={advisor.instructorId} value={advisor.instructorId}>
+                            {advisor.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <StatusBadge status={student.status} />
                   </TableCell>
