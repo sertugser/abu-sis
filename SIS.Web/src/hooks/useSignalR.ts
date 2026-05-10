@@ -32,10 +32,13 @@ export function useSignalR(options: UseSignalROptions): UseSignalRResult {
   const [status, setStatus] = useState<SignalRStatus>('idle');
   // onConnect referans değişikliği yeniden bağlanmaya neden olmasın diye ref'te tut.
   const onConnectRef = useRef(onConnect);
-  onConnectRef.current = onConnect;
+  useEffect(() => {
+    onConnectRef.current = onConnect;
+  });
 
   useEffect(() => {
     if (!enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus('idle');
       return;
     }

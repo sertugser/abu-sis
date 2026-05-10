@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import DepartmentOperationsLayout, { resolveInitialDepartmentId } from '@/components/academic-operations/DepartmentOperationsLayout';
+import DepartmentOperationsLayout from '@/components/academic-operations/DepartmentOperationsLayout';
+import { resolveInitialDepartmentId } from '@/components/academic-operations/utils';
 import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
 import { useAcademicOperationsContext, useDepartmentClassLists } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
@@ -23,6 +24,7 @@ export default function SectioningPage() {
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDepartmentId(resolveInitialDepartmentId(contextQuery.data));
     }
   }, [contextQuery.data, departmentId]);
@@ -32,6 +34,7 @@ export default function SectioningPage() {
   const sections = classListsQuery.data?.sections ?? [];
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExpandedSectionId(null);
   }, [departmentId, termId, search]);
 

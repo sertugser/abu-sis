@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import DepartmentOperationsLayout, { resolveInitialDepartmentId } from '@/components/academic-operations/DepartmentOperationsLayout';
+import DepartmentOperationsLayout from '@/components/academic-operations/DepartmentOperationsLayout';
+import { resolveInitialDepartmentId } from '@/components/academic-operations/utils';
 import { cn } from '@/lib/utils';
 import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
@@ -33,11 +34,13 @@ export default function InstructorCoursesReportPage() {
   useEffect(() => {
     if (departmentId !== null && contextQuery.data) {
       const exists = contextQuery.data.accessibleDepartments.some(department => department.departmentId === departmentId);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (!exists) setDepartmentId(null);
     }
   }, [contextQuery.data, departmentId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExpandedId(null);
   }, [departmentId, activeTerm?.id]);
 

@@ -11,7 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import BulkOperationResultPanel from '@/components/academic-operations/BulkOperationResultPanel';
-import DepartmentOperationsLayout, { resolveInitialDepartmentId } from '@/components/academic-operations/DepartmentOperationsLayout';
+import DepartmentOperationsLayout from '@/components/academic-operations/DepartmentOperationsLayout';
+import { resolveInitialDepartmentId } from '@/components/academic-operations/utils';
 import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
 import { useAcademicOperationsContext, useBulkAdvisorAssignment, useDepartmentStudents } from '../hooks/useAcademicOperations';
 import { useDepartmentInstructors } from '../hooks/useCourseOpening';
@@ -47,11 +48,13 @@ export default function BulkAdvisorAssignmentPage() {
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDepartmentId(resolveInitialDepartmentId(contextQuery.data));
     }
   }, [contextQuery.data, departmentId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearch('');
     setStatusFilter('all');
     setProgramFilter('all');
@@ -73,6 +76,7 @@ export default function BulkAdvisorAssignmentPage() {
   const departmentOptions = contextQuery.data?.accessibleDepartments ?? [];
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedStudentIds(previous => {
       const validIds = new Set(
         students

@@ -1517,6 +1517,13 @@ function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps)
 
 const PAGE_SIZE = 50;
 
+function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+  if (!active) return <ArrowUpDown className="h-3 w-3 inline-block ml-1 text-muted-foreground/40" />;
+  return dir === 'asc'
+    ? <ArrowUp className="h-3 w-3 inline-block ml-1 text-primary" />
+    : <ArrowDown className="h-3 w-3 inline-block ml-1 text-primary" />;
+}
+
 export default function CourseCatalogAdminPage() {
   // Filter state
   const [search, setSearch] = useState('');
@@ -1632,20 +1639,15 @@ export default function CourseCatalogAdminPage() {
     }
   }
 
-  function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
-    if (!active) return <ArrowUpDown className="h-3 w-3 inline-block ml-1 text-muted-foreground/40" />;
-    return dir === 'asc'
-      ? <ArrowUp className="h-3 w-3 inline-block ml-1 text-primary" />
-      : <ArrowDown className="h-3 w-3 inline-block ml-1 text-primary" />;
-  }
-
   // Filtre veya arama değişince ilk sayfaya dön
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
   }, [search, facultyId, departmentId, statusFilter, languageFilter, levelFilter, typeFilter, teachingMethodFilter, nonGpaFilter]);
 
   // Liste kısalırsa açık sayfa son sayfanın ötesine düşmesin
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 

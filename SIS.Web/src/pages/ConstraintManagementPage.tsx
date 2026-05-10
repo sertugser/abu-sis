@@ -152,7 +152,6 @@ function ConstraintEditDialog({
 
   useEffect(() => {
     if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- resync params on open
     try {
       const parsed = constraint.parameters ? JSON.parse(constraint.parameters) as Record<string, unknown> : {};
       const draft: Record<string, string> = {};
@@ -160,6 +159,7 @@ function ConstraintEditDialog({
         const v = parsed[f.key];
         draft[f.key] = v == null ? '' : String(v);
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resync params on open
       setParamDraft(draft);
     } catch {
       setParamDraft({});

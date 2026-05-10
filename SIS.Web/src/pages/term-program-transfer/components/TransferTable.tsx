@@ -44,6 +44,7 @@ export function TransferTable({
   // Filtre değişip toplam azalınca page clamp'lenir, ama state'i de düşür
   const totalPages = Math.max(1, Math.ceil(courses.length / pageSize));
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
   const safePage = Math.min(page, totalPages);

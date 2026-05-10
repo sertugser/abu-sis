@@ -154,10 +154,12 @@ const VARIANT_STYLES: Record<ToastVariant, VariantStyle> = {
   },
 };
 
-function getIcon(variant: ToastVariant) {
-  if (variant === 'error') return AlertCircle;
-  if (variant === 'warning') return AlertTriangle;
-  return CheckCircle2;
+function VariantIcon({ variant, className, strokeWidth }: { variant: ToastVariant; className: string; strokeWidth?: number }) {
+  switch (variant) {
+    case 'error': return <AlertCircle className={className} strokeWidth={strokeWidth} />;
+    case 'warning': return <AlertTriangle className={className} strokeWidth={strokeWidth} />;
+    default: return <CheckCircle2 className={className} strokeWidth={strokeWidth} />;
+  }
 }
 
 function ToastCard({ toast, onDismiss, center }: { toast: ToastItem; onDismiss: () => void; center: boolean }) {
@@ -167,7 +169,6 @@ function ToastCard({ toast, onDismiss, center }: { toast: ToastItem; onDismiss: 
   }, [onDismiss, toast.durationMs]);
 
   const palette = VARIANT_STYLES[toast.variant];
-  const Icon = getIcon(toast.variant);
 
   if (center) {
     return (
@@ -191,7 +192,7 @@ function ToastCard({ toast, onDismiss, center }: { toast: ToastItem; onDismiss: 
         </button>
         <div className="flex flex-col items-center px-12 pt-14 pb-12 text-center">
           <div className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full ring-8 ${palette.iconBg} ${palette.iconHalo}`}>
-            <Icon className={`h-11 w-11 ${palette.iconColor}`} strokeWidth={2} />
+            <VariantIcon variant={toast.variant} className={`h-11 w-11 ${palette.iconColor}`} strokeWidth={2} />
           </div>
           <p className={`mt-7 text-3xl font-bold leading-tight tracking-tight ${palette.title}`}>{toast.title}</p>
           {toast.description && (
@@ -207,7 +208,7 @@ function ToastCard({ toast, onDismiss, center }: { toast: ToastItem; onDismiss: 
       role="status"
       className={`flex items-start gap-4 rounded-2xl border bg-white px-6 py-5 shadow-xl ring-2 ${palette.ring}`}
     >
-      <Icon className={`mt-0.5 h-7 w-7 shrink-0 ${palette.iconColor}`} />
+      <VariantIcon variant={toast.variant} className={`mt-0.5 h-7 w-7 shrink-0 ${palette.iconColor}`} />
       <div className="min-w-0 flex-1">
         <p className={`text-lg font-semibold leading-tight ${palette.title}`}>{toast.title}</p>
         {toast.description && (
@@ -226,6 +227,7 @@ function ToastCard({ toast, onDismiss, center }: { toast: ToastItem; onDismiss: 
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast must be used inside <ToastProvider>');

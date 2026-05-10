@@ -177,6 +177,7 @@ export function OpenedCoursesPanel({
   const [pageSize, setPageSize] = useState(25);
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
   const safePage = Math.min(page, totalPages);

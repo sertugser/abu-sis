@@ -132,7 +132,7 @@ public class ElectiveGroupController(AppDbContext context) : ControllerBase
             .ThenBy(p => p.SlotName)
             .Select(p => new ElectiveGroupUsageDto(
                 p.Id,
-                p.CurriculumId, p.Curriculum.Name, p.Curriculum.Version,
+                p.CurriculumId, p.Curriculum.Name ?? "", p.Curriculum.Version,
                 p.Curriculum.ProgramId, p.Curriculum.Program.Name,
                 p.SlotName,
                 p.SuggestedSemesterStart, p.SuggestedSemesterEnd,

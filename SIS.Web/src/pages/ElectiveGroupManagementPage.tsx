@@ -365,10 +365,12 @@ export default function ElectiveGroupManagementPage({
 
   // Filtre değiştiğinde veya toplam sayfa azaldığında geçerli sayfayı sıfırla.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
   }, [subtypeFilter, facultyFilter, departmentFilter, statusFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
