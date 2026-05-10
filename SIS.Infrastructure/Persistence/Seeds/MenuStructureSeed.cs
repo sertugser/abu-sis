@@ -166,6 +166,7 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Şubelendirme İşlemleri",         "/subelendirme-islemleri",         "subelendirme-islemleri-bolum",      1, "menu.subelendirme-islemleri.view"),
             BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",     "ders-veren-ogretim-uyeleri-bolum",  2, "menu.ders-veren-ogretim-uyeleri.view"),
             BuildItem(permissions, "Toplu Danışman Atama",           "/toplu-danisman-atama",           "toplu-danisman-atama-bolum",        3, "menu.toplu-danisman-atama.view"),
+            BuildItem(permissions, "Toplu Müfredat Atama",           "/toplu-mufredat-atama",           "toplu-mufredat-atama-bolum",        4, "menu.toplu-mufredat-atama.view"),
         };
 
         // ─── Modül 8: Öğrenci İşlemleri (kayma: 7 → 8) ───────────────────────────

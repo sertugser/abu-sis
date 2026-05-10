@@ -2471,11 +2471,17 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AdvisorAssignmentCapacity")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("DepartmentId")
                         .HasColumnType("integer");
+
+                    b.Property<bool?>("IsAvailableForAdvisorAssignment")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("MaxWeeklyHours")
                         .HasColumnType("integer");
