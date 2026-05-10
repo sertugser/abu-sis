@@ -2,9 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createAnnouncement,
   deleteAnnouncement,
+  permanentDeleteAnnouncement,
+  reactivateAnnouncement,
   getActiveAnnouncements,
   getAllAnnouncements,
   getAnnouncementById,
+  getAnnouncementCreateContext,
   updateAnnouncement,
 } from '../api/announcements.api';
 import { QUERY_KEYS } from '../lib/constants';
@@ -37,6 +40,15 @@ export function useAllAnnouncements(enabled = true) {
   });
 }
 
+export function useAnnouncementCreateContext(enabled = true) {
+  return useQuery({
+    queryKey: ['announcements', 'create-context'],
+    queryFn: getAnnouncementCreateContext,
+    staleTime: 5 * 60 * 1000,
+    enabled,
+  });
+}
+
 function invalidateAnnouncementLists(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['announcements'] });
 }
@@ -62,6 +74,22 @@ export function useDeleteAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => deleteAnnouncement(id),
+    onSuccess: () => invalidateAnnouncementLists(qc),
+  });
+}
+
+export function usePermanentDeleteAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => permanentDeleteAnnouncement(id),
+    onSuccess: () => invalidateAnnouncementLists(qc),
+  });
+}
+
+export function useReactivateAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => reactivateAnnouncement(id),
     onSuccess: () => invalidateAnnouncementLists(qc),
   });
 }

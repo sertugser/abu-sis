@@ -361,11 +361,12 @@ public static class MenuStructureSeed
 
         ogretimIslemleri.Items = new List<MenuItem>
         {
-            BuildItem(permissions, "Derslerim",       "/derslerim",                "derslerim",                  1, "menu.derslerim.view"),
-            BuildItem(permissions, "Ders ProgramÄ±m",  "/ders-programim",           "ders-programim",             2, "menu.ders-programim.view"),
-            BuildItem(permissions, "Yoklama YÃ¶netimi", "/yoklama-girisi",          "yoklama-girisi",             3, "menu.yoklama-girisi.view"),
-            BuildItem(permissions, "Not GiriÅŸi",      "/not-girisi",               "not-girisi",                 4, "menu.not-girisi.view"),
-            BuildItem(permissions, "Ders KÄ±sÄ±tlarÄ±",  "/danisman-ders-kisitlari",  "danisman-ders-kisitlari",    5, "menu.danisman-ders-kisitlari.view"),
+            BuildItem(permissions, "Duyurular",        "/duyurular",                "duyurular-ogretim",          1, "menu.duyurular.view"),
+            BuildItem(permissions, "Derslerim",        "/derslerim",                "derslerim",                  2, "menu.derslerim.view"),
+            BuildItem(permissions, "Ders Programım",   "/ders-programim",           "ders-programim",             3, "menu.ders-programim.view"),
+            BuildItem(permissions, "Yoklama Yönetimi", "/yoklama-girisi",           "yoklama-girisi",             4, "menu.yoklama-girisi.view"),
+            BuildItem(permissions, "Not Girişi",       "/not-girisi",               "not-girisi",                 5, "menu.not-girisi.view"),
+            BuildItem(permissions, "Ders Kısıtları",   "/danisman-ders-kisitlari",  "danisman-ders-kisitlari",    6, "menu.danisman-ders-kisitlari.view"),
         };
 
         await context.SaveChangesAsync(ct);

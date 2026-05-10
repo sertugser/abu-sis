@@ -22,23 +22,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Pencil, Trash2, Pin, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Pin, AlertCircle, EyeOff, Eye } from 'lucide-react';
 import AnnouncementFormDialog from '../components/announcements/AnnouncementFormDialog';
 import {
   useAllAnnouncements,
   useAnnouncementDetail,
   useDeleteAnnouncement,
+  usePermanentDeleteAnnouncement,
+  useReactivateAnnouncement,
 } from '../hooks/useAnnouncements';
-import { ANNOUNCEMENT_AUDIENCE_LABELS } from '../types/announcements';
+import { getAudienceBadgeLabel } from '../types/announcements';
 import { formatDate } from '../lib/utils';
 
 export default function AnnouncementManagementPage() {
   const { data, isLoading, isError } = useAllAnnouncements();
-  const deleteMutation = useDeleteAnnouncement();
+  const deleteMutation        = useDeleteAnnouncement();
+  const permDeleteMutation    = usePermanentDeleteAnnouncement();
+  const reactivateMutation    = useReactivateAnnouncement();
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [formOpen,         setFormOpen]         = useState(false);
+  const [editingId,        setEditingId]        = useState<number | null>(null);
+  const [deletingId,       setDeletingId]       = useState<number | null>(null);
+  const [permDeletingId,   setPermDeletingId]   = useState<number | null>(null);
 
   const { data: editingDetail } = useAnnouncementDetail(editingId, editingId != null);
 
@@ -54,9 +59,7 @@ export default function AnnouncementManagementPage() {
 
   function handleFormClose(open: boolean) {
     setFormOpen(open);
-    if (!open) {
-      setEditingId(null);
-    }
+    if (!open) setEditingId(null);
   }
 
   async function confirmDelete() {
@@ -68,12 +71,29 @@ export default function AnnouncementManagementPage() {
     }
   }
 
+  async function confirmPermDelete() {
+    if (permDeletingId == null) return;
+    try {
+      await permDeleteMutation.mutateAsync(permDeletingId);
+    } catch {
+      // error exposed via permDeleteMutation.error if needed
+    } finally {
+      setPermDeletingId(null);
+    }
+  }
+
+  async function handleReactivate(id: number) {
+    await reactivateMutation.mutateAsync(id);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-heading text-xl font-bold">Duyuru Yönetimi</h1>
-          <p className="text-sm text-muted-foreground">İç duyuruları oluşturun, düzenleyin veya kaldırın.</p>
+          <p className="text-sm text-muted-foreground">
+            Duyurularınızı oluşturun, düzenleyin veya kaldırın.
+          </p>
         </div>
         <Button onClick={handleCreateClick}>
           <Plus className="h-4 w-4 mr-1.5" />
@@ -124,10 +144,8 @@ export default function AnnouncementManagementPage() {
                         </p>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-[10px]">
-                          {a.targetAudience === 'Department' && a.targetDepartmentName
-                            ? a.targetDepartmentName
-                            : ANNOUNCEMENT_AUDIENCE_LABELS[a.targetAudience]}
+                        <Badge variant="outline" className="text-[10px] max-w-[160px] truncate">
+                          {getAudienceBadgeLabel(a)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
@@ -149,11 +167,33 @@ export default function AnnouncementManagementPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          {a.isActive ? (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => setDeletingId(a.id)}
+                              title="Geri Çek"
+                            >
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => handleReactivate(a.id)}
+                              title="Yeniden Yayınla"
+                            >
+                              <Eye className="h-4 w-4 text-green-600" />
+                            </Button>
+                          )}
                           <Button
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8"
-                            onClick={() => setDeletingId(a.id)}
+                            onClick={() => setPermDeletingId(a.id)}
+                            title="Kalıcı Sil"
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -177,14 +217,31 @@ export default function AnnouncementManagementPage() {
       <AlertDialog open={deletingId != null} onOpenChange={(open) => !open && setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Duyuruyu sil?</AlertDialogTitle>
+            <AlertDialogTitle>Duyuruyu geri çek?</AlertDialogTitle>
             <AlertDialogDescription>
-              Bu işlem geri alınamaz. Duyuru artık kimseye görünmeyecek.
+              Duyuru geri çekilecek ve artık kimseye görünmeyecek. Gerekirse tekrar yayına alabilirsiniz.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>İptal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Sil</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete}>Geri Çek</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={permDeletingId != null} onOpenChange={(open) => !open && setPermDeletingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Duyuruyu kalıcı olarak sil?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bu duyuru veritabanından <strong>kalıcı olarak silinecektir</strong>. Bu işlem kesinlikle geri alınamaz.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPermDelete}>
+              Kalıcı Sil
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -192,19 +249,17 @@ export default function AnnouncementManagementPage() {
   );
 }
 
-function StatusBadge({ announcement }: { announcement: { isActive: boolean; startsAt: string; expiresAt: string | null } }) {
-  const now = new Date();
-  const starts = new Date(announcement.startsAt);
+function StatusBadge({
+  announcement,
+}: {
+  announcement: { isActive: boolean; startsAt: string; expiresAt: string | null };
+}) {
+  const now     = new Date();
+  const starts  = new Date(announcement.startsAt);
   const expires = announcement.expiresAt ? new Date(announcement.expiresAt) : null;
 
-  if (!announcement.isActive) {
-    return <Badge variant="secondary">Pasif</Badge>;
-  }
-  if (now < starts) {
-    return <Badge variant="outline">Planlandı</Badge>;
-  }
-  if (expires && now > expires) {
-    return <Badge variant="secondary">Süresi Doldu</Badge>;
-  }
+  if (!announcement.isActive)          return <Badge variant="secondary">Pasif</Badge>;
+  if (now < starts)                    return <Badge variant="outline">Planlandı</Badge>;
+  if (expires && now > expires)        return <Badge variant="secondary">Süresi Doldu</Badge>;
   return <Badge variant="success">Aktif</Badge>;
 }

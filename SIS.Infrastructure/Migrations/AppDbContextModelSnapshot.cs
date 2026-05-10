@@ -2078,6 +2078,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("QuestionType")
                         .HasColumnType("integer");
 
@@ -2094,6 +2097,21 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Category", "SortOrder");
 
                     b.ToTable("EvaluationQuestions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.EvaluationPeriodQuestion", b =>
+                {
+                    b.Property<int>("EvaluationPeriodId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EvaluationQuestionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("EvaluationPeriodId", "EvaluationQuestionId");
+
+                    b.HasIndex("EvaluationQuestionId");
+
+                    b.ToTable("EvaluationPeriodQuestions");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.EvaluationResponse", b =>
@@ -2584,6 +2602,12 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("TargetDepartmentId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("TargetFacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetSectionId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2597,6 +2621,10 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("TargetAudience");
 
                     b.HasIndex("TargetDepartmentId");
+
+                    b.HasIndex("TargetFacultyId");
+
+                    b.HasIndex("TargetSectionId");
 
                     b.HasIndex("IsActive", "StartsAt", "ExpiresAt");
 
@@ -4256,6 +4284,25 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Term");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.EvaluationPeriodQuestion", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.EvaluationPeriod", "Period")
+                        .WithMany()
+                        .HasForeignKey("EvaluationPeriodId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.EvaluationQuestion", "Question")
+                        .WithMany()
+                        .HasForeignKey("EvaluationQuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Period");
+
+                    b.Navigation("Question");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.EvaluationResponse", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
@@ -4398,7 +4445,21 @@ namespace SIS.Infrastructure.Migrations
                         .HasForeignKey("TargetDepartmentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SIS.Domain.Entities.Faculty", "TargetFaculty")
+                        .WithMany()
+                        .HasForeignKey("TargetFacultyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIS.Domain.Entities.CourseSection", "TargetSection")
+                        .WithMany()
+                        .HasForeignKey("TargetSectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("TargetDepartment");
+
+                    b.Navigation("TargetFaculty");
+
+                    b.Navigation("TargetSection");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ProgramQuota", b =>

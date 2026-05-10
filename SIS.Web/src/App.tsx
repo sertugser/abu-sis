@@ -83,6 +83,7 @@ import TermProgramTransferPage from './pages/term-program-transfer';
 import CourseEvaluationPage from './pages/CourseEvaluationPage';
 import EvaluationResultsPage from './pages/EvaluationResultsPage';
 import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
+import EvaluationRequiredGate from './components/EvaluationRequiredGate';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
 import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
@@ -112,6 +113,7 @@ export default function App() {
                 </Route>
 
                 <Route element={<AppLayout />}>
+                <Route element={<EvaluationRequiredGate />}>
                   <Route index element={<RoleDashboard />} />
 
                   {/* RBAC: yetki yetersiz olduÄŸunda RoleProtectedRoute buraya yÃ¶nlendirir */}
@@ -375,6 +377,7 @@ export default function App() {
                   )}
 
                   <Route path="*" element={<NotFoundPage />} />
+                </Route>
                 </Route>
               </Route>
             </Routes>

@@ -9,6 +9,10 @@ public record AnnouncementListDto(
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
     string? TargetDepartmentName,
+    int? TargetFacultyId,
+    string? TargetFacultyName,
+    int? TargetSectionId,
+    string? TargetSectionInfo,
     bool IsPinned,
     DateTime StartsAt,
     DateTime? ExpiresAt,
@@ -23,6 +27,10 @@ public record AnnouncementDetailDto(
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
     string? TargetDepartmentName,
+    int? TargetFacultyId,
+    string? TargetFacultyName,
+    int? TargetSectionId,
+    string? TargetSectionInfo,
     bool IsPinned,
     DateTime StartsAt,
     DateTime? ExpiresAt,
@@ -36,6 +44,8 @@ public record CreateAnnouncementDto(
     string Content,
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
+    int? TargetFacultyId,
+    int? TargetSectionId,
     bool IsPinned,
     DateTime? StartsAt,
     DateTime? ExpiresAt);
@@ -45,6 +55,26 @@ public record UpdateAnnouncementDto(
     string Content,
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
+    int? TargetFacultyId,
+    int? TargetSectionId,
     bool IsPinned,
     DateTime StartsAt,
     DateTime? ExpiresAt);
+
+// ── Create context: form'a hangi seçeneklerin sunulacağını döner ─────────────
+
+public record AnnouncementSectionOptionDto(
+    int Id,
+    string CourseName,
+    string CourseCode,
+    int SectionNumber,
+    string TermName);
+
+public record AnnouncementCreateContextDto(
+    string SenderRole,
+    IReadOnlyList<AnnouncementAudience> AllowedAudiences,
+    int? DepartmentId,
+    string? DepartmentName,
+    int? FacultyId,
+    string? FacultyName,
+    IReadOnlyList<AnnouncementSectionOptionDto> Sections);
