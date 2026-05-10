@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertCircle, Loader2, Search, ShieldAlert, UserCheck, Users, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TablePagination } from '@/components/ui/table-pagination';
 import BulkOperationResultPanel from '@/components/academic-operations/BulkOperationResultPanel';
 import DepartmentOperationsLayout from '@/components/academic-operations/DepartmentOperationsLayout';
 import { resolveInitialDepartmentId } from '@/components/academic-operations/utils';
@@ -45,6 +46,8 @@ export default function BulkAdvisorAssignmentPage() {
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<number>>(() => new Set());
   const [lastResult, setLastResult] = useState<BulkAcademicOperationResult | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
@@ -185,6 +188,24 @@ export default function BulkAdvisorAssignmentPage() {
   const selectableFilteredStudents = useMemo(
     () => filteredStudents.filter(student => replaceExisting || student.advisorId === null),
     [filteredStudents, replaceExisting],
+  );
+
+  // Filtre değişimleri → ilk sayfaya dön
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPage(1);
+  }, [search, statusFilter, programFilter, classFilter, curriculumFilter, advisorFilter]);
+
+  // Liste daralırsa açık sayfa son sayfanın ötesine düşmesin
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStudents = useMemo(
+    () => filteredStudents.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredStudents, safePage, pageSize],
   );
 
   const visibleAllSelected = selectableFilteredStudents.length > 0
@@ -447,7 +468,7 @@ export default function BulkAdvisorAssignmentPage() {
         </Card>
 
         <StudentTable
-          students={filteredStudents}
+          students={pageStudents}
           loading={studentsQuery.isLoading}
           selectedStudentIds={selectedStudentIds}
           visibleAllSelected={visibleAllSelected}
@@ -455,6 +476,16 @@ export default function BulkAdvisorAssignmentPage() {
           canSelectStudent={canSelectStudent}
           onToggleStudent={toggleStudent}
           onToggleVisible={toggleVisibleStudents}
+          paginationFooter={
+            <TablePagination
+              totalCount={filteredStudents.length}
+              page={safePage}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+              itemLabel="öğrenci"
+            />
+          }
         />
 
         <BulkOperationResultPanel result={lastResult ?? null} title="Son Danışman Atama Sonucu" />
@@ -513,6 +544,7 @@ function StudentTable({
   canSelectStudent,
   onToggleStudent,
   onToggleVisible,
+  paginationFooter,
 }: {
   students: DepartmentStudentListItem[];
   loading: boolean;
@@ -522,6 +554,7 @@ function StudentTable({
   canSelectStudent: (student: DepartmentStudentListItem) => boolean;
   onToggleStudent: (studentId: number) => void;
   onToggleVisible: () => void;
+  paginationFooter?: ReactNode;
 }) {
   const hasSelectableStudents = students.some(canSelectStudent);
 
@@ -611,6 +644,7 @@ function StudentTable({
         </Table>
         )}
       </CardContent>
+      {paginationFooter}
     </Card>
   );
 }
