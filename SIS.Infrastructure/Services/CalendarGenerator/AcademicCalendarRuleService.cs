@@ -37,7 +37,7 @@ public class AcademicCalendarRuleService : IAcademicCalendarRuleService
                     && e.StartDate <= end, ct);
 
             if (hasBlockingConflict)
-                throw new InvalidOperationException("Kritik akademik etkinlik resmi tatil veya bloklayÄ±cÄ± Ã¶nemli gÃ¼n ile Ã§akÄ±ÅŸmamalÄ±dÄ±r.");
+                throw new InvalidOperationException("Kritik akademik etkinlik resmi tatil veya bloklayıcı önemli gün ile çakışmamalıdır.");
         }
 
         await ValidateGradePublicationDeadlineAsync(term.Id, eventType, start, ct);
@@ -72,10 +72,10 @@ public class AcademicCalendarRuleService : IAcademicCalendarRuleService
     {
         var publicationDate = await GetGradePublicationDateAsync(term.Id, ct);
         if (publicationDate == null)
-            throw new InvalidOperationException("DÃ¶nem kapatÄ±lmadan Ã¶nce final/bÃ¼tÃ¼nleme/yaz okulu not ilan tarihi takvimde bulunmalÄ±dÄ±r.");
+            throw new InvalidOperationException("Dönem kapatılmadan önce final/bütünleme/yaz okulu not ilan tarihi takvimde bulunmalıdır.");
 
         if (publicationDate.Value.Date > DateTime.UtcNow.Date)
-            throw new InvalidOperationException("Not ilan tarihi gelmeden dÃ¶nem kapatÄ±lamaz.");
+            throw new InvalidOperationException("Not ilan tarihi gelmeden dönem kapatılamaz.");
     }
 
     private static bool IsCriticalEvent(CalendarEventType type) =>
@@ -108,7 +108,7 @@ public class AcademicCalendarRuleService : IAcademicCalendarRuleService
             .Where(e => e.TermId == termId && e.EventType == examType.Value);
 
         if (eventType == CalendarEventType.MakeupGradePublication)
-            query = query.Where(e => e.TemplateItemKey == "makeup_exam" || (!e.Title.Contains("BaÅŸvuru") && !e.Title.Contains("Basvuru")));
+            query = query.Where(e => e.TemplateItemKey == "makeup_exam" || (!e.Title.Contains("Başvuru") && !e.Title.Contains("Basvuru")));
 
         var exam = await query
             .OrderByDescending(e => e.EndDate ?? e.StartDate)
@@ -138,7 +138,7 @@ public class AcademicCalendarRuleService : IAcademicCalendarRuleService
         }
 
         if (businessDays > GradePublicationBusinessDayLimit)
-            throw new InvalidOperationException("SÄ±nav sonuÃ§larÄ± sÄ±nav dÃ¶nemini izleyen en geÃ§ 10 iÅŸ gÃ¼nÃ¼ iÃ§inde ilan edilmelidir.");
+            throw new InvalidOperationException("Sınav sonuçları sınav dönemini izleyen en geç 10 iş günü içinde ilan edilmelidir.");
     }
 
     private static DateTime EnsureUtcDate(DateTime date) =>

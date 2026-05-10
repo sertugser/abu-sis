@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useSystemConfigs } from './useSystemConfig';
+import { useSchedulingAlgorithmConfigs } from './useSchedulingAlgorithmConfig';
 import type { DayOfWeekName, TimeSlotAllowedMode } from './useTimeSlots';
 
 /**
@@ -35,11 +36,15 @@ const DEFAULTS: Omit<ScheduleSettings, 'isLoading'> = {
 };
 
 export function useScheduleSettings(): ScheduleSettings {
-  const { data: configs, isLoading } = useSystemConfigs();
+  const { data: configs, isLoading: systemLoading } = useSystemConfigs();
+  // LunchBreakStart/End SchedulingAlgorithmConfigs tablosunda — algoritma ile tek otorite.
+  const { data: algorithmConfigs, isLoading: algorithmLoading } = useSchedulingAlgorithmConfigs();
 
   return useMemo(() => {
     const map = new Map((configs ?? []).map(c => [c.key, c.value]));
+    const algorithmMap = new Map((algorithmConfigs ?? []).map(c => [c.key, c.value]));
     const get = (key: string, fallback: string): string => map.get(key) ?? fallback;
+    const getFromAlgorithm = (key: string, fallback: string): string => algorithmMap.get(key) ?? fallback;
     const getInt = (key: string, fallback: number): number => {
       const v = map.get(key);
       if (!v) return fallback;
@@ -56,16 +61,16 @@ export function useScheduleSettings(): ScheduleSettings {
       slotDurationMinutes:      getInt('Schedule.SlotDurationMinutes',      DEFAULTS.slotDurationMinutes),
       breakBetweenSlotsMinutes: getInt('Schedule.BreakBetweenSlotsMinutes', DEFAULTS.breakBetweenSlotsMinutes),
       morningStartTime:         get   ('Schedule.MorningStartTime',          DEFAULTS.morningStartTime),
-      lunchBreakStart:          get   ('Schedule.LunchBreakStart',           DEFAULTS.lunchBreakStart),
-      lunchBreakEnd:            get   ('Schedule.LunchBreakEnd',             DEFAULTS.lunchBreakEnd),
+      lunchBreakStart:          getFromAlgorithm('Schedule.LunchBreakStart', DEFAULTS.lunchBreakStart),
+      lunchBreakEnd:            getFromAlgorithm('Schedule.LunchBreakEnd',   DEFAULTS.lunchBreakEnd),
       afternoonEndTime:         get   ('Schedule.AfternoonEndTime',          DEFAULTS.afternoonEndTime),
       eveningStartTime:         get   ('Schedule.EveningStartTime',          DEFAULTS.eveningStartTime),
       eveningSlotCount:         getInt('Schedule.EveningSlotCount',          DEFAULTS.eveningSlotCount),
       faceToFaceCutoffTime:     get   ('Schedule.FaceToFaceCutoffTime',      DEFAULTS.faceToFaceCutoffTime),
       weekendOnlineOnly:        getBool('Schedule.WeekendOnlineOnly',        DEFAULTS.weekendOnlineOnly),
-      isLoading,
+      isLoading: systemLoading || algorithmLoading,
     };
-  }, [configs, isLoading]);
+  }, [configs, algorithmConfigs, systemLoading, algorithmLoading]);
 }
 
 // ── Zaman yardımcıları ────────────────────────────────────────────────

@@ -1,7 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search, Plus, Edit2, Trash2, X, BookOpen, BarChart3, GitBranch,
-  AlertTriangle, SlidersHorizontal,
+  AlertTriangle, AlertCircle, SlidersHorizontal, Copy, Users, CalendarClock, Layers,
+  IdCard, Clock, GraduationCap, ShieldCheck, FileText,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ArrowUpDown, ArrowUp, ArrowDown, Columns3, Rows3,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,10 +13,17 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/components/ui/global-toast';
 import {
   Dialog,
+  DialogContent,
+  DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -23,6 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
+import { cn } from '@/lib/utils';
 import {
   useAdminCourses,
   useAdminCourseDetail,
@@ -36,9 +47,15 @@ import {
   useCrossLists,
   useAddCrossList,
   useRemoveCrossList,
+  useCourseSections,
+  useBulkDeleteCourses,
   type CourseListItemDto,
   type CreateCourseDto,
   type PrerequisiteChainNodeDto,
+  type BulkDeleteResultItem,
+  type ClassroomTypeValue,
+  CLASSROOM_TYPE_LABELS,
+  CLASSROOM_TYPE_OPTIONS,
 } from '../hooks/useAdminCourseCatalog';
 import {
   useAdminFaculties,
@@ -54,6 +71,23 @@ import {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 type CourseTypeFilter = 'all' | 'theory' | 'lab' | 'mixed';
+
+const DAY_LABELS: Record<string, string> = {
+  Monday: 'Pzt',
+  Tuesday: 'Sa',
+  Wednesday: 'Çar',
+  Thursday: 'Per',
+  Friday: 'Cu',
+  Saturday: 'Cmt',
+  Sunday: 'Paz',
+};
+
+function formatScheduleSummary(schedules: { dayOfWeek: string; startTime: string; endTime: string }[]): string {
+  if (schedules.length === 0) return '—';
+  return schedules
+    .map(s => `${DAY_LABELS[s.dayOfWeek] ?? s.dayOfWeek} ${s.startTime}-${s.endTime}`)
+    .join(', ');
+}
 
 function emptyCourseForm(): CreateCourseDto {
   return {
@@ -71,7 +105,8 @@ function emptyCourseForm(): CreateCourseDto {
     status: 'Active',
     level: 'Undergraduate',
     description: null,
-    nationalCredit: null,
+    // Ulusal Kredi: Türk eğitim sisteminde theory + lab/2 konvensiyonu, default 3 (3T+0L tipik ders).
+    nationalCredit: 3,
     // Proliz "Diğer Ön Koşul Tanımları"
     minCreditsRequired: null,
     minEctsRequired: null,
@@ -83,6 +118,9 @@ function emptyCourseForm(): CreateCourseDto {
     showInInfoPackage: true,
     applicationHours: null,
     openType: null,
+    // Plan 10 — Derslik tipi tercihleri (opsiyonel; null = scheduler otomatik seçsin)
+    theoryClassroomType: null,
+    labClassroomType: null,
   };
 }
 
@@ -118,12 +156,65 @@ function PrerequisiteChainTree({ nodes, depth = 0 }: { nodes: PrerequisiteChainN
 
 // ─── Field Section Wrapper ───────────────────────────────────────────────────
 
-function FieldSection({ title, children }: { title: string; children: React.ReactNode }) {
+interface FieldSectionProps {
+  icon?: React.ComponentType<{ className?: string }>;
+  iconColor?: string;
+  title: string;
+  children: React.ReactNode;
+}
+
+function FieldSection({ icon: Icon, iconColor = 'text-primary', title, children }: FieldSectionProps) {
   return (
-    <fieldset className="border border-border rounded-lg px-4 pt-2 pb-4">
-      <legend className="text-xs font-semibold text-muted-foreground px-1 uppercase tracking-wide">{title}</legend>
+    <fieldset className="border border-border rounded-lg px-6 pt-4 pb-6">
+      <legend className="text-[11px] font-semibold text-foreground/80 px-2 uppercase tracking-wide flex items-center gap-1.5">
+        {Icon && <Icon className={cn('h-3.5 w-3.5', iconColor)} />}
+        {title}
+      </legend>
       {children}
     </fieldset>
+  );
+}
+
+// Okuma modunda input/select/textarea: opaklık tam, border/bg soluk, cursor default
+const READ_MODE_CLASS = 'disabled:opacity-100 disabled:cursor-default disabled:bg-muted/30 disabled:border-muted/50 disabled:text-foreground';
+
+// ── Zorunlu alan etiketi (kırmızı yıldız) ──
+// Sebep-sonuç: Backend (AdminCourseCatalogService.CreateCourseAsync) DB schema'dan
+// türeyen şu kuralları zorlar:
+//  - Code: non-nullable + unique index (DB)
+//  - Name: non-nullable
+//  - DepartmentId: explicit "Ders sahipliği zorunludur" check
+//  - Ects/TheoryHours/LabHours: non-nullable int
+function RequiredLabel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <Label className={cn('text-xs', className)}>
+      {children}
+      <span className="text-destructive ml-0.5 font-semibold" aria-hidden="true">*</span>
+      <span className="sr-only"> (zorunlu)</span>
+    </Label>
+  );
+}
+
+/** Pre-flight: server'ın gerçek doğrulama kurallarını ön-görür. Eksik alan listesi döner. */
+function collectMissingRequiredFields(form: CreateCourseDto): string[] {
+  const missing: string[] = [];
+  if (!form.code.trim()) missing.push('Ders Kodu');
+  if (!form.name.trim()) missing.push('Ders Adı');
+  if (form.departmentId == null) missing.push('Bölüm (ders sahipliği zorunlu)');
+  if (!form.ects || form.ects < 1 || form.ects > 30) missing.push('AKTS (1-30 aralığında)');
+  // Ulusal Kredi (YÖKSİS zorunlu): null/undefined kabul edilmez, 0-20 aralığı.
+  if (form.nationalCredit == null || form.nationalCredit < 0 || form.nationalCredit > 20) {
+    missing.push('Ulusal Kredi (0-20 aralığında, YÖKSİS raporlama zorunlu)');
+  }
+  if (form.theoryHours < 0 || form.theoryHours > 10) missing.push('Teori Saati (0-10 arası)');
+  if (form.labHours < 0 || form.labHours > 10) missing.push('Lab Saati (0-10 arası)');
+  return missing;
+}
+
+function getServerErrorMessage(error: unknown, fallback: string): string {
+  return (
+    (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+    fallback
   );
 }
 
@@ -144,7 +235,11 @@ function NativeSelect({
 }) {
   return (
     <select
-      className={`w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={cn(
+        'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring',
+        READ_MODE_CLASS,
+        className,
+      )}
       value={value}
       onChange={e => onChange(e.target.value)}
       disabled={disabled}
@@ -163,287 +258,348 @@ interface CourseFormFieldsProps {
   disabled?: boolean;
 }
 
-function CourseFormFields({ form, onChange, departments, disabled = false }: CourseFormFieldsProps) {
-  const descLen = form.description?.length ?? 0;
-
+// ── Kimlik bölümü — 2 sütunlu, sol uzun isimler, sağ kod/bölüm/checkbox ──
+function KimlikSection({ form, onChange, departments, disabled = false }: CourseFormFieldsProps) {
   return (
-    <div className="space-y-4 overflow-y-auto">
-      {/* Kimlik */}
-      <FieldSection title="Kimlik">
-        <div className="grid grid-cols-2 gap-3 mt-2">
+    <FieldSection icon={IdCard} iconColor="text-blue-600" title="Kimlik">
+      <div className="grid grid-cols-2 gap-6 mt-3">
+        {/* Sol kolon — uzun ad alanları */}
+        <div className="space-y-4">
           <div className="space-y-1">
-            <Label className="text-xs">Ders Kodu</Label>
+            <RequiredLabel>Ders Adı</RequiredLabel>
+            <Input
+              value={form.name}
+              onChange={e => onChange({ ...form, name: e.target.value })}
+              placeholder="örn. Programlamaya Giriş"
+              disabled={disabled}
+              aria-required="true"
+              aria-invalid={!disabled && !form.name.trim()}
+              className={READ_MODE_CLASS}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">İngilizce Adı</Label>
+            <Input
+              value={form.englishName ?? ''}
+              onChange={e => onChange({ ...form, englishName: e.target.value || null })}
+              placeholder="örn. Introduction to Programming"
+              disabled={disabled}
+              className={READ_MODE_CLASS}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Diğer Adı</Label>
+            <Input
+              value={form.alternativeName ?? ''}
+              onChange={e => onChange({ ...form, alternativeName: e.target.value || null })}
+              placeholder="Alternatif ders adı"
+              disabled={disabled}
+              className={READ_MODE_CLASS}
+            />
+          </div>
+        </div>
+        {/* Sağ kolon — kısa kod/bölüm + bayraklar */}
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <RequiredLabel>Ders Kodu</RequiredLabel>
             <Input
               value={form.code}
               onChange={e => onChange({ ...form, code: e.target.value.toUpperCase() })}
               placeholder="örn. BM101"
               maxLength={20}
               disabled={disabled}
-              className="font-mono"
+              aria-required="true"
+              aria-invalid={!disabled && !form.code.trim()}
+              className={cn('font-mono', READ_MODE_CLASS)}
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Bölüm</Label>
+            <RequiredLabel>Bölüm</RequiredLabel>
             <NativeSelect
               value={form.departmentId ?? 'none'}
               onChange={v => onChange({ ...form, departmentId: v === 'none' ? null : Number(v) })}
               disabled={disabled}
             >
-              <option value="none">Bölüm yok (Ortak ders)</option>
+              <option value="none">— Bölüm seçin —</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </NativeSelect>
           </div>
-        </div>
-        <div className="space-y-1 mt-3">
-          <Label className="text-xs">Ders Adı</Label>
-          <Input
-            value={form.name}
-            onChange={e => onChange({ ...form, name: e.target.value })}
-            placeholder="örn. Programlamaya Giriş"
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-1 mt-3">
-          <Label className="text-xs">İngilizce Adı</Label>
-          <Input
-            value={form.englishName ?? ''}
-            onChange={e => onChange({ ...form, englishName: e.target.value || null })}
-            placeholder="örn. Introduction to Programming"
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-1 mt-3">
-          <Label className="text-xs">Diğer Adı</Label>
-          <Input
-            value={form.alternativeName ?? ''}
-            onChange={e => onChange({ ...form, alternativeName: e.target.value || null })}
-            placeholder="Alternatif ders adı"
-            disabled={disabled}
-          />
-        </div>
-        <div className="flex items-center gap-2 mt-3">
-          <input
-            type="checkbox"
-            id="showInInfoPackage"
-            checked={form.showInInfoPackage ?? true}
-            onChange={e => onChange({ ...form, showInInfoPackage: e.target.checked })}
-            disabled={disabled}
-            className="h-4 w-4 rounded border-border accent-primary"
-          />
-          <label htmlFor="showInInfoPackage" className="text-sm text-muted-foreground cursor-pointer select-none">
-            Bilgi Paketinde Göster
-          </label>
-        </div>
-      </FieldSection>
-
-      {/* Kredi & Saat */}
-      <FieldSection title="Kredi &amp; Saat">
-        <div className="grid grid-cols-5 gap-3 mt-2">
-          <div className="space-y-1">
-            <Label className="text-xs">AKTS</Label>
-            <Input
-              type="number" min={1} max={30}
-              value={form.ects}
-              onChange={e => onChange({ ...form, ects: Number(e.target.value) })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Ulusal Kredi</Label>
-            <Input
-              type="number" min={0} max={20}
-              value={form.nationalCredit ?? ''}
-              onChange={e => onChange({ ...form, nationalCredit: e.target.value ? Number(e.target.value) : null })}
-              disabled={disabled}
-              placeholder="—"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Teori Saati</Label>
-            <Input
-              type="number" min={0} max={10}
-              value={form.theoryHours}
-              onChange={e => onChange({ ...form, theoryHours: Number(e.target.value) })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Lab Saati</Label>
-            <Input
-              type="number" min={0} max={10}
-              value={form.labHours}
-              onChange={e => onChange({ ...form, labHours: Number(e.target.value) })}
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Uygulama Saati</Label>
-            <Input
-              type="number" min={0} max={10}
-              value={form.applicationHours ?? ''}
-              onChange={e => onChange({ ...form, applicationHours: e.target.value ? Number(e.target.value) : null })}
-              disabled={disabled}
-              placeholder="—"
-            />
-          </div>
-        </div>
-      </FieldSection>
-
-      {/* Akademik Bilgiler */}
-      <FieldSection title="Akademik Bilgiler">
-        <div className="grid grid-cols-2 gap-3 mt-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Dil</Label>
-            <NativeSelect
-              value={form.language}
-              onChange={v => onChange({ ...form, language: v })}
-              disabled={disabled}
-            >
-              {Object.entries(COURSE_LANGUAGE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Öğretim Şekli</Label>
-            <NativeSelect
-              value={form.teachingMethod}
-              onChange={v => onChange({ ...form, teachingMethod: v })}
-              disabled={disabled}
-            >
-              {Object.entries(TEACHING_METHOD_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Seviye</Label>
-            <NativeSelect
-              value={form.level}
-              onChange={v => onChange({ ...form, level: v })}
-              disabled={disabled}
-            >
-              {Object.entries(COURSE_LEVEL_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Durum</Label>
-            <NativeSelect
-              value={form.status}
-              onChange={v => onChange({ ...form, status: v })}
-              disabled={disabled}
-            >
-              {Object.entries(COURSE_STATUS_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Sınav Değer Tipi</Label>
-            <Input
-              value={form.examType ?? ''}
-              onChange={e => onChange({ ...form, examType: e.target.value || null })}
-              placeholder="örn. Yazılı"
-              disabled={disabled}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Açma Tipi</Label>
-            <NativeSelect
-              value={form.openType ?? '__none__'}
-              onChange={v => onChange({
-                ...form,
-                openType: v === '__none__' ? null : (v as 'Standart' | 'Closed' | 'PendingApproval'),
-              })}
-              disabled={disabled}
-            >
-              <option value="__none__">— Standart (varsayılan) —</option>
-              <option value="Standart">Standart</option>
-              <option value="Closed">Kapatıldı</option>
-              <option value="PendingApproval">Açık (Onay Bekleniyor)</option>
-            </NativeSelect>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 mt-3">
-          <input
-            type="checkbox"
-            id="isNonGpa"
-            checked={form.isNonGpa}
-            onChange={e => onChange({ ...form, isNonGpa: e.target.checked })}
-            disabled={disabled}
-            className="h-4 w-4 rounded border-border accent-primary"
-          />
-          <label htmlFor="isNonGpa" className="text-sm text-muted-foreground cursor-pointer select-none">
-            Non-GPA (Ortalamasız)
-          </label>
-        </div>
-      </FieldSection>
-
-      {/* Diğer Ön Koşul Tanımları (Proliz) */}
-      <FieldSection title="Ön Koşul Kuralları">
-        <div className="grid grid-cols-2 gap-3 mt-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Min Kredi Ön Koşul</Label>
-            <Input
-              type="number" min={0}
-              value={form.minCreditsRequired ?? ''}
-              onChange={e => onChange({ ...form, minCreditsRequired: e.target.value ? Number(e.target.value) : null })}
-              disabled={disabled}
-              placeholder="—"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Min AKTS Ön Koşul</Label>
-            <Input
-              type="number" min={0}
-              value={form.minEctsRequired ?? ''}
-              onChange={e => onChange({ ...form, minEctsRequired: e.target.value ? Number(e.target.value) : null })}
-              disabled={disabled}
-              placeholder="—"
-            />
-          </div>
-        </div>
-        <div className="mt-3 space-y-2">
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <div className="flex items-center gap-2 pt-5">
             <input
               type="checkbox"
-              checked={form.requiresNoFailedLowerCourses ?? false}
-              onChange={e => onChange({ ...form, requiresNoFailedLowerCourses: e.target.checked })}
+              id="showInInfoPackage"
+              checked={form.showInInfoPackage ?? true}
+              onChange={e => onChange({ ...form, showInInfoPackage: e.target.checked })}
               disabled={disabled}
               className="h-4 w-4 rounded border-border accent-primary"
             />
-            <span>Alttan Dersi Olmayanlar Alabilir</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.canBeTakenStandalone ?? false}
-              onChange={e => onChange({ ...form, canBeTakenStandalone: e.target.checked })}
-              disabled={disabled}
-              className="h-4 w-4 rounded border-border accent-primary"
-            />
-            <span>Bu Ders Tek Başına Alınabilir</span>
-          </label>
+            <label htmlFor="showInInfoPackage" className="text-sm text-muted-foreground cursor-pointer select-none">
+              Bilgi Paketinde Göster
+            </label>
+          </div>
         </div>
-      </FieldSection>
+      </div>
+    </FieldSection>
+  );
+}
 
-      {/* Açıklama */}
-      <FieldSection title="Açıklama">
-        <div className="mt-2 space-y-1">
-          <textarea
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed resize-none"
-            rows={4}
-            maxLength={1000}
-            value={form.description ?? ''}
-            onChange={e => onChange({ ...form, description: e.target.value || null })}
+// ── Açıklama bölümü ──
+function AciklamaSection({ form, onChange, disabled = false }: CourseFormFieldsProps) {
+  const descLen = form.description?.length ?? 0;
+  return (
+    <FieldSection icon={FileText} iconColor="text-amber-600" title="Açıklama">
+      <div className="mt-3 space-y-1.5">
+        <textarea
+          className={cn(
+            'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none',
+            READ_MODE_CLASS,
+          )}
+          rows={5}
+          maxLength={1000}
+          value={form.description ?? ''}
+          onChange={e => onChange({ ...form, description: e.target.value || null })}
+          disabled={disabled}
+          placeholder="Ders açıklaması..."
+        />
+        <p className="text-[11px] text-muted-foreground text-right">{descLen} / 1000</p>
+      </div>
+    </FieldSection>
+  );
+}
+
+// ── Kredi & Saat ──
+function KrediSaatSection({ form, onChange, disabled = false }: CourseFormFieldsProps) {
+  return (
+    <FieldSection icon={Clock} iconColor="text-purple-600" title="Kredi & Saat">
+      <div className="grid grid-cols-5 gap-4 mt-3">
+        <div className="space-y-1">
+          <RequiredLabel>AKTS</RequiredLabel>
+          <Input type="number" min={1} max={30} value={form.ects}
+            onChange={e => onChange({ ...form, ects: Number(e.target.value) })}
             disabled={disabled}
-            placeholder="Ders açıklaması..."
-          />
-          <p className="text-[11px] text-muted-foreground text-right">{descLen} / 1000</p>
+            aria-required="true"
+            aria-invalid={!disabled && (!form.ects || form.ects < 1)}
+            className={READ_MODE_CLASS} />
         </div>
-      </FieldSection>
+        <div className="space-y-1">
+          <RequiredLabel>Ulusal Kredi</RequiredLabel>
+          <Input type="number" min={0} max={20} value={form.nationalCredit}
+            onChange={e => onChange({ ...form, nationalCredit: e.target.value === '' ? 0 : Number(e.target.value) })}
+            disabled={disabled}
+            aria-required="true"
+            aria-invalid={!disabled && (form.nationalCredit == null || form.nationalCredit < 0 || form.nationalCredit > 20)}
+            className={READ_MODE_CLASS} />
+        </div>
+        <div className="space-y-1">
+          <RequiredLabel>Teori Saati</RequiredLabel>
+          <Input type="number" min={0} max={10} value={form.theoryHours}
+            onChange={e => onChange({ ...form, theoryHours: Number(e.target.value) })}
+            disabled={disabled}
+            aria-required="true"
+            aria-invalid={!disabled && (form.theoryHours < 0 || form.theoryHours > 10)}
+            className={READ_MODE_CLASS} />
+        </div>
+        <div className="space-y-1">
+          <RequiredLabel>Lab Saati</RequiredLabel>
+          <Input type="number" min={0} max={10} value={form.labHours}
+            onChange={e => onChange({ ...form, labHours: Number(e.target.value) })}
+            disabled={disabled}
+            aria-required="true"
+            aria-invalid={!disabled && (form.labHours < 0 || form.labHours > 10)}
+            className={READ_MODE_CLASS} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Uygulama Saati</Label>
+          <Input type="number" min={0} max={10} value={form.applicationHours ?? ''}
+            onChange={e => onChange({ ...form, applicationHours: e.target.value ? Number(e.target.value) : null })}
+            disabled={disabled} placeholder="—" className={READ_MODE_CLASS} />
+        </div>
+      </div>
+      {/* Plan 10 — Derslik tipi tercihleri (opsiyonel; H4 ClassroomType encoder okuyor) */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4 pt-4 border-t border-border/60">
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Teori Sınıf Tipi
+            <span className="text-muted-foreground ml-1 text-[10px] font-normal">(opsiyonel)</span>
+          </Label>
+          <NativeSelect
+            value={form.theoryClassroomType ?? '__auto__'}
+            onChange={v => onChange({
+              ...form,
+              theoryClassroomType: v === '__auto__' ? null : (v as ClassroomTypeValue),
+            })}
+            disabled={disabled || form.theoryHours <= 0}
+          >
+            <option value="__auto__">— Otomatik (kısıt yok) —</option>
+            {CLASSROOM_TYPE_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>{CLASSROOM_TYPE_LABELS[opt]}</option>
+            ))}
+          </NativeSelect>
+          <p className="text-[10px] text-muted-foreground">
+            Seçilirse teori bu tipte derslikte yerleşir; boş ise otomatik seçim.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Lab Sınıf Tipi
+            <span className="text-muted-foreground ml-1 text-[10px] font-normal">(opsiyonel)</span>
+          </Label>
+          <NativeSelect
+            value={form.labClassroomType ?? '__auto__'}
+            onChange={v => onChange({
+              ...form,
+              labClassroomType: v === '__auto__' ? null : (v as ClassroomTypeValue),
+            })}
+            disabled={disabled || form.labHours <= 0}
+          >
+            <option value="__auto__">— Otomatik (kısıt yok) —</option>
+            {CLASSROOM_TYPE_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>{CLASSROOM_TYPE_LABELS[opt]}</option>
+            ))}
+          </NativeSelect>
+          <p className="text-[10px] text-muted-foreground">
+            Seçilirse lab bu tipte derslikte yerleşir; boş ise otomatik seçim.
+          </p>
+        </div>
+      </div>
+    </FieldSection>
+  );
+}
+
+// ── Akademik Bilgiler ──
+function AkademikBilgilerSection({ form, onChange, disabled = false }: CourseFormFieldsProps) {
+  return (
+    <FieldSection icon={GraduationCap} iconColor="text-emerald-600" title="Akademik Bilgiler">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Dil</Label>
+          <NativeSelect value={form.language} onChange={v => onChange({ ...form, language: v })} disabled={disabled}>
+            {Object.entries(COURSE_LANGUAGE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Öğretim Şekli</Label>
+          <NativeSelect value={form.teachingMethod} onChange={v => onChange({ ...form, teachingMethod: v })} disabled={disabled}>
+            {Object.entries(TEACHING_METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Seviye</Label>
+          <NativeSelect value={form.level} onChange={v => onChange({ ...form, level: v })} disabled={disabled}>
+            {Object.entries(COURSE_LEVEL_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Durum</Label>
+          <NativeSelect value={form.status} onChange={v => onChange({ ...form, status: v })} disabled={disabled}>
+            {Object.entries(COURSE_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Sınav Değer Tipi</Label>
+          <Input value={form.examType ?? ''}
+            onChange={e => onChange({ ...form, examType: e.target.value || null })}
+            placeholder="örn. Yazılı" disabled={disabled} className={READ_MODE_CLASS} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Açma Tipi</Label>
+          <NativeSelect
+            value={form.openType ?? '__none__'}
+            onChange={v => onChange({
+              ...form,
+              openType: v === '__none__' ? null : (v as 'Standart' | 'Closed' | 'PendingApproval'),
+            })}
+            disabled={disabled}
+          >
+            <option value="__none__">— Standart (varsayılan) —</option>
+            <option value="Standart">Standart</option>
+            <option value="Closed">Kapatıldı</option>
+            <option value="PendingApproval">Açık (Onay Bekleniyor)</option>
+          </NativeSelect>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 mt-3">
+        <input
+          type="checkbox" id="isNonGpa" checked={form.isNonGpa}
+          onChange={e => onChange({ ...form, isNonGpa: e.target.checked })}
+          disabled={disabled}
+          className="h-4 w-4 rounded border-border accent-primary"
+        />
+        <label htmlFor="isNonGpa" className="text-sm text-muted-foreground cursor-pointer select-none">
+          Non-GPA (Ortalamasız)
+        </label>
+      </div>
+    </FieldSection>
+  );
+}
+
+// ── Ön Koşul Kuralları ──
+function OnKosulSection({ form, onChange, disabled = false }: CourseFormFieldsProps) {
+  return (
+    <FieldSection icon={ShieldCheck} iconColor="text-rose-600" title="Ön Koşul Kuralları">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Min Kredi Ön Koşul</Label>
+          <Input type="number" min={0} value={form.minCreditsRequired ?? ''}
+            onChange={e => onChange({ ...form, minCreditsRequired: e.target.value ? Number(e.target.value) : null })}
+            disabled={disabled} placeholder="—" className={READ_MODE_CLASS} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Min AKTS Ön Koşul</Label>
+          <Input type="number" min={0} value={form.minEctsRequired ?? ''}
+            onChange={e => onChange({ ...form, minEctsRequired: e.target.value ? Number(e.target.value) : null })}
+            disabled={disabled} placeholder="—" className={READ_MODE_CLASS} />
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input type="checkbox" checked={form.requiresNoFailedLowerCourses ?? false}
+            onChange={e => onChange({ ...form, requiresNoFailedLowerCourses: e.target.checked })}
+            disabled={disabled}
+            className="h-4 w-4 rounded border-border accent-primary" />
+          <span>Alttan Dersi Olmayanlar Alabilir</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input type="checkbox" checked={form.canBeTakenStandalone ?? false}
+            onChange={e => onChange({ ...form, canBeTakenStandalone: e.target.checked })}
+            disabled={disabled}
+            className="h-4 w-4 rounded border-border accent-primary" />
+          <span>Bu Ders Tek Başına Alınabilir</span>
+        </label>
+      </div>
+    </FieldSection>
+  );
+}
+
+// ── Wrapper'lar ──
+function GenelFields(props: CourseFormFieldsProps) {
+  return (
+    <div className="space-y-5 overflow-y-auto">
+      <KimlikSection {...props} />
+      <AciklamaSection {...props} />
+    </div>
+  );
+}
+
+function AkademikFields(props: CourseFormFieldsProps) {
+  return (
+    <div className="space-y-5 overflow-y-auto">
+      <KrediSaatSection {...props} />
+      <AkademikBilgilerSection {...props} />
+      <OnKosulSection {...props} />
+    </div>
+  );
+}
+
+// Tüm bölümler tek seferde — Create dialog'unda kullanılır
+function CourseFormFields(props: CourseFormFieldsProps) {
+  return (
+    <div className="space-y-5 overflow-y-auto">
+      <KimlikSection {...props} />
+      <KrediSaatSection {...props} />
+      <AkademikBilgilerSection {...props} />
+      <OnKosulSection {...props} />
+      <AciklamaSection {...props} />
     </div>
   );
 }
@@ -455,9 +611,10 @@ interface DetailDialogProps {
   allCourses: CourseListItemDto[];
   onClose: () => void;
   onDeleted: () => void;
+  onDuplicate: (template: CreateCourseDto) => void;
 }
 
-function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: DetailDialogProps) {
+function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplicate }: DetailDialogProps) {
   const { data: detail, isLoading } = useAdminCourseDetail(courseId);
   const updateCourse = useUpdateCourse();
   const deleteCourse = useDeleteCourse();
@@ -468,6 +625,7 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
   const { data: crossLists = [] } = useCrossLists(courseId);
   const addCrossList = useAddCrossList();
   const removeCrossList = useRemoveCrossList();
+  const { data: sections = [], isLoading: sectionsLoading } = useCourseSections(courseId);
 
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -475,6 +633,7 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
   const [prereqSearch, setPrereqSearch] = useState('');
   const [equivSearch, setEquivSearch] = useState('');
   const [crossListSearch, setCrossListSearch] = useState('');
+  const { showSuccess, showError, showWarning } = useToast();
 
   // Get all departments (unfiltered) for the edit form
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
@@ -507,6 +666,9 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
       showInInfoPackage: detail.showInInfoPackage,
       applicationHours: detail.applicationHours,
       openType: detail.openType,
+      // Plan 10 — Derslik tipi tercihleri
+      theoryClassroomType: detail.theoryClassroomType,
+      labClassroomType: detail.labClassroomType,
     };
   }, [detail]);
 
@@ -524,16 +686,29 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
   }
 
   async function handleSave() {
-    if (!form.code.trim() || !form.name.trim()) {
-      setFormError('Kod ve ad zorunludur.');
+    // Pre-flight: server kurallarını ön-gör (UpdateCourseAsync da aynı kuralları zorlar).
+    const missing = collectMissingRequiredFields(form);
+    if (missing.length > 0) {
+      setFormError('');
+      showWarning(
+        'Değişiklikler kaydedilemedi',
+        `${missing.length} zorunlu alan eksik: ${missing.join(', ')}. Lütfen tamamlayıp tekrar deneyin.`,
+        { center: true, durationMs: 10000 },
+      );
       return;
     }
     try {
-      await updateCourse.mutateAsync({ id: courseId, ...form });
+      const result = await updateCourse.mutateAsync({ id: courseId, ...form });
       setEditMode(false);
       setFormError('');
+      showSuccess(
+        'Ders güncellendi',
+        `${result.code} — ${result.name}${result.departmentName ? ` · ${result.departmentName}` : ''}`,
+      );
     } catch (e: unknown) {
-      setFormError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Güncelleme başarısız.');
+      const msg = getServerErrorMessage(e, 'Güncelleme başarısız.');
+      setFormError(msg);
+      showError('Ders güncellenemedi', msg);
     }
   }
 
@@ -589,59 +764,120 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-      <ResizableDialogContent defaultWidth={720} minWidth={500} minHeight={400}>
+      <ResizableDialogContent defaultWidth={1040} defaultHeight={800} minWidth={500} minHeight={400}>
         {isLoading || !detail ? (
           <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Yükleniyor...</div>
         ) : (
           <div className="flex flex-col h-full min-h-0">
-            {/* Header */}
-            <div className="pb-3 flex-shrink-0">
-              <div className="flex items-center gap-3 mb-1 pr-8">
-                <span className="font-mono font-bold text-lg text-foreground">{detail.code}</span>
-                <span className="text-sm text-foreground font-medium">{detail.name}</span>
-                {detail.isNonGpa && <Badge variant="secondary" className="text-[10px]">Non-GPA</Badge>}
+            {/* Header — başlık satırı + alt bilgi (action butonları footer'a taşındı) */}
+            <div className="pb-4 flex-shrink-0 pr-24">
+              <div className="flex items-baseline gap-3 mb-1.5 flex-wrap">
+                <span className="font-mono font-bold text-lg text-foreground tracking-wide">{detail.code}</span>
+                <span className="text-base text-foreground font-medium truncate">{detail.name}</span>
+                {detail.isNonGpa && <Badge variant="secondary" className="text-[10px] self-center">Non-GPA</Badge>}
               </div>
-              <p className="text-xs text-muted-foreground mb-2">
-                {detail.ects} AKTS · {detail.theoryHours}T+{detail.labHours}L
-                {detail.departmentName && ` · ${detail.departmentName}`}
-              </p>
-              <div className="flex items-center gap-2 relative z-10">
-                {!editMode && (
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditMode(true)}>
-                    <Edit2 className="h-3 w-3 mr-1" /> Düzenle
-                  </Button>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="font-medium">{detail.ects} AKTS</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="font-mono">{detail.theoryHours}T+{detail.labHours}L</span>
+                {detail.departmentName && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span>{detail.departmentName}</span>
+                  </>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/5"
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <Trash2 className="h-3 w-3 mr-1" /> Sil
-                </Button>
               </div>
             </div>
 
             <Separator className="flex-shrink-0" />
 
+            {/* Validation alerts — edit modunda server hatası gösterilir */}
+            {editMode && formError && (
+              <Alert variant="destructive" className="mt-3 mb-1">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-medium mb-0.5">Sunucu doğrulamayı reddetti</p>
+                  <p className="text-sm">{formError}</p>
+                </AlertDescription>
+              </Alert>
+            )}
+            {editMode && (
+              <p className="text-[11px] text-muted-foreground mt-2 px-0.5">
+                <span className="text-destructive font-semibold">*</span> işaretli alanlar zorunludur.
+              </p>
+            )}
+
             {/* Tabs */}
-            <Tabs defaultValue="temel" className="flex-1 flex flex-col min-h-0">
-              <TabsList className="w-full grid grid-cols-4 mb-3 flex-shrink-0">
-                <TabsTrigger value="temel">Temel Bilgiler</TabsTrigger>
-                <TabsTrigger value="onkosullar">İlişkiler</TabsTrigger>
-                <TabsTrigger value="mufredat">Müfredat</TabsTrigger>
-                <TabsTrigger value="istatistik">İstatistikler</TabsTrigger>
+            <Tabs defaultValue="genel" className="flex-1 flex flex-col min-h-0 mt-1">
+              <TabsList className="h-auto p-0 mb-4 flex-shrink-0 w-full bg-transparent border-b rounded-none">
+                <TabsTrigger
+                  value="genel"
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-3.5 py-2.5 text-xs font-medium gap-1.5 transition-colors hover:text-foreground"
+                >
+                  <BookOpen className="h-3.5 w-3.5" /> Genel
+                </TabsTrigger>
+                <TabsTrigger
+                  value="akademik"
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-3.5 py-2.5 text-xs font-medium gap-1.5 transition-colors hover:text-foreground"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" /> Akademik
+                </TabsTrigger>
+                <TabsTrigger
+                  value="onkosullar"
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-3.5 py-2.5 text-xs font-medium gap-1.5 transition-colors hover:text-foreground"
+                >
+                  <GitBranch className="h-3.5 w-3.5" /> İlişkiler
+                </TabsTrigger>
+                <TabsTrigger
+                  value="mufredat"
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-3.5 py-2.5 text-xs font-medium gap-1.5 transition-colors hover:text-foreground"
+                >
+                  <Layers className="h-3.5 w-3.5" /> Müfredat
+                </TabsTrigger>
+                <TabsTrigger
+                  value="program"
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-3.5 py-2.5 text-xs font-medium gap-1.5 transition-colors hover:text-foreground"
+                >
+                  <CalendarClock className="h-3.5 w-3.5" /> Ders Programı
+                </TabsTrigger>
+                <TabsTrigger
+                  value="hocalar"
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-3.5 py-2.5 text-xs font-medium gap-1.5 transition-colors hover:text-foreground"
+                >
+                  <Users className="h-3.5 w-3.5" /> Öğretim Üyeleri
+                </TabsTrigger>
+                <TabsTrigger
+                  value="istatistik"
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-3.5 py-2.5 text-xs font-medium gap-1.5 transition-colors hover:text-foreground"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" /> İstatistik
+                </TabsTrigger>
               </TabsList>
 
-              {/* Tab 1: Temel Bilgiler */}
-              <TabsContent value="temel" className="flex-1 overflow-y-auto">
-                <CourseFormFields
+              {/* Tab 1: Genel — Kimlik + Açıklama */}
+              <TabsContent value="genel" className="flex-1 overflow-y-auto">
+                <GenelFields
                   form={form}
-                  onChange={f => { setForm(f); setFormError(''); }}
+                  onChange={f => {
+                    setForm(f);
+                    setFormError('');
+                  }}
                   departments={allDepartments}
                   disabled={!editMode}
                 />
-                {formError && <p className="text-sm text-destructive mt-2">{formError}</p>}
+              </TabsContent>
+
+              {/* Tab 2: Akademik — Kredi & Saat + Akademik Bilgiler + Ön Koşul Kuralları */}
+              <TabsContent value="akademik" className="flex-1 overflow-y-auto">
+                <AkademikFields
+                  form={form}
+                  onChange={f => {
+                    setForm(f);
+                    setFormError('');
+                  }}
+                  departments={allDepartments}
+                  disabled={!editMode}
+                />
               </TabsContent>
 
               {/* Tab 2: Önkoşullar & Eşdeğerlikler */}
@@ -834,7 +1070,133 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
                 )}
               </TabsContent>
 
-              {/* Tab 4: İstatistikler */}
+              {/* Tab 4: Ders Programı — açıldığı şubeler tablosu */}
+              <TabsContent value="program" className="flex-1 overflow-y-auto">
+                {sectionsLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Yükleniyor...</div>
+                ) : sections.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <CalendarClock className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Bu ders henüz hiç açılmamış.</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {sections.length} şube · {new Set(sections.map(s => s.termId)).size} dönem
+                    </p>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Dönem</th>
+                            <th className="text-center px-2 py-2 font-medium text-muted-foreground w-[55px]">Şube</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Hoca</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Saatler</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Derslik</th>
+                            <th className="text-center px-2 py-2 font-medium text-muted-foreground w-[80px]">Kapasite</th>
+                            <th className="text-center px-2 py-2 font-medium text-muted-foreground w-[70px]">Durum</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {sections.map(s => {
+                            const classrooms = Array.from(
+                              new Set(s.schedules.map(sc => sc.classroom).filter((c): c is string => !!c))
+                            );
+                            return (
+                              <tr key={s.sectionId}>
+                                <td className="px-3 py-2 font-medium">{s.termName}</td>
+                                <td className="px-2 py-2 text-center font-mono">{s.sectionNumber}</td>
+                                <td className="px-3 py-2">
+                                  {s.instructorFullName ?? <span className="italic text-muted-foreground/60">— Atanmamış —</span>}
+                                </td>
+                                <td className="px-3 py-2 font-mono text-[11px]">{formatScheduleSummary(s.schedules)}</td>
+                                <td className="px-3 py-2">{classrooms.length === 0 ? '—' : classrooms.join(', ')}</td>
+                                <td className="px-2 py-2 text-center font-mono">{s.enrolledCount}/{s.capacity}</td>
+                                <td className="px-2 py-2 text-center">
+                                  <Badge
+                                    variant={s.status === 'Active' ? 'success' : s.status === 'Cancelled' ? 'destructive' : 'secondary'}
+                                    className="text-[10px] py-0"
+                                  >
+                                    {s.status === 'Active' ? 'Aktif' : s.status === 'Draft' ? 'Taslak' : s.status === 'Cancelled' ? 'İptal' : s.status}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Tab 5: Öğretim Üyeleri — bu dersi verenler özet listesi */}
+              <TabsContent value="hocalar" className="flex-1 overflow-y-auto">
+                {sectionsLoading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Yükleniyor...</div>
+                ) : (() => {
+                  const map = new Map<number, { name: string; terms: Set<number>; sections: number; enrolled: number }>();
+                  for (const s of sections) {
+                    if (!s.instructorId) continue;
+                    const entry = map.get(s.instructorId) ?? { name: s.instructorFullName ?? '—', terms: new Set<number>(), sections: 0, enrolled: 0 };
+                    entry.terms.add(s.termId);
+                    entry.sections += 1;
+                    entry.enrolled += s.enrolledCount;
+                    map.set(s.instructorId, entry);
+                  }
+                  const summary = Array.from(map, ([id, v]) => ({
+                    id,
+                    name: v.name,
+                    termCount: v.terms.size,
+                    sectionCount: v.sections,
+                    enrolled: v.enrolled,
+                  })).sort((a, b) => b.sectionCount - a.sectionCount);
+                  const unassignedSections = sections.filter(s => !s.instructorId).length;
+
+                  if (summary.length === 0 && unassignedSections === 0) {
+                    return (
+                      <div className="py-12 text-center">
+                        <Users className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">Bu dersi henüz hiçbir hoca vermemiş.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {summary.length} farklı öğretim üyesi
+                        {unassignedSections > 0 && ` · ${unassignedSections} şube hocasız`}
+                      </p>
+                      {summary.length > 0 && (
+                        <div className="border rounded-lg overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-muted/50">
+                                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Öğretim Üyesi</th>
+                                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-[80px]">Dönem</th>
+                                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-[80px]">Şube</th>
+                                <th className="text-center px-2 py-2 font-medium text-muted-foreground w-[100px]">Toplam Kayıt</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {summary.map(i => (
+                                <tr key={i.id}>
+                                  <td className="px-3 py-2 font-medium">{i.name}</td>
+                                  <td className="px-2 py-2 text-center font-mono">{i.termCount}</td>
+                                  <td className="px-2 py-2 text-center font-mono">{i.sectionCount}</td>
+                                  <td className="px-2 py-2 text-center font-mono">{i.enrolled}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </TabsContent>
+
+              {/* Tab 6: İstatistikler */}
               <TabsContent value="istatistik" className="flex-1 overflow-y-auto">
                 {!detail.stats ? (
                   <div className="py-12 text-center">
@@ -971,18 +1333,44 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
               </TabsContent>
             </Tabs>
 
-            {/* Footer */}
+            {/* Footer — sol: Düzenle/Çoğalt/Sil, sağ: Kapat ya da İptal/Kaydet
+                Tüm butonlar min-w-[100px] ile eşit görsel boyutta */}
             <Separator className="mt-3 mb-3" />
-            <DialogFooter>
-              <div className="flex w-full items-center justify-between">
-                <Button variant="outline" size="sm" onClick={onClose}>Kapat</Button>
-                {editMode && (
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={handleCancelEdit}>İptal</Button>
-                    <Button size="sm" onClick={handleSave} disabled={updateCourse.isPending}>
+            <DialogFooter className="flex-row justify-between sm:justify-between gap-2 w-full">
+              <div className="flex items-center gap-2">
+                {!editMode && (
+                  <Button size="sm" variant="outline" className="min-w-[100px]" onClick={() => setEditMode(true)}>
+                    <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Düzenle
+                  </Button>
+                )}
+                {!editMode && (
+                  <Button size="sm" variant="outline" className="min-w-[100px]" onClick={() => onDuplicate(initialForm)}>
+                    <Copy className="h-3.5 w-3.5 mr-1.5" /> Çoğalt
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-w-[100px] text-destructive hover:text-destructive hover:bg-destructive/5"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Sil
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                {editMode ? (
+                  <>
+                    <Button variant="outline" size="sm" className="min-w-[100px]" onClick={handleCancelEdit}>
+                      <X className="h-3.5 w-3.5 mr-1.5" /> İptal
+                    </Button>
+                    <Button size="sm" className="min-w-[100px]" onClick={handleSave} disabled={updateCourse.isPending}>
                       {updateCourse.isPending ? 'Kaydediliyor...' : 'Kaydet'}
                     </Button>
-                  </div>
+                  </>
+                ) : (
+                  <Button variant="outline" size="sm" className="min-w-[100px]" onClick={onClose}>
+                    <X className="h-3.5 w-3.5 mr-1.5" /> Kapat
+                  </Button>
                 )}
               </div>
             </DialogFooter>
@@ -1038,37 +1426,79 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted }: Detail
 interface CreateDialogProps {
   onClose: () => void;
   onCreated: (id: number) => void;
+  /** Var ise dialog bu form ile önyüklü açılır (Çoğalt akışı). Kod boş bırakılır, ad sonuna "(Kopya)" eklenir. */
+  template?: CreateCourseDto;
 }
 
-function CreateCourseDialog({ onClose, onCreated }: CreateDialogProps) {
+function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps) {
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
   const createCourse = useCreateCourse();
-  const [form, setForm] = useState<CreateCourseDto>(emptyCourseForm());
-  const [formError, setFormError] = useState('');
+  const { showSuccess, showError, showWarning } = useToast();
+  const [form, setForm] = useState<CreateCourseDto>(() => {
+    if (!template) return emptyCourseForm();
+    return { ...template, code: '', name: `${template.name} (Kopya)` };
+  });
+  const [serverError, setServerError] = useState('');
 
   async function handleCreate() {
-    if (!form.code.trim() || !form.name.trim()) { setFormError('Kod ve ad zorunludur.'); return; }
+    // 1) Pre-flight: server kurallarını ön-gör (Service.CreateCourseAsync mirror).
+    const missing = collectMissingRequiredFields(form);
+    if (missing.length > 0) {
+      setServerError('');
+      showWarning(
+        'Ders oluşturulamadı',
+        `${missing.length} zorunlu alan eksik: ${missing.join(', ')}. Lütfen tamamlayıp tekrar deneyin.`,
+        { center: true, durationMs: 10000 },
+      );
+      return;
+    }
+
+    // 2) Submit — server'ın InvalidOperationException mesajları doğrudan gösterilir.
     try {
       const result = await createCourse.mutateAsync(form);
+      showSuccess(
+        'Ders başarıyla oluşturuldu',
+        `${result.code} — ${result.name}${result.departmentName ? ` · ${result.departmentName}` : ''} (ID: ${result.id})`,
+      );
       onCreated(result.id);
     } catch (e: unknown) {
-      setFormError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Hata oluştu.');
+      const msg = getServerErrorMessage(e, 'Ders oluşturulurken bir hata oluştu.');
+      setServerError(msg);
+      showError('Ders oluşturulamadı', msg);
     }
   }
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-      <ResizableDialogContent defaultWidth={640} minWidth={480} minHeight={400}>
+      <ResizableDialogContent defaultWidth={1040} defaultHeight={800} minWidth={500} minHeight={400}>
         <div className="flex flex-col h-full min-h-0">
-          <h2 className="text-base font-semibold text-foreground mb-4 pr-8">Ders Ekle</h2>
+          <div className="mb-4 pr-8">
+            <h2 className="text-base font-semibold text-foreground">
+              {template ? 'Dersi Çoğalt' : 'Yeni Ders Aç'}
+            </h2>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              <span className="text-destructive font-semibold">*</span> işaretli alanlar zorunludur.
+            </p>
+          </div>
           <Separator className="mb-4" />
           <div className="flex-1 overflow-y-auto">
+            {serverError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-medium mb-0.5">Sunucu doğrulamayı reddetti</p>
+                  <p className="text-sm">{serverError}</p>
+                </AlertDescription>
+              </Alert>
+            )}
             <CourseFormFields
               form={form}
-              onChange={f => { setForm(f); setFormError(''); }}
+              onChange={f => {
+                setForm(f);
+                setServerError('');
+              }}
               departments={allDepartments}
             />
-            {formError && <p className="text-sm text-destructive mt-2">{formError}</p>}
           </div>
           <Separator className="mt-4 mb-3" />
           <DialogFooter className="flex-shrink-0">
@@ -1085,6 +1515,15 @@ function CreateCourseDialog({ onClose, onCreated }: CreateDialogProps) {
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 50;
+
+function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+  if (!active) return <ArrowUpDown className="h-3 w-3 inline-block ml-1 text-muted-foreground/40" />;
+  return dir === 'asc'
+    ? <ArrowUp className="h-3 w-3 inline-block ml-1 text-primary" />
+    : <ArrowDown className="h-3 w-3 inline-block ml-1 text-primary" />;
+}
+
 export default function CourseCatalogAdminPage() {
   // Filter state
   const [search, setSearch] = useState('');
@@ -1100,6 +1539,44 @@ export default function CourseCatalogAdminPage() {
   // Dialog state
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [duplicateTemplate, setDuplicateTemplate] = useState<CreateCourseDto | null>(null);
+
+  // Toplu silme state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<BulkDeleteResultItem[] | null>(null);
+  const bulkDeleteMutation = useBulkDeleteCourses();
+
+  // Sıralama
+  type SortKey = 'code' | 'name' | 'ects' | 'departmentName';
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  // Yoğun mod (kompakt satırlar)
+  const [dense, setDense] = useState(false);
+
+  // Sütun görünürlüğü — opsiyonel sütunlar gizlenebilir (Proliz hizalı)
+  type OptionalCol = 'nationalCredit' | 'semester' | 'kontenjan' | 'requirement' | 'program' | 'instructor';
+  const [hiddenCols, setHiddenCols] = useState<Set<OptionalCol>>(new Set());
+
+  // Arama input ref — Ctrl+K kısayolu için
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Ctrl/Cmd+K → arama input'a focus
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Data
   const { data: faculties = [] } = useAdminFaculties();
@@ -1127,6 +1604,52 @@ export default function CourseCatalogAdminPage() {
     }
     return filtered;
   }, [allCourses, typeFilter, teachingMethodFilter, nonGpaFilter]);
+
+  // Sıralama uygulanmış liste (sortKey null ise varsayılan sırada)
+  const sortedCourses = useMemo(() => {
+    if (!sortKey) return courses;
+    const arr = [...courses];
+    arr.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      // Null değerler sona düşsün
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), 'tr');
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [courses, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedCourses.length / PAGE_SIZE));
+  const pagedCourses = useMemo(
+    () => sortedCourses.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [sortedCourses, currentPage]
+  );
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  }
+
+  // Filtre veya arama değişince ilk sayfaya dön
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPage(1);
+  }, [search, facultyId, departmentId, statusFilter, languageFilter, levelFilter, typeFilter, teachingMethodFilter, nonGpaFilter]);
+
+  // Liste kısalırsa açık sayfa son sayfanın ötesine düşmesin
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   function handleFacultyChange(val: string) {
     if (val === 'all') {
@@ -1169,11 +1692,25 @@ export default function CourseCatalogAdminPage() {
             <div className="relative flex-1 min-w-[260px] max-w-[420px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
-                className="pl-8 h-8 text-sm"
+                ref={searchInputRef}
+                className="pl-8 pr-8 h-8 text-sm"
                 placeholder="Kod veya isimle ara..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-5 w-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  aria-label="Aramayı temizle"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Filtreler — tek buton, popover içinde tüm filtreler */}
@@ -1383,89 +1920,348 @@ export default function CourseCatalogAdminPage() {
               </div>
             )}
 
-            {/* Count + Add */}
-            <div className="ml-auto flex items-center gap-3">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {!isLoading && `${courses.length} ders`}
-              </span>
+            {/* Sağda: Sütun seçici + Yoğun mod + Yeni Ders */}
+            <div className="ml-auto flex items-center gap-2">
+              {/* Sütun görünürlüğü */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" title="Sütunları seç">
+                    <Columns3 className="h-3.5 w-3.5" />
+                    Sütunlar
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-3 space-y-2" align="end">
+                  <p className="text-xs font-semibold text-foreground/80 mb-2">Görünür Sütunlar</p>
+                  {([
+                    ['nationalCredit', 'K (Ulusal Kredi)'],
+                    ['semester', 'Snf (Yarıyıl)'],
+                    ['kontenjan', 'KO/DO/Kon'],
+                    ['requirement', 'Zor. (Zorunlu/Seçmeli)'],
+                    ['program', 'Program'],
+                    ['instructor', 'Öğretim Üyesi'],
+                  ] as const).map(([key, label]) => {
+                    const visible = !hiddenCols.has(key);
+                    return (
+                      <label key={key} className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={visible}
+                          onChange={e => {
+                            const next = new Set(hiddenCols);
+                            if (e.target.checked) next.delete(key);
+                            else next.add(key);
+                            setHiddenCols(next);
+                          }}
+                          className="h-4 w-4 rounded border-border accent-primary"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+                </PopoverContent>
+              </Popover>
+
+              {/* Yoğun mod */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => setDense(d => !d)}
+                title={dense ? 'Konfor moduna geç' : 'Yoğun moda geç'}
+              >
+                <Rows3 className="h-3.5 w-3.5" />
+                {dense ? 'Konfor' : 'Yoğun'}
+              </Button>
+
               <Button size="sm" className="h-8 text-xs" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-3.5 w-3.5 mr-1" /> Ders Ekle
+                <Plus className="h-3.5 w-3.5 mr-1" /> Yeni Ders Aç
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Toplu seçim banner — yalnızca seçim varken görünür */}
+      {selectedIds.size > 0 && (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="py-2.5 flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-primary">
+              {selectedIds.size} ders seçildi
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Seçimi Temizle
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7 text-xs ml-auto"
+              onClick={() => setBulkDeleteConfirmOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Seçilenleri Sil ({selectedIds.size})
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Course Table */}
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="py-16 text-center text-muted-foreground text-sm">Yükleniyor...</div>
-          ) : courses.length === 0 ? (
-            <div className="py-16 text-center">
-              <BookOpen className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Ders bulunamadı.</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Filtrelerinizi değiştirmeyi deneyin.</p>
-            </div>
-          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 w-[110px]">Ders Kodu</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3 w-[30%]">Ders Adı</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground px-3 py-3 w-[55px]">AKTS</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground px-3 py-3 w-[55px]">T+U</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground px-3 py-3 w-[80px]">Dil</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground px-3 py-3 w-[80px]">Seviye</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Bölüm</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground px-3 py-3 w-[75px]">Durum</th>
+                    <th className="px-4 py-3 w-[42px]"></th>
+                    <th className="px-4 py-3 w-[110px] text-left text-[13px] font-semibold text-foreground/70">Ders Kodu</th>
+                    <th className="px-4 py-3 text-left text-[13px] font-semibold text-foreground/70">Ders Adı</th>
+                    <th className="px-4 py-3 w-[60px] text-center text-[13px] font-semibold text-foreground/70">T+U</th>
+                    {!hiddenCols.has('nationalCredit') && <th className="px-4 py-3 w-[50px] text-center text-[13px] font-semibold text-foreground/70">K</th>}
+                    <th className="px-4 py-3 w-[72px] text-center text-[13px] font-semibold text-foreground/70">AKTS</th>
+                    {!hiddenCols.has('semester') && <th className="px-4 py-3 w-[60px] text-center text-[13px] font-semibold text-foreground/70">Snf</th>}
+                    {!hiddenCols.has('kontenjan') && <th className="px-4 py-3 w-[90px] text-center text-[13px] font-semibold text-foreground/70">KO/DO/Kon</th>}
+                    {!hiddenCols.has('requirement') && <th className="px-4 py-3 w-[70px] text-center text-[13px] font-semibold text-foreground/70">Zor.</th>}
+                    {!hiddenCols.has('program') && <th className="px-4 py-3 text-left text-[13px] font-semibold text-foreground/70">Program</th>}
+                    {!hiddenCols.has('instructor') && <th className="px-4 py-3 text-left text-[13px] font-semibold text-foreground/70">Öğretim Üyesi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {courses.map(c => (
-                    <tr
-                      key={c.id}
-                      className="hover:bg-muted/20 cursor-pointer transition-colors"
-                      onClick={() => setSelectedCourseId(c.id)}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-semibold text-foreground text-sm">{c.code}</span>
-                          {c.isNonGpa && (
-                            <Badge variant="secondary" className="text-[10px] py-0 px-1">Non-GPA</Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-foreground">{c.name}</td>
-                      <td className="px-3 py-3 text-center text-muted-foreground">{c.ects}</td>
-                      <td className="px-3 py-3 text-center font-mono text-muted-foreground">{c.theoryHours}+{c.labHours}</td>
-                      <td className="px-3 py-3 text-center">
-                        <Badge variant="outline" className="text-[11px]">
-                          {COURSE_LANGUAGE_LABELS[c.language] ?? c.language}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <Badge variant="outline" className="text-[11px]">
-                          {COURSE_LEVEL_LABELS[c.level] ?? c.level}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {c.departmentName
-                          ? <span className="text-muted-foreground">{c.departmentName}</span>
-                          : <span className="italic text-muted-foreground/40">Ortak</span>
-                        }
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <Badge variant={c.status === 1 ? 'success' : 'secondary'} className="text-[11px]">
-                          {COURSE_STATUS_LABELS[c.status] ?? c.status}
-                        </Badge>
-                      </td>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-4 mx-auto" /></td>
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-3/4" /></td>
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-8 mx-auto" /></td>
+                      {!hiddenCols.has('nationalCredit') && <td className="px-4 py-3"><Skeleton className="h-4 w-5 mx-auto" /></td>}
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-6 mx-auto" /></td>
+                      {!hiddenCols.has('semester') && <td className="px-4 py-3"><Skeleton className="h-4 w-6 mx-auto" /></td>}
+                      {!hiddenCols.has('kontenjan') && <td className="px-4 py-3"><Skeleton className="h-4 w-4 mx-auto rounded-full" /></td>}
+                      {!hiddenCols.has('requirement') && <td className="px-4 py-3"><Skeleton className="h-4 w-8 mx-auto" /></td>}
+                      {!hiddenCols.has('program') && <td className="px-4 py-3"><Skeleton className="h-4 w-2/3" /></td>}
+                      {!hiddenCols.has('instructor') && <td className="px-4 py-3"><Skeleton className="h-4 w-1/2" /></td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          ) : courses.length === 0 ? (
+            <div className="py-16 text-center">
+              <BookOpen className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-muted-foreground text-sm">Ders bulunamadı.</p>
+              <p className="text-xs text-muted-foreground/60 mt-1 mb-4">Filtrelerinizi değiştirin veya yeni bir ders ekleyin.</p>
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearch('');
+                    setStatusFilter('Active');
+                    setLanguageFilter(undefined);
+                    setLevelFilter(undefined);
+                    setFacultyId(undefined);
+                    setDepartmentId(undefined);
+                    setTypeFilter('all');
+                    setTeachingMethodFilter(undefined);
+                    setNonGpaFilter('all');
+                  }}
+                >
+                  <X className="h-3.5 w-3.5 mr-1.5" /> Filtreleri Temizle
+                </Button>
+                <Button size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Yeni Ders Aç
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border">
+                  <tr>
+                    <th className="text-center px-4 py-3 w-[42px]">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                        title="Bu sayfadakileri seç / kaldır"
+                        checked={pagedCourses.length > 0 && pagedCourses.every(c => selectedIds.has(c.id))}
+                        onChange={e => {
+                          const next = new Set(selectedIds);
+                          if (e.target.checked) {
+                            for (const c of pagedCourses) next.add(c.id);
+                          } else {
+                            for (const c of pagedCourses) next.delete(c.id);
+                          }
+                          setSelectedIds(next);
+                        }}
+                      />
+                    </th>
+                    <th className="text-left text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[110px] cursor-pointer select-none hover:text-foreground whitespace-nowrap" onClick={() => toggleSort('code')}>
+                      Ders Kodu
+                      <SortIcon active={sortKey === 'code'} dir={sortDir} />
+                    </th>
+                    <th className="text-left text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[28%] cursor-pointer select-none hover:text-foreground whitespace-nowrap" onClick={() => toggleSort('name')}>
+                      Ders Adı
+                      <SortIcon active={sortKey === 'name'} dir={sortDir} />
+                    </th>
+                    <th className="text-center text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[60px] whitespace-nowrap">T+U</th>
+                    {!hiddenCols.has('nationalCredit') && (
+                      <th className="text-center text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[50px] whitespace-nowrap" title="Ulusal Kredi">K</th>
+                    )}
+                    <th className="text-center text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[72px] cursor-pointer select-none hover:text-foreground whitespace-nowrap" onClick={() => toggleSort('ects')}>
+                      AKTS
+                      <SortIcon active={sortKey === 'ects'} dir={sortDir} />
+                    </th>
+                    {!hiddenCols.has('semester') && (
+                      <th className="text-center text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[60px] whitespace-nowrap" title="Önerilen sınıf — müfredat yarıyılından hesaplanır (1-2 yarıyıl=1. sınıf, 3-4=2., 5-6=3., 7-8=4.)">Snf</th>
+                    )}
+                    {!hiddenCols.has('kontenjan') && (
+                      <th className="text-center text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[90px] whitespace-nowrap" title="Aktif dönemde açılış durumu">KO/DO/Kon</th>
+                    )}
+                    {!hiddenCols.has('requirement') && (
+                      <th className="text-center text-[13px] font-semibold text-foreground/70 px-4 py-3 w-[70px] whitespace-nowrap" title="Müfredattaki tip — Zorunlu / Seçmeli / Karma">Zor.</th>
+                    )}
+                    {!hiddenCols.has('program') && (
+                      <th className="text-left text-[13px] font-semibold text-foreground/70 px-4 py-3 cursor-pointer select-none hover:text-foreground whitespace-nowrap" onClick={() => toggleSort('departmentName')}>
+                        Program
+                        <SortIcon active={sortKey === 'departmentName'} dir={sortDir} />
+                      </th>
+                    )}
+                    {!hiddenCols.has('instructor') && (
+                      <th className="text-left text-[13px] font-semibold text-foreground/70 px-4 py-3 whitespace-nowrap" title="Aktif dönemde dersi veren öğretim üyesi">Öğretim Üyesi</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pagedCourses.map((c, idx) => {
+                    const isEven = idx % 2 === 0;
+                    const rowPad = dense ? 'py-1.5' : 'py-3';
+                    return (
+                      <tr
+                        key={c.id}
+                        className={cn(
+                          'cursor-pointer transition-colors border-l-2 border-transparent',
+                          isEven ? 'bg-card' : 'bg-muted/20',
+                          'hover:bg-primary/5 hover:border-l-primary',
+                        )}
+                        onClick={() => setSelectedCourseId(c.id)}
+                      >
+                        <td className={cn('px-4 text-center', rowPad)} onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                            checked={selectedIds.has(c.id)}
+                            onChange={e => {
+                              const next = new Set(selectedIds);
+                              if (e.target.checked) next.add(c.id); else next.delete(c.id);
+                              setSelectedIds(next);
+                            }}
+                          />
+                        </td>
+                        <td className={cn('px-4', rowPad)}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-semibold text-foreground text-sm">{c.code}</span>
+                            {c.isNonGpa && (
+                              <Badge variant="secondary" className="text-[10px] py-0 px-1">Non-GPA</Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className={cn('px-4 text-foreground', rowPad)}>{c.name}</td>
+                        <td className={cn('px-4 text-center font-mono tabular-nums text-muted-foreground', rowPad)}>{c.theoryHours}+{c.labHours}</td>
+                        {!hiddenCols.has('nationalCredit') && (
+                          <td className={cn('px-4 text-center tabular-nums text-muted-foreground', rowPad)}>
+                            {c.nationalCredit}
+                          </td>
+                        )}
+                        <td className={cn('px-4 text-center tabular-nums text-muted-foreground', rowPad)}>{c.ects}</td>
+                        {!hiddenCols.has('semester') && (
+                          <td className={cn('px-4 text-center tabular-nums text-muted-foreground', rowPad)}>
+                            {c.semesterMin == null || c.semesterMax == null
+                              ? <span className="text-muted-foreground/40">—</span>
+                              : (() => {
+                                  const minClass = Math.ceil(c.semesterMin / 2);
+                                  const maxClass = Math.ceil(c.semesterMax / 2);
+                                  return minClass === maxClass ? minClass : `${minClass}-${maxClass}`;
+                                })()}
+                          </td>
+                        )}
+                        {!hiddenCols.has('kontenjan') && (
+                          <td className={cn('px-4 text-center', rowPad)}>
+                            {c.isOpenInActiveTerm
+                              ? <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/15" title="Aktif dönemde açık">
+                                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                </span>
+                              : <span className="text-muted-foreground/40 text-xs">—</span>
+                            }
+                          </td>
+                        )}
+                        {!hiddenCols.has('requirement') && (
+                          <td className={cn('px-4 text-center', rowPad)}>
+                            {c.requirementType === 'Compulsory' && (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-emerald-500/40 text-emerald-700 bg-emerald-50">Z</Badge>
+                            )}
+                            {c.requirementType === 'Elective' && (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-sky-500/40 text-sky-700 bg-sky-50">S</Badge>
+                            )}
+                            {c.requirementType === 'Mixed' && (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-amber-500/40 text-amber-700 bg-amber-50">Karma</Badge>
+                            )}
+                            {c.requirementType === 'None' && (
+                              <span className="text-muted-foreground/40 text-xs">—</span>
+                            )}
+                          </td>
+                        )}
+                        {!hiddenCols.has('program') && (
+                          <td className={cn('px-4 text-sm', rowPad)}>
+                            {c.departmentName
+                              ? <span className="text-muted-foreground">{c.departmentName}</span>
+                              : <span className="italic text-muted-foreground/40">Ortak</span>
+                            }
+                          </td>
+                        )}
+                        {!hiddenCols.has('instructor') && (
+                          <td className={cn('px-4 text-sm', rowPad)}>
+                            {c.activeTermInstructorName
+                              ? <span className="text-muted-foreground">{c.activeTermInstructorName}</span>
+                              : <span className="text-muted-foreground/40">—</span>
+                            }
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination — Müfredat sayfasıyla aynı stil */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-t bg-muted/20 text-sm">
+              <span className="text-muted-foreground">
+                {courses.length} ders — Sayfa {currentPage}/{totalPages}
+              </span>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="px-2 min-w-[2rem] text-center">{currentPage}</span>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -1477,6 +2273,10 @@ export default function CourseCatalogAdminPage() {
           allCourses={allCourses}
           onClose={() => setSelectedCourseId(null)}
           onDeleted={() => setSelectedCourseId(null)}
+          onDuplicate={tpl => {
+            setSelectedCourseId(null);
+            setDuplicateTemplate(tpl);
+          }}
         />
       )}
 
@@ -1486,6 +2286,101 @@ export default function CourseCatalogAdminPage() {
           onClose={() => setCreateOpen(false)}
           onCreated={id => { setCreateOpen(false); setSelectedCourseId(id); }}
         />
+      )}
+
+      {/* Duplicate Dialog (Çoğalt) */}
+      {duplicateTemplate && (
+        <CreateCourseDialog
+          template={duplicateTemplate}
+          onClose={() => setDuplicateTemplate(null)}
+          onCreated={id => { setDuplicateTemplate(null); setSelectedCourseId(id); }}
+        />
+      )}
+
+      {/* Toplu silme onay dialog'u */}
+      {bulkDeleteConfirmOpen && (
+        <Dialog open onOpenChange={open => { if (!open) setBulkDeleteConfirmOpen(false); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Seçili dersleri sil
+              </DialogTitle>
+              <DialogDescription>
+                <strong className="text-foreground">{selectedIds.size} ders</strong> silinecek.
+                Bazı dersler müfredatta veya açılmış şubelerde kullanılıyor olabilir; bu dersler silinemez,
+                tek tek raporlanır. Silinemeyen dersler için detayda neden görüntülenir.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>İptal</Button>
+              <Button
+                variant="destructive"
+                disabled={bulkDeleteMutation.isPending}
+                onClick={async () => {
+                  const ids = Array.from(selectedIds);
+                  const result = await bulkDeleteMutation.mutateAsync(ids);
+                  setBulkDeleteConfirmOpen(false);
+                  setBulkDeleteResult(result);
+                  // Başarıyla silinenler seçimden düşülür
+                  const failedIds = new Set(result.filter(r => !r.success).map(r => r.id));
+                  setSelectedIds(failedIds);
+                }}
+              >
+                {bulkDeleteMutation.isPending ? 'Siliniyor...' : 'Sil'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Toplu silme sonuç dialog'u */}
+      {bulkDeleteResult && (
+        <Dialog open onOpenChange={open => { if (!open) setBulkDeleteResult(null); }}>
+          <DialogContent className="max-w-lg max-h-[70vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Toplu Silme Sonucu</DialogTitle>
+              {(() => {
+                const ok = bulkDeleteResult.filter(r => r.success).length;
+                const failed = bulkDeleteResult.filter(r => !r.success).length;
+                return (
+                  <DialogDescription>
+                    <span className="text-emerald-600 font-medium">{ok} başarılı</span>
+                    {failed > 0 && (
+                      <> · <span className="text-destructive font-medium">{failed} silinemedi</span></>
+                    )}
+                  </DialogDescription>
+                );
+              })()}
+            </DialogHeader>
+            {(() => {
+              const failed = bulkDeleteResult.filter(r => !r.success);
+              return (
+                <>
+                  {failed.length > 0 && (
+                    <div className="flex-1 overflow-y-auto border rounded-md divide-y">
+                      {failed.map(r => {
+                        const c = allCourses.find(x => x.id === r.id);
+                        return (
+                          <div key={r.id} className="p-2.5 text-xs">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-mono font-semibold text-foreground">{c?.code ?? `#${r.id}`}</span>
+                              <span className="text-muted-foreground">{c?.name ?? ''}</span>
+                            </div>
+                            <p className="text-destructive">{r.message}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+            <DialogFooter className="mt-3">
+              <Button onClick={() => setBulkDeleteResult(null)}>Kapat</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

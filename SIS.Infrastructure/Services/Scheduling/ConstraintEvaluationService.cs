@@ -8,6 +8,8 @@ namespace SIS.Infrastructure.Services.Scheduling;
 
 public sealed class ConstraintEvaluationService
 {
+    private const double SoftPenaltyPerConvertedConflict = 10;
+
     private readonly IEnumerable<IConstraintEvaluator> _evaluators;
     private readonly AppDbContext _context;
     private readonly ILogger<ConstraintEvaluationService> _logger;
@@ -54,13 +56,6 @@ public sealed class ConstraintEvaluationService
         SectionSnapshot candidate, TermSnapshot snapshot, SchedulingConstraintConfig config,
         ConstraintState? state = null)
     {
-        var context = new SchedulingConstraintContext
-        {
-            Candidate = candidate,
-            Snapshot = snapshot,
-            Config = config,
-        };
-
         var allConflicts = new List<SchedulingConflictDto>();
         var allNotes = new List<string>();
         double totalPenalty = 0;
@@ -76,24 +71,24 @@ public sealed class ConstraintEvaluationService
                 // B25: Check if there's an exemption for this candidate
                 if (state.IsExempt(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId))
                     continue;
-
-                // B27: Check for parameter override and apply to config
-                var paramOverride = state.GetParameterOverride(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
-                if (paramOverride != null)
-                {
-                    context = new SchedulingConstraintContext
-                    {
-                        Candidate = context.Candidate,
-                        Snapshot = context.Snapshot,
-                        Config = MergeParameterOverride(config, paramOverride),
-                    };
-                }
             }
 
+            var effectiveConfig = BuildEffectiveConfig(
+                config, evaluator, state, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
+
+            var context = new SchedulingConstraintContext
+            {
+                Candidate = candidate,
+                Snapshot = snapshot,
+                Config = effectiveConfig,
+            };
+
             var result = evaluator.Evaluate(context);
-            allConflicts.AddRange(result.Conflicts);
-            allNotes.AddRange(result.Notes);
-            totalPenalty += result.SoftPenalty;
+            var effectiveCategory = ResolveCategory(evaluator, state);
+            var categoryChanged = effectiveCategory != evaluator.Category;
+            AppendCandidateResult(
+                result, evaluator, effectiveCategory, categoryChanged, candidate,
+                allConflicts, allNotes, ref totalPenalty);
         }
 
         return (allConflicts, allNotes, totalPenalty);
@@ -125,14 +120,11 @@ public sealed class ConstraintEvaluationService
                 CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
                 CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
                 CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+                CohortConflictPairs = snapshot.CohortConflictPairs,
+                AdjacentYearSoftPairs = snapshot.AdjacentYearSoftPairs,
+                EnrollmentConflicts = snapshot.EnrollmentConflicts,
+                DistributionConstraints = snapshot.DistributionConstraints,
                 SlotAllowedModes = snapshot.SlotAllowedModes,
-            };
-
-            var context = new SchedulingConstraintContext
-            {
-                Candidate = section,
-                Snapshot = filteredSnapshot,
-                Config = config,
             };
 
             foreach (var evaluator in _evaluators)
@@ -144,28 +136,34 @@ public sealed class ConstraintEvaluationService
 
                     if (state.IsExempt(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId))
                         continue;
-
-                    var paramOverride = state.GetParameterOverride(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId);
-                    if (paramOverride != null)
-                    {
-                        context = new SchedulingConstraintContext
-                        {
-                            Candidate = context.Candidate,
-                            Snapshot = context.Snapshot,
-                            Config = MergeParameterOverride(config, paramOverride),
-                        };
-                    }
                 }
 
+                var effectiveConfig = BuildEffectiveConfig(
+                    config, evaluator, state, section.InstructorId, section.DepartmentId, section.SectionId);
+
+                var context = new SchedulingConstraintContext
+                {
+                    Candidate = section,
+                    Snapshot = filteredSnapshot,
+                    Config = effectiveConfig,
+                };
+
                 var result = evaluator.Evaluate(context);
-                foreach (var conflict in result.Conflicts)
+                var effectiveCategory = ResolveCategory(evaluator, state);
+                var categoryChanged = effectiveCategory != evaluator.Category;
+                var normalizedConflicts = new List<SchedulingConflictDto>();
+                double ignoredPenalty = 0;
+                AppendCandidateResult(
+                    result, evaluator, effectiveCategory, categoryChanged, section,
+                    normalizedConflicts, allNotes, ref ignoredPenalty);
+
+                foreach (var conflict in normalizedConflicts)
                 {
                     // Deduplicate bidirectional conflicts (A conflicts with B = B conflicts with A)
                     var key = BuildConflictKey(conflict);
                     if (seen.Add(key))
                         allConflicts.Add(conflict);
                 }
-                allNotes.AddRange(result.Notes);
             }
         }
 
@@ -195,14 +193,11 @@ public sealed class ConstraintEvaluationService
                 CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
                 CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
                 CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
+                CohortConflictPairs = snapshot.CohortConflictPairs,
+                AdjacentYearSoftPairs = snapshot.AdjacentYearSoftPairs,
+                EnrollmentConflicts = snapshot.EnrollmentConflicts,
+                DistributionConstraints = snapshot.DistributionConstraints,
                 SlotAllowedModes = snapshot.SlotAllowedModes,
-            };
-
-            var context = new SchedulingConstraintContext
-            {
-                Candidate = section,
-                Snapshot = filteredSnapshot,
-                Config = config,
             };
 
             foreach (var evaluator in _evaluators)
@@ -210,26 +205,33 @@ public sealed class ConstraintEvaluationService
                 if (state.IsDisabled(evaluator.Code)) continue;
                 if (state.IsExempt(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId)) continue;
 
-                var paramOverride = state.GetParameterOverride(evaluator.Code, section.InstructorId, section.DepartmentId, section.SectionId);
-                if (paramOverride != null)
+                var effectiveConfig = BuildEffectiveConfig(
+                    config, evaluator, state, section.InstructorId, section.DepartmentId, section.SectionId);
+
+                var context = new SchedulingConstraintContext
                 {
-                    context = new SchedulingConstraintContext
-                    {
-                        Candidate = context.Candidate,
-                        Snapshot = context.Snapshot,
-                        Config = MergeParameterOverride(config, paramOverride),
-                    };
-                }
+                    Candidate = section,
+                    Snapshot = filteredSnapshot,
+                    Config = effectiveConfig,
+                };
 
                 var result = evaluator.Evaluate(context);
+                var effectiveCategory = ResolveCategory(evaluator, state);
+                var categoryChanged = effectiveCategory != evaluator.Category;
+                var normalizedConflicts = new List<SchedulingConflictDto>();
+                var normalizedNotes = new List<string>();
+                double normalizedPenalty = 0;
+                AppendCandidateResult(
+                    result, evaluator, effectiveCategory, categoryChanged, section,
+                    normalizedConflicts, normalizedNotes, ref normalizedPenalty);
 
                 if (!perConstraint.ContainsKey(evaluator.Code))
                     perConstraint[evaluator.Code] = (new List<SchedulingConflictDto>(), new List<string>(), 0);
 
                 var entry = perConstraint[evaluator.Code];
-                entry.Conflicts.AddRange(result.Conflicts);
-                entry.Notes.AddRange(result.Notes);
-                perConstraint[evaluator.Code] = (entry.Conflicts, entry.Notes, entry.Penalty + result.SoftPenalty);
+                entry.Conflicts.AddRange(normalizedConflicts);
+                entry.Notes.AddRange(normalizedNotes);
+                perConstraint[evaluator.Code] = (entry.Conflicts, entry.Notes, entry.Penalty + normalizedPenalty);
             }
         }
 
@@ -242,13 +244,14 @@ public sealed class ConstraintEvaluationService
             if (!perConstraint.TryGetValue(evaluator.Code, out var data)) continue;
 
             var weight = weightMap.GetValueOrDefault(evaluator.Code, 5);
+            var effectiveCategory = ResolveCategory(evaluator, state);
             var seen = new HashSet<string>();
             var deduped = data.Conflicts.Where(c => seen.Add(BuildConflictKey(c))).ToList();
 
             var rawPenalty = data.Penalty;
-            var weightedPenalty = evaluator.Category == ConstraintCategory.Soft ? rawPenalty * weight : 0;
+            var weightedPenalty = effectiveCategory == ConstraintCategory.Soft ? rawPenalty * weight : 0;
 
-            if (evaluator.Category == ConstraintCategory.Hard)
+            if (effectiveCategory == ConstraintCategory.Hard)
                 totalHard += deduped.Count;
             else
                 totalSoft += weightedPenalty;
@@ -257,7 +260,7 @@ public sealed class ConstraintEvaluationService
             {
                 items.Add(new ConstraintScoreItemDto(
                     evaluator.Code, evaluator.Name,
-                    evaluator.Category.ToString(), weight,
+                    effectiveCategory.ToString(), weight,
                     deduped.Count, Math.Round(rawPenalty, 1), Math.Round(weightedPenalty, 1), 0,
                     deduped.Select(c => c.SectionId).Distinct().Count(),
                     deduped.Take(5).Select(c => c.Message).ToList()));
@@ -281,21 +284,20 @@ public sealed class ConstraintEvaluationService
 
     /// <summary>
     /// Calculate soft penalty score only (for auto-scheduling scoring).
+    /// SA/LNS optimizer'ı bu fonksiyonu çağırıyor — admin'in kısıt ağırlıkları (1-10)
+    /// burada SoftPenalty ile çarpılarak motora aktarılıyor.
     /// </summary>
     public double CalculatePenalty(
         SectionSnapshot candidate, TermSnapshot snapshot, SchedulingConstraintConfig config,
         ConstraintState? state = null)
     {
-        var context = new SchedulingConstraintContext
-        {
-            Candidate = candidate,
-            Snapshot = snapshot,
-            Config = config,
-        };
-
         double totalPenalty = 0;
-        foreach (var evaluator in _evaluators.Where(e => e.Category == ConstraintCategory.Soft))
+        foreach (var evaluator in _evaluators)
         {
+            var effectiveCategory = ResolveCategory(evaluator, state);
+            if (effectiveCategory != ConstraintCategory.Soft)
+                continue;
+
             if (state != null)
             {
                 if (state.IsDisabled(evaluator.Code))
@@ -303,22 +305,142 @@ public sealed class ConstraintEvaluationService
 
                 if (state.IsExempt(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId))
                     continue;
-
-                var paramOverride = state.GetParameterOverride(evaluator.Code, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
-                if (paramOverride != null)
-                {
-                    context = new SchedulingConstraintContext
-                    {
-                        Candidate = context.Candidate,
-                        Snapshot = context.Snapshot,
-                        Config = MergeParameterOverride(config, paramOverride),
-                    };
-                }
             }
 
-            totalPenalty += evaluator.Evaluate(context).SoftPenalty;
+            var effectiveConfig = BuildEffectiveConfig(
+                config, evaluator, state, candidate.InstructorId, candidate.DepartmentId, candidate.SectionId);
+
+            var context = new SchedulingConstraintContext
+            {
+                Candidate = candidate,
+                Snapshot = snapshot,
+                Config = effectiveConfig,
+            };
+
+            var result = evaluator.Evaluate(context);
+            var categoryChanged = effectiveCategory != evaluator.Category;
+            var weight = ResolveWeight(evaluator, state);
+            totalPenalty += result.SoftPenalty * weight;
+            if (categoryChanged && result.Conflicts.Count > 0)
+                totalPenalty += ConvertConflictsToSoftPenalty(result.Conflicts.Count) * weight;
         }
         return totalPenalty;
+    }
+
+    private static ConstraintCategory ResolveCategory(IConstraintEvaluator evaluator, ConstraintState? state)
+    {
+        if (state?.Definitions.TryGetValue(evaluator.Code, out var definition) == true
+            && Enum.TryParse<ConstraintCategory>(definition.Category, ignoreCase: true, out var category))
+        {
+            return category;
+        }
+
+        return evaluator.Category;
+    }
+
+    /// <summary>
+    /// Admin kısıt kartından ayarlanan 1-10 ağırlık. State yoksa veya tanım eksikse 1 dön (nötr çarpan).
+    /// </summary>
+    private static int ResolveWeight(IConstraintEvaluator evaluator, ConstraintState? state)
+    {
+        if (state?.Definitions.TryGetValue(evaluator.Code, out var definition) == true)
+        {
+            return Math.Clamp(definition.Weight, 1, 10);
+        }
+        return 1;
+    }
+
+    /// <summary>
+    /// Override sıralaması: baseline (FromSystemConfig) → ConstraintDefinition.Parameters
+    /// (kısıt kartından admin ayarı) → ConstraintException.ParameterOverride (entity-spesifik istisna).
+    /// En spesifik kazanır. State yoksa baseline döner.
+    /// </summary>
+    private SchedulingConstraintConfig BuildEffectiveConfig(
+        SchedulingConstraintConfig baseConfig,
+        IConstraintEvaluator evaluator,
+        ConstraintState? state,
+        int? instructorId, int? departmentId, int? sectionId)
+    {
+        if (state == null) return baseConfig;
+
+        var current = baseConfig;
+
+        // 1. Kısıt kartı parametreleri (genel admin ayarı)
+        if (state.Definitions.TryGetValue(evaluator.Code, out var def)
+            && !string.IsNullOrWhiteSpace(def.Parameters))
+        {
+            current = MergeParameterOverride(current, def.Parameters);
+        }
+
+        // 2. İstisna override'ı (entity-spesifik, en yerel)
+        var exOverride = state.GetParameterOverride(evaluator.Code, instructorId, departmentId, sectionId);
+        if (exOverride != null)
+        {
+            current = MergeParameterOverride(current, exOverride);
+        }
+
+        return current;
+    }
+
+    private static void AppendCandidateResult(
+        ConstraintResult result,
+        IConstraintEvaluator evaluator,
+        ConstraintCategory effectiveCategory,
+        bool categoryChanged,
+        SectionSnapshot candidate,
+        List<SchedulingConflictDto> conflicts,
+        List<string> notes,
+        ref double softPenalty)
+    {
+        notes.AddRange(result.Notes);
+
+        if (effectiveCategory == ConstraintCategory.Hard)
+        {
+            conflicts.AddRange(result.Conflicts);
+
+            if (categoryChanged && result.Conflicts.Count == 0 && result.SoftPenalty > 0)
+                conflicts.Add(BuildSyntheticHardConflict(candidate, evaluator, result));
+
+            return;
+        }
+
+        softPenalty += result.SoftPenalty;
+
+        if (categoryChanged && result.Conflicts.Count > 0)
+        {
+            softPenalty += ConvertConflictsToSoftPenalty(result.Conflicts.Count);
+            notes.AddRange(result.Conflicts.Select(c => c.Message));
+            return;
+        }
+
+        // Some soft evaluators can still emit real hard conflicts from their own domain
+        // model (for example DIST with PreferenceLevel.Unavailable). Preserve those
+        // unless the DB category explicitly moved the evaluator from Hard to Soft.
+        conflicts.AddRange(result.Conflicts);
+    }
+
+    private static double ConvertConflictsToSoftPenalty(int conflictCount) =>
+        conflictCount * SoftPenaltyPerConvertedConflict;
+
+    private static SchedulingConflictDto BuildSyntheticHardConflict(
+        SectionSnapshot candidate,
+        IConstraintEvaluator evaluator,
+        ConstraintResult result)
+    {
+        var firstSlot = candidate.TimeBlocks
+            .OrderBy(block => block.Day)
+            .ThenBy(block => block.StartTime)
+            .FirstOrDefault();
+
+        var detail = result.Notes.FirstOrDefault()
+            ?? $"Soft penalty {result.SoftPenalty:0.##}";
+
+        return SchedulingHelpers.BuildConflict(
+            candidate,
+            evaluator.Code,
+            $"{evaluator.Code}: {evaluator.Name} hard constraint violation ({detail})",
+            firstSlot,
+            relatedSectionId: null);
     }
 
     /// <summary>

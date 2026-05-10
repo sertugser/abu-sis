@@ -37,6 +37,9 @@ using SIS.Infrastructure.Services.Announcement;
 using SIS.Infrastructure.Services.CalendarGenerator;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -127,7 +130,33 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!))
     };
+
+    // SignalR WebSocket bağlantısı header gönderemez — token query param'dan gelir.
+    // Bu event sadece /hubs/* path'lerinde devreye girer; HTTP API çağrıları
+    // standart Authorization header'ını kullanmaya devam eder.
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
+
+// SignalR — auto-schedule progress, real-time bildirimler vb. için.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleProgressReporter,
+    SIS.API.Hubs.SignalRScheduleProgressReporter>();
+// Cancel registry: aktif auto-schedule run'larının CTS'ini kullanıcı bazında tutar.
+// Singleton — tüm hub instance'ları aynı registry üzerinden çalışır.
+builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleCancelRegistry,
+    SIS.Infrastructure.Services.Scheduling.ScheduleCancelRegistry>();
 
 // Register Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -215,6 +244,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+app.MapHub<SIS.API.Hubs.ScheduleProgressHub>("/hubs/schedule-progress");
 
 // Seed database
 if (app.Environment.IsDevelopment())
@@ -224,6 +254,11 @@ if (app.Environment.IsDevelopment())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
     await SeedData.SeedAsync(context, userManager, roleManager);
+
+    // Auto-schedule algoritma test verisi — Mühendislik fakültesinin gerçek dönem verisi
+    // (Güz 2024-25 + Bahar 2025-26, 162 section, hoca atanmamış). Idempotent — varsa skip.
+    // Memory: project_autoschedule_test_data.md, project_autoschedule_test_disabled_constraints.md
+    await SeedData.SeedAutoScheduleTestDataAsync(context);
 }
 
 app.Run();

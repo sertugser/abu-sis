@@ -28,6 +28,7 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                Parameters = """{"AmphiThreshold": 100}""",
                 SortOrder = 2
             },
             new()
@@ -171,6 +172,7 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                Parameters = """{"TheoryLabSplitThreshold": 4}""",
                 SortOrder = 16
             },
             new()
@@ -193,20 +195,13 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MinOccupancy": 60, "MaxOccupancy": 85, "Weight": 3}""",
+                Parameters = """{"S1MinOccupancy": 60, "S1MaxOccupancy": 85}""",
                 SortOrder = 101
             },
-            new()
-            {
-                Code = "S2",
-                Name = "Günlük Yük Dengeleme",
-                Description = "Öğretim üyesinin günlük ders saatlerinin dengeli dağılmasını teşvik eder.",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"MaxDailyHours": 6, "Weight": 2}""",
-                SortOrder = 102
-            },
+            // Plan 10 Phase 2 — S2 ConstraintDefinition kaldırıldı.
+            // H-DL "Günlük Yük Limiti" Category toggle (Hard/Soft) ile iki davranışı yönetiyor:
+            //   - Hard (Zorunlu): DailyLoadEncoder yasaklar (limit aşımı kabul edilmez).
+            //   - Soft (Tercihli): DailyLoadSoftEncoder S2Weight ile penalty üretir.
             new()
             {
                 Code = "S3",
@@ -215,7 +210,7 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MaxSectionsPerSlot": 5, "Weight": 2}""",
+                Parameters = """{"S3MaxSectionsPerSlot": 5}""",
                 SortOrder = 103
             },
             new()
@@ -226,20 +221,13 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MinCoPairThreshold": 20, "Weight": 3}""",
+                Parameters = """{"S4MinCoPairThreshold": 20}""",
                 SortOrder = 104
             },
-            new()
-            {
-                Code = "S5",
-                Name = "Öğle Arası Tercihi",
-                Description = "Öğle arası saatlerine ders atanmamasını tercih eder (soft mod).",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"Weight": 2}""",
-                SortOrder = 105
-            },
+            // Plan 10 — S5 ConstraintDefinition kaldırıldı.
+            // H13 "Öğle Arası Koruması" Category toggle (Hard/Soft) ile iki davranışı yönetiyor:
+            //   - Hard (Zorunlu): LunchBreakEncoder yasaklar.
+            //   - Soft (Tercihli): LunchBreakSoftEncoder S5Weight ile penalty üretir.
             new()
             {
                 Code = "S7",
@@ -248,7 +236,7 @@ public static partial class SeedData
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"MaxGapSlots": 3, "Weight": 2}""",
+                Parameters = """{"S7MaxGapSlots": 3}""",
                 SortOrder = 106
             },
             new()
@@ -264,17 +252,6 @@ public static partial class SeedData
             },
             new()
             {
-                Code = "S9",
-                Name = "Erken/Geç Saat Kontrolü",
-                Description = "Erken sabah ve geç akşam saatlerine ders atanmasına ceza uygular.",
-                Category = "Soft",
-                Scope = "Scheduling",
-                IsEnabled = true,
-                Parameters = """{"Weight": 1}""",
-                SortOrder = 108
-            },
-            new()
-            {
                 Code = "S12",
                 Name = "Hafta İçi Denge",
                 Description = "Derslerin hafta içi günlere dengeli dağılmasını teşvik eder.",
@@ -283,6 +260,17 @@ public static partial class SeedData
                 IsEnabled = true,
                 Parameters = """{"Weight": 1}""",
                 SortOrder = 109
+            },
+            new()
+            {
+                Code = "S20",
+                Name = "Komşu Yıl Çakışma",
+                Description = "Aynı bölüm içinde komşu yıl (1-2, 2-3, 3-4) ders çiftleri arasında çakışma penalty'si. Kalan/önden ders alan öğrenciler için section alternatifi kalmasını teşvik eder.",
+                Category = "Soft",
+                Scope = "Scheduling",
+                IsEnabled = true,
+                Parameters = """{"Weight": 1, "PenaltyPerPair": 5.0}""",
+                SortOrder = 110
             },
             new()
             {
@@ -348,7 +336,6 @@ public static partial class SeedData
                     {
                         "S1" => """{"MinOccupancy": 40, "MaxOccupancy": 95, "Weight": 2}""",
                         "H-DL" => """{"MaxDailyHours": 10}""",
-                        "S9" => null,
                         _ => d.Parameters,
                     },
                 }).ToList(),

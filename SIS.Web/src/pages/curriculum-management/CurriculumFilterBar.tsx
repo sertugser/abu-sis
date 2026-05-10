@@ -52,22 +52,19 @@ export default function CurriculumFilterBar({
   const { data: departments, isLoading: loadingDepts } = useAdminDepartmentsByStructure(facultyId);
   const { data: programs, isLoading: loadingPrograms } = useAdminProgramsByStructure(departmentId);
 
+  const labelClass = 'text-xs font-medium text-muted-foreground';
+  const triggerClass = 'h-9 text-sm w-full';
+
   return (
     <Card>
-      <CardContent className="pt-4 pb-4 space-y-3">
-        {/* Üst: sadece Müfredat Ekle (ince çizgi altta ayraç) */}
-        <div className="flex items-center justify-end border-b pb-2">
-          <Button size="sm" className="h-9" onClick={onOpenCreateDialog} title="Yeni müfredat ekle">
-            <Plus className="h-4 w-4 mr-1" /> Müfredat Ekle
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-2.5">
-          {/* Sol: Fakülte */}
-          <div className="grid grid-cols-[65px_1fr] md:grid-cols-[80px_1fr] items-center gap-4">
-            <Label className="text-sm text-left">Fakülte</Label>
+      <CardContent className="pt-4 pb-4">
+        {/* 3 kolon × 2 satır — üst: cascade (Fakülte/Bölüm/Program), alt: filtre (Yıl/Durum/Ara) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+          {/* Fakülte */}
+          <div className="space-y-1">
+            <Label className={labelClass}>Fakülte</Label>
             <Select value={facultyId?.toString() ?? ''} onValueChange={onFacultyChange}>
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className={triggerClass}>
                 {loadingFaculties
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <SelectValue placeholder="Seçin" />}
@@ -80,31 +77,15 @@ export default function CurriculumFilterBar({
             </Select>
           </div>
 
-          {/* Sağ: Müfredat Yılı */}
-          <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-4">
-            <Label className="text-sm text-left">Müfredat Yılı</Label>
-            <Select value={yearFilter} onValueChange={val => onYearFilterChange(val as YearFilter)}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                {availableYears.map(y => (
-                  <SelectItem key={y} value={y}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Sol: Bölüm */}
-          <div className="grid grid-cols-[65px_1fr] md:grid-cols-[80px_1fr] items-center gap-4">
-            <Label className="text-sm text-left">Bölüm</Label>
+          {/* Bölüm */}
+          <div className="space-y-1">
+            <Label className={labelClass}>Bölüm</Label>
             <Select
               value={departmentId?.toString() ?? ''}
               onValueChange={onDepartmentChange}
               disabled={!facultyId}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className={triggerClass}>
                 {loadingDepts
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <SelectValue placeholder="Seçin" />}
@@ -117,31 +98,15 @@ export default function CurriculumFilterBar({
             </Select>
           </div>
 
-          {/* Sağ: Durum */}
-          <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-4">
-            <Label className="text-sm text-left">Durum</Label>
-            <Select value={statusFilter} onValueChange={val => onStatusFilterChange(val as StatusFilter)}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                <SelectItem value="active">Aktif</SelectItem>
-                <SelectItem value="inactive">Pasif</SelectItem>
-                <SelectItem value="archived">Arşiv</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Sol: Program */}
-          <div className="grid grid-cols-[65px_1fr] md:grid-cols-[80px_1fr] items-center gap-4">
-            <Label className="text-sm text-left">Program</Label>
+          {/* Program */}
+          <div className="space-y-1">
+            <Label className={labelClass}>Program</Label>
             <Select
               value={programId?.toString() ?? ''}
               onValueChange={onProgramChange}
               disabled={!departmentId}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className={triggerClass}>
                 {loadingPrograms
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <SelectValue placeholder="Seçin" />}
@@ -154,17 +119,59 @@ export default function CurriculumFilterBar({
             </Select>
           </div>
 
-          {/* Sağ: Anahtar kelimeyle ara — fakülte / program / müfredat adı / yıl / program kodu içinde */}
-          <div className="grid grid-cols-[90px_1fr] md:grid-cols-[110px_1fr] items-center gap-4">
-            <Label className="text-sm text-left">Ara</Label>
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Fakülte, program, müfredat, yıl..."
-                className="h-9 text-sm pl-8"
-                value={searchKeyword}
-                onChange={e => onSearchKeywordChange(e.target.value)}
-              />
+          {/* Müfredat Yılı */}
+          <div className="space-y-1">
+            <Label className={labelClass}>Müfredat Yılı</Label>
+            <Select value={yearFilter} onValueChange={val => onYearFilterChange(val as YearFilter)}>
+              <SelectTrigger className={triggerClass}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tümü</SelectItem>
+                {availableYears.map(y => (
+                  <SelectItem key={y} value={y}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Durum */}
+          <div className="space-y-1">
+            <Label className={labelClass}>Durum</Label>
+            <Select value={statusFilter} onValueChange={val => onStatusFilterChange(val as StatusFilter)}>
+              <SelectTrigger className={triggerClass}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tümü</SelectItem>
+                <SelectItem value="active">Aktif</SelectItem>
+                <SelectItem value="inactive">Pasif</SelectItem>
+                <SelectItem value="archived">Arşiv</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Ara — yarısı arama input, yarısı Müfredat Ekle butonu */}
+          <div className="space-y-1">
+            <Label className={labelClass}>Ara</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Fakülte, program..."
+                  className="h-9 text-sm pl-8 w-full"
+                  value={searchKeyword}
+                  onChange={e => onSearchKeywordChange(e.target.value)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                className="h-9 w-full border-dashed text-primary hover:bg-primary/5 hover:border-primary hover:text-primary"
+                onClick={onOpenCreateDialog}
+                title="Yeni müfredat ekle"
+              >
+                <Plus className="h-4 w-4 mr-1" /> Müfredat Ekle
+              </Button>
             </div>
           </div>
         </div>

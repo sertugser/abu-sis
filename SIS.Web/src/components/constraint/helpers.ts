@@ -6,6 +6,52 @@ export const CATEGORY_LABELS: Record<string, string> = {
   Soft: 'Tercihli',
 };
 
+// ─── Category Toggle Capability ─────────────────────────────────
+// Plan 10 — her kuralın Hard/Soft toggle yapabilirliği:
+//   - 'toggleable': Hem Hard hem Soft encoder var, admin değiştirebilir
+//   - 'hard-only': Mantıken/fiziksel olarak Hard zorunlu, toggle anlamsız
+//   - 'soft-only': Doğası soft (penalty-bazlı), Hard yapılamaz
+export type CategoryCapability = 'toggleable' | 'hard-only' | 'soft-only';
+
+export const CATEGORY_CAPABILITY: Record<string, CategoryCapability> = {
+  // ── Zorunlu HARD (fizik/mantık kuralı) ────────────────
+  'H1':   'hard-only',   // Aynı oda + saat = fizik
+  'H2':   'hard-only',   // Aynı hoca + saat = fizik
+  'H3':   'hard-only',   // Section ≤ classroom kapasitesi
+  'H6':   'hard-only',   // Same-section component overlap = mantıksal
+  'H11':  'hard-only',   // Eşkoşul = öğrenci ikisini de almalı
+  'H17':  'hard-only',   // Slot mode kuralı (AllowedMode)
+
+  // ── Toggleable (Hard ↔ Soft her ikisi mantıklı) ──────
+  'H4':   'toggleable',  // Derslik tipi tercihi
+  'H5':   'toggleable',  // Müfredat çakışması esnekliği
+  'H8':   'toggleable',  // Aynı ders şube tercihi
+  'H10':  'toggleable',  // Fakülte derslik esnekliği
+  'H13':  'toggleable',  // Öğle arası tercihi
+  'H15':  'toggleable',  // Ardışık limit tercihi
+  'H16':  'toggleable',  // Theory-Lab sıra tercihi
+  'H-WL': 'toggleable',  // Haftalık yük limit tercihi
+  'H-DL': 'toggleable',  // Günlük yük limit tercihi
+  'H-DO': 'toggleable',  // Boş gün tercihi
+  // Plan 10 Phase 4: DIST per-row PreferenceLevel ile zaten Hard/Soft seçimi yapıyor;
+  // üst-seviyede Category toggle anlamsız. IsEnabled toggle ile tüm DIST kapatılabilir.
+  'DIST': 'hard-only',
+
+  // ── Doğası SOFT (penalty-bazlı, Hard yapılamaz) ──────
+  // Plan 10 Phase 2: S2 kaldırıldı, H-DL Category toggle ile yönetiliyor.
+  'S1':   'soft-only',
+  'S3':   'soft-only',
+  'S4':   'soft-only',
+  'S7':   'soft-only',
+  'S8':   'soft-only',
+  'S12':  'soft-only',
+  'S20':  'soft-only',
+};
+
+export function getCategoryCapability(code: string): CategoryCapability {
+  return CATEGORY_CAPABILITY[code] ?? 'hard-only';
+}
+
 export const SCOPE_LABELS: Record<string, string> = {
   Schedule: 'Ders Programı',
   Scheduling: 'Ders Programı',
@@ -34,7 +80,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'instructor',
     label: 'Öğretim Üyesi Kısıtlamaları',
     icon: 'GraduationCap',
-    codes: ['H2', 'H-WL', 'H-DL', 'H-DO', 'H15', 'S2', 'S8'],
+    codes: ['H2', 'H-WL', 'H-DL', 'H-DO', 'H15', 'S8'],
   },
   {
     key: 'curriculum',
@@ -46,7 +92,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'time',
     label: 'Zaman & Dağılım Kısıtlamaları',
     icon: 'Clock',
-    codes: ['H13', 'S3', 'S5', 'S7', 'S9', 'S12', 'DIST'],
+    codes: ['H13', 'H17', 'S3', 'S7', 'S12', 'DIST'],
   },
 ];
 
@@ -98,6 +144,8 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'H16': [
     { key: 'TheoryLabSplitThreshold', label: 'Teori-Lab Ayrım Eşiği (saat)', type: 'number', min: 2, max: 10 },
   ],
+  // H17: form alanı yok — slot davranışı Ders Saatleri Yönetimi sayfasındaki AllowedMode'dan yönetiliyor.
+  'H17': [],
   'H-DL': [
     { key: 'MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
   ],
@@ -105,43 +153,28 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'H-DO': [],
 
   // ── Soft Constraints ──────────────────────────────────────────
+  // Not: 'Weight' alanı kaldırıldı — slider üstte kart başlığında ayarlanıyor.
+  // Parameter JSON key'leri backend SchedulingConstraintConfig property adlarıyla
+  // birebir eşleşiyor (MergeParameterOverride reflect ile bind ediyor).
   'S1': [
-    { key: 'MinOccupancy', label: 'Min. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
-    { key: 'MaxOccupancy', label: 'Maks. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S1MinOccupancy', label: 'Min. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
+    { key: 'S1MaxOccupancy', label: 'Maks. Doluluk Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
   ],
-  'S2': [
-    { key: 'MaxDailyHours', label: 'Günlük Maks. Ders Saati', type: 'number', suffix: 'saat', min: 1, max: 16 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
+  // Plan 10 Phase 2 — S2 kaldırıldı, H-DL Category toggle ile yönetiliyor.
   'S3': [
-    { key: 'MaxSectionsPerSlot', label: 'Slot Başına Maks. Şube', type: 'number', min: 1, max: 50 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S3MaxSectionsPerSlot', label: 'Slot Başına Maks. Şube', type: 'number', min: 1, max: 50 },
   ],
   'S4': [
-    { key: 'MinCoPairThreshold', label: 'Min. Birlikte Kayıt Eşiği', type: 'number', suffix: 'öğrenci', min: 1 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
-  'S5': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S4MinCoPairThreshold', label: 'Min. Birlikte Kayıt Eşiği', type: 'number', suffix: 'öğrenci', min: 1 },
   ],
   'S7': [
-    { key: 'MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S7MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 },
   ],
-  'S8': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
-  'S9': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
+  'S8': [],
   'S12': [
-    { key: 'MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
+    { key: 'S12MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
   ],
-  'DIST': [
-    { key: 'Weight', label: 'Ağırlık Puanı', type: 'number', min: 1, max: 10 },
-  ],
+  'DIST': [],
 };
 
 // ─── Entity Type Labels ────────────────────────────────────────

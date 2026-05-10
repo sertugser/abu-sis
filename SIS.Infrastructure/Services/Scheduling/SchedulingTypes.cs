@@ -15,6 +15,12 @@ public sealed class TermSnapshot
     public List<CoursePrerequisite> Corequisites { get; init; } = new();              // for H11
     public List<CoEnrollmentPair> CoEnrollmentPairs { get; set; } = new();            // for S4
     public HashSet<(int SectionId1, int SectionId2)>? CohortConflictPairs { get; set; }
+
+    /// <summary>
+    /// Komşu yıl SOFT pair'leri — aynı bölüm, |year_diff| == 1 ders çiftlerinden
+    /// modulo eşleşme. AdjacentYearConflictEvaluator (S20) bu set'i kullanır.
+    /// </summary>
+    public HashSet<(int SectionId1, int SectionId2)>? AdjacentYearSoftPairs { get; set; }
     public EnrollmentConflictMatrix? EnrollmentConflicts { get; set; }
     public List<DistributionConstraint>? DistributionConstraints { get; set; }
     public Dictionary<int, Dictionary<int, int>> CourseSuggestedSemestersByDepartment { get; init; } = new();

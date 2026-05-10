@@ -18,6 +18,7 @@ export interface ElectiveGroupListDto {
 
 export interface ElectiveGroupDetailDto extends ElectiveGroupListDto {
   courses: ElectiveGroupCourseDto[];
+  usages: ElectiveGroupUsageDto[];
 }
 
 export interface ElectiveGroupCourseDto {
@@ -25,6 +26,23 @@ export interface ElectiveGroupCourseDto {
   courseCode: string;
   courseName: string;
   ects: number;
+}
+
+/** Bu seçmeli grubun bağlı olduğu müfredat slotları —
+ * "Bu havuz nerede kullanılıyor?" sorusuna cevap. */
+export interface ElectiveGroupUsageDto {
+  poolId: number;
+  curriculumId: number;
+  curriculumName: string;
+  curriculumVersion: string;
+  programId: number;
+  programName: string;
+  slotName: string;
+  suggestedSemesterStart: number;
+  suggestedSemesterEnd: number;
+  requiredCourseCount: number;
+  requiredEcts: number;
+  ectsPerCourse: number | null;
 }
 
 export interface CreateElectiveGroupRequest {

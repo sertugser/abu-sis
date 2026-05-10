@@ -175,7 +175,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 c.Status,
                 c.CurriculumCourses.Count,
                 c.CurriculumCourses.Sum(cc => cc.Course.Ects),
-                c.CurriculumCourses.Sum(cc => cc.Course.NationalCredit ?? 0),
+                c.CurriculumCourses.Sum(cc => cc.Course.NationalCredit),
                 c.CurriculumCourses.Count(cc => cc.IsCompulsory),
                 c.CurriculumCourses.Count(cc => !cc.IsCompulsory),
                 context.StudentPrograms.Count(sp => sp.CurriculumId == c.Id && sp.IsActive),
@@ -235,7 +235,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.OpeningReasonId,
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                    cc.Course.NationalCredit ?? 0,
+                    cc.Course.NationalCredit,
                     // Phase 2 — flags
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
@@ -400,7 +400,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 cc.OpeningReasonId,
                 cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                 cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                cc.Course.NationalCredit ?? 0,
+                cc.Course.NationalCredit,
                 // Phase 2
                 cc.IsMainGroupCourse, cc.IsFormationCourse,
                 cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
@@ -502,7 +502,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             saved.OpeningReasonId,
             saved.OpeningReason != null ? saved.OpeningReason.Code : null,
             saved.OpeningReason != null ? saved.OpeningReason.Name : null,
-            saved.Course.NationalCredit ?? 0,
+            saved.Course.NationalCredit,
             // Phase 2
             saved.IsMainGroupCourse, saved.IsFormationCourse,
             saved.ExcludedFromCreditTotal, saved.ExcludedFromTranscriptTotal,
@@ -725,7 +725,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.OpeningReasonId,
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                    cc.Course.NationalCredit ?? 0,
+                    cc.Course.NationalCredit,
                     // Phase 2 — flags
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,

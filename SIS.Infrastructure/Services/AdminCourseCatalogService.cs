@@ -57,16 +57,130 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         if (filter.Status.HasValue)
             query = query.Where(c => c.Status == filter.Status.Value);
 
-        return await query
+        // 1. Ders satırları (anonim — sonra DTO'ya kuracağız)
+        var rows = await query
             .OrderBy(c => c.Code)
-            .Select(c => new CourseListItemDto(
+            .Select(c => new
+            {
                 c.Id, c.Code, c.Name, c.EnglishName,
                 c.Ects, c.TheoryHours, c.LabHours,
                 c.IsNonGpa, c.ExamType,
-                c.DepartmentId, c.Department != null ? c.Department.Name : null,
-                c.Prerequisites.Count, c.Equivalencies.Count,
-                c.Language, c.TeachingMethod, c.Status, c.Level))
+                c.DepartmentId,
+                DepartmentName = c.Department != null ? c.Department.Name : null,
+                PrereqCount = c.Prerequisites.Count,
+                EquivCount = c.Equivalencies.Count,
+                c.Language, c.TeachingMethod, c.Status, c.Level,
+                c.NationalCredit
+            })
             .ToListAsync();
+
+        var courseIds = rows.Select(r => r.Id).ToList();
+
+        // 2a. Doğrudan müfredat atamaları
+        var directAssignments = await db.CurriculumCourses
+            .Where(cc => courseIds.Contains(cc.CourseId))
+            .Select(cc => new
+            {
+                cc.CourseId,
+                cc.SuggestedSemester,
+                cc.IsCompulsory
+            })
+            .ToListAsync();
+
+        // 2b. Havuz üzerinden atamalar (ElectiveGroup üyeliği → CurriculumElectivePool)
+        var poolAssignments = await db.ElectiveGroupCourses
+            .Where(egc => courseIds.Contains(egc.CourseId))
+            .SelectMany(egc => db.CurriculumElectivePools
+                .Where(p => p.ElectiveGroupId == egc.ElectiveGroupId)
+                .Select(p => new
+                {
+                    egc.CourseId,
+                    SuggestedSemester = p.SuggestedSemesterStart,
+                    IsCompulsory = false  // havuz üyeleri seçmeli sayılır
+                }))
+            .ToListAsync();
+
+        // 2c. İki kaynağı birleştir, ders bazında agregat
+        var assignmentMap = directAssignments.Concat(poolAssignments)
+            .GroupBy(x => x.CourseId)
+            .ToDictionary(g => g.Key, g => new
+            {
+                MinSemester = g.Min(x => x.SuggestedSemester),
+                MaxSemester = g.Max(x => x.SuggestedSemester),
+                HasCompulsory = g.Any(x => x.IsCompulsory),
+                HasElective = g.Any(x => !x.IsCompulsory)
+            });
+
+        // 3. Aktif dönem section bilgisi (KO/DO/Kon + Öğretim Üyesi)
+        var now = DateTime.UtcNow;
+        var activeTerm = await db.AcademicTerms
+            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .Select(t => new { t.Id })
+            .FirstOrDefaultAsync();
+
+        var sectionMap = new Dictionary<int, (bool IsOpen, string? InstructorName)>();
+        if (activeTerm != null)
+        {
+            var sections = await db.CourseSections
+                .Where(s => courseIds.Contains(s.CourseId) && s.TermId == activeTerm.Id)
+                .Include(s => s.Instructor)
+                .Select(s => new
+                {
+                    s.CourseId,
+                    s.InstructorId,
+                    InstructorTitle = s.Instructor != null ? s.Instructor.Title : null,
+                    InstructorUserId = s.Instructor != null ? (int?)s.Instructor.UserId : null
+                })
+                .ToListAsync();
+
+            var userIds = sections.Where(s => s.InstructorUserId.HasValue)
+                .Select(s => s.InstructorUserId!.Value).Distinct().ToList();
+            var userMap = await db.Users
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim());
+
+            sectionMap = sections
+                .GroupBy(s => s.CourseId)
+                .ToDictionary(g => g.Key, g =>
+                {
+                    var withInstructor = g.FirstOrDefault(x => x.InstructorUserId.HasValue);
+                    string? name = null;
+                    if (withInstructor != null && userMap.TryGetValue(withInstructor.InstructorUserId!.Value, out var fullName))
+                    {
+                        name = string.IsNullOrWhiteSpace(withInstructor.InstructorTitle)
+                            ? fullName
+                            : $"{withInstructor.InstructorTitle} {fullName}";
+                    }
+                    return (IsOpen: true, InstructorName: name);
+                });
+        }
+
+        // 4. DTO'ya birleştir
+        return rows.Select(r =>
+        {
+            assignmentMap.TryGetValue(r.Id, out var a);
+            string requirementType = a == null ? "None"
+                : a.HasCompulsory && a.HasElective ? "Mixed"
+                : a.HasCompulsory ? "Compulsory"
+                : a.HasElective ? "Elective"
+                : "None";
+
+            sectionMap.TryGetValue(r.Id, out var sec);
+
+            return new CourseListItemDto(
+                r.Id, r.Code, r.Name, r.EnglishName,
+                r.Ects, r.TheoryHours, r.LabHours,
+                r.IsNonGpa, r.ExamType,
+                r.DepartmentId, r.DepartmentName,
+                r.PrereqCount, r.EquivCount,
+                r.Language, r.TeachingMethod, r.Status, r.Level,
+                r.NationalCredit,
+                a?.MinSemester,
+                a?.MaxSemester,
+                requirementType,
+                sec.IsOpen,
+                sec.InstructorName);
+        }).ToList();
     }
 
     public async Task<CourseDetailDto?> GetCourseByIdAsync(int id)
@@ -79,7 +193,8 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
         if (course == null) return null;
 
-        var curriculumAssignments = await db.CurriculumCourses
+        // Doğrudan müfredat atamaları
+        var direct = await db.CurriculumCourses
             .Include(cc => cc.Curriculum).ThenInclude(cu => cu.Program)
             .Where(cc => cc.CourseId == id)
             .Select(cc => new CurriculumAssignmentDto(
@@ -90,6 +205,23 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
                 cc.SuggestedSemester,
                 cc.IsCompulsory))
             .ToListAsync();
+
+        // Havuz üzerinden müfredat atamaları (ElectiveGroup üyeliği → CurriculumElectivePool)
+        var viaPool = await db.ElectiveGroupCourses
+            .Where(egc => egc.CourseId == id)
+            .SelectMany(egc => db.CurriculumElectivePools
+                .Include(p => p.Curriculum).ThenInclude(cu => cu.Program)
+                .Where(p => p.ElectiveGroupId == egc.ElectiveGroupId)
+                .Select(p => new CurriculumAssignmentDto(
+                    p.CurriculumId,
+                    p.Curriculum.Program.Name,
+                    p.Curriculum.Version,
+                    p.Curriculum.IsActive,
+                    p.SuggestedSemesterStart,
+                    false))) // havuz üyeleri seçmeli sayılır
+            .ToListAsync();
+
+        var curriculumAssignments = direct.Concat(viaPool).ToList();
 
         // Önceki dönem istatistikleri
         var stats = await BuildCourseStatsAsync(id);
@@ -118,6 +250,9 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             course.ShowInInfoPackage,
             course.ApplicationHours,
             course.OpenType,
+            // Plan 10 — Derslik tipi tercihleri
+            course.TheoryClassroomType,
+            course.LabClassroomType,
             stats,
             chain
         );
@@ -277,6 +412,11 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             throw new InvalidOperationException("Ders sahipliği zorunludur. Bölüm veya koordinatörlük seçin.");
         if (!await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
             throw new KeyNotFoundException("Bölüm bulunamadı.");
+        // Ulusal Kredi: YÖKSİS raporlama için zorunlu, makul aralıkta olmalı.
+        if (dto.NationalCredit < 0 || dto.NationalCredit > 20)
+            throw new InvalidOperationException("Ulusal Kredi 0-20 aralığında olmalıdır.");
+        if (dto.Ects < 1 || dto.Ects > 30)
+            throw new InvalidOperationException("AKTS 1-30 aralığında olmalıdır.");
 
         var course = new Course
         {
@@ -303,7 +443,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             AlternativeName = dto.AlternativeName,
             ShowInInfoPackage = dto.ShowInInfoPackage,
             ApplicationHours = dto.ApplicationHours,
-            OpenType = dto.OpenType
+            OpenType = dto.OpenType,
+            // Plan 10 — Derslik tipi tercihleri
+            TheoryClassroomType = dto.TheoryClassroomType,
+            LabClassroomType = dto.LabClassroomType
         };
         db.Courses.Add(course);
         await db.SaveChangesAsync();
@@ -321,6 +464,10 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             throw new InvalidOperationException("Ders sahipliği zorunludur. Bölüm veya koordinatörlük seçin.");
         if (!await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId.Value))
             throw new KeyNotFoundException("Bölüm bulunamadı.");
+        if (dto.NationalCredit < 0 || dto.NationalCredit > 20)
+            throw new InvalidOperationException("Ulusal Kredi 0-20 aralığında olmalıdır.");
+        if (dto.Ects < 1 || dto.Ects > 30)
+            throw new InvalidOperationException("AKTS 1-30 aralığında olmalıdır.");
 
         course.Code = dto.Code;
         course.Name = dto.Name;
@@ -346,6 +493,9 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         course.ShowInInfoPackage = dto.ShowInInfoPackage;
         course.ApplicationHours = dto.ApplicationHours;
         course.OpenType = dto.OpenType;
+        // Plan 10 — Derslik tipi tercihleri
+        course.TheoryClassroomType = dto.TheoryClassroomType;
+        course.LabClassroomType = dto.LabClassroomType;
         await db.SaveChangesAsync();
         return (await GetCourseByIdAsync(id))!;
     }

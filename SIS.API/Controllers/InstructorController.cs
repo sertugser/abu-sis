@@ -98,6 +98,12 @@ public class InstructorController : ControllerBase
         var myScheduleMap = mySectionSchedules
             .GroupBy(ss => ss.CourseSectionId)
             .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
+        // 2026-05-10 — Plan E: structured schedule blocks (replaces frontend string parsing).
+        // BuildScheduleBlocks BlockType-aware merge yapar, frontend `parseScheduleSummary`
+        // helper'ı bu sayede silindi.
+        var myScheduleBlockMap = mySectionSchedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(g => g.Key, g => ScheduleHelper.BuildScheduleBlocks(g));
 
         var result = sections.Select(s => new
         {
@@ -113,6 +119,7 @@ public class InstructorController : ControllerBase
             AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),
             ClassroomName = s.Classroom?.Name ?? "",
             Schedule = myScheduleMap.GetValueOrDefault(s.Id, string.Empty),
+            Schedules = myScheduleBlockMap.GetValueOrDefault(s.Id, new()),
             IsActive = s.IsActive,
             IsFinalized = s.IsFinalized,
             ActiveStudents = s.Registrations.Count(r => r.Status == Domain.Enums.RegistrationStatus.Active)

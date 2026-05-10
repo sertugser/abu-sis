@@ -28,6 +28,7 @@ public partial class CalendarGeneratorService
             .Distinct()
             .Where(s => !termsBySemester.ContainsKey(s))
             .OrderBy(s => s)
+            .Select(s => (Semester: s, Reason: "eşleşen dönem yok"))
             .ToList();
 
         var termIds = new List<int>();
@@ -45,7 +46,10 @@ public partial class CalendarGeneratorService
                     continue;
 
                 if (term.IsCancelled)
-                    throw new InvalidOperationException("İptal edilmiş döneme takvim uygulanamaz.");
+                {
+                    skippedSemesters.Add((group.Key, "iptal edilmiş"));
+                    continue;
+                }
                 if (term.CalendarEvents.Count > 0 && !request.ForceOverwrite)
                     throw new InvalidOperationException("Takvim zaten uygulanmış dönem için forceOverwrite gerekir.");
 
@@ -80,7 +84,7 @@ public partial class CalendarGeneratorService
             }
 
             if (termIds.Count == 0)
-                throw new InvalidOperationException("Taslaktaki hiçbir dönem, Dönem İşleri sayfasında eşleşen bir dönem bulamadığı için uygulanamadı.");
+                throw new InvalidOperationException("Taslaktaki hiçbir aktif dönem uygulanamadı. Atlanan dönemler: " + FormatSkippedSemesterReasons(skippedSemesters) + ".");
 
             draft.PreviousSnapshotJson = Serialize(snapshot);
             draft.Status = GeneratedCalendarDraftStatus.Applied;
@@ -94,7 +98,7 @@ public partial class CalendarGeneratorService
 
             var message = skippedSemesters.Count == 0
                 ? "Akademik takvim uygulandı."
-                : $"Akademik takvim eşleşen dönemlere uygulandı. Atlanan dönemler: {FormatSemesterList(skippedSemesters)}.";
+                : $"Akademik takvim uygun dönemlere uygulandı. Atlanan dönemler: {FormatSkippedSemesterReasons(skippedSemesters)}.";
             return new ApplyCalendarDraftResultDto(true, message, termIds);
         }
         catch
@@ -146,6 +150,11 @@ public partial class CalendarGeneratorService
             SemesterType.Summer => "Yaz",
             _ => s.ToString()
         }));
+
+    private static string FormatSkippedSemesterReasons(IEnumerable<(SemesterType Semester, string Reason)> semesters) =>
+        string.Join(", ", semesters
+            .OrderBy(item => item.Semester)
+            .Select(item => $"{SemesterLabel(item.Semester)} ({item.Reason})"));
 
     public async Task<ApplyCalendarDraftResultDto> RollbackAsync(int draftId, int? userId, CancellationToken ct = default)
     {

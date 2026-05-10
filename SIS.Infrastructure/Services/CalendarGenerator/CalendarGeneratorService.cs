@@ -159,6 +159,9 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, draftEventId, oldStart, oldEnd, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
+        var blockingHolidayError = BlockingHolidayOverlapError(target.Title, target.EventType, newStart, newEnd, holidays);
+        if (blockingHolidayError is not null)
+            throw new InvalidOperationException(blockingHolidayError);
         events = NormalizeCalendarEvents(events, holidays);
         events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
@@ -203,6 +206,9 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         if (propagateChanges)
             events = Propagate(events, request.DraftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
         var holidays = Deserialize<List<ResolvedHolidayDto>>(draft.HolidaysJson);
+        var blockingHolidayError = BlockingHolidayOverlapError(target.Title, target.EventType, newStart, newEnd, holidays);
+        if (blockingHolidayError is not null)
+            throw new InvalidOperationException(blockingHolidayError);
         events = NormalizeCalendarEvents(events, holidays);
         events = AlignClassesEndToWeekday(events);
         var warnings = new List<CalendarWarningDto>
@@ -214,6 +220,70 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
                     ? "Bu sonuc taslak kaydedilmeden, zincirleme kaydirma dahil hesaplandi."
                     : "Bu sonuç taslak kaydedilmeden, sadece seçili etkinlik değiştirilerek hesaplandı.",
                 request.DraftEventId)
+        };
+        ValidateChronology(events, warnings);
+        warnings.AddRange(ValidateRegulationRules(events, holidays));
+
+        return new WhatIfResultDto(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList(), warnings, CalculateQualityScore(warnings));
+    }
+
+    public static WhatIfResultDto EvaluateEvents(
+        IReadOnlyList<GeneratedCalendarEventDto> currentEvents,
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
+    {
+        var events = NormalizeCalendarEvents(currentEvents, holidays, pinnedDraftEventIds);
+        events = AlignClassesEndToWeekday(events, pinnedDraftEventIds);
+
+        var warnings = new List<CalendarWarningDto>();
+        ValidateChronology(events, warnings);
+        warnings.AddRange(ValidateRegulationRules(events, holidays));
+
+        return new WhatIfResultDto(events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList(), warnings, CalculateQualityScore(warnings));
+    }
+
+    public static WhatIfResultDto RecalculateEvents(
+        IReadOnlyList<GeneratedCalendarEventDto> currentEvents,
+        IReadOnlyList<ResolvedHolidayDto> holidays,
+        string draftEventId,
+        DateTime startDate,
+        DateTime? endDate,
+        bool? propagateChanges = null)
+    {
+        var events = currentEvents.ToList();
+        var target = events.FirstOrDefault(e => e.DraftEventId == draftEventId)
+            ?? throw new KeyNotFoundException($"Draft event not found: {draftEventId}");
+        if (target.IsHoliday)
+            throw new InvalidOperationException("Resmi tatil ve bloklayici ozel gunler icin tarih degisikligi yapilamaz.");
+
+        var newStart = EnsureUtcDate(startDate);
+        var newEnd = EnsureUtcDate(endDate ?? startDate);
+
+        events = events.Select(e => e.DraftEventId == draftEventId
+                ? e with { StartDate = newStart, EndDate = newStart.Date == newEnd.Date ? null : newEnd }
+                : e)
+            .ToList();
+
+        var shouldPropagate = propagateChanges == true || (propagateChanges is null && IsCriticalEvent(target.EventType));
+        if (shouldPropagate)
+            events = Propagate(events, draftEventId, target.StartDate, target.EndDate ?? target.StartDate, newStart, newEnd);
+
+        var pinnedDraftEventIds = new HashSet<string>(StringComparer.Ordinal) { draftEventId };
+        var blockingHolidayError = BlockingHolidayOverlapError(target.Title, target.EventType, newStart, newEnd, holidays);
+        if (blockingHolidayError is not null)
+            throw new InvalidOperationException(blockingHolidayError);
+        events = NormalizeCalendarEvents(events, holidays, pinnedDraftEventIds);
+        events = AlignClassesEndToWeekday(events, pinnedDraftEventIds);
+
+        var warnings = new List<CalendarWarningDto>
+        {
+            new(
+                "WHAT_IF",
+                "Info",
+                shouldPropagate
+                    ? "Bu sonuc zincirleme kaydirma dahil hesaplandi."
+                    : "Bu sonuc sadece secili etkinlik degistirilerek hesaplandi.",
+                draftEventId)
         };
         ValidateChronology(events, warnings);
         warnings.AddRange(ValidateRegulationRules(events, holidays));

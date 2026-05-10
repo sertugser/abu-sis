@@ -142,7 +142,7 @@ export const QUERY_KEYS = {
   electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
   // Academic Calendar
-  studentAcademicCalendar: (termId?: number | null) => ['academicCalendar', 'student', termId] as const,
+  studentAcademicCalendar: (termId?: number | null, includeAllEvents = false) => ['academicCalendar', 'student', termId, includeAllEvents] as const,
   studentAcademicCalendarActive: ['academicCalendar', 'student', 'active'] as const,
   academicCalendarTerms: ['academicCalendar', 'terms'] as const,
   // Course Evaluation

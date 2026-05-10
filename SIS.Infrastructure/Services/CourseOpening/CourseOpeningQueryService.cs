@@ -68,6 +68,14 @@ public class CourseOpeningQueryService(
             .Select(g => new { CourseId = g.Key, Semester = g.Min(cc => cc.SuggestedSemester) })
             .ToDictionaryAsync(x => x.CourseId, x => x.Semester, ct);
 
+        // Z/S — bölümün aktif müfredatlarında dersin tanımı; çoklu eşleşmede HERHANGİ biri zorunlu ise Z kabul edilir
+        var compulsoryFlags = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => courseIds.Contains(cc.CourseId) && cc.Curriculum.Program.DepartmentId == departmentId && cc.Curriculum.IsActive)
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new { CourseId = g.Key, IsCompulsory = g.Any(cc => cc.IsCompulsory) })
+            .ToDictionaryAsync(x => x.CourseId, x => x.IsCompulsory, ct);
+
         var sectionNumberMap = new Dictionary<int, int>();
         var courseGroupCounters = new Dictionary<int, int>();
         foreach (var s in sections)
@@ -85,6 +93,7 @@ public class CourseOpeningQueryService(
             registeredCounts.TryGetValue(s.Id, out var regCount);
             draftOrPendingCounts.TryGetValue(s.Id, out var draftOrPendingCount);
             suggestedSemesters.TryGetValue(s.CourseId, out var sugSem);
+            compulsoryFlags.TryGetValue(s.CourseId, out var isCompulsory);
 
             return new OpenedCourseSectionDto
             {
@@ -109,6 +118,7 @@ public class CourseOpeningQueryService(
                 IsActive = s.IsActive,
                 DepartmentId = s.Course.DepartmentId,
                 DepartmentName = s.Course.Department?.Name,
+                IsCompulsory = isCompulsory,
             };
         }).ToList();
 
@@ -297,17 +307,41 @@ public class CourseOpeningQueryService(
         return null;
     }
 
-    public async Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, int? termId = null, CancellationToken ct = default)
+    public async Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(
+        IReadOnlyCollection<int> departmentIds,
+        int? termId = null,
+        CancellationToken ct = default)
     {
-        var facultyId = await _context.Departments
-            .AsNoTracking()
-            .Where(d => d.Id == departmentId)
-            .Select(d => d.FacultyId)
-            .FirstOrDefaultAsync(ct);
+        var scopedDepartmentIds = departmentIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        if (scopedDepartmentIds.Count == 0)
+            return [];
+
+        var visibleAssignedInstructorIds = new List<int>();
+        if (termId.HasValue)
+        {
+            visibleAssignedInstructorIds = await _context.CourseSections
+                .AsNoTracking()
+                .Where(cs => cs.InstructorId.HasValue
+                    && cs.TermId == termId.Value
+                    && cs.Status == CourseSectionStatus.Active
+                    && ((cs.Course.DepartmentId.HasValue && scopedDepartmentIds.Contains(cs.Course.DepartmentId.Value))
+                        || _context.CourseAccessPolicies.Any(cap =>
+                            cap.CourseId == cs.CourseId
+                            && cap.TermId == termId.Value
+                            && cap.DepartmentId.HasValue
+                            && scopedDepartmentIds.Contains(cap.DepartmentId.Value))))
+                .Select(cs => cs.InstructorId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
+        }
 
         var instructors = await _context.Instructors
             .AsNoTracking()
-            .Where(i => i.Department.FacultyId == facultyId)
+            .Where(i => scopedDepartmentIds.Contains(i.DepartmentId) || visibleAssignedInstructorIds.Contains(i.Id))
             .Select(i => new { i.Id, i.Title, i.UserId, i.DepartmentId, i.MaxWeeklyHours })
             .ToListAsync(ct);
 
@@ -317,11 +351,11 @@ public class CourseOpeningQueryService(
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => new { u.FirstName, u.LastName }, ct);
 
-        var deptIds = instructors.Select(i => i.DepartmentId).Distinct().ToList();
-        var deptNameMap = await _context.Departments
+        var instructorDepartmentIds = instructors.Select(i => i.DepartmentId).Distinct().ToList();
+        var departmentInfoMap = await _context.Departments
             .AsNoTracking()
-            .Where(d => deptIds.Contains(d.Id))
-            .ToDictionaryAsync(d => d.Id, d => d.Code, ct);
+            .Where(d => instructorDepartmentIds.Contains(d.Id))
+            .ToDictionaryAsync(d => d.Id, d => new { d.Code, d.Name }, ct);
 
         var workloadMap = new Dictionary<int, int>();
         if (termId.HasValue)
@@ -329,7 +363,16 @@ public class CourseOpeningQueryService(
             var instructorIds = instructors.Select(i => i.Id).ToList();
             workloadMap = await _context.CourseSections
                 .AsNoTracking()
-                .Where(cs => instructorIds.Contains(cs.InstructorId!.Value) && cs.TermId == termId.Value && cs.Status == CourseSectionStatus.Active)
+                .Where(cs => cs.InstructorId.HasValue
+                    && instructorIds.Contains(cs.InstructorId.Value)
+                    && cs.TermId == termId.Value
+                    && cs.Status == CourseSectionStatus.Active
+                    && ((cs.Course.DepartmentId.HasValue && scopedDepartmentIds.Contains(cs.Course.DepartmentId.Value))
+                        || _context.CourseAccessPolicies.Any(cap =>
+                            cap.CourseId == cs.CourseId
+                            && cap.TermId == termId.Value
+                            && cap.DepartmentId.HasValue
+                            && scopedDepartmentIds.Contains(cap.DepartmentId.Value))))
                 .GroupBy(cs => cs.InstructorId!.Value)
                 .Select(g => new { InstructorId = g.Key, TotalHours = g.Sum(cs => cs.Course.TheoryHours + cs.Course.LabHours) })
                 .ToDictionaryAsync(x => x.InstructorId, x => x.TotalHours, ct);
@@ -337,20 +380,21 @@ public class CourseOpeningQueryService(
 
         return instructors.Select(i =>
         {
-            var baseName = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
-            var name = i.DepartmentId != departmentId && deptNameMap.TryGetValue(i.DepartmentId, out var deptCode)
-                ? $"{baseName} ({deptCode})"
-                : baseName;
+            var name = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
+            departmentInfoMap.TryGetValue(i.DepartmentId, out var departmentInfo);
             workloadMap.TryGetValue(i.Id, out var assignedHours);
             return new InstructorOptionDto
             {
                 InstructorId = i.Id,
                 FullName = name,
+                DepartmentId = i.DepartmentId,
+                DepartmentName = departmentInfo?.Name ?? "",
+                DepartmentCode = departmentInfo?.Code ?? "",
                 MaxWeeklyHours = i.MaxWeeklyHours,
                 AssignedWeeklyHours = assignedHours,
             };
         })
-        .OrderByDescending(i => instructors.First(x => x.Id == i.InstructorId).DepartmentId == departmentId ? 1 : 0)
+        .OrderBy(i => i.DepartmentName)
         .ThenBy(i => i.FullName)
         .ToList();
     }

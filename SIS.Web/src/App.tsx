@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './components/ui/global-toast';
 import { ActiveRoleProvider } from './context/ActiveRoleContext';
 import { PermissionProvider } from './context/PermissionContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -73,6 +74,7 @@ import FacultySignatureUploadPage from './pages/FacultySignatureUploadPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
+import ScheduleScoreAnalyticsPage from './pages/ScheduleScoreAnalyticsPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import ElectiveConfigurationPage from './pages/ElectiveConfigurationPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
@@ -98,6 +100,7 @@ export default function App() {
         <PermissionProvider>
           <ActiveRoleProvider>
             <TooltipProvider delayDuration={300}>
+            <ToastProvider>
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -304,6 +307,7 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-programi-kisitlamalari.view" />}>
                     <Route path="ders-programi-kisitlamalari" element={<ConstraintManagementPage />} />
+                    <Route path="ders-programi-skor-analizi" element={<ScheduleScoreAnalyticsPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-islemleri.view" />}>
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
@@ -373,6 +377,7 @@ export default function App() {
               </Route>
             </Routes>
             </BrowserRouter>
+            </ToastProvider>
             </TooltipProvider>
           </ActiveRoleProvider>
         </PermissionProvider>

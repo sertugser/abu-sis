@@ -30,6 +30,20 @@ public sealed class ClassroomTypeEvaluator : IConstraintEvaluator
                 null));
         }
 
+        // 2026-05-09 — Simetrik kural: teori bloğu (TheoryHours>0 olan section) lab-kategori
+        // dersliklere yerleşmemeli. Lab dersliği scarce kaynak. Encoder ile parity.
+        if (c.ClassroomId.HasValue
+            && c.TheoryHours > 0 && c.LabHours == 0
+            && c.ClassroomType.IsLabCategory())
+        {
+            conflicts.Add(SchedulingHelpers.BuildConflict(
+                c,
+                "ClassroomTypeConflict",
+                $"Teori dersi ({c.CourseCode}) lab/uzman tipi dersliğe atanamaz, mevcut tip: {c.ClassroomType}.",
+                null,
+                null));
+        }
+
         // Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
         if (c.ClassroomId.HasValue
             && c.Capacity >= config.AmphiThreshold
