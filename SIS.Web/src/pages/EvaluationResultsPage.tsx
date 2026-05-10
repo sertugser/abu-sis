@@ -122,13 +122,13 @@ function ManagementView() {
   );
 
   // Default dönem: önce açık değerlendirme dönemi, sonra aktif akademik dönem
-  const defaultTermId = useMemo(() => {
+  const defaultTermId = (() => {
     if (selectedTermId) return selectedTermId;
     if (activePeriodResponse?.isOpen && activePeriodResponse.period) {
       return activePeriodResponse.period.termId;
     }
     return terms.find((t) => t.isActive)?.id ?? null;
-  }, [selectedTermId, activePeriodResponse, terms]);
+  })();
 
   const { data: summary, isLoading: summaryLoading } = useDepartmentEvaluationSummary(
     selectedDepartmentId,
