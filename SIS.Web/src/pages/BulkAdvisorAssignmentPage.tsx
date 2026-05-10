@@ -305,6 +305,55 @@ export default function BulkAdvisorAssignmentPage() {
     setSelectedStudentIds(new Set());
   }
 
+  function autoDistributeSelectedStudents() {
+    const selectedIds = [...selectedStudentIds];
+    if (selectedIds.length === 0) return;
+
+    const advisors = instructors.filter(i => !excludedAdvisors[i.instructorId]);
+    if (advisors.length === 0) return;
+
+    // Hocaların kapasiteleri (boş = sınırsız)
+    const capacities = new Map<number, number>();
+    for (const advisor of advisors) {
+      const raw = capacityOverrides[advisor.instructorId];
+      const parsed = raw && raw.trim() !== '' ? Number(raw) : Number.NaN;
+      capacities.set(
+        advisor.instructorId,
+        Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : Number.POSITIVE_INFINITY,
+      );
+    }
+
+    // Mevcut yük başlangıç + bu run'da yapılan atama sayısı
+    const baseLoad = new Map<number, number>();
+    const assignedInRun = new Map<number, number>();
+    for (const advisor of advisors) {
+      baseLoad.set(advisor.instructorId, advisor.currentStudentCount);
+      assignedInRun.set(advisor.instructorId, 0);
+    }
+
+    const newAssignments: Record<number, number> = {};
+    for (const studentId of selectedIds) {
+      const candidates = advisors.filter(advisor => {
+        const projected = baseLoad.get(advisor.instructorId)! + assignedInRun.get(advisor.instructorId)!;
+        return projected < capacities.get(advisor.instructorId)!;
+      });
+      if (candidates.length === 0) continue; // tüm kontenjanlar dolu, kalanları atla
+
+      candidates.sort((a, b) => {
+        const aLoad = baseLoad.get(a.instructorId)! + assignedInRun.get(a.instructorId)!;
+        const bLoad = baseLoad.get(b.instructorId)! + assignedInRun.get(b.instructorId)!;
+        if (aLoad !== bLoad) return aLoad - bLoad;
+        return a.fullName.localeCompare(b.fullName, 'tr');
+      });
+
+      const chosen = candidates[0];
+      newAssignments[studentId] = chosen.instructorId;
+      assignedInRun.set(chosen.instructorId, assignedInRun.get(chosen.instructorId)! + 1);
+    }
+
+    setPerStudentAdvisorIds(newAssignments);
+  }
+
   function runAssignment() {
     if (!canAssignAdvisors || departmentId === null || selectedStudentIds.size === 0) return;
 
@@ -611,6 +660,19 @@ export default function BulkAdvisorAssignmentPage() {
                     <X className="h-3.5 w-3.5" />
                     Temizle
                   </Button>
+                  {assignmentMode === 'per-student' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 px-3 text-xs gap-1"
+                      onClick={autoDistributeSelectedStudents}
+                      disabled={!canAssignAdvisors || selectedStudents.length === 0 || instructors.every(i => excludedAdvisors[i.instructorId])}
+                      title="Seçili öğrencileri kapasite ve mevcut yüke göre hocalara dengeli dağıt"
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      Otomatik Dağıt
+                    </Button>
+                  )}
                   <Button
                     className="h-8 flex-1 text-xs"
                     onClick={() => setPreviewOpen(true)}
