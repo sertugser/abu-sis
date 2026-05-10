@@ -66,6 +66,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
     public DbSet<EvaluationPeriod> EvaluationPeriods => Set<EvaluationPeriod>();
     public DbSet<EvaluationQuestion> EvaluationQuestions => Set<EvaluationQuestion>();
+    public DbSet<EvaluationPeriodQuestion> EvaluationPeriodQuestions => Set<EvaluationPeriodQuestion>();
     public DbSet<EvaluationResponse> EvaluationResponses => Set<EvaluationResponse>();
     public DbSet<EvaluationAnswer> EvaluationAnswers => Set<EvaluationAnswer>();
     public DbSet<InternalAnnouncement> InternalAnnouncements => Set<InternalAnnouncement>();
@@ -490,20 +491,44 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         });
 
         // ── GradeComponent ─────────────────────────────────────
-        builder.Entity<GradeComponent>(e =>
-        {
-            e.Property(gc => gc.Weight).HasPrecision(5, 2);
+builder.Entity<GradeComponent>(e =>
+{
+    e.Property(gc => gc.Name)
+     .HasMaxLength(100)
+     .IsRequired();
 
-            e.HasOne(gc => gc.Course)
-             .WithMany()
-             .HasForeignKey(gc => gc.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
+    e.Property(gc => gc.ExamType)
+     .HasMaxLength(40)
+     .HasDefaultValue("Other")
+     .IsRequired();
 
-            e.HasOne(gc => gc.AcademicTerm)
-             .WithMany()
-             .HasForeignKey(gc => gc.AcademicTermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
+    e.Property(gc => gc.Weight)
+     .HasPrecision(5, 2);
+
+    e.Property(gc => gc.MinimumScore)
+     .HasPrecision(5, 2);
+
+    e.Property(gc => gc.IsRequired)
+     .HasDefaultValue(true);
+
+    e.Property(gc => gc.RequiresAttendanceEligibility)
+     .HasDefaultValue(false);
+
+    e.HasOne(gc => gc.Course)
+     .WithMany()
+     .HasForeignKey(gc => gc.CourseId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.AcademicTerm)
+     .WithMany()
+     .HasForeignKey(gc => gc.AcademicTermId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.PrerequisiteGradeComponent)
+     .WithMany(gc => gc.DependentComponents)
+     .HasForeignKey(gc => gc.PrerequisiteGradeComponentId)
+     .OnDelete(DeleteBehavior.Restrict);
+});
 
         // ── StudentGrade ──────────────────────────────────────
         builder.Entity<StudentGrade>(e =>
@@ -525,21 +550,26 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         });
 
         // ── GradingCriteria ─────────────────────────────────────
-        builder.Entity<GradingCriteria>(e =>
-        {
-            // Bir ders bir dönemde tek aralık tanımına sahip olur
-            e.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId }).IsUnique();
+builder.Entity<GradingCriteria>(e =>
+{
+    // Bir ders bir dönemde tek aralık tanımına sahip olur
+    e.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId }).IsUnique();
 
-            e.HasOne(gc => gc.Course)
-             .WithMany()
-             .HasForeignKey(gc => gc.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
+    e.Property(gc => gc.CalculationMethod)
+     .HasMaxLength(30)
+     .HasDefaultValue("Absolute")
+     .IsRequired();
 
-            e.HasOne(gc => gc.AcademicTerm)
-             .WithMany()
-             .HasForeignKey(gc => gc.AcademicTermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
+    e.HasOne(gc => gc.Course)
+     .WithMany()
+     .HasForeignKey(gc => gc.CourseId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.AcademicTerm)
+     .WithMany()
+     .HasForeignKey(gc => gc.AcademicTermId)
+     .OnDelete(DeleteBehavior.Restrict);
+});
 
         // ── CourseSectionApproval ──────────────────────────────
         builder.Entity<CourseSectionApproval>(e =>
@@ -1018,6 +1048,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(q => new { q.Category, q.SortOrder });
         });
 
+        // ── EvaluationPeriodQuestion (snapshot join) ─────────────
+        builder.Entity<EvaluationPeriodQuestion>(e =>
+        {
+            e.HasKey(pq => new { pq.EvaluationPeriodId, pq.EvaluationQuestionId });
+
+            e.HasOne(pq => pq.Period)
+             .WithMany()
+             .HasForeignKey(pq => pq.EvaluationPeriodId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(pq => pq.Question)
+             .WithMany()
+             .HasForeignKey(pq => pq.EvaluationQuestionId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
         // ── EvaluationResponse ───────────────────────────────────
         builder.Entity<EvaluationResponse>(e =>
         {
@@ -1071,6 +1117,16 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasOne(a => a.TargetDepartment)
              .WithMany()
              .HasForeignKey(a => a.TargetDepartmentId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.TargetFaculty)
+             .WithMany()
+             .HasForeignKey(a => a.TargetFacultyId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.TargetSection)
+             .WithMany()
+             .HasForeignKey(a => a.TargetSectionId)
              .OnDelete(DeleteBehavior.SetNull);
         });
 

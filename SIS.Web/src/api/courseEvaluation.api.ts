@@ -87,3 +87,18 @@ export async function updateQuestion(
 export async function deleteQuestion(id: number): Promise<void> {
   await apiClient.delete(`/course-evaluation/questions/${id}`);
 }
+
+export async function restoreQuestion(id: number): Promise<void> {
+  await apiClient.post(`/course-evaluation/questions/${id}/restore`);
+}
+
+export async function exportDepartmentResults(
+  departmentId: number,
+  termId?: number | null
+): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(
+    `/course-evaluation/results/department/${departmentId}/export`,
+    { params: termId ? { termId } : undefined, responseType: 'blob' }
+  );
+  return data;
+}

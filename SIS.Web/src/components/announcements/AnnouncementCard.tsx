@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Pin, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate } from '../../lib/utils';
-import { ANNOUNCEMENT_AUDIENCE_LABELS } from '../../types/announcements';
+import { getAudienceBadgeLabel } from '../../types/announcements';
 import type { AnnouncementList } from '../../types/announcements';
 
 interface AnnouncementCardProps {
@@ -34,10 +34,8 @@ export default function AnnouncementCard({ announcement, onClick, compact }: Ann
               {announcement.title}
             </h3>
           </div>
-          <Badge variant="outline" className="shrink-0 text-[10px]">
-            {announcement.targetAudience === 'Department' && announcement.targetDepartmentName
-              ? announcement.targetDepartmentName
-              : ANNOUNCEMENT_AUDIENCE_LABELS[announcement.targetAudience]}
+          <Badge variant="outline" className="shrink-0 text-[10px] max-w-[160px] truncate">
+            {getAudienceBadgeLabel(announcement)}
           </Badge>
         </div>
 

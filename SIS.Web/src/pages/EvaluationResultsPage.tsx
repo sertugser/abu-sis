@@ -21,13 +21,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { AlertCircle, BarChart3, Info, Lock } from 'lucide-react';
+import { AlertCircle, BarChart3, Download, Info, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasAnyRole } from '../lib/roles';
+import { downloadBlob } from '../lib/download';
 import { useInstructorSections, useInstructorTerms } from '../hooks/useInstructorSections';
 import {
   useActiveEvaluationPeriod,
   useDepartmentEvaluationSummary,
+  useExportDepartmentEvaluationResults,
   useSectionEvaluationResults,
 } from '../hooks/useCourseEvaluation';
 import {
@@ -86,6 +88,9 @@ export default function EvaluationResultsPage() {
 // ─── YÖNETİM GÖRÜNÜMÜ (Admin / Dean / Bölüm Başkanı) ─────────────────
 
 function ManagementView() {
+  const { user } = useAuth();
+  const isAdmin = hasAnyRole(user?.roles ?? [], ['SystemAdministrator']);
+
   const { data: faculties = [], isLoading: facultiesLoading } = useAdminFaculties();
   const { data: terms = [] } = useAdminTerms();
   const { data: activePeriodResponse } = useActiveEvaluationPeriod();
@@ -95,18 +100,35 @@ function ManagementView() {
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
 
+  const exportMutation = useExportDepartmentEvaluationResults();
+
+  function handleExport() {
+    if (!selectedDepartmentId) return;
+    exportMutation.mutate(
+      { departmentId: selectedDepartmentId, termId: defaultTermId },
+      {
+        onSuccess: (blob) => {
+          downloadBlob({ blob }, 'degerlendirme-sonuclari.xlsx');
+        },
+        onError: () => {
+          alert('Excel dışa aktarımı başarısız oldu. Lütfen tekrar deneyin.');
+        },
+      }
+    );
+  }
+
   const { data: departments = [] } = useAdminDepartmentsByStructure(
     selectedFacultyId ?? undefined
   );
 
   // Default dönem: önce açık değerlendirme dönemi, sonra aktif akademik dönem
-  const defaultTermId = useMemo(() => {
+  const defaultTermId = (() => {
     if (selectedTermId) return selectedTermId;
     if (activePeriodResponse?.isOpen && activePeriodResponse.period) {
       return activePeriodResponse.period.termId;
     }
     return terms.find((t) => t.isActive)?.id ?? null;
-  }, [selectedTermId, activePeriodResponse, terms]);
+  })();
 
   const { data: summary, isLoading: summaryLoading } = useDepartmentEvaluationSummary(
     selectedDepartmentId,
@@ -231,10 +253,26 @@ function ManagementView() {
           <AlertDescription>Bölüm özeti yüklenemedi.</AlertDescription>
         </Alert>
       ) : (
-        <DepartmentSummary
-          summary={summary}
-          onShowSection={(sectionId) => setSelectedSectionId(sectionId)}
-        />
+        <div className="space-y-3">
+          {isAdmin && (
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExport}
+                disabled={exportMutation.isPending}
+                className="gap-1.5"
+              >
+                <Download className="h-4 w-4" />
+                {exportMutation.isPending ? 'Hazırlanıyor...' : 'Excel\'e Aktar'}
+              </Button>
+            </div>
+          )}
+          <DepartmentSummary
+            summary={summary}
+            onShowSection={(sectionId) => setSelectedSectionId(sectionId)}
+          />
+        </div>
       )}
 
       <Dialog

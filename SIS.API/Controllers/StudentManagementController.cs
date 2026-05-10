@@ -92,20 +92,95 @@ public class StudentManagementController : ControllerBase
         }
     }
 
-    [HttpPut("{id:int}/advisor")]
-    [RequirePermission("menu.toplu-danisman-atama.assign")]
-    public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorDto dto)
+[HttpPut("{id:int}/advisor")]
+[RequirePermission("menu.toplu-danisman-atama.assign")]
+public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorDto dto)
+{
+    try
     {
-        try
-        {
-            await _service.AssignAdvisorAsync(id, dto.AdvisorId);
-            return NoContent();
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        await _service.AssignAdvisorAsync(id, dto.AdvisorId);
+        return NoContent();
     }
+    catch (KeyNotFoundException ex)
+    {
+        return NotFound(new { message = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
+
+[HttpPost("bulk-advisor-assignment/preview")]
+[RequirePermission("menu.toplu-danisman-atama.assign")]
+public async Task<IActionResult> PreviewBulkAdvisorAssignment(
+    [FromBody] BulkAdvisorAssignmentPreviewRequestDto dto)
+{
+    try
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var enforcedFilter = await EnforceDepartmentFilterAsync(userId, dto.DepartmentId);
+
+        if (enforcedFilter.IsForbidden)
+            return Forbid();
+
+        if (enforcedFilter.DepartmentId.HasValue &&
+            enforcedFilter.DepartmentId.Value != dto.DepartmentId)
+            return Forbid();
+
+        var result = await _service.PreviewBulkAdvisorAssignmentAsync(dto);
+        return Ok(result);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return NotFound(new { message = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
+
+[HttpPost("bulk-advisor-assignment/apply")]
+[RequirePermission("menu.toplu-danisman-atama.assign")]
+public async Task<IActionResult> ApplyBulkAdvisorAssignment(
+    [FromBody] BulkAdvisorAssignmentApplyRequestDto dto)
+{
+    try
+    {
+        var result = await _service.ApplyBulkAdvisorAssignmentAsync(dto);
+        return Ok(result);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return NotFound(new { message = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
+[HttpPut("bulk-advisor-assignment/advisor-settings")]
+[RequirePermission("menu.toplu-danisman-atama.assign")]
+public async Task<IActionResult> UpdateBulkAdvisorAssignmentSettings(
+    [FromBody] BulkAdvisorSettingsUpdateRequestDto dto)
+{
+    try
+    {
+        var result = await _service.UpdateBulkAdvisorAssignmentSettingsAsync(dto);
+        return Ok(result);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return NotFound(new { message = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
 
     private bool TryGetUserId(out int userId)
     {

@@ -22,3 +22,31 @@ public record QuestionResultDto(
     decimal? AverageRating,
     Dictionary<int, int>? RatingDistribution,
     List<string>? TextResponses);
+
+// ─── Export ─────────────────────────────────────────────────────────────
+
+public record DepartmentExportDataDto(
+    string DepartmentName,
+    string TermName,
+    int TotalSections,
+    int EvaluatedSections,
+    decimal OverallResponseRate,
+    decimal? AverageRating,
+    List<SectionExportRowDto> Sections,
+    List<ExportQuestionHeaderDto> RatingQuestions);
+
+public record SectionExportRowDto(
+    string CourseCode,
+    string CourseName,
+    string InstructorName,
+    int ResponseCount,
+    int EnrolledCount,
+    decimal ResponseRate,
+    decimal? AverageRating,
+    bool IsVisible,
+    List<decimal?> QuestionAverages);
+
+public record ExportQuestionHeaderDto(
+    int QuestionId,
+    string Text,
+    EvaluationQuestionCategory Category);

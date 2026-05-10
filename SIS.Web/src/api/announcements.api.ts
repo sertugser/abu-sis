@@ -1,5 +1,6 @@
 import apiClient from './axios';
 import type {
+  AnnouncementCreateContext,
   AnnouncementDetail,
   AnnouncementList,
   CreateAnnouncementPayload,
@@ -23,8 +24,13 @@ export async function getAllAnnouncements(): Promise<AnnouncementList[]> {
   return data;
 }
 
+export async function getAnnouncementCreateContext(): Promise<AnnouncementCreateContext> {
+  const { data } = await apiClient.get<AnnouncementCreateContext>('/internal-announcements/create-context');
+  return data;
+}
+
 export async function createAnnouncement(
-  payload: CreateAnnouncementPayload
+  payload: CreateAnnouncementPayload,
 ): Promise<AnnouncementDetail> {
   const { data } = await apiClient.post<AnnouncementDetail>('/internal-announcements', payload);
   return data;
@@ -32,15 +38,23 @@ export async function createAnnouncement(
 
 export async function updateAnnouncement(
   id: number,
-  payload: UpdateAnnouncementPayload
+  payload: UpdateAnnouncementPayload,
 ): Promise<AnnouncementDetail> {
   const { data } = await apiClient.put<AnnouncementDetail>(
     `/internal-announcements/${id}`,
-    payload
+    payload,
   );
   return data;
 }
 
 export async function deleteAnnouncement(id: number): Promise<void> {
   await apiClient.delete(`/internal-announcements/${id}`);
+}
+
+export async function permanentDeleteAnnouncement(id: number): Promise<void> {
+  await apiClient.delete(`/internal-announcements/${id}/permanent`);
+}
+
+export async function reactivateAnnouncement(id: number): Promise<void> {
+  await apiClient.post(`/internal-announcements/${id}/reactivate`);
 }
