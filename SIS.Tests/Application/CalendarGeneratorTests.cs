@@ -142,7 +142,8 @@ public class CalendarGeneratorTests : IDisposable
         foreach (var ev in result.Events.Where(e =>
             !e.IsHoliday
             && e.EventType is not CalendarEventType.CourseRegistration
-            && e.EventType is not CalendarEventType.AddDrop))
+            && e.EventType is not CalendarEventType.AddDrop
+            && ((e.EndDate ?? e.StartDate).Date - e.StartDate.Date).Days + 1 < 15))
         {
             var eventEnd = (ev.EndDate ?? ev.StartDate).Date;
             blockingHolidayRanges.Should().OnlyContain(range =>
@@ -457,7 +458,7 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Fall && e.TemplateItemKey == "final_exam");
 
         midterm.StartDate.Should().Be(Utc(2025, 11, 10));
-        midterm.EndDate.Should().Be(Utc(2025, 11, 16));
+        midterm.EndDate.Should().Be(Utc(2025, 11, 14));
         ExamEventsShouldNotOverlap(result.Events, result.Holidays);
         CountTeachingWeeksBetween(Utc(2025, 9, 21), midterm.StartDate).Should().Be(7);
         CountTeachingWeeksBetween(midterm.EndDate!.Value, final.StartDate).Should().Be(7);

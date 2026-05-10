@@ -526,6 +526,8 @@ public partial class CalendarGeneratorService
 
     private static bool ShouldTrimTrailingWeekend(GeneratedCalendarEventDto ev) =>
         !ev.IsHoliday
+        && ev.EventType is not CalendarEventType.CourseRegistration
+        && ev.EventType is not CalendarEventType.AddDrop
         && (!IsCriticalEvent(ev.EventType) || IsWeekdayOnlyExamEvent(ev.EventType))
         && ev.EndDate.HasValue
         && ev.EndDate.Value.Date > ev.StartDate.Date;
