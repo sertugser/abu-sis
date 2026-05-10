@@ -115,6 +115,12 @@ export interface InstructorOptionDto {
   departmentCode: string;
   maxWeeklyHours: number;
   assignedWeeklyHours: number;
+  /** Toplu danışman atamasında bu hocaya verilebilecek max öğrenci sayısı. null = sınırsız. */
+  advisorAssignmentCapacity: number | null;
+  /** Toplu danışman atamasına bu hoca dahil edilsin mi. */
+  isAvailableForAdvisorAssignment: boolean;
+  /** Bu hocaya şu an atanmış öğrenci sayısı. */
+  currentStudentCount: number;
 }
 
 // ── Request Types ──

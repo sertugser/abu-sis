@@ -19,6 +19,7 @@ import { useAcademicOperationsContext, useBulkAdvisorAssignment, useDepartmentSt
 import { useDepartmentInstructors } from '../hooks/useCourseOpening';
 import { usePermissions } from '../hooks/usePermissions';
 import type { BulkAcademicOperationResult, DepartmentStudentListItem } from '../types/academicOperations';
+import type { InstructorOptionDto } from '../types/courseOpening';
 
 const STUDENT_STATUS_LABELS: Record<string, string> = {
   Active: 'Aktif',
@@ -48,6 +49,9 @@ export default function BulkAdvisorAssignmentPage() {
   const [lastResult, setLastResult] = useState<BulkAcademicOperationResult | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  // Hoca bazlı kapasite ve dahil/değil overrides — initial value backend'den, kullanıcı override edebilir
+  const [capacityOverrides, setCapacityOverrides] = useState<Record<number, string>>({});
+  const [excludedAdvisors, setExcludedAdvisors] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
@@ -77,6 +81,32 @@ export default function BulkAdvisorAssignmentPage() {
   const students = studentsQuery.data?.students ?? [];
   const instructors = instructorsQuery.data ?? [];
   const departmentOptions = contextQuery.data?.accessibleDepartments ?? [];
+
+  // Backend'den gelen kapasite/dahil değerleriyle local override'ları senkronize et
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCapacityOverrides(prev => {
+      const next: Record<number, string> = { ...prev };
+      instructors.forEach(inst => {
+        if (next[inst.instructorId] === undefined) {
+          next[inst.instructorId] = inst.advisorAssignmentCapacity == null
+            ? ''
+            : String(inst.advisorAssignmentCapacity);
+        }
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExcludedAdvisors(prev => {
+      const next: Record<number, boolean> = { ...prev };
+      instructors.forEach(inst => {
+        if (next[inst.instructorId] === undefined) {
+          next[inst.instructorId] = !inst.isAvailableForAdvisorAssignment;
+        }
+      });
+      return next;
+    });
+  }, [instructors]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -406,10 +436,12 @@ export default function BulkAdvisorAssignmentPage() {
                   disabled={!canAssignAdvisors}
                   options={[
                     { value: 'none', label: 'Danışman seçin' },
-                    ...instructors.map(instructor => ({
-                      value: String(instructor.instructorId),
-                      label: instructor.fullName,
-                    })),
+                    ...instructors
+                      .filter(instructor => !excludedAdvisors[instructor.instructorId])
+                      .map(instructor => ({
+                        value: String(instructor.instructorId),
+                        label: instructor.fullName,
+                      })),
                   ]}
                 />
 
@@ -466,6 +498,16 @@ export default function BulkAdvisorAssignmentPage() {
             </div>
           </CardContent>
         </Card>
+
+        <AdvisorCapacityPanel
+          instructors={instructors}
+          loading={instructorsQuery.isLoading}
+          capacityOverrides={capacityOverrides}
+          excludedAdvisors={excludedAdvisors}
+          onCapacityChange={(id, value) => setCapacityOverrides(prev => ({ ...prev, [id]: value }))}
+          onExcludeChange={(id, excluded) => setExcludedAdvisors(prev => ({ ...prev, [id]: excluded }))}
+          disabled={!canAssignAdvisors}
+        />
 
         <StudentTable
           students={pageStudents}
@@ -645,6 +687,83 @@ function StudentTable({
         )}
       </CardContent>
       {paginationFooter}
+    </Card>
+  );
+}
+
+function AdvisorCapacityPanel({
+  instructors,
+  loading,
+  capacityOverrides,
+  excludedAdvisors,
+  onCapacityChange,
+  onExcludeChange,
+  disabled,
+}: {
+  instructors: InstructorOptionDto[];
+  loading: boolean;
+  capacityOverrides: Record<number, string>;
+  excludedAdvisors: Record<number, boolean>;
+  onCapacityChange: (instructorId: number, value: string) => void;
+  onExcludeChange: (instructorId: number, excluded: boolean) => void;
+  disabled: boolean;
+}) {
+  if (loading) return null;
+  if (instructors.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm">Hoca Kapasiteleri</CardTitle>
+          <Badge variant="outline">{instructors.length} hoca</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Hoca</TableHead>
+              <TableHead className="w-[100px] text-center">Mevcut Yük</TableHead>
+              <TableHead className="w-[110px] text-center">Atamaya Dahil</TableHead>
+              <TableHead className="w-[140px] text-center">Kapasite</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {instructors.map(instructor => {
+              const isExcluded = excludedAdvisors[instructor.instructorId] ?? false;
+              const capacityText = capacityOverrides[instructor.instructorId] ?? '';
+              return (
+                <TableRow key={instructor.instructorId} className={isExcluded ? 'opacity-60' : undefined}>
+                  <TableCell className="font-medium">{instructor.fullName}</TableCell>
+                  <TableCell className="text-center tabular-nums">{instructor.currentStudentCount}</TableCell>
+                  <TableCell className="text-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-input"
+                      checked={!isExcluded}
+                      disabled={disabled}
+                      onChange={event => onExcludeChange(instructor.instructorId, !event.target.checked)}
+                      aria-label={`${instructor.fullName} atamaya dahil`}
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Sınırsız"
+                      value={capacityText}
+                      disabled={disabled || isExcluded}
+                      onChange={event => onCapacityChange(instructor.instructorId, event.target.value)}
+                      className="h-8 w-24 mx-auto text-center text-xs"
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
     </Card>
   );
 }
