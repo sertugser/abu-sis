@@ -29,12 +29,19 @@ export function useMenu(activeRole?: string | null) {
   });
 }
 
+const HIDDEN_MENU_ITEM_SLUGS_BY_MODULE: Record<string, Set<string>> = {
+  'bolum-islemleri': new Set(['toplu-mufredat-atama-bolum']),
+};
+
 function toModule(dto: MenuModuleDto): Module {
+  const hiddenItemSlugs = HIDDEN_MENU_ITEM_SLUGS_BY_MODULE[dto.slug];
   const children: ModuleNode[] = [
     // Nested module'lar önce
     ...dto.children.map(toModule),
     // Sonra leaf item'lar
-    ...dto.items.map(toItem),
+    ...dto.items
+      .filter(item => !hiddenItemSlugs?.has(item.slug))
+      .map(toItem),
   ];
   return {
     // Backend MenuModule.Slug — stabil identifier (label değişse bile sabit).

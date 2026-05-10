@@ -108,7 +108,7 @@ export default function CourseOpeningPage() {
   const poolSlotsQuery = usePoolSlotsForOpening(curriculumId, targetTermId);
   const { data: forecastData } = useDepartmentForecast(deptId);
   const instructorsQuery = useDepartmentInstructors(deptId);
-  const workloadQuery = useInstructorWorkload(selectedInstructorId, targetTermId);
+  const workloadQuery = useInstructorWorkload(selectedInstructorId, targetTermId, deptId);
   const externalCoursesQuery = useExternalCourses(deptId, targetTermId);
 
   const openMutation = useOpenCourse(deptId ?? 0, targetTermId ?? 0);

@@ -137,6 +137,9 @@ public class InstructorOptionDto
 {
     public int InstructorId { get; set; }
     public string FullName { get; set; } = "";
+    public int DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = "";
+    public string DepartmentCode { get; set; } = "";
     public int MaxWeeklyHours { get; set; }
     public int AssignedWeeklyHours { get; set; }
 }
@@ -220,6 +223,9 @@ public class AssignedSectionDto
     public int SectionId { get; set; }
     public string CourseCode { get; set; } = "";
     public string CourseName { get; set; } = "";
+    public int? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public string? DepartmentCode { get; set; }
     public int SectionNumber { get; set; }
     public int WeeklyHours { get; set; }
     public int Capacity { get; set; }

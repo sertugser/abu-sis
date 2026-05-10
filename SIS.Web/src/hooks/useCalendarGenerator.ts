@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/axios';
+import { QUERY_KEYS } from '../lib/constants';
 
 const API = '/admin/calendar-generator';
+const ACADEMIC_CALENDAR_QUERY_ROOT = ['academicCalendar'] as const;
 
 export type SemesterType = 'Fall' | 'Spring' | 'Summer';
 export type CalendarAnchorType = 'AcademicYearStart' | 'TermStart' | 'PreviousItem' | 'FixedDate';
@@ -285,14 +287,14 @@ export function useApplyDraft() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', variables.draftId] }),
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] }),
-        qc.invalidateQueries({ queryKey: ['admin', 'terms'] }),
-        qc.invalidateQueries({ queryKey: ['activeTerm'] }),
-        qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] }),
+        qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms }),
+        qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm }),
+        qc.invalidateQueries({ queryKey: ACADEMIC_CALENDAR_QUERY_ROOT }),
       ]);
       await Promise.all([
-        qc.refetchQueries({ queryKey: ['admin', 'terms'], type: 'active' }),
-        qc.refetchQueries({ queryKey: ['activeTerm'], type: 'active' }),
-        qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' }),
+        qc.refetchQueries({ queryKey: QUERY_KEYS.adminTerms, type: 'active' }),
+        qc.refetchQueries({ queryKey: QUERY_KEYS.activeTerm, type: 'active' }),
+        qc.refetchQueries({ queryKey: ACADEMIC_CALENDAR_QUERY_ROOT, type: 'active' }),
       ]);
     },
   });
@@ -309,14 +311,14 @@ export function useRollbackDraft() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', draftId] }),
         qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] }),
-        qc.invalidateQueries({ queryKey: ['admin', 'terms'] }),
-        qc.invalidateQueries({ queryKey: ['activeTerm'] }),
-        qc.invalidateQueries({ queryKey: ['academic-calendar', 'active'] }),
+        qc.invalidateQueries({ queryKey: QUERY_KEYS.adminTerms }),
+        qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm }),
+        qc.invalidateQueries({ queryKey: ACADEMIC_CALENDAR_QUERY_ROOT }),
       ]);
       await Promise.all([
-        qc.refetchQueries({ queryKey: ['admin', 'terms'], type: 'active' }),
-        qc.refetchQueries({ queryKey: ['activeTerm'], type: 'active' }),
-        qc.refetchQueries({ queryKey: ['academic-calendar', 'active'], type: 'active' }),
+        qc.refetchQueries({ queryKey: QUERY_KEYS.adminTerms, type: 'active' }),
+        qc.refetchQueries({ queryKey: QUERY_KEYS.activeTerm, type: 'active' }),
+        qc.refetchQueries({ queryKey: ACADEMIC_CALENDAR_QUERY_ROOT, type: 'active' }),
       ]);
     },
   });

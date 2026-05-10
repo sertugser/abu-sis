@@ -108,6 +108,9 @@ export interface CurriculumCourseForOpeningDto {
 export interface InstructorOptionDto {
   instructorId: number;
   fullName: string;
+  departmentId: number;
+  departmentName: string;
+  departmentCode: string;
   maxWeeklyHours: number;
   assignedWeeklyHours: number;
 }
@@ -228,6 +231,9 @@ export interface AssignedSectionDto {
   sectionId: number;
   courseCode: string;
   courseName: string;
+  departmentId: number | null;
+  departmentName: string | null;
+  departmentCode: string | null;
   sectionNumber: number;
   weeklyHours: number;
   capacity: number;

@@ -15,6 +15,7 @@ public class DepartmentClassListDto
 public class DepartmentSectionClassListDto
 {
     public int SectionId { get; set; }
+    public int SectionNumber { get; set; }
     public int CourseId { get; set; }
     public string CourseCode { get; set; } = string.Empty;
     public string CourseName { get; set; } = string.Empty;
@@ -22,6 +23,8 @@ public class DepartmentSectionClassListDto
     public string ClassroomName { get; set; } = string.Empty;
     public string ScheduleSummary { get; set; } = string.Empty;
     public int Capacity { get; set; }
+    public int? InternalQuota { get; set; }
+    public int? ExternalQuota { get; set; }
     public int EnrolledCount { get; set; }
     public int ActiveStudentCount { get; set; }
     public bool IsActive { get; set; }

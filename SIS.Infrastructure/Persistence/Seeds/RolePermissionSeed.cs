@@ -170,8 +170,11 @@ public static class RolePermissionSeed
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
                 "menu.derslik-doluluk.view",
+                "menu.subelendirme-islemleri.view",
                 "menu.ders-veren-ogretim-uyeleri.view",
                 "menu.sinif-listeleri.view",
+                "menu.toplu-danisman-atama.view",
+                "menu.toplu-mufredat-atama.view",
                 "menu.ders-programi-kisitlamalari.view",
                 "menu.ogrenci-rehberi.view",
                 "menu.duyuru-yonetimi.view",
@@ -245,6 +248,7 @@ public static class RolePermissionSeed
                 // ── Öğrenci & Personel CRUD ──
                 "menu.ogrenci-rehberi.create",
                 "menu.toplu-danisman-atama.assign",
+                "menu.toplu-mufredat-atama.assign",
                 "menu.personel-listesi.create",
 
                 // ── Duyuru Yönetimi CRUD ──
@@ -286,6 +290,7 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.view",
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
+                "menu.subelendirme-islemleri.view",
                 "menu.ders-veren-ogretim-uyeleri.view",
                 "menu.sinif-listeleri.view",
                 "menu.donem-kapatma.view",
@@ -301,6 +306,8 @@ public static class RolePermissionSeed
                 "menu.personel-listesi.view",
                 "menu.sifre-degistir.view",
                 "menu.sinif-atlatma-islemleri.view",
+                "menu.toplu-danisman-atama.view",
+                "menu.toplu-mufredat-atama.view",
 
                 // ── Müfredat (publish/archive DAHIL) ──
                 "menu.mufredat-islemleri.create",
@@ -376,6 +383,7 @@ public static class RolePermissionSeed
 
                 // ── Öğrenci ──
                 "menu.toplu-danisman-atama.assign",
+                "menu.toplu-mufredat-atama.assign",
 
                 // ── Duyuru Yönetimi CRUD ──
                 "menu.duyuru-yonetimi.create",
@@ -418,6 +426,7 @@ public static class RolePermissionSeed
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
                 "menu.derslik-doluluk.view",
+                "menu.subelendirme-islemleri.view",
                 "menu.ders-veren-ogretim-uyeleri.view",
                 "menu.program-onayi.view",
                 "menu.sinif-listeleri.view",
@@ -434,6 +443,8 @@ public static class RolePermissionSeed
                 "menu.sinif-atlatma-islemleri.view",
 
                 // ── Program Kontenjan ──
+                "menu.toplu-danisman-atama.view",
+                "menu.toplu-mufredat-atama.view",
                 "menu.program-kontenjan.create",
                 "menu.program-kontenjan.edit",
                 "menu.program-kontenjan.delete",
@@ -513,6 +524,10 @@ public static class RolePermissionSeed
 
                 // ── Derslik Export ──
                 "menu.derslik-doluluk.export",
+
+                // ── Öğrenci ──
+                "menu.toplu-danisman-atama.assign",
+                "menu.toplu-mufredat-atama.assign",
 
                 // ── Duyuru Yönetimi CRUD ──
                 "menu.duyuru-yonetimi.create",

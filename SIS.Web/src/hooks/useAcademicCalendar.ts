@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '../lib/constants';
 import apiClient from '../api/axios';
 
@@ -28,6 +28,8 @@ export interface TermCalendarEventDto {
   isPublic: boolean;
   isGenerated: boolean;
   blocksAcademicEvents: boolean;
+  chainCode: string | null;
+  templateItemKey: string | null;
 }
 
 export interface StudentAcademicCalendarDto {
@@ -52,6 +54,25 @@ export interface StudentAcademicCalendarDto {
   events: TermCalendarEventDto[];
 }
 
+export interface UpdateAcademicCalendarEventDto {
+  startDate: string;
+  endDate: string | null;
+  propagateChanges?: boolean;
+}
+
+export interface PreviewAcademicCalendarEventMoveDto extends UpdateAcademicCalendarEventDto {
+  events: TermCalendarEventDto[];
+}
+
+export interface SaveAcademicCalendarTermEventsDto {
+  termId: number;
+  events: TermCalendarEventDto[];
+}
+
+export interface SaveAcademicCalendarChangesDto {
+  calendars: SaveAcademicCalendarTermEventsDto[];
+}
+
 // ── Admin hooks ─────────────────────────────────────────────────
 
 // ── Public hooks ─────────────────────────────────────────────────
@@ -67,23 +88,27 @@ export function useActiveStudentCalendar() {
   });
 }
 
-export function useStudentCalendar(termId: number | null | undefined) {
+export function useStudentCalendar(termId: number | null | undefined, includeAllEvents = false) {
   return useQuery({
-    queryKey: QUERY_KEYS.studentAcademicCalendar(termId ?? null),
+    queryKey: QUERY_KEYS.studentAcademicCalendar(termId ?? null, includeAllEvents),
     queryFn: async () => {
-      const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`);
+      const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`, {
+        params: includeAllEvents ? { includeAllEvents: true } : undefined,
+      });
       return data;
     },
     enabled: !!termId
   });
 }
 
-export function useAcademicYearCalendars(termIds: number[]) {
+export function useAcademicYearCalendars(termIds: number[], includeAllEvents = false) {
   return useQueries({
     queries: termIds.map(termId => ({
-      queryKey: QUERY_KEYS.studentAcademicCalendar(termId),
+      queryKey: QUERY_KEYS.studentAcademicCalendar(termId, includeAllEvents),
       queryFn: async () => {
-        const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`);
+        const { data } = await apiClient.get<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}`, {
+          params: includeAllEvents ? { includeAllEvents: true } : undefined,
+        });
         return data;
       },
     })),
@@ -97,5 +122,57 @@ export function useAcademicCalendarTerms() {
       const { data } = await apiClient.get<AcademicCalendarTermSummaryDto[]>(`${PUBLIC}/terms`);
       return data;
     }
+  });
+}
+
+export function useMoveAcademicCalendarEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ termId, eventId, dto }: { termId: number; eventId: number; dto: UpdateAcademicCalendarEventDto }) => {
+      const { data } = await apiClient.put<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}/events/${eventId}`, dto);
+      return data;
+    },
+    onSuccess: async (calendar, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(variables.termId) }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(variables.termId, true) }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive }),
+      ]);
+
+      queryClient.setQueryData(QUERY_KEYS.studentAcademicCalendar(variables.termId, true), calendar);
+    },
+  });
+}
+
+export function usePreviewAcademicCalendarEventMove() {
+  return useMutation({
+    mutationFn: async ({ termId, eventId, dto }: { termId: number; eventId: number; dto: PreviewAcademicCalendarEventMoveDto }) => {
+      const { data } = await apiClient.post<StudentAcademicCalendarDto>(`${PUBLIC}/${termId}/events/${eventId}/preview-move`, dto);
+      return data;
+    },
+  });
+}
+
+export function useSaveAcademicCalendarChanges() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (dto: SaveAcademicCalendarChangesDto) => {
+      const { data } = await apiClient.put<StudentAcademicCalendarDto[]>(`${PUBLIC}/events`, dto);
+      return data;
+    },
+    onSuccess: async calendars => {
+      await Promise.all([
+        ...calendars.flatMap(calendar => [
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(calendar.termId) }),
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendar(calendar.termId, true) }),
+        ]),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentAcademicCalendarActive }),
+      ]);
+
+      for (const calendar of calendars)
+        queryClient.setQueryData(QUERY_KEYS.studentAcademicCalendar(calendar.termId, true), calendar);
+    },
   });
 }

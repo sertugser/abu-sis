@@ -3,9 +3,14 @@ import apiClient from './axios';
 import type {
   AcademicOperationsContext,
   AcademicPlanningSummary,
+  BulkAcademicOperationResult,
+  BulkAdvisorAssignmentRequest,
+  BulkCurriculumAssignmentRequest,
   BulkAcademicLevelDto,
   DepartmentClassList,
+  DepartmentCurriculumOption,
   DepartmentCurriculumOverview,
+  DepartmentStudentList,
 } from '../types/academicOperations';
 
 export async function getAcademicOperationsContext(): Promise<AcademicOperationsContext> {
@@ -34,6 +39,48 @@ export async function getDepartmentCurriculumOverview(departmentId: number): Pro
   return data;
 }
 
+export interface DepartmentStudentQuery {
+  search?: string;
+  status?: string;
+  programId?: number | null;
+  curriculumId?: number | null;
+  advisorId?: number | null;
+}
+
+export async function getDepartmentStudents(
+  departmentId: number,
+  query: DepartmentStudentQuery = {},
+): Promise<DepartmentStudentList> {
+  const { data } = await apiClient.get<DepartmentStudentList>('/academicoperations/students', {
+    params: {
+      departmentId,
+      search: query.search || undefined,
+      status: query.status || undefined,
+      programId: query.programId || undefined,
+      curriculumId: query.curriculumId || undefined,
+      advisorId: query.advisorId || undefined,
+    },
+  });
+  return data;
+}
+
+export async function getDepartmentCurriculumOptions(departmentId: number): Promise<DepartmentCurriculumOption[]> {
+  const { data } = await apiClient.get<DepartmentCurriculumOption[]>('/academicoperations/curriculum-options', {
+    params: { departmentId },
+  });
+  return data;
+}
+
+export async function bulkAssignAdvisors(request: BulkAdvisorAssignmentRequest): Promise<BulkAcademicOperationResult> {
+  const { data } = await apiClient.post<BulkAcademicOperationResult>('/academicoperations/bulk-advisor-assignment', request);
+  return data;
+}
+
+export async function bulkAssignCurriculum(request: BulkCurriculumAssignmentRequest): Promise<BulkAcademicOperationResult> {
+  const { data } = await apiClient.post<BulkAcademicOperationResult>('/academicoperations/bulk-curriculum-assignment', request);
+  return data;
+}
+
 export async function getDepartmentAcademicLevels(departmentId: number): Promise<BulkAcademicLevelDto> {
   const { data } = await apiClient.get<BulkAcademicLevelDto>(`/academicLevel/department/${departmentId}`);
   return data;
@@ -58,6 +105,14 @@ export async function getGradeLockReadiness(departmentId: number, termId?: numbe
 export function getAcademicOperationsErrorMessage(error: unknown, fallback: string) {
   const axiosError = error as AxiosError<{ error?: string }>;
   const status = axiosError.response?.status;
+
+  if (!axiosError.response) {
+    return 'API sunucusuna ulaşılamadı. Backend çalışıyor mu kontrol edin.';
+  }
+
+  if (status === 401) {
+    return 'Oturum bilgisi bulunamadı veya süresi doldu. Lütfen tekrar giriş yapın.';
+  }
 
   if (status === 403) {
     return 'Bu ekran için yetkiniz bulunmuyor.';

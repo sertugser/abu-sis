@@ -55,7 +55,7 @@ export function AddCourseDialog({
   const [search, setSearch] = useState('');
   const [selectedDeptIds, setSelectedDeptIds] = useState<number[]>([]);
 
-  const workloadQuery = useInstructorWorkload(instructorId ? Number(instructorId) : null, termId);
+  const workloadQuery = useInstructorWorkload(instructorId ? Number(instructorId) : null, termId, departmentId);
 
   const handleSelectCourse = (course: CurriculumCourseForOpeningDto) => {
     setSelectedCourse(course);
