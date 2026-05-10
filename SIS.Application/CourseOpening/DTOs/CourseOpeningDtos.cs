@@ -144,6 +144,19 @@ public class InstructorOptionDto
     public string DepartmentCode { get; set; } = "";
     public int MaxWeeklyHours { get; set; }
     public int AssignedWeeklyHours { get; set; }
+    /// <summary>
+    /// Toplu danışman atamasında bu hocaya verilebilecek maksimum öğrenci sayısı.
+    /// Null = sınırsız.
+    /// </summary>
+    public int? AdvisorAssignmentCapacity { get; set; }
+    /// <summary>
+    /// Toplu danışman atamasına bu hoca dahil edilsin mi?
+    /// </summary>
+    public bool IsAvailableForAdvisorAssignment { get; set; } = true;
+    /// <summary>
+    /// Bu hocaya şu an atanmış öğrenci sayısı (mevcut yük).
+    /// </summary>
+    public int CurrentStudentCount { get; set; }
 }
 
 // ── Request DTOs ──

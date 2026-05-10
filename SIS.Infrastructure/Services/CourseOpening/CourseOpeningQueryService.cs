@@ -342,8 +342,26 @@ public class CourseOpeningQueryService(
         var instructors = await _context.Instructors
             .AsNoTracking()
             .Where(i => scopedDepartmentIds.Contains(i.DepartmentId) || visibleAssignedInstructorIds.Contains(i.Id))
-            .Select(i => new { i.Id, i.Title, i.UserId, i.DepartmentId, i.MaxWeeklyHours })
+            .Select(i => new
+            {
+                i.Id,
+                i.Title,
+                i.UserId,
+                i.DepartmentId,
+                i.MaxWeeklyHours,
+                i.AdvisorAssignmentCapacity,
+                i.IsAvailableForAdvisorAssignment,
+            })
             .ToListAsync(ct);
+
+        // Hocaların mevcut öğrenci sayıları (advisor olarak)
+        var advisorIds = instructors.Select(i => i.Id).ToList();
+        var currentStudentCountMap = await _context.Students
+            .AsNoTracking()
+            .Where(s => s.AdvisorId.HasValue && advisorIds.Contains(s.AdvisorId.Value))
+            .GroupBy(s => s.AdvisorId!.Value)
+            .Select(g => new { AdvisorId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.AdvisorId, x => x.Count, ct);
 
         var userIds = instructors.Select(i => i.UserId).Distinct().ToList();
         var userMap = await _context.Users
@@ -383,6 +401,7 @@ public class CourseOpeningQueryService(
             var name = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
             departmentInfoMap.TryGetValue(i.DepartmentId, out var departmentInfo);
             workloadMap.TryGetValue(i.Id, out var assignedHours);
+            currentStudentCountMap.TryGetValue(i.Id, out var currentStudents);
             return new InstructorOptionDto
             {
                 InstructorId = i.Id,
@@ -392,6 +411,9 @@ public class CourseOpeningQueryService(
                 DepartmentCode = departmentInfo?.Code ?? "",
                 MaxWeeklyHours = i.MaxWeeklyHours,
                 AssignedWeeklyHours = assignedHours,
+                AdvisorAssignmentCapacity = i.AdvisorAssignmentCapacity,
+                IsAvailableForAdvisorAssignment = i.IsAvailableForAdvisorAssignment ?? true,
+                CurrentStudentCount = currentStudents,
             };
         })
         .OrderBy(i => i.DepartmentName)
