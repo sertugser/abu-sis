@@ -399,16 +399,16 @@ public class AcademicCalendarServiceTests
             new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.FinalExam, Title = "Final Sinavlari", StartDate = Utc(2026, 1, 5), EndDate = Utc(2026, 1, 16), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "final_exam" },
             new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.FinalGradePublication, Title = "Final Sonuclarinin Ilani", StartDate = Utc(2026, 1, 21), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "final_publication" },
             new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.MakeupExam, Title = "Butunleme Sinavlari Basvuru Son Gunu", StartDate = Utc(2026, 1, 23), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "makeup_application" },
-            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.MakeupExam, Title = "Butunleme Sinavlari", StartDate = Utc(2026, 1, 26), EndDate = Utc(2026, 1, 31), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "makeup_exam" },
+            new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.MakeupExam, Title = "Butunleme Sinavlari", StartDate = Utc(2026, 1, 26), EndDate = Utc(2026, 1, 30), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "makeup_exam" },
             new TermCalendarEvent { TermId = term.Id, EventType = CalendarEventType.MakeupGradePublication, Title = "Butunleme Sonuclarinin Ilani", StartDate = Utc(2026, 2, 6), IsPublic = true, ChainCode = "MAIN", TemplateItemKey = "makeup_publication" });
         await ctx.SaveChangesAsync();
 
         var makeupExam = ctx.TermCalendarEvents.Single(e => e.TemplateItemKey == "makeup_exam");
 
-        var result = await svc.UpdateEventAsync(term.Id, makeupExam.Id, new UpdateTermCalendarEventDto(Utc(2026, 2, 2), Utc(2026, 2, 7)));
+        var result = await svc.UpdateEventAsync(term.Id, makeupExam.Id, new UpdateTermCalendarEventDto(Utc(2026, 2, 2), Utc(2026, 2, 8)));
 
         result.Events.Single(e => e.TemplateItemKey == "makeup_exam").StartDate.Should().Be(Utc(2026, 2, 2));
-        result.Events.Single(e => e.TemplateItemKey == "makeup_exam").EndDate.Should().Be(Utc(2026, 2, 7));
+        result.Events.Single(e => e.TemplateItemKey == "makeup_exam").EndDate.Should().Be(Utc(2026, 2, 6));
         result.Events.Single(e => e.TemplateItemKey == "makeup_application").StartDate.Should().Be(Utc(2026, 1, 30));
         result.Events.Single(e => e.TemplateItemKey == "makeup_publication").StartDate.Should().Be(Utc(2026, 2, 11));
     }

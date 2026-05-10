@@ -600,14 +600,16 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Spring && e.TemplateItemKey == "makeup_exam");
 
         fallMakeupExam.StartDate.Should().Be(Utc(2026, 1, 26));
-        fallMakeupExam.EndDate.Should().Be(Utc(2026, 2, 1));
+        fallMakeupExam.EndDate.Should().Be(Utc(2026, 1, 30));
         fallMakeupExam.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
+        fallMakeupExam.EndDate!.Value.DayOfWeek.Should().Be(DayOfWeek.Friday);
         fallMakeupExam.StartDate.Should().BeOnOrAfter(fallFinalPublication.StartDate.AddDays(4));
         fallMakeupApplication.StartDate.Should().Be(Utc(2026, 1, 23));
 
         springMakeupExam.StartDate.Should().Be(Utc(2026, 6, 29));
-        springMakeupExam.EndDate.Should().Be(Utc(2026, 7, 5));
+        springMakeupExam.EndDate.Should().Be(Utc(2026, 7, 3));
         springMakeupExam.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
+        springMakeupExam.EndDate!.Value.DayOfWeek.Should().Be(DayOfWeek.Friday);
         springMakeupExam.StartDate.Should().BeOnOrAfter(springFinalPublication.StartDate.AddDays(4));
         springMakeupApplication.StartDate.Should().Be(Utc(2026, 6, 26));
     }
@@ -1013,7 +1015,7 @@ public class CalendarGeneratorTests : IDisposable
 
         var shiftedMakeup = whatIf.Events.Single(e => e.DraftEventId == makeup.DraftEventId);
         shiftedMakeup.StartDate.Should().Be(Utc(2026, 2, 2));
-        shiftedMakeup.EndDate.Should().Be(Utc(2026, 2, 8));
+        shiftedMakeup.EndDate.Should().Be(Utc(2026, 2, 6));
     }
 
     [Fact]
@@ -1158,8 +1160,8 @@ public class CalendarGeneratorTests : IDisposable
                 PropagateChanges: false));
 
         var shiftedMakeup = whatIf.Events.Single(e => e.DraftEventId == makeup.DraftEventId);
-        shiftedMakeup.StartDate.Should().Be(Utc(2026, 1, 28));
-        shiftedMakeup.EndDate.Should().Be(Utc(2026, 2, 3));
+        shiftedMakeup.StartDate.Should().Be(Utc(2026, 2, 2));
+        shiftedMakeup.EndDate.Should().Be(Utc(2026, 2, 6));
     }
 
     [Fact]

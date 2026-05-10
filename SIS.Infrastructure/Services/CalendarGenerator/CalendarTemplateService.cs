@@ -381,7 +381,7 @@ public class CalendarTemplateService : ICalendarTemplateService
             Item("prep_final_exam", CalendarEventType.PrepSchoolExam, "Hazırlık (İngilizce) Muafiyet Sınavları", 4, 112, null, SemesterType.Fall, SemesterType.Spring),
             Item("final_publication", CalendarEventType.FinalGradePublication, "Dönem Sonu Sınav Sonuçlarının İlanı", 1, 121, null, SemesterType.Fall, SemesterType.Spring),
             Item("makeup_application", CalendarEventType.MakeupExamApplication, "Bütünleme Sınavlarının Başvurularının Son Günü (Dönem Sonu)", 1, 123, null, SemesterType.Fall, SemesterType.Spring),
-            Item("makeup_exam", CalendarEventType.MakeupExam, "Bütünleme Sınavları", 6, 126, null, SemesterType.Fall, SemesterType.Spring),
+            Item("makeup_exam", CalendarEventType.MakeupExam, "Bütünleme Sınavları", 5, 126, null, SemesterType.Fall, SemesterType.Spring),
             Item("makeup_publication", CalendarEventType.MakeupGradePublication, "Bütünleme Sınav Sonuçlarının İlanı İçin Son Gün", 1, 136, null, SemesterType.Fall, SemesterType.Spring),
             Item("fall_semester_break", CalendarEventType.SemesterBreak, "Yarıyıl Tatili", 22, 130, null, SemesterType.Fall)
         ];
