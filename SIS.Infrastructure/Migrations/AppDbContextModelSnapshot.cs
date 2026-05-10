@@ -2064,6 +2064,21 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("EvaluationPeriods");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.EvaluationPeriodQuestion", b =>
+                {
+                    b.Property<int>("EvaluationPeriodId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EvaluationQuestionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("EvaluationPeriodId", "EvaluationQuestionId");
+
+                    b.HasIndex("EvaluationQuestionId");
+
+                    b.ToTable("EvaluationPeriodQuestions");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.EvaluationQuestion", b =>
                 {
                     b.Property<int>("Id")
@@ -2097,21 +2112,6 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Category", "SortOrder");
 
                     b.ToTable("EvaluationQuestions");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.EvaluationPeriodQuestion", b =>
-                {
-                    b.Property<int>("EvaluationPeriodId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("EvaluationQuestionId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("EvaluationPeriodId", "EvaluationQuestionId");
-
-                    b.HasIndex("EvaluationQuestionId");
-
-                    b.ToTable("EvaluationPeriodQuestions");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.EvaluationResponse", b =>

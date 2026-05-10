@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -28,13 +28,13 @@ namespace SIS.Infrastructure.Migrations
                 {
                     table.PrimaryKey("PK_EvaluationPeriodQuestions", x => new { x.EvaluationPeriodId, x.EvaluationQuestionId });
                     table.ForeignKey(
-                        name: "FK_EvaluationPeriodQuestions_EvaluationPeriods_EvaluationPeriodId",
+                        name: "FK_EvaluationPeriodQuestions_EvaluationPeriods_EvaluationPerio~",
                         column: x => x.EvaluationPeriodId,
                         principalTable: "EvaluationPeriods",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_EvaluationPeriodQuestions_EvaluationQuestions_EvaluationQuestionId",
+                        name: "FK_EvaluationPeriodQuestions_EvaluationQuestions_EvaluationQue~",
                         column: x => x.EvaluationQuestionId,
                         principalTable: "EvaluationQuestions",
                         principalColumn: "Id",
@@ -50,7 +50,8 @@ namespace SIS.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(name: "EvaluationPeriodQuestions");
+            migrationBuilder.DropTable(
+                name: "EvaluationPeriodQuestions");
 
             migrationBuilder.DropColumn(
                 name: "IsDeleted",
