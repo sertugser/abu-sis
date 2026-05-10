@@ -511,6 +511,29 @@ function validateDraftEventHolidayOverlap(
     : `${displayText(ev.title)} resmi tatil veya bloklayÄ±cÄ± Ã¶nemli gÃ¼n Ã¼zerine taÅŸÄ±namaz.`;
 }
 
+function shouldTrimTrailingWeekend(ev: GeneratedCalendarEventDto) {
+  return !ev.isHoliday && !CRITICAL_EVENT_TYPES.has(ev.eventType);
+}
+
+function trimTrailingWeekendEnd(ev: GeneratedCalendarEventDto, startDate: string, endDate: string) {
+  if (!shouldTrimTrailingWeekend(ev))
+    return { nextStartDate: startDate, nextEndDate: endDate };
+
+  const start = parseUtcDisplayDate(startDate);
+  const end = parseUtcDisplayDate(endDate);
+  if (!start || !end || end.getTime() <= start.getTime())
+    return { nextStartDate: startDate, nextEndDate: endDate };
+
+  let trimmedEnd = end;
+  while (trimmedEnd.getTime() > start.getTime() && (trimmedEnd.getUTCDay() === 0 || trimmedEnd.getUTCDay() === 6))
+    trimmedEnd = addDays(trimmedEnd, -1);
+
+  return {
+    nextStartDate: startDate,
+    nextEndDate: formatUtcDateValue(trimmedEnd),
+  };
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   exam: 'SÃ„Â±nav',
   registration: 'KayÃ„Â±t',
@@ -1318,7 +1341,7 @@ export default function AcademicCalendarGeneratorPage() {
     return calendar?.events.find(event => event.draftEventId === String(eventId)) ?? null;
   }
 
-  function resolveDroppedDates(targetDate: string, sourceStartDate: string, sourceEndDate: string, dragAnchorDate: string) {
+  function resolveDroppedDates(ev: GeneratedCalendarEventDto, targetDate: string, sourceStartDate: string, sourceEndDate: string, dragAnchorDate: string) {
     const shiftDays = dayDifference(targetDate, dragAnchorDate);
     if (shiftDays === null)
       return null;
@@ -1328,7 +1351,7 @@ export default function AcademicCalendarGeneratorPage() {
     if (!nextStartDate || !nextEndDate)
       return null;
 
-    return { nextStartDate, nextEndDate, shiftDays };
+    return { ...trimTrailingWeekendEnd(ev, nextStartDate, nextEndDate), shiftDays };
   }
 
   async function updateDraftEventDates(ev: GeneratedCalendarEventDto, nextStartDate: string, nextEndDate: string, actionLabel: string) {
@@ -1427,7 +1450,7 @@ export default function AcademicCalendarGeneratorPage() {
       return;
     }
 
-    const resolved = resolveDroppedDates(targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
+    const resolved = resolveDroppedDates(ev, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
     if (!resolved) {
       setNotice('BÃ„Â±rakÃ„Â±lan tarih okunamadÃ„Â±.');
       return;
@@ -1450,7 +1473,7 @@ export default function AcademicCalendarGeneratorPage() {
     if (!isEditableDraftEvent(ev))
       return { allowed: false, reason: 'Bu etkinlik sÃƒÂ¼rÃƒÂ¼kle-bÃ„Â±rak ile deÃ„Å¸iÃ…Å¸tirilemez.' };
 
-    const resolved = resolveDroppedDates(targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
+    const resolved = resolveDroppedDates(ev, targetDate, sourceStartDate, sourceEndDate, dragAnchorDate);
     if (!resolved)
       return { allowed: false, reason: 'BÃ„Â±rakÃ„Â±lan tarih okunamadÃ„Â±.' };
 

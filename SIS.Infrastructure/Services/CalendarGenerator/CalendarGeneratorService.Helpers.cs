@@ -516,6 +516,12 @@ public partial class CalendarGeneratorService
             or CalendarEventType.SummerSchoolRegistration or CalendarEventType.SummerSchoolExam
             or CalendarEventType.SummerSchoolGradePublication;
 
+    private static bool ShouldTrimTrailingWeekend(GeneratedCalendarEventDto ev) =>
+        !ev.IsHoliday
+        && !IsCriticalEvent(ev.EventType)
+        && ev.EndDate.HasValue
+        && ev.EndDate.Value.Date > ev.StartDate.Date;
+
     private static bool CanOverlapBlockingHoliday(
         CalendarEventType type,
         DateTime start,
@@ -707,6 +713,7 @@ public partial class CalendarGeneratorService
             normalized = ApplyHolidayOverflowShifts(normalized, holidays, pinnedDraftEventIds);
             normalized = ApplySummerExcuseSequenceRules(normalized, holidays, pinnedDraftEventIds);
             normalized = ApplyGradePublicationSequenceRules(normalized, holidays, pinnedDraftEventIds);
+            normalized = TrimTrailingWeekendEnds(normalized, pinnedDraftEventIds);
 
             if (DateFingerprint(normalized) == before)
                 break;
@@ -793,6 +800,27 @@ public partial class CalendarGeneratorService
             var alignedDate = WeekdayOnOrBefore(classesEnd.StartDate);
             if (alignedDate.Date != classesEnd.StartDate.Date)
                 updated = ReplaceEvent(updated, classesEnd with { StartDate = alignedDate, EndDate = null });
+        }
+
+        return updated;
+    }
+
+    private static List<GeneratedCalendarEventDto> TrimTrailingWeekendEnds(
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
+    {
+        var updated = events.ToList();
+
+        foreach (var ev in events.Where(ShouldTrimTrailingWeekend))
+        {
+            var trimmedEnd = WeekdayOnOrBefore(ev.EndDate!.Value);
+            if (trimmedEnd.Date == ev.EndDate.Value.Date || trimmedEnd.Date < ev.StartDate.Date)
+                continue;
+
+            updated = ReplaceEvent(updated, ev with
+            {
+                EndDate = trimmedEnd.Date == ev.StartDate.Date ? null : trimmedEnd
+            });
         }
 
         return updated;

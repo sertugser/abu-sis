@@ -264,6 +264,29 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Generator_WhatIf_TrimsTrailingWeekend_FromLongApplicationWindow()
+    {
+        var generated = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: false,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var graduateApplication = generated.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "fall_graduate_app");
+
+        var whatIf = await _generatorService.WhatIfAsync(
+            generated.DraftId,
+            new WhatIfRequestDto(graduateApplication.DraftEventId, Utc(2025, 10, 20), Utc(2025, 11, 9), false));
+
+        var moved = whatIf.Events.Single(e => e.DraftEventId == graduateApplication.DraftEventId);
+        moved.StartDate.Should().Be(Utc(2025, 10, 20));
+        moved.EndDate.Should().Be(Utc(2025, 11, 7));
+    }
+
+    [Fact]
     public async Task Generator_PlacesClassesEnd_OnWeekday()
     {
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(

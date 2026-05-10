@@ -257,6 +257,7 @@ public class AcademicCalendarService : IAcademicCalendarService
 
         var startDate = EnsureUtcDate(requestedStartDate);
         var endDate = EnsureUtcDate(requestedEndDate ?? requestedStartDate);
+        endDate = TrimTrailingWeekendEnd(calendarEvent, startDate, endDate);
         if (startDate > endDate)
             throw new InvalidOperationException("BaÃƒâ€¦Ã…Â¸langÃƒâ€Ã‚Â±ÃƒÆ’Ã‚Â§ tarihi bitiÃƒâ€¦Ã…Â¸ tarihinden sonra olamaz.");
 
@@ -746,6 +747,23 @@ public class AcademicCalendarService : IAcademicCalendarService
         MatchesKey(calendarEvent, "makeup_application")
         || calendarEvent.EventType == CalendarEventType.MakeupExam && TitleContainsAny(calendarEvent, "Basvuru", "BaÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸vuru", "BaÃƒâ€¦Ã…Â¸vuru");
 
+    private static bool ShouldTrimTrailingWeekend(TermCalendarEvent calendarEvent) =>
+        !IsLockedCalendarEvent(calendarEvent)
+        && !IsStrictHolidayBlocked(calendarEvent.EventType)
+        && !RequiresWeekdayOnly(calendarEvent);
+
+    private static DateTime TrimTrailingWeekendEnd(TermCalendarEvent calendarEvent, DateTime startDate, DateTime endDate)
+    {
+        if (!ShouldTrimTrailingWeekend(calendarEvent) || endDate.Date <= startDate.Date)
+            return endDate.Date;
+
+        var trimmedEnd = endDate.Date;
+        while (trimmedEnd > startDate.Date && trimmedEnd.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            trimmedEnd = trimmedEnd.AddDays(-1);
+
+        return EnsureUtcDate(trimmedEnd);
+    }
+
     private static bool ContainsWeekend(DateTime startDate, DateTime endDate)
     {
         for (var day = startDate.Date; day <= endDate.Date; day = day.AddDays(1))
@@ -820,6 +838,13 @@ public class AcademicCalendarService : IAcademicCalendarService
 
             if (alignedStart.HasValue && alignedStart.Value.Date != startDate)
                 SetPreservingSpan(calendarEvent, alignedStart.Value, changedEventIds);
+
+            var trimmedEnd = TrimTrailingWeekendEnd(calendarEvent, calendarEvent.StartDate.Date, EventEnd(calendarEvent));
+            if (trimmedEnd.Date != EventEnd(calendarEvent).Date)
+            {
+                calendarEvent.EndDate = trimmedEnd.Date == calendarEvent.StartDate.Date ? null : EnsureUtcDate(trimmedEnd);
+                changedEventIds.Add(calendarEvent.Id);
+            }
         }
     }
 
@@ -1082,7 +1107,7 @@ public class AcademicCalendarService : IAcademicCalendarService
     {
         changedEventIds.Add(calendarEvent.Id);
         var spanDays = (EventEnd(calendarEvent) - calendarEvent.StartDate.Date).Days;
-        var endDate = startDate.Date.AddDays(spanDays);
+        var endDate = TrimTrailingWeekendEnd(calendarEvent, startDate.Date, startDate.Date.AddDays(spanDays));
         calendarEvent.StartDate = EnsureUtcDate(startDate);
         calendarEvent.EndDate = endDate.Date == startDate.Date ? null : EnsureUtcDate(endDate);
     }
