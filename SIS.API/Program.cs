@@ -1,9 +1,11 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using SIS.API.Security;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Admin.Services;
 using SIS.Application.AcademicCalendar.Services;
@@ -37,6 +39,8 @@ using SIS.Infrastructure.Services.Announcement;
 using SIS.Infrastructure.Services.CalendarGenerator;
 
 var builder = WebApplication.CreateBuilder(args);
+StartupSecurityValidator.Validate(builder.Configuration, builder.Environment);
+
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
@@ -53,6 +57,33 @@ builder.Services.AddScoped<SIS.API.Filters.SensitiveDataAccessFilter>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("AuthLogin", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 8,
+                QueueLimit = 0,
+            }));
+    options.AddPolicy("PublicRead", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 60,
+                QueueLimit = 0,
+            }));
+    options.AddPolicy("PublicAttendanceQr", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 20,
+                QueueLimit = 0,
+            }));
     options.AddPolicy("AuditLogRead", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.User?.Identity?.Name ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
@@ -87,7 +118,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -113,6 +145,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
+var jwtKey = StartupSecurityValidator.GetRequiredJwtKey(builder.Configuration);
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -126,9 +159,12 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        RequireExpirationTime = true,
+        RequireSignedTokens = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        ClockSkew = TimeSpan.FromMinutes(1)
     };
 
     // SignalR WebSocket bağlantısı header gönderemez — token query param'dan gelir.
@@ -147,6 +183,13 @@ builder.Services.AddAuthentication(options =>
             return Task.CompletedTask;
         }
     };
+});
+
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
 });
 
 // SignalR — auto-schedule progress, real-time bildirimler vb. için.
@@ -230,11 +273,32 @@ builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 
 var app = builder.Build();
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
+else
+{
+    app.UseExceptionHandler(errorApp =>
+    {
+        errorApp.Run(async context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            context.Response.ContentType = "application/problem+json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                type = "about:blank",
+                title = "An unexpected error occurred.",
+                status = StatusCodes.Status500InternalServerError,
+                traceId = context.TraceIdentifier,
+            });
+        });
+    });
+    app.UseHsts();
 }
 
 app.UseMiddleware<SIS.API.Middleware.ErrorLoggingMiddleware>();

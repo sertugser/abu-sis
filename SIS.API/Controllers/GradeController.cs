@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.API.Security;
 using SIS.Application.Common.Time;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
@@ -460,9 +461,13 @@ public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int c
 [HttpPost("section/{sectionId}/grades/import-preview")]
 [RequirePermission("menu.not-girisi.import")]
 [Consumes("multipart/form-data")]
+[RequestSizeLimit(FileUploadValidation.MaxExcelImportBytes)]
 public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportFileDto request)
 {
     var file = request.File;
+    var fileValidationError = FileUploadValidation.ValidateXlsx(file);
+    if (fileValidationError is not null)
+        return BadRequest(new { error = fileValidationError });
 
     var section = await GetAuthorizedSectionAsync(sectionId);
     if (section == null)
@@ -662,9 +667,14 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
 [HttpPost("section/{sectionId}/grades/import-apply")]
 [RequirePermission("menu.not-girisi.import")]
 [Consumes("multipart/form-data")]
+[RequestSizeLimit(FileUploadValidation.MaxExcelImportBytes)]
 public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFileDto request)
 {
     var file = request.File;
+    var fileValidationError = FileUploadValidation.ValidateXlsx(file);
+    if (fileValidationError is not null)
+        return BadRequest(new { error = fileValidationError });
+
     var section = await GetAuthorizedSectionAsync(sectionId);
 
     if (section == null)

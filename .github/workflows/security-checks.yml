@@ -1,0 +1,35 @@
+name: Security Checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dependency-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: hashFiles('requirements.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Python Dependency Audit
+        if: hashFiles('requirements.txt') != ''
+        run: |
+          pip install pip-audit
+          pip-audit
+
+      - name: Setup Node
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Node Dependency Audit
+        if: hashFiles('package.json') != ''
+        run: npm audit --audit-level=high
