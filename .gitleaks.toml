@@ -1,0 +1,19 @@
+title = "Student Information System Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [rules.allowlist]
+  description = "Known non-secret test and UI configuration keys"
+  regexTarget = "line"
+  regexes = [
+    '''string jwtKey = "0123456789abcdef0123456789abcdef"''',
+    '''key: 'S3MaxSectionsPerSlot''',
+    '''key: 'S4MinCoPairThreshold''',
+    '''key: 'S7MaxGapSlots''',
+    '''key: 'S12MaxImbalancePercent''',
+    '''MIGRATION_FLAG_KEY = 'sis\.favorites\.migrated\.v1''',
+  ]

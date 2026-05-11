@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -1113,10 +1114,27 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         bool IsFulfilled);
 
     [HttpGet("student/{studentId:int}/pool-status")]
+    [RequireAnyPermission("menu.ders-kayit.view", "menu.mufredat-islemleri.view")]
     // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetPoolStatus(int studentId, CancellationToken ct)
     {
         // Öğrencinin aktif ana müfredatı
+        if (User.IsInRole("Student"))
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            var ownStudentId = await context.Students
+                .AsNoTracking()
+                .Where(s => s.UserId == userId)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (ownStudentId == 0 || ownStudentId != studentId)
+                return Forbid();
+        }
+
         var studentProgram = await context.StudentPrograms
             .AsNoTracking()
             .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)

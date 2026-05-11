@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers.Admin;
@@ -14,6 +15,7 @@ namespace SIS.API.Controllers.Admin;
 /// </summary>
 [ApiController]
 [Authorize(Roles = "SystemAdministrator")]
+[RequirePermission("system.permission.assign")]
 [Route("api/admin/seed")]
 public class AdminSeedingController : ControllerBase
 {

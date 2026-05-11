@@ -52,14 +52,17 @@ public class StartupSecurityValidatorTests
     }
 
     private static IConfiguration BuildConfiguration(
-        string jwtKey = "0123456789abcdef0123456789abcdef",
+        string? jwtKey = null,
         string corsOrigin = "http://localhost:5173",
-        string allowedHosts = "localhost") =>
-        new ConfigurationBuilder()
+        string allowedHosts = "localhost")
+    {
+        var effectiveJwtKey = jwtKey ?? new string('a', 32);
+
+        return new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=sis;Username=postgres;Password=local-only",
-                ["Jwt:Key"] = jwtKey,
+                ["Jwt:Key"] = effectiveJwtKey,
                 ["Jwt:Issuer"] = "StudentInformationSystem",
                 ["Jwt:Audience"] = "StudentInformationSystem",
                 ["Jwt:ExpiresInMinutes"] = "60",
@@ -67,6 +70,7 @@ public class StartupSecurityValidatorTests
                 ["AllowedHosts"] = allowedHosts,
             })
             .Build();
+    }
 
     private static IHostEnvironment Environment(string environmentName)
     {
