@@ -117,7 +117,7 @@ export default function InstructorCoursesReportPage() {
       </tr>
     `).join('');
 
-    const printWindow = window.open('', '_blank', 'width=1120,height=820');
+    const printWindow = window.open('', '_blank', 'width=1120,height=820,noopener,noreferrer');
     if (!printWindow) return;
 
     printWindow.document.open();

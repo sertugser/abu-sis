@@ -32,6 +32,7 @@ public class InternalAnnouncementController : ControllerBase
     // ── Duyuru okuma (tüm roller) ─────────────────────────────���───────────────
 
     [HttpGet("active")]
+    [RequireAnyPermission("menu.duyurular.view", "menu.duyurular-admin.view")]
     public async Task<IActionResult> GetActive([FromQuery] int? max, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -96,6 +97,7 @@ public class InternalAnnouncementController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [RequireAnyPermission("menu.duyurular.view", "menu.duyurular-admin.view", "menu.duyuru-yonetimi.view")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var item = await _service.GetByIdAsync(id, ct);

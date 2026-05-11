@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.UserPreferences.DTOs;
 using SIS.Application.UserPreferences.Services;
 
@@ -19,6 +20,7 @@ public class UserPreferencesController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("lookup.user-preferences")]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -29,6 +31,7 @@ public class UserPreferencesController : ControllerBase
     }
 
     [HttpPut]
+    [RequirePermission("lookup.user-preferences")]
     public async Task<IActionResult> Update(
         [FromBody] UpdateUserPreferenceRequest request,
         CancellationToken cancellationToken)

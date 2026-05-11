@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Security;
 using SIS.Application.Auth.DTOs;
 using SIS.Application.Auth.Services;
 using SIS.Domain.Entities;
@@ -30,6 +31,7 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("AuthLogin")]
+    [PublicEndpointJustification("Login must be reachable before authentication; IP rate limiting and audit logging are enforced.")]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto, CancellationToken ct)
     {
         var result = await _authService.LoginAsync(loginDto);

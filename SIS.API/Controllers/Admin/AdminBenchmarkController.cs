@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Domain.Enums;
@@ -16,6 +17,7 @@ namespace SIS.API.Controllers.Admin;
 /// </summary>
 [ApiController]
 [Authorize(Roles = "SystemAdministrator")]
+[RequirePermission("system.permission.view")]
 [Route("api/admin/benchmark")]
 public class AdminBenchmarkController : ControllerBase
 {

@@ -118,6 +118,7 @@ public class StudentController : ControllerBase
     /// GET api/student/curriculum-status — returns the student's curriculum progress.
     /// </summary>
     [HttpGet("curriculum-status")]
+    [RequirePermission("menu.ders-kayit.view")]
     // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCurriculumStatus()
     {

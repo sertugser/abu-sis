@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.API.Security;
 using SIS.Application.Attendance.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -208,6 +209,7 @@ public class AttendanceController : ControllerBase
     [HttpGet("qr/{token}")]
     [AllowAnonymous]
     [EnableRateLimiting("PublicAttendanceQr")]
+    [PublicEndpointJustification("QR attendance links are opened by students without an existing session; token expiry and rate limiting constrain use.")]
     public async Task<IActionResult> GetQrSession(string token)
     {
         var session = await _context.AttendanceSessions
@@ -236,6 +238,7 @@ public class AttendanceController : ControllerBase
     [HttpPost("qr/{token}/submit")]
     [AllowAnonymous]
     [EnableRateLimiting("PublicAttendanceQr")]
+    [PublicEndpointJustification("QR attendance submission is intentionally anonymous before student identity is matched to the course registration.")]
     public async Task<IActionResult> SubmitQr(string token, [FromBody] SubmitQrAttendanceRequest request)
     {
         var session = await _context.AttendanceSessions

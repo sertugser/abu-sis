@@ -35,6 +35,7 @@ public class CourseController : ControllerBase
     /// Optionally filter by programId query parameter.
     /// </summary>
     [HttpGet]
+    [RequirePermission("lookup.course")]
     // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetCourses([FromQuery] int? programId)
     {
@@ -140,6 +141,7 @@ public class CourseController : ControllerBase
     /// Each course includes: TakeStatus (IlkDefa/Alttan/OncedenAlindi), PreviousGrade, CurriculumType, PrerequisitesMet.
     /// </summary>
     [HttpGet("student-catalog")]
+    [RequirePermission("menu.ders-kayit.view")]
     // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetStudentCatalog()
     {
@@ -409,6 +411,7 @@ public class CourseController : ControllerBase
     /// GET api/course/sections/{id} — get section detail.
     /// </summary>
     [HttpGet("sections/{id}")]
+    [RequirePermission("lookup.course")]
     // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetSectionDetail(int id)
     {
