@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIS.API.Authorization;
+using SIS.API.Security;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 
@@ -45,14 +46,16 @@ public class ScheduleExcelController : ControllerBase
 
     [HttpPost("import-preview")]
     [RequirePermission("menu.ders-programi-olusturma.import")]
+    [RequestSizeLimit(FileUploadValidation.MaxExcelImportBytes)]
     public async Task<ActionResult<ImportPreviewDto>> ImportPreview(
         [FromQuery] int termId,
         [FromQuery] int facultyId,
         IFormFile file,
         CancellationToken ct = default)
     {
-        if (file == null || file.Length == 0)
-            return BadRequest("Dosya seçilmedi.");
+        var fileValidationError = FileUploadValidation.ValidateXlsx(file);
+        if (fileValidationError is not null)
+            return BadRequest(new { error = fileValidationError });
 
         using var stream = file.OpenReadStream();
         var result = await _excelService.PreviewImportAsync(stream, termId, facultyId, ct);

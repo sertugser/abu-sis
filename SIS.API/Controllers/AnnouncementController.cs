@@ -2,6 +2,7 @@ using System.Net;
 using HtmlAgilityPack;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace SIS.API.Controllers;
@@ -15,6 +16,7 @@ public class AnnouncementController : ControllerBase
     private readonly ILogger<AnnouncementController> _logger;
     private const string CacheKey = "announcements";
     private const string SourceUrl = "https://ankarabilim.edu.tr/muhendislik-ve-mimarlik-fakultesi/duyurular";
+    private static readonly Uri SourceBaseUri = new("https://ankarabilim.edu.tr");
 
     public AnnouncementController(IMemoryCache cache, IHttpClientFactory httpClientFactory, ILogger<AnnouncementController> logger)
     {
@@ -25,6 +27,7 @@ public class AnnouncementController : ControllerBase
 
     [HttpGet]
     [AllowAnonymous]
+    [EnableRateLimiting("PublicRead")]
     public async Task<IActionResult> GetAnnouncements()
     {
         if (_cache.TryGetValue(CacheKey, out List<AnnouncementDto>? cached) && cached != null)
@@ -63,6 +66,9 @@ public class AnnouncementController : ControllerBase
         foreach (var link in links)
         {
             var href = link.GetAttributeValue("href", "");
+            var safeUrl = BuildSafeAnnouncementUrl(href);
+            if (safeUrl is null)
+                continue;
 
             // Get title from h3 first, then title attribute, then full text
             var h3 = link.SelectSingleNode(".//h3");
@@ -113,13 +119,30 @@ public class AnnouncementController : ControllerBase
             {
                 Title = title,
                 Date = dateText,
-                Url = href.StartsWith("http") ? href : $"https://ankarabilim.edu.tr{href}"
+                Url = safeUrl
             });
 
             if (results.Count >= 5) break;
         }
 
         return results;
+    }
+
+    private static string? BuildSafeAnnouncementUrl(string href)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+            return null;
+
+        if (!Uri.TryCreate(SourceBaseUri, href, out var uri))
+            return null;
+
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(uri.Host, SourceBaseUri.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return uri.ToString();
     }
 }
 

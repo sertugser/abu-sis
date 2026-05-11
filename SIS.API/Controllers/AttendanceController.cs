@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.Attendance.DTOs;
@@ -206,6 +207,7 @@ public class AttendanceController : ControllerBase
 
     [HttpGet("qr/{token}")]
     [AllowAnonymous]
+    [EnableRateLimiting("PublicAttendanceQr")]
     public async Task<IActionResult> GetQrSession(string token)
     {
         var session = await _context.AttendanceSessions
@@ -233,6 +235,7 @@ public class AttendanceController : ControllerBase
 
     [HttpPost("qr/{token}/submit")]
     [AllowAnonymous]
+    [EnableRateLimiting("PublicAttendanceQr")]
     public async Task<IActionResult> SubmitQr(string token, [FromBody] SubmitQrAttendanceRequest request)
     {
         var session = await _context.AttendanceSessions

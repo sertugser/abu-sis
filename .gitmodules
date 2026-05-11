@@ -1,0 +1,3 @@
+[submodule "external/AISVS"]
+	path = external/AISVS
+	url = https://github.com/OWASP/AISVS.git

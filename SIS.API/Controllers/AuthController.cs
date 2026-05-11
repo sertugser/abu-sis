@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Auth.DTOs;
 using SIS.Application.Auth.Services;
@@ -28,6 +29,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("AuthLogin")]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto, CancellationToken ct)
     {
         var result = await _authService.LoginAsync(loginDto);

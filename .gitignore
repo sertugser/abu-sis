@@ -89,3 +89,9 @@ docs/superpowers/
 
 # Local analysis reports (codemap-diff, audit reports vb.)
 .reports/
+
+*.exe
+
+ZAP_2_17_0_windows.exe
+
+OWASP_Application_Security_Verification_Standard_5.0.0_tr.pdf
