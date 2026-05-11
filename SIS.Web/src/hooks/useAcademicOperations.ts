@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
 import {
   bulkAssignAdvisors,
   bulkAssignCurriculum,
@@ -15,11 +16,15 @@ import {
 import { QUERY_KEYS } from '../lib/constants';
 import type { BulkAdvisorAssignmentRequest, BulkCurriculumAssignmentRequest } from '../types/academicOperations';
 
-export function useAcademicOperationsContext() {
+export function useAcademicOperationsContext(enabled = true) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery({
     queryKey: QUERY_KEYS.academicOperationsContext,
     queryFn: getAcademicOperationsContext,
+    enabled: enabled && isAuthenticated,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 

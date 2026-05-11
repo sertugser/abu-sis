@@ -1,12 +1,7 @@
 import axios from 'axios';
-
-const AUTH_STORAGE_KEYS = ['sis_token', 'sis_token_expires', 'sis_roles'] as const;
+import { clearStoredAuth, readStoredAuth } from '../lib/authStorage';
 
 let isRedirectingToLogin = false;
-
-function clearAuthStorage() {
-  AUTH_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
-}
 
 function isLoginRequest(url: string) {
   return url.includes('/auth/login');
@@ -26,20 +21,18 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('sis_token');
-  const expiresAt = localStorage.getItem('sis_token_expires');
   const url = config.url ?? '';
+  const auth = readStoredAuth({ clearInvalid: true, notify: true });
 
-  if (token && expiresAt && new Date(expiresAt) <= new Date()) {
-    clearAuthStorage();
-    if (!isLoginRequest(url))
-      redirectToLogin();
+  if (auth.status === 'valid') {
+    config.headers.Authorization = `Bearer ${auth.session.token}`;
     return config;
   }
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (auth.status !== 'missing' && !isLoginRequest(url)) {
+    redirectToLogin();
   }
+
   return config;
 });
 
@@ -48,7 +41,7 @@ apiClient.interceptors.response.use(
   (error) => {
     const url = error.config?.url ?? '';
     if (error.response?.status === 401 && !isLoginRequest(url)) {
-      clearAuthStorage();
+      clearStoredAuth({ reason: 'unauthorized' });
       redirectToLogin();
     }
     return Promise.reject(error);
