@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 const STORAGE_KEY = 'sis.favorites.v1';
-const MIGRATION_FLAG_KEY = 'sis.favorites.migrated.v1';
+const MIGRATION_FLAG_KEY = 'sis.favorites.migrated.v1'; // gitleaks:allow
 export const MAX_FAVORITES = 11;
 
 const QUERY_KEY = ['user-preferences'] as const;
