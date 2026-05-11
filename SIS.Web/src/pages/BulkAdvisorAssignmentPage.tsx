@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AlertCircle, Loader2, Search, ShieldAlert, UserCheck, Users, X } from 'lucide-react';
+import { AlertCircle, Search, ShieldAlert, UserCheck, Users, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -35,6 +35,8 @@ const STUDENT_STATUS_LABELS: Record<string, string> = {
 };
 
 const STUDENT_STATUS_ORDER = Object.keys(STUDENT_STATUS_LABELS);
+const EMPTY_STUDENTS: DepartmentStudentListItem[] = [];
+const EMPTY_INSTRUCTORS: InstructorOptionDto[] = [];
 
 export default function BulkAdvisorAssignmentPage() {
   const contextQuery = useAcademicOperationsContext();
@@ -56,11 +58,11 @@ export default function BulkAdvisorAssignmentPage() {
   // Hoca bazlı kapasite ve dahil/değil overrides — initial value backend'den, kullanıcı override edebilir
   const [capacityOverrides, setCapacityOverrides] = useState<Record<number, string>>({});
   const [excludedAdvisors, setExcludedAdvisors] = useState<Record<number, boolean>>({});
-  // Atama modu: 'single' = tek hoca tümüne, 'per-student' = her öğrenci için ayrı
-  const [assignmentMode, setAssignmentMode] = useState<'single' | 'per-student'>('single');
+  const [assignmentMode] = useState<'single' | 'per-student'>('single');
   const [perStudentAdvisorIds, setPerStudentAdvisorIds] = useState<Record<number, number>>({});
-  // Önizleme dialog'u — runAssignment'tan önce kullanıcı onayı
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Atama modu: 'single' = tek hoca tümüne, 'per-student' = her öğrenci için ayrı
+  // Önizleme dialog'u — runAssignment'tan önce kullanıcı onayı
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
@@ -80,6 +82,10 @@ export default function BulkAdvisorAssignmentPage() {
     setSelectedAdvisorId('none');
     setReplaceExisting(false);
     setSelectedStudentIds(new Set());
+    setCapacityOverrides({});
+    setExcludedAdvisors({});
+    setPerStudentAdvisorIds({});
+    setPreviewOpen(false);
     setLastResult(null);
   }, [departmentId]);
 
@@ -87,8 +93,8 @@ export default function BulkAdvisorAssignmentPage() {
   const instructorsQuery = useDepartmentInstructors(departmentId);
   const assignmentMutation = useBulkAdvisorAssignment(departmentId);
 
-  const students = studentsQuery.data?.students ?? [];
-  const instructors = instructorsQuery.data ?? [];
+  const students = studentsQuery.data?.students ?? EMPTY_STUDENTS;
+  const instructors = instructorsQuery.data ?? EMPTY_INSTRUCTORS;
   const departmentOptions = contextQuery.data?.accessibleDepartments ?? [];
 
   // Backend'den gelen kapasite/dahil değerleriyle local override'ları senkronize et
@@ -96,24 +102,27 @@ export default function BulkAdvisorAssignmentPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCapacityOverrides(prev => {
       const next: Record<number, string> = { ...prev };
+      let changed = false;
       instructors.forEach(inst => {
         if (next[inst.instructorId] === undefined) {
           next[inst.instructorId] = inst.advisorAssignmentCapacity == null
             ? ''
             : String(inst.advisorAssignmentCapacity);
+          changed = true;
         }
       });
-      return next;
+      return changed ? next : prev;
     });
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExcludedAdvisors(prev => {
       const next: Record<number, boolean> = { ...prev };
+      let changed = false;
       instructors.forEach(inst => {
         if (next[inst.instructorId] === undefined) {
           next[inst.instructorId] = !inst.isAvailableForAdvisorAssignment;
+          changed = true;
         }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [instructors]);
 
@@ -305,55 +314,6 @@ export default function BulkAdvisorAssignmentPage() {
     setSelectedStudentIds(new Set());
   }
 
-  function autoDistributeSelectedStudents() {
-    const selectedIds = [...selectedStudentIds];
-    if (selectedIds.length === 0) return;
-
-    const advisors = instructors.filter(i => !excludedAdvisors[i.instructorId]);
-    if (advisors.length === 0) return;
-
-    // Hocaların kapasiteleri (boş = sınırsız)
-    const capacities = new Map<number, number>();
-    for (const advisor of advisors) {
-      const raw = capacityOverrides[advisor.instructorId];
-      const parsed = raw && raw.trim() !== '' ? Number(raw) : Number.NaN;
-      capacities.set(
-        advisor.instructorId,
-        Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : Number.POSITIVE_INFINITY,
-      );
-    }
-
-    // Mevcut yük başlangıç + bu run'da yapılan atama sayısı
-    const baseLoad = new Map<number, number>();
-    const assignedInRun = new Map<number, number>();
-    for (const advisor of advisors) {
-      baseLoad.set(advisor.instructorId, advisor.currentStudentCount);
-      assignedInRun.set(advisor.instructorId, 0);
-    }
-
-    const newAssignments: Record<number, number> = {};
-    for (const studentId of selectedIds) {
-      const candidates = advisors.filter(advisor => {
-        const projected = baseLoad.get(advisor.instructorId)! + assignedInRun.get(advisor.instructorId)!;
-        return projected < capacities.get(advisor.instructorId)!;
-      });
-      if (candidates.length === 0) continue; // tüm kontenjanlar dolu, kalanları atla
-
-      candidates.sort((a, b) => {
-        const aLoad = baseLoad.get(a.instructorId)! + assignedInRun.get(a.instructorId)!;
-        const bLoad = baseLoad.get(b.instructorId)! + assignedInRun.get(b.instructorId)!;
-        if (aLoad !== bLoad) return aLoad - bLoad;
-        return a.fullName.localeCompare(b.fullName, 'tr');
-      });
-
-      const chosen = candidates[0];
-      newAssignments[studentId] = chosen.instructorId;
-      assignedInRun.set(chosen.instructorId, assignedInRun.get(chosen.instructorId)! + 1);
-    }
-
-    setPerStudentAdvisorIds(newAssignments);
-  }
-
   function runAssignment() {
     if (!canAssignAdvisors || departmentId === null || selectedStudentIds.size === 0) return;
 
@@ -388,26 +348,45 @@ export default function BulkAdvisorAssignmentPage() {
     }
     if (groups.size === 0) return;
 
-    Promise.all(
-      [...groups.entries()].map(([advisorId, studentIds]) =>
-        assignmentMutation.mutateAsync({
-          departmentId,
-          advisorId,
-          replaceExisting,
-          studentIds,
-        }),
-      ),
-    ).then(results => {
+    const assignmentRequests = [...groups.entries()].map(([advisorId, studentIds]) =>
+      assignmentMutation.mutateAsync({
+        departmentId,
+        advisorId,
+        replaceExisting,
+        studentIds,
+      })
+        .then(result => ({ ok: true as const, result }))
+        .catch(error => ({ ok: false as const, error, studentIds })),
+    );
+
+    Promise.all(assignmentRequests).then(outcomes => {
+      const successfulOutcomes = outcomes.filter(
+        (outcome): outcome is { ok: true; result: BulkAcademicOperationResult } => outcome.ok,
+      );
+      const failedOutcomes = outcomes.filter(
+        (outcome): outcome is { ok: false; error: unknown; studentIds: number[] } => !outcome.ok,
+      );
+      const results = successfulOutcomes.map(outcome => outcome.result);
       // Tüm sonuçları birleştir
       const merged: BulkAcademicOperationResult = {
-        requestedCount: results.reduce((sum, r) => sum + r.requestedCount, 0),
+        requestedCount: results.reduce((sum, r) => sum + r.requestedCount, 0)
+          + failedOutcomes.reduce((sum, outcome) => sum + outcome.studentIds.length, 0),
         successCount: results.reduce((sum, r) => sum + r.successCount, 0),
-        failedCount: results.reduce((sum, r) => sum + r.failedCount, 0),
+        failedCount: results.reduce((sum, r) => sum + r.failedCount, 0)
+          + failedOutcomes.reduce((sum, outcome) => sum + outcome.studentIds.length, 0),
         results: results.flatMap(r => r.results),
-        errors: results.flatMap(r => r.errors ?? []),
+        errors: [
+          ...results.flatMap(r => r.errors ?? []),
+          ...failedOutcomes.map(outcome =>
+            getAcademicOperationsErrorMessage(outcome.error, 'Danışman ataması tamamlanamadı.'),
+          ),
+        ],
       };
       setLastResult(merged);
-      const failedIds = merged.results.filter(item => !item.success).map(item => item.studentId);
+      const failedIds = [
+        ...merged.results.filter(item => !item.success).map(item => item.studentId),
+        ...failedOutcomes.flatMap(outcome => outcome.studentIds),
+      ];
       setSelectedStudentIds(new Set(failedIds));
     });
   }
@@ -577,59 +556,21 @@ export default function BulkAdvisorAssignmentPage() {
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-1 sm:col-span-2">
-                  <Label className="text-xs">Atama Modu</Label>
-                  <div className="flex h-8 rounded-md border bg-background overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setAssignmentMode('single')}
-                      disabled={!canAssignAdvisors}
-                      className={`flex-1 text-xs font-medium px-3 transition-colors ${
-                        assignmentMode === 'single'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-muted'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      Tek Hoca, Tümüne Uygula
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAssignmentMode('per-student')}
-                      disabled={!canAssignAdvisors}
-                      className={`flex-1 text-xs font-medium px-3 transition-colors border-l ${
-                        assignmentMode === 'per-student'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-muted'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      Her Öğrenciye Ayrı
-                    </button>
-                  </div>
-                </div>
-                {assignmentMode === 'single' ? (
-                  <FilterSelect
-                    label="Yeni danışman"
-                    value={selectedAdvisorId}
-                    onValueChange={setSelectedAdvisorId}
-                    disabled={!canAssignAdvisors}
-                    options={[
-                      { value: 'none', label: 'Danışman seçin' },
-                      ...instructors
-                        .filter(instructor => !excludedAdvisors[instructor.instructorId])
-                        .map(instructor => ({
-                          value: String(instructor.instructorId),
-                          label: instructor.fullName,
-                        })),
-                    ]}
-                  />
-                ) : (
-                  <div className="space-y-1">
-                    <Label className="text-xs">Danışman Seçimi</Label>
-                    <div className="flex h-8 items-center rounded-md border border-dashed px-2.5 text-xs text-muted-foreground">
-                      Tabloda her öğrenci için ayrı seçilir
-                    </div>
-                  </div>
-                )}
+                <FilterSelect
+                  label="Yeni danışman"
+                  value={selectedAdvisorId}
+                  onValueChange={setSelectedAdvisorId}
+                  disabled={!canAssignAdvisors}
+                  options={[
+                    { value: 'none', label: 'Danışman seçin' },
+                    ...instructors
+                      .filter(instructor => !excludedAdvisors[instructor.instructorId])
+                      .map(instructor => ({
+                        value: String(instructor.instructorId),
+                        label: instructor.fullName,
+                      })),
+                  ]}
+                />
 
                 <div className="flex min-h-[52px] items-end">
                   <div className="flex h-8 w-full items-center justify-between rounded-md border px-2.5">
@@ -659,37 +600,6 @@ export default function BulkAdvisorAssignmentPage() {
                   >
                     <X className="h-3.5 w-3.5" />
                     Temizle
-                  </Button>
-                  {assignmentMode === 'per-student' && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 px-3 text-xs gap-1"
-                      onClick={autoDistributeSelectedStudents}
-                      disabled={!canAssignAdvisors || selectedStudents.length === 0 || instructors.every(i => excludedAdvisors[i.instructorId])}
-                      title="Seçili öğrencileri kapasite ve mevcut yüke göre hocalara dengeli dağıt"
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                      Otomatik Dağıt
-                    </Button>
-                  )}
-                  <Button
-                    className="h-8 flex-1 text-xs"
-                    onClick={() => setPreviewOpen(true)}
-                    disabled={
-                      !canAssignAdvisors
-                      || assignmentMutation.isPending
-                      || (assignmentMode === 'single' && selectedAdvisor === null)
-                      || (assignmentMode === 'per-student' && [...selectedStudentIds].every(id => !perStudentAdvisorIds[id]))
-                      || selectedStudentIds.size === 0
-                    }
-                  >
-                    {assignmentMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
-                    {!canAssignAdvisors
-                      ? 'Atama Yetkisi Yok'
-                      : assignmentMutation.isPending
-                        ? 'Atanıyor'
-                        : 'Önizle ve Ata'}
                   </Button>
                 </div>
               </div>

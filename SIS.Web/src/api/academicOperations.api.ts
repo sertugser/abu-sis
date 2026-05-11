@@ -1,4 +1,4 @@
-import type { AxiosError } from 'axios';
+import { isAxiosError } from 'axios';
 import apiClient from './axios';
 import type {
   AcademicOperationsContext,
@@ -102,11 +102,23 @@ export async function getGradeLockReadiness(departmentId: number, termId?: numbe
   return data;
 }
 
-export function getAcademicOperationsErrorMessage(error: unknown, fallback: string) {
-  const axiosError = error as AxiosError<{ error?: string }>;
-  const status = axiosError.response?.status;
+type ApiErrorPayload = {
+  error?: unknown;
+  message?: unknown;
+  detail?: unknown;
+  title?: unknown;
+  errors?: unknown;
+};
 
-  if (!axiosError.response) {
+export function getAcademicOperationsErrorMessage(error: unknown, fallback: string) {
+  if (!isAxiosError(error)) {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  const status = error.response?.status;
+  const payload = normalizeErrorPayload(error.response?.data);
+
+  if (!error.response) {
     return 'API sunucusuna ulaşılamadı. Backend çalışıyor mu kontrol edin.';
   }
 
@@ -119,12 +131,71 @@ export function getAcademicOperationsErrorMessage(error: unknown, fallback: stri
   }
 
   if (status === 404) {
-    return axiosError.response?.data?.error ?? 'İstenen akademik operasyon verisi bulunamadı.';
+    return readErrorMessage(payload) ?? 'İstenen akademik operasyon verisi bulunamadı.';
   }
 
   if (status === 400) {
-    return axiosError.response?.data?.error ?? fallback;
+    return readErrorMessage(payload) ?? fallback;
   }
 
-  return axiosError.response?.data?.error ?? fallback;
+  return readErrorMessage(payload) ?? fallback;
+}
+
+function normalizeErrorPayload(data: unknown): ApiErrorPayload | null {
+  if (typeof data === 'string') {
+    const trimmed = data.trim();
+    if (!trimmed) return null;
+
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      return isRecord(parsed) ? parsed : { message: trimmed };
+    } catch {
+      return { message: trimmed };
+    }
+  }
+
+  return isRecord(data) ? data : null;
+}
+
+function readErrorMessage(payload: ApiErrorPayload | null): string | null {
+  if (!payload) return null;
+
+  const directMessage = firstString(payload.error)
+    ?? firstString(payload.message)
+    ?? firstString(payload.detail);
+  if (directMessage) return directMessage;
+
+  const validationMessage = readValidationError(payload.errors);
+  if (validationMessage) return validationMessage;
+
+  return firstString(payload.title);
+}
+
+function readValidationError(errors: unknown): string | null {
+  if (!errors) return null;
+
+  if (Array.isArray(errors)) {
+    return errors.map(firstString).find(Boolean) ?? null;
+  }
+
+  if (!isRecord(errors)) return firstString(errors);
+
+  for (const value of Object.values(errors)) {
+    const message = Array.isArray(value)
+      ? value.map(firstString).find(Boolean)
+      : firstString(value);
+    if (message) return message;
+  }
+
+  return null;
+}
+
+function firstString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (Array.isArray(value)) return value.map(firstString).find(Boolean) ?? null;
+  return null;
+}
+
+function isRecord(value: unknown): value is ApiErrorPayload {
+  return typeof value === 'object' && value !== null;
 }

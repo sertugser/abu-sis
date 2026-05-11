@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
+import { getValidAccessToken } from '../lib/authStorage';
 
 export type SignalRStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
 
@@ -48,7 +49,7 @@ export function useSignalR(options: UseSignalROptions): UseSignalRResult {
 
     const conn = new HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => localStorage.getItem('sis_token') ?? '',
+        accessTokenFactory: () => getValidAccessToken({ clearInvalid: true, notify: true }) ?? '',
       })
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
