@@ -4,25 +4,28 @@ import {
 } from '@/components/ui/table';
 import type { ImportRowDto } from '../../types/scheduleExcel';
 
-type FilterMode = 'all' | 'error' | 'warning' | 'valid';
+type FilterMode = 'all' | 'error' | 'warning' | 'valid' | 'skipped';
 
 const STATUS_ICON: Record<ImportRowDto['status'], string> = {
-  Valid: '✅',
-  Warning: '⚠',
-  Error: '❌',
+  Valid: 'OK',
+  Warning: '!',
+  Error: 'X',
+  Skipped: '-',
 };
 
 const ROW_BG: Record<ImportRowDto['status'], string> = {
   Valid: '',
   Warning: 'bg-amber-50',
   Error: 'bg-red-50',
+  Skipped: 'bg-slate-50',
 };
 
 const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
-  { value: 'all', label: 'Tümünü Göster' },
+  { value: 'all', label: 'Tumunu Goster' },
   { value: 'error', label: 'Sadece Hatalar' },
-  { value: 'warning', label: 'Sadece Uyarılar' },
-  { value: 'valid', label: 'Sadece Geçerliler' },
+  { value: 'warning', label: 'Sadece Uyarilar' },
+  { value: 'valid', label: 'Sadece Gecerliler' },
+  { value: 'skipped', label: 'Sadece Atlananlar' },
 ];
 
 const STATUS_BY_FILTER: Record<FilterMode, ImportRowDto['status'] | null> = {
@@ -30,6 +33,7 @@ const STATUS_BY_FILTER: Record<FilterMode, ImportRowDto['status'] | null> = {
   error: 'Error',
   warning: 'Warning',
   valid: 'Valid',
+  skipped: 'Skipped',
 };
 
 interface ImportPreviewTableProps {
@@ -55,19 +59,19 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <span className="text-sm text-slate-500">{filtered.length} satır</span>
+        <span className="text-sm text-slate-500">{filtered.length} satir</span>
       </div>
 
       <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-lg bg-white">
         <Table>
           <TableHeader>
             <TableRow className="border-b-2 border-slate-100">
-              <TableHead className="text-xs font-semibold text-slate-500 py-2 pl-3 w-10"></TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 py-2 pl-3 w-12"></TableHead>
               <TableHead className="text-xs font-semibold text-slate-500 py-2">DERS</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 py-2">ŞUBE</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 py-2">GÜN</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 py-2">SUBE</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 py-2">GUN</TableHead>
               <TableHead className="text-xs font-semibold text-slate-500 py-2">SAAT</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 py-2">DERSLİK</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 py-2">DERSLIK</TableHead>
               <TableHead className="text-xs font-semibold text-slate-500 py-2">MESAJ</TableHead>
             </TableRow>
           </TableHeader>
@@ -75,7 +79,7 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
             {filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-slate-400 text-sm">
-                  Eşleşen satır bulunamadı.
+                  Eslesen satir bulunamadi.
                 </TableCell>
               </TableRow>
             ) : (
@@ -84,14 +88,14 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
                   key={row.rowNumber}
                   className={`border-b border-slate-100 ${ROW_BG[row.status]}`}
                 >
-                  <TableCell className="py-2 pl-3 text-base leading-none">
+                  <TableCell className="py-2 pl-3 text-xs font-semibold leading-none text-slate-600">
                     {STATUS_ICON[row.status]}
                   </TableCell>
                   <TableCell className="py-2 text-sm font-medium">{row.courseCode}</TableCell>
                   <TableCell className="py-2 text-sm">{row.sectionCode}</TableCell>
                   <TableCell className="py-2 text-sm">{row.day}</TableCell>
                   <TableCell className="py-2 text-sm tabular-nums">
-                    {row.startTime} – {row.endTime}
+                    {row.startTime} - {row.endTime}
                   </TableCell>
                   <TableCell className="py-2 text-sm">{row.classroomName}</TableCell>
                   <TableCell className="py-2 text-sm text-slate-600">{row.message}</TableCell>

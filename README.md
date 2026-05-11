@@ -36,13 +36,21 @@ CREATE DATABASE "StudentInfoSystem";
 
 ### 3. Backend ayarları
 
-`SIS.API/appsettings.Development.json.example` dosyasını kopyalayıp kendi bilgilerinle düzenle:
+Development secret değerlerini repoya yazmayın. `SIS.API/appsettings.Development.example.json`
+yalnızca güvenli örnek dosyadır; gerçek connection string ve JWT key için ASP.NET User Secrets
+veya environment variable kullanın:
 
 ```bash
-cp SIS.API/appsettings.Development.json.example SIS.API/appsettings.Development.json
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=StudentInfoSystem;Username=postgres;Password=<strong-password>" --project SIS.API
+dotnet user-secrets set "Jwt:Key" "<at-least-32-byte-random-secret>" --project SIS.API
 ```
 
-Dosyada PostgreSQL şifreni ve JWT key'ini güncelle.
+Environment variable alternatifi:
+
+```bash
+set ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=StudentInfoSystem;Username=postgres;Password=<strong-password>
+set Jwt__Key=<at-least-32-byte-random-secret>
+```
 
 ### 4. Veritabanı migration'larını uygula
 

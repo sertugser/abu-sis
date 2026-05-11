@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using SIS.API.Authorization;
 using SIS.API.Security;
@@ -50,15 +51,18 @@ public class ScheduleExcelController : ControllerBase
     public async Task<ActionResult<ImportPreviewDto>> ImportPreview(
         [FromQuery] int termId,
         [FromQuery] int facultyId,
-        IFormFile file,
+        [FromForm] IFormFile file,
         CancellationToken ct = default)
     {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
         var fileValidationError = FileUploadValidation.ValidateXlsx(file);
         if (fileValidationError is not null)
             return BadRequest(new { error = fileValidationError });
 
         using var stream = file.OpenReadStream();
-        var result = await _excelService.PreviewImportAsync(stream, termId, facultyId, ct);
+        var result = await _excelService.PreviewImportAsync(userId, stream, termId, facultyId, ct);
         return Ok(result);
     }
 
@@ -68,14 +72,41 @@ public class ScheduleExcelController : ControllerBase
         [FromBody] ImportApplyRequest request,
         CancellationToken ct = default)
     {
-        var result = await _excelService.ApplyImportAsync(request.TermId, request.RowNumbers, request.Preview, ct);
-        return Ok(result);
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        try
+        {
+            var result = await _excelService.ApplyImportAsync(
+                userId,
+                request.FacultyId,
+                request.TermId,
+                request.ImportSessionId,
+                request.RowNumbers,
+                ct);
+            return Ok(result);
+        }
+        catch (ScheduleImportSessionForbiddenException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
+        catch (ScheduleImportSessionInvalidException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    private bool TryGetUserId(out int userId)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(userIdClaim, out userId);
     }
 }
 
 public class ImportApplyRequest
 {
+    public int FacultyId { get; set; }
     public int TermId { get; set; }
+    public Guid ImportSessionId { get; set; }
     public List<int> RowNumbers { get; set; } = new();
-    public ImportPreviewDto Preview { get; set; } = new();
 }

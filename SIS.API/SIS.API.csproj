@@ -20,6 +20,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>sis-api-dev-72b3d6a6-4751-43c7-b8e4-956e3a8efeda</UserSecretsId>
   </PropertyGroup>
 
 </Project>

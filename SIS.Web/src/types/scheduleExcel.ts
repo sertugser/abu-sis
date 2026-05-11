@@ -8,14 +8,13 @@ export interface ImportRowDto {
   endTime: string;
   classroomName: string;
   capacity: number;
-  status: 'Valid' | 'Warning' | 'Error';
+  status: 'Valid' | 'Warning' | 'Error' | 'Skipped';
   message: string;
-  sectionId?: number;
-  classroomId?: number;
-  timeSlotId?: number;
 }
 
 export interface ImportPreviewDto {
+  importSessionId: string;
+  expiresAt: string;
   totalRows: number;
   rows: ImportRowDto[];
 }
