@@ -21,6 +21,17 @@ Bu sistem için güvenlik hedefi iki aşamalıdır:
 | Hata yönetimi | V16 | Üretimde genel problem response döndürülür; audit kaydında stack trace saklama kaldırıldı, trace id ile korelasyon bırakıldı. |
 | Dosya yükleme | V5 | Excel import için boyut sınırı, `.xlsx` uzantısı ve ZIP tabanlı imza kontrolü merkezi hale getirildi. |
 | URL güvenliği | V1 | Dış duyuru scraping çıktısındaki URL'ler sadece beklenen HTTPS host'una normalize edilir. |
+| Kod yazma guardrail'leri | V2, V3, V4, V5, V6, V8 | Yeni endpoint permission, public endpoint rate limit/gerekçe, dosya yükleme validasyonu, frontend XSS/token sink kontrolleri ve input validation baseline testleri eklendi. |
+| CI güvenlik kapıları | V13, V15 | ASVS guardrail testleri, dependency audit, Gitleaks secret scan ve PR checklist zorunlu hale getirildi. |
+
+## Kod Yazarken Zorunlu Güvenlik Kapıları
+
+- Yeni API endpoint: `RequirePermission` veya `RequireAnyPermission` olmadan merge edilmemeli.
+- Public endpoint: yalnızca gerçek gerekçe varsa `AllowAnonymous`; yanında `EnableRateLimiting` ve `PublicEndpointJustification` zorunlu.
+- Yeni input/DTO: `AbstractValidator<T>` veya eşdeğer validasyon eklenmeli; baseline dosyası yeni borç için kullanılmamalı.
+- File upload: `FileUploadValidation` ve açık `RequestSizeLimit` kullanılmalı.
+- Frontend: raw HTML sink (`dangerouslySetInnerHTML`, `innerHTML`) ve dağınık access-token storage yasak.
+- CI: `.github/workflows/security-checks.yml` ASVS guardrail testlerini, dependency audit'i ve PR checklist kapısını çalıştırır; `.github/workflows/secret-scan.yml` Gitleaks taraması yapar.
 
 ## Uçtan Uca Yol Haritası
 

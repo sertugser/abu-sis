@@ -162,17 +162,17 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   ],
   // Plan 10 Phase 2 — S2 kaldırıldı, H-DL Category toggle ile yönetiliyor.
   'S3': [
-    { key: 'S3MaxSectionsPerSlot', label: 'Slot Başına Maks. Şube', type: 'number', min: 1, max: 50 },
+    { key: 'S3MaxSectionsPerSlot', label: 'Slot Başına Maks. Şube', type: 'number', min: 1, max: 50 }, // gitleaks:allow
   ],
   'S4': [
-    { key: 'S4MinCoPairThreshold', label: 'Min. Birlikte Kayıt Eşiği', type: 'number', suffix: 'öğrenci', min: 1 },
+    { key: 'S4MinCoPairThreshold', label: 'Min. Birlikte Kayıt Eşiği', type: 'number', suffix: 'öğrenci', min: 1 }, // gitleaks:allow
   ],
   'S7': [
-    { key: 'S7MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 },
+    { key: 'S7MaxGapSlots', label: 'Maks. Boşluk Slot Sayısı', type: 'number', min: 0, max: 10 }, // gitleaks:allow
   ],
   'S8': [],
   'S12': [
-    { key: 'S12MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 },
+    { key: 'S12MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 }, // gitleaks:allow
   ],
   'DIST': [],
 };

@@ -5,31 +5,90 @@ on:
   pull_request:
 
 jobs:
-  dependency-scan:
+  asvs-guardrails:
+    name: ASVS Guardrails
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        if: hashFiles('requirements.txt') != ''
-        uses: actions/setup-python@v5
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          python-version: "3.x"
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
 
-      - name: Python Dependency Audit
-        if: hashFiles('requirements.txt') != ''
-        run: |
-          pip install pip-audit
-          pip-audit
+      - name: Restore
+        run: dotnet restore StudentInformationSystem.slnx
+
+      - name: Build
+        run: dotnet build StudentInformationSystem.slnx --no-restore --configuration Release
+
+      - name: Run ASVS guardrail tests
+        run: >
+          dotnet test SIS.Tests/SIS.Tests.csproj
+          --no-build
+          --configuration Release
+          --filter "FullyQualifiedName~SecurityGuardrailTests|FullyQualifiedName~StartupSecurityValidatorTests|FullyQualifiedName~FileUploadValidationTests"
+          --verbosity normal
+
+  asvs-checklist:
+    name: ASVS PR Checklist
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify checklist completion
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+            const requiredItems = [
+              "Every new API endpoint has `RequirePermission` or `RequireAnyPermission`.",
+              "Every intentionally public endpoint has `AllowAnonymous`, `EnableRateLimiting`, and `PublicEndpointJustification`.",
+              "Every new DTO/input path has validation, preferably `AbstractValidator<T>`.",
+              "Every file upload uses a central validation helper such as `FileUploadValidation`.",
+              "Frontend changes avoid raw HTML sinks and keep access-token storage centralized.",
+              "Security-sensitive changes include tests or an explicit risk note."
+            ];
+
+            const missing = requiredItems.filter(item => !body.includes(`- [x] ${item}`));
+            if (missing.length > 0) {
+              core.setFailed(`ASVS checklist is incomplete:\n${missing.map(item => `- ${item}`).join("\n")}`);
+            }
+
+  dependency-scan:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Restore .NET packages
+        run: dotnet restore StudentInformationSystem.slnx
+
+      - name: .NET vulnerable package audit
+        run: dotnet list StudentInformationSystem.slnx package --vulnerable --include-transitive
 
       - name: Setup Node
-        if: hashFiles('package.json') != ''
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: SIS.Web/package-lock.json
 
-      - name: Node Dependency Audit
-        if: hashFiles('package.json') != ''
+      - name: Install frontend dependencies
+        working-directory: SIS.Web
+        run: npm ci
+
+      - name: Node dependency audit
+        working-directory: SIS.Web
         run: npm audit --audit-level=high

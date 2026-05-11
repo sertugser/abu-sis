@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
+using SIS.API.Security;
 
 namespace SIS.API.Controllers;
 
@@ -28,6 +29,7 @@ public class AnnouncementController : ControllerBase
     [HttpGet]
     [AllowAnonymous]
     [EnableRateLimiting("PublicRead")]
+    [PublicEndpointJustification("University website announcements are public content; responses are cached and rate limited.")]
     public async Task<IActionResult> GetAnnouncements()
     {
         if (_cache.TryGetValue(CacheKey, out List<AnnouncementDto>? cached) && cached != null)
