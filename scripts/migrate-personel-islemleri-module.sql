@@ -42,6 +42,15 @@ SET "SortOrder" = "SortOrder" - 1,
 WHERE "ModuleId" = (SELECT "Id" FROM "MenuModules" WHERE "Slug" = 'yonetim-kullanici-islemleri')
   AND "SortOrder" >= 3;
 
+-- 4) Icon fix-up: bu scripti eski sürümle (Briefcase) çalıştırmış DB'leri düzelt.
+--    Bölüm İşlemleri zaten Briefcase kullanıyor, çakışmayı önlemek için IdCard.
+--    Yeni kurulumlarda zaten IdCard ile insert ediliyor (Adım 1) — bu UPDATE no-op.
+UPDATE "MenuModules"
+SET "Icon" = 'IdCard',
+    "UpdatedAt" = NOW()
+WHERE "Slug" = 'personel-islemleri'
+  AND "Icon" <> 'IdCard';
+
 COMMIT;
 
 -- Doğrulama sorguları (manuel çalıştır):
