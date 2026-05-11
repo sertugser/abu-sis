@@ -1,6 +1,6 @@
 # OWASP ASVS 5.0 Güvenlik Sertleştirme Planı
 
-Kaynak standart: `OWASP_Application_Security_Verification_Standard_5.0.0_en.csv`.
+Kaynak standart: [`OWASP_ASVS_5.0.csv`](OWASP_ASVS_5.0.csv).
 
 ## Hedef
 
