@@ -28,7 +28,6 @@ import AttendanceEntryPage from './pages/AttendanceEntryPage';
 import QrAttendancePage from './pages/QrAttendancePage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
-import ClassListsPage from './pages/ClassListsPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
@@ -55,7 +54,6 @@ import BulkInternshipAdvisorAssignmentPage from './pages/BulkInternshipAdvisorAs
 import BulkCurriculumAssignmentPage from './pages/BulkCurriculumAssignmentPage';
 import BulkCourseRegistrationPage from './pages/BulkCourseRegistrationPage';
 import CourseRegistrationEditPage from './pages/CourseRegistrationEditPage';
-import SectionTransferPage from './pages/SectionTransferPage';
 import CourseTransferPage from './pages/CourseTransferPage';
 import LetterGradeEditPage from './pages/LetterGradeEditPage';
 // â”€â”€ YÃ¶netim â†’ KullanÄ±cÄ± Ä°ÅŸlemleri (placeholder) â”€â”€
@@ -86,6 +84,7 @@ import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
 import EvaluationRequiredGate from './components/EvaluationRequiredGate';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
+import AnnouncementCategoryPage from './pages/AnnouncementCategoryPage';
 import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
 import SectioningPage from './pages/SectioningPage';
 import CourseQuotaPage from './pages/CourseQuotaPage';
@@ -181,9 +180,6 @@ export default function App() {
                     <Route path="degerlendirme-sonuclari" element={<EvaluationResultsPage />} />
                   </Route>
 
-                  <Route element={<RoleProtectedRoute permission="menu.sinif-listeleri.view" />}>
-                    <Route path="sinif-listeleri" element={<ClassListsPage />} />
-                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-programi-olusturma.view" />}>
                     <Route path="ders-programi-olusturma" element={<FacultyPlanningPage />} />
                   </Route>
@@ -259,9 +255,6 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
                     <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.subeler-arasi-ogrenci-transfer.view" />}>
-                    <Route path="subeler-arasi-ogrenci-transfer" element={<SectionTransferPage />} />
-                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.dersler-arasi-ogrenci-transfer.view" />}>
                     <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
                   </Route>
@@ -331,6 +324,9 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.duyuru-yonetimi.view" />}>
                     <Route path="duyuru-yonetimi" element={<AnnouncementManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.duyuru-kategorileri.view" />}>
+                    <Route path="duyuru-kategorileri" element={<AnnouncementCategoryPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute permission="menu.system-config.view" />}>

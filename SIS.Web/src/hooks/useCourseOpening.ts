@@ -15,13 +15,15 @@ import {
   deleteAllSectionsHard,
   reactivateSection,
   bulkAssignInstructor,
+  transferStudentsBetweenSections,
+  autoSplitCourse,
   getPreviousTermCourses,
   transferFromTerm,
   getTransferDefaults,
 } from '../api/courseOpening.api';
 import { QUERY_KEYS } from '../lib/constants';
 import { useToast } from '../components/ui/global-toast';
-import type { OpenCourseRequest, BulkOpenCoursesRequest, UpdateOpenedSectionRequest, BulkAssignInstructorRequest, TransferFromTermRequest } from '../types/courseOpening';
+import type { OpenCourseRequest, BulkOpenCoursesRequest, UpdateOpenedSectionRequest, BulkAssignInstructorRequest, TransferFromTermRequest, TransferStudentsToSectionRequest, AutoSplitCourseRequest } from '../types/courseOpening';
 
 /**
  * Backend'den dönen hata mesajını standart şekilde çıkarır.
@@ -338,6 +340,48 @@ export function useDeleteAllSectionsHard(departmentId: number, termId: number) {
     },
     onError: (error) => {
       showError('Ders kaldırılamadı', getApiErrorMessage(error));
+    },
+  });
+}
+
+export function useAutoSplitCourse(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+  return useMutation({
+    mutationFn: (request: AutoSplitCourseRequest) => autoSplitCourse(request),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.departmentClassLists(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+      const parts: string[] = [];
+      if (result.createdSectionCount > 0) parts.push(`${result.createdSectionCount} yeni şube`);
+      if (result.closedSectionCount > 0) parts.push(`${result.closedSectionCount} şube kapatıldı`);
+      if (result.redistributedRegistrationCount > 0) parts.push(`${result.redistributedRegistrationCount} öğrenci dağıtıldı`);
+      const detail = parts.length > 0 ? parts.join(', ') : `${result.finalSectionCount} şube`;
+      showSuccess('Şubelendirme tamamlandı', detail);
+    },
+    onError: (error) => {
+      showError('Şubelendirme başarısız', getApiErrorMessage(error));
+    },
+  });
+}
+
+export function useTransferStudentsBetweenSections(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+  return useMutation({
+    mutationFn: (request: TransferStudentsToSectionRequest) => transferStudentsBetweenSections(request),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.departmentClassLists(departmentId, termId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      const count = result?.transferredCount ?? 0;
+      showSuccess('Öğrenci taşıma tamamlandı', count === 1 ? '1 öğrenci taşındı.' : `${count} öğrenci taşındı.`);
+    },
+    onError: (error) => {
+      showError('Öğrenci taşıma başarısız', getApiErrorMessage(error));
     },
   });
 }

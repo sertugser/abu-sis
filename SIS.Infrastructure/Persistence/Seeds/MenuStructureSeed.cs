@@ -147,7 +147,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Derslik Doluluk Tablosu",        "/derslik-doluluk-tablosu",             "derslik-doluluk",                13, "menu.derslik-doluluk.view"),
             BuildItem(permissions, "Ders Veren Ã–ÄŸretim Ãœyeleri",     "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
             BuildItem(permissions, "Program OnayÄ±",                  "/program-onayi",                       "program-onayi",                  15, "menu.program-onayi.view"),
-            BuildItem(permissions, "SÄ±nÄ±f Listeleri",                "/sinif-listeleri",                     "sinif-listeleri",                16, "menu.sinif-listeleri.view"),
         };
 
         // â”€â”€â”€ ModÃ¼l 7: BÃ¶lÃ¼m Ä°ÅŸlemleri (hoca + admin iÃ§in) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -191,7 +190,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Toplu MÃ¼fredat Atama",           "/toplu-mufredat-atama",                "toplu-mufredat-atama",           6,  "menu.toplu-mufredat-atama.view"),
             BuildItem(permissions, "Toplu Ders KaydÄ±",               "/toplu-ders-kaydi",                    "toplu-ders-kaydi",               7,  "menu.toplu-ders-kaydi.view"),
             BuildItem(permissions, "Ders KayÄ±t DÃ¼zenleme",           "/ders-kayit-duzenleme",                "ders-kayit-duzenleme",           8,  "menu.ders-kayit-duzenleme.view"),
-            BuildItem(permissions, "Åubeler ArasÄ± Ã–ÄŸrenci Transfer", "/subeler-arasi-ogrenci-transfer",      "subeler-arasi-transfer",         9,  "menu.subeler-arasi-ogrenci-transfer.view"),
             BuildItem(permissions, "Dersler ArasÄ± Ã–ÄŸrenci Transfer", "/dersler-arasi-ogrenci-transfer",      "dersler-arasi-transfer",         10, "menu.dersler-arasi-ogrenci-transfer.view"),
             BuildItem(permissions, "Harf Notu DÃ¼zenleme",            "/harf-notu-duzenleme",                 "harf-notu-duzenleme",            11, "menu.harf-notu-duzenleme.view"),
         };
@@ -246,6 +244,7 @@ public static class MenuStructureSeed
         {
             BuildItem(permissions, "Duyurular",                      "/duyurular",                           "duyurular-admin",                1, "menu.duyurular-admin.view"),
             BuildItem(permissions, "Duyuru YÃ¶netimi",                "/duyuru-yonetimi",                     "duyuru-yonetimi",                2, "menu.duyuru-yonetimi.view"),
+            BuildItem(permissions, "Duyuru Kategorileri",            "/duyuru-kategorileri",                 "duyuru-kategorileri",            3, "menu.duyuru-kategorileri.view"),
         };
 
         // â”€â”€â”€ ModÃ¼l 12: HesabÄ±m (Patch 2C: SADECE Student) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

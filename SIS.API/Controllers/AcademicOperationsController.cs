@@ -25,7 +25,6 @@ public class AcademicOperationsController : ControllerBase
         "menu.ana-sayfa.view",
         "menu.derslerim.view",
         "menu.akilli-planlama.view",
-        "menu.sinif-listeleri.view",
         "menu.ders-programi-olusturma.view",
         "menu.ders-acma-islemleri.view",
         "menu.ogretim-elemani-atama.view",
@@ -67,7 +66,9 @@ public class AcademicOperationsController : ControllerBase
     }
 
     [HttpGet("class-lists")]
-    [RequirePermission("menu.sinif-listeleri.view")]
+    [RequireAnyPermission(
+        "menu.subelendirme-islemleri.view",
+        "menu.ana-sayfa.view")]
     public async Task<IActionResult> GetDepartmentClassLists([FromQuery] int departmentId, [FromQuery] int? termId, [FromQuery] string? search, CancellationToken cancellationToken)
     {
         if (departmentId <= 0)

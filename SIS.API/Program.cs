@@ -29,6 +29,9 @@ using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Application.CourseEvaluation.Services;
+using SIS.Application.Announcement.Attachments;
+using SIS.Application.Announcement.Configuration;
+using SIS.Application.Announcement.Security;
 using SIS.Application.Announcement.Services;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
@@ -267,6 +270,13 @@ builder.Services.AddScoped<IMenuService, MenuService>();
 // Course Evaluation + Internal Announcements
 builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();
 builder.Services.AddScoped<IInternalAnnouncementService, InternalAnnouncementService>();
+builder.Services.AddScoped<IAnnouncementCategoryService, AnnouncementCategoryService>();
+builder.Services.AddScoped<IAnnouncementAttachmentService, AnnouncementAttachmentService>();
+builder.Services.AddScoped<IAnnouncementSettingsProvider, AnnouncementSettingsProvider>();
+builder.Services.AddSingleton<IAnnouncementHtmlSanitizer, AnnouncementHtmlSanitizer>();
+builder.Services.AddSingleton<IAnnouncementAttachmentStorage, FileSystemAnnouncementAttachmentStorage>();
+builder.Services.Configure<AttachmentStorageOptions>(
+    builder.Configuration.GetSection(AttachmentStorageOptions.SectionName));
 
 // Time Provider
 builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();

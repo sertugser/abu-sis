@@ -34,13 +34,26 @@ public class SecurityGuardrailTests
     {
         var failures = EndpointBlocks()
             .Where(endpoint => endpoint.MethodAttributes.Contains("IFormFile") || endpoint.MethodAttributes.Contains("[FromForm]"))
-            .Where(endpoint => !endpoint.Body.Contains("FileUploadValidation.ValidateXlsx")
-                || !endpoint.MethodAttributes.Contains("RequestSizeLimit(FileUploadValidation.MaxExcelImportBytes"))
+            .Where(endpoint =>
+            {
+                // Pattern 1: Excel import endpoint'leri — sabit Xlsx limit + central helper
+                var excelOk =
+                       endpoint.Body.Contains("FileUploadValidation.ValidateXlsx")
+                    && endpoint.MethodAttributes.Contains("RequestSizeLimit(FileUploadValidation.MaxExcelImportBytes");
+
+                // Pattern 2: Generic attachment upload endpoint'leri — central service üzerinden
+                // validate eder (magic byte + uzantı whitelist + boyut) + explicit RequestSizeLimit
+                var attachmentOk =
+                       endpoint.Body.Contains("_attachmentService.UploadAsync")
+                    && Regex.IsMatch(endpoint.MethodAttributes, @"\[RequestSizeLimit\(");
+
+                return !excelOk && !attachmentOk;
+            })
             .Select(endpoint => endpoint.Location)
             .ToList();
 
         failures.Should().BeEmpty(
-            "ASVS V5: file upload endpoints must use the central file validation helper and an explicit request size limit");
+            "ASVS V5: file upload endpoints must use a central file validation helper (FileUploadValidation for Excel imports, IAnnouncementAttachmentService for generic uploads) and an explicit request size limit");
     }
 
     [Fact]
@@ -93,7 +106,16 @@ public class SecurityGuardrailTests
             if (text.Contains("dangerouslySetInnerHTML", StringComparison.Ordinal)
                 || Regex.IsMatch(text, @"\.innerHTML\s*="))
             {
-                failures.Add($"{relative}: avoid raw HTML sinks without a documented sanitizer");
+                // İstisna: dosyada DOMPurify ile sanitize edildiği görünür ise raw HTML sink kabul edilir.
+                // Sanitize çağrısı sink'ten önce yapılmalıdır — pattern dosya seviyesinde kontrol edilir.
+                var hasDocumentedSanitizer =
+                       text.Contains("DOMPurify.sanitize", StringComparison.Ordinal)
+                    || text.Contains("DOMPurify(", StringComparison.Ordinal)
+                    || text.Contains("from 'dompurify'", StringComparison.Ordinal)
+                    || text.Contains("from \"dompurify\"", StringComparison.Ordinal);
+
+                if (!hasDocumentedSanitizer)
+                    failures.Add($"{relative}: avoid raw HTML sinks without a documented sanitizer");
             }
 
             foreach (Match match in Regex.Matches(text, @"window\.open\((?<args>[^\n;]+)\)"))

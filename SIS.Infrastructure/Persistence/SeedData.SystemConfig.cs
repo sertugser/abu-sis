@@ -82,6 +82,21 @@ public static partial class SeedData
             new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "H5 müfredat çakışma kontrolü modu. 'cohort' önerilen — section'ların alternatif olduğunu bilir." },
 
             new() { Key = "SoftConstraint.S20.PenaltyPerPair", Value = "5.0", Category = "Soft", DataType = "decimal", Description = "S20: Komşu yıl ders çiftinde modulo eşi çakışırsa pair başına eklenen ceza puanı." },
+
+            // ── Akıllı Derslik Atama Önerisi (ClassroomSuggestionService) ─────
+            new() { Key = "Classroom.AmphiThreshold", Value = "100", Category = "Suggestion", DataType = "int", Description = "Bir dersi amfi gerektiren öğrenci eşiği. Tahmini talep bu değerin üzerindeyse ders amfide verilmeli sayılır." },
+            new() { Key = "Suggestion.ElectiveDemandRatio", Value = "0.35", Category = "Suggestion", DataType = "decimal", Description = "Seçmeli dersleri öğrencilerin kaç katı talep eder (0-1 arası). 0.35 = %35'i alır varsayımı." },
+            new() { Key = "Suggestion.HistoricalWeight", Value = "0.6", Category = "Suggestion", DataType = "decimal", Description = "Tarihsel veri ile tahmin harmanlamasında tarihsel veriye verilen ağırlık (0-1). 0.6 = tarihsel %60, tahmin %40." },
+            new() { Key = "Suggestion.HistoricalAnomalyCap", Value = "2.0", Category = "Suggestion", DataType = "decimal", Description = "Anomali koruması: tarihsel kullanım, tahminin bu katından fazlasını geçemez. 2.0 = max tahminin 2 katı." },
+            new() { Key = "Suggestion.DemandWeight.Student", Value = "1.0", Category = "Suggestion", DataType = "decimal", Description = "Fakülte talep puanında öğrenci sayısı katsayısı." },
+            new() { Key = "Suggestion.DemandWeight.Curriculum", Value = "3.0", Category = "Suggestion", DataType = "decimal", Description = "Fakülte talep puanında müfredat dersi sayısı katsayısı." },
+            new() { Key = "Suggestion.DemandWeight.Lab", Value = "2.0", Category = "Suggestion", DataType = "decimal", Description = "Fakülte talep puanında laboratuvar dersi sayısı katsayısı." },
+
+            // ── İyileştirilmiş Greedy parametreleri (faz arası feedback + fairness) ──
+            new() { Key = "Suggestion.MinFairnessGuarantee", Value = "1", Category = "Suggestion", DataType = "int", Description = "Her aktif fakülteye normal sınıf fazında garantilenen minimum derslik sayısı (kıt kaynak adaleti). 0 = garanti yok." },
+            new() { Key = "Suggestion.SoftThresholdBandPercent", Value = "10", Category = "Suggestion", DataType = "decimal", Description = "Amfi eşiğinin etrafındaki yumuşak bant (±%). Bu bandtaki dersler 'soft-amphi' olarak işaretlenir; tahminde gri bölgeyi gösterir." },
+            new() { Key = "Suggestion.PhaseFeedbackEnabled", Value = "true", Category = "Suggestion", DataType = "bool", Description = "AÇIK: Amfi/lab dağıtımı sonrası fakültenin tatmin edilmiş ihtiyacı DemandScore'dan düşülür, normal sınıf payı buna göre yeniden hesaplanır." },
+            new() { Key = "Suggestion.PhaseFeedbackWeight", Value = "0.5", Category = "Suggestion", DataType = "decimal", Description = "Faz arası feedback'in DemandScore'a etki oranı (0-1). 1.0 = tam düş, 0.0 = hiç düşme, 0.5 = yarısını düş (dengeli)." },
         };
 
         var existingKeys = await context.SystemConfigs

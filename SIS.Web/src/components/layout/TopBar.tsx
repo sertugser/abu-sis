@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CircleDot } from 'lucide-react';
 import RoleSwitcher from './RoleSwitcher';
+import NotificationBell from '../notifications/NotificationBell';
 
 import { flattenModuleItems } from './SidebarModules';
 import { useMenu } from '../../hooks/useMenu';
@@ -81,6 +82,8 @@ export default function TopBar() {
       </div>
 
       <div className="flex-1" />
+
+      <NotificationBell />
 
       <RoleSwitcher />
 
