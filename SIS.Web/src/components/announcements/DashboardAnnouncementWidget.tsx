@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { Check, Pin, Megaphone, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -10,8 +11,10 @@ import {
   useAnnouncementDetail,
   useMarkAnnouncementAsRead,
 } from '../../hooks/useAnnouncements';
+import { useAnnouncementCategories } from '../../hooks/useAnnouncementCategories';
 import { getAudienceBadgeLabel } from '../../types/announcements';
 import RichTextViewer from './RichTextViewer';
+import AttachmentList from './AttachmentList';
 import { ROUTES } from '../../lib/constants';
 import {
   Dialog,
@@ -21,19 +24,52 @@ import {
 } from '@/components/ui/dialog';
 import { formatDate } from '../../lib/utils';
 
+type CategoryFilter = 'all' | 'none' | number;
+
 interface DashboardAnnouncementWidgetProps {
   max?: number;
 }
 
 export default function DashboardAnnouncementWidget({ max = 5 }: DashboardAnnouncementWidgetProps) {
+  // Sekme filtresi için tüm aktif duyuruları çekiyoruz; max hala student top-count'a etki ediyor
   const { data, isLoading } = useActiveAnnouncements(max);
+  const { data: categories = [] } = useAnnouncementCategories();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<CategoryFilter>('all');
+
+  const all = useMemo(() => data ?? [], [data]);
+
+  // Yalnızca veride bulunan kategorileri sekme olarak göster (boş sekme kalabalık yapmasın)
+  const visibleCategoryIds = useMemo(() => {
+    const ids = new Set<number>();
+    all.forEach((a) => a.category && ids.add(a.category.id));
+    return ids;
+  }, [all]);
+
+  const filtered = useMemo(() => {
+    if (activeTab === 'all') return all;
+    if (activeTab === 'none') return all.filter((a) => a.category === null);
+    return all.filter((a) => a.category?.id === activeTab);
+  }, [all, activeTab]);
+
+  // Kategori sayaçları (sekme rozeti için)
+  const counts = useMemo(() => {
+    const map = new Map<CategoryFilter, number>();
+    map.set('all', all.length);
+    map.set('none', all.filter((a) => a.category === null).length);
+    for (const cat of categories) {
+      const c = all.filter((a) => a.category?.id === cat.id).length;
+      if (c > 0) map.set(cat.id, c);
+    }
+    return map;
+  }, [all, categories]);
 
   if (isLoading) {
     return <Skeleton className="h-48 rounded-xl" />;
   }
 
-  const items = data ?? [];
+  const items = filtered;
+  const visibleCategories = categories.filter((c) => visibleCategoryIds.has(c.id));
 
   return (
     <Card>
@@ -51,6 +87,35 @@ export default function DashboardAnnouncementWidget({ max = 5 }: DashboardAnnoun
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
+
+        {/* Kategori sekmeleri — yalnızca birden fazla kategori varsa göster */}
+        {visibleCategories.length > 0 && (
+          <Tabs
+            value={String(activeTab)}
+            onValueChange={(v) => setActiveTab(v === 'all' || v === 'none' ? v : Number(v))}
+            className="mb-3"
+          >
+            <TabsList className="h-8 flex-wrap">
+              <TabsTrigger value="all" className="text-xs px-2.5">
+                Tümü ({counts.get('all') ?? 0})
+              </TabsTrigger>
+              {visibleCategories.map((cat) => (
+                <TabsTrigger key={cat.id} value={String(cat.id)} className="text-xs px-2.5">
+                  <span
+                    className="h-1.5 w-1.5 rounded-full mr-1.5"
+                    style={{ backgroundColor: cat.colorHex }}
+                  />
+                  {cat.name} ({counts.get(cat.id) ?? 0})
+                </TabsTrigger>
+              ))}
+              {(counts.get('none') ?? 0) > 0 && (
+                <TabsTrigger value="none" className="text-xs px-2.5">
+                  Diğer ({counts.get('none')})
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </Tabs>
+        )}
 
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">Duyuru bulunmuyor.</p>
@@ -137,6 +202,9 @@ function AnnouncementViewDialog({ id, onClose }: { id: number | null; onClose: (
               )}
             </div>
             <RichTextViewer content={data.content} format={data.contentFormat} className="text-sm leading-relaxed" />
+            {data.attachments.length > 0 && (
+              <AttachmentList announcementId={data.id} attachments={data.attachments} />
+            )}
           </div>
         )}
       </DialogContent>

@@ -72,6 +72,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<InternalAnnouncement> InternalAnnouncements => Set<InternalAnnouncement>();
     public DbSet<AnnouncementRead> AnnouncementReads => Set<AnnouncementRead>();
     public DbSet<AnnouncementCategory> AnnouncementCategories => Set<AnnouncementCategory>();
+    public DbSet<AnnouncementAttachment> AnnouncementAttachments => Set<AnnouncementAttachment>();
     public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
     public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
     public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
@@ -1151,6 +1152,22 @@ builder.Entity<GradingCriteria>(e =>
             e.Property(c => c.IconName).HasMaxLength(50);
             e.HasIndex(c => c.Name).IsUnique();
             e.HasIndex(c => c.SortOrder);
+        });
+
+        // ── AnnouncementAttachment ───────────────────────────────
+        builder.Entity<AnnouncementAttachment>(e =>
+        {
+            e.Property(a => a.FileName).HasMaxLength(260).IsRequired();
+            e.Property(a => a.StorageFileName).HasMaxLength(300).IsRequired();
+            e.Property(a => a.MimeType).HasMaxLength(150).IsRequired();
+            e.Property(a => a.UploadedBy).HasMaxLength(100).IsRequired();
+
+            e.HasOne(a => a.Announcement)
+             .WithMany(p => p.Attachments)
+             .HasForeignKey(a => a.AnnouncementId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(a => a.AnnouncementId);
         });
 
         // ── AnnouncementRead (composite PK: AnnouncementId + UserId) ──────

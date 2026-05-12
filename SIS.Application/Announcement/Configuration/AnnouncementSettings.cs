@@ -12,4 +12,7 @@ public sealed record AnnouncementSettings(
     bool AllowImagesInContent,
     bool AllowTablesInContent,
     int StudentYearFilterMin,
-    int StudentYearFilterMax);
+    int StudentYearFilterMax,
+    bool AttachmentsEnabled,
+    int AttachmentMaxSizeMB,
+    int AttachmentMaxCount);

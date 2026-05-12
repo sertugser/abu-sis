@@ -16,17 +16,20 @@ namespace SIS.API.Controllers;
 public class InternalAnnouncementController : ControllerBase
 {
     private readonly IInternalAnnouncementService _service;
+    private readonly IAnnouncementAttachmentService _attachmentService;
     private readonly AppDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public InternalAnnouncementController(
         IInternalAnnouncementService service,
+        IAnnouncementAttachmentService attachmentService,
         AppDbContext context,
         UserManager<ApplicationUser> userManager)
     {
-        _service     = service;
-        _context     = context;
-        _userManager = userManager;
+        _service           = service;
+        _attachmentService = attachmentService;
+        _context           = context;
+        _userManager       = userManager;
     }
 
     // ── Duyuru okuma (tüm roller) ─────────────────────────────���───────────────
@@ -91,6 +94,176 @@ public class InternalAnnouncementController : ControllerBase
         var (roles, deptId, facId, sectionIds, advisorUid, studentYear) = await ResolveUserScopeAsync(userIdClaim, ct);
         var count = await _service.GetUnreadCountAsync(userIdClaim, roles, deptId, facId, sectionIds, advisorUid, studentYear, ct);
         return Ok(new { unreadCount = count });
+    }
+
+    // ── İstatistik (Madde 9) ────────────────────────────────────────────────
+
+    [HttpGet("{id:int}/stats")]
+    [RequirePermission("menu.duyuru-yonetimi.view")]
+    public async Task<IActionResult> GetStats(int id, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null) return Unauthorized();
+
+        // Yetkilendirme: yönetici veya duyurunun yazarı
+        var isManager = User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
+        if (!isManager)
+        {
+            var creator = await _context.InternalAnnouncements
+                .AsNoTracking()
+                .Where(a => a.Id == id)
+                .Select(a => a.CreatedBy)
+                .FirstOrDefaultAsync(ct);
+            if (creator is null) return NotFound(new { error = "Duyuru bulunamadı." });
+            if (creator != userIdClaim) return Forbid();
+        }
+
+        var stats = await _service.GetStatsAsync(id, maxReaders: 20, ct);
+        if (stats is null) return NotFound(new { error = "Duyuru bulunamadı." });
+        return Ok(stats);
+    }
+
+    // ── Pop-up duyurular (Madde 6) ──────────────────────────────────────────
+
+    [HttpGet("popup-pending")]
+    [RequirePermission("menu.duyurular.view")]
+    public async Task<IActionResult> GetPendingPopups(CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null) return Unauthorized();
+
+        var (roles, deptId, facId, sectionIds, advisorUid, studentYear) =
+            await ResolveUserScopeAsync(userIdClaim, ct);
+
+        var items = await _service.GetPendingPopupsAsync(
+            userIdClaim, roles, deptId, facId, sectionIds, advisorUid, studentYear, ct);
+        return Ok(items);
+    }
+
+    [HttpPost("{id:int}/acknowledge")]
+    [RequirePermission("menu.duyurular.view")]
+    public async Task<IActionResult> Acknowledge(int id, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var uid)) return Unauthorized();
+
+        var acknowledged = await _service.AcknowledgeAsync(id, uid, ct);
+        return Ok(new { acknowledged });
+    }
+
+    // ── Attachments (Madde 4) ────────────────────────────────────────────────
+
+    [HttpPost("{id:int}/attachments")]
+    [RequirePermission("menu.duyuru-yonetimi.edit")]
+    [RequestSizeLimit(105 * 1024 * 1024)] // settings max 100 MB + payload overhead
+    public async Task<IActionResult> UploadAttachment(int id, IFormFile? file, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null) return Unauthorized();
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Dosya gönderilmedi veya boş." });
+
+        // Sahiplik kontrolü: kendi duyurusu mu, yoksa admin override mı?
+        var isAdminOverride = User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
+        var announcement = await _context.InternalAnnouncements
+            .AsNoTracking()
+            .Where(a => a.Id == id)
+            .Select(a => new { a.CreatedBy })
+            .FirstOrDefaultAsync(ct);
+        if (announcement is null)
+            return NotFound(new { error = "Duyuru bulunamadı." });
+        if (!isAdminOverride && announcement.CreatedBy != userIdClaim)
+            return Forbid();
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await _attachmentService.UploadAsync(
+                id, file.FileName, stream, file.Length, file.ContentType, userIdClaim, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id:int}/attachments/{attachmentId:int}/download")]
+    [RequireAnyPermission("menu.duyurular.view", "menu.duyurular-admin.view", "menu.duyuru-yonetimi.view")]
+    public async Task<IActionResult> DownloadAttachment(int id, int attachmentId, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null) return Unauthorized();
+
+        // Ek doğru duyuruya mı ait?
+        var parentId = await _attachmentService.GetParentAnnouncementIdAsync(attachmentId, ct);
+        if (parentId is null || parentId.Value != id)
+            return NotFound(new { error = "Ek bulunamadı." });
+
+        // Yetki: yönetici / duyurunun yazarı / audience'a dahil bir kullanıcı
+        var isManager = User.IsInRole("SystemAdministrator")
+                     || User.IsInRole("AdministrativeStaff");
+
+        bool authorized = isManager;
+        if (!authorized)
+        {
+            // Duyurunun yazarı kendi ekini her zaman indirebilir
+            var creatorId = await _context.InternalAnnouncements
+                .AsNoTracking()
+                .Where(a => a.Id == id)
+                .Select(a => a.CreatedBy)
+                .FirstOrDefaultAsync(ct);
+            if (creatorId == userIdClaim)
+            {
+                authorized = true;
+            }
+            else
+            {
+                var (roles, deptId, facId, sectionIds, advisorUid, studentYear) =
+                    await ResolveUserScopeAsync(userIdClaim, ct);
+                authorized = await _service.CanUserSeeAsync(
+                    id, userIdClaim, roles, deptId, facId, sectionIds, advisorUid, studentYear, ct);
+            }
+        }
+
+        if (!authorized) return Forbid();
+
+        var download = await _attachmentService.OpenForDownloadAsync(attachmentId, ct);
+        if (download is null)
+            return NotFound(new { error = "Dosya sunucudan kaldırılmış." });
+
+        // Content-Disposition: orijinal ad ile, RFC 5987 uyumlu UTF-8 encode
+        var encodedName = Uri.EscapeDataString(download.FileName);
+        Response.Headers.Append(
+            "Content-Disposition",
+            $"attachment; filename=\"{download.FileName}\"; filename*=UTF-8''{encodedName}");
+
+        return File(download.Content, download.MimeType, enableRangeProcessing: true);
+    }
+
+    [HttpDelete("{id:int}/attachments/{attachmentId:int}")]
+    [RequirePermission("menu.duyuru-yonetimi.edit")]
+    public async Task<IActionResult> DeleteAttachment(int id, int attachmentId, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null) return Unauthorized();
+
+        var parentId = await _attachmentService.GetParentAnnouncementIdAsync(attachmentId, ct);
+        if (parentId is null || parentId.Value != id)
+            return NotFound(new { error = "Ek bulunamadı." });
+
+        var isAdminOverride = User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff");
+
+        try
+        {
+            var success = await _attachmentService.DeleteAsync(attachmentId, userIdClaim, isAdminOverride, ct);
+            return success ? NoContent() : NotFound(new { error = "Ek bulunamadı." });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Pin, Calendar } from 'lucide-react';
+import { Pin, Calendar, Paperclip } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate } from '../../lib/utils';
 import { getAudienceBadgeLabel } from '../../types/announcements';
@@ -78,6 +78,12 @@ export default function AnnouncementCard({ announcement, onClick, compact }: Ann
             {formatDate(announcement.startsAt)}
           </span>
           <span>· {announcement.createdByName}</span>
+          {announcement.attachmentCount > 0 && (
+            <span className="flex items-center gap-1" title={`${announcement.attachmentCount} dosya eki`}>
+              <Paperclip className="h-3 w-3" />
+              {announcement.attachmentCount}
+            </span>
+          )}
           {expired && <Badge variant="secondary" className="text-[10px]">Süresi Doldu</Badge>}
         </div>
       </CardContent>

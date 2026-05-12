@@ -41,7 +41,24 @@ public class InternalAnnouncement
     public int? TargetSectionId { get; set; }
     public CourseSection? TargetSection { get; set; }
 
+    /// <summary>Bu duyuruya iliştirilmiş dosya ekleri (Madde 4).</summary>
+    public ICollection<AnnouncementAttachment> Attachments { get; set; } = new List<AnnouncementAttachment>();
+
     public bool IsPinned { get; set; }
+
+    /// <summary>
+    /// Login sonrası kullanıcının ekranına blocking dialog olarak çıkar (Madde 6).
+    /// Kritik duyurular (final programı, kayıt yenileme, vb.) için.
+    /// </summary>
+    public bool IsPopup { get; set; }
+
+    /// <summary>
+    /// <c>true</c> ise kullanıcı pop-up'ı kapatamaz — açıkça "Okudum, anladım" butonuna basmalı.
+    /// <see cref="AnnouncementRead.AcknowledgedAt"/> set edilir; hukuki sorumluluk için kullanılır.
+    /// Yalnızca <see cref="IsPopup"/> = true iken anlamlıdır.
+    /// </summary>
+    public bool RequiresAcknowledgement { get; set; }
+
     public DateTime StartsAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public string CreatedBy { get; set; } = string.Empty;

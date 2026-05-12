@@ -1,17 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  acknowledgeAnnouncement,
   createAnnouncement,
   deleteAnnouncement,
+  deleteAnnouncementAttachment,
   permanentDeleteAnnouncement,
   reactivateAnnouncement,
   getActiveAnnouncements,
   getAllAnnouncements,
   getAnnouncementById,
   getAnnouncementCreateContext,
+  getAnnouncementStats,
+  getPendingPopupAnnouncements,
   getUnreadAnnouncementCount,
   markAnnouncementAsRead,
   markAllAnnouncementsAsRead,
   updateAnnouncement,
+  uploadAnnouncementAttachment,
 } from '../api/announcements.api';
 import { QUERY_KEYS } from '../lib/constants';
 import type { CreateAnnouncementPayload, UpdateAnnouncementPayload } from '../types/announcements';
@@ -124,6 +129,67 @@ export function useMarkAllAnnouncementsAsRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => markAllAnnouncementsAsRead(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+    },
+  });
+}
+
+// ── Attachments ──────────────────────────────────────────────────────────────
+
+export function useUploadAnnouncementAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ announcementId, file, onProgress }: {
+      announcementId: number;
+      file: File;
+      onProgress?: (percent: number) => void;
+    }) => uploadAnnouncementAttachment(announcementId, file, onProgress),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+    },
+  });
+}
+
+// ── İstatistik ───────────────────────────────────────────────────────────────
+
+export function useAnnouncementStats(id: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ['announcements', 'stats', id ?? 0],
+    queryFn: () => getAnnouncementStats(id!),
+    enabled: enabled && id != null && id > 0,
+    staleTime: 30 * 1000,
+  });
+}
+
+// ── Pop-up duyurular ─────────────────────────────────────────────────────────
+
+export function usePendingPopupAnnouncements(enabled = true) {
+  return useQuery({
+    queryKey: ['announcements', 'popup-pending'],
+    queryFn: getPendingPopupAnnouncements,
+    enabled,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useAcknowledgeAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => acknowledgeAnnouncement(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+    },
+  });
+}
+
+export function useDeleteAnnouncementAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ announcementId, attachmentId }: {
+      announcementId: number;
+      attachmentId: number;
+    }) => deleteAnnouncementAttachment(announcementId, attachmentId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['announcements'] });
     },

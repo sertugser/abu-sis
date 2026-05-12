@@ -254,6 +254,39 @@
   .print-no-break { break-inside: avoid; page-break-inside: avoid; }
 }
 
+/* ── Duyuru — Hero gradient surface ── */
+.announcement-hero-surface {
+  background:
+    radial-gradient(circle at 15% 20%, oklch(0.55 0.12 250 / 0.10) 0%, transparent 35%),
+    radial-gradient(circle at 85% 80%, oklch(0.68 0.14 320 / 0.08) 0%, transparent 40%),
+    linear-gradient(135deg, oklch(0.98 0.006 250) 0%, oklch(0.96 0.012 248) 100%);
+  border: 1px solid oklch(0.92 0.005 250);
+}
+
+@keyframes announcement-bell-pulse {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  10%      { transform: scale(1.05) rotate(-8deg); }
+  20%      { transform: scale(1.05) rotate(8deg); }
+  30%      { transform: scale(1.05) rotate(-6deg); }
+  40%      { transform: scale(1.05) rotate(6deg); }
+  50%      { transform: scale(1) rotate(0deg); }
+}
+
+.animate-bell-ring {
+  animation: announcement-bell-pulse 2.6s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+@keyframes announcement-orb-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(8px, -6px) scale(1.06); }
+  66%      { transform: translate(-6px, 8px) scale(0.96); }
+}
+
+.animate-orb-drift {
+  animation: announcement-orb-drift 9s ease-in-out infinite;
+}
+
 /* ── Rich Text Content (Duyurular, vb.) ── */
 .rich-text-content {
   color: var(--color-foreground);

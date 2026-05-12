@@ -126,6 +126,33 @@ public static partial class SeedData
                 DataType = "int",
                 Description = "Sınıf bazlı duyuru hedeflemesinde seçilebilecek en büyük sınıf yılı"
             },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "AttachmentsEnabled",
+                Value = "true",
+                Category = "Announcements",
+                DataType = "bool",
+                Description = "Duyurulara dosya eklenebilir mi?"
+            },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "AttachmentMaxSizeMB",
+                Value = "20",
+                Category = "Announcements",
+                DataType = "int",
+                Description = "Bir dosya ekinin izin verilen maksimum boyutu (MB)"
+            },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "AttachmentMaxCount",
+                Value = "5",
+                Category = "Announcements",
+                DataType = "int",
+                Description = "Bir duyuruya iliştirilebilecek maksimum dosya sayısı"
+            },
         };
 
         var existingPairs = await context.WebModuleSettings

@@ -18,12 +18,15 @@ public record AnnouncementListDto(
     int? TargetStudentYear,
     AnnouncementCategorySummaryDto? Category,
     bool IsPinned,
+    bool IsPopup,
+    bool RequiresAcknowledgement,
     DateTime StartsAt,
     DateTime? ExpiresAt,
     string CreatedByName,
     DateTime CreatedAt,
     bool IsActive,
-    bool IsReadByMe);
+    bool IsReadByMe,
+    int AttachmentCount);
 
 public record AnnouncementDetailDto(
     int Id,
@@ -40,13 +43,16 @@ public record AnnouncementDetailDto(
     int? TargetStudentYear,
     AnnouncementCategorySummaryDto? Category,
     bool IsPinned,
+    bool IsPopup,
+    bool RequiresAcknowledgement,
     DateTime StartsAt,
     DateTime? ExpiresAt,
     string CreatedByName,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     bool IsActive,
-    bool IsReadByMe);
+    bool IsReadByMe,
+    IReadOnlyList<AnnouncementAttachmentSummaryDto> Attachments);
 
 public record CreateAnnouncementDto(
     string Title,
@@ -59,6 +65,8 @@ public record CreateAnnouncementDto(
     int? TargetStudentYear,
     int? CategoryId,
     bool IsPinned,
+    bool IsPopup,
+    bool RequiresAcknowledgement,
     DateTime? StartsAt,
     DateTime? ExpiresAt);
 
@@ -73,6 +81,8 @@ public record UpdateAnnouncementDto(
     int? TargetStudentYear,
     int? CategoryId,
     bool IsPinned,
+    bool IsPopup,
+    bool RequiresAcknowledgement,
     DateTime StartsAt,
     DateTime? ExpiresAt);
 

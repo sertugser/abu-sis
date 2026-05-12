@@ -54,6 +54,14 @@ export type AnnouncementContentFormat = 'plain' | 'html';
 
 // ── Announcement DTOs ─────────────────────────────────────────────────────────
 
+export interface AnnouncementAttachmentSummary {
+  id: number;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
 export interface AnnouncementList {
   id: number;
   title: string;
@@ -69,12 +77,15 @@ export interface AnnouncementList {
   targetStudentYear: number | null;
   category: AnnouncementCategorySummary | null;
   isPinned: boolean;
+  isPopup: boolean;
+  requiresAcknowledgement: boolean;
   startsAt: string;
   expiresAt: string | null;
   createdByName: string;
   createdAt: string;
   isActive: boolean;
   isReadByMe: boolean;
+  attachmentCount: number;
 }
 
 export interface AnnouncementDetail {
@@ -92,6 +103,8 @@ export interface AnnouncementDetail {
   targetStudentYear: number | null;
   category: AnnouncementCategorySummary | null;
   isPinned: boolean;
+  isPopup: boolean;
+  requiresAcknowledgement: boolean;
   startsAt: string;
   expiresAt: string | null;
   createdByName: string;
@@ -99,6 +112,7 @@ export interface AnnouncementDetail {
   updatedAt: string | null;
   isActive: boolean;
   isReadByMe: boolean;
+  attachments: AnnouncementAttachmentSummary[];
 }
 
 export interface CreateAnnouncementPayload {
@@ -112,6 +126,8 @@ export interface CreateAnnouncementPayload {
   targetStudentYear: number | null;
   categoryId: number | null;
   isPinned: boolean;
+  isPopup: boolean;
+  requiresAcknowledgement: boolean;
   startsAt: string | null;
   expiresAt: string | null;
 }
@@ -127,6 +143,8 @@ export interface UpdateAnnouncementPayload {
   targetStudentYear: number | null;
   categoryId: number | null;
   isPinned: boolean;
+  isPopup: boolean;
+  requiresAcknowledgement: boolean;
   startsAt: string;
   expiresAt: string | null;
 }
@@ -150,6 +168,9 @@ export interface AnnouncementSettings {
   allowTablesInContent: boolean;
   studentYearFilterMin: number;
   studentYearFilterMax: number;
+  attachmentsEnabled: boolean;
+  attachmentMaxSizeMB: number;
+  attachmentMaxCount: number;
 }
 
 // Sınıf filtresi destekleyen audience'lar (backend ile eşleşmeli)

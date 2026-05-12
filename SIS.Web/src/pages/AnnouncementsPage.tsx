@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -11,8 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Check, CheckCheck, Megaphone, Search } from 'lucide-react';
+import { Check, CheckCheck, Search, Sparkles } from 'lucide-react';
 import AnnouncementCard from '../components/announcements/AnnouncementCard';
+import AnnouncementsEmptyState from '../components/announcements/AnnouncementsEmptyState';
+import AttachmentList from '../components/announcements/AttachmentList';
+import CategoryPillBar, {
+  type CategoryFilterValue,
+} from '../components/announcements/CategoryPillBar';
 import RichTextViewer from '../components/announcements/RichTextViewer';
 import {
   useActiveAnnouncements,
@@ -29,13 +35,28 @@ export default function AnnouncementsPage() {
   const { data: categories = [] } = useAnnouncementCategories();
   const markAllReadMutation = useMarkAllAnnouncementsAsRead();
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<number | 'all' | 'none'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterValue>('all');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const unreadCount = useMemo(() => (data ?? []).filter((a) => !a.isReadByMe).length, [data]);
+  // Deep-link: ?openId=X ile bildirim dropdown'undan gelen duyuru otomatik açılır
+  useEffect(() => {
+    const openId = searchParams.get('openId');
+    if (openId) {
+      const id = Number(openId);
+      if (Number.isFinite(id) && id > 0) {
+        setSelectedId(id);
+      }
+      searchParams.delete('openId');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const all = useMemo(() => data ?? [], [data]);
+  const unreadCount = useMemo(() => all.filter((a) => !a.isReadByMe).length, [all]);
 
   const filtered = useMemo(() => {
-    let list = data ?? [];
+    let list = all;
 
     if (categoryFilter === 'none') {
       list = list.filter((a) => a.category === null);
@@ -48,90 +69,107 @@ export default function AnnouncementsPage() {
       list = list.filter(
         (a) =>
           a.title.toLowerCase().includes(needle) ||
-          a.contentPreview.toLowerCase().includes(needle)
+          a.contentPreview.toLowerCase().includes(needle),
       );
     }
 
     return list;
-  }, [data, search, categoryFilter]);
+  }, [all, search, categoryFilter]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="font-heading text-xl font-bold">Duyurular</h1>
-          <p className="text-sm text-muted-foreground">
-            {unreadCount > 0
-              ? `${unreadCount} okunmamış duyuru var.`
-              : 'Tüm duyurular okundu.'}
-          </p>
-        </div>
-        {unreadCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => markAllReadMutation.mutate()}
-            disabled={markAllReadMutation.isPending}
-          >
-            <CheckCheck className="h-4 w-4 mr-1.5" />
-            Tümünü Okundu İşaretle
-          </Button>
-        )}
-      </div>
+    <>
+      <Card className="overflow-hidden border-border/70 shadow-sm">
+        {/* Üst şerit: kategori pill'leri + arama + okundu durumu/aksiyon */}
+        <div className="border-b border-border/60 bg-gradient-to-r from-card via-card to-accent/20">
+          {/* Kategori sekmeleri */}
+          {all.length > 0 && (
+            <div className="px-5 pt-4 pb-3">
+              <CategoryPillBar
+                categories={categories}
+                items={all}
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+              />
+            </div>
+          )}
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative max-w-md flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Duyuru ara..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        {categories.length > 0 && (
-          <select
-            value={categoryFilter}
-            onChange={(e) => {
-              const v = e.target.value;
-              setCategoryFilter(v === 'all' || v === 'none' ? v : Number(v));
-            }}
-            className="bg-card border border-input rounded-md px-3 py-2 text-sm h-9"
-          >
-            <option value="all">Tüm Kategoriler</option>
-            <option value="none">Kategorisiz</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
+          {/* Arama + durum/aksiyon */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <div className="relative max-w-md flex-1 min-w-[200px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+              <Input
+                className="pl-9 h-9 rounded-lg bg-card border-border/70"
+                placeholder="Duyuru ara..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-      {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
-          ))}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 ? (
+                <>
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inset-0 animate-ping rounded-full bg-primary opacity-60" />
+                      <span className="relative h-2 w-2 rounded-full bg-primary" />
+                    </span>
+                    <span className="font-semibold text-primary tabular-nums">{unreadCount}</span>
+                    <span className="text-muted-foreground">okunmamış</span>
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => markAllReadMutation.mutate()}
+                    disabled={markAllReadMutation.isPending}
+                  >
+                    <CheckCheck className="h-4 w-4 mr-1.5" />
+                    Tümünü Okundu
+                  </Button>
+                </>
+              ) : all.length > 0 ? (
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                  Tüm duyurular okundu
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
-      ) : filtered.length === 0 ? (
-        <Alert>
-          <Megaphone className="h-4 w-4" />
-          <AlertDescription>
-            {search ? 'Arama sonucu bulunamadı.' : 'Aktif duyuru bulunmuyor.'}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((a) => (
-            <AnnouncementCard key={a.id} announcement={a} onClick={() => setSelectedId(a.id)} />
-          ))}
+
+        {/* İçerik */}
+        <div className="p-5">
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <AnnouncementsEmptyState
+              title={search ? 'Sonuç bulunamadı' : 'Aktif duyuru yok'}
+              description={
+                search
+                  ? `"${search}" için duyuru bulamadık. Farklı bir arama deneyin.`
+                  : 'Yeni duyurular yayınlandığında burada görünecek. Bildirim ziline göz atabilirsiniz.'
+              }
+              tone="primary"
+            />
+          ) : (
+            <div className="space-y-3 stagger-children">
+              {filtered.map((a) => (
+                <AnnouncementCard
+                  key={a.id}
+                  announcement={a}
+                  onClick={() => setSelectedId(a.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </Card>
 
       <AnnouncementDetailDialog id={selectedId} onClose={() => setSelectedId(null)} />
-    </div>
+    </>
   );
 }
 
@@ -139,8 +177,6 @@ function AnnouncementDetailDialog({ id, onClose }: { id: number | null; onClose:
   const { data, isLoading } = useAnnouncementDetail(id, id != null);
   const markReadMutation = useMarkAnnouncementAsRead();
 
-  // Detay yüklendiğinde duyuru henüz okunmamışsa otomatik olarak okundu işaretle.
-  // Hukuki sorumluluk için kullanıcının duyuruyu görüntülediği anı kayıt altına alır.
   useEffect(() => {
     if (data && !data.isReadByMe && !markReadMutation.isPending) {
       markReadMutation.mutate(data.id);
@@ -150,17 +186,40 @@ function AnnouncementDetailDialog({ id, onClose }: { id: number | null; onClose:
 
   return (
     <Dialog open={id != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isLoading ? 'Yükleniyor...' : data?.title}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-0">
+        {/* Renkli üst şerit */}
+        <div
+          className="h-1.5"
+          style={{
+            background: data?.category
+              ? `linear-gradient(90deg, ${data.category.colorHex}, ${data.category.colorHex}88)`
+              : 'linear-gradient(90deg, oklch(0.32 0.08 260), oklch(0.55 0.12 250))',
+          }}
+        />
+        <div className="px-6 pt-5 pb-2">
+          <DialogHeader>
+            <DialogTitle className="text-lg leading-tight">
+              {isLoading ? 'Yükleniyor...' : data?.title}
+            </DialogTitle>
+          </DialogHeader>
+        </div>
 
         {data && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-              <Badge variant="outline">
-                {getAudienceBadgeLabel(data)}
-              </Badge>
+          <div className="space-y-3 px-6 pb-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {data.category && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] border-0 font-medium"
+                  style={{
+                    backgroundColor: `${data.category.colorHex}1a`,
+                    color: data.category.colorHex,
+                  }}
+                >
+                  {data.category.name}
+                </Badge>
+              )}
+              <Badge variant="outline">{getAudienceBadgeLabel(data)}</Badge>
               <span>{formatDate(data.startsAt)}</span>
               <span>·</span>
               <span>{data.createdByName}</span>
@@ -171,12 +230,21 @@ function AnnouncementDetailDialog({ id, onClose }: { id: number | null; onClose:
                 </Badge>
               )}
             </div>
-            <RichTextViewer content={data.content} format={data.contentFormat} className="text-sm leading-relaxed" />
+            <RichTextViewer
+              content={data.content}
+              format={data.contentFormat}
+              className="text-sm leading-relaxed"
+            />
+            {data.attachments.length > 0 && (
+              <AttachmentList announcementId={data.id} attachments={data.attachments} />
+            )}
           </div>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Kapat</Button>
+        <DialogFooter className="px-6 py-4 border-t border-border/60 bg-muted/20">
+          <Button variant="outline" onClick={onClose}>
+            Kapat
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

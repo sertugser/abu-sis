@@ -326,6 +326,50 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("AdvisorCourseConstraints");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.AnnouncementAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AnnouncementId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageFileName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnnouncementId");
+
+                    b.ToTable("AnnouncementAttachments");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AnnouncementCategory", b =>
                 {
                     b.Property<int>("Id")
@@ -2668,6 +2712,12 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsPinned")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPopup")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequiresAcknowledgement")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("StartsAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3742,6 +3792,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
 
                     b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AnnouncementAttachment", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.InternalAnnouncement", "Announcement")
+                        .WithMany("Attachments")
+                        .HasForeignKey("AnnouncementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Announcement");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.AnnouncementRead", b =>
@@ -4924,6 +4985,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.Instructor", b =>
                 {
                     b.Navigation("Sections");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.InternalAnnouncement", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.RegistrationPlan", b =>

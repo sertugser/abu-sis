@@ -16,17 +16,20 @@ public class InternalAnnouncementService : IInternalAnnouncementService
     private readonly IWebModuleSettingsProvider _webSettings;
     private readonly IAnnouncementSettingsProvider _settingsProvider;
     private readonly IAnnouncementHtmlSanitizer _sanitizer;
+    private readonly IAnnouncementAttachmentService? _attachmentService;
 
     public InternalAnnouncementService(
         AppDbContext context,
         IAnnouncementSettingsProvider settingsProvider,
         IAnnouncementHtmlSanitizer sanitizer,
-        IWebModuleSettingsProvider? webSettings = null)
+        IWebModuleSettingsProvider? webSettings = null,
+        IAnnouncementAttachmentService? attachmentService = null)
     {
         _context = context;
         _settingsProvider = settingsProvider;
         _sanitizer = sanitizer;
         _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
+        _attachmentService = attachmentService;
     }
 
     // ── Active feed (kullanıcının görebileceği duyurular) ─────────────────────
@@ -42,7 +45,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         int? maxResults,
         CancellationToken ct = default)
     {
-        var scope = BuildScope(roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
+        var scope = BuildScope(userId, roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
 
         IQueryable<InternalAnnouncement> query = _context.InternalAnnouncements
             .AsNoTracking()
@@ -69,10 +72,14 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 
         var items = await query.ToListAsync(ct);
 
-        // Okundu/okunmadı durumunu tek sorguda batch fetch et (N+1 önlemi)
-        var readSet = await FetchReadSetAsync(userId, items.Select(a => a.Id), ct);
+        // Okundu durumu + attachment sayılarını tek sorguda batch fetch et (N+1 önlemi)
+        var ids = items.Select(a => a.Id).ToList();
+        var readSet         = await FetchReadSetAsync(userId, ids, ct);
+        var attachmentCounts = await FetchAttachmentCountsAsync(ids, ct);
 
-        return items.Select(a => MapToList(a, readSet.Contains(a.Id))).ToList();
+        return items
+            .Select(a => MapToList(a, readSet.Contains(a.Id), attachmentCounts.GetValueOrDefault(a.Id)))
+            .ToList();
     }
 
     // ── Management page feeds ─────────────────────────────────────────────────
@@ -85,6 +92,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             .Include(x => x.TargetFaculty)
             .Include(x => x.TargetSection).ThenInclude(s => s!.Course)
             .Include(x => x.Category)
+            .Include(x => x.Attachments)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
         if (a is null) return null;
@@ -112,7 +120,9 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             .OrderByDescending(a => a.IsPinned)
             .ThenByDescending(a => a.CreatedAt)
             .ToListAsync(ct);
-        return items.Select(a => MapToList(a, isReadByMe: false)).ToList();
+
+        var counts = await FetchAttachmentCountsAsync(items.Select(a => a.Id), ct);
+        return items.Select(a => MapToList(a, isReadByMe: false, counts.GetValueOrDefault(a.Id))).ToList();
     }
 
     public async Task<List<AnnouncementListDto>> GetMyCreatedAsync(string userId, CancellationToken ct = default)
@@ -127,7 +137,190 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             .OrderByDescending(a => a.IsPinned)
             .ThenByDescending(a => a.CreatedAt)
             .ToListAsync(ct);
-        return items.Select(a => MapToList(a, isReadByMe: false)).ToList();
+
+        var counts = await FetchAttachmentCountsAsync(items.Select(a => a.Id), ct);
+        return items.Select(a => MapToList(a, isReadByMe: false, counts.GetValueOrDefault(a.Id))).ToList();
+    }
+
+    public async Task<bool> CanUserSeeAsync(
+        int announcementId,
+        string userId,
+        IEnumerable<string> roles,
+        int? userDepartmentId,
+        int? userFacultyId,
+        IEnumerable<int> userEnrolledSectionIds,
+        string? advisorUserId,
+        int? userStudentYear,
+        CancellationToken ct = default)
+    {
+        var scope = BuildScope(userId, roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
+        var query = ApplyActiveDateFilter(_context.InternalAnnouncements.AsNoTracking(), DateTime.UtcNow);
+        query = ApplyVisibilityFilter(query, scope);
+        return await query.AnyAsync(a => a.Id == announcementId, ct);
+    }
+
+    // ── İstatistik (Madde 9) ──────────────────────────────────────────────────
+
+    public async Task<AnnouncementStatsDto?> GetStatsAsync(int announcementId, int maxReaders = 20, CancellationToken ct = default)
+    {
+        const int trendDays = 14;
+
+        var exists = await _context.InternalAnnouncements
+            .AsNoTracking()
+            .AnyAsync(a => a.Id == announcementId, ct);
+        if (!exists) return null;
+
+        var readsQuery = _context.AnnouncementReads
+            .AsNoTracking()
+            .Where(r => r.AnnouncementId == announcementId);
+
+        var now = DateTime.UtcNow;
+        var last24hCutoff = now.AddHours(-24);
+        var trendCutoff   = now.AddDays(-trendDays);
+
+        var readCount         = await readsQuery.CountAsync(ct);
+        var acknowledgedCount = await readsQuery.CountAsync(r => r.AcknowledgedAt != null, ct);
+        var readsInLast24h    = await readsQuery.CountAsync(r => r.ReadAt >= last24hCutoff, ct);
+        var attachmentCount   = await _context.AnnouncementAttachments
+            .CountAsync(a => a.AnnouncementId == announcementId, ct);
+
+        DateTime? firstReadAt = null;
+        DateTime? lastReadAt  = null;
+        if (readCount > 0)
+        {
+            firstReadAt = await readsQuery.MinAsync(r => (DateTime?)r.ReadAt, ct);
+            lastReadAt  = await readsQuery.MaxAsync(r => (DateTime?)r.ReadAt, ct);
+        }
+
+        // ── Günlük okuma trendi: son 14 gün, eksik günler 0 ile dolduruluyor ──
+        var groupedRaw = await readsQuery
+            .Where(r => r.ReadAt >= trendCutoff)
+            .GroupBy(r => r.ReadAt.Date)
+            .Select(g => new { Day = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        var groupedMap = groupedRaw.ToDictionary(x => DateOnly.FromDateTime(x.Day), x => x.Count);
+
+        var today      = DateOnly.FromDateTime(now);
+        var dailyReads = Enumerable.Range(0, trendDays)
+            .Select(offset =>
+            {
+                var day   = today.AddDays(-(trendDays - 1 - offset));
+                var count = groupedMap.GetValueOrDefault(day);
+                return new AnnouncementReadsByDayDto(day, count);
+            })
+            .ToList();
+
+        var recentReaders = await readsQuery
+            .OrderByDescending(r => r.ReadAt)
+            .Take(maxReaders)
+            .Join(
+                _context.Users.AsNoTracking(),
+                read => read.UserId,
+                user => user.Id,
+                (read, user) => new AnnouncementReaderDto(
+                    read.UserId,
+                    BuildDisplayName(user.FirstName, user.LastName, user.UserName),
+                    user.Email,
+                    read.ReadAt,
+                    read.AcknowledgedAt))
+            .ToListAsync(ct);
+
+        return new AnnouncementStatsDto(
+            announcementId, readCount, acknowledgedCount, attachmentCount,
+            firstReadAt, lastReadAt, recentReaders, dailyReads, readsInLast24h);
+    }
+
+    private static string BuildDisplayName(string? firstName, string? lastName, string? userName)
+    {
+        var name = $"{firstName} {lastName}".Trim();
+        if (!string.IsNullOrWhiteSpace(name)) return name;
+        return userName ?? "(bilinmeyen)";
+    }
+
+    // ── Pop-up duyurular (Madde 6) ────────────────────────────────────────────
+
+    public async Task<List<AnnouncementDetailDto>> GetPendingPopupsAsync(
+        string userId,
+        IEnumerable<string> roles,
+        int? userDepartmentId,
+        int? userFacultyId,
+        IEnumerable<int> userEnrolledSectionIds,
+        string? advisorUserId,
+        int? userStudentYear,
+        CancellationToken ct = default)
+    {
+        if (!int.TryParse(userId, out var uid))
+            return new List<AnnouncementDetailDto>();
+
+        var scope = BuildScope(userId, roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
+
+        IQueryable<InternalAnnouncement> query = _context.InternalAnnouncements
+            .AsNoTracking()
+            .Include(a => a.TargetDepartment)
+            .Include(a => a.TargetFaculty)
+            .Include(a => a.TargetSection).ThenInclude(s => s!.Course)
+            .Include(a => a.Category)
+            .Include(a => a.Attachments);
+
+        query = ApplyActiveDateFilter(query, DateTime.UtcNow);
+        query = ApplyVisibilityFilter(query, scope);
+
+        // Sadece pop-up olanlar; ve henüz "kapatma şartı" yerine getirilmemiş olanlar:
+        //   • RequiresAcknowledgement=true  → AcknowledgedAt set olunca kapanır
+        //   • RequiresAcknowledgement=false → AnnouncementRead kaydı (ReadAt) olunca kapanır
+        var pending = await query
+            .Where(a => a.IsPopup)
+            .Where(a => !_context.AnnouncementReads.Any(r =>
+                r.AnnouncementId == a.Id
+                && r.UserId == uid
+                && (!a.RequiresAcknowledgement || r.AcknowledgedAt != null)))
+            .OrderByDescending(a => a.IsPinned)
+            .ThenByDescending(a => a.CreatedAt)
+            .ToListAsync(ct);
+
+        return pending.Select(a => MapToDetail(a, isReadByMe: false)).ToList();
+    }
+
+    public async Task<bool> AcknowledgeAsync(int announcementId, int userId, CancellationToken ct = default)
+    {
+        var announcement = await _context.InternalAnnouncements
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == announcementId, ct);
+        if (announcement is null) return false;
+
+        var now = DateTime.UtcNow;
+        var existing = await _context.AnnouncementReads
+            .FirstOrDefaultAsync(r => r.AnnouncementId == announcementId && r.UserId == userId, ct);
+
+        if (existing is null)
+        {
+            _context.AnnouncementReads.Add(new AnnouncementRead
+            {
+                AnnouncementId = announcementId,
+                UserId         = userId,
+                ReadAt         = now,
+                AcknowledgedAt = now,
+            });
+        }
+        else if (existing.AcknowledgedAt is null)
+        {
+            existing.AcknowledgedAt = now;
+            // ReadAt zaten varsa dokunma
+        }
+        else
+        {
+            return false; // zaten acknowledged
+        }
+
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            return false;
+        }
     }
 
     // ── Read tracking ─────────────────────────────────────────────────────────
@@ -176,7 +369,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         if (!int.TryParse(userId, out var uid))
             return 0;
 
-        var scope = BuildScope(roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
+        var scope = BuildScope(userId, roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
 
         var visibleIds = await BuildVisibleIdsQuery(scope, DateTime.UtcNow).ToListAsync(ct);
         if (visibleIds.Count == 0) return 0;
@@ -227,7 +420,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         if (!int.TryParse(userId, out var uid))
             return 0;
 
-        var scope = BuildScope(roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
+        var scope = BuildScope(userId, roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
 
         var visibleQuery = BuildVisibleIdsQuery(scope, DateTime.UtcNow);
 
@@ -242,12 +435,14 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 
     /// <summary>Rollerden ve scope parametrelerinden derive edilen kullanıcı görünüm bağlamı.</summary>
     private sealed record UserVisibilityScope(
+        string UserId,
         bool IsStudent,
         bool IsInstructor,
         bool IsAcademicAdvisor,
         bool IsDeptMgr,
         bool IsDean,
         bool IsAdminStaff,
+        bool IsSystemAdmin,
         bool IsManagement,
         int? UserDepartmentId,
         int? UserFacultyId,
@@ -256,6 +451,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         int? UserStudentYear);
 
     private static UserVisibilityScope BuildScope(
+        string userId,
         IEnumerable<string> roles,
         int? userDepartmentId,
         int? userFacultyId,
@@ -270,11 +466,13 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         var isDeptMgr         = roleSet.Contains("DepartmentManager");
         var isDean            = roleSet.Contains("Dean");
         var isAdminStaff      = roleSet.Contains("AdministrativeStaff");
-        var isManagement      = isDeptMgr || isDean || roleSet.Contains("SystemAdministrator") || isAdminStaff;
+        var isSystemAdmin     = roleSet.Contains("SystemAdministrator");
+        var isManagement      = isDeptMgr || isDean || isSystemAdmin || isAdminStaff;
 
         return new UserVisibilityScope(
+            userId,
             isStudent, isInstructor, isAcademicAdvisor,
-            isDeptMgr, isDean, isAdminStaff, isManagement,
+            isDeptMgr, isDean, isAdminStaff, isSystemAdmin, isManagement,
             userDepartmentId, userFacultyId,
             userEnrolledSectionIds.ToList(),
             advisorUserId, userStudentYear);
@@ -295,6 +493,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         IQueryable<InternalAnnouncement> source,
         UserVisibilityScope scope)
     {
+        var userId            = scope.UserId;
         var sectionIds        = scope.EnrolledSectionIds;
         var userDepartmentId  = scope.UserDepartmentId;
         var userFacultyId     = scope.UserFacultyId;
@@ -306,10 +505,14 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         var isDeptMgr         = scope.IsDeptMgr;
         var isDean            = scope.IsDean;
         var isAdminStaff      = scope.IsAdminStaff;
+        var isSystemAdmin     = scope.IsSystemAdmin;
         var isManagement      = scope.IsManagement;
 
         return source.Where(a =>
-            a.TargetAudience == AnnouncementAudience.All
+            // Yazar her zaman kendi duyurusunu görür (önizleme + doğrulama amacıyla)
+            a.CreatedBy == userId
+
+            || a.TargetAudience == AnnouncementAudience.All
             || (a.TargetAudience == AnnouncementAudience.Students   && isStudent
                 && (a.TargetStudentYear == null || a.TargetStudentYear == userStudentYear))
             || (a.TargetAudience == AnnouncementAudience.Instructors && (isInstructor || isAcademicAdvisor))
@@ -348,14 +551,16 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             || (a.TargetAudience == AnnouncementAudience.Deans                   && isDean)
             || (a.TargetAudience == AnnouncementAudience.AdministrativeStaffRole && isAdminStaff)
 
+            // "Hepsi" audience'ları: göndericinin altındaki tüm rolleri kapsar.
+            // SysAdmin "AllForSysAdmin" yazdığında kendisi de görür (her zaman görür kuralıyla).
             || (a.TargetAudience == AnnouncementAudience.AllForSysAdmin
-                && (isAdminStaff || isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
+                && (isSystemAdmin || isAdminStaff || isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
             || (a.TargetAudience == AnnouncementAudience.AllForAdmin
-                && (isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
+                && (isAdminStaff || isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
             || (a.TargetAudience == AnnouncementAudience.AllForDean
-                && (isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
+                && (isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
             || (a.TargetAudience == AnnouncementAudience.AllForDeptMgr
-                && (isAcademicAdvisor || isInstructor || isStudent))
+                && (isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
         );
     }
 
@@ -364,6 +569,23 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         var query = ApplyActiveDateFilter(_context.InternalAnnouncements.AsNoTracking(), now);
         query = ApplyVisibilityFilter(query, scope);
         return query.Select(a => a.Id);
+    }
+
+    /// <summary>Duyuru ID listesi için attachment sayılarını tek sorguda batch fetch eder.</summary>
+    private async Task<Dictionary<int, int>> FetchAttachmentCountsAsync(
+        IEnumerable<int> announcementIds,
+        CancellationToken ct)
+    {
+        var ids = announcementIds.ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, int>();
+
+        return await _context.AnnouncementAttachments
+            .AsNoTracking()
+            .Where(att => ids.Contains(att.AnnouncementId))
+            .GroupBy(att => att.AnnouncementId)
+            .Select(g => new { AnnouncementId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.AnnouncementId, x => x.Count, ct);
     }
 
     /// <summary>Verilen kullanıcı için duyuru ID'lerinden okunmuş olanları tek sorguda getirir.</summary>
@@ -411,22 +633,24 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 
         var announcement = new InternalAnnouncement
         {
-            Title              = normalizedTitle,
-            Content            = normalizedContent,
-            ContentFormat      = normalizedFormat,
-            CategoryId         = categoryId,
-            TargetAudience     = dto.TargetAudience,
-            TargetDepartmentId = GetTargetDepartmentId(dto),
-            TargetFacultyId    = GetTargetFacultyId(dto),
-            TargetSectionId    = GetTargetSectionId(dto),
-            TargetStudentYear  = GetTargetStudentYear(dto.TargetAudience, dto.TargetStudentYear, settings),
-            IsPinned           = dto.IsPinned,
-            StartsAt           = dto.StartsAt ?? DateTime.UtcNow,
-            ExpiresAt          = dto.ExpiresAt,
-            CreatedBy          = createdBy,
-            CreatedByName      = createdByName,
-            CreatedAt          = DateTime.UtcNow,
-            IsActive           = true,
+            Title                   = normalizedTitle,
+            Content                 = normalizedContent,
+            ContentFormat           = normalizedFormat,
+            CategoryId              = categoryId,
+            TargetAudience          = dto.TargetAudience,
+            TargetDepartmentId      = GetTargetDepartmentId(dto),
+            TargetFacultyId         = GetTargetFacultyId(dto),
+            TargetSectionId         = GetTargetSectionId(dto),
+            TargetStudentYear       = GetTargetStudentYear(dto.TargetAudience, dto.TargetStudentYear, settings),
+            IsPinned                = dto.IsPinned,
+            IsPopup                 = dto.IsPopup,
+            RequiresAcknowledgement = dto.IsPopup && dto.RequiresAcknowledgement,
+            StartsAt                = dto.StartsAt ?? DateTime.UtcNow,
+            ExpiresAt               = dto.ExpiresAt,
+            CreatedBy               = createdBy,
+            CreatedByName           = createdByName,
+            CreatedAt               = DateTime.UtcNow,
+            IsActive                = true,
         };
 
         _context.InternalAnnouncements.Add(announcement);
@@ -452,6 +676,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             .Include(a => a.TargetDepartment)
             .Include(a => a.TargetFaculty)
             .Include(a => a.TargetSection)
+            .Include(a => a.Attachments)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
 
         if (announcement is null) return null;
@@ -465,19 +690,21 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 
         var categoryId = await ResolveCategoryIdAsync(dto.CategoryId, ct);
 
-        announcement.Title              = normalizedTitle;
-        announcement.Content            = normalizedContent;
-        announcement.ContentFormat      = normalizedFormat;
-        announcement.CategoryId         = categoryId;
-        announcement.TargetAudience     = dto.TargetAudience;
-        announcement.TargetDepartmentId = GetTargetDepartmentId(dto);
-        announcement.TargetFacultyId    = GetTargetFacultyId(dto);
-        announcement.TargetSectionId    = GetTargetSectionId(dto);
-        announcement.TargetStudentYear  = GetTargetStudentYear(dto.TargetAudience, dto.TargetStudentYear, settings);
-        announcement.IsPinned           = dto.IsPinned;
-        announcement.StartsAt           = dto.StartsAt;
-        announcement.ExpiresAt          = dto.ExpiresAt;
-        announcement.UpdatedAt          = DateTime.UtcNow;
+        announcement.Title                   = normalizedTitle;
+        announcement.Content                 = normalizedContent;
+        announcement.ContentFormat           = normalizedFormat;
+        announcement.CategoryId              = categoryId;
+        announcement.TargetAudience          = dto.TargetAudience;
+        announcement.TargetDepartmentId      = GetTargetDepartmentId(dto);
+        announcement.TargetFacultyId         = GetTargetFacultyId(dto);
+        announcement.TargetSectionId         = GetTargetSectionId(dto);
+        announcement.TargetStudentYear       = GetTargetStudentYear(dto.TargetAudience, dto.TargetStudentYear, settings);
+        announcement.IsPinned                = dto.IsPinned;
+        announcement.IsPopup                 = dto.IsPopup;
+        announcement.RequiresAcknowledgement = dto.IsPopup && dto.RequiresAcknowledgement;
+        announcement.StartsAt                = dto.StartsAt;
+        announcement.ExpiresAt               = dto.ExpiresAt;
+        announcement.UpdatedAt               = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(ct);
 
@@ -513,6 +740,13 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 
         if (!isAdminOverride && announcement.CreatedBy != requestingUserId)
             throw new UnauthorizedAccessException("Yalnızca kendi oluşturduğunuz duyuruları kalıcı olarak silebilirsiniz.");
+
+        // Önce ekleri fiziksel olarak temizle (DB cascade satırları siler, dosyalar kalır).
+        // Attachment service null olabilir (eski test ortamı) — null-safe.
+        if (_attachmentService is not null)
+        {
+            await _attachmentService.DeleteAllForAnnouncementAsync(id, ct);
+        }
 
         _context.InternalAnnouncements.Remove(announcement);
         await _context.SaveChangesAsync(ct);
@@ -863,7 +1097,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             ? $"{s.Course?.Name ?? "?"} - Şube {a.TargetSection.SectionNumber}"
             : null;
 
-    private static AnnouncementListDto MapToList(InternalAnnouncement a, bool isReadByMe)
+    private static AnnouncementListDto MapToList(InternalAnnouncement a, bool isReadByMe, int attachmentCount)
     {
         var preview = BuildPreview(a.Content, a.ContentFormat);
         return new AnnouncementListDto(
@@ -874,8 +1108,9 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             a.TargetSectionId,    BuildSectionInfo(a),
             a.TargetStudentYear,
             MapCategorySummary(a.Category),
-            a.IsPinned, a.StartsAt, a.ExpiresAt,
-            a.CreatedByName, a.CreatedAt, a.IsActive, isReadByMe);
+            a.IsPinned, a.IsPopup, a.RequiresAcknowledgement,
+            a.StartsAt, a.ExpiresAt,
+            a.CreatedByName, a.CreatedAt, a.IsActive, isReadByMe, attachmentCount);
     }
 
     private static AnnouncementDetailDto MapToDetail(InternalAnnouncement a, bool isReadByMe) =>
@@ -886,8 +1121,14 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             a.TargetSectionId,    BuildSectionInfo(a),
             a.TargetStudentYear,
             MapCategorySummary(a.Category),
-            a.IsPinned, a.StartsAt, a.ExpiresAt,
-            a.CreatedByName, a.CreatedAt, a.UpdatedAt, a.IsActive, isReadByMe);
+            a.IsPinned, a.IsPopup, a.RequiresAcknowledgement,
+            a.StartsAt, a.ExpiresAt,
+            a.CreatedByName, a.CreatedAt, a.UpdatedAt, a.IsActive, isReadByMe,
+            (a.Attachments ?? new List<AnnouncementAttachment>())
+                .OrderBy(att => att.UploadedAt)
+                .Select(att => new AnnouncementAttachmentSummaryDto(
+                    att.Id, att.FileName, att.MimeType, att.SizeBytes, att.UploadedAt))
+                .ToList());
 
     private static AnnouncementCategorySummaryDto? MapCategorySummary(AnnouncementCategory? c) =>
         c is null ? null : new AnnouncementCategorySummaryDto(c.Id, c.Name, c.ColorHex, c.IconName);
