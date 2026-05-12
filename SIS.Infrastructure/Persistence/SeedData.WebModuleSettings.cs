@@ -72,6 +72,60 @@ public static partial class SeedData
                 DataType = "bool",
                 Description = "Sabitlenmiş duyurular listelerde önce gösterilsin mi?"
             },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "MaxTitleLength",
+                Value = "200",
+                Category = "Announcements",
+                DataType = "int",
+                Description = "Duyuru başlığı için izin verilen maksimum karakter sayısı"
+            },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "MaxContentLength",
+                Value = "50000",
+                Category = "Announcements",
+                DataType = "int",
+                Description = "Duyuru içeriği için izin verilen maksimum karakter sayısı (HTML dahil)"
+            },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "AllowImagesInContent",
+                Value = "true",
+                Category = "Announcements",
+                DataType = "bool",
+                Description = "Zengin metin içeriğinde resim eklenebilir mi?"
+            },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "AllowTablesInContent",
+                Value = "true",
+                Category = "Announcements",
+                DataType = "bool",
+                Description = "Zengin metin içeriğinde tablo eklenebilir mi?"
+            },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "StudentYearFilterMin",
+                Value = "1",
+                Category = "Announcements",
+                DataType = "int",
+                Description = "Sınıf bazlı duyuru hedeflemesinde seçilebilecek en küçük sınıf yılı (örn. 0 = Hazırlık)"
+            },
+            new()
+            {
+                ModuleKey = "Announcements",
+                Key = "StudentYearFilterMax",
+                Value = "7",
+                Category = "Announcements",
+                DataType = "int",
+                Description = "Sınıf bazlı duyuru hedeflemesinde seçilebilecek en büyük sınıf yılı"
+            },
         };
 
         var existingPairs = await context.WebModuleSettings

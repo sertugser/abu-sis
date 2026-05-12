@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Announcement.Configuration;
 using SIS.Application.Announcement.DTOs;
+using SIS.Application.Announcement.Security;
 using SIS.Application.Announcement.Services;
 using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
@@ -12,10 +14,18 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 {
     private readonly AppDbContext _context;
     private readonly IWebModuleSettingsProvider _webSettings;
+    private readonly IAnnouncementSettingsProvider _settingsProvider;
+    private readonly IAnnouncementHtmlSanitizer _sanitizer;
 
-    public InternalAnnouncementService(AppDbContext context, IWebModuleSettingsProvider? webSettings = null)
+    public InternalAnnouncementService(
+        AppDbContext context,
+        IAnnouncementSettingsProvider settingsProvider,
+        IAnnouncementHtmlSanitizer sanitizer,
+        IWebModuleSettingsProvider? webSettings = null)
     {
         _context = context;
+        _settingsProvider = settingsProvider;
+        _sanitizer = sanitizer;
         _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
     }
 
@@ -28,131 +38,81 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         int? userFacultyId,
         IEnumerable<int> userEnrolledSectionIds,
         string? advisorUserId,
+        int? userStudentYear,
         int? maxResults,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
-        var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var scope = BuildScope(roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
 
-        var isStudent         = roleSet.Contains("Student");
-        var isInstructor      = roleSet.Contains("Instructor");
-        var isAcademicAdvisor = roleSet.Contains("AcademicAdvisor");
-        var isDeptMgr         = roleSet.Contains("DepartmentManager");
-        var isDean            = roleSet.Contains("Dean");
-        var isAdminStaff      = roleSet.Contains("AdministrativeStaff");
-        var isManagement      = isDeptMgr
-            || isDean
-            || roleSet.Contains("SystemAdministrator")
-            || isAdminStaff;
-
-        var sectionIds = userEnrolledSectionIds.ToList();
-
-        var query = _context.InternalAnnouncements
+        IQueryable<InternalAnnouncement> query = _context.InternalAnnouncements
             .AsNoTracking()
             .Include(a => a.TargetDepartment)
             .Include(a => a.TargetFaculty)
             .Include(a => a.TargetSection).ThenInclude(s => s!.Course)
-            .Where(a => a.IsActive
-                && a.StartsAt <= now
-                && (a.ExpiresAt == null || a.ExpiresAt > now));
+            .Include(a => a.Category);
 
-        query = query.Where(a =>
-            // ── System-wide ──────────────────────────────────────────────────
-            a.TargetAudience == AnnouncementAudience.All
-            || (a.TargetAudience == AnnouncementAudience.Students   && isStudent)
-            || (a.TargetAudience == AnnouncementAudience.Instructors && (isInstructor || isAcademicAdvisor))
-            || (a.TargetAudience == AnnouncementAudience.Management  && isManagement)
+        query = ApplyActiveDateFilter(query, DateTime.UtcNow);
+        query = ApplyVisibilityFilter(query, scope);
 
-            // ── Department-scoped (geriye dönük uyumluluk) ───────────────────
-            || (a.TargetAudience == AnnouncementAudience.Department
-                && userDepartmentId.HasValue && a.TargetDepartmentId == userDepartmentId)
-            || (a.TargetAudience == AnnouncementAudience.DepartmentStudents
-                && isStudent && userDepartmentId.HasValue && a.TargetDepartmentId == userDepartmentId)
-            || (a.TargetAudience == AnnouncementAudience.DepartmentInstructors
-                && (isInstructor || isAcademicAdvisor) && userDepartmentId.HasValue && a.TargetDepartmentId == userDepartmentId)
-
-            // ── Faculty-scoped (geriye dönük uyumluluk) ──────────────────────
-            || (a.TargetAudience == AnnouncementAudience.Faculty
-                && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId)
-            || (a.TargetAudience == AnnouncementAudience.FacultyStudents
-                && isStudent && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId)
-            || (a.TargetAudience == AnnouncementAudience.FacultyInstructors
-                && (isInstructor || isAcademicAdvisor) && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId)
-            || (a.TargetAudience == AnnouncementAudience.FacultyManagement
-                && isDeptMgr && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId)
-
-            // ── Course-section-scoped ─────────────────────────────────────────
-            || (a.TargetAudience == AnnouncementAudience.CourseSection
-                && isStudent
-                && a.TargetSectionId != null
-                && sectionIds.Contains(a.TargetSectionId.Value))
-
-            // ── Advisor-scoped (danışmanın kendi öğrencileri) ─────────────────
-            || (a.TargetAudience == AnnouncementAudience.MyAdvisees
-                && isStudent
-                && advisorUserId != null
-                && a.CreatedBy == advisorUserId)
-
-            // ── Flat rol bazlı (yeni sistem) ──────────────────────────────────
-            || (a.TargetAudience == AnnouncementAudience.AcademicAdvisors        && isAcademicAdvisor)
-            || (a.TargetAudience == AnnouncementAudience.DepartmentManagers      && isDeptMgr)
-            || (a.TargetAudience == AnnouncementAudience.Deans                   && isDean)
-            || (a.TargetAudience == AnnouncementAudience.AdministrativeStaffRole && isAdminStaff)
-
-            // ── Rol kapsamı "Hepsi" değerleri ────────────────────────────────
-            || (a.TargetAudience == AnnouncementAudience.AllForSysAdmin
-                && (isAdminStaff || isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
-            || (a.TargetAudience == AnnouncementAudience.AllForAdmin
-                && (isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
-            || (a.TargetAudience == AnnouncementAudience.AllForDean
-                && (isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
-            || (a.TargetAudience == AnnouncementAudience.AllForDeptMgr
-                && (isAcademicAdvisor || isInstructor || isStudent))
-        );
-
-        var pinnedFirst = await _webSettings.GetBoolAsync("Announcements", "PinnedAnnouncementsFirst", true, ct);
-        query = pinnedFirst
+        var settings = await _settingsProvider.GetAsync(ct);
+        query = settings.PinnedFirst
             ? query.OrderByDescending(a => a.IsPinned).ThenByDescending(a => a.CreatedAt)
             : query.OrderByDescending(a => a.CreatedAt);
 
-        var effectiveMaxResults = maxResults;
-        if (isStudent && maxResults.HasValue)
-        {
-            effectiveMaxResults = await _webSettings.GetIntAsync(
-                "Announcements", "StudentTopCount", maxResults.Value, ct);
-        }
+        // Öğrenciler için widget kapasitesi admin kontrolünde; diğer roller maxResults'ı geçirir.
+        var effectiveMaxResults = scope.IsStudent && maxResults.HasValue
+            ? settings.StudentTopCount
+            : maxResults;
 
         if (effectiveMaxResults is > 0)
             query = query.Take(effectiveMaxResults.Value);
 
         var items = await query.ToListAsync(ct);
-        return items.Select(MapToList).ToList();
+
+        // Okundu/okunmadı durumunu tek sorguda batch fetch et (N+1 önlemi)
+        var readSet = await FetchReadSetAsync(userId, items.Select(a => a.Id), ct);
+
+        return items.Select(a => MapToList(a, readSet.Contains(a.Id))).ToList();
     }
 
     // ── Management page feeds ─────────────────────────────────────────────────
 
-    public async Task<AnnouncementDetailDto?> GetByIdAsync(int id, CancellationToken ct = default)
+    public async Task<AnnouncementDetailDto?> GetByIdAsync(int id, int? requestingUserId = null, CancellationToken ct = default)
     {
         var a = await _context.InternalAnnouncements
             .AsNoTracking()
             .Include(x => x.TargetDepartment)
             .Include(x => x.TargetFaculty)
             .Include(x => x.TargetSection).ThenInclude(s => s!.Course)
+            .Include(x => x.Category)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
-        return a is null ? null : MapToDetail(a);
+
+        if (a is null) return null;
+
+        bool isReadByMe = false;
+        if (requestingUserId is int uid)
+        {
+            isReadByMe = await _context.AnnouncementReads
+                .AsNoTracking()
+                .AnyAsync(r => r.AnnouncementId == id && r.UserId == uid, ct);
+        }
+
+        return MapToDetail(a, isReadByMe);
     }
 
     public async Task<List<AnnouncementListDto>> GetAllAsync(CancellationToken ct = default)
     {
+        // Admin görünümünde "okundu" durumu anlamsız; her zaman false döner.
         var items = await _context.InternalAnnouncements
             .AsNoTracking()
             .Include(a => a.TargetDepartment)
             .Include(a => a.TargetFaculty)
             .Include(a => a.TargetSection).ThenInclude(s => s!.Course)
+            .Include(a => a.Category)
             .OrderByDescending(a => a.IsPinned)
             .ThenByDescending(a => a.CreatedAt)
             .ToListAsync(ct);
-        return items.Select(MapToList).ToList();
+        return items.Select(a => MapToList(a, isReadByMe: false)).ToList();
     }
 
     public async Task<List<AnnouncementListDto>> GetMyCreatedAsync(string userId, CancellationToken ct = default)
@@ -162,11 +122,268 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             .Include(a => a.TargetDepartment)
             .Include(a => a.TargetFaculty)
             .Include(a => a.TargetSection).ThenInclude(s => s!.Course)
+            .Include(a => a.Category)
             .Where(a => a.CreatedBy == userId)
             .OrderByDescending(a => a.IsPinned)
             .ThenByDescending(a => a.CreatedAt)
             .ToListAsync(ct);
-        return items.Select(MapToList).ToList();
+        return items.Select(a => MapToList(a, isReadByMe: false)).ToList();
+    }
+
+    // ── Read tracking ─────────────────────────────────────────────────────────
+
+    public async Task<bool> MarkAsReadAsync(int announcementId, int userId, CancellationToken ct = default)
+    {
+        var exists = await _context.InternalAnnouncements
+            .AsNoTracking()
+            .AnyAsync(a => a.Id == announcementId, ct);
+        if (!exists) return false;
+
+        var alreadyRead = await _context.AnnouncementReads
+            .AsNoTracking()
+            .AnyAsync(r => r.AnnouncementId == announcementId && r.UserId == userId, ct);
+        if (alreadyRead) return false;
+
+        _context.AnnouncementReads.Add(new AnnouncementRead
+        {
+            AnnouncementId = announcementId,
+            UserId         = userId,
+            ReadAt         = DateTime.UtcNow,
+        });
+
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            // Race condition: paralel çağrı zaten kaydı oluşturdu — idempotent davran
+            return false;
+        }
+    }
+
+    public async Task<int> MarkAllAsReadAsync(
+        string userId,
+        IEnumerable<string> roles,
+        int? userDepartmentId,
+        int? userFacultyId,
+        IEnumerable<int> userEnrolledSectionIds,
+        string? advisorUserId,
+        int? userStudentYear,
+        CancellationToken ct = default)
+    {
+        if (!int.TryParse(userId, out var uid))
+            return 0;
+
+        var scope = BuildScope(roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
+
+        var visibleIds = await BuildVisibleIdsQuery(scope, DateTime.UtcNow).ToListAsync(ct);
+        if (visibleIds.Count == 0) return 0;
+
+        var alreadyReadIds = await _context.AnnouncementReads
+            .AsNoTracking()
+            .Where(r => r.UserId == uid && visibleIds.Contains(r.AnnouncementId))
+            .Select(r => r.AnnouncementId)
+            .ToListAsync(ct);
+
+        var unreadIds = visibleIds.Except(alreadyReadIds).ToList();
+        if (unreadIds.Count == 0) return 0;
+
+        var now = DateTime.UtcNow;
+        foreach (var id in unreadIds)
+        {
+            _context.AnnouncementReads.Add(new AnnouncementRead
+            {
+                AnnouncementId = id,
+                UserId         = uid,
+                ReadAt         = now,
+            });
+        }
+
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+            return unreadIds.Count;
+        }
+        catch (DbUpdateException)
+        {
+            // Paralel çağrı bazılarını eklemiş olabilir — ne kadar kayıt olduğunu yeniden hesapla
+            return await _context.AnnouncementReads
+                .CountAsync(r => r.UserId == uid && unreadIds.Contains(r.AnnouncementId), ct);
+        }
+    }
+
+    public async Task<int> GetUnreadCountAsync(
+        string userId,
+        IEnumerable<string> roles,
+        int? userDepartmentId,
+        int? userFacultyId,
+        IEnumerable<int> userEnrolledSectionIds,
+        string? advisorUserId,
+        int? userStudentYear,
+        CancellationToken ct = default)
+    {
+        if (!int.TryParse(userId, out var uid))
+            return 0;
+
+        var scope = BuildScope(roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
+
+        var visibleQuery = BuildVisibleIdsQuery(scope, DateTime.UtcNow);
+
+        // Visible ve henüz okunmamış olanları say (LEFT JOIN, IsRead null)
+        return await visibleQuery
+            .Where(id => !_context.AnnouncementReads
+                .Any(r => r.AnnouncementId == id && r.UserId == uid))
+            .CountAsync(ct);
+    }
+
+    // ── Visibility helpers ───────────────────────────────────────────────────
+
+    /// <summary>Rollerden ve scope parametrelerinden derive edilen kullanıcı görünüm bağlamı.</summary>
+    private sealed record UserVisibilityScope(
+        bool IsStudent,
+        bool IsInstructor,
+        bool IsAcademicAdvisor,
+        bool IsDeptMgr,
+        bool IsDean,
+        bool IsAdminStaff,
+        bool IsManagement,
+        int? UserDepartmentId,
+        int? UserFacultyId,
+        List<int> EnrolledSectionIds,
+        string? AdvisorUserId,
+        int? UserStudentYear);
+
+    private static UserVisibilityScope BuildScope(
+        IEnumerable<string> roles,
+        int? userDepartmentId,
+        int? userFacultyId,
+        IEnumerable<int> userEnrolledSectionIds,
+        string? advisorUserId,
+        int? userStudentYear)
+    {
+        var roleSet           = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var isStudent         = roleSet.Contains("Student");
+        var isInstructor      = roleSet.Contains("Instructor");
+        var isAcademicAdvisor = roleSet.Contains("AcademicAdvisor");
+        var isDeptMgr         = roleSet.Contains("DepartmentManager");
+        var isDean            = roleSet.Contains("Dean");
+        var isAdminStaff      = roleSet.Contains("AdministrativeStaff");
+        var isManagement      = isDeptMgr || isDean || roleSet.Contains("SystemAdministrator") || isAdminStaff;
+
+        return new UserVisibilityScope(
+            isStudent, isInstructor, isAcademicAdvisor,
+            isDeptMgr, isDean, isAdminStaff, isManagement,
+            userDepartmentId, userFacultyId,
+            userEnrolledSectionIds.ToList(),
+            advisorUserId, userStudentYear);
+    }
+
+    /// <summary>Sadece aktif tarih aralığındaki duyuruları döndüren ortak filtre.</summary>
+    private static IQueryable<InternalAnnouncement> ApplyActiveDateFilter(
+        IQueryable<InternalAnnouncement> source, DateTime now) =>
+        source.Where(a => a.IsActive
+                       && a.StartsAt <= now
+                       && (a.ExpiresAt == null || a.ExpiresAt > now));
+
+    /// <summary>
+    /// Kullanıcının görmesi gereken duyuruları audience hiyerarşisine göre filtreler.
+    /// Tek yerde tanımlı, her kullanım için ortak (Active feed, MarkAllAsRead, UnreadCount).
+    /// </summary>
+    private static IQueryable<InternalAnnouncement> ApplyVisibilityFilter(
+        IQueryable<InternalAnnouncement> source,
+        UserVisibilityScope scope)
+    {
+        var sectionIds        = scope.EnrolledSectionIds;
+        var userDepartmentId  = scope.UserDepartmentId;
+        var userFacultyId     = scope.UserFacultyId;
+        var advisorUserId     = scope.AdvisorUserId;
+        var userStudentYear   = scope.UserStudentYear;
+        var isStudent         = scope.IsStudent;
+        var isInstructor      = scope.IsInstructor;
+        var isAcademicAdvisor = scope.IsAcademicAdvisor;
+        var isDeptMgr         = scope.IsDeptMgr;
+        var isDean            = scope.IsDean;
+        var isAdminStaff      = scope.IsAdminStaff;
+        var isManagement      = scope.IsManagement;
+
+        return source.Where(a =>
+            a.TargetAudience == AnnouncementAudience.All
+            || (a.TargetAudience == AnnouncementAudience.Students   && isStudent
+                && (a.TargetStudentYear == null || a.TargetStudentYear == userStudentYear))
+            || (a.TargetAudience == AnnouncementAudience.Instructors && (isInstructor || isAcademicAdvisor))
+            || (a.TargetAudience == AnnouncementAudience.Management  && isManagement)
+
+            || (a.TargetAudience == AnnouncementAudience.Department
+                && userDepartmentId.HasValue && a.TargetDepartmentId == userDepartmentId)
+            || (a.TargetAudience == AnnouncementAudience.DepartmentStudents
+                && isStudent && userDepartmentId.HasValue && a.TargetDepartmentId == userDepartmentId
+                && (a.TargetStudentYear == null || a.TargetStudentYear == userStudentYear))
+            || (a.TargetAudience == AnnouncementAudience.DepartmentInstructors
+                && (isInstructor || isAcademicAdvisor) && userDepartmentId.HasValue && a.TargetDepartmentId == userDepartmentId)
+
+            || (a.TargetAudience == AnnouncementAudience.Faculty
+                && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId)
+            || (a.TargetAudience == AnnouncementAudience.FacultyStudents
+                && isStudent && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId
+                && (a.TargetStudentYear == null || a.TargetStudentYear == userStudentYear))
+            || (a.TargetAudience == AnnouncementAudience.FacultyInstructors
+                && (isInstructor || isAcademicAdvisor) && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId)
+            || (a.TargetAudience == AnnouncementAudience.FacultyManagement
+                && isDeptMgr && userFacultyId.HasValue && a.TargetFacultyId == userFacultyId)
+
+            || (a.TargetAudience == AnnouncementAudience.CourseSection
+                && isStudent
+                && a.TargetSectionId != null
+                && sectionIds.Contains(a.TargetSectionId.Value))
+
+            || (a.TargetAudience == AnnouncementAudience.MyAdvisees
+                && isStudent
+                && advisorUserId != null
+                && a.CreatedBy == advisorUserId)
+
+            || (a.TargetAudience == AnnouncementAudience.AcademicAdvisors        && isAcademicAdvisor)
+            || (a.TargetAudience == AnnouncementAudience.DepartmentManagers      && isDeptMgr)
+            || (a.TargetAudience == AnnouncementAudience.Deans                   && isDean)
+            || (a.TargetAudience == AnnouncementAudience.AdministrativeStaffRole && isAdminStaff)
+
+            || (a.TargetAudience == AnnouncementAudience.AllForSysAdmin
+                && (isAdminStaff || isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
+            || (a.TargetAudience == AnnouncementAudience.AllForAdmin
+                && (isDean || isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
+            || (a.TargetAudience == AnnouncementAudience.AllForDean
+                && (isDeptMgr || isAcademicAdvisor || isInstructor || isStudent))
+            || (a.TargetAudience == AnnouncementAudience.AllForDeptMgr
+                && (isAcademicAdvisor || isInstructor || isStudent))
+        );
+    }
+
+    private IQueryable<int> BuildVisibleIdsQuery(UserVisibilityScope scope, DateTime now)
+    {
+        var query = ApplyActiveDateFilter(_context.InternalAnnouncements.AsNoTracking(), now);
+        query = ApplyVisibilityFilter(query, scope);
+        return query.Select(a => a.Id);
+    }
+
+    /// <summary>Verilen kullanıcı için duyuru ID'lerinden okunmuş olanları tek sorguda getirir.</summary>
+    private async Task<HashSet<int>> FetchReadSetAsync(
+        string userId,
+        IEnumerable<int> announcementIds,
+        CancellationToken ct)
+    {
+        if (!int.TryParse(userId, out var uid))
+            return [];
+
+        var ids = announcementIds.ToList();
+        if (ids.Count == 0) return [];
+
+        return (await _context.AnnouncementReads
+            .AsNoTracking()
+            .Where(r => r.UserId == uid && ids.Contains(r.AnnouncementId))
+            .Select(r => r.AnnouncementId)
+            .ToListAsync(ct))
+            .ToHashSet();
     }
 
     // ── Create (hiyerarşik kural doğrulaması dahil) ───────────────────────────
@@ -180,31 +397,36 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         int? senderFacultyId,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(dto.Title))
-            throw new InvalidOperationException("Duyuru başlığı boş olamaz.");
-        if (string.IsNullOrWhiteSpace(dto.Content))
-            throw new InvalidOperationException("Duyuru içeriği boş olamaz.");
+        var settings = await _settingsProvider.GetAsync(ct);
+
+        var (normalizedTitle, normalizedContent, normalizedFormat) =
+            ValidateAndNormalize(dto.Title, dto.Content, dto.ContentFormat, settings);
 
         var roleSet = senderRoles.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // Hangi rolün hangi hedef kitleyi seçebileceğini doğrula
         await ValidateHierarchicalRulesAsync(dto, roleSet, senderDepartmentId, senderFacultyId, createdBy, ct);
 
+        var categoryId = await ResolveCategoryIdAsync(dto.CategoryId, ct);
+
         var announcement = new InternalAnnouncement
         {
-            Title            = dto.Title.Trim(),
-            Content          = dto.Content.Trim(),
-            TargetAudience   = dto.TargetAudience,
+            Title              = normalizedTitle,
+            Content            = normalizedContent,
+            ContentFormat      = normalizedFormat,
+            CategoryId         = categoryId,
+            TargetAudience     = dto.TargetAudience,
             TargetDepartmentId = GetTargetDepartmentId(dto),
-            TargetFacultyId   = GetTargetFacultyId(dto),
-            TargetSectionId   = GetTargetSectionId(dto),
-            IsPinned         = dto.IsPinned,
-            StartsAt         = dto.StartsAt ?? DateTime.UtcNow,
-            ExpiresAt        = dto.ExpiresAt,
-            CreatedBy        = createdBy,
-            CreatedByName    = createdByName,
-            CreatedAt        = DateTime.UtcNow,
-            IsActive         = true,
+            TargetFacultyId    = GetTargetFacultyId(dto),
+            TargetSectionId    = GetTargetSectionId(dto),
+            TargetStudentYear  = GetTargetStudentYear(dto.TargetAudience, dto.TargetStudentYear, settings),
+            IsPinned           = dto.IsPinned,
+            StartsAt           = dto.StartsAt ?? DateTime.UtcNow,
+            ExpiresAt          = dto.ExpiresAt,
+            CreatedBy          = createdBy,
+            CreatedByName      = createdByName,
+            CreatedAt          = DateTime.UtcNow,
+            IsActive           = true,
         };
 
         _context.InternalAnnouncements.Add(announcement);
@@ -214,7 +436,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         await _context.Entry(announcement).Reference(a => a.TargetFaculty).LoadAsync(ct);
         if (announcement.TargetSectionId.HasValue)
             await _context.Entry(announcement).Reference(a => a.TargetSection).LoadAsync(ct);
-        return MapToDetail(announcement);
+        return MapToDetail(announcement, isReadByMe: false);
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
@@ -237,21 +459,25 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         if (!isAdminOverride && announcement.CreatedBy != requestingUserId)
             throw new UnauthorizedAccessException("Yalnızca kendi oluşturduğunuz duyuruları düzenleyebilirsiniz.");
 
-        if (string.IsNullOrWhiteSpace(dto.Title))
-            throw new InvalidOperationException("Duyuru başlığı boş olamaz.");
-        if (string.IsNullOrWhiteSpace(dto.Content))
-            throw new InvalidOperationException("Duyuru içeriği boş olamaz.");
+        var settings = await _settingsProvider.GetAsync(ct);
+        var (normalizedTitle, normalizedContent, normalizedFormat) =
+            ValidateAndNormalize(dto.Title, dto.Content, dto.ContentFormat, settings);
 
-        announcement.Title            = dto.Title.Trim();
-        announcement.Content          = dto.Content.Trim();
-        announcement.TargetAudience   = dto.TargetAudience;
+        var categoryId = await ResolveCategoryIdAsync(dto.CategoryId, ct);
+
+        announcement.Title              = normalizedTitle;
+        announcement.Content            = normalizedContent;
+        announcement.ContentFormat      = normalizedFormat;
+        announcement.CategoryId         = categoryId;
+        announcement.TargetAudience     = dto.TargetAudience;
         announcement.TargetDepartmentId = GetTargetDepartmentId(dto);
-        announcement.TargetFacultyId   = GetTargetFacultyId(dto);
-        announcement.TargetSectionId   = GetTargetSectionId(dto);
-        announcement.IsPinned         = dto.IsPinned;
-        announcement.StartsAt         = dto.StartsAt;
-        announcement.ExpiresAt        = dto.ExpiresAt;
-        announcement.UpdatedAt        = DateTime.UtcNow;
+        announcement.TargetFacultyId    = GetTargetFacultyId(dto);
+        announcement.TargetSectionId    = GetTargetSectionId(dto);
+        announcement.TargetStudentYear  = GetTargetStudentYear(dto.TargetAudience, dto.TargetStudentYear, settings);
+        announcement.IsPinned           = dto.IsPinned;
+        announcement.StartsAt           = dto.StartsAt;
+        announcement.ExpiresAt          = dto.ExpiresAt;
+        announcement.UpdatedAt          = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(ct);
 
@@ -259,7 +485,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         await _context.Entry(announcement).Reference(a => a.TargetFaculty).LoadAsync(ct);
         if (announcement.TargetSectionId.HasValue)
             await _context.Entry(announcement).Reference(a => a.TargetSection).LoadAsync(ct);
-        return MapToDetail(announcement);
+        return MapToDetail(announcement, isReadByMe: false);
     }
 
     // ── Delete (soft) ─────────────────────────────────────────────────────────
@@ -317,6 +543,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         CancellationToken ct = default)
     {
         var roleSet = senderRoleSet(roles);
+        var settings = await _settingsProvider.GetAsync(ct);
 
         // ── SystemAdministrator → tüm roller (kendisi hariç) ─────────────────
         if (roleSet.Contains("systemadministrator"))
@@ -334,7 +561,8 @@ public class InternalAnnouncementService : IInternalAnnouncementService
                     AnnouncementAudience.Students,
                 },
                 null, null, null, null,
-                Array.Empty<AnnouncementSectionOptionDto>()
+                Array.Empty<AnnouncementSectionOptionDto>(),
+                settings
             );
         }
 
@@ -353,7 +581,8 @@ public class InternalAnnouncementService : IInternalAnnouncementService
                     AnnouncementAudience.Students,
                 },
                 null, null, null, null,
-                Array.Empty<AnnouncementSectionOptionDto>()
+                Array.Empty<AnnouncementSectionOptionDto>(),
+                settings
             );
         }
 
@@ -371,7 +600,8 @@ public class InternalAnnouncementService : IInternalAnnouncementService
                     AnnouncementAudience.Students,
                 },
                 null, null, null, null,
-                Array.Empty<AnnouncementSectionOptionDto>()
+                Array.Empty<AnnouncementSectionOptionDto>(),
+                settings
             );
         }
 
@@ -388,7 +618,8 @@ public class InternalAnnouncementService : IInternalAnnouncementService
                     AnnouncementAudience.Students,
                 },
                 null, null, null, null,
-                Array.Empty<AnnouncementSectionOptionDto>()
+                Array.Empty<AnnouncementSectionOptionDto>(),
+                settings
             );
         }
 
@@ -399,7 +630,8 @@ public class InternalAnnouncementService : IInternalAnnouncementService
                 "Instructor",
                 new[] { AnnouncementAudience.MyAdvisees },
                 null, null, null, null,
-                Array.Empty<AnnouncementSectionOptionDto>()
+                Array.Empty<AnnouncementSectionOptionDto>(),
+                settings
             );
         }
 
@@ -432,7 +664,8 @@ public class InternalAnnouncementService : IInternalAnnouncementService
                 null, null, null, null,
                 sections.Select(s => new AnnouncementSectionOptionDto(
                     s.Id, s.Course.Name, s.Course.Code, s.SectionNumber, s.Term.ShortEnglishName
-                )).ToList()
+                )).ToList(),
+                settings
             );
         }
 
@@ -599,6 +832,30 @@ public class InternalAnnouncementService : IInternalAnnouncementService
     private static int? GetTargetSectionId(UpdateAnnouncementDto dto) =>
         dto.TargetAudience == AnnouncementAudience.CourseSection ? dto.TargetSectionId : null;
 
+    /// <summary>
+    /// Sınıf filtresi yalnızca öğrenci hedefli audience'larda anlamlıdır. Aksi halde null'a sıfırlanır.
+    /// Değer settings.StudentYearFilterMin/Max aralığı dışındaysa <see cref="InvalidOperationException"/> fırlatır.
+    /// </summary>
+    private static int? GetTargetStudentYear(
+        AnnouncementAudience audience,
+        int? rawYear,
+        AnnouncementSettings settings)
+    {
+        var supportsYearFilter = audience is AnnouncementAudience.Students
+            or AnnouncementAudience.DepartmentStudents
+            or AnnouncementAudience.FacultyStudents;
+
+        if (!supportsYearFilter || rawYear is null)
+            return null;
+
+        var year = rawYear.Value;
+        if (year < settings.StudentYearFilterMin || year > settings.StudentYearFilterMax)
+            throw new InvalidOperationException(
+                $"Sınıf filtresi {settings.StudentYearFilterMin}-{settings.StudentYearFilterMax} aralığında olmalıdır.");
+
+        return year;
+    }
+
     // ── Mapping ───────────────────────────────────────────────────────────────
 
     private static string? BuildSectionInfo(InternalAnnouncement a) =>
@@ -606,25 +863,130 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             ? $"{s.Course?.Name ?? "?"} - Şube {a.TargetSection.SectionNumber}"
             : null;
 
-    private static AnnouncementListDto MapToList(InternalAnnouncement a)
+    private static AnnouncementListDto MapToList(InternalAnnouncement a, bool isReadByMe)
     {
-        var preview = a.Content.Length > 200 ? a.Content[..200] + "..." : a.Content;
+        var preview = BuildPreview(a.Content, a.ContentFormat);
         return new AnnouncementListDto(
-            a.Id, a.Title, preview,
+            a.Id, a.Title, preview, a.ContentFormat,
             a.TargetAudience,
             a.TargetDepartmentId, a.TargetDepartment?.Name,
             a.TargetFacultyId,    a.TargetFaculty?.Name,
             a.TargetSectionId,    BuildSectionInfo(a),
+            a.TargetStudentYear,
+            MapCategorySummary(a.Category),
             a.IsPinned, a.StartsAt, a.ExpiresAt,
-            a.CreatedByName, a.CreatedAt, a.IsActive);
+            a.CreatedByName, a.CreatedAt, a.IsActive, isReadByMe);
     }
 
-    private static AnnouncementDetailDto MapToDetail(InternalAnnouncement a) =>
-        new(a.Id, a.Title, a.Content,
+    private static AnnouncementDetailDto MapToDetail(InternalAnnouncement a, bool isReadByMe) =>
+        new(a.Id, a.Title, a.Content, a.ContentFormat,
             a.TargetAudience,
             a.TargetDepartmentId, a.TargetDepartment?.Name,
             a.TargetFacultyId,    a.TargetFaculty?.Name,
             a.TargetSectionId,    BuildSectionInfo(a),
+            a.TargetStudentYear,
+            MapCategorySummary(a.Category),
             a.IsPinned, a.StartsAt, a.ExpiresAt,
-            a.CreatedByName, a.CreatedAt, a.UpdatedAt, a.IsActive);
+            a.CreatedByName, a.CreatedAt, a.UpdatedAt, a.IsActive, isReadByMe);
+
+    private static AnnouncementCategorySummaryDto? MapCategorySummary(AnnouncementCategory? c) =>
+        c is null ? null : new AnnouncementCategorySummaryDto(c.Id, c.Name, c.ColorHex, c.IconName);
+
+    /// <summary>
+    /// CategoryId varsa veritabanında olup olmadığını doğrular. Bulunamazsa hata fırlatır.
+    /// </summary>
+    private async Task<int?> ResolveCategoryIdAsync(int? rawCategoryId, CancellationToken ct)
+    {
+        if (rawCategoryId is null) return null;
+
+        var exists = await _context.AnnouncementCategories
+            .AsNoTracking()
+            .AnyAsync(c => c.Id == rawCategoryId.Value, ct);
+        if (!exists)
+            throw new InvalidOperationException($"Seçilen kategori bulunamadı (ID: {rawCategoryId.Value}).");
+
+        return rawCategoryId;
+    }
+
+    /// <summary>
+    /// Liste preview için HTML içerikten plain text üretir. Plain format değişmez.
+    /// </summary>
+    private static string BuildPreview(string content, string contentFormat)
+    {
+        const int previewLength = 200;
+
+        var text = string.Equals(contentFormat, AnnouncementSanitizationPolicy.ContentFormats.Html, StringComparison.OrdinalIgnoreCase)
+            ? StripHtml(content)
+            : content;
+
+        return text.Length > previewLength
+            ? text[..previewLength] + "..."
+            : text;
+    }
+
+    private static string StripHtml(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var doc = new HtmlAgilityPack.HtmlDocument();
+        doc.LoadHtml(html);
+        var text = System.Net.WebUtility.HtmlDecode(doc.DocumentNode.InnerText ?? string.Empty);
+        return System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+    }
+
+    /// <summary>
+    /// Title/Content/Format'i sınırlar dahilinde doğrular ve HTML ise sanitize eder.
+    /// </summary>
+    private (string Title, string Content, string Format) ValidateAndNormalize(
+        string? rawTitle,
+        string? rawContent,
+        string? rawFormat,
+        AnnouncementSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(rawTitle))
+            throw new InvalidOperationException("Duyuru başlığı boş olamaz.");
+        if (string.IsNullOrWhiteSpace(rawContent))
+            throw new InvalidOperationException("Duyuru içeriği boş olamaz.");
+
+        var title = rawTitle.Trim();
+        if (title.Length > settings.MaxTitleLength)
+            throw new InvalidOperationException(
+                $"Başlık en fazla {settings.MaxTitleLength} karakter olabilir.");
+
+        var format = NormalizeContentFormat(rawFormat);
+        var content = rawContent.Trim();
+
+        if (format == AnnouncementSanitizationPolicy.ContentFormats.Html)
+        {
+            content = _sanitizer.Sanitize(
+                content,
+                allowImages: settings.AllowImagesInContent,
+                allowTables: settings.AllowTablesInContent);
+        }
+
+        if (content.Length > settings.MaxContentLength)
+            throw new InvalidOperationException(
+                $"İçerik en fazla {settings.MaxContentLength} karakter olabilir.");
+
+        if (string.IsNullOrWhiteSpace(content))
+            throw new InvalidOperationException("Duyuru içeriği boş olamaz.");
+
+        return (title, content, format);
+    }
+
+    private static string NormalizeContentFormat(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return AnnouncementSanitizationPolicy.ContentFormats.Plain;
+
+        var trimmed = raw.Trim().ToLowerInvariant();
+        return trimmed switch
+        {
+            AnnouncementSanitizationPolicy.ContentFormats.Html  => AnnouncementSanitizationPolicy.ContentFormats.Html,
+            AnnouncementSanitizationPolicy.ContentFormats.Plain => AnnouncementSanitizationPolicy.ContentFormats.Plain,
+            _ => throw new InvalidOperationException(
+                $"Geçersiz içerik formatı: '{raw}'. İzin verilen: plain, html."),
+        };
+    }
 }

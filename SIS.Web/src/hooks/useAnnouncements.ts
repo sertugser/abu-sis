@@ -8,6 +8,9 @@ import {
   getAllAnnouncements,
   getAnnouncementById,
   getAnnouncementCreateContext,
+  getUnreadAnnouncementCount,
+  markAnnouncementAsRead,
+  markAllAnnouncementsAsRead,
   updateAnnouncement,
 } from '../api/announcements.api';
 import { QUERY_KEYS } from '../lib/constants';
@@ -91,5 +94,38 @@ export function useReactivateAnnouncement() {
   return useMutation({
     mutationFn: (id: number) => reactivateAnnouncement(id),
     onSuccess: () => invalidateAnnouncementLists(qc),
+  });
+}
+
+// ── Read tracking ────────────────────────────────────────────────────────────
+
+export function useUnreadAnnouncementCount(enabled = true, refetchIntervalMs?: number) {
+  return useQuery({
+    queryKey: ['announcements', 'unread-count'],
+    queryFn: () => getUnreadAnnouncementCount().then((r) => r.unreadCount),
+    enabled,
+    staleTime: 30 * 1000,
+    refetchInterval: refetchIntervalMs,
+  });
+}
+
+export function useMarkAnnouncementAsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => markAnnouncementAsRead(id),
+    onSuccess: () => {
+      // Tüm duyuru listelerini ve okunmamış sayacını taze tut
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+    },
+  });
+}
+
+export function useMarkAllAnnouncementsAsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => markAllAnnouncementsAsRead(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+    },
   });
 }

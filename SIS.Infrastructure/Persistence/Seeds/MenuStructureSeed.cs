@@ -244,6 +244,7 @@ public static class MenuStructureSeed
         {
             BuildItem(permissions, "Duyurular",                      "/duyurular",                           "duyurular-admin",                1, "menu.duyurular-admin.view"),
             BuildItem(permissions, "Duyuru YÃ¶netimi",                "/duyuru-yonetimi",                     "duyuru-yonetimi",                2, "menu.duyuru-yonetimi.view"),
+            BuildItem(permissions, "Duyuru Kategorileri",            "/duyuru-kategorileri",                 "duyuru-kategorileri",            3, "menu.duyuru-kategorileri.view"),
         };
 
         // â”€â”€â”€ ModÃ¼l 12: HesabÄ±m (Patch 2C: SADECE Student) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

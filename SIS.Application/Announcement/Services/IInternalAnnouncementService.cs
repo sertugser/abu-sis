@@ -14,10 +14,42 @@ public interface IInternalAnnouncementService
         int? userFacultyId,
         IEnumerable<int> userEnrolledSectionIds,
         string? advisorUserId,
+        int? userStudentYear,
         int? maxResults,
         CancellationToken ct = default);
 
-    Task<AnnouncementDetailDto?> GetByIdAsync(int id, CancellationToken ct = default);
+    Task<AnnouncementDetailDto?> GetByIdAsync(int id, int? requestingUserId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Duyuruyu kullanıcı için okundu olarak işaretler. Idempotent: zaten okunmuşsa no-op.
+    /// </summary>
+    /// <returns>true: yeni kayıt oluşturuldu; false: zaten okunmuştu veya duyuru bulunamadı</returns>
+    Task<bool> MarkAsReadAsync(int announcementId, int userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Kullanıcının görebildiği tüm okunmamış duyuruları toplu olarak okundu işaretler.
+    /// </summary>
+    /// <returns>Yeni okundu işaretlenen duyuru sayısı</returns>
+    Task<int> MarkAllAsReadAsync(
+        string userId,
+        IEnumerable<string> roles,
+        int? userDepartmentId,
+        int? userFacultyId,
+        IEnumerable<int> userEnrolledSectionIds,
+        string? advisorUserId,
+        int? userStudentYear,
+        CancellationToken ct = default);
+
+    /// <summary>Kullanıcının okunmamış duyuru sayısı (badge sayacı için).</summary>
+    Task<int> GetUnreadCountAsync(
+        string userId,
+        IEnumerable<string> roles,
+        int? userDepartmentId,
+        int? userFacultyId,
+        IEnumerable<int> userEnrolledSectionIds,
+        string? advisorUserId,
+        int? userStudentYear,
+        CancellationToken ct = default);
 
     /// <summary>Admin: tüm duyurular (SysAdmin + AdministrativeStaff için).</summary>
     Task<List<AnnouncementListDto>> GetAllAsync(CancellationToken ct = default);

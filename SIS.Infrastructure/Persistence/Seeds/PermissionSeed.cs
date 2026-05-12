@@ -341,6 +341,12 @@ public static class PermissionSeed
         ("menu.duyuru-yonetimi.edit",                    PermissionCategory.Menu, "Internal announcement düzenleme"),
         ("menu.duyuru-yonetimi.delete",                  PermissionCategory.Menu, "Internal announcement silme"),
 
+        // Duyuru Kategorileri (Madde 3)
+        ("menu.duyuru-kategorileri.view",                PermissionCategory.Menu, "Duyuru kategorileri listesi"),
+        ("menu.duyuru-kategorileri.create",              PermissionCategory.Menu, "Yeni duyuru kategorisi"),
+        ("menu.duyuru-kategorileri.edit",                PermissionCategory.Menu, "Duyuru kategorisi düzenleme"),
+        ("menu.duyuru-kategorileri.delete",              PermissionCategory.Menu, "Duyuru kategorisi silme"),
+
         // ═══════════════════════════════════════════════════════════════════════════
         // Modül 10: Hesabım
         // ═══════════════════════════════════════════════════════════════════════════

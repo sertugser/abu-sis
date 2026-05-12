@@ -397,6 +397,12 @@ public static class RolePermissionSeed
                 "menu.duyuru-yonetimi.edit",
                 "menu.duyuru-yonetimi.delete",
 
+                // ── Duyuru Kategorileri CRUD ──
+                "menu.duyuru-kategorileri.view",
+                "menu.duyuru-kategorileri.create",
+                "menu.duyuru-kategorileri.edit",
+                "menu.duyuru-kategorileri.delete",
+
                 // ── Cross-cutting (authenticated) ──
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
                 // ders-degerlendirme.view Student-only (2026-05-02).
@@ -541,6 +547,12 @@ public static class RolePermissionSeed
                 "menu.duyuru-yonetimi.create",
                 "menu.duyuru-yonetimi.edit",
                 "menu.duyuru-yonetimi.delete",
+
+                // ── Duyuru Kategorileri CRUD ──
+                "menu.duyuru-kategorileri.view",
+                "menu.duyuru-kategorileri.create",
+                "menu.duyuru-kategorileri.edit",
+                "menu.duyuru-kategorileri.delete",
 
                 // ── Cross-cutting (authenticated) ──
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.

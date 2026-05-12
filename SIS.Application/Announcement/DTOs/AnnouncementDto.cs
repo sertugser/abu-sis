@@ -1,3 +1,4 @@
+using SIS.Application.Announcement.Configuration;
 using SIS.Domain.Enums;
 
 namespace SIS.Application.Announcement.DTOs;
@@ -6,6 +7,7 @@ public record AnnouncementListDto(
     int Id,
     string Title,
     string ContentPreview,
+    string ContentFormat,
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
     string? TargetDepartmentName,
@@ -13,17 +15,21 @@ public record AnnouncementListDto(
     string? TargetFacultyName,
     int? TargetSectionId,
     string? TargetSectionInfo,
+    int? TargetStudentYear,
+    AnnouncementCategorySummaryDto? Category,
     bool IsPinned,
     DateTime StartsAt,
     DateTime? ExpiresAt,
     string CreatedByName,
     DateTime CreatedAt,
-    bool IsActive);
+    bool IsActive,
+    bool IsReadByMe);
 
 public record AnnouncementDetailDto(
     int Id,
     string Title,
     string Content,
+    string ContentFormat,
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
     string? TargetDepartmentName,
@@ -31,21 +37,27 @@ public record AnnouncementDetailDto(
     string? TargetFacultyName,
     int? TargetSectionId,
     string? TargetSectionInfo,
+    int? TargetStudentYear,
+    AnnouncementCategorySummaryDto? Category,
     bool IsPinned,
     DateTime StartsAt,
     DateTime? ExpiresAt,
     string CreatedByName,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    bool IsActive);
+    bool IsActive,
+    bool IsReadByMe);
 
 public record CreateAnnouncementDto(
     string Title,
     string Content,
+    string ContentFormat,
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
     int? TargetFacultyId,
     int? TargetSectionId,
+    int? TargetStudentYear,
+    int? CategoryId,
     bool IsPinned,
     DateTime? StartsAt,
     DateTime? ExpiresAt);
@@ -53,10 +65,13 @@ public record CreateAnnouncementDto(
 public record UpdateAnnouncementDto(
     string Title,
     string Content,
+    string ContentFormat,
     AnnouncementAudience TargetAudience,
     int? TargetDepartmentId,
     int? TargetFacultyId,
     int? TargetSectionId,
+    int? TargetStudentYear,
+    int? CategoryId,
     bool IsPinned,
     DateTime StartsAt,
     DateTime? ExpiresAt);
@@ -77,4 +92,5 @@ public record AnnouncementCreateContextDto(
     string? DepartmentName,
     int? FacultyId,
     string? FacultyName,
-    IReadOnlyList<AnnouncementSectionOptionDto> Sections);
+    IReadOnlyList<AnnouncementSectionOptionDto> Sections,
+    AnnouncementSettings Settings);

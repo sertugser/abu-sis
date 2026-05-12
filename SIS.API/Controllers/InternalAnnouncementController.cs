@@ -38,61 +38,8 @@ public class InternalAnnouncementController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userId is null) return Unauthorized();
 
-        var roles = User.Claims
-            .Where(c => c.Type == ClaimTypes.Role)
-            .Select(c => c.Value)
-            .ToList();
-
-        int?    departmentId  = null;
-        int?    facultyId     = null;
-        var     sectionIds    = new List<int>();
-        string? advisorUserId = null;
-
-        if (int.TryParse(userId, out var uid))
-        {
-            var instructor = await _context.Instructors
-                .AsNoTracking()
-                .Include(i => i.Department)
-                .FirstOrDefaultAsync(i => i.UserId == uid, ct);
-
-            if (instructor is not null)
-            {
-                departmentId = instructor.DepartmentId;
-                facultyId    = instructor.Department?.FacultyId;
-            }
-            else
-            {
-                var student = await _context.Students
-                    .AsNoTracking()
-                    .Include(s => s.StudentPrograms)
-                        .ThenInclude(sp => sp.Program)
-                    .Include(s => s.Advisor)
-                    .FirstOrDefaultAsync(s => s.UserId == uid, ct);
-
-                if (student is not null)
-                {
-                    var program = student.StudentPrograms.FirstOrDefault()?.Program;
-                    departmentId = program?.DepartmentId;
-                    if (departmentId.HasValue)
-                    {
-                        var dept = await _context.Departments
-                            .AsNoTracking()
-                            .FirstOrDefaultAsync(d => d.Id == departmentId.Value, ct);
-                        facultyId = dept?.FacultyId;
-                    }
-
-                    sectionIds    = await _context.CourseRegistrations
-                        .AsNoTracking()
-                        .Where(r => r.StudentId == student.Id)
-                        .Select(r => r.CourseSectionId)
-                        .ToListAsync(ct);
-
-                    advisorUserId = student.Advisor?.UserId.ToString();
-                }
-            }
-        }
-
-        var items = await _service.GetActiveForUserAsync(userId, roles, departmentId, facultyId, sectionIds, advisorUserId, max, ct);
+        var (roles, deptId, facId, sectionIds, advisorUid, studentYear) = await ResolveUserScopeAsync(userId, ct);
+        var items = await _service.GetActiveForUserAsync(userId, roles, deptId, facId, sectionIds, advisorUid, studentYear, max, ct);
         return Ok(items);
     }
 
@@ -100,10 +47,115 @@ public class InternalAnnouncementController : ControllerBase
     [RequireAnyPermission("menu.duyurular.view", "menu.duyurular-admin.view", "menu.duyuru-yonetimi.view")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
-        var item = await _service.GetByIdAsync(id, ct);
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int? requestingUserId = int.TryParse(userIdClaim, out var uid) ? uid : null;
+
+        var item = await _service.GetByIdAsync(id, requestingUserId, ct);
         if (item is null)
             return NotFound(new { error = "Duyuru bulunamadı." });
         return Ok(item);
+    }
+
+    // ── Read tracking (Madde 5) ──────────────────────────────────────────────
+
+    [HttpPost("{id:int}/read")]
+    [RequirePermission("menu.duyurular.view")]
+    public async Task<IActionResult> MarkAsRead(int id, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var uid)) return Unauthorized();
+
+        var marked = await _service.MarkAsReadAsync(id, uid, ct);
+        return Ok(new { marked });
+    }
+
+    [HttpPost("read-all")]
+    [RequirePermission("menu.duyurular.view")]
+    public async Task<IActionResult> MarkAllAsRead(CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null) return Unauthorized();
+
+        var (roles, deptId, facId, sectionIds, advisorUid, studentYear) = await ResolveUserScopeAsync(userIdClaim, ct);
+        var count = await _service.MarkAllAsReadAsync(userIdClaim, roles, deptId, facId, sectionIds, advisorUid, studentYear, ct);
+        return Ok(new { markedCount = count });
+    }
+
+    [HttpGet("unread-count")]
+    [RequirePermission("menu.duyurular.view")]
+    public async Task<IActionResult> GetUnreadCount(CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null) return Unauthorized();
+
+        var (roles, deptId, facId, sectionIds, advisorUid, studentYear) = await ResolveUserScopeAsync(userIdClaim, ct);
+        var count = await _service.GetUnreadCountAsync(userIdClaim, roles, deptId, facId, sectionIds, advisorUid, studentYear, ct);
+        return Ok(new { unreadCount = count });
+    }
+
+    /// <summary>
+    /// Kullanıcının duyuru görünürlük kapsamını (rol/bölüm/fakülte/section/danışman/sınıf) tek noktada çözer.
+    /// GetActive, MarkAllAsRead ve GetUnreadCount tarafından paylaşılır.
+    /// </summary>
+    private async Task<(List<string> Roles, int? DeptId, int? FacultyId, List<int> SectionIds, string? AdvisorUid, int? StudentYear)>
+        ResolveUserScopeAsync(string userIdClaim, CancellationToken ct)
+    {
+        var roles = User.Claims
+            .Where(c => c.Type == ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToList();
+
+        int?    deptId      = null;
+        int?    facultyId   = null;
+        var     sectionIds  = new List<int>();
+        string? advisorUid  = null;
+        int?    studentYear = null;
+
+        if (!int.TryParse(userIdClaim, out var uid))
+            return (roles, deptId, facultyId, sectionIds, advisorUid, studentYear);
+
+        var instructor = await _context.Instructors
+            .AsNoTracking()
+            .Include(i => i.Department)
+            .FirstOrDefaultAsync(i => i.UserId == uid, ct);
+
+        if (instructor is not null)
+        {
+            deptId    = instructor.DepartmentId;
+            facultyId = instructor.Department?.FacultyId;
+            return (roles, deptId, facultyId, sectionIds, advisorUid, studentYear);
+        }
+
+        var student = await _context.Students
+            .AsNoTracking()
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+            .Include(s => s.Advisor)
+            .FirstOrDefaultAsync(s => s.UserId == uid, ct);
+
+        if (student is null)
+            return (roles, deptId, facultyId, sectionIds, advisorUid, studentYear);
+
+        var program = student.StudentPrograms.FirstOrDefault()?.Program;
+        deptId = program?.DepartmentId;
+        if (deptId.HasValue)
+        {
+            var dept = await _context.Departments
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == deptId.Value, ct);
+            facultyId = dept?.FacultyId;
+        }
+
+        sectionIds = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(r => r.StudentId == student.Id)
+            .Select(r => r.CourseSectionId)
+            .ToListAsync(ct);
+
+        advisorUid  = student.Advisor?.UserId.ToString();
+        studentYear = (student.CompletedSemesters / 2) + 1;
+
+        return (roles, deptId, facultyId, sectionIds, advisorUid, studentYear);
     }
 
     // ── Yönetim listesi ───────────────────────────────────────────────────────

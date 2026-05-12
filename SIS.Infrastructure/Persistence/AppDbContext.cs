@@ -70,6 +70,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<EvaluationResponse> EvaluationResponses => Set<EvaluationResponse>();
     public DbSet<EvaluationAnswer> EvaluationAnswers => Set<EvaluationAnswer>();
     public DbSet<InternalAnnouncement> InternalAnnouncements => Set<InternalAnnouncement>();
+    public DbSet<AnnouncementRead> AnnouncementReads => Set<AnnouncementRead>();
+    public DbSet<AnnouncementCategory> AnnouncementCategories => Set<AnnouncementCategory>();
     public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
     public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
     public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
@@ -1106,13 +1108,17 @@ builder.Entity<GradingCriteria>(e =>
         // ── InternalAnnouncement ─────────────────────────────────
         builder.Entity<InternalAnnouncement>(e =>
         {
-            e.Property(a => a.Title).HasMaxLength(200);
-            e.Property(a => a.Content).HasMaxLength(5000);
+            // Title / Content max uzunlukları uygulama katmanında (WebModuleSettings) sınırlanır.
+            // DB tarafında geniş tutuluyor ki admin limiti artırırsa şema müdahalesi gerekmesin.
+            e.Property(a => a.Title).HasMaxLength(500);
+            e.Property(a => a.Content).HasColumnType("text");
+            e.Property(a => a.ContentFormat).HasMaxLength(10).HasDefaultValue("plain");
             e.Property(a => a.CreatedBy).HasMaxLength(100);
             e.Property(a => a.CreatedByName).HasMaxLength(200);
 
             e.HasIndex(a => new { a.IsActive, a.StartsAt, a.ExpiresAt });
             e.HasIndex(a => a.TargetAudience);
+            e.HasIndex(a => a.TargetStudentYear);
 
             e.HasOne(a => a.TargetDepartment)
              .WithMany()
@@ -1128,6 +1134,37 @@ builder.Entity<GradingCriteria>(e =>
              .WithMany()
              .HasForeignKey(a => a.TargetSectionId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.Category)
+             .WithMany()
+             .HasForeignKey(a => a.CategoryId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasIndex(a => a.CategoryId);
+        });
+
+        // ── AnnouncementCategory ─────────────────────────────────
+        builder.Entity<AnnouncementCategory>(e =>
+        {
+            e.Property(c => c.Name).HasMaxLength(100).IsRequired();
+            e.Property(c => c.ColorHex).HasMaxLength(7).IsRequired();
+            e.Property(c => c.IconName).HasMaxLength(50);
+            e.HasIndex(c => c.Name).IsUnique();
+            e.HasIndex(c => c.SortOrder);
+        });
+
+        // ── AnnouncementRead (composite PK: AnnouncementId + UserId) ──────
+        builder.Entity<AnnouncementRead>(e =>
+        {
+            e.HasKey(r => new { r.AnnouncementId, r.UserId });
+
+            e.HasOne(r => r.Announcement)
+             .WithMany()
+             .HasForeignKey(r => r.AnnouncementId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Kullanıcının okunmamış duyurularını sorgularken UserId üzerinden index gerekli
+            e.HasIndex(r => r.UserId);
         });
 
         // ── OsymRegistrationCalendar ───────────────────────────

@@ -58,3 +58,26 @@ export async function permanentDeleteAnnouncement(id: number): Promise<void> {
 export async function reactivateAnnouncement(id: number): Promise<void> {
   await apiClient.post(`/internal-announcements/${id}/reactivate`);
 }
+
+// ── Read tracking ────────────────────────────────────────────────────────────
+
+export async function markAnnouncementAsRead(id: number): Promise<{ marked: boolean }> {
+  const { data } = await apiClient.post<{ marked: boolean }>(
+    `/internal-announcements/${id}/read`,
+  );
+  return data;
+}
+
+export async function markAllAnnouncementsAsRead(): Promise<{ markedCount: number }> {
+  const { data } = await apiClient.post<{ markedCount: number }>(
+    '/internal-announcements/read-all',
+  );
+  return data;
+}
+
+export async function getUnreadAnnouncementCount(): Promise<{ unreadCount: number }> {
+  const { data } = await apiClient.get<{ unreadCount: number }>(
+    '/internal-announcements/unread-count',
+  );
+  return data;
+}

@@ -47,12 +47,18 @@ export const ANNOUNCEMENT_AUDIENCE_LABELS: Record<AnnouncementAudience, string> 
   AllForDeptMgr:          'Herkes',
 };
 
+import type { AnnouncementCategorySummary } from './announcementCategories';
+
+// ── İçerik formatı (backend ContentFormat ile eşleşmeli) ─────────────────────
+export type AnnouncementContentFormat = 'plain' | 'html';
+
 // ── Announcement DTOs ─────────────────────────────────────────────────────────
 
 export interface AnnouncementList {
   id: number;
   title: string;
   contentPreview: string;
+  contentFormat: AnnouncementContentFormat;
   targetAudience: AnnouncementAudience;
   targetDepartmentId: number | null;
   targetDepartmentName: string | null;
@@ -60,18 +66,22 @@ export interface AnnouncementList {
   targetFacultyName: string | null;
   targetSectionId: number | null;
   targetSectionInfo: string | null;
+  targetStudentYear: number | null;
+  category: AnnouncementCategorySummary | null;
   isPinned: boolean;
   startsAt: string;
   expiresAt: string | null;
   createdByName: string;
   createdAt: string;
   isActive: boolean;
+  isReadByMe: boolean;
 }
 
 export interface AnnouncementDetail {
   id: number;
   title: string;
   content: string;
+  contentFormat: AnnouncementContentFormat;
   targetAudience: AnnouncementAudience;
   targetDepartmentId: number | null;
   targetDepartmentName: string | null;
@@ -79,6 +89,8 @@ export interface AnnouncementDetail {
   targetFacultyName: string | null;
   targetSectionId: number | null;
   targetSectionInfo: string | null;
+  targetStudentYear: number | null;
+  category: AnnouncementCategorySummary | null;
   isPinned: boolean;
   startsAt: string;
   expiresAt: string | null;
@@ -86,15 +98,19 @@ export interface AnnouncementDetail {
   createdAt: string;
   updatedAt: string | null;
   isActive: boolean;
+  isReadByMe: boolean;
 }
 
 export interface CreateAnnouncementPayload {
   title: string;
   content: string;
+  contentFormat: AnnouncementContentFormat;
   targetAudience: AnnouncementAudience;
   targetDepartmentId: number | null;
   targetFacultyId: number | null;
   targetSectionId: number | null;
+  targetStudentYear: number | null;
+  categoryId: number | null;
   isPinned: boolean;
   startsAt: string | null;
   expiresAt: string | null;
@@ -103,10 +119,13 @@ export interface CreateAnnouncementPayload {
 export interface UpdateAnnouncementPayload {
   title: string;
   content: string;
+  contentFormat: AnnouncementContentFormat;
   targetAudience: AnnouncementAudience;
   targetDepartmentId: number | null;
   targetFacultyId: number | null;
   targetSectionId: number | null;
+  targetStudentYear: number | null;
+  categoryId: number | null;
   isPinned: boolean;
   startsAt: string;
   expiresAt: string | null;
@@ -122,6 +141,28 @@ export interface AnnouncementSectionOption {
   termName: string;
 }
 
+export interface AnnouncementSettings {
+  maxTitleLength: number;
+  maxContentLength: number;
+  studentTopCount: number;
+  pinnedFirst: boolean;
+  allowImagesInContent: boolean;
+  allowTablesInContent: boolean;
+  studentYearFilterMin: number;
+  studentYearFilterMax: number;
+}
+
+// Sınıf filtresi destekleyen audience'lar (backend ile eşleşmeli)
+export const STUDENT_YEAR_FILTERABLE_AUDIENCES: AnnouncementAudience[] = [
+  'Students',
+  'DepartmentStudents',
+  'FacultyStudents',
+];
+
+export function audienceSupportsStudentYearFilter(audience: AnnouncementAudience): boolean {
+  return STUDENT_YEAR_FILTERABLE_AUDIENCES.includes(audience);
+}
+
 export interface AnnouncementCreateContext {
   senderRole: 'Instructor' | 'Dean' | 'DepartmentManager' | 'Admin';
   allowedAudiences: AnnouncementAudience[];
@@ -130,11 +171,25 @@ export interface AnnouncementCreateContext {
   facultyId: number | null;
   facultyName: string | null;
   sections: AnnouncementSectionOption[];
+  settings: AnnouncementSettings;
 }
 
 // ── Audience badge helper ─────────────────────────────────────────────────────
 
-export function getAudienceBadgeLabel(item: Pick<AnnouncementList, 'targetAudience' | 'targetDepartmentName' | 'targetFacultyName' | 'targetSectionInfo'>): string {
+type AudienceBadgeItem = Pick<
+  AnnouncementList,
+  'targetAudience' | 'targetDepartmentName' | 'targetFacultyName' | 'targetSectionInfo' | 'targetStudentYear'
+>;
+
+export function getAudienceBadgeLabel(item: AudienceBadgeItem): string {
+  const base = formatAudienceBase(item);
+  if (item.targetStudentYear && audienceSupportsStudentYearFilter(item.targetAudience)) {
+    return `${base} · ${item.targetStudentYear}. Sınıf`;
+  }
+  return base;
+}
+
+function formatAudienceBase(item: AudienceBadgeItem): string {
   switch (item.targetAudience) {
     case 'Department':
       return item.targetDepartmentName ? `Bölüm: ${item.targetDepartmentName}` : 'Bölüm';

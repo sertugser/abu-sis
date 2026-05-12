@@ -84,6 +84,7 @@ import EvaluationPeriodAdminPage from './pages/EvaluationPeriodAdminPage';
 import EvaluationRequiredGate from './components/EvaluationRequiredGate';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
+import AnnouncementCategoryPage from './pages/AnnouncementCategoryPage';
 import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
 import SectioningPage from './pages/SectioningPage';
 import CourseQuotaPage from './pages/CourseQuotaPage';
@@ -323,6 +324,9 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.duyuru-yonetimi.view" />}>
                     <Route path="duyuru-yonetimi" element={<AnnouncementManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.duyuru-kategorileri.view" />}>
+                    <Route path="duyuru-kategorileri" element={<AnnouncementCategoryPage />} />
                   </Route>
 
                   <Route element={<RoleProtectedRoute permission="menu.system-config.view" />}>
