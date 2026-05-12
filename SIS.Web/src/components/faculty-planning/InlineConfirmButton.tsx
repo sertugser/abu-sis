@@ -50,7 +50,16 @@ export default function InlineConfirmButton({
       size={size}
       disabled={disabled}
       onClick={handleClick}
-      className={cn('transition-all duration-200', confirming && 'animate-pulse', className)}
+      className={cn(
+        'transition-all duration-200',
+        // Onay modunda: animate-pulse opacity'yi %50'ye düşürüp yazıyı
+        // silikleştiriyordu. Yerine kalın yazı + ring vurgusu + hafif scale.
+        confirming && 'font-bold ring-2 ring-red-300 ring-offset-1 scale-[1.02]',
+        className,
+      )}
+      // text-white class'ı Button'un destructive variant'ı tarafından
+      // override edilebildiği için inline style ile zorla — kesin beyaz.
+      style={confirming ? { color: '#ffffff' } : undefined}
     >
       {confirming ? confirmLabel : (<>{icon}{label}</>)}
     </Button>

@@ -8,27 +8,30 @@ import type { FacultyPlanningSection, FacultyPlanningTimeSlot, ScheduleBlockType
 import { useScheduleSettings } from '../../hooks/useScheduleSettings';
 import { STATUS_CONFIG } from './sectionUtils';
 
-/* ── 16 renk paleti — courseCode hash ile sabit renk ── */
+/* ── 16 renk paleti — courseCode hash ile sabit renk ──
+   Pastel açık arka plan + SİYAH yazı (text-slate-900) — en yüksek kontrast.
+   Renk farklılığı sol kenardaki accent + arka plan tonu ile sağlanır.
+*/
 const COURSE_COLORS = [
-  { bg: 'bg-blue-100',    border: 'border-blue-300',    text: 'text-blue-900',    accent: '#2563eb' },
-  { bg: 'bg-emerald-100', border: 'border-emerald-300', text: 'text-emerald-900', accent: '#059669' },
-  { bg: 'bg-violet-100',  border: 'border-violet-300',  text: 'text-violet-900',  accent: '#7c3aed' },
-  { bg: 'bg-amber-100',   border: 'border-amber-300',   text: 'text-amber-900',   accent: '#d97706' },
-  { bg: 'bg-rose-100',    border: 'border-rose-300',    text: 'text-rose-900',    accent: '#e11d48' },
-  { bg: 'bg-cyan-100',    border: 'border-cyan-300',    text: 'text-cyan-900',    accent: '#0891b2' },
-  { bg: 'bg-orange-100',  border: 'border-orange-300',  text: 'text-orange-900',  accent: '#ea580c' },
-  { bg: 'bg-indigo-100',  border: 'border-indigo-300',  text: 'text-indigo-900',  accent: '#4f46e5' },
-  { bg: 'bg-teal-100',    border: 'border-teal-300',    text: 'text-teal-900',    accent: '#0d9488' },
-  { bg: 'bg-pink-100',    border: 'border-pink-300',    text: 'text-pink-900',    accent: '#db2777' },
-  { bg: 'bg-lime-100',    border: 'border-lime-300',    text: 'text-lime-900',    accent: '#65a30d' },
-  { bg: 'bg-fuchsia-100', border: 'border-fuchsia-300', text: 'text-fuchsia-900', accent: '#c026d3' },
-  { bg: 'bg-sky-100',     border: 'border-sky-300',     text: 'text-sky-900',     accent: '#0284c7' },
-  { bg: 'bg-red-100',     border: 'border-red-300',     text: 'text-red-900',     accent: '#dc2626' },
-  { bg: 'bg-yellow-100',  border: 'border-yellow-400',  text: 'text-yellow-900',  accent: '#ca8a04' },
-  { bg: 'bg-purple-100',  border: 'border-purple-300',  text: 'text-purple-900',  accent: '#9333ea' },
+  { bg: 'bg-blue-100',    border: 'border-blue-300',    text: 'text-slate-900', accent: '#2563eb' },
+  { bg: 'bg-emerald-100', border: 'border-emerald-300', text: 'text-slate-900', accent: '#059669' },
+  { bg: 'bg-violet-100',  border: 'border-violet-300',  text: 'text-slate-900', accent: '#7c3aed' },
+  { bg: 'bg-amber-100',   border: 'border-amber-300',   text: 'text-slate-900', accent: '#d97706' },
+  { bg: 'bg-rose-100',    border: 'border-rose-300',    text: 'text-slate-900', accent: '#e11d48' },
+  { bg: 'bg-cyan-100',    border: 'border-cyan-300',    text: 'text-slate-900', accent: '#0891b2' },
+  { bg: 'bg-orange-100',  border: 'border-orange-300',  text: 'text-slate-900', accent: '#ea580c' },
+  { bg: 'bg-indigo-100',  border: 'border-indigo-300',  text: 'text-slate-900', accent: '#4f46e5' },
+  { bg: 'bg-teal-100',    border: 'border-teal-300',    text: 'text-slate-900', accent: '#0d9488' },
+  { bg: 'bg-pink-100',    border: 'border-pink-300',    text: 'text-slate-900', accent: '#db2777' },
+  { bg: 'bg-lime-100',    border: 'border-lime-300',    text: 'text-slate-900', accent: '#65a30d' },
+  { bg: 'bg-fuchsia-100', border: 'border-fuchsia-300', text: 'text-slate-900', accent: '#c026d3' },
+  { bg: 'bg-sky-100',     border: 'border-sky-300',     text: 'text-slate-900', accent: '#0284c7' },
+  { bg: 'bg-red-100',     border: 'border-red-300',     text: 'text-slate-900', accent: '#dc2626' },
+  { bg: 'bg-yellow-100',  border: 'border-yellow-400',  text: 'text-slate-900', accent: '#ca8a04' },
+  { bg: 'bg-purple-100',  border: 'border-purple-300',  text: 'text-slate-900', accent: '#9333ea' },
 ];
 
-const CONFLICT_COLOR = { bg: 'bg-red-50', border: 'border-red-400', text: 'text-red-900', accent: '#dc2626' };
+const CONFLICT_COLOR = { bg: 'bg-red-50', border: 'border-red-400', text: 'text-slate-900', accent: '#dc2626' };
 
 /** Müfredat yılına göre renk: 1.sınıf = mavi, 2.sınıf = yeşil, 3.sınıf = mor, 4.sınıf = turuncu */
 const YEAR_COLOR_MAP: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3 };
@@ -214,8 +217,9 @@ function SectionBlock({
   const cardInner = (
     <div
       className={cn(
-        'rounded-md border-l-[3px] px-1.5 py-1 cursor-pointer transition-all',
-        'hover:shadow-md',
+        'rounded-md border-l-[4px] px-2 py-1 cursor-pointer shadow-sm',
+        'transition-all duration-150 ease-out',
+        'hover:shadow-lg hover:-translate-y-0.5 hover:border-l-[6px]',
         color.bg, color.border, color.text,
         continuationClass,
       )}
@@ -223,40 +227,47 @@ function SectionBlock({
       onClick={e => e.stopPropagation()}
     >
       {isContinuation ? (
-        <div className="flex items-center gap-1">
-          <span className="font-mono font-semibold text-xs">{section.courseCode}</span>
-          <span className="text-[10px] font-mono opacity-70">·{section.sectionIndex}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono font-bold text-sm">{section.courseCode}</span>
+          <span className="text-xs font-mono font-bold">·{section.sectionIndex}</span>
           <BlockTypeBadge blockType={block.blockType} className="ml-auto" />
         </div>
       ) : (
         <>
-          <div className="flex items-baseline gap-1 leading-tight">
-            <span className="font-mono font-bold text-sm">{section.courseCode}</span>
-            <span className="text-[10px] font-mono opacity-70">·{section.sectionIndex}</span>
+          {/* Ders kodu + şube + tip badge */}
+          <div className="flex items-baseline gap-1.5 leading-tight">
+            <span className="font-mono font-bold text-base tracking-tight">{section.courseCode}</span>
+            <span className="text-xs font-mono font-bold">·{section.sectionIndex}</span>
             <BlockTypeBadge blockType={block.blockType} className="ml-auto self-center" />
           </div>
+          {/* Ders adı — koyu yazı, semibold */}
           {rowSpan >= 2 && (
-            <div className="text-[11px] leading-tight mt-0.5 opacity-80 truncate">{section.courseName}</div>
+            <div className="text-xs font-semibold leading-snug mt-0.5 truncate">
+              {section.courseName}
+            </div>
           )}
-          {rowSpan >= 2 && (
-            <div className="flex items-center gap-2 mt-0.5 text-[10px] opacity-70">
+          {/* Derslik + Hoca */}
+          {rowSpan >= 2 && (cardClassroomName || section.instructorName) && (
+            <div className="flex items-center gap-2 mt-0.5 text-xs font-semibold">
               {cardClassroomName && (
-                <span className="flex items-center gap-0.5">
-                  <MapPin className="h-2.5 w-2.5" />
-                  {cardClassroomName}
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{cardClassroomName}</span>
                 </span>
               )}
               {section.instructorName && (
-                <span className="flex items-center gap-0.5 truncate">
-                  <User className="h-2.5 w-2.5" />
-                  {section.instructorName.split(' ').pop()}
+                <span className="flex items-center gap-1 truncate">
+                  <User className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{section.instructorName.split(' ').pop()}</span>
                 </span>
               )}
             </div>
           )}
+          {/* Kapasite */}
           {rowSpan >= 3 && (
-            <div className="text-[10px] mt-0.5 opacity-60">
-              {section.capacity} kişi
+            <div className="flex items-center gap-1 mt-0.5 text-xs font-semibold">
+              <Users className="h-3 w-3 shrink-0" />
+              <span>{section.capacity} kişi</span>
             </div>
           )}
         </>
