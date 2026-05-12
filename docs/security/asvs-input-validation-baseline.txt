@@ -18,6 +18,7 @@ ApproveFacultyScheduleRequestDto
 AssignAdvisorDto
 AssignSectionRequest
 AutoScheduleRequest
+AutoSplitCourseRequest
 BulkAdvisorAssignmentApplyRequestDto
 BulkAdvisorAssignmentPreviewRequestDto
 BulkAdvisorAssignmentRequestDto
@@ -29,6 +30,7 @@ BulkOpenCoursesRequest
 ComponentDto
 CopyCurriculumRequest
 CreateAccessRuleRequest
+CreateAnnouncementCategoryDto
 CreateAnnouncementDto
 CreateAttendanceSessionRequest
 CreateClassroomDto
@@ -79,8 +81,10 @@ SubmitQrAttendanceRequest
 SwapSectionsRequestDto
 SystemConfigImportItemDto
 TransferFromTermRequest
+TransferStudentsToSectionRequest
 UpdateAccessRuleRequest
 UpdateAdvisorCourseConstraintRequest
+UpdateAnnouncementCategoryDto
 UpdateAnnouncementDto
 UpdateCalendarPhaseOverrideDto
 UpdateClassroomDto

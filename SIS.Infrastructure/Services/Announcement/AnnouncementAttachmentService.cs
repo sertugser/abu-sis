@@ -69,6 +69,10 @@ public sealed class AnnouncementAttachmentService : IAnnouncementAttachmentServi
 
         var resolvedMime = AnnouncementAttachmentPolicy.ResolveMimeType(extension)!;
 
+        // Magic byte (header) doğrulaması — uzantı sahteciliğini engeller
+        // (örn. evil.exe → evil.pdf isminde upload girişimi).
+        await ValidateMagicBytesAsync(content, extension, ct);
+
         // Storage'a yaz — burada exception olursa DB'ye yazılmaz, tutarlı kalır.
         var storageName = await _storage.StoreAsync(originalFileName, content, ct);
 
@@ -160,6 +164,35 @@ public sealed class AnnouncementAttachmentService : IAnnouncementAttachmentServi
             .Where(a => a.Id == attachmentId)
             .Select(a => (int?)a.AnnouncementId)
             .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// Dosyanın ilk 16 byte'ını okuyup <see cref="AttachmentMagicBytes"/> politikasıyla
+    /// karşılaştırır. Eşleşmezse <see cref="InvalidOperationException"/> fırlatır.
+    /// Stream sonradan başa konumlandırılır ki storage tüm içeriği yazabilsin.
+    /// </summary>
+    private static async Task ValidateMagicBytesAsync(Stream content, string extension, CancellationToken ct)
+    {
+        const int headerSize = 16;
+        var buffer = new byte[headerSize];
+        var read = 0;
+        while (read < headerSize)
+        {
+            var bytesRead = await content.ReadAsync(buffer.AsMemory(read, headerSize - read), ct);
+            if (bytesRead == 0) break; // dosya 16 byte'tan kısa
+            read += bytesRead;
+        }
+
+        if (read > 0 && !AttachmentMagicBytes.HeaderMatches(extension, buffer.AsSpan(0, read)))
+        {
+            throw new InvalidOperationException(
+                $"Dosya içeriği '{extension}' uzantısıyla uyuşmuyor. Yeniden adlandırılmış bir dosya olabilir.");
+        }
+
+        // Stream'i başa al; storage akışın tamamını yazabilsin.
+        if (!content.CanSeek)
+            throw new InvalidOperationException("Yükleme akışı konumlandırılabilir değil.");
+        content.Position = 0;
     }
 
     /// <summary>

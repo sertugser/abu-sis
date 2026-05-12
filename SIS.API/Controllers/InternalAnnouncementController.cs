@@ -51,8 +51,14 @@ public class InternalAnnouncementController : ControllerBase
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        int? requestingUserId = int.TryParse(userIdClaim, out var uid) ? uid : null;
+        if (userIdClaim is null) return Unauthorized();
 
+        // B1: Audience kontrolü — yönetici/yazar/audience'da olmayan kullanıcı ID tahmin
+        // ederek başkasına yazılmış duyuruyu okuyamaz. 404 döner (var/yok bilgisi sızmaz).
+        var canAccess = await CanAccessAnnouncementAsync(id, userIdClaim, ct);
+        if (!canAccess) return NotFound(new { error = "Duyuru bulunamadı." });
+
+        int? requestingUserId = int.TryParse(userIdClaim, out var uid) ? uid : null;
         var item = await _service.GetByIdAsync(id, requestingUserId, ct);
         if (item is null)
             return NotFound(new { error = "Duyuru bulunamadı." });
@@ -67,6 +73,11 @@ public class InternalAnnouncementController : ControllerBase
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!int.TryParse(userIdClaim, out var uid)) return Unauthorized();
+
+        // B2: Audience kontrolü — audience'da olmayan kullanıcı tahmini ID'lerle
+        // read kaydı oluşturup istatistikleri kirletemesin.
+        var canAccess = await CanAccessAnnouncementAsync(id, userIdClaim, ct);
+        if (!canAccess) return NotFound(new { error = "Duyuru bulunamadı." });
 
         var marked = await _service.MarkAsReadAsync(id, uid, ct);
         return Ok(new { marked });
@@ -146,6 +157,10 @@ public class InternalAnnouncementController : ControllerBase
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!int.TryParse(userIdClaim, out var uid)) return Unauthorized();
+
+        // B2: Audience kontrolü — yetkisiz user başkasına yazılmış duyuruyu onaylamasın.
+        var canAccess = await CanAccessAnnouncementAsync(id, userIdClaim, ct);
+        if (!canAccess) return NotFound(new { error = "Duyuru bulunamadı." });
 
         var acknowledged = await _service.AcknowledgeAsync(id, uid, ct);
         return Ok(new { acknowledged });
@@ -264,6 +279,37 @@ public class InternalAnnouncementController : ControllerBase
         {
             return Forbid(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Kullanıcı verilen duyuruya erişebilir mi? Detay görüntüleme + okudum işaretleme +
+    /// onaylama gibi single-announcement endpoint'lerinde paylaşılır.
+    /// </summary>
+    /// <remarks>
+    /// Yetki sırası: yönetici (SysAdmin / AdminStaff) → yazar → audience'a dahil.
+    /// Bulunamayan duyuru için <c>false</c> döner; controller bunu 404'e çevirir
+    /// (var/yok bilgisi sızdırılmaz).
+    /// </remarks>
+    private async Task<bool> CanAccessAnnouncementAsync(int announcementId, string userIdClaim, CancellationToken ct)
+    {
+        // Yönetici her duyuruya erişebilir (var olup olmadığı sonraki adımda anlaşılır).
+        if (User.IsInRole("SystemAdministrator") || User.IsInRole("AdministrativeStaff"))
+            return true;
+
+        var creatorId = await _context.InternalAnnouncements
+            .AsNoTracking()
+            .Where(a => a.Id == announcementId)
+            .Select(a => a.CreatedBy)
+            .FirstOrDefaultAsync(ct);
+
+        if (creatorId is null)       return false; // duyuru yok
+        if (creatorId == userIdClaim) return true;  // yazar
+
+        // Audience filtresinden geçen kullanıcı
+        var (roles, deptId, facId, sectionIds, advisorUid, studentYear) =
+            await ResolveUserScopeAsync(userIdClaim, ct);
+        return await _service.CanUserSeeAsync(
+            announcementId, userIdClaim, roles, deptId, facId, sectionIds, advisorUid, studentYear, ct);
     }
 
     /// <summary>

@@ -62,10 +62,11 @@ public class InternalAnnouncementService : IInternalAnnouncementService
             ? query.OrderByDescending(a => a.IsPinned).ThenByDescending(a => a.CreatedAt)
             : query.OrderByDescending(a => a.CreatedAt);
 
-        // Öğrenciler için widget kapasitesi admin kontrolünde; diğer roller maxResults'ı geçirir.
-        var effectiveMaxResults = scope.IsStudent && maxResults.HasValue
-            ? settings.StudentTopCount
-            : maxResults;
+        // Caller (frontend) explicit max gönderdiyse onu kullan; aksi halde student için
+        // admin tarafından yapılandırılmış varsayılana düş. Bu sayede bildirim zili
+        // (max=10) student için 5'e düşürülmez ama widget'lar default davranışı korur.
+        var effectiveMaxResults = maxResults
+            ?? (scope.IsStudent ? (int?)settings.StudentTopCount : null);
 
         if (effectiveMaxResults is > 0)
             query = query.Take(effectiveMaxResults.Value);
