@@ -23,18 +23,26 @@ public class DraftRegistrationCleanupService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            var now = DateTime.UtcNow;
-            var nextMidnight = now.Date.AddDays(1);
-            var delay = nextMidnight - now;
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                var now = DateTime.UtcNow;
+                var nextMidnight = now.Date.AddDays(1);
+                var delay = nextMidnight - now;
 
-            _logger.LogInformation("FR-44: Draft cleanup scheduled in {Hours}h {Minutes}m", (int)delay.TotalHours, delay.Minutes);
+                _logger.LogInformation("FR-44: Draft cleanup scheduled in {Hours}h {Minutes}m", (int)delay.TotalHours, delay.Minutes);
 
-            await Task.Delay(delay, stoppingToken);
+                await Task.Delay(delay, stoppingToken);
 
-            if (!stoppingToken.IsCancellationRequested)
-                await CleanupExpiredDraftRegistrationsAsync(stoppingToken);
+                if (!stoppingToken.IsCancellationRequested)
+                    await CleanupExpiredDraftRegistrationsAsync(stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown — Task.Delay(..., stoppingToken) cancel'a TaskCanceledException fırlatır.
+            // BackgroundServiceExceptionBehavior=StopHost (default .NET 8+) uygulamayı çakmasın.
         }
     }
 

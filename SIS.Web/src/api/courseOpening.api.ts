@@ -11,6 +11,10 @@ import type {
   UpdateOpenedSectionRequest,
   BulkAssignInstructorRequest,
   BulkAssignInstructorResultDto,
+  TransferStudentsToSectionRequest,
+  TransferStudentsToSectionResultDto,
+  AutoSplitCourseRequest,
+  AutoSplitCourseResultDto,
   PreviousTermCourseDto,
   TransferFromTermRequest,
   TransferFromTermResultDto,
@@ -119,6 +123,21 @@ export async function bulkAssignInstructor(
     request,
     { params: { departmentId, termId } },
   );
+  return data;
+}
+
+export async function transferStudentsBetweenSections(
+  request: TransferStudentsToSectionRequest,
+): Promise<TransferStudentsToSectionResultDto> {
+  const { data } = await apiClient.post<TransferStudentsToSectionResultDto>(
+    '/course-opening/transfer-students',
+    request,
+  );
+  return data;
+}
+
+export async function autoSplitCourse(request: AutoSplitCourseRequest): Promise<AutoSplitCourseResultDto> {
+  const { data } = await apiClient.post<AutoSplitCourseResultDto>('/course-opening/auto-split', request);
   return data;
 }
 

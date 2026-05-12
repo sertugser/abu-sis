@@ -178,6 +178,46 @@ export interface BulkAssignInstructorResultDto {
   errors: string[];
 }
 
+// ── Section-to-Section Student Transfer ──
+
+export interface TransferStudentsToSectionRequest {
+  sourceSectionId: number;
+  targetSectionId: number;
+  studentIds: number[];
+}
+
+export interface TransferStudentsToSectionResultDto {
+  requestedCount: number;
+  transferredCount: number;
+  transferredStudentIds: number[];
+}
+
+// ── Auto-Split (Otomatik Şubelendirme) ──
+
+export type AutoSplitStrategy = 'Equal' | 'EqualRepeat' | 'ModOddEven';
+
+export interface AutoSplitCourseRequest {
+  courseId: number;
+  termId: number;
+  targetSectionCount: number;
+  strategy: AutoSplitStrategy;
+  defaultCapacityPerSection?: number;
+}
+
+export interface AutoSplitSectionSummary {
+  sectionId: number;
+  sectionNumber: number;
+  assignedStudentCount: number;
+}
+
+export interface AutoSplitCourseResultDto {
+  finalSectionCount: number;
+  createdSectionCount: number;
+  closedSectionCount: number;
+  redistributedRegistrationCount: number;
+  sections: AutoSplitSectionSummary[];
+}
+
 // ── Term Transfer ──
 
 export interface PreviousTermCourseDto {

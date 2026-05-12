@@ -286,6 +286,61 @@ public class CourseOpeningController(
         }
     }
 
+    [HttpPost("auto-split")]
+    [RequirePermission("menu.subelendirme-islemleri.auto-split")]
+    public async Task<IActionResult> AutoSplitCourse(
+        [FromBody] AutoSplitCourseRequest request,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var course = await _context.Courses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId, ct);
+
+        if (course == null) return NotFound(new { error = "Ders bulunamadı." });
+        if (course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            var result = await _lifecycleService.AutoSplitCourseAsync(request, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("transfer-students")]
+    [RequirePermission("menu.subelendirme-islemleri.transfer")]
+    public async Task<IActionResult> TransferStudentsBetweenSections(
+        [FromBody] TransferStudentsToSectionRequest request,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var sourceSection = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == request.SourceSectionId, ct);
+
+        if (sourceSection == null) return NotFound(new { error = "Kaynak şube bulunamadı." });
+        if (sourceSection.Course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, sourceSection.Course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            var result = await _lifecycleService.TransferStudentsBetweenSectionsAsync(request, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPut("section/{id}/reactivate")]
     [RequirePermission("menu.ders-acma-islemleri.reactivate")]
     public async Task<IActionResult> ReactivateSection(int id, CancellationToken ct)
