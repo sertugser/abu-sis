@@ -1,4 +1,5 @@
 using System.IO;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Http;
 
 namespace SIS.API.Security;
@@ -29,6 +30,21 @@ public static class FileUploadValidation
         catch
         {
             return "Dosya okunamadi.";
+        }
+
+        return null;
+    }
+
+    public static string? ValidateWorkbookShape(IXLWorkbook workbook, int maxRows = 5000, int maxColumns = 100)
+    {
+        foreach (var worksheet in workbook.Worksheets)
+        {
+            var range = worksheet.RangeUsed();
+            if (range is null)
+                continue;
+
+            if (range.RowCount() > maxRows || range.ColumnCount() > maxColumns)
+                return $"Excel dosyası en fazla {maxRows} satır ve {maxColumns} sütun içerebilir.";
         }
 
         return null;

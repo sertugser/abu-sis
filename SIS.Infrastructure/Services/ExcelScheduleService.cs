@@ -577,6 +577,8 @@ public class ExcelScheduleService : IExcelScheduleService
             .ToListAsync(ct);
 
         using var workbook = new XLWorkbook(fileStream);
+        ValidateWorkbookShape(workbook);
+
         var sheet = workbook.Worksheets.FirstOrDefault(ws => ws.Name == "Program Verisi")
                     ?? workbook.Worksheet(1);
 
@@ -931,6 +933,23 @@ public class ExcelScheduleService : IExcelScheduleService
         Status = row.Status,
         Message = row.Message,
     };
+
+    private static void ValidateWorkbookShape(IXLWorkbook workbook)
+    {
+        const int maxRows = 5000;
+        const int maxColumns = 100;
+
+        foreach (var worksheet in workbook.Worksheets)
+        {
+            var range = worksheet.RangeUsed();
+            if (range is null)
+                continue;
+
+            if (range.RowCount() > maxRows || range.ColumnCount() > maxColumns)
+                throw new ScheduleImportSessionInvalidException(
+                    $"Excel file cannot exceed {maxRows} rows and {maxColumns} columns.");
+        }
+    }
 
     private sealed class ScheduleImportSessionRow
     {

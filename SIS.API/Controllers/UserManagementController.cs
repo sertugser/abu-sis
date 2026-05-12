@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using SIS.API.Authorization;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
@@ -39,6 +40,10 @@ public class UserManagementController : ControllerBase
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id:int}/roles")]
@@ -53,6 +58,10 @@ public class UserManagementController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 
@@ -81,6 +90,9 @@ public class UserManagementController : ControllerBase
     {
         try
         {
+            if (!dto.IsActive && IsCurrentUser(id))
+                return BadRequest(new { message = "Kendi hesabınızı pasifleştiremezsiniz." });
+
             await _service.SetUserStatusAsync(id, dto.IsActive);
             return NoContent();
         }
@@ -88,6 +100,16 @@ public class UserManagementController : ControllerBase
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private bool IsCurrentUser(int id)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(userIdClaim, out var userId) && userId == id;
     }
 }
 

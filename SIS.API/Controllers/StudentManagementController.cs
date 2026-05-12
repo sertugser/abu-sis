@@ -17,11 +17,16 @@ public class StudentManagementController : ControllerBase
 {
     private readonly IAdminStudentService _service;
     private readonly AppDbContext _context;
+    private readonly IAcademicScopeGuard _scopeGuard;
 
-    public StudentManagementController(IAdminStudentService service, AppDbContext context)
+    public StudentManagementController(
+        IAdminStudentService service,
+        AppDbContext context,
+        IAcademicScopeGuard scopeGuard)
     {
         _service = service;
         _context = context;
+        _scopeGuard = scopeGuard;
     }
 
     [HttpGet]
@@ -33,12 +38,14 @@ public class StudentManagementController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
         // Dean/DepartmentManager: departmentId filtresi zorunlu kıl
-        var enforcedFilter = await EnforceDepartmentFilterAsync(userId, filter.DepartmentId);
-        if (enforcedFilter.IsForbidden) return Forbid();
+        var scope = await _scopeGuard.ResolveAsync(User, userId);
+        if (scope.IsForbidden) return Forbid();
+        if (filter.DepartmentId.HasValue && !scope.IsGlobal && !scope.DepartmentIds.Contains(filter.DepartmentId.Value))
+            return Forbid();
 
-        var appliedFilter = enforcedFilter.DepartmentId != filter.DepartmentId
-            ? filter with { DepartmentId = enforcedFilter.DepartmentId }
-            : filter;
+        var appliedFilter = scope.IsGlobal
+            ? filter
+            : filter with { DepartmentIds = scope.DepartmentIds };
 
         var result = await _service.GetStudentsAsync(appliedFilter);
         return Ok(result);
@@ -67,7 +74,7 @@ public class StudentManagementController : ControllerBase
                 .FirstOrDefaultAsync();
 
             if (studentDeptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
-            if (!await HasDepartmentAccessAsync(userId, studentDeptId.Value)) return Forbid();
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, studentDeptId.Value)) return Forbid();
         }
 
         return Ok(result);
@@ -98,6 +105,22 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
 {
     try
     {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var studentDepartmentId = await GetStudentMainDepartmentIdAsync(id);
+        if (studentDepartmentId == null)
+            return NotFound(new { message = "Öğrenci bulunamadı." });
+
+        if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, studentDepartmentId.Value))
+            return Forbid();
+
+        var advisorDepartmentId = await GetAdvisorDepartmentIdAsync(dto.AdvisorId);
+        if (advisorDepartmentId == null)
+            return NotFound(new { message = $"Danışman bulunamadı: {dto.AdvisorId}" });
+
+        if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, advisorDepartmentId.Value))
+            return Forbid();
+
         await _service.AssignAdvisorAsync(id, dto.AdvisorId);
         return NoContent();
     }
@@ -121,13 +144,7 @@ public async Task<IActionResult> PreviewBulkAdvisorAssignment(
         if (!TryGetUserId(out var userId))
             return Unauthorized();
 
-        var enforcedFilter = await EnforceDepartmentFilterAsync(userId, dto.DepartmentId);
-
-        if (enforcedFilter.IsForbidden)
-            return Forbid();
-
-        if (enforcedFilter.DepartmentId.HasValue &&
-            enforcedFilter.DepartmentId.Value != dto.DepartmentId)
+        if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, dto.DepartmentId))
             return Forbid();
 
         var result = await _service.PreviewBulkAdvisorAssignmentAsync(dto);
@@ -150,6 +167,10 @@ public async Task<IActionResult> ApplyBulkAdvisorAssignment(
 {
     try
     {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await CanAccessAllBulkAssignmentTargetsAsync(userId, dto))
+            return Forbid();
+
         var result = await _service.ApplyBulkAdvisorAssignmentAsync(dto);
         return Ok(result);
     }
@@ -169,6 +190,10 @@ public async Task<IActionResult> UpdateBulkAdvisorAssignmentSettings(
 {
     try
     {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await CanAccessAllAdvisorSettingTargetsAsync(userId, dto))
+            return Forbid();
+
         var result = await _service.UpdateBulkAdvisorAssignmentSettingsAsync(dto);
         return Ok(result);
     }
@@ -187,6 +212,93 @@ public async Task<IActionResult> UpdateBulkAdvisorAssignmentSettings(
         userId = 0;
         var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return claim != null && int.TryParse(claim, out userId);
+    }
+
+    private async Task<bool> CanAccessAllBulkAssignmentTargetsAsync(
+        int userId,
+        BulkAdvisorAssignmentApplyRequestDto dto)
+    {
+        if (dto.Assignments == null || dto.Assignments.Count == 0)
+            return true;
+
+        var studentIds = dto.Assignments.Select(item => item.StudentId).Distinct().ToList();
+        var advisorIds = dto.Assignments.Select(item => item.AdvisorId).Distinct().ToList();
+
+        var studentDepartmentIds = await _context.StudentPrograms
+            .AsNoTracking()
+            .Include(sp => sp.Program)
+            .Where(sp => studentIds.Contains(sp.StudentId)
+                && sp.IsActive
+                && sp.Type == Domain.Enums.StudentProgramType.Main)
+            .Select(sp => sp.Program.DepartmentId)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var departmentId in studentDepartmentIds)
+        {
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, departmentId))
+                return false;
+        }
+
+        var advisorDepartmentIds = await _context.Instructors
+            .AsNoTracking()
+            .Where(instructor => advisorIds.Contains(instructor.Id))
+            .Select(instructor => instructor.DepartmentId)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var departmentId in advisorDepartmentIds)
+        {
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, departmentId))
+                return false;
+        }
+
+        return true;
+    }
+
+    private async Task<bool> CanAccessAllAdvisorSettingTargetsAsync(
+        int userId,
+        BulkAdvisorSettingsUpdateRequestDto dto)
+    {
+        if (dto.Advisors == null || dto.Advisors.Count == 0)
+            return true;
+
+        var advisorIds = dto.Advisors.Select(item => item.AdvisorId).Distinct().ToList();
+        var advisorDepartmentIds = await _context.Instructors
+            .AsNoTracking()
+            .Where(instructor => advisorIds.Contains(instructor.Id))
+            .Select(instructor => instructor.DepartmentId)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var departmentId in advisorDepartmentIds)
+        {
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, departmentId))
+                return false;
+        }
+
+        return true;
+    }
+
+    private async Task<int?> GetStudentMainDepartmentIdAsync(int studentId)
+    {
+        return await _context.StudentPrograms
+            .AsNoTracking()
+            .Include(sp => sp.Program)
+            .Where(sp => sp.StudentId == studentId
+                && sp.IsActive
+                && sp.Type == Domain.Enums.StudentProgramType.Main)
+            .Select(sp => (int?)sp.Program.DepartmentId)
+            .FirstOrDefaultAsync();
+    }
+
+    private async Task<int?> GetAdvisorDepartmentIdAsync(int advisorId)
+    {
+        return await _context.Instructors
+            .AsNoTracking()
+            .Where(instructor => instructor.Id == advisorId)
+            .Select(instructor => (int?)instructor.DepartmentId)
+            .FirstOrDefaultAsync();
     }
 
     private async Task<(int? DepartmentId, bool IsForbidden)> EnforceDepartmentFilterAsync(int userId, int? requestedDepartmentId)

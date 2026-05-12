@@ -14,10 +14,12 @@ namespace SIS.API.Controllers;
 public class ScheduleExcelController : ControllerBase
 {
     private readonly IExcelScheduleService _excelService;
+    private readonly IAcademicScopeGuard _scopeGuard;
 
-    public ScheduleExcelController(IExcelScheduleService excelService)
+    public ScheduleExcelController(IExcelScheduleService excelService, IAcademicScopeGuard scopeGuard)
     {
         _excelService = excelService;
+        _scopeGuard = scopeGuard;
     }
 
     [HttpGet("export")]
@@ -28,6 +30,11 @@ public class ScheduleExcelController : ControllerBase
         [FromQuery] int? departmentId = null,
         CancellationToken ct = default)
     {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+        if (!await CanAccessScheduleScopeAsync(userId, facultyId, departmentId, ct))
+            return Forbid();
+
         var bytes = await _excelService.ExportScheduleAsync(termId, facultyId, departmentId, ct);
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "ders-programi.xlsx");
     }
@@ -40,6 +47,11 @@ public class ScheduleExcelController : ControllerBase
         [FromQuery] int? departmentId = null,
         CancellationToken ct = default)
     {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+        if (!await CanAccessScheduleScopeAsync(userId, facultyId, departmentId, ct))
+            return Forbid();
+
         var bytes = await _excelService.ExportPdfAsync(termId, facultyId, departmentId, ct);
         var fileName = departmentId.HasValue ? "ders-programi.pdf" : "ders-programi-tum.pdf";
         return File(bytes, "application/pdf", fileName);
@@ -56,14 +68,23 @@ public class ScheduleExcelController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
             return Unauthorized();
+        if (!await _scopeGuard.CanAccessFacultyAsync(User, userId, facultyId, ct))
+            return Forbid();
 
         var fileValidationError = FileUploadValidation.ValidateXlsx(file);
         if (fileValidationError is not null)
             return BadRequest(new { error = fileValidationError });
 
         using var stream = file.OpenReadStream();
-        var result = await _excelService.PreviewImportAsync(userId, stream, termId, facultyId, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _excelService.PreviewImportAsync(userId, stream, termId, facultyId, ct);
+            return Ok(result);
+        }
+        catch (ScheduleImportSessionInvalidException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPost("import-apply")]
@@ -74,6 +95,8 @@ public class ScheduleExcelController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
             return Unauthorized();
+        if (!await _scopeGuard.CanAccessFacultyAsync(User, userId, request.FacultyId, ct))
+            return Forbid();
 
         try
         {
@@ -100,6 +123,19 @@ public class ScheduleExcelController : ControllerBase
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return int.TryParse(userIdClaim, out userId);
+    }
+
+    private async Task<bool> CanAccessScheduleScopeAsync(
+        int userId,
+        int facultyId,
+        int? departmentId,
+        CancellationToken ct)
+    {
+        if (!await _scopeGuard.CanAccessFacultyAsync(User, userId, facultyId, ct))
+            return false;
+
+        return !departmentId.HasValue
+            || await _scopeGuard.CanAccessDepartmentAsync(User, userId, departmentId.Value, ct);
     }
 }
 

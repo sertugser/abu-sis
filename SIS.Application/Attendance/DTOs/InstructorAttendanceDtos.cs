@@ -75,9 +75,6 @@ public class QrAttendanceSessionDto
 
 public class SubmitQrAttendanceRequest
 {
-    public string StudentNumber { get; set; } = string.Empty;
-    public string FirstName { get; set; } = string.Empty;
-    public string LastName { get; set; } = string.Empty;
 }
 
 public class SubmitQrAttendanceResponse

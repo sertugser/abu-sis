@@ -51,6 +51,13 @@ public class AdminStudentService : IAdminStudentService
             query = query.Where(s => s.StudentPrograms.Any(sp =>
                 sp.IsActive && sp.Program.DepartmentId == filter.DepartmentId));
 
+        if (filter.DepartmentIds is { Count: > 0 })
+        {
+            var departmentIds = filter.DepartmentIds.ToList();
+            query = query.Where(s => s.StudentPrograms.Any(sp =>
+                sp.IsActive && departmentIds.Contains(sp.Program.DepartmentId)));
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.Status) &&
             Enum.TryParse<StudentStatus>(filter.Status, out var statusEnum))
             query = query.Where(s => s.Status == statusEnum);
