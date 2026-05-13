@@ -5,6 +5,8 @@ import { CalendarVisualizer, type DropFeedback, type DropFeedbackRequest, type V
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { downloadAcademicCalendarPdf, type AcademicCalendarPdfSection } from '@/lib/academicCalendarPdf';
 import { resolveCalendarEventType } from '@/lib/calendarEventTypes';
 import { cn } from '@/lib/utils';
@@ -207,6 +209,19 @@ function fallbackPhaseEvents(calendar: StudentAcademicCalendarDto): VisualizerEv
   add('grade-entry', 'FinalGradeEntry', 'Not girişi', calendar.gradeEntryStart, calendar.gradeEntryEnd);
 
   return events;
+}
+
+// Liste sekmesi için "öğrenciye açık" event'leri kronolojik sırada döner.
+// PDF helper'ı (printableEventsForCalendar) string formatlanmış tek sütun döndürdüğü için
+// tabloya ayrı bir kaynak gerekti: tablo Başlangıç ve Bitiş'i ayrı kolonlarda gösteriyor.
+function publicEventsForCalendar(calendar: StudentAcademicCalendarDto): TermCalendarEventDto[] {
+  return calendar.events
+    .filter(event => event.isPublic)
+    .slice()
+    .sort((left, right) =>
+      left.startDate.localeCompare(right.startDate)
+      || (left.endDate ?? left.startDate).localeCompare(right.endDate ?? right.startDate)
+      || displayTurkishText(left.title).localeCompare(displayTurkishText(right.title), 'tr-TR'));
 }
 
 function printableEventsForCalendar(calendar: StudentAcademicCalendarDto, includeAllEvents: boolean) {
@@ -547,126 +562,203 @@ export default function AcademicCalendarPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-col lg:flex-row lg:items-stretch border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
-        <div className="lg:w-72 lg:flex-shrink-0 bg-slate-50 lg:border-r border-slate-200">
-          <label htmlFor="academic-year-select" className="sr-only">Akademik yıl</label>
-          <Select value={selectedYear?.toString() ?? ''} onValueChange={(value) => setExplicitYear(Number(value))}>
-            <SelectTrigger id="academic-year-select" aria-label="Akademik yıl seçimi" className="border-0 focus:ring-0 shadow-none h-full min-h-[64px] bg-transparent rounded-none px-4 font-semibold text-slate-800">
-              <div className="flex flex-col items-start gap-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Akademik yıl seçimi</span>
-                <SelectValue placeholder="Akademik yıl seçin..." />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              {academicYears.map(year => (
-                <SelectItem key={year} value={year.toString()}>
-                  {academicYearLabel(year)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <Tabs defaultValue="calendar" className="space-y-3">
+        {/* Üst kart: Akademik yıl + özet kartlar. Görünüm switcher kartın üst header'ına
+            entegre edildi — kart-dışı ayrı bir TabsList kutucuğu görünmesin diye. */}
+        <div className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              Görünüm
+            </span>
+            <div className="flex items-center gap-2">
+              <TabsList className="h-8 bg-slate-200/60">
+                <TabsTrigger value="calendar" className="text-xs h-6 px-3">Takvim</TabsTrigger>
+                <TabsTrigger value="list" className="text-xs h-6 px-3">Liste</TabsTrigger>
+              </TabsList>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf || isCalendarMutating || pdfSections.length === 0}
+              >
+                {isDownloadingPdf ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                {isDownloadingPdf ? 'PDF hazirlaniyor' : 'PDF indir'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col lg:flex-row lg:items-stretch">
+            <div className="lg:w-72 lg:flex-shrink-0 bg-slate-50 lg:border-r border-slate-200">
+              <label htmlFor="academic-year-select" className="sr-only">Akademik yıl</label>
+              <Select value={selectedYear?.toString() ?? ''} onValueChange={(value) => setExplicitYear(Number(value))}>
+                <SelectTrigger id="academic-year-select" aria-label="Akademik yıl seçimi" className="border-0 focus:ring-0 shadow-none h-full min-h-[64px] bg-transparent rounded-none px-4 font-semibold text-slate-800">
+                  <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Akademik yıl seçimi</span>
+                    <SelectValue placeholder="Akademik yıl seçin..." />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {academicYears.map(year => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {academicYearLabel(year)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 divide-x divide-slate-100 border-t lg:border-t-0 border-slate-200">
+              <PhaseCard
+                icon={<CalendarDays className="w-4 h-4 text-indigo-500" />}
+                accent="bg-indigo-500"
+                label="Akademik Yıl"
+                value={yearRangeValue}
+              />
+              <PhaseCard
+                icon={<UserPlus className="w-4 h-4 text-blue-500" />}
+                accent="bg-blue-500"
+                label="Kayıt"
+                value={rangeText(calendars.map(calendar => [calendar.registrationStart, calendar.registrationEnd]))}
+              />
+              <PhaseCard
+                icon={<Repeat2 className="w-4 h-4 text-emerald-500" />}
+                accent="bg-emerald-500"
+                label="Ekle / Bırak"
+                value={rangeText(calendars.map(calendar => [calendar.addDropStart, calendar.addDropEnd]))}
+                topBorder
+              />
+              <PhaseCard
+                icon={<LogOut className="w-4 h-4 text-rose-500" />}
+                accent="bg-rose-500"
+                label="Ders Çekilme"
+                value={latestText(calendars.map(calendar => calendar.withdrawalDeadline))}
+                topBorder
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 divide-x divide-slate-100 border-t lg:border-t-0 border-slate-200">
-          <PhaseCard
-            icon={<CalendarDays className="w-4 h-4 text-indigo-500" />}
-            accent="bg-indigo-500"
-            label="Akademik Yıl"
-            value={yearRangeValue}
-          />
-          <PhaseCard
-            icon={<UserPlus className="w-4 h-4 text-blue-500" />}
-            accent="bg-blue-500"
-            label="Kayıt"
-            value={rangeText(calendars.map(calendar => [calendar.registrationStart, calendar.registrationEnd]))}
-          />
-          <PhaseCard
-            icon={<Repeat2 className="w-4 h-4 text-emerald-500" />}
-            accent="bg-emerald-500"
-            label="Ekle / Bırak"
-            value={rangeText(calendars.map(calendar => [calendar.addDropStart, calendar.addDropEnd]))}
-            topBorder
-          />
-          <PhaseCard
-            icon={<LogOut className="w-4 h-4 text-rose-500" />}
-            accent="bg-rose-500"
-            label="Ders Çekilme"
-            value={latestText(calendars.map(calendar => calendar.withdrawalDeadline))}
-            topBorder
-          />
-        </div>
-      </div>
+        {missingCalendarTerms.length > 0 && (
+          <div className="flex items-center gap-2 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-900">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+            <span>
+              Bu akademik yılda takvimi eksik dönemler var: {missingCalendarTerms.map(term => term.termName).join(', ')}.
+            </span>
+          </div>
+        )}
 
-      {missingCalendarTerms.length > 0 && (
-        <div className="flex items-center gap-2 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-900">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-          <span>
-            Bu akademik yılda takvimi eksik dönemler var: {missingCalendarTerms.map(term => term.termName).join(', ')}.
-          </span>
-        </div>
-      )}
+        {isLoading ? (
+          <div className="border border-gray-200 rounded-xl bg-white shadow-sm p-10 text-center text-gray-400">
+            Takvim yükleniyor...
+          </div>
+        ) : (
+          <>
+          <TabsContent value="calendar" className="space-y-3 mt-0">
+            <CalendarVisualizer
+              events={visualizerEvents}
+              inlineYearView
+              filterableLegend
+              headerActions={hasDraftChanges ? (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUndoDraftChange}
+                    disabled={isCalendarMutating || draftHistory.length === 0}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    Geri al
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCancelDraftChanges}
+                    disabled={isCalendarMutating}
+                  >
+                    <X className="h-4 w-4" />
+                    Iptal
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveDraftChanges}
+                    disabled={isCalendarMutating}
+                  >
+                    {saveCalendarChanges.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Kaydet
+                  </Button>
+                </div>
+              ) : undefined}
+              academicYearStart={selectedYear ?? undefined}
+              onEventDrop={canEditCalendar ? handleEventDrop : undefined}
+              getDropFeedback={canEditCalendar ? getDropFeedback : undefined}
+              onInvalidEventDrop={handleInvalidEventDrop}
+              dragDisabled={isCalendarMutating}
+            />
+          </TabsContent>
 
-      {isLoading ? (
-        <div className="border border-gray-200 rounded-xl bg-white shadow-sm p-10 text-center text-gray-400">
-          Takvim yükleniyor...
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <CalendarVisualizer
-            events={visualizerEvents}
-            inlineYearView
-            filterableLegend
-            headerActions={(
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {hasDraftChanges && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleUndoDraftChange}
-                      disabled={isCalendarMutating || draftHistory.length === 0}
-                    >
-                      <Undo2 className="h-4 w-4" />
-                      Geri al
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleCancelDraftChanges}
-                      disabled={isCalendarMutating}
-                    >
-                      <X className="h-4 w-4" />
-                      Iptal
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleSaveDraftChanges}
-                      disabled={isCalendarMutating}
-                    >
-                      {saveCalendarChanges.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                      Kaydet
-                    </Button>
-                  </>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleDownloadPdf}
-                  disabled={isDownloadingPdf || isCalendarMutating || pdfSections.length === 0}
-                >
-                  {isDownloadingPdf ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                  {isDownloadingPdf ? 'PDF hazirlaniyor' : 'PDF indir'}
-                </Button>
-              </div>
-            )}
-            academicYearStart={selectedYear ?? undefined}
-            onEventDrop={canEditCalendar ? handleEventDrop : undefined}
-            getDropFeedback={canEditCalendar ? getDropFeedback : undefined}
-            onInvalidEventDrop={handleInvalidEventDrop}
-            dragDisabled={isCalendarMutating}
-          />
-        </div>
-      )}
+          <TabsContent value="list" className="space-y-3">
+            {(() => {
+              // İçeriği olan dönemleri filtrele. Boş kartlar listede yer kaplamasın —
+              // kullanıcı öğrenciye açık etkinlik aramaya geldiğinde info-only dönemler
+              // ("Öğrenciye açık etkinlik tanımlanmamış") sayfayı kalabalıklaştırıyor.
+              const populated = calendars
+                .map(calendar => ({ calendar, rows: publicEventsForCalendar(calendar) }))
+                .filter(item => item.rows.length > 0);
+
+              if (populated.length === 0) {
+                return (
+                  <div className="border border-slate-200 rounded-xl bg-white shadow-sm p-10 text-center text-slate-400">
+                    Bu akademik yıl için öğrenciye açık etkinlik bulunamadı.
+                  </div>
+                );
+              }
+
+              return populated.map(({ calendar, rows }) => (
+                <div key={calendar.termId} className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50">
+                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+                      {displayTurkishText(calendar.termName)}
+                    </h3>
+                    <span className="text-[11px] text-slate-500">
+                      {fmtDate(calendar.termStart)} - {fmtDate(calendar.termEnd)}
+                    </span>
+                  </div>
+
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[60%]">Takvim Adı</TableHead>
+                        <TableHead className="w-[20%]">Başlangıç Tarihi</TableHead>
+                        <TableHead className="w-[20%]">Bitiş Tarihi</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map(event => (
+                        <TableRow key={event.id}>
+                          <TableCell className="font-medium text-slate-800">
+                            {displayTurkishText(event.title)}
+                          </TableCell>
+                          <TableCell className="text-slate-600">
+                            {fmtDate(event.startDate)}
+                          </TableCell>
+                          <TableCell className="text-slate-600">
+                            {event.endDate && event.endDate !== event.startDate
+                              ? fmtDate(event.endDate)
+                              : ''}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ));
+            })()}
+          </TabsContent>
+          </>
+        )}
+      </Tabs>
     </div>
   );
 }
