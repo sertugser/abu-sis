@@ -233,6 +233,7 @@ builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
+builder.Services.AddScoped<SIS.Application.AdvisorInfo.Services.IAdvisorInfoService, SIS.Infrastructure.Services.AdvisorInfoService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
 builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
 builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
