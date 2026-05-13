@@ -150,6 +150,14 @@ public class StudentController : ControllerBase
             .ThenBy(cc => cc.Course.Code)
             .ToListAsync();
 
+        // 1b. Get curriculum elective pool slots (TE-1, TE-2, NDE-1, vs.) — ders gibi semester'lara dağıt
+        var curriculumPools = await _context.CurriculumElectivePools
+            .Include(p => p.ElectiveGroup)
+            .Where(p => p.CurriculumId == activeProgram.CurriculumId && p.SuggestedSemesterStart > 0)
+            .OrderBy(p => p.SuggestedSemesterStart)
+            .ThenBy(p => p.SlotName)
+            .ToListAsync();
+
         // 2. Get ALL student registrations (excluding dropped)
         var allRegistrations = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
@@ -211,6 +219,48 @@ public class StudentController : ControllerBase
             }
         }
 
+        // 3b. Build per-pool best registration map (AppliedElectivePoolId üzerinden)
+        // Öğrencinin bir slot için seçtiği ders → sağ tarafta "Alınan Ders" olarak görünür.
+        var poolRegMap = new Dictionary<int, (CourseRegistration reg, string gradeStatus)>();
+        foreach (var poolGroup in allRegistrations
+            .Where(r => r.AppliedElectivePoolId.HasValue)
+            .GroupBy(r => r.AppliedElectivePoolId!.Value))
+        {
+            var poolId = poolGroup.Key;
+
+            var poolPassed = poolGroup
+                .Where(r => HasVisibleLetterGrade(r) && r.Grade != GradeCode.FF && r.Grade != GradeCode.NA
+                    && r.Grade != GradeCode.U && r.Grade != GradeCode.W && r.Grade != GradeCode.I)
+                .OrderByDescending(r => r.Id)
+                .FirstOrDefault();
+            if (poolPassed != null)
+            {
+                poolRegMap[poolId] = (poolPassed, "passed");
+                continue;
+            }
+
+            var poolCurrent = poolGroup
+                .Where(r => !HasVisibleLetterGrade(r) && (r.Status == RegistrationStatus.Active
+                    || r.Status == RegistrationStatus.PendingAdvisorApproval
+                    || r.Grade != null))
+                .OrderByDescending(r => r.Id)
+                .FirstOrDefault();
+            if (poolCurrent != null)
+            {
+                poolRegMap[poolId] = (poolCurrent, "current");
+                continue;
+            }
+
+            var poolFailed = poolGroup
+                .Where(HasVisibleLetterGrade)
+                .OrderByDescending(r => r.Id)
+                .FirstOrDefault();
+            if (poolFailed != null)
+            {
+                poolRegMap[poolId] = (poolFailed, "failed");
+            }
+        }
+
         // 4. Passed course IDs for prerequisite checking
         var passedCourseIds = courseRegMap
             .Where(kv => kv.Value.gradeStatus == "passed")
@@ -229,18 +279,32 @@ public class StudentController : ControllerBase
             .GroupBy(e => e.CourseId)
             .ToDictionary(g => g.Key, g => g.Select(e => e.EquivalentCourseId).ToHashSet());
 
-        // 7. Build semester groups
-        var semesterGroups = curriculumCourses
+        // 7. Build semester groups — curriculum dersleri + pool slot'ları aynı dönemde
+        var allSemesterNumbers = curriculumCourses.Select(cc => cc.SuggestedSemester)
+            .Concat(curriculumPools.Select(p => p.SuggestedSemesterStart))
+            .Where(s => s > 0)
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+
+        var coursesBySemester = curriculumCourses
             .GroupBy(cc => cc.SuggestedSemester)
-            .OrderBy(g => g.Key)
-            .Select(g =>
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var poolsBySemester = curriculumPools
+            .GroupBy(p => p.SuggestedSemesterStart)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var semesterGroups = allSemesterNumbers
+            .Select(semNum =>
             {
-                var semNum = g.Key;
                 var classYear = (semNum - 1) / 2 + 1;
                 var isGuz = semNum % 2 == 1;
                 var label = $"{classYear}. Sinif {(isGuz ? "Guz" : "Bahar")}";
 
-                var courses = g.Select(cc =>
+                var coursesInSem = coursesBySemester.GetValueOrDefault(semNum) ?? new List<CurriculumCourse>();
+                var poolsInSem = poolsBySemester.GetValueOrDefault(semNum) ?? new List<CurriculumElectivePool>();
+
+                var courses = coursesInSem.Select(cc =>
                 {
                     var course = cc.Course;
                     var cid = course.Id;
@@ -316,16 +380,84 @@ public class StudentController : ControllerBase
                     };
                 }).ToList();
 
+                // Pool slot satırları — ders gibi listede, sağ tarafta öğrencinin seçtiği ders.
+                var poolEntries = poolsInSem.Select(pool =>
+                {
+                    string? termLabel = null;
+                    string? takenCode = null;
+                    string? takenName = null;
+                    bool? takenIsComp = null;
+                    int? takenCredits = null;
+                    int? takenEcts = null;
+                    string? grade = null;
+                    string? gradeStatus = null;
+
+                    if (poolRegMap.TryGetValue(pool.Id, out var poolRegInfo))
+                    {
+                        var reg = poolRegInfo.reg;
+                        var section = reg.CourseSection;
+                        var term = section.Term;
+                        var takenCourse = section.Course;
+
+                        var y1 = term.Year % 100;
+                        var y2 = (term.Year + 1) % 100;
+                        var semChar = term.TermType == TermType.Fall ? "G" : "B";
+                        termLabel = $"{y1:D2}-{y2:D2}{semChar}";
+
+                        takenCode = takenCourse.Code;
+                        takenName = takenCourse.Name;
+                        takenIsComp = false; // pool slot → seçmeli
+                        takenCredits = takenCourse.TheoryHours + takenCourse.LabHours;
+                        takenEcts = reg.EctsSnapshot ?? pool.EctsPerCourse ?? takenCourse.Ects;
+                        gradeStatus = poolRegInfo.gradeStatus;
+                        grade = poolRegInfo.gradeStatus == "current" ? "--" : reg.Grade?.ToString();
+                    }
+
+                    // Müfredat ders adı: slot'un tam adı = ElectiveGroup.Name + slot numarası.
+                    // Örn: ElectiveGroup.Name = "Technical Elective", SlotName = "TE-1"
+                    //   → "Technical Elective 1"
+                    // Slot adının "PREFIX-N" formatında olduğunu varsayar; değilse sadece
+                    // grup adı kullanılır.
+                    var slotNumberToken = pool.SlotName.Split('-').LastOrDefault();
+                    var hasSlotNumber = int.TryParse(slotNumberToken, out var slotNumber);
+                    var poolDisplayName = hasSlotNumber
+                        ? $"{pool.ElectiveGroup.Name} {slotNumber}"
+                        : pool.ElectiveGroup.Name;
+
+                    return new CurriculumCourseStatusDto
+                    {
+                        // Pool slot'ları için CourseId çakışmaması adına negative: -pool.Id
+                        CourseId = -pool.Id,
+                        Code = string.IsNullOrEmpty(pool.SlotName) ? pool.ElectiveGroup.Code : pool.SlotName,
+                        Name = poolDisplayName,
+                        IsCompulsory = false,
+                        Credits = takenCredits ?? 0,
+                        Ects = takenEcts ?? pool.EctsPerCourse ?? pool.RequiredEcts,
+                        TakenTermLabel = termLabel,
+                        TakenCourseCode = takenCode,
+                        TakenCourseName = takenName,
+                        TakenIsCompulsory = takenIsComp,
+                        TakenCredits = takenCredits,
+                        TakenEcts = takenEcts,
+                        Grade = grade,
+                        GradeStatus = gradeStatus,
+                        Prerequisites = new List<string>(),
+                        PrerequisitesMet = true,
+                    };
+                }).ToList();
+
+                var allEntries = courses.Concat(poolEntries).ToList();
+
                 return new CurriculumSemesterDto
                 {
                     SemesterNumber = semNum,
                     Label = label,
-                    Courses = courses,
-                    TotalCredits = courses.Sum(c => c.Credits),
-                    TotalEcts = courses.Sum(c => c.Ects),
-                    CourseCount = courses.Count,
-                    CompulsoryCount = courses.Count(c => c.IsCompulsory),
-                    ElectiveCount = courses.Count(c => !c.IsCompulsory),
+                    Courses = allEntries,
+                    TotalCredits = allEntries.Sum(c => c.Credits),
+                    TotalEcts = allEntries.Sum(c => c.Ects),
+                    CourseCount = allEntries.Count,
+                    CompulsoryCount = allEntries.Count(c => c.IsCompulsory),
+                    ElectiveCount = allEntries.Count(c => !c.IsCompulsory),
                 };
             }).ToList();
 
