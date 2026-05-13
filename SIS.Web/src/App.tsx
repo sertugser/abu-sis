@@ -15,6 +15,7 @@ import SmartPlanningPage from './pages/SmartPlanningPage';
 import RegistrationPlanPage from './pages/RegistrationPlanPage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import AdvisorInfoPage from './pages/AdvisorInfoPage';
+import OpenedDepartmentCoursesPage from './pages/OpenedDepartmentCoursesPage';
 import GradeListPage from './pages/GradeListPage';
 import AttendanceStatusPage from './pages/AttendanceStatusPage';
 import CurriculumStatusPage from './pages/CurriculumStatusPage';
@@ -137,6 +138,9 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.alinan-dersler.view" />}>
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.acilan-bolum-dersleri.view" />}>
+                    <Route path="acilan-bolum-dersleri" element={<OpenedDepartmentCoursesPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.not-listesi.view" />}>
                     <Route path="not-listesi" element={<GradeListPage />} />

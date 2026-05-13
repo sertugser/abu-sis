@@ -37,10 +37,11 @@ public static class MenuStructureSeed
 
         genelIslemler.Items = new List<MenuItem>
         {
-            BuildItem(permissions, "Akademik Takvim",     "/akademik-takvim",      "akademik-takvim",     1, "menu.akademik-takvim.view"),
-            BuildItem(permissions, "Duyurular",           "/duyurular",            "duyurular",           2, "menu.duyurular.view"),
-            BuildItem(permissions, "Danışman Bilgileri",  "/danisman-bilgileri",   "danisman-bilgileri",  3, "menu.danisman-bilgileri.view"),
-            BuildItem(permissions, "AlÄ±nan Dersler",      "/alinan-dersler",       "alinan-dersler",      4, "menu.alinan-dersler.view"),
+            BuildItem(permissions, "Akademik Takvim",        "/akademik-takvim",         "akademik-takvim",        1, "menu.akademik-takvim.view"),
+            BuildItem(permissions, "Duyurular",              "/duyurular",               "duyurular",              2, "menu.duyurular.view"),
+            BuildItem(permissions, "Danışman Bilgileri",     "/danisman-bilgileri",      "danisman-bilgileri",     3, "menu.danisman-bilgileri.view"),
+            BuildItem(permissions, "AlÄ±nan Dersler",         "/alinan-dersler",          "alinan-dersler",         4, "menu.alinan-dersler.view"),
+            BuildItem(permissions, "Açılan Bölüm Dersleri",  "/acilan-bolum-dersleri",   "acilan-bolum-dersleri",  5, "menu.acilan-bolum-dersleri.view"),
         };
 
         // â”€â”€â”€ ModÃ¼l 2: SÄ±k KullanÄ±lanlar (favori-odaklÄ±, sadece Ana Sayfa default) â”€

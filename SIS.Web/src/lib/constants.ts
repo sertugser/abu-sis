@@ -195,6 +195,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/plan',
   '/alinan-dersler',
   '/danisman-bilgileri',
+  '/acilan-bolum-dersleri',
   '/not-listesi',
   '/devamsizlik-durumu',
   '/donem-ortalamalari',
