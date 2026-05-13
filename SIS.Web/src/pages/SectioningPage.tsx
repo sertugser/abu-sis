@@ -1,272 +1,524 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronDown, Eye, Layers, Search, Users } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import DepartmentOperationsLayout from '@/components/academic-operations/DepartmentOperationsLayout';
-import { resolveInitialDepartmentId } from '@/components/academic-operations/utils';
-import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
-import { useAcademicOperationsContext, useDepartmentClassLists } from '../hooks/useAcademicOperations';
-import { useActiveTerm } from '../hooks/useActiveTerm';
+import { getAcademicOperationsErrorMessage } from '@/api/academicOperations.api';
+import {
+  useAcademicOperationsContext,
+  useDepartmentClassLists,
+} from '@/hooks/useAcademicOperations';
+import { useActiveTerm } from '@/hooks/useActiveTerm';
+import { useAdminFaculties, useAdminDepartmentsByStructure } from '@/hooks/useAdminAcademicStructure';
+import {
+  useUpdateOpenedSection,
+  useBulkAssignInstructor,
+  useCloseSection,
+  useReactivateSection,
+  useDeleteAllSectionsHard,
+  useTransferStudentsBetweenSections,
+  useAutoSplitCourse,
+  useOpenCourse,
+} from '@/hooks/useCourseOpening';
+import { usePermissions } from '@/hooks/usePermissions';
+import type { AutoSplitStrategy } from '@/types/courseOpening';
+import type { DepartmentSectionClassList } from '@/types/academicOperations';
+import { useCourseGroups } from './sectioning/hooks/useCourseGroups';
+import { FilterPanel } from './sectioning/components/FilterPanel';
+import { SectionsPanel } from './sectioning/components/SectionsPanel';
+import { CoursesPanel } from './sectioning/components/CoursesPanel';
+import { StudentsPanel } from './sectioning/components/StudentsPanel';
+import { BottomToolbar } from './sectioning/components/BottomToolbar';
+import { AssignInstructorDialog } from './sectioning/components/AssignInstructorDialog';
+import { BulkAssignInstructorDialog } from './sectioning/components/BulkAssignInstructorDialog';
+import { EditCapacityDialog, type CapacityUpdate } from './sectioning/components/EditCapacityDialog';
+import { ConfirmActionDialog } from './sectioning/components/ConfirmActionDialog';
+import { AutoSplitConfirmDialog } from './sectioning/components/AutoSplitConfirmDialog';
+import { AddSectionDialog, type AddSectionPayload } from './sectioning/components/AddSectionDialog';
+import type { SplitStrategy } from './sectioning/constants';
+import type { CourseGroup } from './sectioning/types';
+
+type ConfirmAction =
+  | { type: 'closeSection'; section: DepartmentSectionClassList }
+  | { type: 'reactivateSection'; section: DepartmentSectionClassList }
+  | { type: 'deleteAllSections'; course: CourseGroup };
 
 export default function SectioningPage() {
   const contextQuery = useAcademicOperationsContext();
-  const activeTermQuery = useActiveTerm();
-  const activeTerm = activeTermQuery.data;
-  const [departmentId, setDepartmentId] = useState<number | null>(null);
-  const [search, setSearch] = useState('');
-  const [expandedSectionId, setExpandedSectionId] = useState<number | null>(null);
+  const { data: activeTerm } = useActiveTerm();
+  const { data: faculties } = useAdminFaculties();
+  const { data: structureDepartments } = useAdminDepartmentsByStructure();
+
+  const accessibleDepartments = contextQuery.data?.accessibleDepartments;
+  const departments = useMemo(() => accessibleDepartments ?? [], [accessibleDepartments]);
+
+  // ── Filter state ──
+  const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [courseCodeFilter, setCourseCodeFilter] = useState('');
+  const [courseNameFilter, setCourseNameFilter] = useState('');
+  const [instructorFilter, setInstructorFilter] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  // ── Selection state ──
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<number>>(() => new Set());
+
+  // ── Bulk toolbar state ──
+  const [splitCount, setSplitCount] = useState('3');
+  const [splitStrategy, setSplitStrategy] = useState<SplitStrategy>('Equal');
+  const [moveToSectionNumber, setMoveToSectionNumber] = useState('1');
+  const [autoSplitConfirmOpen, setAutoSplitConfirmOpen] = useState(false);
+  const [addSectionOpen, setAddSectionOpen] = useState(false);
+
+  // ── Dialog state ──
+  const [assignInstructorTarget, setAssignInstructorTarget] = useState<DepartmentSectionClassList | null>(null);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [editCapacityTarget, setEditCapacityTarget] = useState<DepartmentSectionClassList | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   useEffect(() => {
-    if (departmentId === null && contextQuery.data) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDepartmentId(resolveInitialDepartmentId(contextQuery.data));
-    }
-  }, [contextQuery.data, departmentId]);
+    const t = setTimeout(() => {
+      const combined = [courseCodeFilter, courseNameFilter, instructorFilter]
+        .map(s => s.trim())
+        .filter(Boolean)
+        .join(' ');
+      setDebouncedQuery(combined);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [courseCodeFilter, courseNameFilter, instructorFilter]);
 
-  const termId = activeTerm?.id;
-  const classListsQuery = useDepartmentClassLists(departmentId, termId, !!departmentId && !!termId, search);
-  const sections = classListsQuery.data?.sections ?? [];
+  const accessibleDeptIds = useMemo(() => new Set(departments.map(d => d.departmentId)), [departments]);
+
+  const availableFaculties = useMemo(() => {
+    if (!faculties || !structureDepartments) return [];
+    const facultyIds = new Set(
+      structureDepartments
+        .filter(sd => accessibleDeptIds.has(sd.id))
+        .map(sd => sd.facultyId),
+    );
+    return faculties.filter(f => facultyIds.has(f.id));
+  }, [faculties, structureDepartments, accessibleDeptIds]);
+
+  const filteredDepartments = useMemo(() => {
+    if (!selectedFacultyId || !structureDepartments) return departments;
+    const deptIdsInFaculty = new Set(
+      structureDepartments
+        .filter(sd => sd.facultyId === selectedFacultyId)
+        .map(sd => sd.id),
+    );
+    return departments.filter(d => deptIdsInFaculty.has(d.departmentId));
+  }, [departments, structureDepartments, selectedFacultyId]);
+
+  const currentDeptId = useMemo(() => {
+    if (selectedDeptId && filteredDepartments.some(d => d.departmentId === selectedDeptId)) {
+      return selectedDeptId;
+    }
+    return filteredDepartments[0]?.departmentId ?? null;
+  }, [selectedDeptId, filteredDepartments]);
+
+  const handleFacultyChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value ? Number(event.target.value) : null;
+    setSelectedFacultyId(value);
+    setSelectedDeptId(null);
+    setSelectedCourseCode(null);
+    setSelectedSectionId(null);
+  }, []);
+
+  const handleDeptChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value ? Number(event.target.value) : null;
+    setSelectedDeptId(value);
+    setSelectedCourseCode(null);
+    setSelectedSectionId(null);
+  }, []);
+
+  const classListsQuery = useDepartmentClassLists(currentDeptId, activeTerm?.id, true, debouncedQuery || undefined);
+  const sections = useMemo(() => classListsQuery.data?.sections ?? [], [classListsQuery.data]);
+  const courseGroups = useCourseGroups(sections);
+
+  // ── Sync derived selection state ──
+  useEffect(() => {
+    if (selectedCourseCode && !courseGroups.some(g => g.courseCode === selectedCourseCode)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedCourseCode(null);
+      setSelectedSectionId(null);
+    }
+  }, [courseGroups, selectedCourseCode]);
+
+  const selectedCourse = courseGroups.find(g => g.courseCode === selectedCourseCode) ?? null;
+
+  useEffect(() => {
+    if (
+      selectedSectionId !== null &&
+      selectedCourse &&
+      !selectedCourse.sections.some(s => s.sectionId === selectedSectionId)
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedSectionId(null);
+    }
+  }, [selectedCourse, selectedSectionId]);
+
+  const selectedSection = selectedCourse?.sections.find(s => s.sectionId === selectedSectionId) ?? null;
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setExpandedSectionId(null);
-  }, [departmentId, termId, search]);
+    setSelectedStudentIds(new Set());
+  }, [selectedSectionId]);
 
-  const stats = useMemo(() => {
-    const totalCapacity = sections.reduce((sum, section) => sum + section.capacity, 0);
-    const totalActiveStudents = sections.reduce((sum, section) => sum + section.activeStudentCount, 0);
-    const fullSections = sections.filter(section => section.capacity > 0 && section.activeStudentCount >= section.capacity).length;
-    const emptySections = sections.filter(section => section.activeStudentCount === 0).length;
-    const crossListed = sections.filter(section => section.crossListGroupId !== null).length;
+  const toggleStudent = (studentId: number) => {
+    setSelectedStudentIds(prev => {
+      const next = new Set(prev);
+      if (next.has(studentId)) next.delete(studentId);
+      else next.add(studentId);
+      return next;
+    });
+  };
 
-    return {
-      totalCapacity,
-      totalActiveStudents,
-      fullSections,
-      emptySections,
-      crossListed,
-      occupancy: totalCapacity > 0 ? Math.round((totalActiveStudents / totalCapacity) * 100) : 0,
-    };
-  }, [sections]);
+  const toggleAllStudents = (checked: boolean) => {
+    if (!selectedSection) return;
+    setSelectedStudentIds(checked ? new Set(selectedSection.students.map(s => s.studentId)) : new Set());
+  };
 
-  return (
-    <DepartmentOperationsLayout
-      icon={Layers}
-      title="Şubelendirme İşlemleri"
-      description="Bölümün aktif dönem şubelerini, doluluk durumunu, cross-list ilişkilerini ve öğrenci dağılımını izleyin."
-      context={contextQuery.data ?? null}
-      departmentId={departmentId}
-      onDepartmentChange={setDepartmentId}
-      termName={activeTerm?.name}
-      isContextLoading={contextQuery.isLoading}
-      contextError={contextQuery.isError ? getAcademicOperationsErrorMessage(contextQuery.error, 'Kapsam bilgileri alınamadı.') : null}
-      hideHeader
-      actions={
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            placeholder="Ders, şube veya derslik ara..."
-            className="h-9 w-[260px] pl-8"
-          />
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        {classListsQuery.isError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {getAcademicOperationsErrorMessage(classListsQuery.error, 'Şube listesi yüklenemedi.')}
-            </AlertDescription>
-          </Alert>
-        )}
+  // ── Mutations (Faz 2-4) ──
+  const updateSection = useUpdateOpenedSection(currentDeptId ?? 0, activeTerm?.id ?? 0);
+  const bulkAssign = useBulkAssignInstructor(currentDeptId ?? 0, activeTerm?.id ?? 0);
+  const closeSection = useCloseSection(currentDeptId ?? 0, activeTerm?.id ?? 0);
+  const reactivateSection = useReactivateSection(currentDeptId ?? 0, activeTerm?.id ?? 0);
+  const deleteAllSections = useDeleteAllSectionsHard(currentDeptId ?? 0, activeTerm?.id ?? 0);
+  const transferStudents = useTransferStudentsBetweenSections(currentDeptId ?? 0, activeTerm?.id ?? 0);
+  const autoSplit = useAutoSplitCourse(currentDeptId ?? 0, activeTerm?.id ?? 0);
+  const openCourse = useOpenCourse(currentDeptId ?? 0, activeTerm?.id ?? 0);
 
-        {!activeTermQuery.isLoading && !activeTerm && (
-          <Alert variant="warning">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>Aktif akademik dönem bulunamadığı için şube dağılımı listelenemiyor.</AlertDescription>
-          </Alert>
-        )}
+  const { hasPermission } = usePermissions();
+  const canTransfer = hasPermission('menu.subelendirme-islemleri.transfer');
+  const canAutoSplit = hasPermission('menu.subelendirme-islemleri.auto-split');
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard title="Şube" value={classListsQuery.isLoading ? null : sections.length} />
-          <MetricCard title="Aktif Öğrenci" value={classListsQuery.isLoading ? null : stats.totalActiveStudents} />
-          <MetricCard title="Doluluk" value={classListsQuery.isLoading ? null : `%${stats.occupancy}`} progress={stats.occupancy} />
-          <MetricCard title="Kapasitesi Dolu" value={classListsQuery.isLoading ? null : stats.fullSections} tone={stats.fullSections > 0 ? 'warning' : 'default'} />
-          <MetricCard title="Cross-list" value={classListsQuery.isLoading ? null : stats.crossListed} />
-        </div>
+  const handleAssignInstructor = (instructorId: number) => {
+    if (!assignInstructorTarget) return;
+    updateSection.mutate(
+      { sectionId: assignInstructorTarget.sectionId, instructorId },
+      { onSuccess: () => setAssignInstructorTarget(null) },
+    );
+  };
 
-        {!activeTermQuery.isLoading && !activeTerm ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <Users className="mb-3 h-9 w-9 text-muted-foreground/45" />
-              <p className="text-sm font-medium">Aktif dönem seçimi bekleniyor.</p>
-              <p className="mt-1 text-sm text-muted-foreground">Şubelendirme görünümü dönem bazlı çalışır.</p>
-            </CardContent>
-          </Card>
-        ) : classListsQuery.isLoading ? (
-          <Skeleton className="h-[420px] rounded-lg" />
-        ) : sections.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <Users className="mb-3 h-9 w-9 text-muted-foreground/45" />
-              <p className="text-sm font-medium">Bu filtreyle şube bulunamadı.</p>
-              <p className="mt-1 text-sm text-muted-foreground">Dönem, bölüm veya arama filtresini değiştirerek tekrar deneyin.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Şube Dağılımı</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ders</TableHead>
-                    <TableHead className="w-[90px]">Şube</TableHead>
-                    <TableHead className="w-[160px]">Doluluk</TableHead>
-                    <TableHead>Öğretim Elemanı</TableHead>
-                    <TableHead>Derslik / Saat</TableHead>
-                    <TableHead className="w-[130px]">Durum</TableHead>
-                    <TableHead className="w-[120px] text-right">Liste</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sections.map(section => {
-                    const fill = section.capacity > 0 ? Math.round((section.activeStudentCount / section.capacity) * 100) : 0;
-                    const isExpanded = expandedSectionId === section.sectionId;
-                    return (
-                      <Fragment key={section.sectionId}>
-                        <TableRow
-                          className="cursor-pointer"
-                          onClick={() => setExpandedSectionId(current => (current === section.sectionId ? null : section.sectionId))}
-                        >
-                          <TableCell>
-                            <div className="font-medium">{section.courseCode}</div>
-                            <div className="text-xs text-muted-foreground">{section.courseName}</div>
-                            {section.crossListPeerCodes.length > 0 && (
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                Cross-list: {section.crossListPeerCodes.join(', ')}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>#{section.sectionNumber}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-between text-xs">
-                              <span>{section.activeStudentCount}/{section.capacity}</span>
-                              <span className="text-muted-foreground">%{fill}</span>
-                            </div>
-                            <Progress value={Math.min(fill, 100)} className="mt-1 h-2" />
-                            {(section.internalQuota !== null || section.externalQuota !== null) && (
-                              <div className="mt-1 text-[11px] text-muted-foreground">
-                                İç: {section.internalQuota ?? '-'} / Dış: {section.externalQuota ?? '-'}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>{section.instructorName || <span className="text-muted-foreground">Atanmamış</span>}</TableCell>
-                          <TableCell>
-                            <div>{section.classroomName || <span className="text-muted-foreground">Derslik yok</span>}</div>
-                            <div className="text-xs text-muted-foreground">{section.scheduleSummary || 'Saat yok'}</div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={section.isActive ? 'success' : 'secondary'}>
-                              {section.isActive ? 'Aktif' : 'Taslak'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              variant={isExpanded ? 'secondary' : 'outline'}
-                              size="sm"
-                              onClick={event => {
-                                event.stopPropagation();
-                                setExpandedSectionId(current => (current === section.sectionId ? null : section.sectionId));
-                              }}
-                            >
-                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              Liste
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                        {isExpanded && (
-                          <TableRow key={`${section.sectionId}-students`} className="bg-muted/20 hover:bg-muted/20">
-                            <TableCell colSpan={7} className="p-0">
-                              <div className="border-t px-6 py-4">
-                                {section.students.length === 0 ? (
-                                  <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                                    <Users className="h-4 w-4" />
-                                    Bu şubede kayıtlı öğrenci yok.
-                                  </div>
-                                ) : (
-                                  <div className="max-h-[280px] overflow-auto rounded-md border bg-background">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>Öğrenci</TableHead>
-                                          <TableHead>Numara</TableHead>
-                                          <TableHead>E-posta</TableHead>
-                                          <TableHead className="w-[120px]">Kayıt</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {section.students.map(student => (
-                                          <TableRow key={student.studentId}>
-                                            <TableCell className="font-medium">{student.studentName}</TableCell>
-                                            <TableCell className="font-mono text-xs">{student.studentNumber}</TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">{student.email || '-'}</TableCell>
-                                            <TableCell>
-                                              <Badge variant="outline">{student.status}</Badge>
-                                            </TableCell>
-                                          </TableRow>
-                                        ))}
-                                      </TableBody>
-                                    </Table>
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+  const handleBulkAssignInstructor = (instructorId: number) => {
+    if (!selectedCourse) return;
+    const assignments = selectedCourse.sections.map(s => ({ sectionId: s.sectionId, instructorId }));
+    bulkAssign.mutate(
+      { assignments },
+      { onSuccess: () => setBulkAssignOpen(false) },
+    );
+  };
+
+  const handleEditCapacity = (update: CapacityUpdate) => {
+    if (!editCapacityTarget) return;
+    updateSection.mutate(
+      {
+        sectionId: editCapacityTarget.sectionId,
+        capacity: update.capacity,
+        internalQuota: update.internalQuota,
+        externalQuota: update.externalQuota,
+      },
+      { onSuccess: () => setEditCapacityTarget(null) },
+    );
+  };
+
+  const handleAddSection = (payload: AddSectionPayload) => {
+    if (!selectedCourse) return;
+    openCourse.mutate(
+      {
+        courseId: selectedCourse.courseId,
+        sectionCount: 1,
+        capacityPerSection: payload.capacityPerSection,
+        internalQuota: payload.internalQuota ?? undefined,
+        externalQuota: payload.externalQuota ?? undefined,
+        instructorId: payload.instructorId ?? undefined,
+        includeCrossLists: false,
+      },
+      { onSuccess: () => setAddSectionOpen(false) },
+    );
+  };
+
+  const handleConfirmAutoSplit = () => {
+    if (!selectedCourse || !activeTerm) return;
+    const targetCount = Number(splitCount);
+    if (!Number.isInteger(targetCount) || targetCount < 1) return;
+    autoSplit.mutate(
+      {
+        courseId: selectedCourse.courseId,
+        termId: activeTerm.id,
+        targetSectionCount: targetCount,
+        strategy: splitStrategy as AutoSplitStrategy,
+      },
+      {
+        onSuccess: () => {
+          setAutoSplitConfirmOpen(false);
+          setSelectedStudentIds(new Set());
+        },
+      },
+    );
+  };
+
+  const handleTransferStudents = (targetSectionId: number) => {
+    if (!selectedSectionId || selectedStudentIds.size === 0) return;
+    transferStudents.mutate(
+      {
+        sourceSectionId: selectedSectionId,
+        targetSectionId,
+        studentIds: Array.from(selectedStudentIds),
+      },
+      {
+        onSuccess: () => {
+          setSelectedStudentIds(new Set());
+        },
+      },
+    );
+  };
+
+  const handleConfirmAction = () => {
+    if (!confirmAction) return;
+    switch (confirmAction.type) {
+      case 'closeSection':
+        closeSection.mutate(confirmAction.section.sectionId, { onSuccess: () => setConfirmAction(null) });
+        break;
+      case 'reactivateSection':
+        reactivateSection.mutate(confirmAction.section.sectionId, { onSuccess: () => setConfirmAction(null) });
+        break;
+      case 'deleteAllSections':
+        deleteAllSections.mutate(confirmAction.course.courseId, { onSuccess: () => setConfirmAction(null) });
+        break;
+    }
+  };
+
+  // ── Loading / Error ──
+  if (contextQuery.isLoading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-[280px] rounded-lg" />
+        <Skeleton className="h-[460px] rounded-lg" />
+        <Skeleton className="h-[80px] rounded-lg" />
       </div>
-    </DepartmentOperationsLayout>
-  );
-}
+    );
+  }
 
-function MetricCard({
-  title,
-  value,
-  progress,
-  tone = 'default',
-}: {
-  title: string;
-  value: number | string | null;
-  progress?: number;
-  tone?: 'default' | 'warning';
-}) {
+  if (contextQuery.isError || !contextQuery.data) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Sayfa yüklenemedi</AlertTitle>
+        <AlertDescription>
+          {getAcademicOperationsErrorMessage(contextQuery.error, 'Yetkili kapsam bilgileri alınamadı.')}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const isConfirming =
+    confirmAction?.type === 'closeSection' ? closeSection.isPending :
+    confirmAction?.type === 'reactivateSection' ? reactivateSection.isPending :
+    confirmAction?.type === 'deleteAllSections' ? deleteAllSections.isPending :
+    false;
+
   return (
-    <Card className={tone === 'warning' ? 'border-amber-200 bg-amber-50/40' : undefined}>
-      <CardContent className="p-4">
-        <p className="text-xs font-medium text-muted-foreground">{title}</p>
-        {value === null ? <Skeleton className="mt-2 h-7 w-16" /> : <p className="mt-1 text-2xl font-semibold">{value}</p>}
-        {progress !== undefined && <Progress value={Math.min(progress, 100)} className="mt-3 h-2" />}
-      </CardContent>
-    </Card>
+    <div className="space-y-3">
+      {classListsQuery.isError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Hata</AlertTitle>
+          <AlertDescription>
+            {getAcademicOperationsErrorMessage(classListsQuery.error, 'Şube listesi yüklenemedi.')}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* ── ÜST: Filtreler + Şubeler ── */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <FilterPanel
+          activeTermName={activeTerm?.name ?? '—'}
+          availableFaculties={availableFaculties}
+          selectedFacultyId={selectedFacultyId}
+          onFacultyChange={handleFacultyChange}
+          filteredDepartments={filteredDepartments}
+          currentDeptId={currentDeptId}
+          onDeptChange={handleDeptChange}
+          courseCodeFilter={courseCodeFilter}
+          setCourseCodeFilter={setCourseCodeFilter}
+          courseNameFilter={courseNameFilter}
+          setCourseNameFilter={setCourseNameFilter}
+          instructorFilter={instructorFilter}
+          setInstructorFilter={setInstructorFilter}
+          onClearAll={() => {
+            setCourseCodeFilter('');
+            setCourseNameFilter('');
+            setInstructorFilter('');
+          }}
+        />
+
+        <SectionsPanel
+          course={selectedCourse}
+          selectedSectionId={selectedSectionId}
+          onSelectSection={setSelectedSectionId}
+          isLoading={classListsQuery.isLoading}
+          onAddSection={() => setAddSectionOpen(true)}
+          onBulkAssignInstructor={() => setBulkAssignOpen(true)}
+          onDeleteAllSections={() =>
+            selectedCourse && setConfirmAction({ type: 'deleteAllSections', course: selectedCourse })
+          }
+          onAssignInstructor={setAssignInstructorTarget}
+          onEditCapacity={setEditCapacityTarget}
+          onCloseSection={section => setConfirmAction({ type: 'closeSection', section })}
+          onReactivateSection={section => setConfirmAction({ type: 'reactivateSection', section })}
+        />
+      </div>
+
+      {/* ── ALT: Dersler + Şube Öğrencileri ── */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <CoursesPanel
+          courses={courseGroups}
+          selectedCourseCode={selectedCourseCode}
+          onSelectCourse={code => {
+            setSelectedCourseCode(code);
+            setSelectedSectionId(null);
+          }}
+          isLoading={classListsQuery.isLoading}
+        />
+
+        <StudentsPanel
+          section={selectedSection}
+          selectedStudentIds={selectedStudentIds}
+          onToggleStudent={toggleStudent}
+          onToggleAll={toggleAllStudents}
+        />
+      </div>
+
+      {/* ── Alt toolbar ── */}
+      <BottomToolbar
+        course={selectedCourse}
+        splitCount={splitCount}
+        setSplitCount={setSplitCount}
+        splitStrategy={splitStrategy}
+        setSplitStrategy={value => setSplitStrategy(value as SplitStrategy)}
+        moveToSectionNumber={moveToSectionNumber}
+        setMoveToSectionNumber={setMoveToSectionNumber}
+        selectedStudentCount={selectedStudentIds.size}
+        canAutoSplit={canAutoSplit}
+        isAutoSplitting={autoSplit.isPending}
+        onAutoSplit={() => setAutoSplitConfirmOpen(true)}
+        sourceSectionId={selectedSectionId}
+        canTransfer={canTransfer}
+        isTransferring={transferStudents.isPending}
+        onTransferStudents={handleTransferStudents}
+      />
+
+      {/* ── Dialogs (Faz 2 operasyonları) ── */}
+      <AssignInstructorDialog
+        open={!!assignInstructorTarget}
+        section={assignInstructorTarget}
+        departmentId={currentDeptId}
+        termId={activeTerm?.id ?? null}
+        isSubmitting={updateSection.isPending}
+        onClose={() => setAssignInstructorTarget(null)}
+        onSubmit={handleAssignInstructor}
+      />
+
+      <BulkAssignInstructorDialog
+        open={bulkAssignOpen}
+        course={selectedCourse}
+        departmentId={currentDeptId}
+        termId={activeTerm?.id ?? null}
+        isSubmitting={bulkAssign.isPending}
+        onClose={() => setBulkAssignOpen(false)}
+        onSubmit={handleBulkAssignInstructor}
+      />
+
+      <EditCapacityDialog
+        open={!!editCapacityTarget}
+        section={editCapacityTarget}
+        isSubmitting={updateSection.isPending}
+        onClose={() => setEditCapacityTarget(null)}
+        onSubmit={handleEditCapacity}
+      />
+
+      <ConfirmActionDialog
+        open={confirmAction?.type === 'closeSection'}
+        title="Şubeyi Kapat"
+        description={
+          confirmAction?.type === 'closeSection' ? (
+            <>
+              <span className="font-mono font-semibold text-blue-700">{confirmAction.section.courseCode}</span> dersinin{' '}
+              <strong>Şube {confirmAction.section.sectionNumber}</strong> kapatılacak.
+              {confirmAction.section.activeStudentCount > 0 && (
+                <p className="mt-2 text-amber-700">
+                  ⚠ Bu şubede <strong>{confirmAction.section.activeStudentCount} kayıtlı öğrenci</strong> var. Kayıtları iptal edilebilir.
+                </p>
+              )}
+            </>
+          ) : null
+        }
+        confirmLabel="Kapat"
+        tone="destructive"
+        isSubmitting={isConfirming}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={handleConfirmAction}
+      />
+
+      <ConfirmActionDialog
+        open={confirmAction?.type === 'reactivateSection'}
+        title="Şubeyi Yeniden Aç"
+        description={
+          confirmAction?.type === 'reactivateSection' ? (
+            <>
+              <span className="font-mono font-semibold text-blue-700">{confirmAction.section.courseCode}</span> dersinin{' '}
+              <strong>Şube {confirmAction.section.sectionNumber}</strong> yeniden aktifleştirilecek.
+            </>
+          ) : null
+        }
+        confirmLabel="Yeniden Aç"
+        isSubmitting={isConfirming}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={handleConfirmAction}
+      />
+
+      <AddSectionDialog
+        open={addSectionOpen}
+        course={selectedCourse}
+        departmentId={currentDeptId}
+        termId={activeTerm?.id ?? null}
+        isSubmitting={openCourse.isPending}
+        onClose={() => setAddSectionOpen(false)}
+        onSubmit={handleAddSection}
+      />
+
+      <AutoSplitConfirmDialog
+        open={autoSplitConfirmOpen}
+        course={selectedCourse}
+        targetCount={Number(splitCount)}
+        strategy={splitStrategy}
+        isSubmitting={autoSplit.isPending}
+        onCancel={() => setAutoSplitConfirmOpen(false)}
+        onConfirm={handleConfirmAutoSplit}
+      />
+
+      <ConfirmActionDialog
+        open={confirmAction?.type === 'deleteAllSections'}
+        title="Tüm Şubelerini Sil"
+        description={
+          confirmAction?.type === 'deleteAllSections' ? (
+            <>
+              <span className="font-mono font-semibold text-blue-700">{confirmAction.course.courseCode}</span> dersinin{' '}
+              <strong>{confirmAction.course.sections.length} şubesi</strong> bu dönemden tamamen silinecek.
+              <p className="mt-2 text-red-700">
+                ⚠ Bu işlem geri alınamaz. Aktif kayıt, not veya yoklama varsa backend tarafından engellenebilir.
+              </p>
+            </>
+          ) : null
+        }
+        confirmLabel="Tümünü Sil"
+        tone="destructive"
+        isSubmitting={isConfirming}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={handleConfirmAction}
+      />
+    </div>
   );
 }

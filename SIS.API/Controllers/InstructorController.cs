@@ -172,7 +172,7 @@ public class InstructorController : ControllerBase
     /// GET api/instructor/section/{id}/students — list students enrolled in a specific section.
     /// </summary>
     [HttpGet("section/{id}/students")]
-    [RequirePermission("menu.sinif-listeleri.view")]
+    [RequirePermission("menu.derslerim.view")]
     public async Task<IActionResult> GetSectionStudents(int id)
     {
         var instructor = await GetInstructorAsync();

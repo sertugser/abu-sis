@@ -330,6 +330,51 @@ public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegis
 
 public record DeleteAllSectionsResultDto(int DeletedSectionCount, int DeletedRegistrationCount, int DeletedAccessPolicyCount);
 
+// ── Section-to-Section Student Transfer ──
+
+public class TransferStudentsToSectionRequest
+{
+    public int SourceSectionId { get; set; }
+    public int TargetSectionId { get; set; }
+    public List<int> StudentIds { get; set; } = new();
+}
+
+public record TransferStudentsToSectionResultDto(
+    int RequestedCount,
+    int TransferredCount,
+    List<int> TransferredStudentIds);
+
+// ── Auto-Split (Şubelendirme) ──
+
+public enum AutoSplitStrategy
+{
+    /// <summary>Öğrencileri sıralayıp eşit dağıtır (round-robin).</summary>
+    Equal,
+    /// <summary>Tekrar dersi alanları homojen dağıtır, normal öğrencileri sonra dağıtır.</summary>
+    EqualRepeat,
+    /// <summary>Öğrenci numarasının son hanesine göre tek/çift; sadece 2 şube için geçerli.</summary>
+    ModOddEven,
+}
+
+public class AutoSplitCourseRequest
+{
+    public int CourseId { get; set; }
+    public int TermId { get; set; }
+    public int TargetSectionCount { get; set; }
+    public AutoSplitStrategy Strategy { get; set; } = AutoSplitStrategy.Equal;
+    /// <summary>Yeni şubeler oluşturulurken kullanılacak varsayılan kapasite. Null = mevcut kapasite ortalaması.</summary>
+    public int? DefaultCapacityPerSection { get; set; }
+}
+
+public record AutoSplitSectionSummary(int SectionId, int SectionNumber, int AssignedStudentCount);
+
+public record AutoSplitCourseResultDto(
+    int FinalSectionCount,
+    int CreatedSectionCount,
+    int ClosedSectionCount,
+    int RedistributedRegistrationCount,
+    List<AutoSplitSectionSummary> Sections);
+
 // ── External Courses (opened by other departments but in our curriculum) ──
 
 public class ExternalCourseDto

@@ -186,6 +186,8 @@ public static class PermissionSeed
 
         // Şubelendirme İşlemleri (sidebar item; backend henüz yok ama placeholder)
         ("menu.subelendirme-islemleri.view",             PermissionCategory.Menu, "Şubelendirme işlemleri sayfası"),
+        ("menu.subelendirme-islemleri.transfer",         PermissionCategory.Menu, "Şubeler arası öğrenci taşıma"),
+        ("menu.subelendirme-islemleri.auto-split",       PermissionCategory.Menu, "Otomatik şubelendirme (auto-split)"),
 
         // Ders Kontenjan İşlemleri (sidebar placeholder)
         ("menu.ders-kontenjan-islemleri.view",           PermissionCategory.Menu, "Ders kontenjan işlemleri sayfası"),
@@ -250,8 +252,7 @@ public static class PermissionSeed
         ("menu.program-onayi.approve",                   PermissionCategory.Menu, "Faculty schedule onayla"),
         ("menu.program-onayi.revoke",                    PermissionCategory.Menu, "Faculty schedule onayını geri al"),
 
-        // Sınıf Listeleri
-        ("menu.sinif-listeleri.view",                    PermissionCategory.Menu, "Sınıf listeleri görüntüleme"),
+        // Sınıf Listeleri sayfası 2026-05-11'de silindi; aynı veri Şubelendirme İşlemleri (subelendirme-islemleri) sayfasında.
 
         // Dönem Kapatma — sayfa silindi; .view AcademicProgressionController tarafından kullanılmaya devam ediyor
         ("menu.donem-kapatma.view",                      PermissionCategory.Menu, "Sınıf atlatma simülasyonu (AcademicProgressionController)"),
@@ -303,7 +304,7 @@ public static class PermissionSeed
         ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
         ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
         ("menu.ders-kayit-duzenleme.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
-        ("menu.subeler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Şubeler arası öğrenci transfer sayfası"),
+        // menu.subeler-arasi-ogrenci-transfer.view — 2026-05-12'de silindi; işlev SectioningPage'e taşındı (menu.subelendirme-islemleri.transfer)
         ("menu.dersler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
         ("menu.harf-notu-duzenleme.view",                PermissionCategory.Menu, "Harf notu düzenleme sayfası"),
 
@@ -339,6 +340,12 @@ public static class PermissionSeed
         ("menu.duyuru-yonetimi.create",                  PermissionCategory.Menu, "Yeni internal announcement"),
         ("menu.duyuru-yonetimi.edit",                    PermissionCategory.Menu, "Internal announcement düzenleme"),
         ("menu.duyuru-yonetimi.delete",                  PermissionCategory.Menu, "Internal announcement silme"),
+
+        // Duyuru Kategorileri (Madde 3)
+        ("menu.duyuru-kategorileri.view",                PermissionCategory.Menu, "Duyuru kategorileri listesi"),
+        ("menu.duyuru-kategorileri.create",              PermissionCategory.Menu, "Yeni duyuru kategorisi"),
+        ("menu.duyuru-kategorileri.edit",                PermissionCategory.Menu, "Duyuru kategorisi düzenleme"),
+        ("menu.duyuru-kategorileri.delete",              PermissionCategory.Menu, "Duyuru kategorisi silme"),
 
         // ═══════════════════════════════════════════════════════════════════════════
         // Modül 10: Hesabım

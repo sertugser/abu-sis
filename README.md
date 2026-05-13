@@ -11,22 +11,26 @@ Ankara Bilim University - Student Information System
 | **Veritabanı** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white) |
 | **Auth** | ![JWT](https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white) |
 
-## Gereksinimler
+## Ön-Koşullar
+
+Aşağıdakiler **kurulu ve çalışır** olmalı:
 
 | Araç | Versiyon |
 |------|----------|
 | .NET SDK | 10.0+ |
 | Node.js | 18+ |
-| PostgreSQL | 15+ |
+| PostgreSQL | 15+ (servis çalışır durumda) |
 
 ## Kurulum
 
 ### 1. Repo'yu klonla
 
 ```bash
-git clone <repo-url>
+git clone --recurse-submodules <repo-url>
 cd Student-Information-System
 ```
+
+> **Not:** `--recurse-submodules` flag'i `external/AISVS/` submodule'ünü de çeker. Düz `git clone` yaptıysan sonradan `git submodule update --init --recursive` çalıştır.
 
 ### 2. PostgreSQL veritabanını oluştur
 
@@ -52,6 +56,24 @@ set ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=Stude
 set Jwt__Key=<at-least-32-byte-random-secret>
 ```
 
+Alternatif olarak `SIS.API/appsettings.Development.json` dosyasını oluşturabilirsiniz (gitignored, sadece sende kalır):
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=StudentInfoSystem;Username=postgres;Password=YOUR_PASSWORD"
+  },
+  "Jwt": {
+    "Key": "your-secret-key-must-be-at-least-32-characters-long",
+    "Issuer": "StudentInformationSystem",
+    "Audience": "StudentInformationSystem",
+    "ExpiresInMinutes": 60
+  }
+}
+```
+
+> **JWT Key minimum 32 karakter** olmalı. Aksi takdirde API açılışta `StartupSecurityValidator` tarafından reddedilir ve başlatılamaz.
+
 ### 4. Veritabanı migration'larını uygula
 
 ```bash
@@ -75,6 +97,18 @@ npm install
 npm run dev
 ```
 
+## Hızlı başlangıç (Windows)
+
+Adım 4-6 yerine tek komutla başlatabilirsin:
+
+```cmd
+start-project.bat
+```
+
+Bu script `dotnet restore`, `dotnet build`, EF Core migration, `npm install` ve hem backend (port 5213) hem frontend'i (port 5173) çalıştırır, sonra tarayıcıyı açar.
+
+> **Önemli:** `start-project.bat` PostgreSQL'i kurmaz, veritabanını oluşturmaz ve `appsettings.Development.json` yaratmaz. Adım 2 ve 3 önceden tamamlanmış olmalıdır.
+
 ## Varsayılan Kullanıcılar (Development)
 
 | Rol | E-posta | Şifre |
@@ -92,7 +126,7 @@ SIS.Infrastructure/   → EF Core, DbContext, Repositories
 SIS.API/              → Controllers, Middleware, DI
 SIS.Web/              → React frontend (Vite + TypeScript + Tailwind)
 SIS.Tests/            → Unit testler
-scripts/              → Seed scriptleri
+scripts/              → Manuel SQL migration ve yetki yamaları
 ```
 
 ## Komutlar
@@ -103,3 +137,16 @@ dotnet test                           # Testleri çalıştır
 dotnet run --project SIS.API          # Backend'i başlat
 cd SIS.Web && npm run dev             # Frontend'i başlat
 ```
+
+## Hata giderme
+
+**API başlatılamıyor / port 5213 açılmıyor:**
+
+Terminal çıktısında `StartupSecurityValidator` hatasını ara. Genelde sebep:
+
+- `appsettings.Development.json` yok veya eksik (Adım 3'e dön)
+- `Jwt:Key` 32 karakterden kısa
+- `ConnectionStrings:DefaultConnection` boş veya PostgreSQL erişilemez
+- PostgreSQL servisi çalışmıyor
+
+`start-project.bat` çalıştırırken "Smart App Control bloklaması" uyarısı görsen bile gerçek sebep büyük ihtimalle yukarıdakilerden biridir.

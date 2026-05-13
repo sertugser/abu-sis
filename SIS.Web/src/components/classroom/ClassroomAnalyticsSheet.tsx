@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from '@/components/ui/sheet';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Building2, Users, Layers, TrendingUp } from 'lucide-react';
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
+import { BarChart3, Building2, Users, Layers, TrendingUp } from 'lucide-react';
 import type { ClassroomDto } from '../../api/classroom.api';
 import {
   getClassroomTypeLabel,
@@ -57,20 +56,25 @@ export default function ClassroomAnalyticsSheet({
   const maxBucket = Math.max(...stats.buckets.map(b => b.count), 1);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md overflow-hidden flex flex-col">
-        <SheetHeader>
-          <SheetTitle>Derslik Analizi</SheetTitle>
-          <SheetDescription>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-hidden p-0">
+        <DialogHeader className="border-b border-slate-100 bg-gradient-to-r from-violet-50/70 via-violet-50/30 to-transparent px-6 py-4">
+          <DialogTitle className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
+              <BarChart3 className="h-4 w-4" />
+            </span>
+            Derslik Analizi
+          </DialogTitle>
+          <DialogDescription>
             Toplam, dağılım ve kapasite analizleri.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
-        <ScrollArea className="flex-1 -mx-6 px-6 mt-4">
-          <div className="space-y-6 pb-6">
+        <div className="max-h-[calc(85vh-5rem)] overflow-y-auto px-6 py-5">
+          <div className="space-y-6">
 
             {/* Metric grid */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <MetricCard
                 icon={<Building2 className="h-4 w-4 text-blue-600" />}
                 bg="bg-blue-50"
@@ -102,59 +106,62 @@ export default function ClassroomAnalyticsSheet({
               />
             </div>
 
-            {/* Type distribution */}
-            {typesSorted.length > 0 && (
-              <section>
-                <h3 className="text-sm font-semibold mb-3">Tip Dağılımı</h3>
-                <div className="space-y-2">
-                  {typesSorted.map(([type, count]) => {
-                    const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
-                    return (
-                      <div key={type} className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-700">{getClassroomTypeLabel(type)}</span>
-                          <span className="font-mono text-muted-foreground">
-                            {count} <span className="text-[10px]">({pct.toFixed(0)}%)</span>
-                          </span>
+            {/* Type + Capacity side-by-side */}
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {/* Type distribution */}
+              {typesSorted.length > 0 && (
+                <section>
+                  <h3 className="text-sm font-semibold mb-3">Tip Dağılımı</h3>
+                  <div className="space-y-2">
+                    {typesSorted.map(([type, count]) => {
+                      const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
+                      return (
+                        <div key={type} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-700">{getClassroomTypeLabel(type)}</span>
+                            <span className="font-mono text-muted-foreground">
+                              {count} <span className="text-[10px]">({pct.toFixed(0)}%)</span>
+                            </span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${getClassroomTypeBarClass(type)}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${getClassroomTypeBarClass(type)}`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
-            {/* Capacity histogram */}
-            {stats.total > 0 && (
-              <section>
-                <h3 className="text-sm font-semibold mb-3">Kapasite Dağılımı</h3>
-                <div className="space-y-2">
-                  {stats.buckets.map(b => {
-                    const pct = (b.count / maxBucket) * 100;
-                    return (
-                      <div key={b.label} className="flex items-center gap-3">
-                        <span className="text-xs text-gray-600 w-20 shrink-0">{b.label}</span>
-                        <div className="flex-1 h-5 rounded bg-gray-100 overflow-hidden relative">
-                          <div
-                            className="h-full bg-[#003366]/80 rounded transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                          <span className="absolute inset-0 flex items-center px-2 text-[11px] font-mono">
-                            {b.count}
-                          </span>
+              {/* Capacity histogram */}
+              {stats.total > 0 && (
+                <section>
+                  <h3 className="text-sm font-semibold mb-3">Kapasite Dağılımı</h3>
+                  <div className="space-y-2">
+                    {stats.buckets.map(b => {
+                      const pct = (b.count / maxBucket) * 100;
+                      return (
+                        <div key={b.label} className="flex items-center gap-3">
+                          <span className="text-xs text-gray-600 w-20 shrink-0">{b.label}</span>
+                          <div className="flex-1 h-5 rounded bg-gray-100 overflow-hidden relative">
+                            <div
+                              className="h-full bg-[#003366]/80 rounded transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                            <span className="absolute inset-0 flex items-center px-2 text-[11px] font-mono">
+                              {b.count}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+            </div>
 
             {/* Building distribution */}
             {buildingsSorted.length > 0 && (
@@ -182,9 +189,9 @@ export default function ClassroomAnalyticsSheet({
               </div>
             )}
           </div>
-        </ScrollArea>
-      </SheetContent>
-    </Sheet>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

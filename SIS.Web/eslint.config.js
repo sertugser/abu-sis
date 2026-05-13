@@ -30,6 +30,14 @@ export default defineConfig([
           destructuredArrayIgnorePattern: '^_',
         },
       ],
+      // eslint-plugin-react-hooks v6 ile gelen yeni "best practice" kuralları
+      // — bu projedeki birçok dialog/form bileşeni "modal açılınca state
+      // resetle" için useEffect+setState pattern'i kullanıyor (legacy, ama
+      // çalışıyor). Toplu refactor uzun süreceği için error yerine warn.
+      // Yeni kod yazarken bu uyarılar dikkate alınmalı.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/refs': 'warn',
+      'react-hooks/use-memo': 'warn',
     },
   },
 ])
