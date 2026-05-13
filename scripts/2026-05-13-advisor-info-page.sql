@@ -11,12 +11,14 @@
 BEGIN;
 
 -- ── 1. Permission INSERT (idempotent) ──────────────────────────────────
-INSERT INTO "Permissions" ("Key", "Category", "Description", "CreatedAt", "UpdatedAt")
-VALUES ('menu.danisman-bilgileri.view', 1, 'Danışman bilgileri sayfası (öğrenci görünümü)', NOW(), NOW())
+-- Permissions tablosunda UpdatedAt YOK; sadece Id, Key, Category, Description, CreatedAt
+INSERT INTO "Permissions" ("Key", "Category", "Description", "CreatedAt")
+VALUES ('menu.danisman-bilgileri.view', 1, 'Danışman bilgileri sayfası (öğrenci görünümü)', NOW())
 ON CONFLICT ("Key") DO NOTHING;
 
 -- ── 2. Student rolüne RolePermission ekle ──────────────────────────────
-INSERT INTO "RolePermissions" ("RoleId", "PermissionId", "CreatedAt")
+-- RolePermissions: timestamp kolonu GrantedAt (CreatedAt değil)
+INSERT INTO "RolePermissions" ("RoleId", "PermissionId", "GrantedAt")
 SELECT r."Id", p."Id", NOW()
 FROM "AspNetRoles" r
 CROSS JOIN "Permissions" p
