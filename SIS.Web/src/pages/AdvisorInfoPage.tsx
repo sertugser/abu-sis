@@ -25,8 +25,8 @@ export default function AdvisorInfoPage() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
   return (
-    <div className="container mx-auto max-w-4xl py-6">
-      <Card>
+    <>
+      <Card className="overflow-hidden border-border/70 shadow-sm">
         <CardHeader>
           <CardTitle>Danışman Bilgileri</CardTitle>
         </CardHeader>
@@ -56,27 +56,41 @@ export default function AdvisorInfoPage() {
           )}
 
           {!isLoading && !isError && data && data.hasAdvisor && (
-            <div className="flex flex-col gap-6 sm:flex-row">
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-muted">
-                <UserIcon className="h-12 w-12 text-muted-foreground" aria-hidden />
+            <div className="space-y-6">
+              {/* Header: Avatar + isim + sağda Ders Programı butonu */}
+              <div className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-center">
+                <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full bg-muted">
+                  <UserIcon className="h-14 w-14 text-muted-foreground" aria-hidden />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-2xl font-semibold text-foreground">
+                    {data.fullName}
+                  </h2>
+                  {data.departmentName && (
+                    <p className="text-sm text-muted-foreground">
+                      {data.departmentName}
+                      {data.facultyName ? ` — ${data.facultyName}` : ''}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setScheduleOpen(true)}
+                  className="gap-2 sm:self-center"
+                >
+                  <CalendarDays className="h-4 w-4" />
+                  Ders Programı
+                </Button>
               </div>
-              <div className="flex-1 space-y-3">
-                <InfoRow label="Adı Soyadı" value={data.fullName} />
+
+              {/* Info grid: 2-kolonlu, E-Posta tam satır */}
+              <div className="grid grid-cols-1 gap-x-10 gap-y-4 sm:grid-cols-2">
                 <InfoRow label="Fakülte" value={data.facultyName} />
                 <InfoRow label="Bölüm" value={data.departmentName} />
                 <InfoRow label="Program" value={data.programName} />
                 <InfoRow label="Telefon" value={data.phone} />
-                <InfoRow label="E-Posta" value={data.email} />
-
-                <div className="pt-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setScheduleOpen(true)}
-                    className="gap-2"
-                  >
-                    <CalendarDays className="h-4 w-4" />
-                    Ders Programı
-                  </Button>
+                <div className="sm:col-span-2">
+                  <InfoRow label="E-Posta" value={data.email} />
                 </div>
               </div>
             </div>
@@ -91,6 +105,6 @@ export default function AdvisorInfoPage() {
           advisorName={data.fullName}
         />
       )}
-    </div>
+    </>
   );
 }
