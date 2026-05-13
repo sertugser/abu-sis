@@ -34,6 +34,7 @@ public static class PermissionSeed
         ("menu.duyurular-admin.view",                    PermissionCategory.Menu, "Duyurular sayfası — Duyuru Yönetimi altındaki link (admin)"),
         ("menu.alinan-dersler.view",                     PermissionCategory.Menu, "Alınan dersler listesi görüntüleme"),
         ("menu.alinan-dersler.statistics",               PermissionCategory.Menu, "Alınan ders not istatistikleri"),
+        ("menu.danisman-bilgileri.view",                 PermissionCategory.Menu, "Danışman bilgileri sayfası (öğrenci görünümü)"),
 
         // ═══════════════════════════════════════════════════════════════════════════
         // Modül 2: Akademik İşlemler
