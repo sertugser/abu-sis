@@ -104,12 +104,6 @@ export interface AttendanceMatrix {
   students: AttendanceMatrixStudent[];
 }
 
-export interface SubmitQrPayload {
-  studentNumber: string;
-  firstName: string;
-  lastName: string;
-}
-
 export interface SubmitQrResponse {
   success: boolean;
   message: string;
@@ -151,7 +145,7 @@ export async function getQrAttendanceSession(token: string): Promise<QrAttendanc
   return data;
 }
 
-export async function submitQrAttendance(token: string, payload: SubmitQrPayload): Promise<SubmitQrResponse> {
-  const { data } = await apiClient.post(`/attendance/qr/${token}/submit`, payload);
+export async function submitQrAttendance(token: string): Promise<SubmitQrResponse> {
+  const { data } = await apiClient.post(`/attendance/qr/${token}/submit`, {});
   return data;
 }

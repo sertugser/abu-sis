@@ -43,7 +43,8 @@ public record AdminStudentFilterDto(
     decimal? MinCgpa,
     decimal? MaxCgpa,
     int Page = 1,
-    int PageSize = 25
+    int PageSize = 25,
+    IReadOnlyList<int>? DepartmentIds = null
 );
 
 public record CreateStudentDto(

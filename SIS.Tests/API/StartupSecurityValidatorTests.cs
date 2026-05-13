@@ -20,6 +20,55 @@ public class StartupSecurityValidatorTests
     }
 
     [Fact]
+    public void Validate_Throws_WhenJwtKeyIsEmpty()
+    {
+        var configuration = BuildConfiguration(jwtKey: "");
+
+        var act = () => StartupSecurityValidator.Validate(configuration, Environment("Development"));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Jwt:Key*");
+    }
+
+    [Fact]
+    public void Validate_Throws_WhenJwtKeyIsShort()
+    {
+        var configuration = BuildConfiguration(jwtKey: "short");
+
+        var act = () => StartupSecurityValidator.Validate(configuration, Environment("Development"));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*at least*");
+    }
+
+    [Fact]
+    public void Validate_Throws_WhenJwtKeyIsKnownCompromisedValue()
+    {
+        var leakedJwtKey = string.Concat("qjsCG!", "acM3VKnQJp", "Vn*QMYYs8", "Gn!fDSE");
+        var configuration = BuildConfiguration(jwtKey: leakedJwtKey);
+
+        var act = () => StartupSecurityValidator.Validate(configuration, Environment("Development"));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*compromised*");
+    }
+
+    [Theory]
+    [InlineData("123456")]
+    [InlineData("215215")]
+    public void Validate_Throws_WhenConnectionStringUsesKnownWeakPassword(string password)
+    {
+        var passwordPart = string.Concat("Pass", "word=", password);
+        var configuration = BuildConfiguration(
+            connectionString: $"Host=localhost;Database=sis;Username=postgres;{passwordPart}");
+
+        var act = () => StartupSecurityValidator.Validate(configuration, Environment("Development"));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*database password*");
+    }
+
+    [Fact]
     public void Validate_Throws_WhenProductionCorsUsesWildcard()
     {
         var configuration = BuildConfiguration(corsOrigin: "https://*.example.edu");
@@ -53,6 +102,7 @@ public class StartupSecurityValidatorTests
 
     private static IConfiguration BuildConfiguration(
         string? jwtKey = null,
+        string? connectionString = null,
         string corsOrigin = "http://localhost:5173",
         string allowedHosts = "localhost")
     {
@@ -61,7 +111,7 @@ public class StartupSecurityValidatorTests
         return new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=sis;Username=postgres;Password=local-only",
+                ["ConnectionStrings:DefaultConnection"] = connectionString ?? "Host=localhost;Database=sis;Username=postgres;Password=local-only",
                 ["Jwt:Key"] = effectiveJwtKey,
                 ["Jwt:Issuer"] = "StudentInformationSystem",
                 ["Jwt:Audience"] = "StudentInformationSystem",

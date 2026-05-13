@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/axios';
 import { Button } from '@/components/ui/button';
@@ -62,12 +62,14 @@ export default function LoginPage() {
   }[lang];
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = getSafeReturnTo(searchParams.get('returnTo'));
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/', { replace: true });
+      navigate(returnTo, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, returnTo]);
 
   if (isAuthenticated) {
     return null;
@@ -82,7 +84,7 @@ export default function LoginPage() {
       if (err) {
         setError(err);
       } else {
-        navigate('/', { replace: true });
+        navigate(returnTo, { replace: true });
       }
     } catch {
       setError('Bağlantı hatası. Lütfen tekrar deneyin.');
@@ -299,4 +301,12 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+function getSafeReturnTo(value: string | null) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return '/';
+  }
+
+  return value;
 }

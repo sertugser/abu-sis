@@ -30,12 +30,14 @@ export async function importSchedulePreview(
 export async function importScheduleApply(
   facultyId: number,
   termId: number,
-  rows: ImportPreviewDto['rows'],
+  importSessionId: string,
+  rowNumbers: number[],
 ): Promise<ImportResultDto> {
   const { data } = await apiClient.post<ImportResultDto>('/schedule-excel/import-apply', {
     facultyId,
     termId,
-    rows,
+    importSessionId,
+    rowNumbers,
   });
   return data;
 }

@@ -1,5 +1,8 @@
 using ClosedXML.Excel;
+using System.Data;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -12,6 +15,8 @@ namespace SIS.Infrastructure.Services;
 
 public class ExcelScheduleService : IExcelScheduleService
 {
+    private static readonly TimeSpan ImportSessionLifetime = TimeSpan.FromMinutes(30);
+    private static readonly JsonSerializerOptions SessionJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly AppDbContext _db;
 
     public ExcelScheduleService(AppDbContext db)
@@ -789,7 +794,7 @@ public class ExcelScheduleService : IExcelScheduleService
         return document.GeneratePdf();
     }
 
-    public async Task<ImportPreviewDto> PreviewImportAsync(Stream fileStream, int termId, int facultyId, CancellationToken ct = default)
+    public async Task<ImportPreviewDto> PreviewImportAsync(int userId, Stream fileStream, int termId, int facultyId, CancellationToken ct = default)
     {
         // Turkish day name → DayOfWeek (normalised: lowercase, no diacritics for resilience)
         var dayMap = new Dictionary<string, DayOfWeek>(StringComparer.OrdinalIgnoreCase)
@@ -833,17 +838,19 @@ public class ExcelScheduleService : IExcelScheduleService
             .ToListAsync(ct);
 
         using var workbook = new XLWorkbook(fileStream);
+        ValidateWorkbookShape(workbook);
+
         var sheet = workbook.Worksheets.FirstOrDefault(ws => ws.Name == "Program Verisi")
                     ?? workbook.Worksheet(1);
 
-        var preview = new ImportPreviewDto();
+        var serverRows = new List<ScheduleImportSessionRow>();
         var importedSchedules = new List<(int SectionId, int TimeSlotId, int ClassroomId, int RowNumber)>();
 
         int lastRow = sheet.LastRowUsed()?.RowNumber() ?? 1;
 
         for (int r = 2; r <= lastRow; r++)
         {
-            var row = new ImportRowDto { RowNumber = r };
+            var row = new ScheduleImportSessionRow { RowNumber = r };
 
             string courseCode     = sheet.Cell(r, 1).GetValue<string>().Trim();
             string sectionCodeRaw = sheet.Cell(r, 3).GetValue<string>().Trim();
@@ -871,7 +878,7 @@ public class ExcelScheduleService : IExcelScheduleService
             {
                 row.Status  = "Skipped";
                 row.Message = "Gün veya saat bilgisi yok, atlandı.";
-                preview.Rows.Add(row);
+                serverRows.Add(row);
                 continue;
             }
 
@@ -932,7 +939,7 @@ public class ExcelScheduleService : IExcelScheduleService
             {
                 row.Status  = "Error";
                 row.Message = string.Join("; ", errors);
-                preview.Rows.Add(row);
+                serverRows.Add(row);
                 continue;
             }
 
@@ -994,65 +1001,234 @@ public class ExcelScheduleService : IExcelScheduleService
             }
 
             importedSchedules.Add((section.Id, timeSlot.Id, classroom.Id, r));
-            preview.Rows.Add(row);
+            serverRows.Add(row);
         }
 
-        preview.TotalRows = preview.Rows.Count;
-        return preview;
+        var now = DateTime.UtcNow;
+        var session = new ScheduleImportSession
+        {
+            Id = Guid.NewGuid(),
+            CreatedByUserId = userId,
+            FacultyId = facultyId,
+            TermId = termId,
+            RowsJson = JsonSerializer.Serialize(serverRows, SessionJsonOptions),
+            CreatedAt = now,
+            ExpiresAt = now.Add(ImportSessionLifetime),
+        };
+
+        _db.ScheduleImportSessions.Add(session);
+        await _db.SaveChangesAsync(ct);
+
+        return new ImportPreviewDto
+        {
+            ImportSessionId = session.Id,
+            ExpiresAt = session.ExpiresAt,
+            TotalRows = serverRows.Count,
+            Rows = serverRows.Select(ToPublicRow).ToList(),
+        };
     }
 
-    public async Task<ImportResultDto> ApplyImportAsync(int termId, List<int> rowNumbers, ImportPreviewDto preview, CancellationToken ct = default)
+    public async Task<ImportResultDto> ApplyImportAsync(
+        int userId,
+        int facultyId,
+        int termId,
+        Guid importSessionId,
+        List<int> rowNumbers,
+        CancellationToken ct = default)
     {
-        var result = new ImportResultDto();
-        var rowSet = new HashSet<int>(rowNumbers);
+        if (importSessionId == Guid.Empty)
+            throw new ScheduleImportSessionInvalidException("Import session is required.");
 
-        var rowsToApply = preview.Rows
-            .Where(r => rowSet.Contains(r.RowNumber) &&
-                        (r.Status == "Valid" || r.Status == "Warning") &&
-                        r.SectionId.HasValue &&
-                        r.ClassroomId.HasValue &&
-                        r.TimeSlotId.HasValue)
-            .ToList();
+        var selectedRowNumbers = rowNumbers.Distinct().ToList();
+        if (selectedRowNumbers.Count == 0)
+            throw new ScheduleImportSessionInvalidException("At least one row must be selected.");
 
-        foreach (var row in rowsToApply)
+        IDbContextTransaction? transaction = null;
+        try
         {
-            try
+            if (_db.Database.IsRelational())
             {
-                // Remove existing schedules for this section
-                var existing = await _db.SectionSchedules
-                    .Where(ss => ss.CourseSectionId == row.SectionId!.Value)
-                    .ToListAsync(ct);
+                transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            }
 
-                _db.SectionSchedules.RemoveRange(existing);
+            var now = DateTime.UtcNow;
+            var session = await _db.ScheduleImportSessions
+                .FirstOrDefaultAsync(s => s.Id == importSessionId, ct)
+                ?? throw new ScheduleImportSessionInvalidException("Import session was not found.");
 
-                // Create new schedule entry
-                var newSchedule = new SIS.Domain.Entities.SectionSchedule
+            if (session.CreatedByUserId != userId)
+                throw new ScheduleImportSessionForbiddenException("Import session belongs to another user.");
+
+            if (session.FacultyId != facultyId || session.TermId != termId)
+                throw new ScheduleImportSessionInvalidException("Import session does not match the requested faculty or term.");
+
+            if (session.ConsumedAt.HasValue)
+                throw new ScheduleImportSessionInvalidException("Import session has already been used.");
+
+            if (session.ExpiresAt <= now)
+                throw new ScheduleImportSessionInvalidException("Import session has expired.");
+
+            var sessionRows = DeserializeSessionRows(session.RowsJson);
+            var rowsByNumber = sessionRows.ToDictionary(r => r.RowNumber);
+            var rowsToApply = new List<ScheduleImportSessionRow>();
+
+            foreach (var rowNumber in selectedRowNumbers)
+            {
+                if (!rowsByNumber.TryGetValue(rowNumber, out var row) || !IsApplicable(row))
+                {
+                    throw new ScheduleImportSessionInvalidException($"Selected row {rowNumber} cannot be applied.");
+                }
+
+                rowsToApply.Add(row);
+            }
+
+            await ValidateRowsBeforeApplyAsync(rowsToApply, facultyId, termId, ct);
+
+            var sectionIds = rowsToApply
+                .Select(r => r.SectionId!.Value)
+                .Distinct()
+                .ToList();
+
+            var existingSchedules = await _db.SectionSchedules
+                .Where(ss => sectionIds.Contains(ss.CourseSectionId))
+                .ToListAsync(ct);
+
+            _db.SectionSchedules.RemoveRange(existingSchedules);
+
+            foreach (var row in rowsToApply)
+            {
+                _db.SectionSchedules.Add(new SectionSchedule
                 {
                     CourseSectionId = row.SectionId!.Value,
-                    TimeSlotId      = row.TimeSlotId!.Value,
-                    ClassroomId     = row.ClassroomId!.Value,
-                };
-                _db.SectionSchedules.Add(newSchedule);
-
-                result.AppliedCount++;
-            }
-            catch (Exception ex)
-            {
-                result.FailedCount++;
-                result.Failures.Add(new ImportFailureDto
-                {
-                    RowNumber  = row.RowNumber,
-                    CourseCode = row.CourseCode,
-                    Reason     = ex.Message,
+                    TimeSlotId = row.TimeSlotId!.Value,
+                    ClassroomId = row.ClassroomId!.Value,
                 });
             }
-        }
 
-        await _db.SaveChangesAsync(ct);
-        return result;
+            session.ConsumedAt = now;
+            await _db.SaveChangesAsync(ct);
+
+            if (transaction is not null)
+                await transaction.CommitAsync(ct);
+
+            return new ImportResultDto
+            {
+                AppliedCount = rowsToApply.Count,
+            };
+        }
+        finally
+        {
+            if (transaction is not null)
+                await transaction.DisposeAsync();
+        }
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private static List<ScheduleImportSessionRow> DeserializeSessionRows(string rowsJson)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<ScheduleImportSessionRow>>(rowsJson, SessionJsonOptions) ?? [];
+        }
+        catch (JsonException ex)
+        {
+            throw new ScheduleImportSessionInvalidException($"Import session data is invalid: {ex.Message}");
+        }
+    }
+
+    private static bool IsApplicable(ScheduleImportSessionRow row) =>
+        (row.Status == "Valid" || row.Status == "Warning")
+        && row.SectionId.HasValue
+        && row.ClassroomId.HasValue
+        && row.TimeSlotId.HasValue;
+
+    private async Task ValidateRowsBeforeApplyAsync(
+        List<ScheduleImportSessionRow> rows,
+        int facultyId,
+        int termId,
+        CancellationToken ct)
+    {
+        var sectionIds = rows.Select(r => r.SectionId!.Value).Distinct().ToList();
+        var timeSlotIds = rows.Select(r => r.TimeSlotId!.Value).Distinct().ToList();
+        var classroomIds = rows.Select(r => r.ClassroomId!.Value).Distinct().ToList();
+
+        var validSectionIds = await _db.CourseSections
+            .Where(s => sectionIds.Contains(s.Id)
+                     && s.TermId == termId
+                     && s.Course.Department!.FacultyId == facultyId)
+            .Select(s => s.Id)
+            .ToListAsync(ct);
+
+        if (validSectionIds.Count != sectionIds.Count)
+            throw new ScheduleImportSessionInvalidException("One or more selected sections no longer match the requested faculty or term.");
+
+        var validTimeSlotIds = await _db.TimeSlots
+            .Where(ts => timeSlotIds.Contains(ts.Id) && ts.TermId == termId)
+            .Select(ts => ts.Id)
+            .ToListAsync(ct);
+
+        if (validTimeSlotIds.Count != timeSlotIds.Count)
+            throw new ScheduleImportSessionInvalidException("One or more selected time slots no longer match the requested term.");
+
+        var validClassroomIds = await _db.Classrooms
+            .Where(c => classroomIds.Contains(c.Id))
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+
+        if (validClassroomIds.Count != classroomIds.Count)
+            throw new ScheduleImportSessionInvalidException("One or more selected classrooms no longer exist.");
+    }
+
+    private static ImportRowDto ToPublicRow(ScheduleImportSessionRow row) => new()
+    {
+        RowNumber = row.RowNumber,
+        CourseCode = row.CourseCode,
+        SectionCode = row.SectionCode,
+        InstructorName = row.InstructorName,
+        Day = row.Day,
+        StartTime = row.StartTime,
+        EndTime = row.EndTime,
+        ClassroomName = row.ClassroomName,
+        Capacity = row.Capacity,
+        Status = row.Status,
+        Message = row.Message,
+    };
+
+    private static void ValidateWorkbookShape(IXLWorkbook workbook)
+    {
+        const int maxRows = 5000;
+        const int maxColumns = 100;
+
+        foreach (var worksheet in workbook.Worksheets)
+        {
+            var range = worksheet.RangeUsed();
+            if (range is null)
+                continue;
+
+            if (range.RowCount() > maxRows || range.ColumnCount() > maxColumns)
+                throw new ScheduleImportSessionInvalidException(
+                    $"Excel file cannot exceed {maxRows} rows and {maxColumns} columns.");
+        }
+    }
+
+    private sealed class ScheduleImportSessionRow
+    {
+        public int RowNumber { get; set; }
+        public string CourseCode { get; set; } = string.Empty;
+        public string SectionCode { get; set; } = string.Empty;
+        public string InstructorName { get; set; } = string.Empty;
+        public string Day { get; set; } = string.Empty;
+        public string StartTime { get; set; } = string.Empty;
+        public string EndTime { get; set; } = string.Empty;
+        public string ClassroomName { get; set; } = string.Empty;
+        public int Capacity { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public int? SectionId { get; set; }
+        public int? ClassroomId { get; set; }
+        public int? TimeSlotId { get; set; }
+    }
 
     /// <summary>
     /// Derslik-bazlı pivot sheet'i oluşturur. Satırlarda gün+slot#+saat,

@@ -43,6 +43,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GeneratedCalendarDraft> GeneratedCalendarDrafts => Set<GeneratedCalendarDraft>();
     public DbSet<TimeSlot> TimeSlots => Set<TimeSlot>();
     public DbSet<SectionSchedule> SectionSchedules => Set<SectionSchedule>();
+    public DbSet<ScheduleImportSession> ScheduleImportSessions => Set<ScheduleImportSession>();
     public DbSet<ClassroomTermAssignment> ClassroomTermAssignments => Set<ClassroomTermAssignment>();
     public DbSet<CourseAccessPolicy> CourseAccessPolicies => Set<CourseAccessPolicy>();
     public DbSet<RegistrationPlan> RegistrationPlans => Set<RegistrationPlan>();
@@ -709,6 +710,25 @@ builder.Entity<GradingCriteria>(e =>
         });
 
         // ── ClassroomTermAssignment ──────────────────────────────
+        // Schedule import sessions keep server-validated import rows out of client-controlled apply requests.
+        builder.Entity<ScheduleImportSession>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.RowsJson).HasColumnType("jsonb").IsRequired();
+            e.HasIndex(s => new { s.CreatedByUserId, s.FacultyId, s.TermId, s.ExpiresAt });
+            e.HasIndex(s => s.ConsumedAt);
+
+            e.HasOne(s => s.Faculty)
+             .WithMany()
+             .HasForeignKey(s => s.FacultyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(s => s.Term)
+             .WithMany()
+             .HasForeignKey(s => s.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<ClassroomTermAssignment>(e =>
         {
             e.HasIndex(cta => new { cta.TermId, cta.ClassroomId }).IsUnique();

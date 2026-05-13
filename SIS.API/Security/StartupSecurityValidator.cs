@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
@@ -7,6 +8,16 @@ namespace SIS.API.Security;
 public static class StartupSecurityValidator
 {
     private const int MinimumJwtKeyBytes = 32;
+    private static readonly HashSet<string> KnownCompromisedJwtKeyHashes =
+    [
+        "9054c06d3cf9d9b392e5b2cfecd2ffce0ea6437d88fdc8542b8a55fd54a30d1a"
+    ];
+
+    private static readonly HashSet<string> KnownWeakDatabasePasswords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "123456",
+        "215215",
+    };
 
     public static void Validate(IConfiguration configuration, IHostEnvironment environment)
     {
@@ -25,11 +36,15 @@ public static class StartupSecurityValidator
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("Jwt:Key configuration is required.");
 
-        if (key.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase))
+        if (key.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("PLACEHOLDER", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Jwt:Key must be replaced before the API starts.");
 
         if (Encoding.UTF8.GetByteCount(key) < MinimumJwtKeyBytes)
             throw new InvalidOperationException($"Jwt:Key must be at least {MinimumJwtKeyBytes} bytes.");
+
+        if (KnownCompromisedJwtKeyHashes.Contains(Sha256Hex(key.Trim())))
+            throw new InvalidOperationException("Jwt:Key is a known compromised value and must be rotated.");
 
         if (string.IsNullOrWhiteSpace(configuration["Jwt:Issuer"]))
             throw new InvalidOperationException("Jwt:Issuer configuration is required.");
@@ -63,10 +78,10 @@ public static class StartupSecurityValidator
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException("ConnectionStrings:DefaultConnection configuration is required.");
 
-        if (!environment.IsDevelopment()
-            && connectionString.Contains("Password=215215", StringComparison.OrdinalIgnoreCase))
+        var password = ExtractConnectionStringPassword(connectionString);
+        if (password is not null && KnownWeakDatabasePasswords.Contains(password))
         {
-            throw new InvalidOperationException("Default development database password cannot be used outside Development.");
+            throw new InvalidOperationException("Default development database password cannot be used.");
         }
     }
 
@@ -78,5 +93,29 @@ public static class StartupSecurityValidator
         {
             throw new InvalidOperationException("AllowedHosts must be restricted outside Development.");
         }
+    }
+
+    private static string Sha256Hex(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private static string? ExtractConnectionStringPassword(string connectionString)
+    {
+        foreach (var part in connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separatorIndex = part.IndexOf('=');
+            if (separatorIndex <= 0)
+                continue;
+
+            var key = part[..separatorIndex].Trim();
+            if (!key.Equals("Password", StringComparison.OrdinalIgnoreCase)
+                && !key.Equals("Pwd", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return part[(separatorIndex + 1)..].Trim();
+        }
+
+        return null;
     }
 }

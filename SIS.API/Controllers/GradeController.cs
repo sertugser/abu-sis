@@ -84,6 +84,9 @@ public class GradeController : ControllerBase
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         // Guard: bileşen ekleme/düzenleme iptal edilmiş dönemde yapılamaz
+        if (!await CanMutateSharedGradeConfigurationAsync(section))
+            return Forbid();
+
         var termIsCancelled = await GetTermIsCancelledAsync(section.TermId);
         if (termIsCancelled == true)
             return BadRequest(new { error = "İptal edilmiş dönemde bileşen değiştirilemez." });
@@ -142,6 +145,9 @@ public class GradeController : ControllerBase
         var section = await GetAuthorizedSectionAsync(sectionId);
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        if (!await CanMutateSharedGradeConfigurationAsync(section))
+            return Forbid();
 
         var termIsCancelled2 = await GetTermIsCancelledAsync(section.TermId);
         if (termIsCancelled2 == true)
@@ -499,6 +505,10 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
     stream.Position = 0;
 
     using var workbook = new XLWorkbook(stream);
+    var workbookValidationError = FileUploadValidation.ValidateWorkbookShape(workbook);
+    if (workbookValidationError is not null)
+        return BadRequest(new { error = workbookValidationError });
+
     var worksheet = workbook.Worksheet("Grades");
 
     var templateSectionIdText = worksheet.Cell(1, 2).GetValue<string>();
@@ -706,6 +716,10 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     stream.Position = 0;
 
     using var workbook = new XLWorkbook(stream);
+    var workbookValidationError = FileUploadValidation.ValidateWorkbookShape(workbook);
+    if (workbookValidationError is not null)
+        return BadRequest(new { error = workbookValidationError });
+
     var worksheet = workbook.Worksheet("Grades");
 
     var templateSectionIdText = worksheet.Cell(1, 2).GetValue<string>();
@@ -1062,6 +1076,9 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         // Aralıkların tutarlılığını kontrol et (AA > BA > BB > ... > DD)
+        if (!await CanMutateSharedGradeConfigurationAsync(section))
+            return Forbid();
+
         if (dto.AAMin <= dto.BAMin || dto.BAMin <= dto.BBMin || dto.BBMin <= dto.CBMin
             || dto.CBMin <= dto.CCMin || dto.CCMin <= dto.DCMin || dto.DCMin <= dto.DDMin
             || dto.DDMin <= 0)
@@ -1103,6 +1120,18 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     /// Giriş yapan hocaya ait section'ı doğrular ve döner.
     /// Hocanın o dersin herhangi bir section'ına atanmış olması yeterlidir.
     /// </summary>
+    private async Task<bool> CanMutateSharedGradeConfigurationAsync(CourseSection section)
+    {
+        if (!section.InstructorId.HasValue)
+            return false;
+
+        return !await _context.CourseSections
+            .AsNoTracking()
+            .AnyAsync(other => other.CourseId == section.CourseId
+                && other.TermId == section.TermId
+                && other.InstructorId != section.InstructorId);
+    }
+
     private async Task<CourseSection?> GetAuthorizedSectionAsync(int sectionId)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

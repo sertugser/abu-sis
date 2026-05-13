@@ -12,7 +12,6 @@ import {
   type CreateAttendanceSessionPayload,
   type OpenQrPayload,
   type SaveAttendancePayload,
-  type SubmitQrPayload,
 } from '../api/attendance.api';
 
 export const attendanceKeys = {
@@ -97,7 +96,7 @@ export function useQrAttendanceSession(token?: string) {
 export function useSubmitQrAttendance(token?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: SubmitQrPayload) => submitQrAttendance(token!, payload),
+    mutationFn: () => submitQrAttendance(token!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: attendanceKeys.qr(token) });
     },

@@ -55,6 +55,7 @@ builder.Services.AddControllers()
         o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddScoped<SIS.API.Filters.SensitiveDataAccessFilter>();
+builder.Services.AddScoped<SIS.API.Authorization.IAcademicScopeGuard, SIS.API.Authorization.AcademicScopeGuard>();
 
 // Rate limiting for audit log endpoints
 builder.Services.AddRateLimiter(options =>
