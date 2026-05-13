@@ -30,16 +30,17 @@ public static class RolePermissionSeed
         new Dictionary<string, IReadOnlyList<string>>
         {
             // ═══════════════════════════════════════════════════════════════════════════
-            // Student — 29 permission (15 view + 14 action)
+            // Student — 30 permission (16 view + 14 action)
             // Sidebar: Sık Kullanılanlar + Ders ve Dönem İşlemleri + Anketler + Hesabım
             // ═══════════════════════════════════════════════════════════════════════════
             ["Student"] = new[]
             {
-                // ── View permissions (15) ──
+                // ── View permissions (16) ──
                 "menu.ana-sayfa.view",
                 "menu.akademik-takvim.view",
                 "menu.duyurular.view",
                 "menu.alinan-dersler.view",
+                "menu.danisman-bilgileri.view",
                 "menu.ders-kayit.view",
                 "menu.akilli-planlama.view",
                 "menu.plan.view",
