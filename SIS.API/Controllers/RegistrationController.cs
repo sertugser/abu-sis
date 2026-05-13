@@ -15,11 +15,16 @@ namespace SIS.API.Controllers;
 public class RegistrationController : ControllerBase
 {
     private readonly ICourseRegistrationService _registrationService;
+    private readonly ICourseHistoryPdfService _courseHistoryPdfService;
     private readonly AppDbContext _context;
 
-    public RegistrationController(ICourseRegistrationService registrationService, AppDbContext context)
+    public RegistrationController(
+        ICourseRegistrationService registrationService,
+        ICourseHistoryPdfService courseHistoryPdfService,
+        AppDbContext context)
     {
         _registrationService = registrationService;
+        _courseHistoryPdfService = courseHistoryPdfService;
         _context = context;
     }
 
@@ -105,6 +110,22 @@ public class RegistrationController : ControllerBase
 
         var history = await _registrationService.GetCourseHistoryAsync(studentId.Value);
         return Ok(history);
+    }
+
+    /// <summary>
+    /// GET api/registrations/history/pdf — "Alınan Dersler" resmî PDF raporu.
+    /// </summary>
+    [HttpGet("history/pdf")]
+    [RequirePermission("menu.alinan-dersler.view")]
+    public async Task<IActionResult> GetCourseHistoryPdf(CancellationToken ct)
+    {
+        var studentId = await GetStudentIdAsync();
+        if (studentId == null)
+            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+
+        var pdfBytes = await _courseHistoryPdfService.GenerateAsync(studentId.Value, ct);
+        var fileName = $"alinan-dersler-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pdf";
+        return File(pdfBytes, "application/pdf", fileName);
     }
 
     /// <summary>

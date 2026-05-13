@@ -42,6 +42,17 @@ export async function getCourseHistory(): Promise<CourseHistoryTermDto[]> {
   return response.data;
 }
 
+/**
+ * "Alınan Dersler" PDF dosyasını indir. Backend QuestPDF ile resmî görünüm üretir.
+ * Browser yeni sekmede açar veya download tetikler.
+ */
+export async function downloadCourseHistoryPdf(): Promise<Blob> {
+  const response = await apiClient.get<Blob>('/registrations/history/pdf', {
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
 export async function dropCourse(registrationId: number): Promise<RegistrationResponseDto> {
   try {
     const response = await apiClient.delete<RegistrationResponseDto>(`/registrations/${registrationId}/drop`);

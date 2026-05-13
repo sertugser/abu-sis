@@ -216,6 +216,7 @@ builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidatio
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<RegistrationCleanupJob>();
 builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();

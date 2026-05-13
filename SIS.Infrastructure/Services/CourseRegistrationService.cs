@@ -343,9 +343,83 @@ public partial class CourseRegistrationService : ICourseRegistrationService
 
     public async Task<List<CourseHistoryTermDto>> GetCourseHistoryAsync(int studentId)
     {
+        var (terms, _) = await LoadCourseHistoryCoreAsync(studentId);
+        return terms;
+    }
+
+    /// <summary>
+    /// "Alınan Dersler" PDF raporu için öğrenci bilgi bloğu + dönem listesi + alt toplam.
+    /// </summary>
+    public async Task<CourseHistoryReportDto?> GetCourseHistoryReportAsync(int studentId)
+    {
+        var (terms, studentInfo) = await LoadCourseHistoryCoreAsync(studentId);
+        if (studentInfo == null)
+            return null;
+
+        // Alt toplam — tüm dönemler birleşik
+        var allCourses = terms.SelectMany(t => t.Courses).ToList();
+
+        return new CourseHistoryReportDto
+        {
+            StudentNumber = studentInfo.StudentNumber,
+            FullName = studentInfo.FullName,
+            CurrentClassYear = studentInfo.CurrentClassYear,
+            FacultyName = studentInfo.FacultyName,
+            ProgramName = studentInfo.ProgramName,
+            AdvisorName = studentInfo.AdvisorName,
+            ActiveTermName = studentInfo.ActiveTermName,
+            Terms = terms,
+            TotalCourses = allCourses.Count,
+            TotalTheoryHours = allCourses.Sum(c => c.TheoryHours + c.LabHours + (c.ApplicationHours ?? 0)),
+            TotalCredit = allCourses.Sum(c => c.NationalCredit),
+            TotalEcts = allCourses.Sum(c => c.Ects)
+        };
+    }
+
+    /// <summary>
+    /// İçi: GetCourseHistoryAsync + GetCourseHistoryReportAsync ortak akışı.
+    /// Tüm join'ler ve AcquisitionType hesabı tek yerde toplanır.
+    /// </summary>
+    private async Task<(List<CourseHistoryTermDto> Terms, CourseHistoryStudentInfo? StudentInfo)>
+        LoadCourseHistoryCoreAsync(int studentId)
+    {
+        // Öğrenci + program + curriculum bilgisi (rapor üst bloğu + ClassYear hesabı için)
+        var student = await _context.Students
+            .AsNoTracking()
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+                    .ThenInclude(p => p.Department)
+                        .ThenInclude(d => d.Faculty)
+            .Include(s => s.Advisor)
+            .FirstOrDefaultAsync(s => s.Id == studentId);
+
+        if (student == null)
+            return (new List<CourseHistoryTermDto>(), null);
+
+        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+
+        // Aktif curriculum'daki CurriculumCourse → ClassYear hesabı için
+        Dictionary<int, CurriculumCourseInfo> curriculumMap = new();
+        if (activeProgram != null)
+        {
+            curriculumMap = await _context.CurriculumCourses
+                .AsNoTracking()
+                .Where(cc => cc.CurriculumId == activeProgram.CurriculumId)
+                .Select(cc => new CurriculumCourseInfo
+                {
+                    CourseId = cc.CourseId,
+                    IsCompulsory = cc.IsCompulsory,
+                    SuggestedSemester = cc.SuggestedSemester
+                })
+                .ToDictionaryAsync(x => x.CourseId);
+        }
+
+        // Tüm kayıtlar (Department/Course.Department dahil)
         var registrations = await _context.CourseRegistrations
+            .AsNoTracking()
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Course)
+                    .ThenInclude(c => c.Department)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Instructor)
             .Include(cr => cr.CourseSection)
@@ -355,7 +429,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 && cr.Status != RegistrationStatus.Dropped)
             .ToListAsync();
 
-        // Load instructor user names
+        // Instructor user adları
         var instructorUserIds = registrations
             .Where(r => r.CourseSection.Instructor != null)
             .Select(r => r.CourseSection.Instructor!.UserId)
@@ -365,6 +439,47 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         var userNames = await _context.Users
             .Where(u => instructorUserIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}");
+
+        // CourseId bazında önceki başarısızlıkları say (AcquisitionType için)
+        // Sıra: Term.Year → Term.TermType (kronolojik) → Id (deterministik fallback)
+        var registrationsByCourse = registrations
+            .GroupBy(r => r.CourseSection.CourseId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(r => r.CourseSection.Term.Year)
+                      .ThenBy(r => r.CourseSection.Term.TermType)
+                      .ThenBy(r => r.Id)
+                      .ToList());
+
+        // Advisor adı (rapor üst bloğu)
+        string? advisorName = null;
+        if (student.Advisor != null)
+        {
+            var advisorUser = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == student.Advisor.UserId);
+            if (advisorUser != null)
+                advisorName = $"{student.Advisor.Title} {advisorUser.FirstName} {advisorUser.LastName}".Trim();
+        }
+
+        // Aktif dönem (rapor üst bloğu)
+        var nowReport = _clock.UtcNow;
+        var activeTermName = await _context.AcademicTerms
+            .AsNoTracking()
+            .Where(t => !t.IsCancelled && t.TermStart <= nowReport && t.TermEnd >= nowReport)
+            .Select(t => t.Name)
+            .FirstOrDefaultAsync();
+
+        var studentInfo = new CourseHistoryStudentInfo
+        {
+            StudentNumber = student.StudentNumber,
+            FullName = await ResolveStudentFullNameAsync(student.UserId),
+            CurrentClassYear = (student.CompletedSemesters / 2) + 1,
+            FacultyName = activeProgram?.Program.Department.Faculty.Name,
+            ProgramName = activeProgram?.Program.Name,
+            AdvisorName = advisorName,
+            ActiveTermName = activeTermName
+        };
 
         var grouped = registrations
             .GroupBy(r => r.CourseSection.TermId)
@@ -377,21 +492,38 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                     TermName = term.Name,
                     Year = term.Year,
                     Semester = term.TermType.ToString(),
-                    Courses = g.Select(r => new CourseHistoryItemDto
+                    Courses = g.Select(r =>
                     {
-                        RegistrationId = r.Id,
-                        CourseSectionId = r.CourseSectionId,
-                        SectionNumber = r.CourseSection.SectionNumber,
-                        CourseCode = r.CourseSection.Course.Code,
-                        CourseName = r.CourseSection.Course.Name,
-                        Ects = r.CourseSection.Course.Ects,
-                        InstructorName = r.CourseSection.Instructor != null
-                            && userNames.TryGetValue(r.CourseSection.Instructor.UserId, out var name)
-                                ? $"{r.CourseSection.Instructor.Title} {name}".Trim()
-                                : string.Empty,
-                        Grade = r.Grade?.ToString(),
-                        Status = r.Status.ToString(),
-                        IsRepeated = r.IsRepeated
+                        var course = r.CourseSection.Course;
+                        curriculumMap.TryGetValue(course.Id, out var ccInfo);
+
+                        return new CourseHistoryItemDto
+                        {
+                            RegistrationId = r.Id,
+                            CourseSectionId = r.CourseSectionId,
+                            CourseId = course.Id,
+                            SectionNumber = r.CourseSection.SectionNumber,
+                            CourseCode = course.Code,
+                            CourseName = course.Name,
+                            Ects = r.EctsSnapshot ?? course.Ects,
+                            NationalCredit = r.CreditSnapshot ?? course.NationalCredit,
+                            TheoryHours = course.TheoryHours,
+                            LabHours = course.LabHours,
+                            ApplicationHours = course.ApplicationHours,
+                            ClassYear = ccInfo != null && ccInfo.SuggestedSemester > 0
+                                ? ((ccInfo.SuggestedSemester - 1) / 2) + 1
+                                : (int?)null,
+                            AcquisitionType = ComputeAcquisitionType(r, registrationsByCourse[course.Id], ccInfo),
+                            OwnerDepartmentName = course.Department?.Name,
+                            LanguageDisplay = FormatCourseLanguage(course.Language),
+                            InstructorName = r.CourseSection.Instructor != null
+                                && userNames.TryGetValue(r.CourseSection.Instructor.UserId, out var name)
+                                    ? $"{r.CourseSection.Instructor.Title} {name}".Trim()
+                                    : string.Empty,
+                            Grade = r.Grade?.ToString(),
+                            Status = r.Status.ToString(),
+                            IsRepeated = r.IsRepeated
+                        };
                     }).OrderBy(c => c.CourseCode).ToList()
                 };
             })
@@ -399,7 +531,79 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 .ThenByDescending(t => t.Semester)
             .ToList();
 
-        return grouped;
+        return (grouped, studentInfo);
+    }
+
+    private async Task<string> ResolveStudentFullNameAsync(int userId)
+    {
+        var user = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId);
+        return user == null ? string.Empty : $"{user.FirstName} {user.LastName}".Trim();
+    }
+
+    /// <summary>
+    /// "Alış Şekli" hesabı. Müfredattaki zorunluluk + önceki FF/NA sayısı + IsRepeated bayrağı.
+    /// </summary>
+    private static string ComputeAcquisitionType(
+        Domain.Entities.CourseRegistration current,
+        List<Domain.Entities.CourseRegistration> allRegistrationsForCourse,
+        CurriculumCourseInfo? curriculumInfo)
+    {
+        // Mevcut kayıttan önceki başarısızlıklar (kronolojik)
+        var currentIndex = allRegistrationsForCourse.FindIndex(r => r.Id == current.Id);
+        var priorRegistrations = currentIndex > 0
+            ? allRegistrationsForCourse.Take(currentIndex)
+            : Enumerable.Empty<Domain.Entities.CourseRegistration>();
+
+        var priorFFCount = priorRegistrations.Count(r => r.Grade == GradeCode.FF);
+        var priorNACount = priorRegistrations.Count(r => r.Grade == GradeCode.NA);
+        var totalPriorFails = priorFFCount + priorNACount;
+
+        // İlk kez alıyor → müfredattaki tipe göre
+        if (totalPriorFails == 0)
+        {
+            if (curriculumInfo == null)
+                return "Seçmeli"; // müfredat dışı = seçmeli kabul
+            return curriculumInfo.IsCompulsory ? "Zorunlu" : "Seçmeli";
+        }
+
+        // Önceden başarısız almış, tekrar alıyor
+        // Hangi başarısızlık daha baskınsa onu yansıt
+        var dominantFailGrade = priorFFCount >= priorNACount ? "FF" : "NA";
+
+        // Birden fazla başarısızlık → "Devamlı"
+        return totalPriorFails >= 2
+            ? $"Devamlı Alttan {dominantFailGrade}"
+            : $"Alttan {dominantFailGrade}";
+    }
+
+    private static string FormatCourseLanguage(Domain.Enums.CourseLanguage language) => language switch
+    {
+        Domain.Enums.CourseLanguage.Turkish => "Türkçe",
+        Domain.Enums.CourseLanguage.English => "İngilizce",
+        Domain.Enums.CourseLanguage.French  => "Fransızca",
+        Domain.Enums.CourseLanguage.German  => "Almanca",
+        Domain.Enums.CourseLanguage.Arabic  => "Arapça",
+        _ => language.ToString()
+    };
+
+    private sealed class CourseHistoryStudentInfo
+    {
+        public string StudentNumber { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public int? CurrentClassYear { get; set; }
+        public string? FacultyName { get; set; }
+        public string? ProgramName { get; set; }
+        public string? AdvisorName { get; set; }
+        public string? ActiveTermName { get; set; }
+    }
+
+    private sealed class CurriculumCourseInfo
+    {
+        public int CourseId { get; set; }
+        public bool IsCompulsory { get; set; }
+        public int SuggestedSemester { get; set; }
     }
 
 
