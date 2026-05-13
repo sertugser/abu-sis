@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.DTOs;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Infrastructure.Persistence;
@@ -37,7 +38,7 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var result = await _registrationService.AddToPlanAsync(studentId.Value, dto.CourseSectionId);
         if (!result.Success)
@@ -55,7 +56,7 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var result = await _registrationService.SubmitRegistrationAsync(studentId.Value, dto);
         if (!result.Success)
@@ -73,7 +74,7 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var registrations = await _registrationService.GetStudentRegistrationsAsync(studentId.Value);
         return Ok(registrations);
@@ -88,11 +89,11 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var status = await _registrationService.GetStudentAttendanceStatusAsync(studentId.Value, termId);
         if (status == null)
-            return NotFound(new { error = "Dönem veya ders kaydı bulunamadı." });
+            return NotFound(new ApiErrorResponse("Dönem veya ders kaydı bulunamadı.", "AttendanceStatusNotFound"));
 
         return Ok(status);
     }
@@ -106,7 +107,7 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var history = await _registrationService.GetCourseHistoryAsync(studentId.Value);
         return Ok(history);
@@ -121,7 +122,7 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var pdfBytes = await _courseHistoryPdfService.GenerateAsync(studentId.Value, ct);
         var fileName = $"alinan-dersler-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pdf";
@@ -137,7 +138,7 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var result = await _registrationService.DropCourseAsync(studentId.Value, id);
         if (!result.Success)
@@ -155,7 +156,7 @@ public class RegistrationController : ControllerBase
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
-            return Unauthorized(new { error = "Ogrenci bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var result = await _registrationService.WithdrawCourseAsync(studentId.Value, id);
         if (!result.Success)

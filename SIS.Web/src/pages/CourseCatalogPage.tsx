@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -12,6 +12,7 @@ import {
 import ValidationErrors from '../components/registration/ValidationErrors';
 import CourseCard from '../components/course/CourseCard';
 import RegistrationStatusBadge from '../components/registration/RegistrationStatusBadge';
+import SlotCandidatesTable from '../components/registration/SlotCandidatesTable';
 import { useStudentCatalog } from '../hooks/useStudentCatalog';
 import { useMyRegistrations } from '../hooks/useMyRegistrations';
 import { useAddToPlan } from '../hooks/useAddToPlan';
@@ -23,23 +24,19 @@ import { useActiveTerm } from '../hooks/useActiveTerm';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { formatDate } from '../lib/utils';
+import { formatDate, cn } from '../lib/utils';
 import { ROUTES } from '../lib/constants';
+import { classYearOptions } from '../lib/academicYear';
+import { ApiError } from '../lib/apiError';
 import type { ValidationError } from '../types/registration';
 import {
-  AlertCircle, AlertTriangle, BookX, Trash2, Send, CheckCircle2,
-  CircleAlert, Layers, Loader2, RotateCcw, GraduationCap, Calendar, Clock, User,
+  AlertCircle, AlertTriangle, BookX, Trash2, Send, CheckCircle2, ChevronRight,
+  CircleAlert, Layers, Loader2, RotateCcw, GraduationCap, Sparkles, Calendar, Clock,
 } from 'lucide-react';
-
-function getEctsExplanation(cgpa: number): string {
-  if (cgpa >= 2.50) return `GANO 2.50 ve üstü olduğundan 48 AKTS alınabilir.`;
-  if (cgpa >= 2.00) return `GANO 2.00-2.49 arasında olduğundan 42 AKTS alınabilir.`;
-  return `GANO 2.00 altında olduğundan 30 AKTS alınabilir.`;
-}
 
 const TAKE_TYPE_COLORS: Record<string, string> = {
   Zorunlu: 'text-primary',
-  Secmeli: 'text-accent',
+  Secmeli: 'text-accent-foreground',
   Alttan: 'text-destructive',
   Yukseltme: 'text-warning',
 };
@@ -63,7 +60,8 @@ export default function CourseCatalogPage() {
   const [validationWarnings, setValidationWarnings] = useState<ValidationError[]>([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all');
-  const classYear = student ? Math.min(Math.floor(student.completedSemesters / 2) + 1, 4) : 1;
+  // Backend StudentInfoDto.ClassYear zaten hesaplıyor; UI tarafında tekrar etme.
+  const classYear = student?.classYear ?? 1;
   const [classYearFilter, setClassYearFilter] = useState<number | null>(null);
   const [termTypeFilter, setTermTypeFilter] = useState<'all' | 'guz' | 'bahar'>('all');
   const effectiveClassYear = classYearFilter ?? classYear;
@@ -78,8 +76,9 @@ export default function CourseCatalogPage() {
   const confirmedItems = registrations?.filter(r => ['Active', 'PendingAdvisorApproval'].includes(r.status)) || [];
   const allSelectedItems = [...confirmedItems, ...planItems];
   const totalEcts = allSelectedItems.reduce((sum, r) => sum + r.ects, 0);
-  const ectsLimit = student?.ectsLimit ?? 30;
-  const ectsPercent = Math.min((totalEcts / ectsLimit) * 100, 100);
+  // Backend EctsLimit non-nullable; loading durumunda student undefined → progress'i 0 göster.
+  const ectsLimit = student?.ectsLimit ?? 0;
+  const ectsPercent = ectsLimit > 0 ? Math.min((totalEcts / ectsLimit) * 100, 100) : 0;
   const totalHours = allSelectedItems.reduce((sum, r) => sum + r.theoryHours + r.labHours, 0);
 
   const isFinalized = confirmedItems.length > 0 && planItems.length === 0;
@@ -124,7 +123,18 @@ export default function CourseCatalogPage() {
       return;
     }
 
-    addToPlan.mutate(sectionId);
+    setValidationErrors([]);
+    setValidationWarnings([]);
+    addToPlan.mutate(sectionId, {
+      onError: (error) => {
+        if (error instanceof ApiError && error.validationErrors.length > 0) {
+          setValidationErrors(error.validationErrors);
+          setValidationWarnings(error.validationWarnings);
+        } else {
+          setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Plana eklenirken hata oluştu.' }]);
+        }
+      },
+    });
   };
 
   const handleRemove = (registrationId: number) => {
@@ -134,7 +144,18 @@ export default function CourseCatalogPage() {
       return;
     }
 
-    dropCourse.mutate(registrationId);
+    setValidationErrors([]);
+    setValidationWarnings([]);
+    dropCourse.mutate(registrationId, {
+      onError: (error) => {
+        if (error instanceof ApiError && error.validationErrors.length > 0) {
+          setValidationErrors(error.validationErrors);
+          setValidationWarnings(error.validationWarnings);
+        } else {
+          setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Ders kaldırılamadı.' }]);
+        }
+      },
+    });
   };
 
   const handleSubmit = () => {
@@ -149,18 +170,19 @@ export default function CourseCatalogPage() {
     const sectionIds = planItems.map(r => r.courseSectionId);
     submitRegistration.mutate(sectionIds, {
       onSuccess: (data) => {
-        if (data.validationResult && !data.validationResult.isValid) {
-          setValidationErrors(data.validationResult.errors);
-          setValidationWarnings(data.validationResult.warnings ?? []);
-        } else if (data.success) {
+        if (data.success) {
           setSubmitSuccess(true);
           setValidationErrors([]);
           setValidationWarnings(data.validationResult?.warnings ?? []);
         }
       },
       onError: (error) => {
-        setValidationWarnings([]);
-        setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Kayit sirasinda bir hata olustu.' }]);
+        if (error instanceof ApiError && error.validationErrors.length > 0) {
+          setValidationErrors(error.validationErrors);
+          setValidationWarnings(error.validationWarnings);
+        } else {
+          setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Kayıt sırasında bir hata oluştu.' }]);
+        }
       },
     });
   };
@@ -168,59 +190,48 @@ export default function CourseCatalogPage() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-32 rounded-xl" />
-        <Skeleton className="h-8 w-48" />
-        {[1,2,3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        <Skeleton className="h-12 w-full rounded-md" />
+        <Skeleton className="h-32 w-full rounded-md" />
+        {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-md" />)}
       </div>
     );
   }
 
   if (error) {
+    const errorCode = error instanceof ApiError ? error.code : undefined;
     const errMsg = error instanceof Error ? error.message : '';
 
-    if (errMsg.includes('yayınlanmadı') || errMsg.includes('Dönem durumu')) {
+    if (errorCode === 'ActiveTermNotFound') {
       return (
-        <Alert variant="default" className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
-          <Clock className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-800 dark:text-blue-200">
-            <p className="font-semibold">Ders katalogu henuz yayinlanmadi</p>
-            <p className="mt-1 text-sm">Aktif donem su anda planlama asamasinda. Ders katalog yayinlandiginda bu sayfada gorebilirsin.</p>
+        <Alert>
+          <Calendar className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-semibold">Aktif akademik dönem bulunmuyor</p>
+            <p className="mt-1 text-sm text-muted-foreground">Yeni dönem açıldığında ders katalog burada görünecek.</p>
           </AlertDescription>
         </Alert>
       );
     }
 
-    if (errMsg.includes('Aktif donem bulunamadi')) {
-      return (
-        <Alert variant="default" className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
-          <Calendar className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-800 dark:text-blue-200">
-            <p className="font-semibold">Aktif akademik donem bulunmuyor</p>
-            <p className="mt-1 text-sm">Yeni donem acildiginda ders katalog burada gorunecek.</p>
-          </AlertDescription>
-        </Alert>
-      );
-    }
-
-    if (errMsg.includes('Aktif program bulunamadi')) {
+    if (errorCode === 'ActiveProgramNotFound') {
       return (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <p className="font-semibold">Aktif programiniz bulunamadi</p>
-            <p className="mt-1 text-sm">Lutfen ogrenci isleri birimi ile iletisime gecin.</p>
+            <p className="font-semibold">Aktif programınız bulunamadı</p>
+            <p className="mt-1 text-sm">Lütfen öğrenci işleri birimi ile iletişime geçin.</p>
           </AlertDescription>
         </Alert>
       );
     }
 
-    if (errMsg.includes('Ogrenci bilgisi bulunamadi')) {
+    if (errorCode === 'StudentNotFound') {
       return (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <p className="font-semibold">Ogrenci kaydina erisilemiyor</p>
-            <p className="mt-1 text-sm">Hesabinizla iliskili ogrenci kaydi bulunamadi. Lutfen ogrenci isleri birimi ile iletisime gecin.</p>
+            <p className="font-semibold">Öğrenci kaydına erişilemiyor</p>
+            <p className="mt-1 text-sm">Hesabınızla ilişkili öğrenci kaydı bulunamadı. Lütfen öğrenci işleri birimi ile iletişime geçin.</p>
           </AlertDescription>
         </Alert>
       );
@@ -230,232 +241,122 @@ export default function CourseCatalogPage() {
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          <p className="font-semibold">Dersler yuklenirken hata olustu</p>
+          <p className="font-semibold">Dersler yüklenirken hata oluştu</p>
           {errMsg && <p className="mt-1 text-sm">{errMsg}</p>}
-          {!errMsg && <p className="mt-1 text-sm">Lutfen sayfayi yenileyip tekrar deneyin.</p>}
+          {!errMsg && <p className="mt-1 text-sm">Lütfen sayfayı yenileyip tekrar deneyin.</p>}
         </AlertDescription>
       </Alert>
     );
   }
 
+  // Tek üst banner — öncelik: takvim eksikliği > kayıt kapalı > reddedilen plan
+  const topBanner = (() => {
+    if (term && !term.hasAcademicCalendar) {
+      return (
+        <Alert variant="warning">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-semibold">Kayıt alınamıyor</p>
+            <p className="mt-1 text-sm">
+              Aktif dönemin akademik takvimi henüz tanımlanmamış. Öğrenci işleri daire başkanlığı ile iletişime geçin.
+            </p>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    if (!registrationActionsOpen) {
+      return (
+        <Alert>
+          <Clock className="h-4 w-4" />
+          <AlertDescription>{registrationClosedMessage}</AlertDescription>
+        </Alert>
+      );
+    }
+    return null;
+  })();
+
   return (
     <div className="space-y-5">
-      {/* ── Takvim eksikliği uyarısı ── */}
-      {term && !term.hasAcademicCalendar && (
-        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-amber-900">Kayıt alınamıyor</h3>
-            <p className="text-sm text-amber-800 mt-1">
-              Aktif dönemin akademik takvimi henüz tanımlanmamış. Kayıt ve ekle/bırak dönemleri belli değil. Öğrenci işleri daire başkanlığı ile iletişime geçin.
-            </p>
-          </div>
-        </div>
-      )}
+      {topBanner}
 
-      {/* ── Öğrenci Bilgileri + Durum ── */}
+      {/* ── Öğrenci bilgi kartı ── */}
       {student && (
-        <Card className="overflow-hidden shadow-sm">
-          <CardContent className="p-0">
-            {/* Kompakt öğrenci bilgi şeridi */}
-            <div className="bg-[#003366] px-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <InfoCell
-                  icon={User}
-                  label="Öğrenci"
-                  value={`${student.studentNumber} — ${student.firstName} ${student.lastName}`}
-                />
-                <InfoCell
-                  icon={GraduationCap}
-                  label="Program"
-                  value={`${student.programName}`}
-                />
-                <InfoCell
-                  icon={Calendar}
-                  label="Sınıf / Dönem"
-                  value={`${classYear}. Sınıf, ${student.completedSemesters + 1}. Dönem`}
-                />
-                <InfoCell
-                  label="Genel Ortalama"
-                  value={student.cgpa.toFixed(2)}
-                  highlight={student.cgpa >= 2.0 ? 'success' : 'danger'}
-                />
+        <Card className="overflow-hidden border-border/70 shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex flex-col gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted">
+                <GraduationCap className="h-8 w-8 text-muted-foreground" aria-hidden />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl font-semibold text-foreground truncate">
+                  {student.firstName} {student.lastName}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {student.studentNumber} · {student.programName}
+                </p>
+              </div>
+              <div className="flex items-baseline gap-2 sm:flex-col sm:items-end sm:gap-0">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">GANO</span>
+                <span className={`text-2xl font-semibold tabular-nums ${student.cgpa >= 2.0 ? 'text-success' : 'text-destructive'}`}>
+                  {student.cgpa.toFixed(2)}
+                </span>
               </div>
             </div>
 
-            {/* Kayıt tarihleri + durum */}
-            <div className="px-6 py-3 flex flex-wrap items-center gap-x-8 gap-y-2 text-sm border-b bg-muted/20">
+            <div className="grid grid-cols-1 gap-x-10 gap-y-4 pt-5 sm:grid-cols-2">
+              <InfoRow label="Sınıf / Dönem" value={`${classYear}. Sınıf · ${student.completedSemesters + 1}. Dönem`} />
+              <InfoRow
+                label="AKTS Limiti"
+                value={ectsLimit > 0 ? `${ectsLimit} AKTS` : '—'}
+              />
               {term && (
                 <>
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span>Kayıt: <span className="text-foreground font-medium">{formatDate(term.registrationStart)} – {formatDate(term.registrationEnd)}</span></span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>Ek/Bırak: <span className="text-foreground font-medium">{formatDate(term.addDropStart)} – {formatDate(term.addDropEnd)}</span></span>
-                  </div>
+                  <InfoRow label="Kayıt Dönemi" value={`${formatDate(term.registrationStart)} – ${formatDate(term.registrationEnd)}`} />
+                  <InfoRow label="Ek/Bırak Dönemi" value={`${formatDate(term.addDropStart)} – ${formatDate(term.addDropEnd)}`} />
                 </>
               )}
-
               {allSelectedItems.length > 0 && (
-                <div className="flex items-center gap-4 ml-auto">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground text-xs">Kesinleştirme:</span>
-                    {isFinalized ? (
-                      <Badge variant="success" className="text-[10px]">Kesinleştirildi</Badge>
-                    ) : planItems.length > 0 ? (
-                      <Badge variant="warning" className="text-[10px]">Bekliyor</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[10px]">—</Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground text-xs">Danışman:</span>
-                    {hasAdvisorApproval && confirmedItems.length > 0 ? (
-                      <Badge variant="success" className="text-[10px]">Onaylandı</Badge>
-                    ) : confirmedItems.some(r => r.status === 'PendingAdvisorApproval') ? (
-                      <Badge variant="warning" className="text-[10px]">Onay Bekleniyor</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[10px]">—</Badge>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="border-dashed border-primary/30 bg-gradient-to-r from-primary/5 via-background to-accent/10">
-        <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <GraduationCap className="h-3.5 w-3.5" />
-              Yeni
-            </div>
-            <p className="text-base font-semibold text-foreground">Akilli ders onerileri hazir</p>
-            <p className="text-sm text-muted-foreground">
-              Bu donem icin sistemin onerilerini skor, zorluk ve kritik yol etkisiyle birlikte inceleyebilirsin.
-            </p>
-          </div>
-          <Button asChild className="gap-2 rounded-xl bg-[#003366] hover:bg-[#002244]">
-            <Link to={ROUTES.SMART_PLANNING}>
-              <GraduationCap className="h-4 w-4" />
-              Akilli Planlama Sayfasina Git
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* ── Müfredat Slotlarım (Faz C C2 + C4) ── */}
-      {poolStatus.length > 0 && (() => {
-        const currentSemester = (student?.completedSemesters ?? 0) + 1;
-        const visiblePools = showUpperSemesterPools
-          ? poolStatus
-          : poolStatus.filter(p => p.suggestedSemesterStart <= currentSemester);
-        const hiddenUpperCount = poolStatus.length - visiblePools.length;
-
-        return (
-        <Card>
-          <CardContent className="px-5 py-4">
-            <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-violet-700" />
-                <h3 className="font-semibold text-sm text-foreground">Müfredat Slotlarım</h3>
-                <Badge variant="secondary" className="text-[10px]">
-                  {visiblePools.filter(p => p.isFulfilled).length}/{visiblePools.length} doldu
-                </Badge>
-              </div>
-              {/* Faz C C4: üstten yarıyıl toggle */}
-              {(showUpperSemesterPools || hiddenUpperCount > 0) && (
-                <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={showUpperSemesterPools}
-                    onChange={e => setShowUpperSemesterPools(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-input accent-violet-600 cursor-pointer"
-                  />
-                  <span className="text-muted-foreground">
-                    Üstten yarıyıl havuzlarını göster
-                    {!showUpperSemesterPools && hiddenUpperCount > 0 && (
-                      <span className="ml-1 text-violet-700">({hiddenUpperCount} gizli)</span>
-                    )}
-                  </span>
-                </label>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground mb-3">
-              Müfredatındaki seçmeli grup slot'ları. Slot'a tıklayarak o slot için aday dersleri görebilirsin.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {visiblePools.map(pool => (
-                <button
-                  key={pool.poolId}
-                  type="button"
-                  onClick={() => setSlotCandidatesTarget(pool)}
-                  className={`text-left border rounded-lg p-3 transition-colors ${
-                    pool.isFulfilled
-                      ? 'border-success/40 bg-success/5 hover:bg-success/10'
-                      : 'border-border hover:bg-violet-50/40 hover:border-violet-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    {pool.isFulfilled
-                      ? <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
-                      : <CircleAlert className="h-4 w-4 text-amber-500 shrink-0" />
-                    }
-                    <span className="text-xs font-mono font-bold text-foreground">
-                      {pool.poolCode}
-                      {pool.slotName && (
-                        <span className="text-violet-700 font-semibold"> / {pool.slotName}</span>
+                <>
+                  <div className="grid grid-cols-[140px_1fr] gap-3 text-sm">
+                    <span className="text-muted-foreground">Kesinleştirme</span>
+                    <span>
+                      {isFinalized ? (
+                        <Badge variant="success">Kesinleştirildi</Badge>
+                      ) : planItems.length > 0 ? (
+                        <Badge variant="warning">Bekliyor</Badge>
+                      ) : (
+                        <Badge variant="secondary">—</Badge>
                       )}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground truncate mb-1.5">{pool.poolName}</p>
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">
-                      {pool.requiredCourseCount > 0 && `${pool.completedCourseCount}/${pool.requiredCourseCount} ders`}
-                      {pool.requiredCourseCount > 0 && pool.requiredEcts > 0 && ' · '}
-                      {pool.requiredEcts > 0 && `${pool.earnedEcts}/${pool.requiredEcts} AKTS`}
+                  <div className="grid grid-cols-[140px_1fr] gap-3 text-sm">
+                    <span className="text-muted-foreground">Danışman</span>
+                    <span>
+                      {hasAdvisorApproval && confirmedItems.length > 0 ? (
+                        <Badge variant="success">Onaylandı</Badge>
+                      ) : confirmedItems.some(r => r.status === 'PendingAdvisorApproval') ? (
+                        <Badge variant="warning">Onay Bekleniyor</Badge>
+                      ) : (
+                        <Badge variant="secondary">—</Badge>
+                      )}
                     </span>
-                    <span className="text-violet-700">→ adaylar</span>
                   </div>
-                </button>
-              ))}
+                </>
+              )}
             </div>
-            {visiblePools.length === 0 && (
-              <p className="text-xs text-muted-foreground italic text-center py-4">
-                Bu yarıyıla denk gelen aktif slot yok. Üstten yarıyıl havuzlarını
-                görmek için yukarıdaki kutuyu işaretle.
-              </p>
-            )}
           </CardContent>
         </Card>
-        );
-      })()}
+      )}
 
-      {/* ── Uyarılar ── */}
+      {/* ── Bildirimler ── */}
       {submitSuccess && (
         <Alert variant="success">
           <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>Kayıt başarıyla kesinleştirildi!</AlertDescription>
+          <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
         </Alert>
       )}
       {(validationErrors.length > 0 || validationWarnings.length > 0) && (
         <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
-      )}
-      {!registrationActionsOpen && (
-        <Alert variant="warning">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{registrationClosedMessage}</AlertDescription>
-        </Alert>
-      )}
-      {addToPlan.error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{addToPlan.error instanceof Error ? addToPlan.error.message : 'Plana eklenirken hata oluştu. Lütfen tekrar deneyin.'}</AlertDescription>
-        </Alert>
       )}
       {rejectedItems.length > 0 && (
         <Alert variant="destructive">
@@ -471,221 +372,325 @@ export default function CourseCatalogPage() {
         <Alert variant="destructive">
           <RotateCcw className="h-4 w-4" />
           <AlertDescription>
-            <strong>{alttanCourses.length} ders</strong>ten başarısız (FF/NA) notunuz var ve tekrar almanız gerekmektedir:{' '}
+            <strong>{alttanCourses.length} dersten</strong> başarısız (FF/NA) notunuz var ve tekrar almanız gerekmektedir:{' '}
             {alttanCourses.map(c => `${c.code} (${c.previousGrade})`).join(', ')}
           </AlertDescription>
         </Alert>
       )}
 
-      {/* ── Seçilen Dersler ── */}
+      {/* ── Seçilen dersler ── */}
       {allSelectedItems.length > 0 && (
-        <Card className="overflow-hidden shadow-sm">
-          <CardContent className="p-0">
-            {/* AKTS Progress Bar — en üstte, dikkat çekici */}
-            <div className="px-6 py-3 bg-muted/30 border-b flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div className="flex items-center gap-3 flex-1 min-w-[200px]">
-                <span className="text-sm font-semibold text-foreground whitespace-nowrap">
-                  AKTS: {totalEcts}/{ectsLimit}
+        <Card className="overflow-hidden border-border/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="text-base">Seçilen Dersler</CardTitle>
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <span>Ders: <strong className="text-foreground">{allSelectedItems.length}</strong></span>
+                <span>Saat: <strong className="text-foreground">{totalHours}</strong></span>
+              </div>
+            </div>
+
+            {ectsLimit > 0 && (
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <span className="text-sm font-medium text-foreground tabular-nums whitespace-nowrap">
+                  AKTS: {totalEcts} / {ectsLimit}
                 </span>
                 <Progress
                   value={ectsPercent}
-                  indicatorClassName={ectsPercent > 90 ? 'bg-destructive' : 'bg-[#003366]'}
-                  className="h-2.5 flex-1 max-w-[300px]"
+                  indicatorClassName={ectsPercent > 90 ? 'bg-destructive' : undefined}
+                  className="h-2 flex-1 max-w-[320px]"
                 />
                 {student && (
-                  <span className="text-[11px] text-muted-foreground hidden lg:inline">
-                    ({getEctsExplanation(student.cgpa)})
+                  <span className="text-xs text-muted-foreground hidden lg:inline">
+                    GANO {student.cgpa.toFixed(2)} → en fazla {ectsLimit} AKTS
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span>Saat: <strong className="text-foreground">{totalHours}</strong></span>
-                <span>Ders: <strong className="text-foreground">{allSelectedItems.length}</strong></span>
-              </div>
-            </div>
-
-            {/* Tablo */}
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/20 hover:bg-muted/20">
-                    <TableHead className="w-28 pl-6 font-semibold">Ders Kodu</TableHead>
-                    <TableHead className="font-semibold">Ders Adı</TableHead>
-                    <TableHead className="text-center w-14 font-semibold">Z/S</TableHead>
-                    <TableHead className="text-center w-16 font-semibold">T+U</TableHead>
-                    <TableHead className="text-center w-16 font-semibold">AKTS</TableHead>
-                    <TableHead className="text-center w-14 hidden md:table-cell font-semibold">Snf</TableHead>
-                    <TableHead className="w-24 hidden sm:table-cell font-semibold">Alış</TableHead>
-                    <TableHead className="text-center w-24 font-semibold">Durum</TableHead>
-                    <TableHead className="text-right w-16 pr-6 font-semibold">İşlem</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {allSelectedItems.map((item, idx) => (
-                    <TableRow key={item.registrationId} className={idx % 2 === 1 ? 'bg-muted/10' : undefined}>
-                      <TableCell className="pl-6 font-mono text-sm font-semibold text-[#003366]">{item.courseCode}</TableCell>
-                      <TableCell className="font-medium">{item.courseName}</TableCell>
-                      <TableCell className="text-center">
-                        <span className={`text-xs font-bold ${item.isCompulsory ? 'text-[#003366]' : 'text-accent'}`}>
-                          {item.isCompulsory ? 'Z' : 'S'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-sm">{item.theoryHours}+{item.labHours}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className="font-mono">{item.ects}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center hidden md:table-cell text-sm text-muted-foreground">
-                        {item.suggestedSemester > 0 ? item.suggestedSemester : '—'}
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <span className={`text-xs font-medium ${TAKE_TYPE_COLORS[item.takeType] || 'text-muted-foreground'}`}>
-                          {item.takeType}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <RegistrationStatusBadge status={item.status} />
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
-                        {(item.status === 'Draft' || item.status === 'Rejected') && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemove(item.registrationId)}
-                            disabled={dropCourse.isPending || !registrationActionsOpen}
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Kesinleştir butonu */}
-            {planItems.length > 0 && (
-              <div className="px-6 py-3 border-t flex justify-end bg-muted/10">
-                <Button
-                  size="lg"
-                  onClick={handleSubmit}
-                  disabled={submitRegistration.isPending || !registrationActionsOpen}
-                  className="gap-2 rounded-xl bg-[#003366] hover:bg-[#002244]"
-                >
-                  {submitRegistration.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Gönderiliyor...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4" />
-                      Kaydı Kesinleştir
-                    </>
-                  )}
-                </Button>
-              </div>
             )}
-          </CardContent>
+          </CardHeader>
+
+          <div className="overflow-x-auto border-t border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="w-28 pl-6 font-semibold text-foreground">Ders Kodu</TableHead>
+                  <TableHead className="font-semibold text-foreground">Ders Adı</TableHead>
+                  <TableHead className="w-14 text-center font-semibold text-foreground">Z/S</TableHead>
+                  <TableHead className="w-16 text-center font-semibold text-foreground">T+U</TableHead>
+                  <TableHead className="w-16 text-center font-semibold text-foreground">AKTS</TableHead>
+                  <TableHead className="hidden w-14 text-center font-semibold text-foreground md:table-cell">Sınıf</TableHead>
+                  <TableHead className="hidden w-24 font-semibold text-foreground sm:table-cell">Alış</TableHead>
+                  <TableHead className="w-28 text-center font-semibold text-foreground">Durum</TableHead>
+                  <TableHead className="w-16 pr-6 text-right font-semibold text-foreground">İşlem</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allSelectedItems.map(item => (
+                  <TableRow key={item.registrationId} className="transition-colors hover:bg-muted/20">
+                    <TableCell className="py-3 pl-6 font-mono text-xs font-semibold text-primary whitespace-nowrap">{item.courseCode}</TableCell>
+                    <TableCell className="py-3 font-medium">{item.courseName}</TableCell>
+                    <TableCell className="py-3 text-center">
+                      <span className={`text-xs font-bold ${item.isCompulsory ? 'text-primary' : 'text-muted-foreground'}`}>
+                        {item.isCompulsory ? 'Z' : 'S'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-3 text-center font-mono text-sm tabular-nums">{item.theoryHours}+{item.labHours}</TableCell>
+                    <TableCell className="py-3 text-center">
+                      <Badge variant="secondary" className="font-mono">{item.ects}</Badge>
+                    </TableCell>
+                    <TableCell className="hidden py-3 text-center text-sm text-muted-foreground tabular-nums md:table-cell">
+                      {item.suggestedSemester > 0 ? item.suggestedSemester : '—'}
+                    </TableCell>
+                    <TableCell className="hidden py-3 sm:table-cell">
+                      <span className={`text-xs font-medium ${TAKE_TYPE_COLORS[item.takeType] || 'text-muted-foreground'}`}>
+                        {item.takeType}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-3 text-center">
+                      <RegistrationStatusBadge status={item.status} />
+                    </TableCell>
+                    <TableCell className="py-3 pr-6 text-right">
+                      {(item.status === 'Draft' || item.status === 'Rejected') && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemove(item.registrationId)}
+                          disabled={dropCourse.isPending || !registrationActionsOpen}
+                          className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {planItems.length > 0 && (
+            <div className="flex justify-end border-t border-border/60 bg-muted/20 px-6 py-3">
+              <Button
+                onClick={handleSubmit}
+                disabled={submitRegistration.isPending || !registrationActionsOpen}
+                className="gap-2"
+              >
+                {submitRegistration.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Gönderiliyor…
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Kaydı Kesinleştir
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
-      {/* ── Açık Dersler ── */}
-      <div className="space-y-3">
-        {/* Filtre çubuğu */}
-        <Card className="overflow-hidden shadow-sm">
-          <CardContent className="px-5 py-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <h3 className="text-sm font-bold text-foreground mr-1">Açık Dersler</h3>
+      {/* ── Açık dersler (müfredat slotları + akıllı planlama dahil) ── */}
+      <Card className="overflow-hidden border-border/70 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <CardTitle className="text-base">Açık Dersler</CardTitle>
 
-              <div className="h-5 w-px bg-border hidden sm:block" />
-
-              <div className="flex flex-wrap gap-1.5">
-                <FilterButton active={viewFilter === 'all'} onClick={() => setViewFilter('all')}>
-                  Tümü ({statusCounts.total})
-                </FilterButton>
-                {statusCounts.alttan > 0 && (
-                  <FilterButton active={viewFilter === 'alttan'} onClick={() => setViewFilter('alttan')} variant="destructive">
-                    Alttan ({statusCounts.alttan})
-                  </FilterButton>
-                )}
-                <FilterButton active={viewFilter === 'new'} onClick={() => setViewFilter('new')}>
-                  Alınmamış ({statusCounts.new_})
-                </FilterButton>
-                <FilterButton active={viewFilter === 'taken'} onClick={() => setViewFilter('taken')}>
-                  Önceden Alınan ({statusCounts.taken})
-                </FilterButton>
-              </div>
-
-              <div className="h-5 w-px bg-border hidden sm:block" />
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Sınıf:</span>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Sınıf
                 <select
                   value={effectiveClassYear}
                   onChange={e => setClassYearFilter(Number(e.target.value))}
-                  className="h-7 text-xs rounded-md border border-border bg-background px-2 outline-none focus:ring-1 focus:ring-primary"
+                  className="h-7 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
                 >
-                  {[1, 2, 3, 4].map(y => (
+                  {classYearOptions().map(y => (
                     <option key={y} value={y}>{y}. Sınıf</option>
                   ))}
                 </select>
-              </div>
+              </label>
 
-              <div className="h-5 w-px bg-border hidden sm:block" />
-
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Dönem</span>
                 {(['all', 'guz', 'bahar'] as const).map(val => (
-                  <label key={val} className="flex items-center gap-1 cursor-pointer">
+                  <label key={val} className="flex cursor-pointer items-center gap-1">
                     <input
                       type="radio"
                       name="termType"
                       value={val}
                       checked={termTypeFilter === val}
                       onChange={() => setTermTypeFilter(val)}
-                      className="accent-[#003366] w-3 h-3"
+                      className="h-3 w-3 accent-primary"
                     />
-                    <span className="text-xs text-muted-foreground">
-                      {val === 'all' ? 'Tümü' : val === 'guz' ? 'Güz' : 'Bahar'}
-                    </span>
+                    {val === 'all' ? 'Tümü' : val === 'guz' ? 'Güz' : 'Bahar'}
                   </label>
                 ))}
               </div>
 
-              <span className="text-xs text-muted-foreground ml-auto font-medium">
-                {filteredCourses.length} ders
-              </span>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Durum</span>
+                <label className="flex cursor-pointer items-center gap-1">
+                  <input
+                    type="radio"
+                    name="viewFilter"
+                    value="all"
+                    checked={viewFilter === 'all'}
+                    onChange={() => setViewFilter('all')}
+                    className="h-3 w-3 accent-primary"
+                  />
+                  Tümü ({statusCounts.total})
+                </label>
+                <label className="flex cursor-pointer items-center gap-1">
+                  <input
+                    type="radio"
+                    name="viewFilter"
+                    value="new"
+                    checked={viewFilter === 'new'}
+                    onChange={() => setViewFilter('new')}
+                    className="h-3 w-3 accent-primary"
+                  />
+                  Alınmamış ({statusCounts.new_})
+                </label>
+                <label className="flex cursor-pointer items-center gap-1">
+                  <input
+                    type="radio"
+                    name="viewFilter"
+                    value="taken"
+                    checked={viewFilter === 'taken'}
+                    onChange={() => setViewFilter('taken')}
+                    className="h-3 w-3 accent-primary"
+                  />
+                  Önceden ({statusCounts.taken})
+                </label>
+                {statusCounts.alttan > 0 && (
+                  <label className="flex cursor-pointer items-center gap-1 text-destructive">
+                    <input
+                      type="radio"
+                      name="viewFilter"
+                      value="alttan"
+                      checked={viewFilter === 'alttan'}
+                      onChange={() => setViewFilter('alttan')}
+                      className="h-3 w-3 accent-destructive"
+                    />
+                    Alttan ({statusCounts.alttan})
+                  </label>
+                )}
+              </div>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Ders listesi */}
-        {filteredCourses.length > 0 ? (
-          filteredCourses.map(course => (
-            <CourseCard
-              key={course.courseId}
-              course={course}
-              onAddToPlan={handleAddToPlan}
-              isAdding={addToPlan.isPending}
-              registeredSectionIds={registeredSectionIds}
-              registrationActionsOpen={registrationActionsOpen}
-            />
-          ))
-        ) : (
-          <div className="text-center py-16">
-            <BookX className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-            <h3 className="font-heading text-lg font-semibold text-foreground">Ders bulunamadı</h3>
-            <p className="text-muted-foreground mt-1">
-              {viewFilter !== 'all' || termTypeFilter !== 'all'
-                ? 'Seçilen filtrelere uygun ders bulunmamaktadır.'
-                : 'Bu dönem için açık ders bulunmamaktadır.'}
-            </p>
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link to={ROUTES.SMART_PLANNING}>
+                <Sparkles className="h-3.5 w-3.5" />
+                Akıllı Planlamaya Git
+              </Link>
+            </Button>
           </div>
-        )}
-      </div>
+        </CardHeader>
 
-      {/* ── Slot Aday Dersler Dialog (Faz C C2) ── */}
+        <CardContent className="pt-0">
+          {(() => {
+            // Müfredat slot satırları — derslerle aynı listede, ders satırı görsel pattern'ı
+            const currentSemester = (student?.completedSemesters ?? 0) + 1;
+            const visiblePools = poolStatus.length === 0
+              ? []
+              : (showUpperSemesterPools
+                  ? poolStatus
+                  : poolStatus.filter(p => p.suggestedSemesterStart <= currentSemester));
+            const hiddenUpperCount = poolStatus.length - visiblePools.length;
+
+            if (filteredCourses.length === 0 && visiblePools.length === 0) {
+              return (
+                <div className="py-12 text-center">
+                  <BookX className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
+                  <p className="font-medium text-foreground">Ders bulunamadı</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {viewFilter !== 'all' || termTypeFilter !== 'all'
+                      ? 'Seçilen filtrelere uygun ders bulunmamaktadır.'
+                      : 'Bu dönem için açık ders bulunmamaktadır.'}
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-3">
+                {visiblePools.map(pool => (
+                  <button
+                    key={`pool-${pool.poolId}`}
+                    type="button"
+                    onClick={() => setSlotCandidatesTarget(pool)}
+                    className={cn(
+                      'w-full flex items-center justify-between gap-4 rounded-md border bg-card p-4 text-left transition-all duration-200 hover:shadow-sm',
+                      pool.isFulfilled
+                        ? 'border-success/40 bg-success/5 hover:bg-success/10'
+                        : 'border-warning/40 bg-warning/5 hover:bg-warning/10',
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+                      <Layers className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-mono text-sm font-semibold text-foreground">
+                        {pool.slotName || pool.poolCode}
+                      </span>
+                      <Badge variant="secondary" className="text-[11px]">Seçmeli Grup</Badge>
+                      {pool.requiredEcts > 0 && (
+                        <Badge variant="default" className="text-[11px] font-mono">
+                          {pool.requiredEcts} AKTS
+                        </Badge>
+                      )}
+                      {pool.isFulfilled ? (
+                        <Badge variant="success" className="text-[11px] gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Dolduruldu
+                        </Badge>
+                      ) : (
+                        <Badge variant="warning" className="text-[11px] gap-1">
+                          <CircleAlert className="h-3 w-3" />
+                          {pool.completedCourseCount}/{pool.requiredCourseCount} ders
+                          {pool.requiredEcts > 0 && ` · ${pool.earnedEcts}/${pool.requiredEcts} AKTS`}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <span className="text-xs text-muted-foreground">aday dersler</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </button>
+                ))}
+
+                {(showUpperSemesterPools || hiddenUpperCount > 0) && (
+                  <label className="flex cursor-pointer select-none items-center gap-2 px-1 py-1 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={showUpperSemesterPools}
+                      onChange={e => setShowUpperSemesterPools(e.target.checked)}
+                      className="h-3.5 w-3.5 cursor-pointer rounded border-input"
+                    />
+                    Üst yarıyıl havuzlarını da göster
+                    {!showUpperSemesterPools && hiddenUpperCount > 0 && (
+                      <span>({hiddenUpperCount} gizli)</span>
+                    )}
+                  </label>
+                )}
+
+                {filteredCourses.map(course => (
+                  <CourseCard
+                    key={course.courseId}
+                    course={course}
+                    onAddToPlan={handleAddToPlan}
+                    isAdding={addToPlan.isPending}
+                    registeredSectionIds={registeredSectionIds}
+                    registrationActionsOpen={registrationActionsOpen}
+                  />
+                ))}
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+      {/* ── Slot aday dersler dialog ── */}
       <Dialog
         open={slotCandidatesTarget !== null}
         onOpenChange={(o) => { if (!o) setSlotCandidatesTarget(null); }}
@@ -695,7 +700,7 @@ export default function CourseCatalogPage() {
             <DialogTitle>
               {slotCandidatesTarget && (
                 <span>
-                  <span className="font-mono text-violet-700">{slotCandidatesTarget.poolCode} / {slotCandidatesTarget.slotName}</span>
+                  <span className="font-mono text-foreground">{slotCandidatesTarget.poolCode} / {slotCandidatesTarget.slotName}</span>
                   <span className="ml-2 text-sm font-normal text-muted-foreground">
                     — {slotCandidatesTarget.poolName}
                   </span>
@@ -703,8 +708,7 @@ export default function CourseCatalogPage() {
               )}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Bu slot için müfredatında aday olan dersler. Listedeki bir derse kayıt olduğunda
-              bu slot için sayılır.
+              Bu slot için müfredatında aday olan dersler. Listedeki bir derse kayıt olduğunda bu slot için sayılır.
             </DialogDescription>
           </DialogHeader>
           {slotCandidatesTarget && (
@@ -721,125 +725,16 @@ export default function CourseCatalogPage() {
   );
 }
 
-/* ── Slot Aday Dersler Tablosu ── */
-
-function SlotCandidatesTable({
-  pool,
-  courses,
-}: {
-  pool: PoolProgressDto;
-  courses: import('../types/course').StudentCourseDto[];
-}) {
-  if (courses.length === 0) {
-    return (
-      <div className="text-center py-8 text-sm text-muted-foreground">
-        Bu slot için aday ders bulunamadı.
-        <p className="text-xs mt-1">
-          Grup boş olabilir veya öğrenci kaydı için açık dersi yok.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{courses.length} aday ders</span>
-        {pool.ectsPerCourse !== null && (
-          <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
-            Bu havuzda her ders {pool.ectsPerCourse} AKTS
-          </Badge>
-        )}
-      </div>
-      <div className="overflow-y-auto max-h-[60vh] -mx-1">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-24">Kod</TableHead>
-              <TableHead>Ad</TableHead>
-              <TableHead className="text-right w-16">AKTS</TableHead>
-              <TableHead className="text-center w-24">Durum</TableHead>
-              <TableHead className="text-center w-20">Açık?</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {courses.map(c => (
-              <TableRow key={c.courseId}>
-                <TableCell className="font-mono text-xs">{c.code}</TableCell>
-                <TableCell className="text-sm">{c.name}</TableCell>
-                <TableCell className="text-right tabular-nums">{c.ects}</TableCell>
-                <TableCell className="text-center">
-                  {c.takeStatus === 'Alttan' && (
-                    <Badge variant="destructive" className="text-[10px]">Alttan</Badge>
-                  )}
-                  {c.takeStatus === 'OncedenAlindi' && (
-                    <Badge variant="secondary" className="text-[10px]">Alındı</Badge>
-                  )}
-                  {c.takeStatus === 'IlkDefa' && (
-                    <Badge variant="outline" className="text-[10px]">İlk defa</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-center">
-                  {c.sections.length > 0 ? (
-                    <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                      {c.sections.length} şube
-                    </Badge>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground italic">Açık değil</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-/* ── Yardımcı bileşenler ── */
-
-function InfoCell({ icon: Icon, label, value, highlight }: {
-  icon?: React.ComponentType<{ className?: string }>;
+interface InfoRowProps {
   label: string;
   value: string;
-  highlight?: 'success' | 'danger';
-}) {
-  return (
-    <div className="flex items-center gap-2.5 min-w-0">
-      {Icon && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
-          <Icon className="h-4 w-4 text-white/80" />
-        </div>
-      )}
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider text-white/50 font-medium">{label}</p>
-        <p className={`text-sm font-semibold truncate ${
-          highlight === 'success' ? 'text-emerald-300' :
-          highlight === 'danger' ? 'text-red-300' :
-          'text-white'
-        }`}>
-          {value}
-        </p>
-      </div>
-    </div>
-  );
 }
 
-function FilterButton({ active, onClick, variant, children }: {
-  active: boolean;
-  onClick: () => void;
-  variant?: 'destructive';
-  children: React.ReactNode;
-}) {
+function InfoRow({ label, value }: InfoRowProps) {
   return (
-    <Button
-      variant={active ? (variant === 'destructive' ? 'destructive' : 'default') : 'outline'}
-      size="sm"
-      onClick={onClick}
-      className={`h-7 text-xs rounded-lg ${active && !variant ? 'bg-[#003366] hover:bg-[#002244]' : ''}`}
-    >
-      {children}
-    </Button>
+    <div className="grid grid-cols-[140px_1fr] gap-3 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-foreground">{value && value.trim().length > 0 ? value : '—'}</span>
+    </div>
   );
 }

@@ -148,23 +148,23 @@ public class CourseController : ControllerBase
         // 1. Authenticated student
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
-            return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
 
         var student = await _context.Students
             .Include(s => s.StudentPrograms)
             .FirstOrDefaultAsync(s => s.UserId == userId);
         if (student == null)
-            return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
+            return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
         if (activeProgram == null)
-            return NotFound(new { error = "Aktif program bulunamadi." });
+            return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
 
         // 2. Active term
         var nowCatalog = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowCatalog && t.TermEnd >= nowCatalog);
         if (activeTerm == null)
-            return NotFound(new { error = "Aktif donem bulunamadi." });
+            return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
 
         // 3. Curriculum data — which courses are in the student's program
         var curriculumCourses = await _context.CurriculumCourses
