@@ -28,8 +28,10 @@ const PREVIEW_COUNT = 10;
  */
 export default function NotificationBell() {
   const navigate = useNavigate();
-  const { data: unreadCount = 0 } = useUnreadAnnouncementCount(true, POLL_INTERVAL_MS);
-  const { data: items = [], isLoading } = useActiveAnnouncements(PREVIEW_COUNT);
+  const { data: unreadCount = 0, refetch: refetchUnreadCount } =
+    useUnreadAnnouncementCount(true, POLL_INTERVAL_MS);
+  const { data: items = [], isLoading, refetch: refetchItems } =
+    useActiveAnnouncements(PREVIEW_COUNT);
   const markAllReadMutation = useMarkAllAnnouncementsAsRead();
 
   function openItem(id: number) {
@@ -37,8 +39,17 @@ export default function NotificationBell() {
     navigate(`${ROUTES.ANNOUNCEMENTS}?openId=${id}`);
   }
 
+  // Popover her açıldığında badge ve liste'yi server'dan tazele.
+  // Aksi halde liste query'si refetchInterval'a sahip olmadığı için badge sayısı
+  // ile dropdown içeriği arasında stale-cache farkı oluşabilir (sayım 1, liste 0).
+  function handleOpenChange(open: boolean) {
+    if (!open) return;
+    void refetchUnreadCount();
+    void refetchItems();
+  }
+
   return (
-    <Popover>
+    <Popover onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
