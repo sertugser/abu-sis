@@ -582,6 +582,10 @@ export default function SchedulingEditorPage() {
       let classroomId = data.classroomId ?? undefined;
       // FaceToFace + Hybrid dersler için derslik zorunlu; en uygun ilk dersliği API'den al
       if (section.teachingMethod !== 'Online') {
+        if (termId == null) {
+          setFeedback({ kind: 'error', message: 'Aktif dönem bulunamadı, atama yapılamaz.' });
+          return;
+        }
         try {
           const available = await getAvailableClassrooms(
             termId, targetDay, startHm, endHm, section.capacity, undefined,

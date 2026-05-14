@@ -52,6 +52,7 @@ interface ParsedBlock {
   startTime: string;
   endTime: string;
   blockType: ScheduleBlockType;
+  classroomId: number | null;
   classroomName: string | null;
 }
 
@@ -64,6 +65,7 @@ function parseSectionSchedule(section: FacultyPlanningSection): ParsedBlock[] {
     startTime: b.startTime.slice(0, 5),
     endTime: b.endTime.slice(0, 5),
     blockType: b.blockType,
+    classroomId: b.classroomId,
     classroomName: b.classroomName,
   }));
 }
@@ -101,10 +103,9 @@ function BlockTypeBadge({ blockType, className }: { blockType: ScheduleBlockType
  * <td> yalnız semantic ve grid layout için kullanılır.
  */
 function CalendarCell({
-  isRestricted, isDroppable, dropId, isDropDisabled, isSuggested, children,
+  isRestricted, dropId, isDropDisabled, isSuggested, children,
 }: {
   isRestricted: boolean;
-  isDroppable: boolean;
   dropId: string;
   isDropDisabled: boolean;
   /** Smart suggestion ile öneriliyorsa parıltılı vurgu uygula. */
@@ -631,9 +632,7 @@ export function CalendarGrid({
 
                     // Drop yalnız boş hücrelere ve geçerli slot'lara izinli; OnlineOnly veya slot eksik hücreler hâlâ droppable ama
                       //   isDropDisabled true ile kırmızı vurgulama yapar (kullanıcı kuralı görsün).
-                      const isEmptyCell = cellBlocks.length === 0;
                       const dropId = `cell-${wd.day}-${row.slotOrder}`;
-                      const dropEnabled = editable && isEmptyCell && !slotMissing;
                       const dropDisabled = invalidDropIds?.has(dropId) ?? false;
                       const isSuggested = (suggestedDropIds?.has(dropId) ?? false) && !dropDisabled;
 
@@ -641,7 +640,6 @@ export function CalendarGrid({
                       <CalendarCell
                         key={cellKey}
                         isRestricted={isOnlineOnly || slotMissing}
-                        isDroppable={dropEnabled}
                         dropId={dropId}
                         isDropDisabled={dropDisabled}
                         isSuggested={isSuggested}
