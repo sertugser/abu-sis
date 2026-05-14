@@ -103,13 +103,15 @@ function BlockTypeBadge({ blockType, className }: { blockType: ScheduleBlockType
  * <td> yalnız semantic ve grid layout için kullanılır.
  */
 function CalendarCell({
-  isRestricted, dropId, isDropDisabled, isSuggested, children,
+  isRestricted, dropId, isDropDisabled, isSuggested, rowHeightPx, children,
 }: {
   isRestricted: boolean;
   dropId: string;
   isDropDisabled: boolean;
   /** Smart suggestion ile öneriliyorsa parıltılı vurgu uygula. */
   isSuggested: boolean;
+  /** Density'ye göre değişen satır yüksekliği (px). */
+  rowHeightPx: number;
   children: React.ReactNode;
 }) {
   // KRİTİK: useDroppable HER hücrede register edilir; `disabled` bağlamı yok.
@@ -120,7 +122,10 @@ function CalendarCell({
     id: dropId,
   });
   return (
-    <td className="relative border border-slate-200/80 p-0 align-top min-h-[44px] h-[44px]">
+    <td
+      className="relative border border-slate-200/80 p-0 align-top"
+      style={{ height: rowHeightPx, minHeight: rowHeightPx }}
+    >
       {/* KESİN ÇÖZÜM: Drop ref'i absolute pozisyonla TAM <td>'yi kaplar. table-layout:fixed altında
           normal-flow <div>'in width/height'i tuhaf hesaplanıyor, rect 0 ölçülüyordu. absolute+inset:0
           ile dnd-kit'in getBoundingClientRect'i hücrenin gerçek boyutunu döndürür. */}
@@ -534,6 +539,16 @@ export function CalendarGrid({
       .map(([, v]) => v);
   }, [timeSlots]);
 
+  // Density'ye göre satır yüksekliği (px). Spacious mevcut 44px'i korur.
+  const rowHeightPx = (() => {
+    switch (cardDensity) {
+      case 'compact':  return 22;
+      case 'normal':   return 24;
+      case 'wide':     return 36;
+      case 'spacious': return 44;
+    }
+  })();
+
   /* Blokları parse et */
   const allBlocks = useMemo(() => {
     return sections
@@ -689,7 +704,7 @@ export function CalendarGrid({
                     </td>
                   </tr>
                 )}
-                <tr style={{ height: 44 }}>
+                <tr style={{ height: rowHeightPx }}>
                   {/* Saat etiketi */}
                   <td className="border border-slate-200/80 px-1 py-0.5 text-center align-top bg-white">
                     <span className="font-mono font-semibold text-[12px] text-slate-600">
@@ -726,6 +741,7 @@ export function CalendarGrid({
                         dropId={dropId}
                         isDropDisabled={dropDisabled}
                         isSuggested={isSuggested}
+                        rowHeightPx={rowHeightPx}
                       >
                         <div
                           className={cn(
