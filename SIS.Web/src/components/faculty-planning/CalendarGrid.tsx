@@ -380,6 +380,8 @@ function SectionBlock({
 }
 
 /* ── Ana CalendarGrid ── */
+export type CardDensity = 'compact' | 'normal' | 'wide' | 'spacious';
+
 export interface CalendarGridProps {
   sections: FacultyPlanningSection[];
   timeSlots: FacultyPlanningTimeSlot[];
@@ -408,13 +410,21 @@ export interface CalendarGridProps {
   selectedSectionIds?: Set<number>;
   /** Multi-select aktifken karta tıklanınca tetiklenir (toggle). */
   onSectionToggleSelect?: (sectionId: number) => void;
+  /**
+   * Kart yoğunluk modu. Salt-okunur sayfa (AutoScheduleTab) `'compact' | 'normal' | 'wide'` geçer;
+   * düzenleyici prop geçmez → `'spacious'` (mevcut çok-satır kart davranışı) aktif kalır.
+   * @default 'spacious'
+   */
+  cardDensity?: CardDensity;
 }
 
 export function CalendarGrid({
   sections, timeSlots, onEmptyCellClick, editable = false,
   invalidDropIds, suggestedDropIds, highlightedSectionIds, onSectionClick, maxBlocksPerCell,
   selectedSectionIds, onSectionToggleSelect,
+  cardDensity = 'spacious',
 }: CalendarGridProps) {
+  void cardDensity; // Used in subsequent tasks (Task 3+)
   /* Görünür günler — veride slot tanımlı olan günleri sırala */
   const visibleDays = useMemo(() => {
     const groups = new Map<number, FacultyPlanningTimeSlot[]>();
