@@ -3,6 +3,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { dayNumberToTurkish, weekOrderKey } from '@/lib/scheduleUtils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { GripVertical, Lock, MapPin, Plus, User, Users, Clock, Coffee } from 'lucide-react';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot, ScheduleBlockType } from '../../types/facultyPlanning';
@@ -437,14 +438,49 @@ function SectionBlock({
     </div>
   );
 
+  // Tooltip içeriği: tam ders bilgisi (kompakt modlarda kritik — derslik+hoca gizli)
+  const tooltipContent = (
+    <div className="text-xs space-y-1 max-w-xs">
+      <p className="font-semibold text-slate-800">{section.courseName}</p>
+      <p className="text-slate-600">
+        <span className="font-mono font-bold">{section.courseCode}</span>·{section.sectionIndex}
+        {' · '}
+        <span>{section.departmentCode}</span>
+      </p>
+      {section.instructorName && (
+        <p className="text-slate-600">Hoca: {section.instructorName}</p>
+      )}
+      {cardClassroomName && (
+        <p className="text-slate-600">Derslik: {cardClassroomName}</p>
+      )}
+      <p className="text-slate-500 text-[10px]">
+        {section.theoryHours}T + {section.labHours}L · {section.capacity} kişi
+      </p>
+    </div>
+  );
+
+  // Spacious modda popover yeterli (kart zaten geniş ve içerik tam görünür) — tooltip eklenmez.
+  // Kompakt modlarda tooltip kart üzerine hover ile detay verir (300ms gecikme, global TooltipProvider).
+  const wrapWithTooltip = (child: React.ReactElement): React.ReactElement => {
+    if (cardDensity === 'spacious') return child;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{child}</TooltipTrigger>
+        <TooltipContent side="right" align="start" className="bg-white border border-slate-200 shadow-lg text-slate-800">
+          {tooltipContent}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
   if (onSectionClick || onToggleSelect) {
     // Custom click handler ya da multi-select aktifse popover atlanır.
-    return cardInner;
+    return wrapWithTooltip(cardInner);
   }
 
   return (
     <Popover>
-      <PopoverTrigger asChild>{cardInner}</PopoverTrigger>
+      <PopoverTrigger asChild>{wrapWithTooltip(cardInner)}</PopoverTrigger>
       <PopoverContent className="w-80" side="right" align="start">
         <SectionPopoverContent
           section={section}
