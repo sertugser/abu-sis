@@ -14,6 +14,7 @@ import {
   useBatchUnassignSections, useFacultyPlanningOverview, useFacultyPlanningSections,
   useFacultyPlanningTimeSlots, useResetAllSchedules, useScheduleRun, useScheduleRuns,
 } from '../../hooks/useFacultyPlanning';
+import { useGridDensity } from '../../hooks/useGridDensity';
 import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { CalendarGrid } from './CalendarGrid';
 import { ScheduleResultModal } from './ScheduleResultModal';
@@ -35,6 +36,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
   const applyMutation = useApplySchedule();
   const batchUnassign = useBatchUnassignSections();
   const resetAll = useResetAllSchedules();
+  const { density } = useGridDensity();
 
   const runsQuery = useScheduleRuns(facultyId, termId);
   const overviewQuery = useFacultyPlanningOverview(facultyId, termId);
@@ -374,6 +376,8 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
         <CalendarGrid
           sections={sections}
           timeSlots={timeSlots}
+          cardDensity={density}
+          maxBlocksPerCell={4}
           onEmptyCellClick={(day, slotOrder, startTime, endTime, allowedMode) => {
             setAssignSlot({ day, slotOrder, startTime, endTime, allowedMode });
           }}
