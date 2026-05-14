@@ -31,6 +31,7 @@ import QrAttendancePage from './pages/QrAttendancePage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
+import SchedulingEditorPage from './pages/SchedulingEditorPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
 
@@ -382,6 +383,11 @@ export default function App() {
 
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
+                </Route>
+
+                {/* AppLayout dışı: tam-ekran düzenleyici sayfası, sidebar/topbar görünmez */}
+                <Route element={<RoleProtectedRoute permission="menu.ders-programi-olusturma.view" />}>
+                  <Route path="ders-programi-olusturma/duzenle" element={<SchedulingEditorPage />} />
                 </Route>
               </Route>
             </Routes>

@@ -1,9 +1,10 @@
 import { Fragment, useMemo } from 'react';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { dayNumberToTurkish, weekOrderKey } from '@/lib/scheduleUtils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Plus, User, Users, Clock, Coffee } from 'lucide-react';
+import { GripVertical, Lock, MapPin, Plus, User, Users, Clock, Coffee } from 'lucide-react';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot, ScheduleBlockType } from '../../types/facultyPlanning';
 import { useScheduleSettings } from '../../hooks/useScheduleSettings';
 import { STATUS_CONFIG } from './sectionUtils';
@@ -92,21 +93,48 @@ function BlockTypeBadge({ blockType, className }: { blockType: ScheduleBlockType
   );
 }
 
-/* ── Plain CalendarCell ── */
+/* ── Plain CalendarCell ──
+ * Editable mod açıkken `dropId` ile useDroppable hook'una bağlanır.
+ *
+ * NOT (dnd-kit kısıtı): setNodeRef <td> üzerinde rect doğru ölçülmüyor (display: table-cell
+ * getBoundingClientRect anomalisi). Bu yüzden droppable ref'i içerideki bir <div>'e bağlanır;
+ * <td> yalnız semantic ve grid layout için kullanılır.
+ */
 function CalendarCell({
-  isRestricted, children,
+  isRestricted, isDroppable, dropId, isDropDisabled, isSuggested, children,
 }: {
   isRestricted: boolean;
+  isDroppable: boolean;
+  dropId: string;
+  isDropDisabled: boolean;
+  /** Smart suggestion ile öneriliyorsa parıltılı vurgu uygula. */
+  isSuggested: boolean;
   children: React.ReactNode;
 }) {
+  // KRİTİK: useDroppable HER hücrede register edilir; `disabled` bağlamı yok.
+  // Sebep: term Inactive/Test ise editable=false geliyordu ve isDroppable=false → disabled=true
+  // → dnd-kit hiç register etmiyordu → `event.over` her drag-move'da null.
+  // Drop akışı handleDragEnd'de frontend pre-check ile zaten yönetilir (dolu hücre/invalid → banner).
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropId,
+  });
   return (
-    <td
-      className={cn(
-        'border border-slate-200/80 p-0.5 align-top',
-        isRestricted ? 'bg-slate-50/60' : 'bg-white',
-      )}
-    >
-      {children}
+    <td className="relative border border-slate-200/80 p-0 align-top min-h-[44px] h-[44px]">
+      {/* KESİN ÇÖZÜM: Drop ref'i absolute pozisyonla TAM <td>'yi kaplar. table-layout:fixed altında
+          normal-flow <div>'in width/height'i tuhaf hesaplanıyor, rect 0 ölçülüyordu. absolute+inset:0
+          ile dnd-kit'in getBoundingClientRect'i hücrenin gerçek boyutunu döndürür. */}
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'absolute inset-0 p-0.5 transition-colors',
+          isRestricted ? 'bg-slate-50/60' : 'bg-white',
+          isSuggested && !isOver && 'ring-2 ring-amber-300 ring-inset bg-amber-50/30 animate-pulse',
+          isOver && !isDropDisabled && 'ring-2 ring-emerald-400 ring-inset bg-emerald-50/40 animate-none',
+          isOver && isDropDisabled && 'ring-2 ring-red-400 ring-inset bg-red-50/40 animate-none',
+        )}
+      >
+        {children}
+      </div>
     </td>
   );
 }
@@ -196,15 +224,43 @@ function SectionPopoverContent({
 
 /* ── Tek ders bloğu ── */
 function SectionBlock({
-  section, block, rowSpan, isContinuation,
+  section, block, rowSpan, isContinuation, editable, dimmed, onSectionClick,
+  isSelected, onToggleSelect,
 }: {
   section: FacultyPlanningSection;
   /** The specific schedule block (theory or lab) this card represents in the grid. */
   block: ParsedBlock;
   rowSpan: number;
   isContinuation: boolean;
+  /** editable=true iken kart sürüklenebilir hale gelir. Pinli/devam-bloğu kartlar sürüklenemez. */
+  editable: boolean;
+  /** Conflict-only mod'da dışarıdaki kartları silikleştir. */
+  dimmed?: boolean;
+  /** Karta tıklanınca tetiklenir; varsa Popover yerine bu çağrılır (taşı dialog gibi). */
+  onSectionClick?: (section: FacultyPlanningSection) => void;
+  /** Multi-select modunda kart seçili mi (mavi ring). */
+  isSelected?: boolean;
+  /** Multi-select aktifken tıklanınca seçim toggle; popover atlanır. */
+  onToggleSelect?: (sectionId: number) => void;
 }) {
   const color = getBlockColor(section.suggestedSemester, section.status);
+  // isContinuation=true → bu kart bir başka satırdaki "ana" blok'un alt satırı; sürüklenemez (üst kartı taşırsın).
+  const isDraggable = editable && !section.isPinned && !isContinuation;
+  const dragId = `section-${section.sectionId}-${block.day}-${block.startTime}-${block.blockType}`;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: dragId,
+    disabled: !isDraggable,
+    data: {
+      kind: 'block',
+      sectionId: section.sectionId,
+      classroomId: block.classroomId ?? section.classroomId,
+      blockType: block.blockType,
+      currentDay: block.day,
+      currentStartTime: block.startTime,
+      currentEndTime: block.endTime,
+      durationMinutes: timeToMinutes(block.endTime) - timeToMinutes(block.startTime),
+    },
+  });
 
   // Continuation = üst slotun devamı; noktalı üst border + daha silik
   const continuationClass = isContinuation
@@ -216,16 +272,45 @@ function SectionBlock({
 
   const cardInner = (
     <div
+      ref={isDraggable ? setNodeRef : undefined}
+      // Listener'lar tüm kart üzerinde — PointerSensor distance: 8 sayesinde click vs drag ayrımı otomatik
+      // (8 px altında hareket → click → Popover, 8 px üstü → drag başlar). GripVertical sadece görsel ipucu.
+      {...(isDraggable ? attributes : {})}
+      {...(isDraggable ? listeners : {})}
       className={cn(
-        'rounded-md border-l-[4px] px-2 py-1 cursor-pointer shadow-sm',
+        'relative rounded-md border-l-[4px] px-2 py-1 shadow-sm',
         'transition-all duration-150 ease-out',
         'hover:shadow-lg hover:-translate-y-0.5 hover:border-l-[6px]',
+        isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
         color.bg, color.border, color.text,
         continuationClass,
+        isDragging && 'opacity-40 ring-2 ring-[#003366]',
+        dimmed && 'opacity-25 grayscale',
+        isSelected && 'ring-2 ring-[#003366] ring-offset-1',
       )}
       style={{ borderLeftColor: color.accent }}
-      onClick={e => e.stopPropagation()}
+      onClick={e => {
+        e.stopPropagation();
+        // Multi-select mod aktifse popover/onClick atlanır, seçim toggle yapılır
+        if (onToggleSelect) {
+          onToggleSelect(section.sectionId);
+          return;
+        }
+        if (onSectionClick) onSectionClick(section);
+      }}
     >
+      {/* Sürüklenebilir kartlarda sağ üstte küçük görsel ipucu — listener YOK, gövde zaten draggable. */}
+      {isDraggable && (
+        <span
+          className="absolute top-0.5 right-0.5 p-0.5 rounded text-slate-500/40 pointer-events-none"
+          aria-hidden="true"
+        >
+          <GripVertical className="h-3 w-3" />
+        </span>
+      )}
+      {editable && section.isPinned && (
+        <Lock className="absolute top-0.5 right-0.5 h-3 w-3 text-amber-500" aria-label="Sabitlenmiş" />
+      )}
       {isContinuation ? (
         <div className="flex items-center gap-1.5">
           <span className="font-mono font-bold text-sm">{section.courseCode}</span>
@@ -275,6 +360,11 @@ function SectionBlock({
     </div>
   );
 
+  if (onSectionClick || onToggleSelect) {
+    // Custom click handler ya da multi-select aktifse popover atlanır.
+    return cardInner;
+  }
+
   return (
     <Popover>
       <PopoverTrigger asChild>{cardInner}</PopoverTrigger>
@@ -299,10 +389,30 @@ export interface CalendarGridProps {
     endTime: string,
     allowedMode: FacultyPlanningTimeSlot['allowedMode'],
   ) => void;
+  /** Sürükle-bırak için aktif edilir; her atanmış blok draggable, her boş hücre droppable olur.
+   *  Parent'ta DndContext kurulmalı, drop akışı için handleDragEnd implement edilmelidir. */
+  editable?: boolean;
+  /** Sürükleme esnasında kırmızı vurgulanacak hücrelerin dropId set'i. Parent hesaplar.
+   *  dropId formatı: "cell-{day}-{slotOrder}". */
+  invalidDropIds?: Set<string>;
+  /** Smart suggestion — drag esnasında en uygun 3 hücre, parıltılı highlight ile. */
+  suggestedDropIds?: Set<string>;
+  /** Conflict-only modu — yalnız çakışmalı/atanmamış section'ları göster, diğerleri silikleştir. */
+  highlightedSectionIds?: Set<number>;
+  /** Bir section'a tıklayınca tetiklenir (kart popover yerine harici aksiyon — ör. taşı dialog). */
+  onSectionClick?: (section: FacultyPlanningSection) => void;
+  /** Hücrede gösterilecek maksimum kart sayısı; üzeri "+N daha" rozetiyle popover'a katlanır. */
+  maxBlocksPerCell?: number;
+  /** Multi-select mod aktif (Set varsa); seçili kartların id'leri burada. Card click toggle yapar. */
+  selectedSectionIds?: Set<number>;
+  /** Multi-select aktifken karta tıklanınca tetiklenir (toggle). */
+  onSectionToggleSelect?: (sectionId: number) => void;
 }
 
 export function CalendarGrid({
-  sections, timeSlots, onEmptyCellClick,
+  sections, timeSlots, onEmptyCellClick, editable = false,
+  invalidDropIds, suggestedDropIds, highlightedSectionIds, onSectionClick, maxBlocksPerCell,
+  selectedSectionIds, onSectionToggleSelect,
 }: CalendarGridProps) {
   /* Görünür günler — veride slot tanımlı olan günleri sırala */
   const visibleDays = useMemo(() => {
@@ -437,7 +547,9 @@ export function CalendarGrid({
   const isEmpty = allBlocks.length === 0;
 
   return (
-    <div className="h-full border border-slate-200 rounded-xl overflow-auto bg-white shadow-sm relative">
+    // overflow-auto kasıtlı olarak yok: dnd-kit'in WhileDragging measuring stratejisi scrollable
+    // ancestor'da droppable rect'lerini stale ölçüyordu. Scroll dışarıdaki container'da yapılır.
+    <div className="h-full border border-slate-200 rounded-xl bg-white shadow-sm relative">
       {isEmpty && (
         <div className="sticky top-0 z-20 flex items-center justify-center gap-2 bg-slate-50/90 backdrop-blur-sm border-b border-slate-200/60 py-1.5 text-xs text-slate-400">
           <span>Henüz atama yok</span>
@@ -517,8 +629,23 @@ export function CalendarGrid({
                       !slotMissing &&
                       onEmptyCellClick != null;
 
+                    // Drop yalnız boş hücrelere ve geçerli slot'lara izinli; OnlineOnly veya slot eksik hücreler hâlâ droppable ama
+                      //   isDropDisabled true ile kırmızı vurgulama yapar (kullanıcı kuralı görsün).
+                      const isEmptyCell = cellBlocks.length === 0;
+                      const dropId = `cell-${wd.day}-${row.slotOrder}`;
+                      const dropEnabled = editable && isEmptyCell && !slotMissing;
+                      const dropDisabled = invalidDropIds?.has(dropId) ?? false;
+                      const isSuggested = (suggestedDropIds?.has(dropId) ?? false) && !dropDisabled;
+
                     return (
-                      <CalendarCell key={cellKey} isRestricted={isOnlineOnly || slotMissing}>
+                      <CalendarCell
+                        key={cellKey}
+                        isRestricted={isOnlineOnly || slotMissing}
+                        isDroppable={dropEnabled}
+                        dropId={dropId}
+                        isDropDisabled={dropDisabled}
+                        isSuggested={isSuggested}
+                      >
                         <div
                           className={cn(
                             'flex flex-col gap-0.5',
@@ -527,21 +654,40 @@ export function CalendarGrid({
                           )}
                           onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime, slot!.allowedMode) : undefined}
                         >
-                          {cellBlocks.map(b => {
-                            const startKey = `${b.sectionId}-${b.day}-${row.startTime}-${b.blockType}`;
-                            const isContinuation = blockStartCells.covered.has(startKey);
-                            const startInfo = blockStartCells.starts.get(startKey);
-
+                          {(() => {
+                            const isOverflow = maxBlocksPerCell != null && cellBlocks.length > maxBlocksPerCell;
+                            const visibleBlocks = isOverflow ? cellBlocks.slice(0, maxBlocksPerCell - 1) : cellBlocks;
+                            const hiddenBlocks = isOverflow ? cellBlocks.slice(maxBlocksPerCell - 1) : [];
                             return (
-                              <SectionBlock
-                                key={`${b.sectionId}-${b.blockType}-${b.startTime}`}
-                                section={b.section}
-                                block={b}
-                                rowSpan={startInfo?.rowSpan ?? 1}
-                                isContinuation={isContinuation}
-                              />
+                              <>
+                                {visibleBlocks.map(b => {
+                                  const startKey = `${b.sectionId}-${b.day}-${row.startTime}-${b.blockType}`;
+                                  const isContinuation = blockStartCells.covered.has(startKey);
+                                  const startInfo = blockStartCells.starts.get(startKey);
+                                  const isDimmed = highlightedSectionIds != null
+                                    && !highlightedSectionIds.has(b.sectionId);
+
+                                  return (
+                                    <SectionBlock
+                                      key={`${b.sectionId}-${b.blockType}-${b.startTime}`}
+                                      section={b.section}
+                                      block={b}
+                                      rowSpan={startInfo?.rowSpan ?? 1}
+                                      isContinuation={isContinuation}
+                                      editable={editable}
+                                      dimmed={isDimmed}
+                                      onSectionClick={onSectionClick}
+                                      isSelected={selectedSectionIds?.has(b.sectionId)}
+                                      onToggleSelect={onSectionToggleSelect}
+                                    />
+                                  );
+                                })}
+                                {hiddenBlocks.length > 0 && (
+                                  <OverflowPill blocks={hiddenBlocks} highlightedSectionIds={highlightedSectionIds} />
+                                )}
+                              </>
                             );
-                          })}
+                          })()}
                           {isClickableEmpty && (
                             <Plus className="h-3.5 w-3.5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                           )}
@@ -556,5 +702,64 @@ export function CalendarGrid({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Hücre kapasitesi aşıldığında "+N daha" rozet — tıklayınca Popover ile geri kalan kartlar listelenir. */
+function OverflowPill({
+  blocks, highlightedSectionIds,
+}: {
+  blocks: ParsedBlock[];
+  highlightedSectionIds?: Set<number>;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={e => e.stopPropagation()}
+          className="text-[10px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded px-1.5 py-0.5 border border-slate-300"
+          aria-label={`${blocks.length} daha`}
+        >
+          +{blocks.length} daha
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-2" side="right" align="start">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2 px-1">
+          Bu hücrede {blocks.length} ders daha
+        </p>
+        <div className="space-y-1 max-h-72 overflow-y-auto">
+          {blocks.map(b => {
+            const color = getBlockColor(b.section.suggestedSemester, b.section.status);
+            const isDimmed = highlightedSectionIds != null && !highlightedSectionIds.has(b.sectionId);
+            return (
+              <div
+                key={`${b.sectionId}-${b.blockType}-${b.startTime}`}
+                className={cn(
+                  'rounded-md border-l-[3px] px-2 py-1.5 text-xs',
+                  color.bg, color.border, color.text,
+                  isDimmed && 'opacity-40',
+                )}
+                style={{ borderLeftColor: color.accent }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold">{b.section.courseCode}</span>
+                  <span className="text-[10px]">·{b.section.sectionIndex}</span>
+                  <span className="ml-auto text-[10px] text-slate-500 truncate max-w-[120px]">
+                    {b.classroomName ?? '—'}
+                  </span>
+                </div>
+                <p className="truncate text-[11px] mt-0.5">{b.section.courseName}</p>
+                {b.section.instructorName && (
+                  <p className="truncate text-[10px] text-slate-500 mt-0.5">
+                    {b.section.instructorName}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
