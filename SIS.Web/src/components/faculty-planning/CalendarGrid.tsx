@@ -224,15 +224,19 @@ function SectionPopoverContent({
 }
 
 /* ── Tek ders bloğu ── */
+type ContinuationPosition = 'standalone' | 'first' | 'middle' | 'last';
+
 function SectionBlock({
-  section, block, rowSpan, isContinuation, editable, dimmed, onSectionClick,
-  isSelected, onToggleSelect,
+  section, block, rowSpan, isContinuation, continuationPosition, editable, dimmed, onSectionClick,
+  isSelected, onToggleSelect, cardDensity,
 }: {
   section: FacultyPlanningSection;
   /** The specific schedule block (theory or lab) this card represents in the grid. */
   block: ParsedBlock;
   rowSpan: number;
   isContinuation: boolean;
+  /** İlk/orta/son/standalone — bağlı blok hissi için border-radius koşullu. */
+  continuationPosition: ContinuationPosition;
   /** editable=true iken kart sürüklenebilir hale gelir. Pinli/devam-bloğu kartlar sürüklenemez. */
   editable: boolean;
   /** Conflict-only mod'da dışarıdaki kartları silikleştir. */
@@ -243,6 +247,7 @@ function SectionBlock({
   isSelected?: boolean;
   /** Multi-select aktifken tıklanınca seçim toggle; popover atlanır. */
   onToggleSelect?: (sectionId: number) => void;
+  cardDensity: CardDensity;
 }) {
   const color = getBlockColor(section.suggestedSemester, section.status);
   // isContinuation=true → bu kart bir başka satırdaki "ana" blok'un alt satırı; sürüklenemez (üst kartı taşırsın).
@@ -270,21 +275,39 @@ function SectionBlock({
 
   // Block-level classroom (mixed dersde teori/lab odası farklı olabilir).
   const cardClassroomName = block.classroomName ?? section.classroomName;
+  const instructorLastName = section.instructorName?.split(' ').pop() ?? null;
+  const totalHours = section.theoryHours + section.labHours;
+
+  // Density'ye göre border-radius — bağlı blok hissi
+  const borderRadiusClass = (() => {
+    if (cardDensity === 'spacious') return 'rounded-md';
+    switch (continuationPosition) {
+      case 'standalone': return 'rounded';
+      case 'first':      return 'rounded-t rounded-b-none';
+      case 'middle':     return 'rounded-none';
+      case 'last':       return 'rounded-b rounded-t-none';
+    }
+  })();
+
+  const isCompactDensity = cardDensity === 'compact' || cardDensity === 'normal' || cardDensity === 'wide';
 
   const cardInner = (
     <div
       ref={isDraggable ? setNodeRef : undefined}
-      // Listener'lar tüm kart üzerinde — PointerSensor distance: 8 sayesinde click vs drag ayrımı otomatik
-      // (8 px altında hareket → click → Popover, 8 px üstü → drag başlar). GripVertical sadece görsel ipucu.
       {...(isDraggable ? attributes : {})}
       {...(isDraggable ? listeners : {})}
+      data-section-id={section.sectionId}
       className={cn(
-        'relative rounded-md border-l-[4px] px-2 py-1 shadow-sm',
-        'transition-all duration-150 ease-out',
-        'hover:shadow-lg hover:-translate-y-0.5 hover:border-l-[6px]',
+        'relative transition-all duration-150 ease-out',
+        borderRadiusClass,
+        // Spacious modunda eski 4px şerit + padding + shadow + hover translate
+        cardDensity === 'spacious' && 'border-l-[4px] shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-l-[6px] px-2 py-1',
+        // Compact modlarda 3px şerit + kompakt padding + hafif hover shadow
+        isCompactDensity && 'border-l-[3px] px-1.5 py-0.5 hover:shadow-sm',
         isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
         color.bg, color.border, color.text,
-        continuationClass,
+        // isContinuation soluk hâli SADECE spacious modda aktif
+        cardDensity === 'spacious' && continuationClass,
         isDragging && 'opacity-40 ring-2 ring-[#003366]',
         dimmed && 'opacity-25 grayscale',
         isSelected && 'ring-2 ring-[#003366] ring-offset-1',
@@ -292,7 +315,6 @@ function SectionBlock({
       style={{ borderLeftColor: color.accent }}
       onClick={e => {
         e.stopPropagation();
-        // Multi-select mod aktifse popover/onClick atlanır, seçim toggle yapılır
         if (onToggleSelect) {
           onToggleSelect(section.sectionId);
           return;
@@ -300,8 +322,8 @@ function SectionBlock({
         if (onSectionClick) onSectionClick(section);
       }}
     >
-      {/* Sürüklenebilir kartlarda sağ üstte küçük görsel ipucu — listener YOK, gövde zaten draggable. */}
-      {isDraggable && (
+      {/* Draggable ipucu — yalnız spacious modda görünür (kompakt modlarda yatay yer tasarrufu) */}
+      {isDraggable && cardDensity === 'spacious' && (
         <span
           className="absolute top-0.5 right-0.5 p-0.5 rounded text-slate-500/40 pointer-events-none"
           aria-hidden="true"
@@ -309,54 +331,103 @@ function SectionBlock({
           <GripVertical className="h-3 w-3" />
         </span>
       )}
-      {editable && section.isPinned && (
+      {editable && section.isPinned && cardDensity === 'spacious' && (
         <Lock className="absolute top-0.5 right-0.5 h-3 w-3 text-amber-500" aria-label="Sabitlenmiş" />
       )}
-      {isContinuation ? (
-        <div className="flex items-center gap-1.5">
-          <span className="font-mono font-bold text-sm">{section.courseCode}</span>
-          <span className="text-xs font-mono font-bold">·{section.sectionIndex}</span>
-          <BlockTypeBadge blockType={block.blockType} className="ml-auto" />
+
+      {cardDensity === 'spacious' ? (
+        // ── SPACIOUS (mevcut davranış aynen korunur) ──
+        isContinuation ? (
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono font-bold text-sm">{section.courseCode}</span>
+            <span className="text-xs font-mono font-bold">·{section.sectionIndex}</span>
+            <BlockTypeBadge blockType={block.blockType} className="ml-auto" />
+          </div>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-1.5 leading-tight">
+              <span className="font-mono font-bold text-base tracking-tight">{section.courseCode}</span>
+              <span className="text-xs font-mono font-bold">·{section.sectionIndex}</span>
+              <BlockTypeBadge blockType={block.blockType} className="ml-auto self-center" />
+            </div>
+            {rowSpan >= 2 && (
+              <div className="text-xs font-semibold leading-snug mt-0.5 truncate">
+                {section.courseName}
+              </div>
+            )}
+            {rowSpan >= 2 && (cardClassroomName || section.instructorName) && (
+              <div className="flex items-center gap-2 mt-0.5 text-xs font-semibold">
+                {cardClassroomName && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{cardClassroomName}</span>
+                  </span>
+                )}
+                {section.instructorName && (
+                  <span className="flex items-center gap-1 truncate">
+                    <User className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{instructorLastName}</span>
+                  </span>
+                )}
+              </div>
+            )}
+            {rowSpan >= 3 && (
+              <div className="flex items-center gap-1 mt-0.5 text-xs font-semibold">
+                <Users className="h-3 w-3 shrink-0" />
+                <span>{section.capacity} kişi</span>
+              </div>
+            )}
+          </>
+        )
+      ) : cardDensity === 'compact' ? (
+        // ── COMPACT (22px tek satır) ──
+        <div className="flex items-center gap-1 h-[18px] overflow-hidden">
+          <span className="font-mono font-bold text-[11px] tabular-nums whitespace-nowrap">
+            {section.courseCode}·{section.sectionIndex}
+          </span>
+          <BlockTypeBadge blockType={block.blockType} className="ml-auto shrink-0" />
+        </div>
+      ) : cardDensity === 'normal' ? (
+        // ── NORMAL (24px tek satır, her saat satırında aynı) ──
+        <div className="flex items-center gap-1.5 h-[20px] overflow-hidden">
+          <span className="font-mono font-bold text-[11px] tabular-nums whitespace-nowrap shrink-0">
+            {section.courseCode}·{section.sectionIndex}
+          </span>
+          <BlockTypeBadge blockType={block.blockType} className="shrink-0" />
+          {cardClassroomName && (
+            <span className="text-[10px] text-slate-700 font-medium whitespace-nowrap shrink-0">
+              {cardClassroomName}
+            </span>
+          )}
+          {instructorLastName && (
+            <span className="text-[10px] text-slate-600 truncate min-w-0">
+              · {instructorLastName}
+            </span>
+          )}
         </div>
       ) : (
-        <>
-          {/* Ders kodu + şube + tip badge */}
-          <div className="flex items-baseline gap-1.5 leading-tight">
-            <span className="font-mono font-bold text-base tracking-tight">{section.courseCode}</span>
-            <span className="text-xs font-mono font-bold">·{section.sectionIndex}</span>
-            <BlockTypeBadge blockType={block.blockType} className="ml-auto self-center" />
+        // ── WIDE (36px iki satır) ──
+        <div className="flex flex-col gap-0.5 h-[32px] overflow-hidden">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono font-bold text-[11px] tabular-nums whitespace-nowrap shrink-0">
+              {section.courseCode}·{section.sectionIndex}
+            </span>
+            <BlockTypeBadge blockType={block.blockType} className="shrink-0" />
+            {cardClassroomName && (
+              <span className="text-[10px] text-slate-700 font-medium ml-auto whitespace-nowrap shrink-0">
+                {cardClassroomName}
+              </span>
+            )}
           </div>
-          {/* Ders adı — koyu yazı, semibold */}
-          {rowSpan >= 2 && (
-            <div className="text-xs font-semibold leading-snug mt-0.5 truncate">
-              {section.courseName}
-            </div>
-          )}
-          {/* Derslik + Hoca */}
-          {rowSpan >= 2 && (cardClassroomName || section.instructorName) && (
-            <div className="flex items-center gap-2 mt-0.5 text-xs font-semibold">
-              {cardClassroomName && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{cardClassroomName}</span>
-                </span>
-              )}
-              {section.instructorName && (
-                <span className="flex items-center gap-1 truncate">
-                  <User className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{section.instructorName.split(' ').pop()}</span>
-                </span>
-              )}
-            </div>
-          )}
-          {/* Kapasite */}
-          {rowSpan >= 3 && (
-            <div className="flex items-center gap-1 mt-0.5 text-xs font-semibold">
-              <Users className="h-3 w-3 shrink-0" />
-              <span>{section.capacity} kişi</span>
-            </div>
-          )}
-        </>
+          <div className="flex items-center gap-1 text-[10px] text-slate-600">
+            {section.instructorName && (
+              <span className="truncate min-w-0">{section.instructorName}</span>
+            )}
+            {totalHours > 0 && (
+              <span className="text-slate-400 shrink-0 ml-auto">{section.theoryHours}T+{section.labHours}L</span>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -424,7 +495,6 @@ export function CalendarGrid({
   selectedSectionIds, onSectionToggleSelect,
   cardDensity = 'spacious',
 }: CalendarGridProps) {
-  void cardDensity; // Used in subsequent tasks (Task 3+)
   /* Görünür günler — veride slot tanımlı olan günleri sırala */
   const visibleDays = useMemo(() => {
     const groups = new Map<number, FacultyPlanningTimeSlot[]>();
@@ -500,6 +570,7 @@ export function CalendarGrid({
   const blockStartCells = useMemo(() => {
     const starts = new Map<string, { block: ParsedBlock; rowSpan: number }>();
     const covered = new Set<string>();
+    const lastRowKeys = new Set<string>();
 
     for (const block of allBlocks) {
       const spanRows: number[] = [];
@@ -515,6 +586,7 @@ export function CalendarGrid({
       }
       if (spanRows.length > 0) {
         const firstRow = timeRows[spanRows[0]];
+        const lastRowIdx = spanRows[spanRows.length - 1];
         // Include startTime + blockType so the same section's theory and lab blocks track
         // their own rowSpan when both fall on the same day at different times.
         const startKey = `${block.sectionId}-${block.day}-${firstRow.startTime}-${block.blockType}`;
@@ -523,10 +595,11 @@ export function CalendarGrid({
           for (let k = 1; k < spanRows.length; k++) {
             covered.add(`${block.sectionId}-${block.day}-${timeRows[spanRows[k]].startTime}-${block.blockType}`);
           }
+          lastRowKeys.add(`${block.sectionId}-${block.day}-${timeRows[lastRowIdx].startTime}-${block.blockType}`);
         }
       }
     }
-    return { starts, covered };
+    return { starts, covered, lastRowKeys };
   }, [allBlocks, timeRows]);
 
   /* Öğle arası: config'ten oku, uygun satırlar arasına ayırıcı bas */
@@ -671,22 +744,40 @@ export function CalendarGrid({
                                 {visibleBlocks.map(b => {
                                   const startKey = `${b.sectionId}-${b.day}-${row.startTime}-${b.blockType}`;
                                   const isContinuation = blockStartCells.covered.has(startKey);
+                                  const isLastRow = blockStartCells.lastRowKeys.has(startKey);
                                   const startInfo = blockStartCells.starts.get(startKey);
+                                  const blockRowSpan = startInfo?.rowSpan ?? 1;
                                   const isDimmed = highlightedSectionIds != null
                                     && !highlightedSectionIds.has(b.sectionId);
+
+                                  // ContinuationPosition: continuation satırlarda startInfo yok (blockRowSpan=1),
+                                  // bu yüzden önce covered/lastRow set'lerini kontrol et — bunlar multi-row blokların
+                                  // alt satırlarını güvenilir şekilde işaretler.
+                                  let continuationPosition: ContinuationPosition;
+                                  if (isContinuation) {
+                                    continuationPosition = isLastRow ? 'last' : 'middle';
+                                  } else if (blockRowSpan > 1) {
+                                    // Multi-row blok ilk satırı
+                                    continuationPosition = 'first';
+                                  } else {
+                                    // Tek satır blok
+                                    continuationPosition = 'standalone';
+                                  }
 
                                   return (
                                     <SectionBlock
                                       key={`${b.sectionId}-${b.blockType}-${b.startTime}`}
                                       section={b.section}
                                       block={b}
-                                      rowSpan={startInfo?.rowSpan ?? 1}
+                                      rowSpan={blockRowSpan}
                                       isContinuation={isContinuation}
+                                      continuationPosition={continuationPosition}
                                       editable={editable}
                                       dimmed={isDimmed}
                                       onSectionClick={onSectionClick}
                                       isSelected={selectedSectionIds?.has(b.sectionId)}
                                       onToggleSelect={onSectionToggleSelect}
+                                      cardDensity={cardDensity}
                                     />
                                   );
                                 })}
