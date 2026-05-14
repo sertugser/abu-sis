@@ -12,6 +12,7 @@ import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
 import { useExportExcel, useExportPdf } from '../hooks/useExcelSchedule';
+import { useGridDensity } from '../hooks/useGridDensity';
 import { ConflictBar } from '../components/faculty-planning/ConflictBar';
 import { SectionListTab } from '../components/faculty-planning/SectionListTab';
 import { AutoScheduleTab } from '../components/faculty-planning/AutoScheduleTab';
@@ -34,6 +35,7 @@ export default function FacultyPlanningPage() {
 
   const exportExcel = useExportExcel();
   const exportPdf = useExportPdf();
+  const { density, setDensity } = useGridDensity();
 
   const [triggerRun, setTriggerRun] = useState(0);
   const [autoIsPending, setAutoIsPending] = useState(false);
@@ -121,6 +123,48 @@ export default function FacultyPlanningPage() {
         <div ref={setActionBarNode} className="flex items-center gap-2" />
 
         <div className="flex-1" />
+
+        {/* Density toggle — yalnız Takvim sekmesinde anlamlı */}
+        {activeTab === 'auto-schedule' && (
+          <>
+            <div className="flex bg-slate-100 rounded-lg p-0.5 shrink-0" role="group" aria-label="Kart yoğunluğu">
+              <button
+                type="button"
+                onClick={() => setDensity('compact')}
+                title="Sıkı: 22px, sadece ders kodu"
+                className={cn(
+                  'px-2 py-1 text-[11px] font-medium rounded-md transition-all',
+                  density === 'compact' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Sıkı
+              </button>
+              <button
+                type="button"
+                onClick={() => setDensity('normal')}
+                title="Normal: 24px, derslik + hoca soyadı"
+                className={cn(
+                  'px-2 py-1 text-[11px] font-medium rounded-md transition-all',
+                  density === 'normal' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Normal
+              </button>
+              <button
+                type="button"
+                onClick={() => setDensity('wide')}
+                title="Geniş: 36px, iki satır"
+                className={cn(
+                  'px-2 py-1 text-[11px] font-medium rounded-md transition-all',
+                  density === 'wide' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Geniş
+              </button>
+            </div>
+            <div className="w-px h-5 bg-slate-200" />
+          </>
+        )}
 
         {/* Segmented control */}
         <div className="flex bg-slate-100 rounded-lg p-0.5 shrink-0">
