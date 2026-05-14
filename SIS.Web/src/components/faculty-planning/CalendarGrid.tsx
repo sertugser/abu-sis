@@ -458,6 +458,18 @@ function SectionBlock({
 /* ── Ana CalendarGrid ── */
 export type CardDensity = 'compact' | 'normal' | 'wide' | 'spacious';
 
+/**
+ * Hücre içi kartların yerleşim sınıfı. Spacious mevcut dikey flex'i korur;
+ * kompakt modlarda 2-sütun grid'e geçer (1 kart → tek sütun; 2+ kart → yan yana).
+ */
+function getCellLayoutClass(density: CardDensity, blockCount: number): string {
+  if (density === 'spacious') {
+    return 'flex flex-col gap-0.5';
+  }
+  if (blockCount <= 1) return 'grid grid-cols-1 gap-0';
+  return 'grid grid-cols-2 gap-0 auto-rows-min';
+}
+
 export interface CalendarGridProps {
   sections: FacultyPlanningSection[];
   timeSlots: FacultyPlanningTimeSlot[];
@@ -745,8 +757,8 @@ export function CalendarGrid({
                       >
                         <div
                           className={cn(
-                            'flex flex-col gap-0.5',
-                            cellBlocks.length > 0 && 'min-h-[2.5rem]',
+                            getCellLayoutClass(cardDensity, cellBlocks.length),
+                            cellBlocks.length > 0 && cardDensity === 'spacious' && 'min-h-[2.5rem]',
                             isClickableEmpty && 'cursor-pointer hover:bg-blue-50/50 rounded transition-colors group min-h-[2.5rem] items-center justify-center',
                           )}
                           onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime, slot!.allowedMode) : undefined}
