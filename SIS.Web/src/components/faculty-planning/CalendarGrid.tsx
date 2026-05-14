@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { dayNumberToTurkish, weekOrderKey } from '@/lib/scheduleUtils';
@@ -234,7 +234,7 @@ type ContinuationPosition = 'standalone' | 'first' | 'middle' | 'last';
 
 function SectionBlock({
   section, block, rowSpan, isContinuation, continuationPosition, editable, dimmed, onSectionClick,
-  isSelected, onToggleSelect, cardDensity,
+  isSelected, onToggleSelect, cardDensity, hoveredSectionId, onHoverSection,
 }: {
   section: FacultyPlanningSection;
   /** The specific schedule block (theory or lab) this card represents in the grid. */
@@ -254,6 +254,10 @@ function SectionBlock({
   /** Multi-select aktifken tıklanınca seçim toggle; popover atlanır. */
   onToggleSelect?: (sectionId: number) => void;
   cardDensity: CardDensity;
+  /** Group highlight: parent CalendarGrid'in tuttuğu, şu anda hover'da olan section'ın id'si (yoksa null). */
+  hoveredSectionId: number | null;
+  /** Hover state'i değiştirmek için parent callback. mouseEnter ile section.sectionId, mouseLeave ile null çağrılır. */
+  onHoverSection: (sectionId: number | null) => void;
 }) {
   const color = getBlockColor(section.suggestedSemester, section.status);
   // isContinuation=true → bu kart bir başka satırdaki "ana" blok'un alt satırı; sürüklenemez (üst kartı taşırsın).
@@ -303,6 +307,8 @@ function SectionBlock({
       {...(isDraggable ? attributes : {})}
       {...(isDraggable ? listeners : {})}
       data-section-id={section.sectionId}
+      onMouseEnter={isCompactDensity ? () => onHoverSection(section.sectionId) : undefined}
+      onMouseLeave={isCompactDensity ? () => onHoverSection(null) : undefined}
       className={cn(
         'relative transition-all duration-150 ease-out',
         borderRadiusClass,
@@ -317,6 +323,9 @@ function SectionBlock({
         isDragging && 'opacity-40 ring-2 ring-[#003366]',
         dimmed && 'opacity-25 grayscale',
         isSelected && 'ring-2 ring-[#003366] ring-offset-1',
+        // Group highlight: aynı section hover'da → ring; başka section hover'da → dim
+        isCompactDensity && hoveredSectionId === section.sectionId && 'ring-1 ring-[#003366] z-10',
+        isCompactDensity && hoveredSectionId !== null && hoveredSectionId !== section.sectionId && 'opacity-60',
       )}
       style={{ borderLeftColor: color.accent }}
       onClick={e => {
@@ -548,6 +557,9 @@ export function CalendarGrid({
   selectedSectionIds, onSectionToggleSelect,
   cardDensity = 'spacious',
 }: CalendarGridProps) {
+  // Group highlight: kompakt modlarda aynı sectionId'ye sahip tüm satırları birlikte vurgulamak için
+  const [hoveredSectionId, setHoveredSectionId] = useState<number | null>(null);
+
   /* Görünür günler — veride slot tanımlı olan günleri sırala */
   const visibleDays = useMemo(() => {
     const groups = new Map<number, FacultyPlanningTimeSlot[]>();
@@ -842,6 +854,8 @@ export function CalendarGrid({
                                       isSelected={selectedSectionIds?.has(b.sectionId)}
                                       onToggleSelect={onSectionToggleSelect}
                                       cardDensity={cardDensity}
+                                      hoveredSectionId={hoveredSectionId}
+                                      onHoverSection={setHoveredSectionId}
                                     />
                                   );
                                 })}
