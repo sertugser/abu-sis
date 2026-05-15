@@ -28,11 +28,14 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// totalHours hesabına dahil olur ama gün dağılımı sayılmaz; Plan 9'a deferred.
 /// </para>
 /// <para>
-/// NOTE (v1 unit divergence — Plan 9 tune): v1 evaluator gerçek clock-hour'u
-/// kullanırken bu encoder credit-hour (<c>section.TheoryHours + section.LabHours</c>)
-/// kullanıyor (DailyLoadSoftEncoder ile aynı semantik). <see cref="SoftThresholds.S2MaxDailyHours"/>
-/// burada da credit-hour cinsinden okunur — admin Plan 9 sonrası real DB smoke ile tune
-/// edebilir.
+/// NOTE (v1 unit divergence): v1 evaluator gerçek clock-hour
+/// (<c>Σ EndTime − StartTime</c>) kullanırken bu encoder credit-hour
+/// (<c>section.TheoryHours + section.LabHours</c>) kullanıyor (DailyLoadSoftEncoder ile
+/// aynı semantik). Plan 12 "birebir tutsun" kararı sonrası clock-hour migration
+/// **Plan 13'e ertelendi** — CP-SAT block-level model genişletmesi gerek (her block
+/// için duration int aggregation). Production cap (S2MaxDailyHours=6) için credit-hour
+/// ile clock-hour arasındaki fark genellikle ≤1 saat (50dk slot grid'inde 6 credit
+/// ≈ 5 clock); admin tune edebilir.
 /// </para>
 /// </remarks>
 public sealed class InstructorDaySpreadEncoder : IConstraintEncoder
