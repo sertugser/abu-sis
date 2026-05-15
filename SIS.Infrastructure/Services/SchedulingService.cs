@@ -1,11 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Rules;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services.Scheduling;
+using SIS.Infrastructure.Services.Scheduling.Rules;
 
 namespace SIS.Infrastructure.Services;
 
@@ -24,19 +27,56 @@ public partial class SchedulingService : ISchedulingService
     private readonly AppDbContext _context;
     private readonly ConstraintEvaluationService _constraintEvaluation;
     private readonly IScheduleWriter _scheduleWriter;
+    private readonly IRuleEngine? _ruleEngine;
+    private readonly ISystemConfigProvider? _systemConfig;
 
     public SchedulingService(
         AppDbContext context,
         ConstraintEvaluationService constraintEvaluation,
-        IScheduleWriter scheduleWriter)
+        IScheduleWriter scheduleWriter,
+        IRuleEngine? ruleEngine = null,
+        ISystemConfigProvider? systemConfig = null)
     {
         _context = context;
         _constraintEvaluation = constraintEvaluation;
         _scheduleWriter = scheduleWriter;
+        _ruleEngine = ruleEngine;
+        _systemConfig = systemConfig;
+    }
+
+    /// <summary>
+    /// Plan 11 Faz 4 — SystemConfig 'Schedule.UseV2RuntimeRules' okur. True iken yeni
+    /// RuleEngine path'i aktif; false (default) iken V1 evaluator zinciri. Faz 5 V1
+    /// silindiğinde bu flag ve method kaldırılır.
+    /// </summary>
+    internal async Task<bool> ShouldUseV2RuntimeRulesAsync(CancellationToken ct)
+    {
+        if (_ruleEngine == null || _systemConfig == null) return false;
+        return await _systemConfig.GetBoolAsync("Schedule.UseV2RuntimeRules", false, ct);
     }
 
     public async Task<List<SchedulingConflictDto>> GetConflictsAsync(int? termId = null, CancellationToken cancellationToken = default)
     {
+        // Plan 11 Faz 4 — Feature flag açıkken RuleEngine path'i; default V1 evaluator.
+        if (await ShouldUseV2RuntimeRulesAsync(cancellationToken))
+        {
+            var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
+            if (resolvedTerm == null) return new List<SchedulingConflictDto>();
+
+            var termSnapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
+            var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
+            var rawConfig = await LoadSystemConfigAsync(cancellationToken);
+            var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
+
+            var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
+                termSnapshot,
+                curriculumConflictMode: hardCfg?.CurriculumConflictMode ?? "curriculum");
+
+            var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, resolvedTerm.Id, cancellationToken);
+            var conflicts = await _ruleEngine!.EvaluateAllExistingAsync(runtimeSnapshot, fullCfg, state, cancellationToken);
+            return conflicts.ToList();
+        }
+
         var validation = await ValidateExistingAsync(termId, cancellationToken);
         return validation.Conflicts;
     }

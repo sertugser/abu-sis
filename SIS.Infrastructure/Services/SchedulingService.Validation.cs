@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Infrastructure.Services.Scheduling.Rules;
 
 namespace SIS.Infrastructure.Services;
 
@@ -42,8 +43,25 @@ public partial class SchedulingService
         var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
             candidate.InstructorId, candidate.DepartmentId, candidate.SectionId, section.TermId, cancellationToken);
 
-        result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
+        result.Notes.Add($"Degerlendirelen donem: {snapshot.TermName}");
         result.Notes.AddRange(candidate.Notes);
+
+        // Plan 11 Faz 4 — Feature flag açıkken RuleEngine candidate evaluasyonu; default V1 evaluator.
+        if (await ShouldUseV2RuntimeRulesAsync(cancellationToken))
+        {
+            var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
+                snapshot,
+                curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
+            var runtimeCandidate = RuntimeSnapshotAdapter.FromSectionSnapshot(candidate);
+            var fullCfg = BuildConstraintConfig(softConfig, hardConfig);
+
+            var ruleConflicts = await _ruleEngine!.EvaluateCandidateAsync(
+                runtimeCandidate, runtimeSnapshot, fullCfg, constraintState, cancellationToken);
+
+            result.Conflicts = ruleConflicts.ToList();
+            result.IsValid = ruleConflicts.Count == 0;
+            return result;
+        }
 
         var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig, constraintState);
         result.Conflicts = conflicts;
