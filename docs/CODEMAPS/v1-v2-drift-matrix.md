@@ -3,7 +3,12 @@
 > **Plan 11 Faz 0 audit artifact.** Auto-schedule (V2 CP-SAT) ile runtime check (V1 evaluator) arasındaki tüm hard-constraint kuralların kanıt-zincirli karşılaştırması. Faz 3 boyunca her satır için failing-first parity test'i yazılır; Faz 5 sonunda V1 silinince bu matrix "RESOLVED" başlığıyla arşivlenir.
 
 Son güncelleme: 2026-05-15
-Status: **OPEN** (Faz 0 audit)
+Status: **PARTIALLY RESOLVED** (Plan 11 Faz 0-4 tamamlandı)
+- ✅ **Faz 1 acil patch'ler:** K1 hardcoded 9 → SystemConfig, ClassroomTypeEvaluator Amphi flag-gated, SkipHardValidation kapsamı 3 V1 kapısına genişledi (production stabilleşti)
+- ✅ **Faz 3:** 17 IRulePredicate (V2 mantığı saf C# port) + DI register
+- ✅ **Faz 4:** `SchedulingService.ValidateAsync` + `GetConflictsAsync` `Schedule.UseV2RuntimeRules` flag-aware delegasyon
+- ⏳ **Bekleyen:** Faz 4.7 production flag aktivasyonu + 1 hafta gözlem; Faz 5 V1 evaluator silme; Faz 6 frontend smoke
+- Detay: [rule-engine.md](rule-engine.md)
 
 ---
 
