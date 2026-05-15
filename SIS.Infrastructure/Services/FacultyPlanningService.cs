@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Application.Scheduling.DTOs;
@@ -26,6 +27,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly AutoScheduleEngine _autoScheduleEngine;
     private readonly IScheduleWriter _scheduleWriter;
+    private readonly ISystemConfigProvider _systemConfig;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -36,13 +38,15 @@ public partial class FacultyPlanningService : IFacultyPlanningService
         ISchedulingService schedulingService,
         IHttpContextAccessor httpContextAccessor,
         AutoScheduleEngine autoScheduleEngine,
-        IScheduleWriter scheduleWriter)
+        IScheduleWriter scheduleWriter,
+        ISystemConfigProvider systemConfig)
     {
         _context = context;
         _schedulingService = schedulingService;
         _httpContextAccessor = httpContextAccessor;
         _autoScheduleEngine = autoScheduleEngine;
         _scheduleWriter = scheduleWriter;
+        _systemConfig = systemConfig;
     }
 
     public async Task<int> ResolveFacultyForUserAsync(string userId, CancellationToken ct = default)

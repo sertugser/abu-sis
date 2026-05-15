@@ -127,9 +127,15 @@ public partial class FacultyPlanningService
                     throw new KeyNotFoundException("Ogretim uyesi bulunamadi.");
                 section.InstructorId = request.InstructorId.Value;
 
-                // K1: Hoca günlük yük limiti kontrolü
+                // K1: Hoca günlük yük limiti kontrolü.
+                // Plan 11 Faz 1.1 — hardcoded 9 yerine SystemConfig'ten okur (V2 DailyLoadEncoder ile parite).
+                // Admin Schedule.MaxDailyHoursPerInstructor'ı değiştirince hem V2 atama hem K1 runtime check
+                // aynı eşiği kullanır, drift kapanır.
                 if (request.ScheduleSlots is { Count: > 0 })
                 {
+                    var maxDailyHours = await _systemConfig.GetIntAsync(
+                        "Schedule.MaxDailyHoursPerInstructor", 9, ct);
+
                     var instrId = request.InstructorId.Value;
                     var requestDays = request.ScheduleSlots.Select(s => s.Day).Distinct();
                     var existingInstructorSchedules = await _context.SectionSchedules
@@ -148,9 +154,9 @@ public partial class FacultyPlanningService
                         var newHours = request.ScheduleSlots
                             .Where(s => s.Day == day)
                             .Sum(s => (s.EndTime - s.StartTime).TotalHours);
-                        if (existingHours + newHours > 9)
+                        if (existingHours + newHours > maxDailyHours)
                             throw new InvalidOperationException(
-                                $"Ogretim uyesinin {day} gunundeki toplam yuku {existingHours + newHours:F1} saate ulasacak (limit: 9 saat). Atama reddedildi.");
+                                $"Ogretim uyesinin {day} gunundeki toplam yuku {existingHours + newHours:F1} saate ulasacak (limit: {maxDailyHours} saat). Atama reddedildi.");
                     }
                 }
             }
