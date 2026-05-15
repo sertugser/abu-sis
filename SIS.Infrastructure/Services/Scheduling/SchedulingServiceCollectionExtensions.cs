@@ -176,6 +176,13 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HDO_NoDayOffRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HWL_WeeklyLoadRule>();
 
+        // Plan 12 Faz 2 — Soft IRulePredicate kayıtları (ISoftRulePredicate de IRulePredicate
+        // implement ettiği için IRulePredicate seti olarak kayıt; RuleEngine dispatch Faz 4'te
+        // ResolveCategory'ye göre Evaluate (hard, boş) veya CalculatePenalty (soft) çağırır).
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S1_OccupancyRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S2_DailyLoadSoftRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S3_SlotCongestionRule>();
+
         return services;
     }
 }
