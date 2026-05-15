@@ -27,151 +27,37 @@ public partial class SchedulingService
         int? departmentId,
         CancellationToken cancellationToken)
     {
-        var sectionsQuery = _context.CourseSections
-            .AsNoTracking()
-            .Include(cs => cs.Course)
-            .Include(cs => cs.Instructor)
-            .Include(cs => cs.Classroom)
-            .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
-            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
-            .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value);
-
-        if (departmentId.HasValue)
-        {
-            sectionsQuery = sectionsQuery.Where(cs =>
-                cs.Course.DepartmentId == departmentId.Value
-                || (cs.Instructor != null && cs.Instructor.DepartmentId == departmentId.Value));
-        }
-
-        var sections = await sectionsQuery.ToListAsync(cancellationToken);
-
-        var termName = await _context.AcademicTerms
-            .AsNoTracking()
-            .Where(t => t.Id == termId)
-            .Select(t => t.Name)
-            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
-
-        var scopeName = departmentId.HasValue
-            ? await _context.Departments
-                .AsNoTracking()
-                .Where(department => department.Id == departmentId.Value)
-                .Select(department => department.Name)
-                .FirstOrDefaultAsync(cancellationToken) ?? "Bolum"
-            : "Tum sistem";
+        var sections = await LoadActiveSectionsAsync(termId, excludedSectionId, departmentId, cancellationToken);
+        var (termName, scopeName) = await LoadTermAndScopeNamesAsync(termId, departmentId, cancellationToken);
 
         var instructorIds = sections
             .Where(section => section.InstructorId.HasValue)
             .Select(section => section.InstructorId!.Value)
             .Distinct()
             .ToList();
-
         var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
-
         var courseMetadata = await LoadCourseSchedulingMetadataAsync(
-            termId,
-            sections.Select(section => section.CourseId),
-            cancellationToken);
+            termId, sections.Select(section => section.CourseId), cancellationToken);
 
-        // H10 — ClassroomTermAssignment + dept→faculty map.
-        var classroomAssignmentEntities = await _context.ClassroomTermAssignments
-            .AsNoTracking()
-            .Where(cta => cta.TermId == termId)
-            .ToListAsync(cancellationToken);
+        var (classroomAssignments, deptFacultyMap) = await LoadFacultyClassroomDataAsync(termId, cancellationToken);
+        var corequisites = await LoadCorequisitePairsAsync(cancellationToken);
 
-        var classroomAssignments = classroomAssignmentEntities
-            .Select(cta => new ClassroomTermAssignmentInfo(cta.ClassroomId, cta.FacultyId))
-            .ToList();
-
-        var deptFacultyMap = await _context.Departments
-            .AsNoTracking()
-            .ToDictionaryAsync(d => d.Id, d => d.FacultyId, cancellationToken);
-
-        // H11 — Corequisite course çiftleri.
-        var corequisites = await _context.CoursePrerequisites
-            .AsNoTracking()
-            .Where(cp => cp.IsCorequisite)
-            .Select(cp => new CorequisitePair(cp.CourseId, cp.RequiredCourseId))
-            .ToListAsync(cancellationToken);
-
-        // S4 — Co-enrollment pairs (config-aware).
         var softCfg = await LoadSoftConstraintConfigAsync(cancellationToken);
-        var coEnrollmentRawPairs = softCfg.S4Enabled
-            ? await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, cancellationToken)
-            : new List<CoEnrollmentPair>();
+        var coEnrollmentRuntimePairs = await LoadCoEnrollmentRuntimePairsAsync(termId, softCfg, cancellationToken);
 
-        var coEnrollmentRuntimePairs = coEnrollmentRawPairs
-            .Select(p => new CoEnrollmentRuntimePair(p.CourseId1, p.CourseId2, p.StudentCount))
-            .ToList();
+        var distributionConstraints = await LoadDistributionConstraintsAsync(termId, cancellationToken);
+        var slotAllowedModes = await LoadSlotAllowedModesAsync(termId, cancellationToken);
 
-        // DIST — Distribution constraints.
-        var distributionEntities = await _context.DistributionConstraints
-            .AsNoTracking()
-            .Include(d => d.Courses)
-            .Where(d => d.TermId == termId)
-            .ToListAsync(cancellationToken);
+        var candidates = ProjectRuntimeCandidates(sections, instructorNameMap, courseMetadata);
 
-        var distributionConstraints = distributionEntities
-            .Select(dc => new RuntimeDistributionConstraint(
-                DistributionType: dc.DistributionType,
-                PreferenceLevel: dc.PreferenceLevel,
-                Courses: dc.Courses
-                    .OrderBy(c => c.SortOrder)
-                    .Select(c => new DistributionConstraintCourseInfo(c.CourseId, c.CourseSectionId, c.SortOrder))
-                    .ToList()))
-            .ToList();
-
-        // H17 — FaceToFaceSlotRestriction için (Day, StartTime) → AllowedMode lookup.
-        // Duplicate (Day, StartTime) için OnlineOnly daha kısıtlayıcıdır → onu tercih et.
-        var slotRecords = await _context.TimeSlots
-            .AsNoTracking()
-            .Where(ts => ts.TermId == termId)
-            .Select(ts => new { ts.DayOfWeek, ts.StartTime, ts.AllowedMode })
-            .ToListAsync(cancellationToken);
-
-        var slotAllowedModes = new Dictionary<(int Day, TimeOnly StartTime), TimeSlotAllowedMode>();
-        foreach (var slot in slotRecords)
-        {
-            var key = ((int)slot.DayOfWeek, slot.StartTime);
-            if (!slotAllowedModes.TryGetValue(key, out var existing)
-                || slot.AllowedMode == TimeSlotAllowedMode.OnlineOnly)
-            {
-                slotAllowedModes[key] = slot.AllowedMode;
-            }
-        }
-
-        // RuntimeCandidate'lara çevir (paralel-split capacity, primary classroom resolution).
-        var classroomLookup = sections
-            .Where(s => s.Classroom != null)
-            .GroupBy(s => s.Classroom!.Id)
-            .ToDictionary(g => g.Key, g => g.First().Classroom!);
-
-        var candidates = sections
-            .Select(section => BuildExistingRuntimeCandidate(
-                section,
-                instructorNameMap,
-                courseMetadata.MinSuggestedSemesters,
-                courseMetadata.SuggestedSemestersByDepartment,
-                courseMetadata.AccessibleDepartments,
-                classroomLookup))
-            .ToList();
-
-        // Manuel atama (Apply) yolu da AutoScheduleEngine ile AYNI mode'u kullanır.
         var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
         var rawConfig = await LoadSystemConfigAsync(cancellationToken);
         var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
         var curriculumConflictMode = hardCfg?.CurriculumConflictMode ?? "curriculum";
 
-        var cohortRefs = candidates
-            .Select(c => new CohortSectionRef(c.SectionId, c.SectionNumber, c.CourseId))
-            .ToList();
-
-        var conflictData = await ConflictPairsBuilder.BuildAsync(
-            curriculumConflictMode,
-            cohortRefs,
-            courseMetadata.SuggestedSemestersByDepartment,
-            courseMetadata.AccessibleDepartments,
-            fullCfg.EnrollmentConflictHardThreshold,
-            _context, termId, cancellationToken);
+        var conflictData = await BuildConflictPairsAsync(
+            candidates, courseMetadata, curriculumConflictMode,
+            fullCfg.EnrollmentConflictHardThreshold, termId, cancellationToken);
 
         return new RuntimeSnapshot
         {
@@ -190,6 +76,186 @@ public partial class SchedulingService
             AdjacentYearSoftPairs = conflictData.AdjacentYearSoftPairs ?? new HashSet<(int, int)>(),
             DistributionConstraints = distributionConstraints,
         };
+    }
+
+    private async Task<List<CourseSection>> LoadActiveSectionsAsync(
+        int termId, int? excludedSectionId, int? departmentId, CancellationToken ct)
+    {
+        var query = _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .Include(cs => cs.Instructor)
+            .Include(cs => cs.Classroom)
+            .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
+            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active)
+            .Where(cs => !excludedSectionId.HasValue || cs.Id != excludedSectionId.Value);
+
+        if (departmentId.HasValue)
+        {
+            query = query.Where(cs =>
+                cs.Course.DepartmentId == departmentId.Value
+                || (cs.Instructor != null && cs.Instructor.DepartmentId == departmentId.Value));
+        }
+
+        return await query.ToListAsync(ct);
+    }
+
+    private async Task<(string TermName, string ScopeName)> LoadTermAndScopeNamesAsync(
+        int termId, int? departmentId, CancellationToken ct)
+    {
+        var termName = await _context.AcademicTerms
+            .AsNoTracking()
+            .Where(t => t.Id == termId)
+            .Select(t => t.Name)
+            .FirstOrDefaultAsync(ct) ?? string.Empty;
+
+        var scopeName = departmentId.HasValue
+            ? await _context.Departments
+                .AsNoTracking()
+                .Where(d => d.Id == departmentId.Value)
+                .Select(d => d.Name)
+                .FirstOrDefaultAsync(ct) ?? "Bolum"
+            : "Tum sistem";
+
+        return (termName, scopeName);
+    }
+
+    /// <summary>H10 — ClassroomTermAssignment listesi + dept→faculty map.</summary>
+    private async Task<(List<ClassroomTermAssignmentInfo> Assignments, Dictionary<int, int> DeptFacultyMap)>
+        LoadFacultyClassroomDataAsync(int termId, CancellationToken ct)
+    {
+        var entities = await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Where(cta => cta.TermId == termId)
+            .ToListAsync(ct);
+
+        var assignments = entities
+            .Select(cta => new ClassroomTermAssignmentInfo(cta.ClassroomId, cta.FacultyId))
+            .ToList();
+
+        var deptFacultyMap = await _context.Departments
+            .AsNoTracking()
+            .ToDictionaryAsync(d => d.Id, d => d.FacultyId, ct);
+
+        return (assignments, deptFacultyMap);
+    }
+
+    /// <summary>H11 — Corequisite course çiftleri.</summary>
+    private async Task<List<CorequisitePair>> LoadCorequisitePairsAsync(CancellationToken ct) =>
+        await _context.CoursePrerequisites
+            .AsNoTracking()
+            .Where(cp => cp.IsCorequisite)
+            .Select(cp => new CorequisitePair(cp.CourseId, cp.RequiredCourseId))
+            .ToListAsync(ct);
+
+    /// <summary>S4 — Co-enrollment pairs (config-aware: S4 kapalıysa boş döner).</summary>
+    private async Task<List<CoEnrollmentRuntimePair>> LoadCoEnrollmentRuntimePairsAsync(
+        int termId, SoftConstraintConfig softCfg, CancellationToken ct)
+    {
+        if (!softCfg.S4Enabled)
+            return new List<CoEnrollmentRuntimePair>();
+
+        var rawPairs = await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, ct);
+        return rawPairs
+            .Select(p => new CoEnrollmentRuntimePair(p.CourseId1, p.CourseId2, p.StudentCount))
+            .ToList();
+    }
+
+    /// <summary>DIST — Distribution constraints (DistributionType + PreferenceLevel + Courses).</summary>
+    private async Task<List<RuntimeDistributionConstraint>> LoadDistributionConstraintsAsync(
+        int termId, CancellationToken ct)
+    {
+        var entities = await _context.DistributionConstraints
+            .AsNoTracking()
+            .Include(d => d.Courses)
+            .Where(d => d.TermId == termId)
+            .ToListAsync(ct);
+
+        return entities
+            .Select(dc => new RuntimeDistributionConstraint(
+                DistributionType: dc.DistributionType,
+                PreferenceLevel: dc.PreferenceLevel,
+                Courses: dc.Courses
+                    .OrderBy(c => c.SortOrder)
+                    .Select(c => new DistributionConstraintCourseInfo(c.CourseId, c.CourseSectionId, c.SortOrder))
+                    .ToList()))
+            .ToList();
+    }
+
+    /// <summary>
+    /// H17 — FaceToFaceSlotRestriction için (Day, StartTime) → AllowedMode lookup.
+    /// Duplicate (Day, StartTime) için OnlineOnly daha kısıtlayıcıdır → onu tercih et.
+    /// </summary>
+    private async Task<Dictionary<(int Day, TimeOnly StartTime), TimeSlotAllowedMode>>
+        LoadSlotAllowedModesAsync(int termId, CancellationToken ct)
+    {
+        var slotRecords = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .Select(ts => new { ts.DayOfWeek, ts.StartTime, ts.AllowedMode })
+            .ToListAsync(ct);
+
+        var result = new Dictionary<(int Day, TimeOnly StartTime), TimeSlotAllowedMode>();
+        foreach (var slot in slotRecords)
+        {
+            var key = ((int)slot.DayOfWeek, slot.StartTime);
+            if (!result.TryGetValue(key, out _)
+                || slot.AllowedMode == TimeSlotAllowedMode.OnlineOnly)
+            {
+                result[key] = slot.AllowedMode;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Loaded section entity'lerini paralel-split-aware RuntimeCandidate listesine çevirir.
+    /// Classroom lookup: query'de Include edilen Classroom'lardan inşa edilir (primary kapasite hesabı için).
+    /// </summary>
+    private static List<RuntimeCandidate> ProjectRuntimeCandidates(
+        List<CourseSection> sections,
+        IReadOnlyDictionary<int, string> instructorNameMap,
+        CourseSchedulingMetadata courseMetadata)
+    {
+        var classroomLookup = sections
+            .Where(s => s.Classroom != null)
+            .GroupBy(s => s.Classroom!.Id)
+            .ToDictionary(g => g.Key, g => g.First().Classroom!);
+
+        return sections
+            .Select(section => BuildExistingRuntimeCandidate(
+                section,
+                instructorNameMap,
+                courseMetadata.MinSuggestedSemesters,
+                courseMetadata.SuggestedSemestersByDepartment,
+                courseMetadata.AccessibleDepartments,
+                classroomLookup))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Manuel atama (Apply) yolu da AutoScheduleEngine ile AYNI mode'u kullanır.
+    /// ConflictPairsBuilder mode-branching tek otoritedir.
+    /// </summary>
+    private async Task<ConflictPairsResult> BuildConflictPairsAsync(
+        IReadOnlyList<RuntimeCandidate> candidates,
+        CourseSchedulingMetadata courseMetadata,
+        string curriculumConflictMode,
+        int enrollmentThreshold,
+        int termId,
+        CancellationToken ct)
+    {
+        var cohortRefs = candidates
+            .Select(c => new CohortSectionRef(c.SectionId, c.SectionNumber, c.CourseId))
+            .ToList();
+
+        return await ConflictPairsBuilder.BuildAsync(
+            curriculumConflictMode,
+            cohortRefs,
+            courseMetadata.SuggestedSemestersByDepartment,
+            courseMetadata.AccessibleDepartments,
+            enrollmentThreshold,
+            _context, termId, ct);
     }
 
     private static RuntimeCandidate BuildExistingRuntimeCandidate(
