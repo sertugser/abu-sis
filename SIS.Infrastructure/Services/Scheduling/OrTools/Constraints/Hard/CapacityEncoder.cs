@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
@@ -23,6 +24,13 @@ public sealed class CapacityEncoder : IConstraintEncoder
 
         foreach (var section in ctx.Request.Sections)
         {
+            // Online section'lar için ScheduleModelBuilder room IntVar oluşturmaz; Kapasite kısıtının
+            // anlamı yoktur. Guard atlanırsa GetLectureRoom/GetLabRooms KeyNotFoundException atar.
+            // (Diğer 3 hard room encoder — Distribution / ClassroomType / ClassroomConflict — aynı
+            // guard'a zaten sahip; CapacityEncoder'da eksikti.)
+            if (section.TeachingMethod == TeachingMethod.Online)
+                continue;
+
             // Lecture component (single room — unchanged)
             if (section.TheoryHours > 0)
             {
