@@ -4,7 +4,6 @@ using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.Scheduling.Solver;
 using SIS.Infrastructure.Services.Scheduling.Evaluators;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 using SIS.Infrastructure.Services.Scheduling.OrTools;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
@@ -23,24 +22,9 @@ public static class SchedulingServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddSchedulingConstraints(this IServiceCollection services)
     {
-        // Hard constraint evaluators
-        services.AddScoped<IConstraintEvaluator, CapacityEvaluator>();
-        services.AddScoped<IConstraintEvaluator, ClassroomTypeEvaluator>();
-        services.AddScoped<IConstraintEvaluator, FacultyClassroomEvaluator>();
-        services.AddScoped<IConstraintEvaluator, ClassroomConflictEvaluator>();
-        services.AddScoped<IConstraintEvaluator, InstructorConflictEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CurriculumConflictEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CourseComponentEvaluator>();
-        services.AddScoped<IConstraintEvaluator, SameCourseSectionEvaluator>();
-        services.AddScoped<IConstraintEvaluator, WeeklyLoadEvaluator>();
-        services.AddScoped<IConstraintEvaluator, DailyLoadEvaluator>();
-        services.AddScoped<IConstraintEvaluator, NoDayOffEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CorequisiteEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CreditHourEvaluator>();
-        services.AddScoped<IConstraintEvaluator, LunchBreakEvaluator>();
-        services.AddScoped<IConstraintEvaluator, MaxConsecutiveHoursEvaluator>();
-        services.AddScoped<IConstraintEvaluator, TheoryLabDaySplitEvaluator>();
-        services.AddScoped<IConstraintEvaluator, FaceToFaceSlotRestrictionEvaluator>();
+        // Plan 11 Faz 5 — Hard V1 evaluator'lar silindi (2026-05-15). RuleEngine + 17 IRulePredicate
+        // (Rules/Hard/H*.cs) tüm hard validation'ı üstlendi. Soft evaluator'lar Plan 11 scope dışı,
+        // ileride Plan 12'de ele alınır.
 
         // Soft constraint evaluators
         services.AddScoped<IConstraintEvaluator, OccupancyEvaluator>();

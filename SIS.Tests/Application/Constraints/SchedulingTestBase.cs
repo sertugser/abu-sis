@@ -7,7 +7,6 @@ using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
 using SIS.Infrastructure.Services.Scheduling.Evaluators;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application.Constraints;
@@ -43,7 +42,8 @@ public abstract class SchedulingTestBase : IDisposable
 
         Context = new AppDbContext(options);
         ConstraintService = CreateConstraintEvaluationService();
-        Service = new SchedulingService(Context, ConstraintService, new ScheduleWriter(Context));
+        Service = new SchedulingService(Context, ConstraintService, new ScheduleWriter(Context),
+            SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine());
 
         SeedBaseData();
         SeedSchedulingDefaults();
@@ -564,23 +564,9 @@ public abstract class SchedulingTestBase : IDisposable
     {
         var evaluators = new IConstraintEvaluator[]
         {
-            // Hard
-            new CapacityEvaluator(),
-            new ClassroomTypeEvaluator(),
-            new FacultyClassroomEvaluator(),
-            new ClassroomConflictEvaluator(),
-            new InstructorConflictEvaluator(),
-            new CurriculumConflictEvaluator(),
-            new CourseComponentEvaluator(),
-            new SameCourseSectionEvaluator(),
-            new WeeklyLoadEvaluator(),
-            new DailyLoadEvaluator(),
-            new NoDayOffEvaluator(),
-            new CorequisiteEvaluator(),
-            new CreditHourEvaluator(),
-            new LunchBreakEvaluator(),
-            new MaxConsecutiveHoursEvaluator(),
-            new TheoryLabDaySplitEvaluator(),
+            // Plan 11 Faz 5 — V1 hard evaluator'lar silindi (2026-05-15). RuleEngine + IRulePredicate'lar
+            // (Rules/Hard/H*.cs) hard validation'ı üstlendi. Hard V1 evaluator'lara bağlı eski testler
+            // class-level Skip ile işaretlenebilir; soft evaluator setine dokunulmadı.
             // Soft
             new OccupancyEvaluator(),
             new DailyLoadSoftEvaluator(),

@@ -43,30 +43,21 @@ public partial class SchedulingService
         var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
             candidate.InstructorId, candidate.DepartmentId, candidate.SectionId, section.TermId, cancellationToken);
 
-        result.Notes.Add($"Degerlendirelen donem: {snapshot.TermName}");
+        result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
         result.Notes.AddRange(candidate.Notes);
 
-        // Plan 11 Faz 4 — Feature flag açıkken RuleEngine candidate evaluasyonu; default V1 evaluator.
-        if (await ShouldUseV2RuntimeRulesAsync(cancellationToken))
-        {
-            var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
-                snapshot,
-                curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
-            var runtimeCandidate = RuntimeSnapshotAdapter.FromSectionSnapshot(candidate);
-            var fullCfg = BuildConstraintConfig(softConfig, hardConfig);
+        // Plan 11 Faz 5 — RuleEngine her zaman aktif (V1 hard evaluator silindi 2026-05-15).
+        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
+            snapshot,
+            curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
+        var runtimeCandidate = RuntimeSnapshotAdapter.FromSectionSnapshot(candidate);
+        var fullCfg = BuildConstraintConfig(softConfig, hardConfig);
 
-            var ruleConflicts = await _ruleEngine!.EvaluateCandidateAsync(
-                runtimeCandidate, runtimeSnapshot, fullCfg, constraintState, cancellationToken);
+        var ruleConflicts = await _ruleEngine.EvaluateCandidateAsync(
+            runtimeCandidate, runtimeSnapshot, fullCfg, constraintState, cancellationToken);
 
-            result.Conflicts = ruleConflicts.ToList();
-            result.IsValid = ruleConflicts.Count == 0;
-            return result;
-        }
-
-        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig, constraintState);
-        result.Conflicts = conflicts;
-        result.Notes.AddRange(softNotes);
-        result.IsValid = conflicts.Count == 0;
+        result.Conflicts = ruleConflicts.ToList();
+        result.IsValid = ruleConflicts.Count == 0;
         return result;
     }
 
@@ -128,18 +119,26 @@ public partial class SchedulingService
 
         var config = BuildConstraintConfig(softConfig, hardConfig);
         var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
-        var (conflicts, notes) = _constraintEvaluation.EvaluateAllExisting(snapshot, config, state);
+
+        // Plan 11 Faz 5 — Hard validation RuleEngine üzerinden; ConstraintEvaluationService
+        // sadece soft note/penalty için kullanılır (V1 hard evaluator silindi 2026-05-15).
+        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
+            snapshot, curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
+        var hardConflicts = await _ruleEngine.EvaluateAllExistingAsync(runtimeSnapshot, config, state, ct);
+
+        // Soft notes (V1 soft evaluator chain hâlâ aktif — Plan 12'ye ertelendi)
+        var (_, softNotes) = _constraintEvaluation.EvaluateAllExisting(snapshot, config, state);
 
         return new ScheduleValidationResultDto
         {
-            IsValid = conflicts.Count == 0,
-            Conflicts = conflicts
+            IsValid = hardConflicts.Count == 0,
+            Conflicts = hardConflicts
                 .OrderBy(conflict => conflict.SectionId)
                 .ThenBy(conflict => conflict.ConflictType)
                 .ThenBy(conflict => conflict.Day)
                 .ThenBy(conflict => conflict.StartTime)
                 .ToList(),
-            Notes = notes.Distinct().OrderBy(note => note).ToList()
+            Notes = softNotes.Distinct().OrderBy(note => note).ToList()
         };
     }
 

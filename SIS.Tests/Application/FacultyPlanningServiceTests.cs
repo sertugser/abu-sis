@@ -12,7 +12,6 @@ using SIS.Infrastructure.Persistence;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
 using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
@@ -37,9 +36,10 @@ public class FacultyPlanningServiceTests : IDisposable
         var constraintService = CreateConstraintEvaluationService();
         var autoScheduleEngine = new AutoScheduleEngine(_context, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
         var scheduleWriter = new ScheduleWriter(_context);
+        var ruleEngine = SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine();
         _service = new FacultyPlanningService(
             _context,
-            new SchedulingService(_context, constraintService, scheduleWriter),
+            new SchedulingService(_context, constraintService, scheduleWriter, ruleEngine),
             new HttpContextAccessor(),
             autoScheduleEngine,
             scheduleWriter,
@@ -435,23 +435,9 @@ public class FacultyPlanningServiceTests : IDisposable
 
     private ConstraintEvaluationService CreateConstraintEvaluationService()
     {
+        // Plan 11 Faz 5 — Hard V1 evaluator'lar silindi; soft kalır.
         var evaluators = new IConstraintEvaluator[]
         {
-            new CapacityEvaluator(),
-            new ClassroomTypeEvaluator(),
-            new FacultyClassroomEvaluator(),
-            new ClassroomConflictEvaluator(),
-            new InstructorConflictEvaluator(),
-            new CurriculumConflictEvaluator(),
-            new CourseComponentEvaluator(),
-            new SameCourseSectionEvaluator(),
-            new WeeklyLoadEvaluator(),
-            new DailyLoadEvaluator(),
-            new NoDayOffEvaluator(),
-            new CorequisiteEvaluator(),
-            new CreditHourEvaluator(),
-            new LunchBreakEvaluator(),
-            new MaxConsecutiveHoursEvaluator(),
             new OccupancyEvaluator(),
             new DailyLoadSoftEvaluator(),
             new SlotCongestionEvaluator(),
