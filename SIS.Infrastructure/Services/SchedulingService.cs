@@ -47,12 +47,11 @@ public partial class SchedulingService : ISchedulingService
         var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
         if (resolvedTerm == null) return new List<SchedulingConflictDto>();
 
-        var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
         var rawConfig = await LoadSystemConfigAsync(cancellationToken);
         var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
 
-        var (_, runtimeSnapshot) = await BuildRuntimeSnapshotAsync(
-            resolvedTerm.Id, null, null, hardCfg?.CurriculumConflictMode, cancellationToken);
+        var runtimeSnapshot = await BuildRuntimeSnapshotAsync(
+            resolvedTerm.Id, null, null, cancellationToken);
 
         var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, resolvedTerm.Id, cancellationToken);
         var conflicts = await _ruleEngine.EvaluateAllExistingAsync(runtimeSnapshot, fullCfg, state, cancellationToken);
@@ -121,17 +120,14 @@ public partial class SchedulingService : ISchedulingService
         // weighted soft penalty + ConstraintScoreItemDto üretimi RuleEngine içinde.
         // V1 ConstraintEvaluationService hâlâ DI'da (Faz 7'de silinecek); SimulationService gibi
         // diğer caller'lar Faz 6'da delege edilecek.
-        var snapshot = await BuildTermSnapshotAsync(termId, null, null, cancellationToken);
+        // BuildRuntimeSnapshotAsync zaten S4Enabled durumunda CoEnrollmentPairs yükler ve
+        // curriculumConflictMode'a göre Cohort/Enrollment veri ön-yüklemesini yapar.
+        var runtimeSnapshot = await BuildRuntimeSnapshotAsync(termId, null, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
 
-        if (softConfig.S4Enabled)
-            snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, cancellationToken);
-
         var config = BuildConstraintConfig(softConfig, hardConfig);
         var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
-        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
-            snapshot, curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
 
         return await _ruleEngine.EvaluateWithBreakdownAsync(runtimeSnapshot, config, state, cancellationToken);
     }

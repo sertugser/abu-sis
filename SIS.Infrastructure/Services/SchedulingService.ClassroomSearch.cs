@@ -62,7 +62,7 @@ public partial class SchedulingService
         string? buildingName = null,
         CancellationToken cancellationToken = default)
     {
-        var snapshot = await BuildTermSnapshotAsync(termId, null, null, cancellationToken);
+        var snapshot = await BuildRuntimeSnapshotAsync(termId, null, null, cancellationToken);
 
         var classroomQuery = _context.Classrooms.AsNoTracking().AsQueryable();
 
@@ -88,11 +88,11 @@ public partial class SchedulingService
         var classrooms = await classroomQuery.ToListAsync(cancellationToken);
 
         var occupiedSlots = snapshot.Sections
-            .Where(s => s.ClassroomId.HasValue)
-            .SelectMany(s => s.TimeBlocks.Select(tb => new
+            .Where(s => s.PrimaryClassroomId.HasValue)
+            .SelectMany(s => s.Blocks.Select(tb => new
             {
-                ClassroomId = s.ClassroomId!.Value,
-                Day = (int)tb.Day,
+                ClassroomId = s.PrimaryClassroomId!.Value,
+                Day = tb.Day,
                 StartHour = tb.StartTime.Hour,
                 EndHour = tb.EndTime.Minute > 0 ? tb.EndTime.Hour : tb.EndTime.Hour - 1
             }))
@@ -127,10 +127,10 @@ public partial class SchedulingService
             int used = weeklyUsage.TryGetValue(classroom.Id, out var u) ? u : 0;
 
             var classroomSchedules = snapshot.Sections
-                .Where(sec => sec.ClassroomId == classroom.Id)
-                .SelectMany(sec => sec.TimeBlocks.Select(tb => new ClassroomScheduleSlotDto
+                .Where(sec => sec.PrimaryClassroomId == classroom.Id)
+                .SelectMany(sec => sec.Blocks.Select(tb => new ClassroomScheduleSlotDto
                 {
-                    Day = (int)tb.Day,
+                    Day = tb.Day,
                     StartHour = tb.StartTime.Hour,
                     EndHour = tb.EndTime.Minute > 0 ? tb.EndTime.Hour : tb.EndTime.Hour - 1,
                     CourseCode = sec.CourseCode,

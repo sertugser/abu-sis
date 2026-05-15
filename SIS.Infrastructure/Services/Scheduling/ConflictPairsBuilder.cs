@@ -8,32 +8,24 @@ namespace SIS.Infrastructure.Services.Scheduling;
 /// <summary>
 /// Tek otorite müfredat çakışma çift üretici.
 ///
-/// PROBLEM: 3 farklı yer aynı mode-branching mantığını yazıyordu:
-///   1. AutoScheduleEngine.cs:230-249 (auto-schedule preview)
-///   2. SchedulingService.BuildTermSnapshotAsync:1546-1562 (manuel atama validate)
-///   3. (gelecekte) Excel import vb akışlar
-///
 /// Mode'lar (Schedule.CurriculumConflictMode config):
-///   - "curriculum" : eski agresif (CohortConflictPairs ve EnrollmentConflicts boş kalır,
-///                    H5 evaluator 3. branch'ine düşer ve aynı bölüm/yıl ders-bazlı kontrol yapar)
+///   - "curriculum" : eski agresif (Cohort/Enrollment veri yok → H5 ders-bazlı kontrol yapar)
 ///   - "cohort"     : (Dept, Year) cohort + adjacent year, bottleneck-aware modulo
 ///   - "enrollment" : gerçek öğrenci kayıt verisinden çakışma matrisi
 ///
-/// ÇÖZÜM: tüm mode-branching bu dosyada. AutoScheduleEngine ve SchedulingService
-/// aynı çağrıyı yapar; mode değiştiğinde tek yer güncellenir.
+/// AutoScheduleEngine, manuel atama (SchedulingService.Snapshot) ve Excel import gibi tüm
+/// akışlar bu builder'ı çağırır → mode değiştiğinde tek yer güncellenir.
 /// </summary>
 public static class ConflictPairsBuilder
 {
     /// <summary>
-    /// Verilen mode'a göre snapshot'a uygun konflikt verisini ekler.
-    /// "cohort" → CohortConflictPairs + AdjacentYearSoftPairs.
-    /// "enrollment" → EnrollmentConflicts (matrix).
-    /// "curriculum" veya bilinmeyen → hiçbir şey set edilmez (evaluator 3. branch'ine düşer).
+    /// Verilen mode'a göre çakışma ön-yükleme verisini üretir. RuntimeSnapshot inşaası
+    /// sırasında <see cref="ConflictPairsResult"/> RuntimeSnapshot init alanlarına geçirilir
+    /// (immutable record — mutation yok).
     /// </summary>
-    public static async Task ApplyToSnapshotAsync(
-        TermSnapshot snapshot,
+    public static async Task<ConflictPairsResult> BuildAsync(
         string mode,
-        IReadOnlyList<SectionSnapshot> sections,
+        IReadOnlyList<CohortSectionRef> sections,
         Dictionary<int, Dictionary<int, int>> courseSemestersByDept,
         Dictionary<int, HashSet<int>> courseAccessibleDepts,
         int enrollmentThreshold,
@@ -46,31 +38,30 @@ public static class ConflictPairsBuilder
             case "cohort":
             {
                 var cohortBuilder = new CohortBuilder();
-                var cohortRefs = sections
-                    .Select(s => new CohortSectionRef(s.SectionId, s.SectionNumber, s.CourseId))
-                    .ToList();
-                var assignment = cohortBuilder.Build(cohortRefs, courseSemestersByDept, courseAccessibleDepts);
-                snapshot.CohortConflictPairs = assignment.ConflictPairs;
-                snapshot.AdjacentYearSoftPairs = assignment.AdjacentYearSoftPairs;
-                break;
+                var assignment = cohortBuilder.Build(sections, courseSemestersByDept, courseAccessibleDepts);
+                return new ConflictPairsResult(
+                    CohortConflictPairs: assignment.ConflictPairs,
+                    AdjacentYearSoftPairs: assignment.AdjacentYearSoftPairs,
+                    EnrollmentConflicts: null);
             }
             case "enrollment":
             {
                 var sectionIds = sections.Select(s => s.SectionId);
-                snapshot.EnrollmentConflicts = await BuildEnrollmentMatrixAsync(
-                    context, termId, sectionIds, enrollmentThreshold, ct);
-                break;
+                var matrix = await BuildEnrollmentMatrixAsync(context, termId, sectionIds, enrollmentThreshold, ct);
+                return new ConflictPairsResult(
+                    CohortConflictPairs: null,
+                    AdjacentYearSoftPairs: null,
+                    EnrollmentConflicts: matrix);
             }
-            // "curriculum" veya bilinmeyen → evaluator 3. branch'i (ders-bazlı agresif kontrol).
-            // CohortConflictPairs ve EnrollmentConflicts null kalır, H5 default davranışına düşer.
+            default:
+                // "curriculum" veya bilinmeyen → evaluator default davranışına düşer.
+                return ConflictPairsResult.Empty;
         }
     }
 
     /// <summary>
     /// "enrollment" mode için gerçek öğrenci kayıt verisinden hard çakışma matrisi üretir.
     /// Hard threshold: bir section çiftini en az bu kadar ortak öğrenci alıyorsa pair hard.
-    /// Eski V1 <c>EnrollmentConflictMatrix.BuildAsync</c> portu — SoftConflictPairs alanı
-    /// hiç tüketilmediği için elenmiştir.
     /// </summary>
     private static async Task<EnrollmentConflictMatrix> BuildEnrollmentMatrixAsync(
         AppDbContext context,
@@ -119,4 +110,15 @@ public static class ConflictPairsBuilder
             HardConflictPairs = hard,
         };
     }
+}
+
+/// <summary>
+/// ConflictPairsBuilder.BuildAsync sonucu. RuntimeSnapshot init alanlarına doğrudan geçirilir.
+/// </summary>
+public sealed record ConflictPairsResult(
+    HashSet<(int, int)>? CohortConflictPairs,
+    HashSet<(int, int)>? AdjacentYearSoftPairs,
+    EnrollmentConflictMatrix? EnrollmentConflicts)
+{
+    public static readonly ConflictPairsResult Empty = new(null, null, null);
 }

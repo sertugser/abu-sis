@@ -100,7 +100,7 @@ internal static class TestRuleHelpers
             CourseName = $"Course {courseId}",
             DepartmentId = departmentId,
             InstructorId = instructorId,
-            InstructorName = instructorId.HasValue ? $"Hoca {instructorId}" : null,
+            InstructorName = instructorId.HasValue ? $"Hoca {instructorId}" : string.Empty,
             InstructorMaxWeeklyHours = instructorMaxWeeklyHours,
             Capacity = capacity,
             TheoryHours = theory,

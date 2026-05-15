@@ -27,7 +27,7 @@ public partial class SchedulingService
             return result;
         }
 
-        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
+        var snapshot = await BuildRuntimeSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
         var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
         result.ConflictsCount = evaluation.Conflicts?.Count ?? 0;
 
@@ -68,13 +68,13 @@ public partial class SchedulingService
 
         // Her derslik için o donemdeki dersleri haritala
         var classroomSchedules = snapshot.Sections
-            .Where(s => s.ClassroomId.HasValue)
-            .GroupBy(s => s.ClassroomId!.Value)
+            .Where(s => s.PrimaryClassroomId.HasValue)
+            .GroupBy(s => s.PrimaryClassroomId!.Value)
             .ToDictionary(
                 g => g.Key,
-                g => g.SelectMany(s => s.TimeBlocks.Select(slot => new ClassroomScheduleSlotDto
+                g => g.SelectMany(s => s.Blocks.Select(slot => new ClassroomScheduleSlotDto
                 {
-                    Day = (int)slot.Day,
+                    Day = slot.Day,
                     StartHour = slot.StartTime.Hour,
                     EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
                     CourseCode = s.CourseCode,
@@ -154,11 +154,11 @@ public partial class SchedulingService
         var occupationMap = new Dictionary<(int day, int slotOrder), List<ClassroomOccupationDto>>();
         foreach (var section in snapshot.Sections)
         {
-            if (section.ClassroomId.HasValue && filteredClassroomIds.Contains(section.ClassroomId.Value))
+            if (section.PrimaryClassroomId.HasValue && filteredClassroomIds.Contains(section.PrimaryClassroomId.Value))
             {
-                foreach (var block in section.TimeBlocks)
+                foreach (var block in section.Blocks)
                 {
-                    int dayIndex = (int)block.Day - 1;
+                    int dayIndex = block.Day - 1;
                     if (dayIndex >= 0 && dayIndex <= 4)
                     {
                         if (timeSlotsPerDay.TryGetValue(dayIndex, out var daySlots))
@@ -174,11 +174,11 @@ public partial class SchedulingService
                                     if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
                                     occupationMap[key].Add(new ClassroomOccupationDto
                                     {
-                                        ClassroomName = section.ClassroomName,
+                                        ClassroomName = section.PrimaryClassroomName,
                                         CourseCode = section.CourseCode,
                                         CourseName = section.CourseName,
                                         EnrolledCount = section.EnrolledCount,
-                                        Capacity = section.ClassroomCapacity
+                                        Capacity = section.PrimaryClassroomCapacity
                                     });
                                 }
                             }
@@ -199,11 +199,11 @@ public partial class SchedulingService
                                     if (!occupationMap.ContainsKey(key)) occupationMap[key] = new List<ClassroomOccupationDto>();
                                     occupationMap[key].Add(new ClassroomOccupationDto
                                     {
-                                        ClassroomName = section.ClassroomName,
+                                        ClassroomName = section.PrimaryClassroomName,
                                         CourseCode = section.CourseCode,
                                         CourseName = section.CourseName,
                                         EnrolledCount = section.EnrolledCount,
-                                        Capacity = section.ClassroomCapacity
+                                        Capacity = section.PrimaryClassroomCapacity
                                     });
                                 }
                             }

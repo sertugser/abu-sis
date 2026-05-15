@@ -17,15 +17,23 @@ public sealed record RuntimeCandidate
     public string CourseName { get; init; } = string.Empty;
     public int? DepartmentId { get; init; }
     public int? InstructorId { get; init; }
-    public string? InstructorName { get; init; }
+    public string InstructorName { get; init; } = string.Empty;
 
     /// <summary>0 ise no override (V2 WeeklyLoadEncoder default fallback uygulanır).</summary>
     public int InstructorMaxWeeklyHours { get; init; }
 
     public int Capacity { get; init; }
+    public int EnrolledCount { get; init; }
     public int TheoryHours { get; init; }
     public int LabHours { get; init; }
     public TeachingMethod TeachingMethod { get; init; } = TeachingMethod.FaceToFace;
+
+    /// <summary>Primary (UI gösterim için) derslik metadata — paralel-split'te ilk pencereden türetilir.
+    /// Blocks boş ise (atanmamış section) bu alanlar fallback olur.</summary>
+    public int? PrimaryClassroomId { get; init; }
+    public string PrimaryClassroomName { get; init; } = string.Empty;
+    public int PrimaryClassroomCapacity { get; init; }
+    public ClassroomType PrimaryClassroomType { get; init; }
 
     /// <summary>H4 Theory classroom type override (Course.TheoryClassroomType).</summary>
     public int? RequiredTheoryClassroomType { get; init; }
