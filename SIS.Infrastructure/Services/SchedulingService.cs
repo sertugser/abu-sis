@@ -47,14 +47,12 @@ public partial class SchedulingService : ISchedulingService
         var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
         if (resolvedTerm == null) return new List<SchedulingConflictDto>();
 
-        var termSnapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
         var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
         var rawConfig = await LoadSystemConfigAsync(cancellationToken);
         var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
 
-        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
-            termSnapshot,
-            curriculumConflictMode: hardCfg?.CurriculumConflictMode ?? "curriculum");
+        var (_, runtimeSnapshot) = await BuildRuntimeSnapshotAsync(
+            resolvedTerm.Id, null, null, hardCfg?.CurriculumConflictMode, cancellationToken);
 
         var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, resolvedTerm.Id, cancellationToken);
         var conflicts = await _ruleEngine.EvaluateAllExistingAsync(runtimeSnapshot, fullCfg, state, cancellationToken);

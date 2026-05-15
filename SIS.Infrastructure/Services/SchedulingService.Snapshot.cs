@@ -20,6 +20,27 @@ namespace SIS.Infrastructure.Services;
 /// </summary>
 public partial class SchedulingService
 {
+    /// <summary>
+    /// Plan 13 Faz 8 helper — TermSnapshot inşa et + RuntimeSnapshotAdapter ile çevir.
+    /// 9 caller'da tekrar eden 2-adımı tek method'a sarar. İlerideki Faz 8 tam refactor
+    /// (V1 TermSnapshot/SectionSnapshot tipleri silme) bu method'un içeriğini direkt DB→Runtime
+    /// dönüşümüne değiştirir; caller'lar değişmez.
+    /// </summary>
+    internal async Task<(TermSnapshot TermSnapshot, SIS.Application.Scheduling.Rules.RuntimeSnapshot RuntimeSnapshot)>
+        BuildRuntimeSnapshotAsync(
+            int termId,
+            int? excludedSectionId,
+            int? departmentId,
+            string? curriculumConflictMode,
+            CancellationToken cancellationToken)
+    {
+        var termSnapshot = await BuildTermSnapshotAsync(termId, excludedSectionId, departmentId, cancellationToken);
+        var runtimeSnapshot = SIS.Infrastructure.Services.Scheduling.Rules.RuntimeSnapshotAdapter.FromTermSnapshot(
+            termSnapshot,
+            curriculumConflictMode: curriculumConflictMode ?? "curriculum");
+        return (termSnapshot, runtimeSnapshot);
+    }
+
     internal async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
     {
         var sectionsQuery = _context.CourseSections

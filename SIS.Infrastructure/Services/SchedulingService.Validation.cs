@@ -37,20 +37,18 @@ public partial class SchedulingService
             return result;
         }
 
-        var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
         var constraintState = await _constraintStateLoader.LoadConstraintStateAsync(
             candidate.InstructorId, candidate.DepartmentId, candidate.SectionId, section.TermId, cancellationToken);
 
+        var (snapshot, runtimeSnapshot) = await BuildRuntimeSnapshotAsync(
+            section.TermId, section.Id, null, hardConfig?.CurriculumConflictMode, cancellationToken);
+
         result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
         result.Notes.AddRange(candidate.Notes);
 
-        // Plan 11 Faz 5 — RuleEngine her zaman aktif (V1 hard evaluator silindi 2026-05-15).
-        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
-            snapshot,
-            curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
         var runtimeCandidate = RuntimeSnapshotAdapter.FromSectionSnapshot(candidate);
         var fullCfg = BuildConstraintConfig(softConfig, hardConfig);
 
