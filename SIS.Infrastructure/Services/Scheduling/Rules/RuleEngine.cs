@@ -61,6 +61,39 @@ public sealed class RuleEngine : IRuleEngine
         return Task.FromResult<IReadOnlyList<SchedulingConflictDto>>(all);
     }
 
+    /// <summary>
+    /// Plan 12 Faz 1 STUB — Faz 4'te gerçek implementasyon: soft predicate'lar üzerinde
+    /// dispatch + ConstraintScoreItemDto üretimi. Şu an boş breakdown döner; mevcut V1
+    /// path bozulmaz çünkü SchedulingService.GetScoreBreakdownAsync hâlâ ConstraintEvaluationService
+    /// çağırıyor (Faz 5'te delegasyon yapılacak).
+    /// </summary>
+    public Task<ScoreBreakdownDto> EvaluateWithBreakdownAsync(
+        RuntimeSnapshot snapshot,
+        SchedulingConstraintConfig config,
+        ConstraintState? state,
+        CancellationToken ct)
+    {
+        return Task.FromResult(new ScoreBreakdownDto(
+            TotalHardViolations: 0,
+            TotalSoftPenalty: 0,
+            Feasible: true,
+            Constraints: Array.Empty<ConstraintScoreItemDto>()));
+    }
+
+    /// <summary>
+    /// Plan 12 Faz 1 STUB — Faz 4'te gerçek implementasyon: candidate üzerinde soft
+    /// predicate'ları çalıştırıp weighted penalty toplamı döner. Şimdilik 0.
+    /// </summary>
+    public Task<double> CalculateCandidatePenaltyAsync(
+        RuntimeCandidate candidate,
+        RuntimeSnapshot snapshot,
+        SchedulingConstraintConfig config,
+        ConstraintState? state,
+        CancellationToken ct)
+    {
+        return Task.FromResult(0.0);
+    }
+
     // Predicate'ları sırayla çağır, Plan 10 disable/exempt/category mantığı uygula.
     // Faz 2.4'te boş predicate set olduğu için boş döner; Faz 3.N'lerde gerçek predicate'lar
     // DI'a eklendikçe etkili çalışır.

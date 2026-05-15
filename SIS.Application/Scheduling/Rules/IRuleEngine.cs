@@ -32,4 +32,27 @@ public interface IRuleEngine
         SchedulingConstraintConfig config,
         ConstraintState? state,
         CancellationToken ct);
+
+    /// <summary>
+    /// Plan 12 — Tüm snapshot için score breakdown üretir: hard violation count + per-constraint
+    /// soft penalty kalemleri. <c>GetScoreBreakdownAsync</c> + <c>SimulationService</c> bu method'u
+    /// çağırır. V1 <c>ConstraintEvaluationService.EvaluateWithBreakdown</c> portu.
+    /// </summary>
+    Task<ScoreBreakdownDto> EvaluateWithBreakdownAsync(
+        RuntimeSnapshot snapshot,
+        SchedulingConstraintConfig config,
+        ConstraintState? state,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Plan 12 — Tek candidate için soft penalty toplamı. V1
+    /// <c>ConstraintEvaluationService.CalculatePenalty</c> portu. Auto-schedule optimizer
+    /// (Plan 13 SA/LNS rollback) ve simulation suggestion path için tutulur.
+    /// </summary>
+    Task<double> CalculateCandidatePenaltyAsync(
+        RuntimeCandidate candidate,
+        RuntimeSnapshot snapshot,
+        SchedulingConstraintConfig config,
+        ConstraintState? state,
+        CancellationToken ct);
 }

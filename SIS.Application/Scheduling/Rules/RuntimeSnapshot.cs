@@ -40,10 +40,56 @@ public sealed class RuntimeSnapshot
 
     /// <summary>H5 enrollment mode: gerçek kayıt verisinden hard çakışma çiftleri.</summary>
     public EnrollmentConflictMatrix? EnrollmentConflicts { get; init; }
+
+    /// <summary>
+    /// Plan 12 — S4 CoEnrollment için: ortak alınan course çiftleri ve öğrenci sayıları.
+    /// <c>SchedulingService.LoadCoEnrollmentPairsAsync</c> tarafından (S4 enabled ise) doldurulur.
+    /// </summary>
+    public IReadOnlyList<CoEnrollmentRuntimePair> CoEnrollmentPairs { get; init; }
+        = Array.Empty<CoEnrollmentRuntimePair>();
+
+    /// <summary>
+    /// Plan 12 — S20 AdjacentYear için: komşu yıl ders çiftleri (sec1, sec2).
+    /// <c>TermSnapshot.AdjacentYearSoftPairs</c> portu — RuntimeSnapshotAdapter doldurur.
+    /// </summary>
+    public IReadOnlySet<(int FirstSectionId, int SecondSectionId)> AdjacentYearSoftPairs { get; init; }
+        = new HashSet<(int, int)>();
+
+    /// <summary>
+    /// Plan 12 — DIST DistributionConstraint preload set'i. Per-instructor slot tercihleri.
+    /// </summary>
+    public IReadOnlyList<DistributionConstraintInfo> DistributionConstraints { get; init; }
+        = Array.Empty<DistributionConstraintInfo>();
 }
 
 public sealed record ClassroomTermAssignmentInfo(int ClassroomId, int FacultyId);
 public sealed record CorequisitePair(int CourseId, int RequiredCourseId);
+
+/// <summary>
+/// Plan 12 — S4 CoEnrollment pair (Course ↔ Course, common student count).
+/// V1 <see cref="SIS.Infrastructure.Services.Scheduling.CoEnrollmentPair"/> portu.
+/// </summary>
+public sealed record CoEnrollmentRuntimePair(int FirstCourseId, int SecondCourseId, int StudentCount);
+
+/// <summary>
+/// Plan 12 — DIST DistributionConstraint per-section slot tercih bilgisi.
+/// Level değerleri: Unavailable (hard ban) → Evaluator hard ihlal; Discouraged/Preferred → soft penalty.
+/// </summary>
+public sealed record DistributionConstraintInfo(
+    int InstructorId,
+    int Day,
+    TimeOnly StartTime,
+    TimeOnly EndTime,
+    DistributionPreferenceLevel Level);
+
+public enum DistributionPreferenceLevel
+{
+    Unavailable = 0,
+    StronglyDiscouraged = 1,
+    Discouraged = 2,
+    Neutral = 3,
+    Preferred = 4,
+}
 
 /// <summary>
 /// Plan 11 — H5 enrollment mode (`Schedule.CurriculumConflictMode = "enrollment"`) için
