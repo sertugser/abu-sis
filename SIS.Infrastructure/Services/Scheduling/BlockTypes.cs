@@ -1,10 +1,9 @@
+using SIS.Application.Scheduling.Constraints;
+
 namespace SIS.Infrastructure.Services.Scheduling;
 
-/// <summary>
-/// Schedule bloku tipi. Plan 9 sonrası v1 engine silindi; bu type'lar evaluator'lar +
-/// SectionSnapshot yapıları tarafından hâlâ kullanılıyor (constraint preview, simulation).
-/// </summary>
-public enum BlockType { Theory, Lab }
+// Plan 11 Faz 2 — BlockType enum SIS.Application.Scheduling.Constraints'e taşındı; bu dosyada
+// kalan BlockAssignment + BlockCombination Infrastructure-internal kullanımlar.
 
 /// <summary>
 /// Bir section'ın belirli bir gün/saat aralığındaki yerleşimini ifade eder.

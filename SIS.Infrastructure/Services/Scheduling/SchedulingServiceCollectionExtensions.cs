@@ -168,6 +168,11 @@ public static class SchedulingServiceCollectionExtensions
         // Engine
         services.AddScoped<ISolverEngine, CpSatSolverEngine>();
 
+        // ── Plan 11 — RuleEngine (Faz 2.4) ─────────────────────────────
+        // IRulePredicate'lar Faz 3'te per-rule eklendikçe DI'a register edilir.
+        // RuleEngine boş predicate seti ile bile boş violation döner — safe scaffold.
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRuleEngine, Rules.RuleEngine>();
+
         return services;
     }
 }
