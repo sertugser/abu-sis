@@ -48,9 +48,7 @@ Faz 1.3'te 3 kapı `SkipHardValidation=true` ise bypass'lanacak şekilde patch'l
 
 ---
 
-## ConstraintException Tablosu Audit
-
-Production DB'sindeki kural başına istisna sayım (Plan 11 Faz 0.5'te doldurulacak):
+## ConstraintException Tablosu Audit (2026-05-15)
 
 ```sql
 SELECT cd."Code", COUNT(*) FROM "ConstraintExceptions" ce
@@ -58,9 +56,11 @@ JOIN "ConstraintDefinitions" cd ON cd."Id" = ce."ConstraintDefinitionId"
 GROUP BY cd."Code";
 ```
 
-| Code | Count | Not |
-|---|---|---|
-| _Faz 0.5'te doldur_ | — | — |
+**Sonuç:** 0 satır. Production'da hiçbir kural başına istisna kaydı yok.
+
+| Toplam | Not |
+|---|---|
+| **0** | Faz 3'te `IRulePredicate` exempt davranışı sentetik test verisi ile doğrulanır. Migration veya backfill ihtiyacı yok. |
 
 ---
 
