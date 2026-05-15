@@ -47,7 +47,10 @@ public static class ConflictPairsBuilder
             case "cohort":
             {
                 var cohortBuilder = new CohortBuilder();
-                var assignment = cohortBuilder.Build(sections, courseSemestersByDept, courseAccessibleDepts);
+                var cohortRefs = sections
+                    .Select(s => new CohortSectionRef(s.SectionId, s.SectionNumber, s.CourseId))
+                    .ToList();
+                var assignment = cohortBuilder.Build(cohortRefs, courseSemestersByDept, courseAccessibleDepts);
                 snapshot.CohortConflictPairs = assignment.ConflictPairs;
                 snapshot.AdjacentYearSoftPairs = assignment.AdjacentYearSoftPairs;
                 break;

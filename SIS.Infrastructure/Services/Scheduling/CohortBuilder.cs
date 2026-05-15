@@ -1,3 +1,5 @@
+using SIS.Application.Scheduling.Rules;
+
 namespace SIS.Infrastructure.Services.Scheduling;
 
 public sealed class CohortAssignment
@@ -19,10 +21,18 @@ public sealed class CohortAssignment
     public HashSet<(int SectionId1, int SectionId2)> AdjacentYearSoftPairs { get; init; } = new();
 }
 
+/// <summary>
+/// Cohort (DeptId, Year) gruplama + bottleneck-aware modulo pair üretici.
+/// Build SADECE (SectionId, SectionNumber, CourseId) tuple'ına bağımlıdır — bu nedenle
+/// hafif <see cref="CohortSectionRef"/> projeksiyonu kabul eder. Hem RuntimeCandidate
+/// hem de CP-SAT SectionInput'tan üretilebilir.
+/// </summary>
+public sealed record CohortSectionRef(int SectionId, int SectionNumber, int CourseId);
+
 public sealed class CohortBuilder
 {
     public CohortAssignment Build(
-        IReadOnlyList<SectionSnapshot> sections,
+        IReadOnlyList<CohortSectionRef> sections,
         Dictionary<int, Dictionary<int, int>> courseSemestersByDept,
         Dictionary<int, HashSet<int>> courseAccessibleDepts)
     {
@@ -31,7 +41,7 @@ public sealed class CohortBuilder
         var adjacentYearSoftPairs = new HashSet<(int, int)>();
 
         // 1. Group sections by (DeptId, Year)
-        var deptYearGroups = new Dictionary<(int DeptId, int Year), List<SectionSnapshot>>();
+        var deptYearGroups = new Dictionary<(int DeptId, int Year), List<CohortSectionRef>>();
 
         foreach (var section in sections)
         {
@@ -48,7 +58,7 @@ public sealed class CohortBuilder
                 var year = (semester - 1) / 2;
                 var key = (deptId, year);
                 if (!deptYearGroups.ContainsKey(key))
-                    deptYearGroups[key] = new List<SectionSnapshot>();
+                    deptYearGroups[key] = new List<CohortSectionRef>();
                 deptYearGroups[key].Add(section);
             }
         }
@@ -135,8 +145,8 @@ public sealed class CohortBuilder
     /// </summary>
     private static void AddModuloPairs(
         HashSet<(int, int)> set,
-        List<SectionSnapshot> sectionsA,
-        List<SectionSnapshot> sectionsB)
+        List<CohortSectionRef> sectionsA,
+        List<CohortSectionRef> sectionsB)
     {
         var pairCount = Math.Min(sectionsA.Count, sectionsB.Count);
         for (var i = 0; i < pairCount; i++)
@@ -153,8 +163,8 @@ public sealed class CohortBuilder
     /// </summary>
     private static void AddCoursePairConflicts(
         HashSet<(int, int)> conflictPairs,
-        List<SectionSnapshot> sectionsA,
-        List<SectionSnapshot> sectionsB)
+        List<CohortSectionRef> sectionsA,
+        List<CohortSectionRef> sectionsB)
     {
         if (sectionsA.Count == 1 || sectionsB.Count == 1)
         {

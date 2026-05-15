@@ -187,17 +187,13 @@ public sealed class SolverRequestBuilder
             var (courseSemestersByDept, courseAccessibleDepts) =
                 await LoadCohortMetadataAsync(cohortCourseIds, cancellationToken);
 
-            // Project SectionInput → SectionSnapshot for v1 CohortBuilder reuse.
-            var sectionSnapshots = sections.Select(s => new SectionSnapshot
-            {
-                SectionId = s.Id,
-                SectionNumber = s.SectionNumber,
-                CourseId = s.CourseId,
-                CourseCode = s.CourseCode
-            }).ToList();
+            // Project SectionInput → CohortSectionRef (CohortBuilder needs only SectionId, SectionNumber, CourseId).
+            var cohortRefs = sections
+                .Select(s => new CohortSectionRef(s.Id, s.SectionNumber, s.CourseId))
+                .ToList();
 
             var cohortBuilder = new CohortBuilder();
-            cohortAssignment = cohortBuilder.Build(sectionSnapshots, courseSemestersByDept, courseAccessibleDepts);
+            cohortAssignment = cohortBuilder.Build(cohortRefs, courseSemestersByDept, courseAccessibleDepts);
 
             cohortConflictPairs = cohortAssignment.ConflictPairs
                 .Select(p => (p.SectionId1, p.SectionId2))
