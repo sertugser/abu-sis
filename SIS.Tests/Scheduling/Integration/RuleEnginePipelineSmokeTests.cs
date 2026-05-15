@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Enums;
 using SIS.Tests.Application.Constraints;
@@ -84,6 +85,97 @@ public sealed class RuleEnginePipelineSmokeTests : SchedulingTestBase
 
         result.IsValid.Should().BeFalse();
         result.Conflicts.Should().Contain(c => c.ConflictType == ClassroomConflict);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_RejectsConflictingAssignment_DoesNotPersist()
+    {
+        // Plan 11 silent bug regression guard: ApplyAsync, ValidateAsync üzerinden RuleEngine'a
+        // delegasyon yapar. Validation IsValid=false ise SectionSchedule yazılmamalı.
+        var instructor = AddInstructor(1, maxWeeklyHours: 20);
+        var room = AddClassroom(1, "D101", 30);
+        var courseA = AddCourse(1, "CENG401", theoryHours: 2);
+        var courseB = AddCourse(2, "CENG402", theoryHours: 2);
+
+        AddSection(1001, courseA.Id, instructor.Id, room.Id, capacity: 30,
+            (DayOfWeek.Monday, 9, 0, 11, 0));
+        AddSection(1002, courseB.Id, instructor.Id, classroomId: null, capacity: 30);
+        AddClassroomAssignment(7001, room.Id, EngineeringFacultyId);
+
+        var request = new ApplyScheduleRequestDto
+        {
+            SectionId = 1002,
+            ClassroomId = room.Id,
+            ScheduleSlots = Slots((DayOfWeek.Monday, 9, 0, 11, 0)),
+        };
+
+        var result = await Service.ApplyAsync(request);
+
+        result.IsValid.Should().BeFalse(because: "Çakışma tespit edilen apply request reddedilmeli");
+        result.Notes.Should().Contain(n => n.Contains("uygulanmadı"));
+
+        // DB seviyesinde: section 1002 hâlâ classroom'suz ve schedule'sız olmalı.
+        var persisted = await Context.CourseSections
+            .Include(cs => cs.SectionSchedules)
+            .FirstAsync(cs => cs.Id == 1002);
+        persisted.ClassroomId.Should().BeNull(because: "Reddedilen apply DB'ye classroom atamamalı");
+        persisted.SectionSchedules.Should().BeEmpty(because: "Reddedilen apply SectionSchedule yazmamalı");
+    }
+
+    [Fact]
+    public async Task ApplyAsync_NoConflict_PersistsAndReturnsValid()
+    {
+        // ApplyAsync happy path: çakışma yoksa SectionSchedule yazılır, section.ClassroomId güncellenir.
+        var instructor = AddInstructor(1, maxWeeklyHours: 20);
+        var room = AddClassroom(1, "D101", 40);
+        // 2 saatlik teori → 2x 1-saat TimeSlot oluştur; ScheduleWriter her slot için ayrı
+        // TimeSlot row beklediği için "1 saat = 1 slot" rejimine uyuyoruz.
+        var course = AddCourse(1, "CENG501", theoryHours: 2);
+        AddSection(2001, course.Id, instructor.Id, classroomId: null, capacity: 30);
+        AddClassroomAssignment(7001, room.Id, EngineeringFacultyId);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Wednesday, 13, 0, 14, 0);
+        AddTimeSlot(ActiveTermId, DayOfWeek.Wednesday, 14, 0, 15, 0);
+
+        var request = new ApplyScheduleRequestDto
+        {
+            SectionId = 2001,
+            ClassroomId = room.Id,
+            ScheduleSlots = Slots(
+                (DayOfWeek.Wednesday, 13, 0, 14, 0),
+                (DayOfWeek.Wednesday, 14, 0, 15, 0)),
+        };
+
+        var result = await Service.ApplyAsync(request);
+
+        result.IsValid.Should().BeTrue(because: $"Temiz slot apply'ı kabul edilmeli, ancak: {string.Join(", ", result.Conflicts.Select(c => c.ConflictType))}");
+        result.Notes.Should().Contain(n => n.Contains("başarıyla uygulanarak kaydedildi"));
+
+        var persisted = await Context.CourseSections
+            .Include(cs => cs.SectionSchedules).ThenInclude(ss => ss.TimeSlot)
+            .FirstAsync(cs => cs.Id == 2001);
+        persisted.ClassroomId.Should().Be(room.Id);
+        persisted.SectionSchedules.Should().HaveCount(2);
+        persisted.SectionSchedules.Should().AllSatisfy(s =>
+        {
+            s.TimeSlot.DayOfWeek.Should().Be(DayOfWeek.Wednesday);
+            s.ClassroomId.Should().Be(room.Id);
+        });
+    }
+
+    [Fact]
+    public async Task GetConflictsAsync_ReturnsDashboardConflicts_FromRuleEngine()
+    {
+        // Dashboard endpoint'i (SchedulingService.GetConflictsAsync) RuleEngine'a delegasyon yapıyor.
+        // Çakışmalı 2 section seed edilirse dönüş listesinde H1+H2+H8 yer almalı.
+        BuildConflictDataset();
+
+        var conflicts = await Service.GetConflictsAsync(ActiveTermId);
+
+        conflicts.Should().NotBeEmpty();
+        var types = conflicts.Select(c => c.ConflictType).Distinct().ToHashSet();
+        types.Should().Contain(ClassroomConflict);
+        types.Should().Contain(InstructorConflict);
+        types.Should().Contain(SameCourseSectionConflict);
     }
 
     [Fact]
