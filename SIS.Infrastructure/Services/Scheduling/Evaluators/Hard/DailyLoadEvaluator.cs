@@ -17,6 +17,11 @@ public sealed class DailyLoadEvaluator : IConstraintEvaluator
         if (!c.InstructorId.HasValue || c.TimeBlocks.Count == 0)
             return ConstraintResult.Ok();
 
+        // Plan 11 Faz 1.2 — hardcoded 9 yerine effectiveConfig.MaxDailyHours okunur.
+        // V2 DailyLoadEncoder ile parite: admin Schedule.MaxDailyHoursPerInstructor'ı değiştirince
+        // veya per-constraint Parameters JSON {"MaxDailyHours": N} verince override edilir.
+        var maxDailyHours = context.Config.MaxDailyHours;
+
         var instructorSections = context.Snapshot.Sections
             .Where(s => s.InstructorId == c.InstructorId && s.TimeBlocks.Count > 0)
             .ToList();
@@ -31,14 +36,14 @@ public sealed class DailyLoadEvaluator : IConstraintEvaluator
         foreach (var dayGroup in dailyGroups)
         {
             var dailyHours = dayGroup.Sum(slot => (slot.EndTime - slot.StartTime).TotalHours);
-            if (dailyHours <= 9)
+            if (dailyHours <= maxDailyHours)
                 continue;
 
             var dayName = SchedulingHelpers.GetDayOfWeekName(dayGroup.Key);
             conflicts.Add(SchedulingHelpers.BuildConflict(
                 c,
                 "DailyLoadConflict",
-                $"Öğretim üyesi '{c.InstructorName}' {dayName} günü {dailyHours:0.#} saat ders veriyor (maks 9 saat).",
+                $"Öğretim üyesi '{c.InstructorName}' {dayName} günü {dailyHours:0.#} saat ders veriyor (maks {maxDailyHours} saat).",
                 null,
                 null));
         }

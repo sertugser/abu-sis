@@ -64,7 +64,9 @@ public partial class FacultyPlanningService
 
                 // H17 koruması: ders öğretim yöntemi ile slot AllowedMode uyumlu olmalı.
                 // TeachingMethodPolicy + SlotAllowedModePolicy üzerinden tek otorite kontrol.
-                if (!Scheduling.TeachingMethodPolicy.CanUseOnlineOnlySlots(section.Course.TeachingMethod)
+                // Plan 11 Faz 1.3 — SkipHardValidation true ise V2 zaten enforce etti, manuel duplicate skip.
+                if (!request.SkipHardValidation
+                    && !Scheduling.TeachingMethodPolicy.CanUseOnlineOnlySlots(section.Course.TeachingMethod)
                     && request.ScheduleSlots is { Count: > 0 })
                 {
                     var requestedSlotKeys = request.ScheduleSlots
@@ -129,9 +131,8 @@ public partial class FacultyPlanningService
 
                 // K1: Hoca günlük yük limiti kontrolü.
                 // Plan 11 Faz 1.1 — hardcoded 9 yerine SystemConfig'ten okur (V2 DailyLoadEncoder ile parite).
-                // Admin Schedule.MaxDailyHoursPerInstructor'ı değiştirince hem V2 atama hem K1 runtime check
-                // aynı eşiği kullanır, drift kapanır.
-                if (request.ScheduleSlots is { Count: > 0 })
+                // Plan 11 Faz 1.3 — SkipHardValidation true ise V2 zaten enforce etti, manuel duplicate skip.
+                if (!request.SkipHardValidation && request.ScheduleSlots is { Count: > 0 })
                 {
                     var maxDailyHours = await _systemConfig.GetIntAsync(
                         "Schedule.MaxDailyHoursPerInstructor", 9, ct);
@@ -207,8 +208,20 @@ public partial class FacultyPlanningService
                 }
             }
 
-            var conflicts = await _schedulingService.GetConflictsAsync(section.TermId, ct);
-            var sectionConflicts = conflicts.Where(c => c.SectionId == section.Id || c.RelatedSectionId == section.Id).ToList();
+            // Plan 11 Faz 1.3 — V2 apply path SkipHardValidation=true ise V1 evaluator
+            // zincirini de atla (paralel-lab ve V4 Amphi gibi drift kaynaklarına yol açıyordu).
+            // V2 encoder zaten tüm hard kuralları enforce etti; manuel atama (Skip=false) için
+            // tam V1 conflict listesi korunur.
+            List<SchedulingConflictDto> sectionConflicts;
+            if (request.SkipHardValidation)
+            {
+                sectionConflicts = new List<SchedulingConflictDto>();
+            }
+            else
+            {
+                var conflicts = await _schedulingService.GetConflictsAsync(section.TermId, ct);
+                sectionConflicts = conflicts.Where(c => c.SectionId == section.Id || c.RelatedSectionId == section.Id).ToList();
+            }
             result.Conflicts = sectionConflicts;
             result.Success = sectionConflicts.Count == 0;
 

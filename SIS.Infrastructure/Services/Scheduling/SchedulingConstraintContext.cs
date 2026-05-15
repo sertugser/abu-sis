@@ -23,6 +23,21 @@ public sealed class SchedulingConstraintConfig
     public bool AllowSameCourseSectionOverlap { get; set; }
 
     /// <summary>
+    /// Plan 11 Faz 1.2 — Hoca günlük max ders saati. V2 DailyLoadEncoder ile ortak kaynak.
+    /// SystemConfig: <c>Schedule.MaxDailyHoursPerInstructor</c> (default 9).
+    /// ConstraintParameterMapping üzerinden ConstraintDefinition.Parameters JSON
+    /// <c>{"MaxDailyHours": ...}</c> ile per-constraint override edilebilir.
+    /// </summary>
+    public int MaxDailyHours { get; set; } = 9;
+
+    /// <summary>
+    /// Plan 11 Faz 1.4 — H4 Amphi rule flag. V2 ClassroomTypeEncoder ile parite.
+    /// SystemConfig: <c>Schedule.AmphiThresholdEnabled</c> (default false).
+    /// False iken Capacity ≥ AmphiThreshold zorunluluğu kaldırılır (V2'de zaten flag-gated).
+    /// </summary>
+    public bool AmphiThresholdEnabled { get; set; } = false;
+
+    /// <summary>
     /// Kapasite yetersiz olduğunda paralel oda split'i yapılabilen block tipleri.
     /// Varsayılan: sadece Lab. Config: "Schedule.SplittableBlockTypes".
     /// </summary>
@@ -83,6 +98,10 @@ public sealed class SchedulingConstraintConfig
             MaxConsecutiveHours = 4,
             AmphiThreshold = 100,
             TheoryLabSplitThreshold = 4,
+
+            // Plan 11 Faz 1.2 + 1.4 — V2 encoder ile parite kaynaklar
+            MaxDailyHours = GetInt(config, "Schedule.MaxDailyHoursPerInstructor", 9),
+            AmphiThresholdEnabled = GetBool(config, "Schedule.AmphiThresholdEnabled", false),
 
             // Soft — aç/kapat tek otorite ConstraintDefinition.IsEnabled (state.IsDisabled).
             // Evaluator-içi defansif S*Enabled bayrakları daima true.

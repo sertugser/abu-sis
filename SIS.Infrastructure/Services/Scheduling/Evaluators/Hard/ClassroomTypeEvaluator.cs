@@ -44,8 +44,13 @@ public sealed class ClassroomTypeEvaluator : IConstraintEvaluator
                 null));
         }
 
-        // Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu
-        if (c.ClassroomId.HasValue
+        // Büyük dersler (kontenjan >= AmphiThreshold) → Amphitheater zorunlu.
+        // Plan 11 Faz 1.4 — V2 ClassroomTypeEncoder ile parite: AmphiThresholdEnabled flag-gated
+        // (default false). Production'da 0 Amphitheater envanteri olduğu için flag kapalı kalıyor;
+        // V2 bu kuralı zaten uygulamıyordu, V1 evaluator ise her zaman uyguluyordu → drift.
+        // Bu patch flag'i V1 tarafına da getirir.
+        if (config.AmphiThresholdEnabled
+            && c.ClassroomId.HasValue
             && c.Capacity >= config.AmphiThreshold
             && c.ClassroomType != ClassroomType.Amphitheater)
         {
