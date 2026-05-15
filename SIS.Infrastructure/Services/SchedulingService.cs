@@ -118,6 +118,11 @@ public partial class SchedulingService : ISchedulingService
 
     public async Task<ScoreBreakdownDto> GetScoreBreakdownAsync(int termId, CancellationToken cancellationToken = default)
     {
+        // Plan 12 Faz 5 — RuleEngine delegasyonu. V1 ConstraintEvaluationService.EvaluateWithBreakdown
+        // yerine V2 RuleEngine.EvaluateWithBreakdownAsync. Per-section dispatch, hard+soft toggle,
+        // weighted soft penalty + ConstraintScoreItemDto üretimi RuleEngine içinde.
+        // V1 ConstraintEvaluationService hâlâ DI'da (Faz 7'de silinecek); SimulationService gibi
+        // diğer caller'lar Faz 6'da delege edilecek.
         var snapshot = await BuildTermSnapshotAsync(termId, null, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
@@ -127,9 +132,10 @@ public partial class SchedulingService : ISchedulingService
 
         var config = BuildConstraintConfig(softConfig, hardConfig);
         var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
-        var weightMap = state.Definitions.ToDictionary(d => d.Key, d => d.Value.Weight);
+        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
+            snapshot, curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
 
-        return _constraintEvaluation.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        return await _ruleEngine.EvaluateWithBreakdownAsync(runtimeSnapshot, config, state, cancellationToken);
     }
 
     // ── Private helpers ──────────────────────────────────────────────────

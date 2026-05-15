@@ -163,6 +163,21 @@ public sealed class RuleEnginePipelineSmokeTests : SchedulingTestBase
     }
 
     [Fact]
+    public async Task GetScoreBreakdownAsync_ViaRuleEngine_ReturnsItems()
+    {
+        // Plan 12 Faz 5 — SchedulingService.GetScoreBreakdownAsync RuleEngine'a delege.
+        // Conflict dataset: section'larda H1/H2/H8 hard ihlali var, dolayısıyla
+        // breakdown.TotalHardViolations > 0 ve Constraints listesinde Hard kalemler olmalı.
+        BuildConflictDataset();
+
+        var breakdown = await Service.GetScoreBreakdownAsync(ActiveTermId);
+
+        breakdown.TotalHardViolations.Should().BeGreaterThan(0);
+        breakdown.Feasible.Should().BeFalse();
+        breakdown.Constraints.Should().Contain(c => c.Category == "Hard" && c.ViolationCount > 0);
+    }
+
+    [Fact]
     public async Task GetConflictsAsync_ReturnsDashboardConflicts_FromRuleEngine()
     {
         // Dashboard endpoint'i (SchedulingService.GetConflictsAsync) RuleEngine'a delegasyon yapıyor.

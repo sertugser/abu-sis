@@ -120,14 +120,17 @@ public partial class SchedulingService
         var config = BuildConstraintConfig(softConfig, hardConfig);
         var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
 
-        // Plan 11 Faz 5 — Hard validation RuleEngine üzerinden; ConstraintEvaluationService
-        // sadece soft note/penalty için kullanılır (V1 hard evaluator silindi 2026-05-15).
+        // Plan 12 Faz 5 — Hard + soft validation RuleEngine üzerinden. Soft note'lar
+        // EvaluateWithBreakdownAsync ConstraintScoreItemDto.SampleViolations'tan toplanır.
         var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
             snapshot, curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
         var hardConflicts = await _ruleEngine.EvaluateAllExistingAsync(runtimeSnapshot, config, state, ct);
+        var breakdown = await _ruleEngine.EvaluateWithBreakdownAsync(runtimeSnapshot, config, state, ct);
 
-        // Soft notes (V1 soft evaluator chain hâlâ aktif — Plan 12'ye ertelendi)
-        var (_, softNotes) = _constraintEvaluation.EvaluateAllExisting(snapshot, config, state);
+        var softNotes = breakdown.Constraints
+            .Where(item => item.Category == "Soft")
+            .SelectMany(item => item.SampleViolations)
+            .ToList();
 
         return new ScheduleValidationResultDto
         {
