@@ -38,6 +38,23 @@ public class RegistrationCleanupJobTests
         return (ctx, clock);
     }
 
+    private static void SeedCourse(AppDbContext ctx, int courseId = 1)
+    {
+        if (ctx.Courses.Any(course => course.Id == courseId))
+            return;
+
+        ctx.Courses.Add(new Course
+        {
+            Id = courseId,
+            Code = $"TEST{courseId}",
+            Name = "Test Course",
+            DepartmentId = null,
+            Ects = 5,
+            TheoryHours = 3,
+            LabHours = 0
+        });
+    }
+
     [Fact]
     public async Task CleansDraftRegistrations_WhenAddDropStartPassed()
     {
@@ -58,6 +75,7 @@ public class RegistrationCleanupJobTests
             }
         };
         ctx.AcademicTerms.Add(term);
+        SeedCourse(ctx);
         var section = new CourseSection { Id = 1, TermId = 1, EnrolledCount = 2, Status = CourseSectionStatus.Active, CourseId = 1 };
         ctx.CourseSections.Add(section);
         ctx.CourseRegistrations.AddRange(
@@ -93,6 +111,7 @@ public class RegistrationCleanupJobTests
             }
         };
         ctx.AcademicTerms.Add(term);
+        SeedCourse(ctx);
         ctx.CourseRegistrations.Add(
             new CourseRegistration { Id = 1, CourseSectionId = 1, StudentId = 1, Status = RegistrationStatus.Draft });
         ctx.CourseSections.Add(new CourseSection { Id = 1, TermId = 1, EnrolledCount = 1, Status = CourseSectionStatus.Active, CourseId = 1 });
@@ -123,6 +142,7 @@ public class RegistrationCleanupJobTests
             }
         };
         ctx.AcademicTerms.Add(term);
+        SeedCourse(ctx);
         ctx.CourseSections.Add(new CourseSection { Id = 1, TermId = 1, EnrolledCount = 1, Status = CourseSectionStatus.Active, CourseId = 1 });
         ctx.CourseRegistrations.Add(new CourseRegistration { Id = 1, CourseSectionId = 1, StudentId = 1, Status = RegistrationStatus.Draft });
         await ctx.SaveChangesAsync();

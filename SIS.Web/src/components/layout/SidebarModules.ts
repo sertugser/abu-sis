@@ -13,6 +13,7 @@ import {
   Briefcase,
   IdCard,
   HelpCircle,
+  FileBarChart,
 } from 'lucide-react';
 
 /**
@@ -36,6 +37,7 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   Briefcase,
   IdCard,
   HelpCircle,
+  FileBarChart,
 };
 
 export function resolveIcon(name: string | null | undefined): React.ComponentType<{ className?: string }> {

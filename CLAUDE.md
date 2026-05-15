@@ -210,6 +210,21 @@ Tam detay: [docs/CODEMAPS/permission-system.md](docs/CODEMAPS/permission-system.
 - Frontend: `SIS.Web/src/context/PermissionContext.tsx`, `hooks/useMenu.ts`, `components/admin/RolePermissionMatrix.tsx`
 - Seed: `SIS.Infrastructure/Persistence/Seeds/{Permission,MenuStructure,RolePermission}Seed.cs`
 
+### Permission Scope (Phase 2)
+
+Yetki sistemi artık ortogonal bir "scope" boyutuna da sahip. Scope-bound rol üyesi kullanıcılar
+şu an sadece `Dean` yetkili oldukları işlemleri yalnızca atanmış fakülte verisi üzerinde yapabilir.
+
+- Stored: `UserScopes` tablosu (`UserId`, `Kind`, `FacultyId`)
+- Read: `AppDbContext` içindeki EF query filter'ları `_scope.IsActive` aktifken otomatik faculty filtresi uygular
+- Write: `IScopeGuard.EnsureCanWrite(ScopeKind.Faculty, targetFacultyId)` create ve cross-faculty update akışlarında explicit çağrılır
+- Resolve helper: `IScopeResolver` department/program/course gibi FK zincirlerinden faculty çözer
+- SystemAdmin her zaman bypass eder (`ICurrentUserScope.IsActive == false`)
+- Bilinçli bypass: `query.WithoutScope()` sadece admin/cross-faculty operasyonlarında kullanılmalı
+
+Yeni bir entity faculty'e doğrudan veya dolaylı bağlıysa, scope gerekip gerekmediği kontrol edilip
+gerekliyse `OnModelCreating` query filter zincirine eklenmeli.
+
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports
 - ApplicationUser (IdentityUser) lives in SIS.Infrastructure/Persistence/
@@ -233,4 +248,3 @@ dotnet build                          # Build solution
 dotnet test                           # Run tests
 dotnet ef database update -p SIS.Infrastructure -s SIS.API  # Apply migrations
 ```
-

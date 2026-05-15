@@ -11,15 +11,18 @@ public class MenuService : IMenuService
 {
     private readonly AppDbContext _context;
     private readonly IPermissionService _permissionService;
+    private readonly IPermissionDelegationService _delegationService;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public MenuService(
         AppDbContext context,
         IPermissionService permissionService,
+        IPermissionDelegationService delegationService,
         UserManager<ApplicationUser> userManager)
     {
         _context = context;
         _permissionService = permissionService;
+        _delegationService = delegationService;
         _userManager = userManager;
     }
 
@@ -27,16 +30,23 @@ public class MenuService : IMenuService
     {
         // Patch 2C: Modül-bazlı role filter için user'ın role'lerini al.
         var user = await _userManager.FindByIdAsync(userId.ToString());
-        var userRoles = user is not null
+        var ownRoles = user is not null
             ? (await _userManager.GetRolesAsync(user)).ToHashSet(StringComparer.Ordinal)
             : new HashSet<string>(StringComparer.Ordinal);
 
-        // Patch 3 (panel switcher): activeRole verilmişse + kullanıcı o role'e sahipse →
-        // SADECE o role'in DB permission'ları (SystemAdmin shortcut bypass).
+        // Vekâlet (Phase 4): aktif vekâletten devralınan rolleri "selectable" set'e ekle.
+        // Mesut "DepartmentManager (vekâlet)" panelini seçebilsin diye activeRole gate
+        // own ∪ delegated set'ine bakar.
+        var delegatedRoles = await _delegationService.GetActiveDelegatedRoleNamesAsync(userId, ct);
+        var selectableRoles = new HashSet<string>(ownRoles, StringComparer.Ordinal);
+        foreach (var r in delegatedRoles) selectableRoles.Add(r);
+
+        // Patch 3 (panel switcher): activeRole verilmişse + kullanıcı o role'e sahipse
+        // (kendi role'i veya vekâletle devraldığı bir rol) → SADECE o role'in DB permission'ları.
         // Aksi halde tüm rollerin union'u (mevcut davranış).
         HashSet<string> permissions;
         HashSet<string> filterRoles;
-        if (!string.IsNullOrWhiteSpace(activeRole) && userRoles.Contains(activeRole))
+        if (!string.IsNullOrWhiteSpace(activeRole) && selectableRoles.Contains(activeRole))
         {
             permissions = await _permissionService.GetPermissionsByRoleNameAsync(activeRole, ct);
             // AllowedRolesCsv kontrolü için tek-rol set ver (multi-rol union yerine)
@@ -45,7 +55,8 @@ public class MenuService : IMenuService
         else
         {
             permissions = await _permissionService.GetUserPermissionsAsync(userId, ct);
-            filterRoles = userRoles;
+            // AllowedRolesCsv kontrolü: own roles + delegated (vekâlet de etkili sayılır)
+            filterRoles = selectableRoles;
         }
 
         // v2 perf: AsSplitQuery (cartesian explosion önler) + AsNoTracking (read-only).

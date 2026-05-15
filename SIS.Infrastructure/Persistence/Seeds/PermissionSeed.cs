@@ -358,6 +358,7 @@ public static class PermissionSeed
         ("menu.kullanici-grup-sinirlandirmalar.view",    PermissionCategory.Menu, "Kullanıcı grup sınırlandırmalar sayfası"),
         ("menu.kullanici-rapor-tasarim-gruplari.view",   PermissionCategory.Menu, "Kullanıcı rapor tasarım grupları sayfası"),
         ("menu.kullanici-vekalet-islemleri.view",        PermissionCategory.Menu, "Kullanıcı vekalet işlemleri sayfası"),
+        ("menu.kullanici-vekalet-islemleri.manage",      PermissionCategory.Menu, "Vekâlet oluşturma/iptal etme (audit'li)"),
         ("menu.audit-log.view",                          PermissionCategory.Menu, "Denetim kayıtları listesi/stats/anomalies"),
         ("menu.audit-log.export",                        PermissionCategory.Menu, "Denetim kayıtları CSV export"),
 
@@ -389,10 +390,23 @@ public static class PermissionSeed
         ("system.permission-bundle.view",                PermissionCategory.System, "Yetki paketi listesi/detayı görüntüleme (admin UI)"),
         ("system.permission-bundle.manage",              PermissionCategory.System, "Yetki paketi oluşturma/düzenleme/silme (admin UI)"),
         ("system.permission-bundle.apply",               PermissionCategory.System, "Yetki paketini role uygulama/kaldırma (admin UI)"),
+        ("system.user-scope.view",                       PermissionCategory.System, "Kullanıcı scope bilgisini görüntüleme (admin UI)"),
+        ("system.user-scope.assign",                     PermissionCategory.System, "Kullanıcı scope atama/güncelleme/temizleme (admin UI)"),
 
         // ─── menu.* (Phase 2 — Permission Bundles sayfası) ──────────────────
         ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası görüntüleme"),
         ("menu.kullanici-yetki-gruplari.manage",         PermissionCategory.Menu, "Kullanıcı yetki grupları oluşturma/düzenleme/silme"),
+
+        // ─── menu.* + system.* (Menü Yönetimi — Admin Menu Editor) ─────────
+        ("menu.menu-yonetimi.view",                      PermissionCategory.Menu, "Menü yönetimi sayfası görüntüleme"),
+        ("system.menu.view",                             PermissionCategory.System, "Menü ağacı (modül/item) okuma (admin UI)"),
+        ("system.menu.manage",                           PermissionCategory.System, "Menü modül/item oluşturma/düzenleme/silme/sıralama (admin UI)"),
+
+        // ─── menu.* (Phase 3 — Rapor Yetkilendirmesi, Kullanıcı Rapor Grupları sayfası altında) ─
+        ("menu.kullanici-rapor-gruplari.manage",         PermissionCategory.Menu, "Rapor kategorisi/raporu CRUD + kategori-rol matrix + per-rapor override yönetimi"),
+
+        // ─── menu.* (Phase 3 — Raporlarım son kullanıcı sayfası) ─
+        ("menu.raporlarim.view",                         PermissionCategory.Menu, "Kullanıcının erişebildiği raporları listeleyen 'Raporlarım' sayfası"),
     };
 
     /// <summary>

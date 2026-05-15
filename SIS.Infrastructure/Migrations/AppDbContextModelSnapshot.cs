@@ -3456,6 +3456,189 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("PermissionBundleItems");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Identity.PermissionDelegation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DelegateeUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DelegatorUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("EndsAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RevokeReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("RevokedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartsAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DelegatorUserId", "StartsAtUtc", "EndsAtUtc")
+                        .HasDatabaseName("IX_PermissionDelegations_Delegator");
+
+                    b.HasIndex("DelegateeUserId", "RevokedAtUtc", "StartsAtUtc", "EndsAtUtc")
+                        .HasDatabaseName("IX_PermissionDelegations_Delegatee_Active");
+
+                    b.ToTable("PermissionDelegations");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("ReportCategories");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportCategoryRolePermission", b =>
+                {
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("GrantedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CategoryId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("ReportCategoryRolePermissions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportDefinition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("ReportDefinitions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportPermissionOverride", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsAllowed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("ReportId", "RoleId")
+                        .IsUnique();
+
+                    b.ToTable("ReportPermissionOverrides");
+                });
+
             modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
                 {
                     b.Property<int>("Id")
@@ -3498,6 +3681,46 @@ namespace SIS.Infrastructure.Migrations
                         .HasFilter("\"SourceBundleId\" IS NOT NULL");
 
                     b.ToTable("RolePermissions");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.UserScope", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserScopes_UserId");
+
+                    b.HasIndex("UserId", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_UserScopes_UserId_Kind");
+
+                    b.ToTable("UserScopes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_UserScopes_Kind_Faculty", "(\"Kind\" = 1 AND \"FacultyId\" IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("SIS.Infrastructure.Persistence.ApplicationUser", b =>
@@ -4699,6 +4922,66 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Permission");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Identity.PermissionDelegation", b =>
+                {
+                    b.HasOne("SIS.Infrastructure.Persistence.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DelegateeUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Infrastructure.Persistence.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DelegatorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportCategoryRolePermission", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.ReportCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<int>", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportDefinition", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.ReportCategory", "Category")
+                        .WithMany("Reports")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportPermissionOverride", b =>
+                {
+                    b.HasOne("SIS.Domain.Identity.ReportDefinition", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<int>", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
             modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
                 {
                     b.HasOne("SIS.Domain.Identity.Permission", "Permission")
@@ -4721,6 +5004,20 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Permission");
 
                     b.Navigation("SourceBundle");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.UserScope", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Faculty", null)
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SIS.Infrastructure.Persistence.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
@@ -4858,6 +5155,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("AppliedRolePermissions");
 
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportCategory", b =>
+                {
+                    b.Navigation("Reports");
                 });
 #pragma warning restore 612, 618
         }
