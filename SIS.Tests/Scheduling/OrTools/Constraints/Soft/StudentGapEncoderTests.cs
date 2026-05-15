@@ -12,8 +12,9 @@ namespace SIS.Tests.Scheduling.OrTools.Constraints.Soft;
 
 /// <summary>
 /// Plan 8 Task 12 — S7 StudentGapEncoder real-impl coverage.
-/// Per-(DepartmentId, Year) pair: penalty if same-day AND (gap_AB ≥ cap OR gap_BA ≥ cap).
-/// Penalty per violating pair = S7Weight (fixed, simplified vs v1 (gap - cap + 1) × Weight).
+/// Per-(DepartmentId, Year) pair: penalty if same-day AND effectiveGap ≥ cap.
+/// Plan 13 V1 alignment (2026-05-15): penalty = (effectiveGap − cap + 1) × S7Weight
+/// (multiplier'lı, V1 evaluator ile birebir).
 /// </summary>
 public class StudentGapEncoderTests
 {
@@ -51,9 +52,9 @@ public class StudentGapEncoderTests
     public void Encode_SameDayFarApart_PenaltyAdded()
     {
         // 2 sections same dept-year; both Monday; A at slot 0, B at slot 5.
-        // Gap = startB - endA = 5 - 1 = 4 ≥ S7MaxGapSlots (3) → penalty triggers.
-        // S7Weight = 3 → pair penalty = 3.
-        // Objective = 2 × 10000 - 3 = 19997.
+        // effectiveGap = max(0, 5−1, 0−6) = 4. cap = 3 → triggered.
+        // Plan 13 V1 alignment: multiplier = 4 − 3 + 1 = 2; penalty = 2 × 3 = 6.
+        // Objective = 2 × 10000 − 6 = 19994.
         var (model, ctx) = BuildScenario(s7Enabled: true,
             sections: TwoSectionsSameGroup(),
             forcedStartA: 0, forcedStartB: 5);
@@ -63,7 +64,7 @@ public class StudentGapEncoderTests
 
         var solver = new CpSolver();
         solver.Solve(model);
-        solver.ObjectiveValue.Should().Be(19997);
+        solver.ObjectiveValue.Should().Be(19994);
     }
 
     [Fact]

@@ -11,13 +11,12 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// </summary>
 /// <remarks>
 /// <para>
-/// NOTE (v1 divergence): v1 evaluator per-(dept, year, day) ardışık section sıralaması
-/// üzerinden her ardışık çift için <c>(gap − cap + 1) × 3</c> penalty (multiplier'lı)
-/// uygular — gap büyüdükçe lineer artar. Plan 8 simplification (V2): per-pair reified
-/// <c>same_day ∧ (gapAB OR gapBA)</c> literal'i, sabit <see cref="SoftThresholds.S7Weight"/>
-/// (default 3). Default cap'te küçük gap (=cap) aynı sayı verir; büyük gap'te V1 daha
-/// agresif. Plan 12 "birebir tutsun" kararı sonrası multiplier port'u **Plan 13'e ertelendi**
-/// (block-level gap arithmetic için CP-SAT IntVar zinciri pahalı; ayrı tasarım gerek).
+/// V1 alignment (Plan 13 başlatma 2026-05-15): V1 evaluator
+/// <c>(gap − cap + 1) × Weight</c> multiplier'lı penalty uyguluyor; gap büyüdükçe
+/// lineer artar. V2 encoder bu davranışı taklit eder:
+/// <c>effectiveGap = max(gapForwardAB, gapForwardBA, 0)</c>, eğer
+/// <c>effectiveGap ≥ cap</c> ise <c>multiplier = effectiveGap − cap + 1</c>;
+/// <c>sameDay ∧ triggered</c> olduğunda penalty <c>multiplier × S7Weight</c>.
 /// </para>
 /// <para>
 /// NOTE (Plan 9): Yalnızca <see cref="ComponentType.Lecture"/> interval'ı iterate edilir;
@@ -82,36 +81,38 @@ public sealed class StudentGapEncoder : IConstraintEncoder
                     ctx.Model.Add(dayA == dayB).OnlyEnforceIf(sameDay);
                     ctx.Model.Add(dayA != dayB).OnlyEnforceIf(sameDay.Not());
 
-                    // gapAB ⇔ (startB - endA >= cap) — B is after A with ≥ cap empty slots between.
-                    var gapAB = ctx.Model.NewBoolVar($"s7_gapAB_s{a.Id}_s{b.Id}");
-                    ctx.Model.Add(ivB.StartExpr() - ivA.EndExpr() >= t.S7MaxGapSlots)
-                        .OnlyEnforceIf(gapAB);
-                    ctx.Model.Add(ivB.StartExpr() - ivA.EndExpr() < t.S7MaxGapSlots)
-                        .OnlyEnforceIf(gapAB.Not());
+                    // Plan 13 V1 alignment: effectiveGap = max(0, gapForwardAB, gapForwardBA).
+                    // gapForwardAB = ivB.Start - ivA.End (pozitif → B sonra)
+                    // gapForwardBA = ivA.Start - ivB.End (pozitif → A sonra)
+                    // İkisi de aynı anda pozitif olamaz (interval'ler overlap etmiyor);
+                    // negatif olan dikkate alınmaz (max ile 0'a clamplenir).
+                    var maxSpan = ctx.Request.TimeSlots.Count + 1;
+                    var effectiveGap = ctx.Model.NewIntVar(0, maxSpan, $"s7_gap_s{a.Id}_s{b.Id}");
+                    ctx.Model.AddMaxEquality(effectiveGap, new[]
+                    {
+                        ivB.StartExpr() - ivA.EndExpr(),
+                        ivA.StartExpr() - ivB.EndExpr(),
+                        LinearExpr.Constant(0),
+                    });
 
-                    // gapBA ⇔ (startA - endB >= cap) — symmetric, A is after B.
-                    var gapBA = ctx.Model.NewBoolVar($"s7_gapBA_s{a.Id}_s{b.Id}");
-                    ctx.Model.Add(ivA.StartExpr() - ivB.EndExpr() >= t.S7MaxGapSlots)
-                        .OnlyEnforceIf(gapBA);
-                    ctx.Model.Add(ivA.StartExpr() - ivB.EndExpr() < t.S7MaxGapSlots)
-                        .OnlyEnforceIf(gapBA.Not());
+                    // triggered ⇔ effectiveGap ≥ cap
+                    var triggered = ctx.Model.NewBoolVar($"s7_trig_s{a.Id}_s{b.Id}");
+                    ctx.Model.Add(effectiveGap >= t.S7MaxGapSlots).OnlyEnforceIf(triggered);
+                    ctx.Model.Add(effectiveGap < t.S7MaxGapSlots).OnlyEnforceIf(triggered.Not());
 
-                    // gapAny ⇔ gapAB ∨ gapBA
-                    var gapAny = ctx.Model.NewBoolVar($"s7_gapAny_s{a.Id}_s{b.Id}");
-                    ctx.Model.AddBoolOr(new ILiteral[] { gapAB, gapBA }).OnlyEnforceIf(gapAny);
-                    ctx.Model.AddBoolAnd(new ILiteral[] { gapAB.Not(), gapBA.Not() })
-                        .OnlyEnforceIf(gapAny.Not());
+                    // multiplier = effectiveGap - cap + 1 when triggered, else 0
+                    var multiplier = ctx.Model.NewIntVar(0, maxSpan, $"s7_mult_s{a.Id}_s{b.Id}");
+                    ctx.Model.Add(multiplier == effectiveGap - t.S7MaxGapSlots + 1)
+                        .OnlyEnforceIf(triggered);
+                    ctx.Model.Add(multiplier == 0).OnlyEnforceIf(triggered.Not());
 
-                    // penaltyLit ⇔ sameDay ∧ gapAny
-                    var penaltyLit = ctx.Model.NewBoolVar($"s7_pen_s{a.Id}_s{b.Id}");
-                    ctx.Model.AddBoolAnd(new ILiteral[] { sameDay, gapAny })
-                        .OnlyEnforceIf(penaltyLit);
-                    ctx.Model.AddBoolOr(new ILiteral[] { sameDay.Not(), gapAny.Not() })
-                        .OnlyEnforceIf(penaltyLit.Not());
-
-                    // (long) cast: defensive against future S7Weight tuning that might overflow int
-                    // when summed across many pair-violations.
-                    ctx.Penalties.Add(LinearExpr.Term(penaltyLit, (long)t.S7Weight));
+                    // penalty = sameDay ? (multiplier × weight) : 0
+                    var maxPenalty = (long)maxSpan * t.S7Weight;
+                    var penalty = ctx.Model.NewIntVar(0, maxPenalty, $"s7_pen_s{a.Id}_s{b.Id}");
+                    ctx.Model.Add(penalty == multiplier * (long)t.S7Weight)
+                        .OnlyEnforceIf(sameDay);
+                    ctx.Model.Add(penalty == 0).OnlyEnforceIf(sameDay.Not());
+                    ctx.Penalties.Add(penalty);
                 }
             }
         }
