@@ -31,6 +31,14 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// section-level lecture interval esas). Lab interval ve multi-block lab gap deferred —
 /// S2/S4/S5 ile aynı kapsam kararı.
 /// </para>
+/// <para>
+/// NOTE (Plan 12 Faz 9 — weight authority): V2 <c>SoftThresholds.S20Weight</c>
+/// (<c>Schedule.S20Weight</c> SystemConfig) ile V1 <c>ConstraintDefinition.Weight</c>
+/// (DB) **iki ayrı admin UI yolu**. Birebir uyum için tek weight authority kararı
+/// gerek (admin "S20 ağırlığı" değiştirdiğinde hangi yere yansısın?). **Plan 13'e
+/// ertelendi** — mimari karar gerek (önerim: ConstraintDefinition.Weight tek otorite,
+/// SolverRequestBuilder oradan okusun, SystemConfig.Schedule.S20Weight kalkar).
+/// </para>
 /// </remarks>
 public sealed class AdjacentYearEncoder : IConstraintEncoder
 {

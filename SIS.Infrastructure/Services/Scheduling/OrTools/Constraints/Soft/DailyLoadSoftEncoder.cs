@@ -24,15 +24,14 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// alınamadığı için silently skip olur.
 /// </para>
 /// <para>
-/// NOTE (v1 unit divergence — Plan 9 Issue 5 — CLOSED): v1 evaluator gerçek clock-hour
+/// NOTE (v1 unit divergence): v1 evaluator gerçek clock-hour
 /// (<c>slot.EndTime - slot.StartTime</c>) topluyor; bu encoder credit-hour
-/// (<c>section.TheoryHours + section.LabHours</c>) kullanıyor. Plan 9'da kararlaştırıldı:
-/// real clock-hour implementasyonu model karmaşıklığını artırır (slot duration × slot count
-/// per-instructor reified literal). Yerine default cap 6 → 7 credit-hour'a yükseltildi
-/// (50dk slot grid'inde 7 credit ≈ 5.8 clock ≈ v1 default 6 clock). Admin
-/// <c>Schedule.S2.MaxDailyHours</c>'u real DB tune sonrası override edebilir; DB seed
-/// migration üzerinden 6 olarak kalıyor (kod default 7 yalnız config eksik fresh test
-/// senaryolarında devreye girer).
+/// (<c>section.TheoryHours + section.LabHours</c>) kullanıyor. Plan 9'da
+/// kararlaştırıldı: real clock-hour implementasyonu model karmaşıklığını artırır.
+/// Default cap 6 → 7 credit-hour'a yükseltilmişti workaround olarak. Plan 12
+/// "birebir tutsun" kararı sonrası clock-hour migration **Plan 13'e ertelendi**
+/// — CP-SAT block-level slot duration aggregation gerektiriyor (her block için
+/// duration IntVar). InstructorDaySpreadEncoder (S8) ile aynı kapsam.
 /// </para>
 /// </remarks>
 public sealed class DailyLoadSoftEncoder : IConstraintEncoder
