@@ -66,6 +66,14 @@ public static partial class SeedData
             new() { Key = "Schedule.OrTools.SearchStrategy", Value = "auto", Category = "Schedule", DataType = "string", Description = "CP-SAT search strategy: 'auto', 'fixed', 'portfolio'." },
             new() { Key = "Schedule.OrTools.UnsatCoreEnabled", Value = "true", Category = "Schedule", DataType = "bool", Description = "Infeasible çözümde UNSAT core extraction yap. Performance penalty küçük, default true." },
 
+            // ── Plan 11 — Runtime Rule Engine (V1 evaluator elimination) ─
+            // V1 evaluator zinciri ile V2 encoder mantığı arasındaki drift'leri kapatmak için
+            // runtime hard-constraint validation V2 encoder mantığına bağlanır (RuleEngine).
+            // False (default Faz 0-3): eski V1 evaluator path çalışır.
+            // True (Faz 4.7 itibariyle): RuleEngine devrede; V1 path bypass'lı.
+            // Faz 5 V1 silindikten sonra bu key migration ile düşürülür.
+            new() { Key = "Schedule.UseV2RuntimeRules", Value = "false", Category = "Schedule", DataType = "bool", Description = "Plan 11 — Runtime hard-rule validation V2 encoder mantığı (RuleEngine) üzerinden yapılır. False (default) iken eski V1 evaluator path'i çalışır. Faz 4 sonu true yapılır; Faz 5 V1 silindikten sonra config kaldırılır." },
+
             // ── Algoritma Parametreleri (eski SchedulingAlgorithmConfigs'tan merge — 2026-05-09) ─
             // Hard threshold flag'leri — admin panel'inden toggle edilir, solver SystemConfigs'i okur.
             new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: öğle arasına ders koyulamaz (zorunlu). KAPALI: koyulabilir ama ceza alır (tercihli)." },
