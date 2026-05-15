@@ -236,12 +236,17 @@ public partial class SchedulingService
 
         if (scheduleSlotOverrides != null)
         {
+            // Plan 11 sonrası: H1 ClassroomConflict per-block ClassroomId üzerinden eşleşiyor
+            // (paralel-lab desteği). Manuel atama akışında dto.ClassroomId boş gelirse top-level
+            // request.ClassroomId (classroomIdOverride) yansıtılır — aksi halde block.ClassroomId
+            // null kalır ve H1 sessizce skip eder.
             var overrideValidation = ValidateTimeBlocks(scheduleSlotOverrides
                 .Select(dto => new TimeBlock
                 {
                     Day = (DayOfWeek)dto.Day,
                     StartTime = dto.StartTime,
-                    EndTime = dto.EndTime
+                    EndTime = dto.EndTime,
+                    ClassroomId = dto.ClassroomId ?? classroomId
                 })
                 .ToList());
 

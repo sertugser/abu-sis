@@ -57,7 +57,7 @@ export default function MyCoursesPage() {
       setIsPrinting(true);
       const blob = await downloadCourseHistoryPdf();
       const url = window.URL.createObjectURL(blob);
-      const newWindow = window.open(url, '_blank');
+      const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
       // Yeni sekme açılamadıysa (popup blocker) indirme tetikle
       if (!newWindow) {
         const a = document.createElement('a');
