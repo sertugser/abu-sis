@@ -129,7 +129,7 @@ public class SolverRequestBuilderSoftThresholdsTests
         t.S1MinOccupancyPercent.Should().Be(60);
         t.S1MaxOccupancyPercent.Should().Be(85);
         t.S1Weight.Should().Be(1);
-        t.S2MaxDailyHours.Should().Be(7); // Plan 9 Issue 5 — credit-hour cap (was 6)
+        t.S2MaxDailyHours.Should().Be(6); // Plan 13 — V1 clock-hour alignment (default 6)
         t.S2Weight.Should().Be(10);
         t.S3MaxSectionsPerSlot.Should().Be(5);
         t.S3Weight.Should().Be(5);
