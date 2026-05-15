@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Rules;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services.Scheduling.Rules;
 
 namespace SIS.Infrastructure.Services.Scheduling;
 
@@ -10,30 +12,36 @@ public sealed class SimulationService : ISimulationService
     private readonly AppDbContext _context;
     private readonly SchedulingService _schedulingService;
     private readonly ConstraintEvaluationService _evaluationService;
+    private readonly IRuleEngine _ruleEngine;
 
     public SimulationService(
         AppDbContext context,
         SchedulingService schedulingService,
-        ConstraintEvaluationService evaluationService)
+        ConstraintEvaluationService evaluationService,
+        IRuleEngine ruleEngine)
     {
         _context = context;
         _schedulingService = schedulingService;
         _evaluationService = evaluationService;
+        _ruleEngine = ruleEngine;
     }
 
     public async Task<SimulationResult> SimulateMoveAsync(SimulateMoveRequest request, CancellationToken ct)
     {
-        var (snapshot, config, state, weightMap) = await LoadEvaluationContextAsync(request.TermId, ct);
+        var (snapshot, config, state, _) = await LoadEvaluationContextAsync(request.TermId, ct);
 
-        // Evaluate BEFORE
-        var beforeBreakdown = _evaluationService.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        // Plan 12 Faz 6 — V1 EvaluateWithBreakdown yerine RuleEngine delegasyonu.
+        // BEFORE
+        var beforeRuntime = RuntimeSnapshotAdapter.FromTermSnapshot(snapshot, config.CurriculumConflictMode);
+        var beforeBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(beforeRuntime, config, state, ct);
         var before = new SimulationBreakdown(beforeBreakdown.TotalHardViolations, beforeBreakdown.TotalSoftPenalty);
 
-        // Create modified snapshot with the virtual move
+        // Modified snapshot with the virtual move
         var modifiedSnapshot = CloneSnapshotWithMove(snapshot, request);
 
-        // Evaluate AFTER
-        var afterBreakdown = _evaluationService.EvaluateWithBreakdown(modifiedSnapshot, config, state, weightMap);
+        // AFTER
+        var afterRuntime = RuntimeSnapshotAdapter.FromTermSnapshot(modifiedSnapshot, config.CurriculumConflictMode);
+        var afterBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(afterRuntime, config, state, ct);
         var after = new SimulationBreakdown(afterBreakdown.TotalHardViolations, afterBreakdown.TotalSoftPenalty);
 
         return BuildSimulationResult(before, after, beforeBreakdown, afterBreakdown);
@@ -47,11 +55,13 @@ public sealed class SimulationService : ISimulationService
         var section = snapshot.Sections.FirstOrDefault(s => s.SectionId == sectionId);
         if (section == null) return Array.Empty<SuggestionItem>();
 
-        // Evaluate current state for this section
+        // Plan 12 Faz 6 — current state evaluation V2 RuleEngine üzerinden.
         var filteredSnapshot = BuildFilteredSnapshot(snapshot, sectionId);
-        var currentResult = _evaluationService.EvaluateCandidate(section, filteredSnapshot, config, state);
-        var currentHard = currentResult.Conflicts.Count;
-        var currentPenalty = currentResult.SoftPenalty;
+        var filteredRuntime = RuntimeSnapshotAdapter.FromTermSnapshot(filteredSnapshot, config.CurriculumConflictMode);
+        var sectionRuntime = RuntimeSnapshotAdapter.FromSectionSnapshot(section);
+        var currentHardConflicts = await _ruleEngine.EvaluateCandidateAsync(sectionRuntime, filteredRuntime, config, state, ct);
+        var currentPenalty = await _ruleEngine.CalculateCandidatePenaltyAsync(sectionRuntime, filteredRuntime, config, state, ct);
+        var currentHard = currentHardConflicts.Count;
 
         // Load available classrooms (limit for performance)
         var classrooms = await _context.Classrooms.AsNoTracking()
@@ -101,23 +111,27 @@ public sealed class SimulationService : ISimulationService
                     // Build a candidate section snapshot with the new time/classroom
                     var movedSection = CloneSectionWithNewSchedule(
                         section, newTimeBlocks, classroom.Id, classroom.Name, classroom.Capacity);
+                    var movedRuntime = RuntimeSnapshotAdapter.FromSectionSnapshot(movedSection);
 
-                    var result = _evaluationService.EvaluateCandidate(movedSection, filteredSnapshot, config, state);
+                    var hardConflicts = await _ruleEngine.EvaluateCandidateAsync(
+                        movedRuntime, filteredRuntime, config, state, ct);
+                    var softPenalty = await _ruleEngine.CalculateCandidatePenaltyAsync(
+                        movedRuntime, filteredRuntime, config, state, ct);
 
                     // Only include feasible (no hard violations) or better-than-current suggestions
-                    if (result.Conflicts.Count <= currentHard)
+                    if (hardConflicts.Count <= currentHard)
                     {
-                        var improvement = currentPenalty - result.SoftPenalty;
+                        var improvement = currentPenalty - softPenalty;
                         suggestions.Add(new SuggestionItem(
                             0,
                             (int)day,
                             startTime.ToString("HH:mm"),
                             classroom.Id,
                             classroom.Name,
-                            result.Conflicts.Count,
-                            Math.Round(result.SoftPenalty, 1),
+                            hardConflicts.Count,
+                            Math.Round(softPenalty, 1),
                             Math.Round(improvement, 1),
-                            result.Notes.Take(3).ToList()));
+                            hardConflicts.Take(3).Select(c => c.Message).ToList()));
                     }
                 }
             }
@@ -135,10 +149,14 @@ public sealed class SimulationService : ISimulationService
     public async Task<SimulationResult> SimulateConstraintChangeAsync(
         SimulateConstraintChangeRequest request, CancellationToken ct)
     {
-        var (snapshot, config, state, weightMap) = await LoadEvaluationContextAsync(request.TermId, ct);
+        var (snapshot, config, state, _) = await LoadEvaluationContextAsync(request.TermId, ct);
+        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(snapshot, config.CurriculumConflictMode);
 
-        // Evaluate BEFORE
-        var beforeBreakdown = _evaluationService.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        // Plan 12 Faz 6 — V2 RuleEngine delegasyonu. SimulateConstraintChange "what-if" senaryosu
+        // ConstraintState.Definitions üzerinde in-memory mutation yapar. Plan 13'te ConstraintState
+        // immutable record'a çevrilince bu blok `state with { ... }` cloned override'a dönüşür.
+        // BEFORE
+        var beforeBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(runtimeSnapshot, config, state, ct);
         var before = new SimulationBreakdown(beforeBreakdown.TotalHardViolations, beforeBreakdown.TotalSoftPenalty);
 
         // Apply virtual changes to constraint definitions (in-memory only)
@@ -153,9 +171,7 @@ public sealed class SimulationService : ISimulationService
                     def.IsEnabled = Convert.ToBoolean(change.Value);
                     break;
                 case "weight":
-                    var newWeight = Convert.ToInt32(change.Value);
-                    def.Weight = newWeight;
-                    weightMap[def.Code] = newWeight;
+                    def.Weight = Convert.ToInt32(change.Value);
                     break;
                 case "parameters":
                     def.Parameters = change.Value?.ToString();
@@ -163,8 +179,8 @@ public sealed class SimulationService : ISimulationService
             }
         }
 
-        // Evaluate AFTER with modified state
-        var afterBreakdown = _evaluationService.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        // AFTER (mutated state)
+        var afterBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(runtimeSnapshot, config, state, ct);
         var after = new SimulationBreakdown(afterBreakdown.TotalHardViolations, afterBreakdown.TotalSoftPenalty);
 
         return BuildSimulationResult(before, after, beforeBreakdown, afterBreakdown);
