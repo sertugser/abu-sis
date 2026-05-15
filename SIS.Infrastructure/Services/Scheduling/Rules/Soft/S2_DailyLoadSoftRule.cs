@@ -3,19 +3,20 @@ using SIS.Application.Scheduling.Rules;
 namespace SIS.Infrastructure.Services.Scheduling.Rules.Soft;
 
 /// <summary>
-/// Plan 12 Faz 2.2 — S2 Günlük Yoğunluk Dengesi (V1 <c>DailyLoadSoftEvaluator</c> portu).
+/// Plan 12 Faz 9 — S2 Günlük Yoğunluk Dengesi (V1 <c>DailyLoadSoftEvaluator</c> portu).
 ///
-/// V1 davranışını birebir koruyor (Faz 0.1 pinning baseline):
-///   • <c>existingSlots</c> = snapshot.Sections (same instructor) tüm blokları —
-///     CANDIDATE SNAPSHOT İÇİNDEYSE DAHİL.
-///   • <c>allSlots</c> = existingSlots + c.Blocks → candidate blokları iki kez sayılır.
-///   • Per-day total &gt; S2MaxDailyHours → <c>(total − cap) × 10</c>.
+/// V1 davranışı: per-instructor per-day clock-hour toplamı &gt; S2MaxDailyHours →
+/// <c>(total − cap) × 10</c>. existingSlots + c.Blocks (V1 quirk: candidate çift sayılır).
 ///
-/// Bu çift-sayım V1 quirk'i; davranışı korumak için Plan 12 port'unda da var.
+/// Code drift fix (2026-05-15): Plan 10'da S2 ConstraintDefinition silindi, H-DL
+/// Category toggle tek otorite. Code "S2" → "H-DL":
+///   • Admin H-DL Category="Hard" → HDL_DailyLoadRule (hard) çalışır, bu predicate skip.
+///   • Admin H-DL Category="Soft" → bu predicate (soft penalty) çalışır, hard rule skip.
+/// V1 pinning'i Plan 10 mimari spec'inin dışındaydı — Faz 9'da düzeltildi.
 /// </summary>
 public sealed class S2_DailyLoadSoftRule : ISoftRulePredicate
 {
-    public string Code => "S2";
+    public string Code => "H-DL";
     public RuleCategory DefaultCategory => RuleCategory.Soft;
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx) => Array.Empty<RuleViolation>();
