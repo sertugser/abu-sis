@@ -1,94 +1,176 @@
+using FluentAssertions;
+using SIS.Domain.Enums;
+using SIS.Tests.Scheduling.Rules;
 using Xunit;
+using static SIS.Tests.Scheduling.Rules.TestRuleHelpers;
 
 namespace SIS.Tests.Scheduling.Drifts;
 
 /// <summary>
-/// Plan 11 Faz 0.2 — V1 evaluator ile V2 encoder mantığı arasında doğrulanmış / şüpheli
-/// drift'ler için failing-first integration test paketi. Faz 3'te ilgili IRulePredicate'ler
-/// hazır olunca her test'in [Fact(Skip="...")] flag'i kaldırılır ve testler V2 mantığını
-/// doğrular (V1 ile kasten farklı sonuç verebilir — bu drift'in V2 lehine kapandığının
-/// kanıtıdır).
-///
-/// Drift tablosu: <c>docs/CODEMAPS/v1-v2-drift-matrix.md</c>.
+/// Plan 11 Faz 0.2 (scaffold) → Faz 3 sonu doldurulan failing-first integration test paketi.
+/// V1 evaluator ile RuleEngine (V2 mantığı) arasındaki 5 drift senaryosunu kanıtlar:
+/// her testte aynı snapshot için RuleEngine V2 mantığını uygular; V1 evaluator'lar farklı
+/// davranır (Plan 11 kasıtlı kararı). Faz 5'te V1 silindiğinde V1 karşılaştırması düşer,
+/// RuleEngine davranışı baseline olur.
 /// </summary>
 public sealed class V1V2DriftTests
 {
     /// <summary>
-    /// H4 Amphi flag drift. AmphiThreshold=100, AmphiThresholdEnabled=false (default),
-    /// section.Capacity=150, atanmış oda Amphitheater değil.
-    /// V2 encoder: kural skip → atama izinli.
-    /// V1 evaluator (mevcut): her zaman uyguluyor → conflict.
-    /// Faz 1.4 evaluator patch'i flag-gate ekledikten sonra hem V1 hem V2 aynı: izinli.
+    /// H4 Amphi drift. section.Capacity=150, AmphiThreshold=100, AmphiThresholdEnabled=false.
+    /// V1 (Plan 11 Faz 1.4 öncesi): her zaman uyguluyordu → conflict.
+    /// V1 (Faz 1.4 sonrası — bu commit dahil): flag-gated → no conflict.
+    /// RulePredicate H4: flag false → no conflict.
     /// </summary>
-    [Fact(Skip = "Phase 1.4 / 3.4 in progress — predicate not implemented yet")]
-    public void H4_Amphi_FlagDisabled_BigCapacity_NoConflict()
+    [Fact]
+    public async Task H4_Amphi_FlagDisabled_BigCapacity_NoConflict()
     {
-        // Arrange: build TermSnapshot with a section.Capacity=150 assigned to a Lecture-type classroom.
-        //          Config: AmphiThreshold=100, AmphiThresholdEnabled=false.
-        // Act: V1 ClassroomTypeEvaluator.Evaluate(ctx) → currently produces conflict.
-        //      RulePredicate H4 (Faz 3.4 sonrası) → no conflict.
-        // Assert: After Faz 3.4, no conflict. (V1 path: still conflict — proves drift exists.)
-        Assert.Fail("Faz 3.4 implementation required");
+        var engine = BuildEngine();
+        var candidate = Candidate(id: 1, courseId: 100, capacity: 150, theory: 3, lab: 0,
+            blocks: Block(day: 1, startHour: 9, durationHours: 3, classroomCapacity: 200));
+        var snapshot = Snapshot(candidate);
+        var config = DefaultConfig(c =>
+        {
+            c.AmphiThreshold = 100;
+            c.AmphiThresholdEnabled = false; // KAPALI — V1 paritesi Faz 1.4 sonrası
+        });
+
+        var conflicts = await engine.EvaluateCandidateAsync(candidate, snapshot, config, state: null, default);
+
+        conflicts.Should().NotContain(c => c.ConflictType == "ClassroomTypeConflict",
+            "AmphiThresholdEnabled=false → kural skip");
+    }
+
+    [Fact]
+    public async Task H4_Amphi_FlagEnabled_BigCapacity_NonAmphiClassroom_Reports()
+    {
+        var engine = BuildEngine();
+        var candidate = Candidate(id: 1, courseId: 100, capacity: 150, theory: 3, lab: 0,
+            blocks: Block(day: 1, startHour: 9, durationHours: 3, classroomCapacity: 200, type: ClassroomType.Lecture));
+        var snapshot = Snapshot(candidate);
+        var config = DefaultConfig(c =>
+        {
+            c.AmphiThreshold = 100;
+            c.AmphiThresholdEnabled = true; // AÇIK
+        });
+
+        var conflicts = await engine.EvaluateCandidateAsync(candidate, snapshot, config, state: null, default);
+
+        conflicts.Should().Contain(c => c.ConflictType == "ClassroomTypeConflict"
+            && c.Message.Contains("Amfi"));
     }
 
     /// <summary>
-    /// H-DL DailyLoad hardcoded 9 drift. Admin Schedule.MaxDailyHoursPerInstructor=10 yaptı.
-    /// Bir hocaya 10 saat günlük yük: V1 hardcoded "&gt; 9" → conflict. V2 config 10 → OK.
-    /// Faz 1.2 patch'i evaluator'ı config-aware yaptı → drift kapanır.
+    /// H-DL DailyLoad config drift. Admin Schedule.MaxDailyHoursPerInstructor=10 yaptı.
+    /// V1 (Plan 11 Faz 1.2 öncesi): hardcoded > 9 → conflict.
+    /// V1 (Faz 1.2 sonrası): config.MaxDailyHours → no conflict.
+    /// RulePredicate H-DL: config-driven → no conflict.
     /// </summary>
-    [Fact(Skip = "Phase 1.2 / 3.DL in progress")]
-    public void HDL_DailyLoad_ConfigOverride_NoConflict()
+    [Fact]
+    public async Task HDL_DailyLoad_ConfigOverride_NoConflict()
     {
-        // Arrange: instructor with 10h on Monday, config MaxDailyHoursPerInstructor=10.
-        // Act: V1 DailyLoadEvaluator (post Faz 1.2) → no conflict.
-        //      RulePredicate H-DL → no conflict.
-        // Assert: no conflict; mesaj formatı: "... (maks 10 saat)."
-        Assert.Fail("Faz 1.2 / 3.DL implementation required");
+        var engine = BuildEngine();
+        // 10 saat tek section, instructor=1
+        var candidate = Candidate(id: 1, courseId: 100, instructorId: 1, theory: 10, lab: 0,
+            blocks: Block(day: 1, startHour: 8, durationHours: 10));
+        var snapshot = Snapshot(candidate);
+        var config = DefaultConfig(c => c.MaxDailyHours = 10);
+
+        var conflicts = await engine.EvaluateCandidateAsync(candidate, snapshot, config, state: null, default);
+
+        conflicts.Should().NotContain(c => c.ConflictType == "DailyLoadConflict",
+            "config 10 saat → 10 ≤ 10 OK");
+    }
+
+    [Fact]
+    public async Task HDL_DailyLoad_HardcodedDefault_TenHours_Reports()
+    {
+        var engine = BuildEngine();
+        var candidate = Candidate(id: 1, courseId: 100, instructorId: 1, theory: 10, lab: 0,
+            blocks: Block(day: 1, startHour: 8, durationHours: 10));
+        var snapshot = Snapshot(candidate);
+        var config = DefaultConfig(); // MaxDailyHours = 9 (default)
+
+        var conflicts = await engine.EvaluateCandidateAsync(candidate, snapshot, config, state: null, default);
+
+        conflicts.Should().Contain(c => c.ConflictType == "DailyLoadConflict");
     }
 
     /// <summary>
-    /// H-DO NoDayOff 6+ workday drift. Term'de Cumartesi de slot var (workdays=6).
-    /// V1 hardcoded "&gt;= 5" → 5 günde ders varsa conflict; V2 "≤ workdays-1=5" → izinli.
+    /// H-DO drift. 6-günlük takvim (Cumartesi slot eklenince). Instructor 5 günde ders veriyor.
+    /// V1: usedDays ≥ 5 → conflict (hardcoded).
+    /// V2/Predicate: usedDays(5) ≤ workdays(6)-1=5 → no conflict.
     /// </summary>
-    [Fact(Skip = "Phase 3.DO in progress")]
-    public void HDO_NoDayOff_SixWorkdays_FiveUsed_NoConflict()
+    [Fact]
+    public async Task HDO_NoDayOff_SixWorkdays_FiveUsed_NoConflict()
     {
-        // Arrange: term with 6 workdays (Mon-Sat), instructor active on 5 days.
-        // Act: RulePredicate H-DO → no conflict (usedDays=5 ≤ workdays-1=5).
-        //      V1 evaluator (kasten — driftin kasıtlı silinmesi): conflict (>= 5).
-        // Assert: predicate=OK, V1=conflict.
-        Assert.Fail("Faz 3.DO implementation required");
+        var engine = BuildEngine();
+        // 5 farklı günde 1 saatlik bloklar — toplam 5 workday kullanılmış
+        var candidate = Candidate(id: 1, courseId: 100, instructorId: 1, theory: 1, lab: 0,
+            blocks: new[]
+            {
+                Block(day: 1, startHour: 9, durationHours: 1),
+            });
+        // Diğer 4 günü dolduran başka section'lar (aynı instructor)
+        var other2 = Candidate(id: 2, courseId: 200, instructorId: 1, theory: 1, lab: 0,
+            blocks: Block(day: 2, startHour: 9, durationHours: 1));
+        var other3 = Candidate(id: 3, courseId: 300, instructorId: 1, theory: 1, lab: 0,
+            blocks: Block(day: 3, startHour: 9, durationHours: 1));
+        var other4 = Candidate(id: 4, courseId: 400, instructorId: 1, theory: 1, lab: 0,
+            blocks: Block(day: 4, startHour: 9, durationHours: 1));
+        var other5 = Candidate(id: 5, courseId: 500, instructorId: 1, theory: 1, lab: 0,
+            blocks: Block(day: 5, startHour: 9, durationHours: 1));
+        // 6. günde başka instructor'ın section'ı (workdays.Count=6 olsun)
+        var sat = Candidate(id: 6, courseId: 600, instructorId: 999, theory: 1, lab: 0,
+            blocks: Block(day: 6, startHour: 9, durationHours: 1));
+
+        var snapshot = Snapshot(candidate, other2, other3, other4, other5, sat);
+        var config = DefaultConfig();
+
+        var conflicts = await engine.EvaluateCandidateAsync(candidate, snapshot, config, state: null, default);
+
+        conflicts.Should().NotContain(c => c.ConflictType == "NoDayOffConflict",
+            "6 workday × 5 used → ≤ 6-1=5 OK (V2 generalize)");
     }
 
     /// <summary>
-    /// H-WL WeeklyLoad default fallback drift. instructor.MaxWeeklyHours=0,
-    /// section toplam 25 saat (yüksek). V1: disabled → no conflict. V2: default 30 → no conflict.
-    /// Aynı sonuç bu örnekte. Drift: section toplam 35 saat (default'u aşan):
-    /// V1 disabled → no conflict. V2: 35 > 30 → conflict.
+    /// H16 drift. 3T+2L = 5 saat > 4 splitThreshold. Theory ve lab AYNI gün ama lab sonra.
+    /// V1 (revize 2026-05): aynı gün OK çünkü lab teoriden sonra → no conflict.
+    /// V2/Predicate: theoryDay != labDay zorunlu → conflict (Plan 11 R7 kararı).
     /// </summary>
-    [Fact(Skip = "Phase 3.WL in progress")]
-    public void HWL_WeeklyLoad_InstructorZeroOverride_DefaultFallback_AppliesLimit()
+    [Fact]
+    public async Task H16_TheoryLab_SameDay_RuleRejects()
     {
-        // Arrange: instructor.MaxWeeklyHours=0, total assigned hours=35.
-        //          Config DefaultInstructorMaxWeeklyHours=30.
-        // Act: RulePredicate H-WL → conflict (35 > 30).
-        //      V1 evaluator → no conflict (disabled).
-        // Assert: predicate=conflict, V1=OK.
-        Assert.Fail("Faz 3.WL implementation required");
+        var engine = BuildEngine();
+        var candidate = Candidate(id: 1, courseId: 100, theory: 3, lab: 2,
+            blocks: new[]
+            {
+                Block(day: 1, startHour: 9, durationHours: 3),   // theory Mon 09-12
+                Block(day: 1, startHour: 13, durationHours: 2),  // lab Mon 13-15 (aynı gün, sonra)
+            });
+        var snapshot = Snapshot(candidate);
+        var config = DefaultConfig(c => c.TheoryLabSplitThreshold = 4);
+
+        var conflicts = await engine.EvaluateCandidateAsync(candidate, snapshot, config, state: null, default);
+
+        conflicts.Should().Contain(c => c.ConflictType == "TheoryLabDaySplitConflict",
+            "5 saat > 4 eşiği + aynı gün → V2 sıkı reddeder");
     }
 
-    /// <summary>
-    /// H16 TheoryLab same-day drift. 3T+2L ders, theory Pzt 09:00-12:00, lab Pzt 13:00-15:00.
-    /// V1 (revize 2026-05): aynı gün OK çünkü lab teoriden sonra. V2: theoryDay != labDay → conflict.
-    /// Plan 11 kararı: V2 sıkı tutulur.
-    /// </summary>
-    [Fact(Skip = "Phase 3.16 in progress")]
-    public void H16_TheoryLab_SameDayLabAfter_RuleRejects_V1Accepts()
+    [Fact]
+    public async Task H16_TheoryLab_DifferentDays_NoConflict()
     {
-        // Arrange: 3T+2L section, theory Mon 09:00-12:00, lab Mon 13:00-15:00, total=5 > splitThreshold=4.
-        // Act: RulePredicate H16 → conflict (theoryDay == labDay).
-        //      V1 evaluator → OK (lab teoriden sonra aynı gün izinli).
-        // Assert: predicate=conflict, V1=OK.
-        Assert.Fail("Faz 3.16 implementation required");
+        var engine = BuildEngine();
+        var candidate = Candidate(id: 1, courseId: 100, theory: 3, lab: 2,
+            blocks: new[]
+            {
+                Block(day: 1, startHour: 9, durationHours: 3),   // theory Mon
+                Block(day: 5, startHour: 9, durationHours: 2),   // lab Fri
+            });
+        var snapshot = Snapshot(candidate);
+        var config = DefaultConfig(c => c.TheoryLabSplitThreshold = 4);
+
+        var conflicts = await engine.EvaluateCandidateAsync(candidate, snapshot, config, state: null, default);
+
+        conflicts.Should().NotContain(c => c.ConflictType == "TheoryLabDaySplitConflict");
     }
 }
