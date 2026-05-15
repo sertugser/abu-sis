@@ -469,6 +469,10 @@ public abstract class SchedulingTestBase : IDisposable
         AddConfig("Schedule.MaxConsecutiveHours", "12");
         AddConfig("Schedule.BreakDurationMinutes", "5");
         AddConfig("Classroom.AmphiThreshold", "100");
+        // Plan 11 Faz 1.4 — V1 ClassroomTypeEvaluator artık flag-gated. Test'lerde eski Amphi
+        // davranışı (her zaman uygula) korunacak şekilde default true setliyoruz; flag-spesifik
+        // test'ler SetSystemConfig ile override edebilir.
+        AddConfig("Schedule.AmphiThresholdEnabled", "true");
         AddConfig("Schedule.TheoryLabSplitThreshold", "4");
         Context.SaveChanges();
     }

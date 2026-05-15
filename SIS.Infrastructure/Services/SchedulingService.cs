@@ -171,6 +171,9 @@ public partial class SchedulingService : ISchedulingService
             TheoryLabSplitThreshold = hard?.TheoryLabSplitThreshold ?? 4,
             AllowSameCourseSectionOverlap = hard?.AllowSameCourseSectionOverlap ?? false,
             CurriculumConflictMode = hard?.CurriculumConflictMode ?? "curriculum",
+            // Plan 11 — V2 encoder paritesi
+            MaxDailyHours = hard?.MaxDailyHours ?? 9,
+            AmphiThresholdEnabled = hard?.AmphiThresholdEnabled ?? false,
             S1Enabled = soft.S1Enabled,
             S1MinOccupancy = soft.S1MinOccupancy,
             S1MaxOccupancy = soft.S1MaxOccupancy,

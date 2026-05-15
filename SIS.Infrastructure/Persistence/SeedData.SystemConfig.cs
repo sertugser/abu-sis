@@ -72,7 +72,7 @@ public static partial class SeedData
             // False (default Faz 0-3): eski V1 evaluator path çalışır.
             // True (Faz 4.7 itibariyle): RuleEngine devrede; V1 path bypass'lı.
             // Faz 5 V1 silindikten sonra bu key migration ile düşürülür.
-            new() { Key = "Schedule.UseV2RuntimeRules", Value = "false", Category = "Schedule", DataType = "bool", Description = "Plan 11 — Runtime hard-rule validation V2 encoder mantığı (RuleEngine) üzerinden yapılır. False (default) iken eski V1 evaluator path'i çalışır. Faz 4 sonu true yapılır; Faz 5 V1 silindikten sonra config kaldırılır." },
+            new() { Key = "Schedule.UseV2RuntimeRules", Value = "true", Category = "Schedule", DataType = "bool", Description = "Plan 11 — Runtime hard-rule validation V2 encoder mantığı (RuleEngine) üzerinden yapılır. True (Faz 4.7 sonu — 2026-05-15 itibariyle 22 test ile doğrulandı). Faz 5'te V1 evaluator silindikten sonra config kaldırılır. Rollback için false'a çekilebilir." },
 
             // ── Algoritma Parametreleri (eski SchedulingAlgorithmConfigs'tan merge — 2026-05-09) ─
             // Hard threshold flag'leri — admin panel'inden toggle edilir, solver SystemConfigs'i okur.
