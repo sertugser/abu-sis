@@ -173,8 +173,24 @@ public static class SchedulingServiceCollectionExtensions
         // RuleEngine boş predicate seti ile bile boş violation döner — safe scaffold.
         services.AddScoped<SIS.Application.Scheduling.Rules.IRuleEngine, Rules.RuleEngine>();
 
-        // Faz 3 — IRulePredicate kayıtları (single-section ilk)
+        // Faz 3 — IRulePredicate kayıtları (17 hard kural)
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H1_ClassroomConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H2_InstructorConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H3_CapacityRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H4_ClassroomTypeRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H5_CurriculumConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H6_TheoryLabComponentRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H8_SameCourseSectionRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H10_FacultyClassroomRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H11_CorequisiteRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H12_CreditHourRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H13_LunchBreakRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H15_MaxConsecutiveHoursRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H16_TheoryLabDaySplitRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H17_FaceToFaceSlotRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HDL_DailyLoadRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HDO_NoDayOffRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HWL_WeeklyLoadRule>();
 
         return services;
     }
