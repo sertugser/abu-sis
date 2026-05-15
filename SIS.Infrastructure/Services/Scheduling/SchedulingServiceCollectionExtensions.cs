@@ -173,6 +173,9 @@ public static class SchedulingServiceCollectionExtensions
         // RuleEngine boş predicate seti ile bile boş violation döner — safe scaffold.
         services.AddScoped<SIS.Application.Scheduling.Rules.IRuleEngine, Rules.RuleEngine>();
 
+        // Faz 3 — IRulePredicate kayıtları (single-section ilk)
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H17_FaceToFaceSlotRule>();
+
         return services;
     }
 }

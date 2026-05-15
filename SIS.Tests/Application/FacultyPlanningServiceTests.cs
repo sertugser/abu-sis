@@ -42,7 +42,8 @@ public class FacultyPlanningServiceTests : IDisposable
             new SchedulingService(_context, constraintService, scheduleWriter),
             new HttpContextAccessor(),
             autoScheduleEngine,
-            scheduleWriter);
+            scheduleWriter,
+            new NullSystemConfigProvider());
 
         SeedBaseData();
     }
