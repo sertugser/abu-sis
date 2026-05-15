@@ -373,7 +373,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
     public async Task<AutoSchedulePreviewDto> AutoSchedulePreviewAsync(AutoScheduleRequest request, string userId, CancellationToken ct = default)
     {
         // userId'yi RunAsync'e geçir → IScheduleProgressReporter SignalR ile o kullanıcıya
-        // canlı stage event'leri yayınlasın (started → construction → sa → lns → complete).
+        // canlı stage event'leri yayınlasın (started → v2-building-request → v2-solving → complete).
         var result = await _autoScheduleEngine.RunAsync(request, userId, ct);
 
         // Save run to DB

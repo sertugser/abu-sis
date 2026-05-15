@@ -124,8 +124,8 @@ function CalendarCell({
   });
   return (
     <td
-      className="relative border border-slate-200/80 p-0 align-top"
-      style={{ height: rowHeightPx, minHeight: rowHeightPx }}
+      className="relative border-r-2 border-r-slate-300 border-b border-b-slate-300 p-0 align-top"
+      style={{ minHeight: rowHeightPx }}
     >
       {/* KESİN ÇÖZÜM: Drop ref'i absolute pozisyonla TAM <td>'yi kaplar. table-layout:fixed altında
           normal-flow <div>'in width/height'i tuhaf hesaplanıyor, rect 0 ölçülüyordu. absolute+inset:0
@@ -133,7 +133,7 @@ function CalendarCell({
       <div
         ref={setNodeRef}
         className={cn(
-          'absolute inset-0 p-0.5 transition-colors',
+          'absolute inset-0 px-1 py-0.5 transition-colors',
           isRestricted ? 'bg-slate-50/60' : 'bg-white',
           isSuggested && !isOver && 'ring-2 ring-amber-300 ring-inset bg-amber-50/30 animate-pulse',
           isOver && !isDropDisabled && 'ring-2 ring-emerald-400 ring-inset bg-emerald-50/40 animate-none',
@@ -299,7 +299,7 @@ function SectionBlock({
     }
   })();
 
-  const isCompactDensity = cardDensity === 'compact' || cardDensity === 'normal' || cardDensity === 'wide';
+  const isCompactDensity = cardDensity === 'normal';
 
   const cardInner = (
     <div
@@ -351,7 +351,7 @@ function SectionBlock({
       )}
 
       {cardDensity === 'spacious' ? (
-        // ── SPACIOUS (mevcut davranış aynen korunur) ──
+        // ── SPACIOUS (düzenleyici — çok satırlı kart, mevcut davranış aynen korunur) ──
         isContinuation ? (
           <div className="flex items-center gap-1.5">
             <span className="font-mono font-bold text-sm">{section.courseCode}</span>
@@ -394,34 +394,8 @@ function SectionBlock({
             )}
           </>
         )
-      ) : cardDensity === 'compact' ? (
-        // ── COMPACT (22px tek satır) ──
-        <div className="flex items-center gap-1 h-[18px] overflow-hidden">
-          <span className="font-mono font-bold text-[11px] tabular-nums whitespace-nowrap">
-            {section.courseCode}·{section.sectionIndex}
-          </span>
-          <BlockTypeBadge blockType={block.blockType} className="ml-auto shrink-0" />
-        </div>
-      ) : cardDensity === 'normal' ? (
-        // ── NORMAL (24px tek satır, her saat satırında aynı) ──
-        <div className="flex items-center gap-1.5 h-[20px] overflow-hidden">
-          <span className="font-mono font-bold text-[11px] tabular-nums whitespace-nowrap shrink-0">
-            {section.courseCode}·{section.sectionIndex}
-          </span>
-          <BlockTypeBadge blockType={block.blockType} className="shrink-0" />
-          {cardClassroomName && (
-            <span className="text-[10px] text-slate-700 font-medium whitespace-nowrap shrink-0">
-              {cardClassroomName}
-            </span>
-          )}
-          {instructorLastName && (
-            <span className="text-[10px] text-slate-600 truncate min-w-0">
-              · {instructorLastName}
-            </span>
-          )}
-        </div>
       ) : (
-        // ── WIDE (36px iki satır) ──
+        // ── NORMAL (salt-okunur — 36px iki satır kompakt) ──
         <div className="flex flex-col gap-0.5 h-[32px] overflow-hidden">
           <div className="flex items-center gap-1.5">
             <span className="font-mono font-bold text-[11px] tabular-nums whitespace-nowrap shrink-0">
@@ -501,7 +475,7 @@ function SectionBlock({
 }
 
 /* ── Ana CalendarGrid ── */
-export type CardDensity = 'compact' | 'normal' | 'wide' | 'spacious';
+export type CardDensity = 'normal' | 'spacious';
 
 /**
  * Hücre içi kartların yerleşim sınıfı. Spacious mevcut dikey flex'i korur;
@@ -544,8 +518,8 @@ export interface CalendarGridProps {
   /** Multi-select aktifken karta tıklanınca tetiklenir (toggle). */
   onSectionToggleSelect?: (sectionId: number) => void;
   /**
-   * Kart yoğunluk modu. Salt-okunur sayfa (AutoScheduleTab) `'compact' | 'normal' | 'wide'` geçer;
-   * düzenleyici prop geçmez → `'spacious'` (mevcut çok-satır kart davranışı) aktif kalır.
+   * Kart yoğunluk modu. Salt-okunur sayfa (AutoScheduleTab) `'normal'` (36px iki satır) geçer;
+   * düzenleyici prop geçmez → `'spacious'` (çok-satır kart, sürükle-bırak hissi) aktif kalır.
    * @default 'spacious'
    */
   cardDensity?: CardDensity;
@@ -599,15 +573,8 @@ export function CalendarGrid({
       .map(([, v]) => v);
   }, [timeSlots]);
 
-  // Density'ye göre satır yüksekliği (px). Spacious mevcut 44px'i korur.
-  const rowHeightPx = (() => {
-    switch (cardDensity) {
-      case 'compact':  return 22;
-      case 'normal':   return 24;
-      case 'wide':     return 36;
-      case 'spacious': return 44;
-    }
-  })();
+  // Density'ye göre satır yüksekliği (px). Spacious mevcut 44px'i korur; salt-okunur 'normal' 36px iki satır kart.
+  const rowHeightPx = cardDensity === 'spacious' ? 44 : 36;
 
   /* Blokları parse et */
   const allBlocks = useMemo(() => {
@@ -708,7 +675,8 @@ export function CalendarGrid({
   return (
     // overflow-auto kasıtlı olarak yok: dnd-kit'in WhileDragging measuring stratejisi scrollable
     // ancestor'da droppable rect'lerini stale ölçüyordu. Scroll dışarıdaki container'da yapılır.
-    <div className="h-full border border-slate-200 rounded-xl bg-white shadow-sm relative">
+    // h-full her iki modda da aktif — takvim, parent flex container'ı tam doldurur.
+    <div className="h-full border border-slate-200 rounded-xl bg-white shadow-sm relative flex flex-col overflow-hidden">
       {isEmpty && (
         <div className="sticky top-0 z-20 flex items-center justify-center gap-2 bg-slate-50/90 backdrop-blur-sm border-b border-slate-200/60 py-1.5 text-xs text-slate-400">
           <span>Henüz atama yok</span>
@@ -716,21 +684,23 @@ export function CalendarGrid({
           <span>Hücreye tıklayın veya <span className="font-medium text-slate-500">Otomatik Programla</span> kullanın</span>
         </div>
       )}
-      <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+      {/* Tabloyu flex-1 wrap'le — display:table flex-1'i tanımaz; div sarmalı ki tablo height:100% gerçek bir parent'a yansıdığında stretch çalışsın */}
+      <div className="flex-1 min-h-0">
+      <table className="w-full border-collapse" style={{ tableLayout: 'fixed', height: '100%' }}>
         <colgroup>
           <col style={{ width: 72 }} />
           {visibleDays.map(wd => <col key={wd.day} />)}
         </colgroup>
         <thead className="sticky top-0 z-10">
           <tr className="bg-slate-50/95 backdrop-blur-sm">
-            <th className="border border-slate-200/80 p-2 text-center font-semibold text-slate-500 text-xs uppercase tracking-wider">
+            <th className="border-r-[3px] border-r-slate-300 border-b border-b-slate-200 p-2 text-center font-semibold text-slate-500 text-xs uppercase tracking-wider">
               Saat
             </th>
             {visibleDays.map(wd => (
               <th
                 key={wd.day}
                 className={cn(
-                  'border border-slate-200/80 p-2 text-center',
+                  'border-r-2 border-r-slate-300 border-b border-b-slate-200 p-2 text-center',
                   wd.isAllOnline && 'bg-slate-100/80',
                 )}
               >
@@ -755,7 +725,7 @@ export function CalendarGrid({
               <Fragment key={row.startTime}>
                 {showLunchSeparator && (
                   <tr>
-                    <td colSpan={totalColSpan} className="bg-amber-50/60 border border-slate-200/80 py-0.5 px-3">
+                    <td colSpan={totalColSpan} className="bg-amber-50/60 border-y border-slate-300 py-0.5 px-3">
                       <div className="flex items-center gap-2 text-[11px] text-amber-700 font-medium">
                         <Coffee className="h-3 w-3" />
                         <span>Öğle Arası — {settings.lunchBreakStart}–{settings.lunchBreakEnd}</span>
@@ -764,9 +734,9 @@ export function CalendarGrid({
                     </td>
                   </tr>
                 )}
-                <tr style={{ height: rowHeightPx }}>
+                <tr>
                   {/* Saat etiketi */}
-                  <td className="border border-slate-200/80 px-1 py-0.5 text-center align-top bg-white">
+                  <td className="border-r-[3px] border-r-slate-300 border-b border-b-slate-300 px-1 py-0.5 text-center align-top bg-white">
                     <span className="font-mono font-semibold text-[12px] text-slate-600">
                       {row.startTime.slice(0, 5)}
                     </span>
@@ -878,6 +848,7 @@ export function CalendarGrid({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

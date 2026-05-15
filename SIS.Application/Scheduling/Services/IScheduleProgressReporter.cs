@@ -21,13 +21,14 @@ public interface IScheduleProgressReporter
 
 /// <summary>
 /// Auto-schedule progress event payload'ı. Frontend "ScheduleProgress" event handler
-/// bu yapıyı bekler.
+/// bu yapıyı bekler. v2-ortools 3 aşamalı:
+/// "started" → "v2-building-request" → "v2-solving" → "complete" (iptalde "failed").
 /// </summary>
-/// <param name="Stage">"started" | "construction" | "sa" | "lns" | "complete" | "failed"</param>
-/// <param name="Percent">0-100. Stage kümülatif progress (örn. SA aşaması 33-66 aralığı).</param>
-/// <param name="Current">İşlenen item sayısı (placed sections, SA iter, vb.).</param>
-/// <param name="Total">Toplam beklenen item (target sections, max iter, vb.).</param>
-/// <param name="Detail">Kullanıcıya gösterilecek mesaj (ör. "CENG102-3 yerleştirildi").</param>
+/// <param name="Stage">"started" | "v2-building-request" | "v2-solving" | "complete" | "failed"</param>
+/// <param name="Percent">0-100 global progress (started=0, building=10, solving=50, complete=100).</param>
+/// <param name="Current">İşlenen item sayısı (placed sections vb.). Backend her event'te yollamayabilir.</param>
+/// <param name="Total">Toplam item (target sections vb.). Backend her event'te yollamayabilir.</param>
+/// <param name="Detail">Kullanıcıya gösterilecek Türkçe mesaj (ör. "34 ders için en uygun program aranıyor...").</param>
 public sealed record ScheduleProgressEvent(
     string Stage,
     int Percent,
@@ -43,16 +44,3 @@ public sealed class NoOpScheduleProgressReporter : IScheduleProgressReporter
     public Task ReportAsync(string userId, ScheduleProgressEvent evt, CancellationToken ct = default)
         => Task.CompletedTask;
 }
-
-/// <summary>
-/// Algoritma loop'larının (Construction / SA / LNS) içinden çağrılan periodic progress
-/// callback'i. Fire-and-forget kullanılır: algoritma sync devam eder, callback async
-/// işler (SignalR send). Implementor exception atmamalı (no-throw kontratı).
-/// </summary>
-/// <param name="stage">"construction" | "sa" | "lns"</param>
-/// <param name="percent">0-100 global progress</param>
-/// <param name="current">İşlenen item sayısı</param>
-/// <param name="total">Toplam item sayısı</param>
-/// <param name="detail">Kullanıcı için kısa metin</param>
-public delegate void ScheduleProgressCallback(
-    string stage, int percent, int current, int total, string? detail);

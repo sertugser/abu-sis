@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Loader2, CheckCircle2, AlertCircle,
-  Database, Sparkles, ShieldCheck, Trophy,
+  Loader2, CheckCircle2, AlertCircle, AlertTriangle, XCircle, X,
+  Database, Sparkles, Trophy, Clock, Building2, BookOpen, Users,
 } from 'lucide-react';
 import { useSignalR } from '@/hooks/useSignalR';
 import {
@@ -9,9 +9,26 @@ import {
   AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import type { AutoSchedulePreview } from '../../types/facultyPlanning';
 import type { HubConnection } from '@microsoft/signalr';
 
-export type ProgressStage = 'idle' | 'started' | 'construction' | 'sa' | 'lns' | 'complete' | 'failed';
+/**
+ * Failure suggestionType → Türkçe etiket. Backend `SuggestionType` enum'unun string'i; UI çevirisi.
+ * Backend bir tür yollamazsa veya bilinmeyen tür gelirse ham string fallback olarak gösterilir.
+ */
+const FAILURE_LABELS: Record<string, string> = {
+  CapacityIncrease: 'Kapasite yetersiz',
+  ClassroomAdd: 'Uygun derslik yok',
+  TimeChange: 'Zaman çakışması',
+  InstructorReassign: 'Hoca çakışması',
+  ConstraintRelax: 'Kısıt ihlali',
+};
+
+export type ProgressStage = 'idle' | 'started' | 'v2-building-request' | 'v2-solving' | 'complete' | 'failed';
 
 interface ScheduleProgressEvent {
   stage: ProgressStage;
@@ -23,7 +40,27 @@ interface ScheduleProgressEvent {
 
 interface AutoScheduleProgressModalProps {
   open: boolean;
+  /**
+   * Aktif olarak bir algoritma çalışıyor mu. Modal mod ayrımı:
+   *   - isPending=true  → progress UI (stage indicator + animated bar)
+   *   - isPending=false → previewData varsa ResultPanel; yoksa modal görünmez
+   * Bu prop olmadan, geçmiş run'lı bir oturumda "Otomatik Programla"ya basınca
+   * modal direkt eski sonucu gösterir — yeni algoritmanın progress'i gizlenirdi.
+   */
+  isPending?: boolean;
+  /** Loading state'inde "İptal Et" butonu. Algoritma çalışırken backend Hub.Cancel() tetiklenir. */
   onCancel?: () => void;
+  /**
+   * Algoritma tamamlandıktan sonra modal "sonuç paneli" moduna geçer (eski ScheduleResultModal birleştirildi).
+   * Bu prop set'liyse ve <c>isPending=false</c> ise "Yerleştirilen / Yerleşemeyen" özeti + aksiyon butonları gösterilir.
+   */
+  previewData?: AutoSchedulePreview | null;
+  /** Sonuç panelinde "Tümünü Uygula" butonu. previewData mevcutsa gerekli. */
+  onApplyAll?: () => void;
+  /** Apply mutation pending — buton disable + "Uygulanıyor..." metni. */
+  applyPending?: boolean;
+  /** Sağ üstteki X butonu — sonuç panelini kapatır (loading'de X gösterilmez, iptal akışı ayrı). */
+  onDismiss?: () => void;
 }
 
 interface StageMeta {
@@ -34,16 +71,19 @@ interface StageMeta {
   ring: string;
 }
 
-const STAGE_ORDER: ProgressStage[] = ['construction', 'sa', 'lns', 'complete'];
+// v2-ortools 3 aşama: backend AutoScheduleEngine sırasıyla yayınlar.
+//   1) v2-building-request — section/derslik/zaman dilimleri yükleniyor (0-10%)
+//   2) v2-solving           — kısıtlar değerlendiriliyor, program aranıyor (10-90%)
+//   3) complete             — sonuç hazır (100%)
+const STAGE_ORDER: ProgressStage[] = ['v2-building-request', 'v2-solving', 'complete'];
 
 const STAGE_META: Record<ProgressStage, StageMeta> = {
-  idle:         { label: 'Hazırlanıyor',     icon: Loader2,      bg: 'bg-slate-100',   text: 'text-slate-400',   ring: 'ring-slate-200' },
-  started:      { label: 'Başlatılıyor',     icon: Loader2,      bg: 'bg-slate-100',   text: 'text-slate-400',   ring: 'ring-slate-200' },
-  construction: { label: 'Yerleşim',         icon: Database,     bg: 'bg-blue-500',    text: 'text-white',       ring: 'ring-blue-300' },
-  sa:           { label: 'Optimizasyon',     icon: Sparkles,     bg: 'bg-violet-500',  text: 'text-white',       ring: 'ring-violet-300' },
-  lns:          { label: 'Çakışma Çözümü',   icon: ShieldCheck,  bg: 'bg-amber-500',   text: 'text-white',       ring: 'ring-amber-300' },
-  complete:     { label: 'Tamamlandı',       icon: Trophy,       bg: 'bg-emerald-500', text: 'text-white',       ring: 'ring-emerald-300' },
-  failed:       { label: 'Hata',             icon: AlertCircle,  bg: 'bg-red-500',     text: 'text-white',       ring: 'ring-red-300' },
+  idle:                  { label: 'Hazırlanıyor',   icon: Loader2,     bg: 'bg-slate-100',   text: 'text-slate-400', ring: 'ring-slate-200' },
+  started:               { label: 'Başlatılıyor',   icon: Loader2,     bg: 'bg-slate-100',   text: 'text-slate-400', ring: 'ring-slate-200' },
+  'v2-building-request': { label: 'Veri Hazırlığı', icon: Database,    bg: 'bg-blue-500',    text: 'text-white',     ring: 'ring-blue-300' },
+  'v2-solving':          { label: 'Program Çözümü', icon: Sparkles,    bg: 'bg-violet-500',  text: 'text-white',     ring: 'ring-violet-300' },
+  complete:              { label: 'Tamamlandı',     icon: Trophy,      bg: 'bg-emerald-500', text: 'text-white',     ring: 'ring-emerald-300' },
+  failed:                { label: 'Hata',           icon: AlertCircle, bg: 'bg-red-500',     text: 'text-white',     ring: 'ring-red-300' },
 };
 
 // localStorage history — son 5 run'ın elapsed süresi (saniye)
@@ -84,7 +124,10 @@ function fmtSec(sec: number): string {
   return `${Math.floor(s / 60)}d ${s % 60}s`;
 }
 
-export function AutoScheduleProgressModal({ open, onCancel }: AutoScheduleProgressModalProps) {
+export function AutoScheduleProgressModal({
+  open, isPending, onCancel,
+  previewData, onApplyAll, applyPending, onDismiss,
+}: AutoScheduleProgressModalProps) {
   // Backend'in dediği "target" yüzde — atlamalı (10→35→40→65→70→90→100)
   const [targetProgress, setTargetProgress] = useState<ScheduleProgressEvent>({
     stage: 'idle', percent: 0, current: 0, total: 0, detail: null,
@@ -245,6 +288,22 @@ export function AutoScheduleProgressModal({ open, onCancel }: AutoScheduleProgre
   const HeaderIcon = headerMeta.icon;
   const isLoading = !isComplete && !isFailed;
 
+  // Mod ayrımı: aktif mutation varsa (isPending) progress UI; mutation yokken previewData varsa
+  // ResultPanel. Bu sıra önemli — geçmiş run'lı bir oturumda "Otomatik Programla" basıldığında
+  // previewData (önceki run) hâlâ duruyor; isPending kontrolü öncelikli olmazsa modal direkt eski
+  // sonucu gösterir, kullanıcı yeni algoritmanın progress'ini hiç görmez.
+  if (!isPending && previewData) {
+    return (
+      <ResultPanel
+        previewData={previewData}
+        elapsedSec={elapsedSec}
+        onApplyAll={onApplyAll}
+        applyPending={applyPending ?? false}
+        onDismiss={onDismiss}
+      />
+    );
+  }
+
   return (
     <>
       {/* Backdrop */}
@@ -259,7 +318,7 @@ export function AutoScheduleProgressModal({ open, onCancel }: AutoScheduleProgre
           <div className="px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-3">
               <div className={`w-9 h-9 rounded-full flex items-center justify-center ${headerMeta.bg} ${headerMeta.text}`}>
-                <HeaderIcon className={`h-4.5 w-4.5 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={2.2} />
+                <HeaderIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={2.2} />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 id="auto-schedule-progress-title" className="font-semibold text-base text-slate-800 leading-tight">
@@ -276,24 +335,19 @@ export function AutoScheduleProgressModal({ open, onCancel }: AutoScheduleProgre
                   )}
                 </p>
               </div>
-              <div className="text-right">
-                <div className="text-xs font-mono font-medium text-slate-700">{fmtSec(elapsedSec)}</div>
+              <div className="text-right text-xs font-mono tabular-nums whitespace-nowrap">
+                <span className="font-medium text-slate-700">{fmtSec(elapsedSec)}</span>
                 {!isComplete && !isFailed && estimatedRemaining != null && estimatedRemaining > 0 && (
-                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                    ~{fmtSec(estimatedRemaining)} kaldı
-                  </div>
+                  <span className="text-slate-400"> · ~{fmtSec(estimatedRemaining)} kaldı</span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Progress bar */}
+          {/* Progress bar — header altyazısı zaten stage label'ını gösteriyor; üstteki çift etiket kaldırıldı */}
           <div className="px-6 pt-5 pb-2">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                {headerMeta.label}
-              </span>
-              <span className="text-xs font-mono text-slate-700 tabular-nums">
+            <div className="flex items-center justify-end mb-1.5">
+              <span className="text-sm font-mono font-semibold text-slate-700 tabular-nums">
                 %{Math.round(displayPercent)}
               </span>
             </div>
@@ -419,6 +473,225 @@ function SkeletonLine() {
     <div className="space-y-1.5">
       <div className="h-3 bg-slate-100 rounded animate-pulse w-3/4" />
       <div className="h-2 bg-slate-100 rounded animate-pulse w-1/2" />
+    </div>
+  );
+}
+
+/**
+ * Sonuç paneli — algoritma tamamlandığında progress UI yerine bu komponent render edilir.
+ * Eski ScheduleResultModal'dan birleştirilmiş; tüm sayılar backend payload'undan gelir
+ * (hardcoded yok). Frontend yalnız görsel gruplama yapar (departmana göre sayım, failure tipine
+ * göre kümeleme) — kaynak veri backend'in <c>AutoSchedulePreviewDto</c> yapısıdır.
+ */
+function ResultPanel({
+  previewData, elapsedSec, onApplyAll, applyPending, onDismiss,
+}: {
+  previewData: AutoSchedulePreview;
+  elapsedSec: number;
+  onApplyAll?: () => void;
+  applyPending: boolean;
+  onDismiss?: () => void;
+}) {
+  const { assignments, failures, stats } = previewData;
+  const sectionTotal = assignments.length + failures.length;
+  const pct = sectionTotal > 0 ? Math.round((assignments.length / sectionTotal) * 100) : 0;
+
+  // Departmana göre başarılı şube dağılımı — backend her assignment için departmentCode yolluyor.
+  const successByDept = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of assignments) {
+      const dept = a.departmentCode || '—';
+      map.set(dept, (map.get(dept) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [assignments]);
+
+  // Failure'ları suggestionType'a göre grupla (Türkçe etiketleme FAILURE_LABELS üzerinden).
+  const failuresByReason = useMemo(() => {
+    const map = new Map<string, typeof failures>();
+    for (const f of failures) {
+      const type = f.suggestions?.[0]?.suggestionType ?? 'Unknown';
+      const arr = map.get(type) ?? [];
+      arr.push(f);
+      map.set(type, arr);
+    }
+    return Array.from(map.entries());
+  }, [failures]);
+
+  // Tonlama: yüksek başarı yeşil, orta amber, düşük kırmızı.
+  const toneClass =
+    pct >= 80 ? 'bg-emerald-500 text-white'
+    : pct >= 50 ? 'bg-amber-500 text-white'
+    : 'bg-red-500 text-white';
+  const toneTextClass =
+    pct >= 80 ? 'text-emerald-600'
+    : pct >= 50 ? 'text-amber-600'
+    : 'text-red-600';
+  const toneBarClass =
+    pct >= 80 ? 'bg-emerald-500'
+    : pct >= 50 ? 'bg-amber-500'
+    : 'bg-red-500';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center"
+      aria-modal="true"
+      role="dialog"
+      aria-labelledby="auto-schedule-result-title"
+    >
+      <div className="w-[560px] max-w-[95vw] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 relative">
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              aria-label="Kapat"
+              className="absolute top-3 right-3 p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+          <div className="flex items-center gap-3 mb-4">
+            <div className={cn('w-10 h-10 rounded-full flex items-center justify-center', toneClass)}>
+              {pct >= 80 ? <CheckCircle2 className="h-5 w-5" />
+                : pct >= 50 ? <AlertTriangle className="h-5 w-5" />
+                : <XCircle className="h-5 w-5" />}
+            </div>
+            <div className="min-w-0">
+              <h2 id="auto-schedule-result-title" className="text-lg font-semibold text-slate-800 leading-tight">
+                Programlama Tamamlandı
+              </h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {assignments.length} / {sectionTotal} şube yerleştirildi
+                {stats.distinctCourseCount > 0 && (
+                  <span className="text-slate-400"> · {stats.distinctCourseCount} ders kapsanıyor</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="relative h-3 bg-slate-100 rounded-full overflow-hidden mb-1.5">
+            <div
+              className={cn('h-full rounded-full transition-all duration-700', toneBarClass)}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={cn('text-2xl font-bold tabular-nums', toneTextClass)}>%{pct}</span>
+            <div className="flex items-center gap-3 text-xs text-slate-500 tabular-nums">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {(stats.elapsedSeconds || elapsedSec).toFixed(1)}s
+              </span>
+              <span className="flex items-center gap-1">
+                <Building2 className="h-3 w-3" />
+                {stats.usedClassroomCount} derslik
+              </span>
+              <span className="flex items-center gap-1">
+                <BookOpen className="h-3 w-3" />
+                {stats.distinctCourseCount} ders
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* İçerik — iki sütun */}
+        <div className="border-t border-slate-100">
+          <ScrollArea className="max-h-[320px]">
+            <div className="grid grid-cols-2 divide-x divide-slate-100">
+              {/* Sol: Başarılı şubeler — departmana göre dağılım */}
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <span className="text-sm font-semibold text-slate-700">Yerleştirilen</span>
+                  <Badge className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+                    {assignments.length} şube
+                  </Badge>
+                </div>
+                {successByDept.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Henüz şube yerleşmedi.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {successByDept.map(([dept, count]) => (
+                      <div key={dept} className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 flex items-center gap-1">
+                          <Users className="h-3 w-3 text-slate-400" />
+                          {dept}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-400 rounded-full"
+                              style={{ width: `${(count / assignments.length) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium text-slate-700 tabular-nums w-6 text-right">{count}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Sağ: Başarısız şubeler — sebebe göre kümeleme */}
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <XCircle className="h-4 w-4 text-red-400" />
+                  <span className="text-sm font-semibold text-slate-700">Yerleşemeyen</span>
+                  {failures.length > 0 && (
+                    <Badge className="text-[10px] bg-red-50 text-red-600 border border-red-200 hover:bg-red-50">
+                      {failures.length} şube
+                    </Badge>
+                  )}
+                </div>
+                {failures.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Tüm şubeler başarıyla yerleştirildi.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {failuresByReason.map(([type, items]) => (
+                      <div key={type}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <AlertTriangle className="h-3 w-3 text-amber-500" />
+                          <span className="text-[11px] font-medium text-slate-600">
+                            {FAILURE_LABELS[type] ?? type}
+                          </span>
+                          <span className="text-[10px] text-slate-400">({items.length})</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 ml-4">
+                          {items.map(f => (
+                            <span
+                              key={f.sectionId}
+                              className="px-1.5 py-0.5 rounded text-[10px] bg-red-50 text-red-600 border border-red-200"
+                              title={`${f.courseCode}·${f.sectionNumber} — ${f.reason}`}
+                            >
+                              {f.courseCode}·{f.sectionNumber}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* Footer — tek ana eylem: Tümünü Uygula. Kapama X butonu sağ üstte. */}
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+          {onApplyAll && (
+            <Button
+              onClick={onApplyAll}
+              disabled={applyPending || assignments.length === 0}
+              className="bg-[#003366] hover:bg-[#002244]"
+            >
+              {applyPending ? 'Uygulanıyor...' : `Tümünü Uygula (${assignments.length})`}
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
