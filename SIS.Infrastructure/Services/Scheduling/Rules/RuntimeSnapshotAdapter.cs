@@ -86,6 +86,24 @@ public static class RuntimeSnapshotAdapter
             };
         }
 
+        // Plan 12 Faz 3 — 3 soft-only alanın propagation'ı.
+        var coEnrollmentPairs = t.CoEnrollmentPairs
+            .Select(p => new CoEnrollmentRuntimePair(p.CourseId1, p.CourseId2, p.StudentCount))
+            .ToList();
+
+        var adjacentPairs = t.AdjacentYearSoftPairs != null
+            ? new HashSet<(int, int)>(t.AdjacentYearSoftPairs)
+            : new HashSet<(int, int)>();
+
+        var distributionConstraints = t.DistributionConstraints?
+            .Select(dc => new RuntimeDistributionConstraint(
+                DistributionType: dc.DistributionType,
+                PreferenceLevel: dc.PreferenceLevel,
+                Courses: dc.Courses
+                    .Select(c => new DistributionConstraintCourseInfo(c.CourseId, c.CourseSectionId, c.SortOrder))
+                    .ToList()))
+            .ToList() ?? new List<RuntimeDistributionConstraint>();
+
         return new RuntimeSnapshot
         {
             TermId = t.TermId,
@@ -99,6 +117,9 @@ public static class RuntimeSnapshotAdapter
             CohortConflictPairs = cohortPairs,
             CurriculumConflictMode = curriculumConflictMode,
             EnrollmentConflicts = enrollmentMatrix,
+            CoEnrollmentPairs = coEnrollmentPairs,
+            AdjacentYearSoftPairs = adjacentPairs,
+            DistributionConstraints = distributionConstraints,
         };
     }
 }
