@@ -28,11 +28,10 @@ public sealed class SimulationService : ISimulationService
 
     public async Task<SimulationResult> SimulateMoveAsync(SimulateMoveRequest request, CancellationToken ct)
     {
-        var (snapshot, config, state, _) = await LoadEvaluationContextAsync(request.TermId, ct);
+        var (snapshot, beforeRuntime, config, state, _) = await LoadEvaluationContextAsync(request.TermId, ct);
 
         // Plan 12 Faz 6 — V1 EvaluateWithBreakdown yerine RuleEngine delegasyonu.
         // BEFORE
-        var beforeRuntime = RuntimeSnapshotAdapter.FromTermSnapshot(snapshot, config.CurriculumConflictMode);
         var beforeBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(beforeRuntime, config, state, ct);
         var before = new SimulationBreakdown(beforeBreakdown.TotalHardViolations, beforeBreakdown.TotalSoftPenalty);
 
@@ -50,7 +49,7 @@ public sealed class SimulationService : ISimulationService
     public async Task<IReadOnlyList<SuggestionItem>> GetSuggestionsAsync(
         int sectionId, int termId, int limit, CancellationToken ct)
     {
-        var (snapshot, config, state, _) = await LoadEvaluationContextAsync(termId, ct);
+        var (snapshot, _, config, state, _) = await LoadEvaluationContextAsync(termId, ct);
 
         var section = snapshot.Sections.FirstOrDefault(s => s.SectionId == sectionId);
         if (section == null) return Array.Empty<SuggestionItem>();
@@ -149,8 +148,7 @@ public sealed class SimulationService : ISimulationService
     public async Task<SimulationResult> SimulateConstraintChangeAsync(
         SimulateConstraintChangeRequest request, CancellationToken ct)
     {
-        var (snapshot, config, state, _) = await LoadEvaluationContextAsync(request.TermId, ct);
-        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(snapshot, config.CurriculumConflictMode);
+        var (snapshot, runtimeSnapshot, config, state, _) = await LoadEvaluationContextAsync(request.TermId, ct);
 
         // Plan 12 Faz 6 — V2 RuleEngine delegasyonu. SimulateConstraintChange "what-if" senaryosu
         // ConstraintState.Definitions üzerinde in-memory mutation yapar. Plan 13'te ConstraintState
@@ -188,7 +186,7 @@ public sealed class SimulationService : ISimulationService
 
     // ── Private helpers ──────────────────────────────────────────────────
 
-    private async Task<(TermSnapshot Snapshot, SchedulingConstraintConfig Config, ConstraintState State, Dictionary<string, int> WeightMap)>
+    private async Task<(TermSnapshot Snapshot, RuntimeSnapshot Runtime, SchedulingConstraintConfig Config, ConstraintState State, Dictionary<string, int> WeightMap)>
         LoadEvaluationContextAsync(int termId, CancellationToken ct)
     {
         var snapshot = await _schedulingService.BuildTermSnapshotAsync(termId, null, null, ct);
@@ -203,7 +201,10 @@ public sealed class SimulationService : ISimulationService
         var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, termId, ct);
         var weightMap = state.Definitions.ToDictionary(d => d.Key, d => d.Value.Weight);
 
-        return (snapshot, config, state, weightMap);
+        // Plan 13 Faz 8 — runtime snapshot mutation sonrası inşa edilir (S4 CoEnrollmentPairs lazy).
+        var runtime = RuntimeSnapshotAdapter.FromTermSnapshot(snapshot, config.CurriculumConflictMode);
+
+        return (snapshot, runtime, config, state, weightMap);
     }
 
     private static TermSnapshot BuildFilteredSnapshot(TermSnapshot snapshot, int excludeSectionId)
