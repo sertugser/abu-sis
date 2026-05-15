@@ -1,6 +1,6 @@
 # Rule Engine — Runtime Hard-Constraint Evaluation
 
-> **Plan 11 (Faz 0-4.7 tamamlandı).** Auto-schedule (V2 CP-SAT) ile manuel runtime check arasındaki silent drift'leri kapatmak için unified hard-rule predicate katmanı. **Flag default `true` (2026-05-15 migration)** — RuleEngine production'da aktif. Faz 5 (V1 evaluator silme) 1 hafta gözlem sonrası.
+> **Plan 11 (Faz 0-5 tamamlandı, 2026-05-15).** Auto-schedule (V2 CP-SAT) ile manuel runtime check arasındaki silent drift'lerin tek kaynak (RuleEngine) ile kapatılması. **V1 hard evaluator + feature flag silindi**; RuleEngine tek path. Drift fiziksel olarak imkansız.
 
 Son güncelleme: 2026-05-15
 
@@ -131,11 +131,12 @@ Orchestrator. Plan 10 davranışları:
 
 ## Rollout Planı (Plan 11 Faz 4.7 + 5)
 
-### Mevcut durum (Faz 4.7 sonu — 2026-05-15)
-- Feature flag `Schedule.UseV2RuntimeRules` = **`true`** (DB'de migration `20260515115108_EnableV2RuntimeRulesByDefault` ile aktive).
-- **RuleEngine path production'da aktif.** V1 evaluator hâlâ DI'da rollback için duruyor.
-- 22 test pass (6 H17 unit + 9 RuleEngine integration + 7 V1↔V2 drift).
-- Rollback için tek hamle: `UPDATE "SystemConfigs" SET "Value"='false' WHERE "Key"='Schedule.UseV2RuntimeRules';` — V1 path anında geri aktive olur.
+### Mevcut durum (Faz 5 sonu — 2026-05-15)
+- **Tek hard path: RuleEngine.** V1 hard evaluator klasörü silindi (17 dosya).
+- `ConstraintEvaluationService` korundu — soft note/penalty hesaplaması Plan 12'ye ertelendi.
+- Feature flag `Schedule.UseV2RuntimeRules` SystemConfigs'ten kaldırıldı (`RemoveUseV2RuntimeRulesFlag` migration).
+- **Rollback yolu kalmadı** — V1 hard evaluator dosyaları artık yok. Sorun çıkarsa `git revert` ile bu commit'i geri al.
+- Test paketi: 778 başarılı, 1 başarısız (pre-existing XSS, Plan 11 alakasız), 2 atlanan.
 
 ### Aktivasyon adımları
 1. **Test ortamında flag'i aç:**
