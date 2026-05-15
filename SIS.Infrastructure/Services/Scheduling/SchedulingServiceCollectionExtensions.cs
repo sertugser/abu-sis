@@ -182,6 +182,9 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S1_OccupancyRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S2_DailyLoadSoftRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S3_SlotCongestionRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S4_CoEnrollmentRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S5_LunchBreakSoftRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S7_StudentGapRule>();
 
         return services;
     }
