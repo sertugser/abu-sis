@@ -77,15 +77,6 @@ public static class RuntimeSnapshotAdapter
             ? new HashSet<(int, int)>(t.CohortConflictPairs)
             : new HashSet<(int, int)>();
 
-        Application.Scheduling.Rules.EnrollmentConflictMatrix? enrollmentMatrix = null;
-        if (t.EnrollmentConflicts != null)
-        {
-            enrollmentMatrix = new Application.Scheduling.Rules.EnrollmentConflictMatrix
-            {
-                HardConflictPairs = t.EnrollmentConflicts.HardConflictPairs,
-            };
-        }
-
         // Plan 12 Faz 3 — 3 soft-only alanın propagation'ı.
         var coEnrollmentPairs = t.CoEnrollmentPairs
             .Select(p => new CoEnrollmentRuntimePair(p.CourseId1, p.CourseId2, p.StudentCount))
@@ -116,7 +107,7 @@ public static class RuntimeSnapshotAdapter
             SlotAllowedModes = slotAllowedModes,
             CohortConflictPairs = cohortPairs,
             CurriculumConflictMode = curriculumConflictMode,
-            EnrollmentConflicts = enrollmentMatrix,
+            EnrollmentConflicts = t.EnrollmentConflicts,
             CoEnrollmentPairs = coEnrollmentPairs,
             AdjacentYearSoftPairs = adjacentPairs,
             DistributionConstraints = distributionConstraints,

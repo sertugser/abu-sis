@@ -1,3 +1,4 @@
+using SIS.Application.Scheduling.Rules;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Services.Scheduling;
