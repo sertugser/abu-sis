@@ -7,6 +7,8 @@ using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services.Scheduling;
 using SIS.Infrastructure.Services.Scheduling.Rules;
 using SIS.Infrastructure.Services.Scheduling.Rules.Hard;
+using SIS.Infrastructure.Services.Scheduling.Rules.Soft;
+using SIS.Infrastructure.Services.Scheduling.Rules.Hybrid;
 
 namespace SIS.Tests.Scheduling.Rules;
 
@@ -35,6 +37,17 @@ internal static class TestRuleHelpers
         new HDL_DailyLoadRule(),
         new HDO_NoDayOffRule(),
         new HWL_WeeklyLoadRule(),
+        // Plan 12 — soft + hybrid predicate'lar
+        new S1_OccupancyRule(),
+        new S2_DailyLoadSoftRule(),
+        new S3_SlotCongestionRule(),
+        new S4_CoEnrollmentRule(),
+        new S5_LunchBreakSoftRule(),
+        new S7_StudentGapRule(),
+        new S8_InstructorDaySpreadRule(),
+        new S12_WeekdayBalanceRule(),
+        new S20_AdjacentYearConflictRule(),
+        new DIST_DistributionRule(),
     };
 
     /// <summary>Boş in-memory DbContext üzerine ConstraintEvaluationService kurar (state null kullanmak için).</summary>
