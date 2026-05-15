@@ -2,15 +2,22 @@
 
 > **Plan 11 Faz 0 audit artifact.** Auto-schedule (V2 CP-SAT) ile runtime check (V1 evaluator) arasındaki tüm hard-constraint kuralların kanıt-zincirli karşılaştırması. Faz 3 boyunca her satır için failing-first parity test'i yazılır; Faz 5 sonunda V1 silinince bu matrix "RESOLVED" başlığıyla arşivlenir.
 
-Son güncelleme: 2026-05-15
-Status: **RESOLVED** (Plan 11 Faz 0-5 tamamlandı)
-- ✅ **Faz 1 acil patch'ler** uygulandı
-- ✅ **Faz 3:** 17 IRulePredicate (V2 mantığı saf C# port) + DI register
-- ✅ **Faz 4:** `SchedulingService` RuleEngine'a delegasyon + feature flag
-- ✅ **Faz 4.7:** Flag default true, RuleEngine production-aktif
-- ✅ **Faz 5:** V1 hard evaluator (17 dosya) + DI registration + feature flag SystemConfigs'ten silindi. **Drift fiziksel olarak imkansız — aynı kural iki yerde yok.**
-- Soft path (S1, S2, S3, S4, S5, S7, S8, S12, S20, DIST) Plan 12 kapsamı; bu matrix soft satırlar için **OPEN**.
-- Detay: [rule-engine.md](rule-engine.md)
+Son güncelleme: 2026-05-15 (Plan 12 Faz 0-7)
+Status: **HARD RESOLVED / SOFT PARTIAL** — Plan 11 hard tamamlandı, Plan 12 soft mimari birleştirme tamam, V2 encoder alignment Faz 9'a kaldı.
+
+### Plan 11 (hard, RESOLVED)
+- ✅ **Faz 5:** V1 hard evaluator (17 dosya) + DI registration + feature flag silindi. **Drift fiziksel olarak imkansız.**
+
+### Plan 12 (soft, PARTIAL)
+- ✅ **Faz 1-2:** ISoftRulePredicate + 10 soft+hybrid predicate port edildi (S1, S2, S3, S4, S5, S7, S8, S12, S20, DIST).
+- ✅ **Faz 3:** RuntimeSnapshotAdapter 3 soft alan propage ediyor.
+- ✅ **Faz 4:** RuleEngine soft dispatch + EvaluateWithBreakdownAsync gerçek çalışıyor.
+- ✅ **Faz 5-6:** SchedulingService + SimulationService RuleEngine'a delege.
+- ✅ **Faz 7:** V1 ConstraintEvaluationService + 11 evaluator dosyası silindi. IConstraintStateLoader extract.
+- ⏳ **Faz 8:** RuntimeSnapshotFactory (TermSnapshot tipleri kaldırılır) — sonraki seans.
+- ⏳ **Faz 9:** V2 encoder ↔ V1 numerik divergence düzeltmesi (5 encoder) — kullanıcı "birebir tutsun" kararı, sonraki seans.
+
+- Detay: [rule-engine.md](rule-engine.md), `project_plan12_progress.md` memory
 
 ---
 
@@ -86,11 +93,16 @@ Bu davranış RuleEngine'a port edilir (Faz 3.18).
 
 `project_known_encoder_evaluator_drifts.md` memory'sindeki belgelenmiş drift'ler:
 
-1. **S2/S5 Code drift** — Soft kurallar, Plan 11 dışı.
-2. **Plan 10 STUB soft encoder'lar** — Soft, Plan 11 dışı.
-3. **DIST per-row pattern** — DistributionConstraint dinamik kategori, Plan 11 dışı (ayrı mini-plan).
-4. **H12/Capacity preview-only** — Bu matrix'te H12 (V1 only) + H3 Capacity (V2 ile parite) olarak açıldı.
-5. _(memory'de detay yok, kullanılıyorsa eklenecek)_
+1. **S2/S5 Code drift** — Plan 12 Faz 9'da V2 alignment ile birlikte fix (Plan 10 H13/H-DL Category toggle entegrasyonu).
+2. **Plan 10 STUB soft encoder'lar (H4/H10 soft)** — Plan 12 kapsamı dışı (ayrı mini-plan; CP-SAT domain expansion gerektirir).
+3. **DIST per-row pattern** — Plan 12 Faz 2.10'da DIST_DistributionRule hybrid predicate olarak port edildi (RESOLVED).
+4. **H12/Capacity preview-only** — Plan 11 Faz 3 izole testlerle korundu.
+5. **Soft numerik divergence (5 encoder)** — Plan 12 Faz 9'da V1 davranışına hizalanır:
+   - DailyLoadSoftEncoder (S2): credit-hour → clock-hour
+   - StudentGapEncoder (S7): sabit → multiplier `(gap − cap + 1) × 3`
+   - WeekdayBalanceEncoder (S12): threshold guard ekle
+   - AdjacentYearConflictEncoder (S20): double weight kaldır
+   - InstructorDaySpreadEncoder (S8): credit-hour → clock-hour
 
 ---
 
