@@ -512,8 +512,6 @@ public partial class SchedulingService : ISchedulingService
 
     private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, Course course) => SchedulingHelpers.ResolveWeeklyHours(slots, course);
 
-    private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, SectionSnapshot section) => SchedulingHelpers.ResolveWeeklyHours(slots, section);
-
     private static ScheduleSlotDto MapTimeBlock(TimeBlock slot) =>
         new()
         {
@@ -521,18 +519,6 @@ public partial class SchedulingService : ISchedulingService
             StartTime = slot.StartTime,
             EndTime = slot.EndTime
         };
-
-    private static SchedulingConflictDto BuildConflict(
-        SectionSnapshot section,
-        string conflictType,
-        string message,
-        TimeBlock? slot,
-        int? relatedSectionId) => SchedulingHelpers.BuildConflict(section, conflictType, message, slot, relatedSectionId);
-
-    private static bool TryGetSharedCurriculumDepartment(
-        SectionSnapshot first,
-        SectionSnapshot second,
-        out int sharedDepartmentId) => SchedulingHelpers.TryGetSharedCurriculumDepartment(first, second, out sharedDepartmentId);
 
     private static Dictionary<int, int> GetSuggestedSemestersByDepartment(
         int courseId,
