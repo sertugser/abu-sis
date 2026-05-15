@@ -2,20 +2,20 @@
 
 > **Plan 11 Faz 0 audit artifact.** Auto-schedule (V2 CP-SAT) ile runtime check (V1 evaluator) arasındaki tüm hard-constraint kuralların kanıt-zincirli karşılaştırması. Faz 3 boyunca her satır için failing-first parity test'i yazılır; Faz 5 sonunda V1 silinince bu matrix "RESOLVED" başlığıyla arşivlenir.
 
-Son güncelleme: 2026-05-15 (Plan 12 Faz 0-7)
-Status: **HARD RESOLVED / SOFT PARTIAL** — Plan 11 hard tamamlandı, Plan 12 soft mimari birleştirme tamam, V2 encoder alignment Faz 9'a kaldı.
+Son güncelleme: 2026-05-15 (Plan 12 FULL RESOLVED)
+Status: **TÜMÜ RESOLVED** — Plan 11 hard + Plan 12 soft tüm fazları tamamlandı. V1 tipler silindi, RuleEngine tek path, V2 encoder ↔ V1 evaluator numerik paritesi sağlandı.
 
 ### Plan 11 (hard, RESOLVED)
 - ✅ **Faz 5:** V1 hard evaluator (17 dosya) + DI registration + feature flag silindi. **Drift fiziksel olarak imkansız.**
 
-### Plan 12 (soft, PARTIAL)
+### Plan 12 (soft, RESOLVED)
 - ✅ **Faz 1-2:** ISoftRulePredicate + 10 soft+hybrid predicate port edildi (S1, S2, S3, S4, S5, S7, S8, S12, S20, DIST).
 - ✅ **Faz 3:** RuntimeSnapshotAdapter 3 soft alan propage ediyor.
 - ✅ **Faz 4:** RuleEngine soft dispatch + EvaluateWithBreakdownAsync gerçek çalışıyor.
 - ✅ **Faz 5-6:** SchedulingService + SimulationService RuleEngine'a delege.
 - ✅ **Faz 7:** V1 ConstraintEvaluationService + 11 evaluator dosyası silindi. IConstraintStateLoader extract.
-- ⏳ **Faz 8:** RuntimeSnapshotFactory (TermSnapshot tipleri kaldırılır) — sonraki seans.
-- ⏳ **Faz 9:** V2 encoder ↔ V1 numerik divergence düzeltmesi (5 encoder) — kullanıcı "birebir tutsun" kararı, sonraki seans.
+- ✅ **Faz 8 (2026-05-15):** V1 `TermSnapshot/SectionSnapshot` tipleri tamamen silindi. `SchedulingService.Snapshot.cs` direkt DB → `RuntimeSnapshot` inşa eder. `RuntimeSnapshotAdapter` + `SectionSnapshotFactory` silindi. `ConflictPairsBuilder` mutation pattern → immutable `ConflictPairsResult`. 901/2/0/903 yeşil. Commit `f32bbf4`.
+- ✅ **Faz 9 (2026-05-15):** V2 encoder ↔ V1 numerik divergence düzeltmesi tamamlandı (5 encoder: S2/S7/S8/S12/S20). `SoftThresholds.AverageSlotDurationMinutes` ortak parametre. V1 ile birebir clock-hour mantığı.
 
 - Detay: [rule-engine.md](rule-engine.md), `project_plan12_progress.md` memory
 
