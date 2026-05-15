@@ -188,6 +188,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S8_InstructorDaySpreadRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S12_WeekdayBalanceRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S20_AdjacentYearConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hybrid.DIST_DistributionRule>();
 
         return services;
     }

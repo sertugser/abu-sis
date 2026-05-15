@@ -56,10 +56,11 @@ public sealed class RuntimeSnapshot
         = new HashSet<(int, int)>();
 
     /// <summary>
-    /// Plan 12 — DIST DistributionConstraint preload set'i. Per-instructor slot tercihleri.
+    /// Plan 12 — DIST DistributionConstraint preload set'i. V1 <c>DistributionConstraint</c> entity
+    /// mirror'ı (DistributionType + PreferenceLevel + Courses).
     /// </summary>
-    public IReadOnlyList<DistributionConstraintInfo> DistributionConstraints { get; init; }
-        = Array.Empty<DistributionConstraintInfo>();
+    public IReadOnlyList<RuntimeDistributionConstraint> DistributionConstraints { get; init; }
+        = Array.Empty<RuntimeDistributionConstraint>();
 }
 
 public sealed record ClassroomTermAssignmentInfo(int ClassroomId, int FacultyId);
@@ -72,24 +73,24 @@ public sealed record CorequisitePair(int CourseId, int RequiredCourseId);
 public sealed record CoEnrollmentRuntimePair(int FirstCourseId, int SecondCourseId, int StudentCount);
 
 /// <summary>
-/// Plan 12 — DIST DistributionConstraint per-section slot tercih bilgisi.
-/// Level değerleri: Unavailable (hard ban) → Evaluator hard ihlal; Discouraged/Preferred → soft penalty.
+/// Plan 12 — V1 <c>DistributionConstraint</c> entity mirror'ı.
+/// DIST_DistributionRule (hybrid hard+soft) bu set'i kullanır:
+///   • <c>PreferenceLevel.Unavailable</c> → hard violation (Evaluate döndürür)
+///   • Diğer level'lar → soft penalty (CalculatePenalty döndürür)
 /// </summary>
-public sealed record DistributionConstraintInfo(
-    int InstructorId,
-    int Day,
-    TimeOnly StartTime,
-    TimeOnly EndTime,
-    DistributionPreferenceLevel Level);
+public sealed record RuntimeDistributionConstraint(
+    SIS.Domain.Enums.DistributionType DistributionType,
+    SIS.Domain.Enums.PreferenceLevel PreferenceLevel,
+    IReadOnlyList<DistributionConstraintCourseInfo> Courses);
 
-public enum DistributionPreferenceLevel
-{
-    Unavailable = 0,
-    StronglyDiscouraged = 1,
-    Discouraged = 2,
-    Neutral = 3,
-    Preferred = 4,
-}
+/// <summary>
+/// Plan 12 — V1 <c>DistributionConstraintCourse</c> portu. CourseSectionId null ise
+/// ders genelinde (tüm section'lar), aksi halde spesifik section.
+/// </summary>
+public sealed record DistributionConstraintCourseInfo(
+    int CourseId,
+    int? CourseSectionId,
+    int SortOrder);
 
 /// <summary>
 /// Plan 11 — H5 enrollment mode (`Schedule.CurriculumConflictMode = "enrollment"`) için
