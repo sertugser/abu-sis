@@ -6,8 +6,6 @@ using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application.Constraints;
 
@@ -32,7 +30,7 @@ public abstract class SchedulingTestBase : IDisposable
 
     protected AppDbContext Context { get; }
     protected SchedulingService Service { get; }
-    protected ConstraintEvaluationService ConstraintService { get; }
+    protected IConstraintStateLoader ConstraintStateLoader { get; }
 
     protected SchedulingTestBase()
     {
@@ -41,8 +39,8 @@ public abstract class SchedulingTestBase : IDisposable
             .Options;
 
         Context = new AppDbContext(options);
-        ConstraintService = CreateConstraintEvaluationService();
-        Service = new SchedulingService(Context, ConstraintService, new ScheduleWriter(Context),
+        ConstraintStateLoader = new ConstraintStateLoader(Context);
+        Service = new SchedulingService(Context, ConstraintStateLoader, new ScheduleWriter(Context),
             SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine());
 
         SeedBaseData();
@@ -560,26 +558,8 @@ public abstract class SchedulingTestBase : IDisposable
         return timeSlot;
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        var evaluators = new IConstraintEvaluator[]
-        {
-            // Plan 11 Faz 5 — V1 hard evaluator'lar silindi (2026-05-15). RuleEngine + IRulePredicate'lar
-            // (Rules/Hard/H*.cs) hard validation'ı üstlendi. Hard V1 evaluator'lara bağlı eski testler
-            // class-level Skip ile işaretlenebilir; soft evaluator setine dokunulmadı.
-            // Soft
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new WeekdayBalanceEvaluator(),
-            new DistributionConstraintEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, Context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi. Test base artık doğrudan
+    // ConstraintStateLoader + RuleEngine (TestRuleHelpers.BuildEngine) kullanır.
 
     public void Dispose()
     {

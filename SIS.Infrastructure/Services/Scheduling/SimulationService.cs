@@ -11,18 +11,18 @@ public sealed class SimulationService : ISimulationService
 {
     private readonly AppDbContext _context;
     private readonly SchedulingService _schedulingService;
-    private readonly ConstraintEvaluationService _evaluationService;
+    private readonly IConstraintStateLoader _constraintStateLoader;
     private readonly IRuleEngine _ruleEngine;
 
     public SimulationService(
         AppDbContext context,
         SchedulingService schedulingService,
-        ConstraintEvaluationService evaluationService,
+        IConstraintStateLoader constraintStateLoader,
         IRuleEngine ruleEngine)
     {
         _context = context;
         _schedulingService = schedulingService;
-        _evaluationService = evaluationService;
+        _constraintStateLoader = constraintStateLoader;
         _ruleEngine = ruleEngine;
     }
 
@@ -200,7 +200,7 @@ public sealed class SimulationService : ISimulationService
                 snapshot.TermId, softConfig.S4MinCoPairThreshold, ct);
 
         var config = _schedulingService.BuildConstraintConfig(softConfig, hardConfig);
-        var state = await _evaluationService.LoadConstraintStateAsync(null, null, null, termId, ct);
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, termId, ct);
         var weightMap = state.Definitions.ToDictionary(d => d.Key, d => d.Value.Weight);
 
         return (snapshot, config, state, weightMap);

@@ -7,7 +7,6 @@ using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
 
@@ -29,7 +28,7 @@ public class SchedulingServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        _service = new SchedulingService(_context, CreateConstraintEvaluationService(), new ScheduleWriter(_context),
+        _service = new SchedulingService(_context, new ConstraintStateLoader(_context), new ScheduleWriter(_context),
             SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine());
 
         SeedBaseData();
@@ -765,23 +764,8 @@ public class SchedulingServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        // Plan 11 Faz 5 — V1 hard evaluator'lar silindi; RuleEngine path her zaman aktif.
-        // ConstraintEvaluationService sadece soft evaluator'lar ile çalışır.
-        var evaluators = new IConstraintEvaluator[]
-        {
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new WeekdayBalanceEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, _context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi; SchedulingService artık
+    // ConstraintStateLoader + RuleEngine ile kuruluyor.
 
     public void Dispose()
     {

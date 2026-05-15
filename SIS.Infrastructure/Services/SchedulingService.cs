@@ -25,18 +25,18 @@ namespace SIS.Infrastructure.Services;
 public partial class SchedulingService : ISchedulingService
 {
     private readonly AppDbContext _context;
-    private readonly ConstraintEvaluationService _constraintEvaluation;
+    private readonly IConstraintStateLoader _constraintStateLoader;
     private readonly IScheduleWriter _scheduleWriter;
     private readonly IRuleEngine _ruleEngine;
 
     public SchedulingService(
         AppDbContext context,
-        ConstraintEvaluationService constraintEvaluation,
+        IConstraintStateLoader constraintStateLoader,
         IScheduleWriter scheduleWriter,
         IRuleEngine ruleEngine)
     {
         _context = context;
-        _constraintEvaluation = constraintEvaluation;
+        _constraintStateLoader = constraintStateLoader;
         _scheduleWriter = scheduleWriter;
         _ruleEngine = ruleEngine;
     }
@@ -56,7 +56,7 @@ public partial class SchedulingService : ISchedulingService
             termSnapshot,
             curriculumConflictMode: hardCfg?.CurriculumConflictMode ?? "curriculum");
 
-        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, resolvedTerm.Id, cancellationToken);
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, resolvedTerm.Id, cancellationToken);
         var conflicts = await _ruleEngine.EvaluateAllExistingAsync(runtimeSnapshot, fullCfg, state, cancellationToken);
         return conflicts.ToList();
     }
@@ -131,7 +131,7 @@ public partial class SchedulingService : ISchedulingService
             snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, cancellationToken);
 
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
         var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
             snapshot, curriculumConflictMode: hardConfig?.CurriculumConflictMode ?? "curriculum");
 

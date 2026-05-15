@@ -3,8 +3,6 @@ using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.Scheduling.Solver;
-using SIS.Infrastructure.Services.Scheduling.Evaluators;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 using SIS.Infrastructure.Services.Scheduling.OrTools;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
@@ -22,25 +20,12 @@ public static class SchedulingServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddSchedulingConstraints(this IServiceCollection services)
     {
-        // Plan 11 Faz 5 — Hard V1 evaluator'lar silindi (2026-05-15). RuleEngine + 17 IRulePredicate
-        // (Rules/Hard/H*.cs) tüm hard validation'ı üstlendi. Soft evaluator'lar Plan 11 scope dışı,
-        // ileride Plan 12'de ele alınır.
+        // Plan 11 + 12 — V1 ConstraintEvaluationService ve evaluator chain silindi (2026-05-15).
+        // Hard validation 17 IRulePredicate (Rules/Hard/H*.cs), soft validation 9 ISoftRulePredicate
+        // (Rules/Soft/S*.cs) + DIST hybrid; tüm orchestration RuleEngine'da. ConstraintState
+        // loader ayrı bir servise (IConstraintStateLoader) extract edildi.
 
-        // Soft constraint evaluators
-        services.AddScoped<IConstraintEvaluator, OccupancyEvaluator>();
-        services.AddScoped<IConstraintEvaluator, DailyLoadSoftEvaluator>();
-        services.AddScoped<IConstraintEvaluator, SlotCongestionEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CoEnrollmentEvaluator>();
-        services.AddScoped<IConstraintEvaluator, LunchBreakSoftEvaluator>();
-        services.AddScoped<IConstraintEvaluator, StudentGapEvaluator>();
-        services.AddScoped<IConstraintEvaluator, InstructorDaySpreadEvaluator>();
-        services.AddScoped<IConstraintEvaluator, WeekdayBalanceEvaluator>();
-        services.AddScoped<IConstraintEvaluator, AdjacentYearConflictEvaluator>();
-        // Distribution constraint evaluator (hard/soft depending on preference level)
-        services.AddScoped<IConstraintEvaluator, DistributionConstraintEvaluator>();
-
-        // Orchestrator
-        services.AddScoped<ConstraintEvaluationService>();
+        services.AddScoped<IConstraintStateLoader, ConstraintStateLoader>();
 
         // Auto-schedule engine
         services.AddScoped<AutoScheduleEngine>();

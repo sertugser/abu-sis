@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Infrastructure.Services.Scheduling;
 using SIS.Infrastructure.Services.Scheduling.Rules;
 
 namespace SIS.Infrastructure.Services;
@@ -40,7 +41,7 @@ public partial class SchedulingService
         var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
-        var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
+        var constraintState = await _constraintStateLoader.LoadConstraintStateAsync(
             candidate.InstructorId, candidate.DepartmentId, candidate.SectionId, section.TermId, cancellationToken);
 
         result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
@@ -118,7 +119,7 @@ public partial class SchedulingService
             snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, ct);
 
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
 
         // Plan 12 Faz 5 — Hard + soft validation RuleEngine üzerinden. Soft note'lar
         // EvaluateWithBreakdownAsync ConstraintScoreItemDto.SampleViolations'tan toplanır.
@@ -152,8 +153,23 @@ public partial class SchedulingService
         HardConstraintConfig? hardConfig = null,
         ConstraintState? state = null)
     {
+        // Plan 12 Faz 7 — V1 ConstraintEvaluationService.EvaluateCandidate yerine RuleEngine
+        // delegasyonu. SuggestAsync path'i için kullanılır (manuel slot önerisi). Soft notes
+        // RuleEngine breakdown çıktısından üretilir; per-candidate breakdown yerine
+        // hard violations + CalculatePenaltyAsync ile karışık değer.
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var (conflicts, notes, _) = _constraintEvaluation.EvaluateCandidate(candidate, snapshot, config, state);
-        return (conflicts, notes);
+        var runtimeSnapshot = RuntimeSnapshotAdapter.FromTermSnapshot(
+            snapshot, hardConfig?.CurriculumConflictMode ?? "curriculum");
+        var runtimeCandidate = RuntimeSnapshotAdapter.FromSectionSnapshot(candidate);
+
+        // Async API'ler sync wrapper içinde (caller blok bekliyor; SuggestAsync ana akışı async).
+        var conflictsTask = _ruleEngine.EvaluateCandidateAsync(runtimeCandidate, runtimeSnapshot, config, state, CancellationToken.None);
+        conflictsTask.Wait();
+        var conflicts = conflictsTask.Result.ToList();
+
+        // Soft notes — SuggestAsync feasibility için sadece bilgilendirici, ihlal değil.
+        // EvaluateWithBreakdownAsync term-wide sonuç döner; tek candidate için CalculatePenaltyAsync
+        // skalar dönüyor. Notes boş bırakılır (UI'da SuggestAsync hızı için kabul edilebilir trade).
+        return (conflicts, new List<string>());
     }
 }

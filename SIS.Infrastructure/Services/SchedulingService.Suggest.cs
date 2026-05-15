@@ -79,7 +79,7 @@ public partial class SchedulingService
         var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
-        var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
+        var constraintState = await _constraintStateLoader.LoadConstraintStateAsync(
             instructorId, section.Course.DepartmentId, section.Id, section.TermId, cancellationToken);
         var candidateCourseMetadata = await LoadCourseSchedulingMetadataAsync(section.TermId, [section.CourseId], cancellationToken);
         var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);

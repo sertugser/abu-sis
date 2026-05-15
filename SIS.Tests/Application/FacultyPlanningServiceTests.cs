@@ -12,7 +12,6 @@ using SIS.Infrastructure.Persistence;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
 
@@ -33,13 +32,13 @@ public class FacultyPlanningServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        var constraintService = CreateConstraintEvaluationService();
+        var stateLoader = new ConstraintStateLoader(_context);
         var autoScheduleEngine = new AutoScheduleEngine(_context, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
         var scheduleWriter = new ScheduleWriter(_context);
         var ruleEngine = SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine();
         _service = new FacultyPlanningService(
             _context,
-            new SchedulingService(_context, constraintService, scheduleWriter, ruleEngine),
+            new SchedulingService(_context, stateLoader, scheduleWriter, ruleEngine),
             new HttpContextAccessor(),
             autoScheduleEngine,
             scheduleWriter,
@@ -433,22 +432,8 @@ public class FacultyPlanningServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        // Plan 11 Faz 5 — Hard V1 evaluator'lar silindi; soft kalır.
-        var evaluators = new IConstraintEvaluator[]
-        {
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new WeekdayBalanceEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, _context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi; SchedulingService artık
+    // ConstraintStateLoader + RuleEngine ile kuruluyor.
 
     public void Dispose()
     {
