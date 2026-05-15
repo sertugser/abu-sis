@@ -11,12 +11,13 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// </summary>
 /// <remarks>
 /// <para>
-/// NOTE (Plan 9): v1 evaluator per-(dept, year, day) ardışık section sıralaması üzerinden
-/// her ardışık çift için <c>(gap - cap + 1) × Weight</c> penalty (multiplier'lı) uygular —
-/// CP-SAT'ta sıralama IntVar zincirleri pahalı. Plan 8 simplification: per-pair reified
-/// <c>same_day ∧ (gapAB OR gapBA)</c> literal'i, penalty sabit <see cref="SoftThresholds.S7Weight"/>.
-/// "Birden fazla aynı-gün-uzak ders" durumu pair-bazlı sayım ile yine de cezalandırılır
-/// (3 section aynı gün uzaksa 3 pair = 3 × Weight).
+/// NOTE (v1 divergence): v1 evaluator per-(dept, year, day) ardışık section sıralaması
+/// üzerinden her ardışık çift için <c>(gap − cap + 1) × 3</c> penalty (multiplier'lı)
+/// uygular — gap büyüdükçe lineer artar. Plan 8 simplification (V2): per-pair reified
+/// <c>same_day ∧ (gapAB OR gapBA)</c> literal'i, sabit <see cref="SoftThresholds.S7Weight"/>
+/// (default 3). Default cap'te küçük gap (=cap) aynı sayı verir; büyük gap'te V1 daha
+/// agresif. Plan 12 "birebir tutsun" kararı sonrası multiplier port'u **Plan 13'e ertelendi**
+/// (block-level gap arithmetic için CP-SAT IntVar zinciri pahalı; ayrı tasarım gerek).
 /// </para>
 /// <para>
 /// NOTE (Plan 9): Yalnızca <see cref="ComponentType.Lecture"/> interval'ı iterate edilir;
