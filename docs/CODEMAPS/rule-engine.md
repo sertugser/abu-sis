@@ -1,6 +1,6 @@
 # Rule Engine — Runtime Hard-Constraint Evaluation
 
-> **Plan 11 (Faz 0-4 tamamlandı).** Auto-schedule (V2 CP-SAT) ile manuel runtime check arasındaki silent drift'leri kapatmak için unified hard-rule predicate katmanı. Faz 5 (V1 evaluator silme) production'da `Schedule.UseV2RuntimeRules` = true ile 1 hafta gözlem sonrası uygulanır.
+> **Plan 11 (Faz 0-4.7 tamamlandı).** Auto-schedule (V2 CP-SAT) ile manuel runtime check arasındaki silent drift'leri kapatmak için unified hard-rule predicate katmanı. **Flag default `true` (2026-05-15 migration)** — RuleEngine production'da aktif. Faz 5 (V1 evaluator silme) 1 hafta gözlem sonrası.
 
 Son güncelleme: 2026-05-15
 
@@ -131,10 +131,11 @@ Orchestrator. Plan 10 davranışları:
 
 ## Rollout Planı (Plan 11 Faz 4.7 + 5)
 
-### Mevcut durum (Faz 4 sonu)
-- Feature flag `Schedule.UseV2RuntimeRules` = **false** (DB default).
-- V1 evaluator path aktif.
-- RuleEngine ve 17 predicate hazır + DI register'lı + H17 unit test pass.
+### Mevcut durum (Faz 4.7 sonu — 2026-05-15)
+- Feature flag `Schedule.UseV2RuntimeRules` = **`true`** (DB'de migration `20260515115108_EnableV2RuntimeRulesByDefault` ile aktive).
+- **RuleEngine path production'da aktif.** V1 evaluator hâlâ DI'da rollback için duruyor.
+- 22 test pass (6 H17 unit + 9 RuleEngine integration + 7 V1↔V2 drift).
+- Rollback için tek hamle: `UPDATE "SystemConfigs" SET "Value"='false' WHERE "Key"='Schedule.UseV2RuntimeRules';` — V1 path anında geri aktive olur.
 
 ### Aktivasyon adımları
 1. **Test ortamında flag'i aç:**
