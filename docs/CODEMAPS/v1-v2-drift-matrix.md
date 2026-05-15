@@ -97,14 +97,14 @@ Bu davranış RuleEngine'a port edilir (Faz 3.18).
 2. **Plan 10 STUB soft encoder'lar (H4/H10 soft)** — Plan 12 kapsamı dışı (ayrı mini-plan; CP-SAT domain expansion gerektirir).
 3. **DIST per-row pattern** — ✅ Plan 12 Faz 2.10'da DIST_DistributionRule hybrid predicate olarak port edildi (RESOLVED).
 4. **H12/Capacity preview-only** — Plan 11 Faz 3 izole testlerle korundu.
-5. **Soft numerik divergence (5 encoder)** — Karışık durum (2026-05-15 güncel):
-   - ✅ **StudentGapEncoder (S7)**: multiplier `(gap − cap + 1) × Weight` Plan 13 commit `728a4eb`'de port edildi. V1 ↔ V2 birebir aynı penalty üretiyor.
-   - ✅ **WeekdayBalanceEncoder (S12)**: threshold guard `diff × 700 > sumOfDays × percent` Plan 12 commit `b29bb0e`'de port edildi.
-   - ✅ **AdjacentYearConflictEncoder (S20)**: "double weight" drift'i **gerçek değil** — `ConstraintController.UpdateWeight` dual-write yapıyor (ConstraintDefinitions.Weight + SystemConfigs.Schedule.S20Weight senkron). Manuel DB değişikliği dışında drift yok.
-   - ⏳ DailyLoadSoftEncoder (S2): credit-hour → clock-hour — Plan 13'e ertelendi (block-level CP-SAT model genişletmesi)
-   - ⏳ InstructorDaySpreadEncoder (S8): credit-hour → clock-hour — aynı genişletme
+5. **Soft numerik divergence (5 encoder)** — ✅ **TÜMÜ RESOLVED** (2026-05-15):
+   - ✅ **StudentGapEncoder (S7)**: multiplier `(gap − cap + 1) × Weight` Plan 13 commit `728a4eb`.
+   - ✅ **WeekdayBalanceEncoder (S12)**: threshold guard Plan 12 commit `b29bb0e`.
+   - ✅ **AdjacentYearConflictEncoder (S20)**: dual-write keşfi — gerçek drift yok.
+   - ✅ **DailyLoadSoftEncoder (S2)**: clock-minute hesabı + AddDivisionEquality saate çevirme Plan 13 commit `cd490cb`.
+   - ✅ **InstructorDaySpreadEncoder (S8)**: clock-minute totalMinutes / capMinutes Plan 13 commit `cd490cb`.
 
-   **3/5 RESOLVED**, 2/5 (S2/S8) clock-hour migration kaldı.
+   `SoftThresholds.AverageSlotDurationMinutes` field'ı (default 50) tüm clock-hour hesaplarının ortak parametresi. V2 encoder artık V1 evaluator ile birebir aynı clock-hour mantığını kullanıyor.
 
 ---
 
