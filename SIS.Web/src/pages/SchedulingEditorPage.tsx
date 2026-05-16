@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, PointerSensor,
+  DndContext, KeyboardSensor, MeasuringStrategy, PointerSensor,
+  pointerWithin, rectIntersection,
   useSensor, useSensors,
-  type DragEndEvent, type DragMoveEvent, type DragStartEvent,
+  type CollisionDetection,
+  type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, CheckSquare,
@@ -258,7 +260,7 @@ export default function SchedulingEditorPage() {
 
   const { data: activeTerm, isLoading: termLoading } = useActiveTerm();
   const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
-  const { isFullscreen, toggle, autoEnter, setAutoEnter } = useFullscreen();
+  const { isFullscreen, toggle } = useFullscreen();
 
   const urlFacultyId = searchParams.get('facultyId');
   const urlTermId = searchParams.get('termId');
@@ -363,6 +365,18 @@ export default function SchedulingEditorPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor),
   );
+
+  // Collision detection: pointer-based primary + rectIntersection fallback.
+  // Default `rectIntersection` grid→grid drag'inde source cell ile drop overlay'leri arasında
+  // intersection bulamıyor ve `over` her DragMove'da null kalıyordu (pool→grid çalışıyordu çünkü
+  // source aside ayrı container). `pointerWithin` mouse cursor'un hangi cell içinde olduğuna
+  // doğrudan bakar; pointer hücreler arasında boşluktayken `rectIntersection` fallback en yakın
+  // droppable'ı bulur. Pool drop'u (UNASSIGNED_POOL_DROP_ID) da bu yolla doğru hedef olarak gelir.
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return rectIntersection(args);
+  }, []);
 
   // URL'de fakülte/dönem yoksa default'ları yaz — link paylaşılabilir kalsın
   useEffect(() => {
@@ -703,18 +717,15 @@ export default function SchedulingEditorPage() {
     <>
     <DndContext
       sensors={sensors}
+      collisionDetection={collisionDetection}
+      // autoScroll kapalı: scrollable parent (main overflow-auto) içinde aktif kartı takip etmek
+      // için autoScroll cell rect'lerini yeniden ölçmeye çalışıyor ve Status.Initialized geçişi
+      // (activeNodeRect ölçümü) hiç tamamlanmıyordu → over her zaman null.
+      autoScroll={false}
       // Scrollable parent + position:fixed kombinasyonunda droppable rect'leri stale kalıyordu.
       // Always ile her drag-move'da rect'ler yeniden ölçülür.
       measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-      onDragStart={(e: DragStartEvent) => {
-        // eslint-disable-next-line no-console
-        console.log('[DragStart] activeId:', e.active.id, 'data:', e.active.data.current);
-        handleDragStart(e);
-      }}
-      onDragMove={(e: DragMoveEvent) => {
-        // eslint-disable-next-line no-console
-        console.log('[DragMove] over:', e.over?.id ?? 'null', 'delta:', e.delta);
-      }}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
@@ -757,11 +768,6 @@ export default function SchedulingEditorPage() {
                 <option key={f.id} value={f.id}>{f.code} — {f.name}</option>
               ))}
             </select>
-            {activeTerm && (
-              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                {activeTerm.name}
-              </span>
-            )}
           </div>
 
           {/* Mutation status mini-indikatör */}
@@ -869,17 +875,6 @@ export default function SchedulingEditorPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
-          {/* Fullscreen tercih checkbox'ı */}
-          <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={autoEnter}
-              onChange={e => setAutoEnter(e.target.checked)}
-              className="rounded accent-[#003366] h-3 w-3"
-            />
-            Açılışta tam ekran
-          </label>
 
           <TooltipProvider delayDuration={150}>
             <Tooltip>
@@ -1022,33 +1017,9 @@ export default function SchedulingEditorPage() {
         </div>
       </div>
 
-      {/* ── DragOverlay: sürüklenen kart kopyası cursor'u takip eder ── */}
-      <DragOverlay dropAnimation={null}>
-        {dragPreview ? (
-          <div className="rounded-md border-l-[4px] px-2 py-1 shadow-2xl bg-white border border-slate-300 cursor-grabbing pointer-events-none min-w-[140px]">
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-mono font-bold text-sm text-slate-800">
-                {dragPreview.section.courseCode}
-              </span>
-              <span className="text-[10px] font-mono font-bold text-slate-500">
-                ·{dragPreview.section.sectionIndex}
-              </span>
-              <span
-                className={`ml-auto text-[9px] px-1 py-0.5 rounded border font-bold ${
-                  dragPreview.data.blockType === 'Theory'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                }`}
-              >
-                {dragPreview.data.blockType === 'Theory' ? 'T' : 'L'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-600 truncate mt-0.5">
-              {dragPreview.section.courseName}
-            </p>
-          </div>
-        ) : null}
-      </DragOverlay>
+      {/* DragOverlay kaldırıldı: scrollable parent içinde `over` her DragMove'da null kalıyordu.
+          Yerine kartlar useDraggable.transform ile in-place hareket eder (SectionBlock +
+          UnassignedSectionCard içinde uygulanır). */}
     </DndContext>
     </>
   );

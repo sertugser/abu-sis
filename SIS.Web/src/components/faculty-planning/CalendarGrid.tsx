@@ -272,7 +272,7 @@ function SectionBlock({
   // isContinuation=true → bu kart bir başka satırdaki "ana" blok'un alt satırı; sürüklenemez (üst kartı taşırsın).
   const isDraggable = editable && !section.isPinned && !isContinuation;
   const dragId = `section-${section.sectionId}-${block.day}-${block.startTime}-${block.blockType}`;
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: dragId,
     disabled: !isDraggable,
     data: {
@@ -286,6 +286,15 @@ function SectionBlock({
       durationMinutes: timeToMinutes(block.endTime) - timeToMinutes(block.startTime),
     },
   });
+
+  // DragOverlay yerine transform-based drag: kartın kendisi cursor'la birlikte hareket eder.
+  // Sebep: dnd-kit DragOverlay + scrollable parent (main overflow-auto) + grid kartı (kendi
+  // cell'inin droppable'ı içinde başlıyor) kombinasyonunda `over` her DragMove'da null kalıyordu.
+  // Transform style orijinal node'u translate ederek dnd-kit'in collision detection'ını
+  // doğru cell rect'leriyle eşleştirilebilir hale getirir.
+  const dragTransformStyle = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
+    : undefined;
 
   // Continuation = üst slotun devamı; noktalı üst border + daha silik
   const continuationClass = isContinuation
@@ -312,7 +321,11 @@ function SectionBlock({
 
   const cardInner = (
     <div
-      ref={isDraggable ? setNodeRef : undefined}
+      // ref koşulsuz: React 19'da `ref={cond ? cb : undefined}` callback'i bağlamıyor — bu yüzden
+      // useDraggable'ın node.current'i null kalıyordu, dnd-kit aktif kartın rect'ini ölçemiyordu,
+      // collisionDetection hiç çağrılmıyor → over=null. useDraggable disabled=true ise drag zaten
+      // tetiklenmediği için ref'in her zaman bağlı olması güvenli.
+      ref={setNodeRef}
       {...(isDraggable ? attributes : {})}
       {...(isDraggable ? listeners : {})}
       data-section-id={section.sectionId}
@@ -336,7 +349,7 @@ function SectionBlock({
         isCompactDensity && hoveredSectionId === section.sectionId && 'ring-1 ring-[#003366] z-10',
         isCompactDensity && hoveredSectionId !== null && hoveredSectionId !== section.sectionId && 'opacity-60',
       )}
-      style={{ borderLeftColor: color.accent }}
+      style={{ borderLeftColor: color.accent, ...dragTransformStyle }}
       onClick={e => {
         e.stopPropagation();
         if (onToggleSelect) {
@@ -451,8 +464,8 @@ function SectionBlock({
     </div>
   );
 
-  // Spacious modda popover yeterli (kart zaten geniş ve içerik tam görünür) — tooltip eklenmez.
-  // Kompakt modlarda tooltip kart üzerine hover ile detay verir (300ms gecikme, global TooltipProvider).
+  // Salt-okunur + spacious modda Popover detay taşır; tooltip gereksiz.
+  // Kompakt modda tooltip hover ile detayı verir.
   const wrapWithTooltip = (child: React.ReactElement): React.ReactElement => {
     if (cardDensity === 'spacious') return child;
     return (
@@ -465,8 +478,15 @@ function SectionBlock({
     );
   };
 
+  // editable iken hem Popover hem Tooltip devre dışı: Radix `asChild` ref composition
+  // useDraggable'ın setNodeRef'iyle çakışıp dnd-kit'in `activeNodeRect` ölçümünü null bırakıyordu
+  // (kanıt: useDndMonitor → initialRect=null her DragMove'da, dolayısıyla Status.Initialized'a
+  // geçilemiyor → collisionDetection hiç çağrılmıyor → over=null). Düzenleyici drag-drop için
+  // kurulduğundan tooltip/popover gereksiz; kart yüzeyi zaten ders kodu/derslik/hoca veriyor.
+  if (editable) {
+    return cardInner;
+  }
   if (onSectionClick || onToggleSelect) {
-    // Custom click handler ya da multi-select aktifse popover atlanır.
     return wrapWithTooltip(cardInner);
   }
 

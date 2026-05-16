@@ -36,6 +36,8 @@ export function UnassignedSectionsPanel({
   sections, isDragging, canAcceptDrop, slotMinutes = DEFAULT_SLOT_MINUTES,
 }: UnassignedSectionsPanelProps) {
   const [search, setSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   // KRİTİK: disabled drag state'ine bağlanmaz — drag start'ta dnd-kit ilk ölçümünü yaparken
   // React state batched update ile gecikme yaratıyor; havuz "kayıtsız" kalıp drop hedefi olarak
@@ -50,16 +52,44 @@ export function UnassignedSectionsPanel({
     [sections],
   );
 
+  // Dropdown opsiyonları havuzun gerçek içeriğinden türetilir — hiç olmayan bölüm/sınıf gösterilmez.
+  const deptOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of unscheduled) if (s.departmentCode) set.add(s.departmentCode);
+    return Array.from(set).sort();
+  }, [unscheduled]);
+
+  const yearOptions = useMemo(() => {
+    const set = new Set<number>();
+    for (const s of unscheduled) {
+      const y = s.suggestedSemester > 0 ? Math.ceil(s.suggestedSemester / 2) : 0;
+      if (y > 0) set.add(y);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [unscheduled]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return unscheduled;
-    return unscheduled.filter(s =>
-      s.courseCode.toLowerCase().includes(q)
-      || s.courseName.toLowerCase().includes(q)
-      || (s.instructorName?.toLowerCase().includes(q) ?? false)
-      || s.departmentCode.toLowerCase().includes(q),
-    );
-  }, [unscheduled, search]);
+    const yearNum = yearFilter ? Number(yearFilter) : null;
+    return unscheduled.filter(s => {
+      if (deptFilter && s.departmentCode !== deptFilter) return false;
+      if (yearNum != null) {
+        const y = s.suggestedSemester > 0 ? Math.ceil(s.suggestedSemester / 2) : 0;
+        if (y !== yearNum) return false;
+      }
+      if (q) {
+        const hit = s.courseCode.toLowerCase().includes(q)
+          || s.courseName.toLowerCase().includes(q)
+          || (s.instructorName?.toLowerCase().includes(q) ?? false)
+          || s.departmentCode.toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      return true;
+    });
+  }, [unscheduled, search, deptFilter, yearFilter]);
+
+  const activeFilterCount = [search, deptFilter, yearFilter].filter(Boolean).length;
+  const clearFilters = () => { setSearch(''); setDeptFilter(''); setYearFilter(''); };
 
   const showAcceptHint = isDragging && canAcceptDrop;
 
@@ -102,7 +132,7 @@ export function UnassignedSectionsPanel({
               Atanmamış
             </h2>
             <span className="text-[10px] tabular-nums bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 font-medium">
-              {filtered.length}{search ? `/${unscheduled.length}` : ''}
+              {filtered.length}{activeFilterCount > 0 ? `/${unscheduled.length}` : ''}
             </span>
           </>
         )}
@@ -116,8 +146,8 @@ export function UnassignedSectionsPanel({
         </div>
       ) : (
         <>
-          {/* Search */}
-          <div className="px-3 py-2 border-b border-slate-100">
+          {/* Filtreler — uzun havuz listesinde kullanıcı kaybolmasın diye bölüm + sınıf daralt */}
+          <div className="px-3 py-2 border-b border-slate-100 space-y-1.5">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <Input
@@ -127,6 +157,39 @@ export function UnassignedSectionsPanel({
                 className="pl-7 h-7 text-xs border-slate-200"
               />
             </div>
+            <div className="flex items-center gap-1.5">
+              <select
+                className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                value={deptFilter}
+                onChange={e => setDeptFilter(e.target.value)}
+                aria-label="Bölüm filtresi"
+              >
+                <option value="">Tüm Bölümler</option>
+                {deptOptions.map(code => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
+              <select
+                className="h-7 flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                value={yearFilter}
+                onChange={e => setYearFilter(e.target.value)}
+                aria-label="Sınıf filtresi"
+              >
+                <option value="">Tüm Sınıflar</option>
+                {yearOptions.map(y => (
+                  <option key={y} value={y}>{y}. sınıf</option>
+                ))}
+              </select>
+            </div>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-[10px] text-slate-500 hover:text-red-600 underline underline-offset-2"
+              >
+                Filtreyi temizle ({activeFilterCount})
+              </button>
+            )}
           </div>
 
           {/* Drop hint */}
@@ -145,7 +208,7 @@ export function UnassignedSectionsPanel({
               <div className="py-6 text-center">
                 <Inbox className="h-6 w-6 text-slate-300 mx-auto mb-1.5" />
                 <p className="text-[11px] text-slate-400">
-                  {search ? 'Eşleşen şube yok' : 'Tüm şubeler atanmış'}
+                  {activeFilterCount > 0 ? 'Eşleşen şube yok' : 'Tüm şubeler atanmış'}
                 </p>
               </div>
             ) : (
@@ -163,7 +226,7 @@ export function UnassignedSectionsPanel({
 /** Kompakt sürüklenebilir kart — atanmamış section bilgisi. Drop sonrası backend `assign` çağrılır. */
 function UnassignedSectionCard({ section, slotMinutes }: { section: FacultyPlanningSection; slotMinutes: number }) {
   const totalHours = section.theoryHours + section.labHours;
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `${POOL_DRAG_ID_PREFIX}${section.sectionId}`,
     disabled: section.isPinned,
     data: {
@@ -177,9 +240,15 @@ function UnassignedSectionCard({ section, slotMinutes }: { section: FacultyPlann
     },
   });
 
+  // Transform-based drag — DragOverlay yerine kart kendisi hareket eder (grid kart fix'iyle tutarlı).
+  const dragTransformStyle = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
+    : undefined;
+
   return (
     <div
       ref={setNodeRef}
+      style={dragTransformStyle}
       {...attributes}
       {...listeners}
       className={cn(
