@@ -263,13 +263,22 @@ public partial class FacultyPlanningService : IFacultyPlanningService
             .ToDictionary(g => g.Key, g => g.ToList());
         var sectionPageHasSchedule = sectionPageScheduleMap.Keys.ToHashSet();
 
-        // Load SuggestedSemester from CurriculumCourse for year-level coloring
+        // Load SuggestedSemester from CurriculumCourse for year-level coloring.
+        // SuggestedSemester=0 anlamı: "seçmeli havuz/placeholder" — gerçek yarıyıl bilgisi
+        // değil. Naif MIN(...) çağrısı 0'lı seçmeli kayıtla zorunlu kayıtları karıştırıp
+        // 0 döndürüyordu (örn. CENG 213 → 4 kayıt: 3,3,3,0 → MIN=0 → mavi). 0'ları filtreleyip
+        // pozitif yarıyılların min'ini alıyoruz; hiç pozitif yoksa fallback 0 (eski davranış).
         var courseIds = allSections.Select(s => s.CourseId).Distinct().ToList();
         var semesterMap = await _context.Set<CurriculumCourse>()
             .AsNoTracking()
             .Where(cc => courseIds.Contains(cc.CourseId))
             .GroupBy(cc => cc.CourseId)
-            .Select(g => new { CourseId = g.Key, Semester = g.Min(cc => cc.SuggestedSemester) })
+            .Select(g => new
+            {
+                CourseId = g.Key,
+                Semester = g.Where(cc => cc.SuggestedSemester > 0)
+                            .Min(cc => (int?)cc.SuggestedSemester) ?? 0
+            })
             .ToDictionaryAsync(x => x.CourseId, x => x.Semester, ct);
 
         foreach (var group in grouped)
