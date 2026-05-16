@@ -18,7 +18,6 @@ import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/f
 import { CalendarGrid } from './CalendarGrid';
 import { AutoScheduleProgressModal } from './AutoScheduleProgressModal';
 import InlineConfirmButton from './InlineConfirmButton';
-import { cn } from '@/lib/utils';
 
 interface AutoScheduleTabProps {
   facultyId: number;

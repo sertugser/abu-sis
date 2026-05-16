@@ -62,7 +62,6 @@ test.describe('Auto-schedule progress modal', () => {
   test.beforeEach(async ({ page }) => {
     await authenticate(page);
     page.on('pageerror', (err) => {
-      // eslint-disable-next-line no-console
       console.error(`[browser-error] ${err.message}`);
     });
   });

@@ -36,7 +36,6 @@ test.describe('Scheduling Editor — drag-drop', () => {
   test.beforeEach(async ({ page }) => {
     await authenticate(page);
     page.on('pageerror', (err) => {
-      // eslint-disable-next-line no-console
       console.error(`[browser-error] ${err.message}`);
     });
   });
