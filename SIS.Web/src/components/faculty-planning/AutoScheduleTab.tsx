@@ -244,8 +244,11 @@ export function AutoScheduleTab({
       {/* Aksiyon bar: portal varsa toolbar'a, yoksa yerinde */}
       {actionBar && (actionBarPortal ? createPortal(actionBar, actionBarPortal) : actionBar)}
 
-      {/* ── Takvim — tam alan ── */}
-      <div className="flex-1 min-h-0 relative">
+      {/* ── Takvim — tam alan ──
+          overflow-auto: CalendarGrid içerik-bazlı boyutlanıyor; uzun gridlerde dikey scroll
+          burada sağlanır (CalendarGrid'in kendi içinde scroll yok — dnd-kit measuring stratejisi
+          için tek-katman scroll). */}
+      <div className="flex-1 min-h-0 relative overflow-auto">
         <CalendarGrid
           sections={sections}
           timeSlots={timeSlots}

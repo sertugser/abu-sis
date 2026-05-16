@@ -127,18 +127,27 @@ function CalendarCell({
       className="relative border-r-2 border-r-slate-300 border-b border-b-slate-300 p-0 align-top"
       style={{ minHeight: rowHeightPx }}
     >
-      {/* KESİN ÇÖZÜM: Drop ref'i absolute pozisyonla TAM <td>'yi kaplar. table-layout:fixed altında
-          normal-flow <div>'in width/height'i tuhaf hesaplanıyor, rect 0 ölçülüyordu. absolute+inset:0
-          ile dnd-kit'in getBoundingClientRect'i hücrenin gerçek boyutunu döndürür. */}
+      {/* Drop target: absolute+inset:0 — table-layout:fixed altında doğru rect ölçümü için zorunlu
+          (normal-flow rect 0 anomalisi). pointer-events kaldırılmadı (default auto) — eski
+          pointer-events-none denemesi panel droppable detection'ını bozmuş olabilir. */}
       <div
         ref={setNodeRef}
+        aria-hidden="true"
         className={cn(
-          'absolute inset-0 px-1 py-0.5 transition-colors',
+          'absolute inset-0 transition-colors',
           isRestricted ? 'bg-slate-50/60' : 'bg-white',
           isSuggested && !isOver && 'ring-2 ring-amber-300 ring-inset bg-amber-50/30 animate-pulse',
           isOver && !isDropDisabled && 'ring-2 ring-emerald-400 ring-inset bg-emerald-50/40 animate-none',
           isOver && isDropDisabled && 'ring-2 ring-red-400 ring-inset bg-red-50/40 animate-none',
         )}
+      />
+      {/* İçerik katmanı — doğal akış, hücreyi içeriğe göre büyütür (2+ kart alt alta).
+          relative + z-10 ile absolute overlay'in üstünde durur → kart tıklamaları/drag düzgün çalışır.
+          minHeight = rowHeightPx zorunlu: boş hücre aksi halde ~4px olur, td küçülür, overlay
+          (drop rect) küçülür → drop hedefi bulunamaz. */}
+      <div
+        className="relative z-10 px-1 py-0.5"
+        style={{ minHeight: rowHeightPx }}
       >
         {children}
       </div>
@@ -478,15 +487,16 @@ function SectionBlock({
 export type CardDensity = 'normal' | 'spacious';
 
 /**
- * Hücre içi kartların yerleşim sınıfı. Spacious mevcut dikey flex'i korur;
- * kompakt modlarda 2-sütun grid'e geçer (1 kart → tek sütun; 2+ kart → yan yana).
+ * Hücre içi kartların yerleşim sınıfı.
+ *
+ * Her iki modda da dikey stack: kart sayısı ne olursa olsun her kart hücrenin tam
+ * genişliğini alır. 2+ kartlı hücrede satır içeriğe göre otomatik uzar (CalendarCell'in
+ * içerik katmanı doğal akışta — `<td>` doğal şekilde büyür). Bu, normal modda eski
+ * `grid grid-cols-2`'nin yarattığı yatay sıkışmayı (truncate, derslik+hoca kesilmesi)
+ * tamamen ortadan kaldırır.
  */
-function getCellLayoutClass(density: CardDensity, blockCount: number): string {
-  if (density === 'spacious') {
-    return 'flex flex-col gap-0.5';
-  }
-  if (blockCount <= 1) return 'grid grid-cols-1 gap-0';
-  return 'grid grid-cols-2 gap-0 auto-rows-min';
+function getCellLayoutClass(_density: CardDensity, _blockCount: number): string {
+  return 'flex flex-col gap-0.5';
 }
 
 export interface CalendarGridProps {
@@ -673,10 +683,10 @@ export function CalendarGrid({
   const isEmpty = allBlocks.length === 0;
 
   return (
-    // overflow-auto kasıtlı olarak yok: dnd-kit'in WhileDragging measuring stratejisi scrollable
-    // ancestor'da droppable rect'lerini stale ölçüyordu. Scroll dışarıdaki container'da yapılır.
-    // h-full her iki modda da aktif — takvim, parent flex container'ı tam doldurur.
-    <div className="h-full border border-slate-200 rounded-xl bg-white shadow-sm relative flex flex-col overflow-hidden">
+    // overflow-auto burada YOK: iç içe scroll dnd-kit measuring'i karıştırır.
+    // min-h-full: parent kısa olduğunda esner; içerik uzunsa natural flow'da büyür ve
+    // parent'ın overflow-auto'su scroll verir (single-layer scroll architecture).
+    <div className="min-h-full border border-slate-200 rounded-xl bg-white shadow-sm relative flex flex-col">
       {isEmpty && (
         <div className="sticky top-0 z-20 flex items-center justify-center gap-2 bg-slate-50/90 backdrop-blur-sm border-b border-slate-200/60 py-1.5 text-xs text-slate-400">
           <span>Henüz atama yok</span>
@@ -684,9 +694,10 @@ export function CalendarGrid({
           <span>Hücreye tıklayın veya <span className="font-medium text-slate-500">Otomatik Programla</span> kullanın</span>
         </div>
       )}
-      {/* Tabloyu flex-1 wrap'le — display:table flex-1'i tanımaz; div sarmalı ki tablo height:100% gerçek bir parent'a yansıdığında stretch çalışsın */}
-      <div className="flex-1 min-h-0">
-      <table className="w-full border-collapse" style={{ tableLayout: 'fixed', height: '100%' }}>
+      {/* İç scroll YOK — natural flow. Tablo içerik kadar büyür, dış container (main veya
+          tab parent) overflow-auto verir. */}
+      <div>
+      <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 72 }} />
           {visibleDays.map(wd => <col key={wd.day} />)}
