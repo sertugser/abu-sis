@@ -218,9 +218,10 @@ export function AutoScheduleProgressModal({
         const target = targetProgress.percent;
         if (target <= prev) return prev; // backend geri sayım yapmaz; aşağı interpolate etmiyoruz
         const gap = target - prev;
-        // Hedefe yumuşak yaklaş: gap'in 0.06's'ı (saniyede ~%6 hız)
-        // Plus stage-aware drift: stage uzunsa UI yavaşça kendisi de ilerler
-        const easing = Math.min(gap, gap * 0.0035 * dtMs); // ~6%/sn yaklaşım
+        // Hedefe yumuşak yaklaş. Backend artık v2-solving aşamasında 50→90 arası
+        // sürekli event yolladığı için interpolasyon hızını yükselttik (eski %6/sn →
+        // %10/sn). Yavaş hızda UI backend'in arkasında sürünüyordu.
+        const easing = Math.min(gap, gap * 0.006 * dtMs); // ~10%/sn yaklaşım
         return Math.min(target, prev + easing);
       });
       raf = requestAnimationFrame(tick);
@@ -356,7 +357,10 @@ export function AutoScheduleProgressModal({
                 className={`h-full ${isFailed ? 'bg-red-500' : isComplete ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-500 via-violet-500 to-amber-500'}`}
                 style={{
                   width: `${displayPercent}%`,
-                  transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), background-color 200ms',
+                  // CSS transition burada requestAnimationFrame ile çakışıyordu: her RAF tick'i
+                  // yeni transition başlatıyor, bar hep 320ms gerideki target'a tween yapıyordu.
+                  // RAF zaten frame-by-frame smooth artırıyor → transition yalnız renk değişimi için.
+                  transition: 'background-color 200ms',
                 }}
               />
               {isLoading && displayPercent < 100 && (
@@ -369,22 +373,23 @@ export function AutoScheduleProgressModal({
           </div>
 
           {/* Detail */}
+          {/* Eskiden burada "{current} / {total}" satırı vardı (V1 sequential mirası).
+              V2 CP-SAT bütünü tek model olarak çözer; "X/Y processed" anlamını yitirdi.
+              Backend payload'unda current/total alanları hâlâ var (protocol unchanged)
+              ama UI'da render etmiyoruz — detail metni zaten "N ders için..." diye anlamlı. */}
           <div className="px-6 pt-3 pb-4 min-h-[64px]">
             {targetProgress.detail ? (
               <p className="text-sm text-slate-700 leading-snug">{targetProgress.detail}</p>
             ) : (
               <SkeletonLine />
             )}
-            {targetProgress.total > 0 && (
-              <p className="text-[11px] text-slate-400 mt-1.5 font-mono tabular-nums">
-                {targetProgress.current} / {targetProgress.total}
-              </p>
-            )}
           </div>
 
-          {/* Stage indicator (4 step) — renkli + ikonlu + tamamlanma süresiyle */}
+          {/* Stage indicator (3 step) — renkli + ikonlu + tamamlanma süresiyle.
+              STAGE_ORDER 3 elemanlı; eski grid-cols-4 sağda boş 4. kolon bırakıyordu (sola yaslı).
+              grid-cols-3 + justify-items-center yatayda simetrik dağıtır. */}
           <div className="px-6 pb-4">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2 justify-items-center">
               {STAGE_ORDER.map((stage, idx) => {
                 const meta = STAGE_META[stage];
                 const StageIcon = meta.icon;

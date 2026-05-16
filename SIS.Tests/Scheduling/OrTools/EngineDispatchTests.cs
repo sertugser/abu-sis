@@ -32,7 +32,10 @@ public class EngineDispatchTests
             CancellationToken.None);
 
         solverEngineMock.Verify(
-            x => x.SolveAsync(It.IsAny<SolverRequest>(), It.IsAny<CancellationToken>()),
+            x => x.SolveAsync(
+                It.IsAny<SolverRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<Action<SolverProgressInfo>?>()),
             Times.Once);
     }
 
@@ -183,11 +186,16 @@ public class EngineDispatchTests
             .Setup(x => x.GetDecimalAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()))
             .Returns<string, decimal, CancellationToken>((_, fallback, _) => Task.FromResult(fallback));
 
-        // Solver engine mock
+        // Solver engine mock — Plan A progress callback patch sonrası 3. parametre eklendi
+        // (Action<SolverProgressInfo>? onProgress). AutoScheduleEngine artık non-null geçiyor;
+        // testin amacı progress wiring DEĞİL, bu yüzden It.IsAny<...> ile parametreyi ignore ediyoruz.
         var solverMock = new Mock<ISolverEngine>();
         solverMock
-            .Setup(x => x.SolveAsync(It.IsAny<SolverRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<SolverRequest, CancellationToken>((req, _) => captureRequest?.Invoke(req))
+            .Setup(x => x.SolveAsync(
+                It.IsAny<SolverRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<Action<SolverProgressInfo>?>()))
+            .Callback<SolverRequest, CancellationToken, Action<SolverProgressInfo>?>((req, _, _) => captureRequest?.Invoke(req))
             .ReturnsAsync(solverResult ?? BuildEmptySuccessResult());
 
         // Plan 9 sonrası AutoScheduleEngine v2-only — ConstraintEvaluationService bağımlılığı kaldırıldı.
