@@ -6,9 +6,6 @@ using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application.Constraints;
 
@@ -33,7 +30,7 @@ public abstract class SchedulingTestBase : IDisposable
 
     protected AppDbContext Context { get; }
     protected SchedulingService Service { get; }
-    protected ConstraintEvaluationService ConstraintService { get; }
+    protected IConstraintStateLoader ConstraintStateLoader { get; }
 
     protected SchedulingTestBase()
     {
@@ -42,8 +39,9 @@ public abstract class SchedulingTestBase : IDisposable
             .Options;
 
         Context = new AppDbContext(options);
-        ConstraintService = CreateConstraintEvaluationService();
-        Service = new SchedulingService(Context, ConstraintService, new ScheduleWriter(Context));
+        ConstraintStateLoader = new ConstraintStateLoader(Context);
+        Service = new SchedulingService(Context, ConstraintStateLoader, new ScheduleWriter(Context),
+            SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine());
 
         SeedBaseData();
         SeedSchedulingDefaults();
@@ -469,6 +467,10 @@ public abstract class SchedulingTestBase : IDisposable
         AddConfig("Schedule.MaxConsecutiveHours", "12");
         AddConfig("Schedule.BreakDurationMinutes", "5");
         AddConfig("Classroom.AmphiThreshold", "100");
+        // Plan 11 Faz 1.4 — V1 ClassroomTypeEvaluator artık flag-gated. Test'lerde eski Amphi
+        // davranışı (her zaman uygula) korunacak şekilde default true setliyoruz; flag-spesifik
+        // test'ler SetSystemConfig ile override edebilir.
+        AddConfig("Schedule.AmphiThresholdEnabled", "true");
         AddConfig("Schedule.TheoryLabSplitThreshold", "4");
         Context.SaveChanges();
     }
@@ -556,40 +558,8 @@ public abstract class SchedulingTestBase : IDisposable
         return timeSlot;
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        var evaluators = new IConstraintEvaluator[]
-        {
-            // Hard
-            new CapacityEvaluator(),
-            new ClassroomTypeEvaluator(),
-            new FacultyClassroomEvaluator(),
-            new ClassroomConflictEvaluator(),
-            new InstructorConflictEvaluator(),
-            new CurriculumConflictEvaluator(),
-            new CourseComponentEvaluator(),
-            new SameCourseSectionEvaluator(),
-            new WeeklyLoadEvaluator(),
-            new DailyLoadEvaluator(),
-            new NoDayOffEvaluator(),
-            new CorequisiteEvaluator(),
-            new CreditHourEvaluator(),
-            new LunchBreakEvaluator(),
-            new MaxConsecutiveHoursEvaluator(),
-            new TheoryLabDaySplitEvaluator(),
-            // Soft
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new WeekdayBalanceEvaluator(),
-            new DistributionConstraintEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, Context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi. Test base artık doğrudan
+    // ConstraintStateLoader + RuleEngine (TestRuleHelpers.BuildEngine) kullanır.
 
     public void Dispose()
     {

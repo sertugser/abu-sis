@@ -184,7 +184,11 @@ public class ExcelScheduleService : IExcelScheduleService
             dataSheet.RangeUsed()?.SetAutoFilter();
         }
 
-        // ── Sheet 2: Haftalık Grid ───────────────────────────────────────────
+        // ── Sheet 3: Haftalık Grid (renkli, multi-row kart layout) ─────────
+        // Her ders AYRI bir Excel satırında, ders kodu prefix'ine göre kendi renginde.
+        // Saat sütunu, o saat dilimindeki en kalabalık günün ders sayısı kadar satıra
+        // MERGE edilir → tek lacivert "saat hücresi" görselliği. Kalın dış border + ince
+        // iç border → her ders kartı net ayırt edilebilir.
         var gridSheet = workbook.Worksheets.Add("Haftalık Grid");
 
         var days = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
@@ -196,24 +200,31 @@ public class ExcelScheduleService : IExcelScheduleService
             .OrderBy(s => s.SlotOrder)
             .ToList();
 
-        // Header row: col 1 = "Saat / Gün", cols 2-6 = days
-        gridSheet.Cell(1, 1).Value = "Saat / Gün";
-        gridSheet.Cell(1, 1).Style.Font.Bold = true;
-        gridSheet.Cell(1, 1).Style.Fill.BackgroundColor = XLColor.FromArgb(0x1F, 0x49, 0x7D);
-        gridSheet.Cell(1, 1).Style.Font.FontColor = XLColor.White;
+        // ── Header row: col 1 = "Saat / Gün", cols 2-6 = days ─────────────
+        var headerSaatCell = gridSheet.Cell(1, 1);
+        headerSaatCell.Value = "Saat / Gün";
+        headerSaatCell.Style.Font.Bold = true;
+        headerSaatCell.Style.Font.FontSize = 11;
+        headerSaatCell.Style.Fill.BackgroundColor = XLColor.FromArgb(0x1F, 0x49, 0x7D);
+        headerSaatCell.Style.Font.FontColor = XLColor.White;
+        headerSaatCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        headerSaatCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
 
         for (int d = 0; d < days.Length; d++)
         {
             var cell = gridSheet.Cell(1, d + 2);
             cell.Value = DayOfWeekTurkish(days[d]);
             cell.Style.Font.Bold = true;
+            cell.Style.Font.FontSize = 11;
             cell.Style.Fill.BackgroundColor = XLColor.FromArgb(0x1F, 0x49, 0x7D);
             cell.Style.Font.FontColor = XLColor.White;
             cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         }
 
-        // Build a lookup: (slotOrder, dayOfWeek) → list of cell texts
-        var gridLookup = new Dictionary<(int slotOrder, DayOfWeek day), List<string>>();
+        // Build a lookup: (slotOrder, dayOfWeek) → list of section "cards"
+        // (kod-şube, hoca, derslik üçlüsü — her ders kendi satırına yerleşecek)
+        var gridLookup = new Dictionary<(int slotOrder, DayOfWeek day), List<(string code, string instructor, string classroom)>>();
 
         foreach (var row in rows)
         {
@@ -221,45 +232,100 @@ public class ExcelScheduleService : IExcelScheduleService
                 ? userNames.TryGetValue(row.InstructorUserId.Value, out var name) ? name : "-"
                 : "-";
 
-            string cellText = $"{row.CourseCode}-{row.SectionNumber}\n{instructorName}\n{row.ClassroomName}";
+            var card = ($"{row.CourseCode}-{row.SectionNumber}", instructorName, row.ClassroomName);
             var key = (row.SlotOrder, row.DayOfWeek);
 
             if (!gridLookup.ContainsKey(key))
-                gridLookup[key] = new List<string>();
+                gridLookup[key] = new List<(string, string, string)>();
 
-            gridLookup[key].Add(cellText);
+            gridLookup[key].Add(card);
         }
 
-        // Fill slot rows
+        // ── Fill slot blocks (multi-row layout) ────────────────────────────
+        // Her ders kartı 1 Excel satırı (yükseklik ~45pt). O saat dilimindeki en kalabalık
+        // günün ders sayısı kadar Excel satırı ayrılır; saat sütunu bu satırların tümünde
+        // MERGE edilir → tek lacivert "saat aralığı" hücresi.
+        const double CardRowHeight = 45;
+        int currentRow = 2;
+
         for (int s = 0; s < slotOrders.Count; s++)
         {
-            int gridRow = s + 2;
             var (slotOrder, startTime, endTime) = slotOrders[s];
 
-            string slotLabel = $"{startTime:HH\\:mm}-{endTime:HH\\:mm}";
-            var labelCell = gridSheet.Cell(gridRow, 1);
-            labelCell.Value = slotLabel;
-            labelCell.Style.Font.Bold = true;
-            labelCell.Style.Fill.BackgroundColor = XLColor.FromArgb(0xD6, 0xE4, 0xF7);
+            // Bu slot'ta her gün için ders kartı listesi (boşsa empty list)
+            var cardsPerDay = days
+                .Select(d => gridLookup.TryGetValue((slotOrder, d), out var list)
+                    ? list
+                    : new List<(string, string, string)>())
+                .ToList();
+            int maxCards = Math.Max(1, cardsPerDay.Max(list => list.Count));
 
+            int blockStart = currentRow;
+            int blockEnd = currentRow + maxCards - 1;
+
+            // Saat sütunu — tüm blok satırlarını kapsayan tek hücre (merge)
+            var labelRange = gridSheet.Range(blockStart, 1, blockEnd, 1);
+            labelRange.Merge();
+            labelRange.Value = $"{startTime:HH\\:mm}-{endTime:HH\\:mm}";
+            labelRange.Style.Font.Bold = true;
+            labelRange.Style.Font.FontSize = 12;
+            labelRange.Style.Font.FontColor = XLColor.White;
+            labelRange.Style.Fill.BackgroundColor = XLColor.FromArgb(0x1F, 0x49, 0x7D);
+            labelRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            labelRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // Her gün için, her ders kartını ayrı satıra yerleştir
             for (int d = 0; d < days.Length; d++)
             {
-                var key = (slotOrder, days[d]);
-                var dataCell = gridSheet.Cell(gridRow, d + 2);
-
-                if (gridLookup.TryGetValue(key, out var texts))
+                var cardsHere = cardsPerDay[d];
+                for (int i = 0; i < maxCards; i++)
                 {
-                    dataCell.Value = string.Join("\n---\n", texts);
-                    dataCell.Style.Alignment.WrapText = true;
-                    dataCell.Style.Fill.BackgroundColor = XLColor.FromArgb(0xE8, 0xF5, 0xE9);
-                }
+                    var dataCell = gridSheet.Cell(blockStart + i, d + 2);
 
-                dataCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-                dataCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    if (i < cardsHere.Count)
+                    {
+                        var (code, instructor, classroom) = cardsHere[i];
+                        dataCell.Value = $"{code}\n{instructor}\n{classroom}";
+                        dataCell.Style.Alignment.WrapText = true;
+                        var (r, g, b) = GetCourseCardColor(code);
+                        dataCell.Style.Fill.BackgroundColor = XLColor.FromArgb(r, g, b);
+                        dataCell.Style.Font.FontSize = 10;
+                        // Ders kodu satırı için font default kalır; istenirse RichText ile
+                        // kod kalın yapılabilir — şu an WrapText + line break yeterli okunaklılık.
+                    }
+                    else
+                    {
+                        // O saatte o günde ders yok — açık gri, görsel olarak dolu hücrelerden ayırt edilebilir
+                        dataCell.Style.Fill.BackgroundColor = XLColor.FromArgb(0xF8, 0xF9, 0xFA);
+                    }
+
+                    dataCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                    dataCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                }
             }
+
+            // Her kart satırına sabit yükseklik (3 satır metin için yeterli)
+            for (int i = 0; i < maxCards; i++)
+                gridSheet.Row(blockStart + i).Height = CardRowHeight;
+
+            currentRow = blockEnd + 1;
         }
 
-        gridSheet.Columns().AdjustToContents();
+        // ── Sütun genişlikleri (sabit + eşit) ──
+        gridSheet.Column(1).Width = 15;                       // Saat sütunu
+        for (int d = 2; d <= 1 + days.Length; d++)
+            gridSheet.Column(d).Width = 28;                   // Her gün sütunu eşit
+
+        // ── Header satırı yüksekliği ──
+        gridSheet.Row(1).Height = 30;
+
+        // ── Tüm hücrelere border (görsel ayrım) ──
+        // Dış border kalın (kart bloklarını çerçeveler), iç border ince (ders ayrımı için)
+        int lastDataRow = currentRow - 1;
+        var gridRange = gridSheet.Range(1, 1, lastDataRow, days.Length + 1);
+        gridRange.Style.Border.OutsideBorder = XLBorderStyleValues.Medium;
+        gridRange.Style.Border.InsideBorder  = XLBorderStyleValues.Thin;
+
         gridSheet.SheetView.FreezeRows(1);
         gridSheet.SheetView.FreezeColumns(1);
 
@@ -1541,4 +1607,69 @@ public class ExcelScheduleService : IExcelScheduleService
         DayOfWeek.Sunday    => "Pazar",
         _                   => day.ToString()
     };
+
+    // ── Ders kartı renkleri (Haftalık Grid sheet için) ─────────────────────
+    // Excel hücre background renkleri olarak kullanılır. Ders kodu prefix'ine göre
+    // (CENG, SENG, MATH, vb.) sabit renk atanır → aynı bölümün dersleri aynı renk,
+    // bölümler birbirinden ayırt edilebilir. Pastel tonlar seçilmiş ki üstüne yazılan
+    // siyah metin okunabilir kalsın.
+    private static readonly Dictionary<string, (int r, int g, int b)> CourseCardColors = new()
+    {
+        // Mühendislik ana bölümleri
+        { "CENG", (0xDB, 0xE7, 0xF5) },  // soft blue
+        { "BM",   (0xDB, 0xE7, 0xF5) },  // soft blue (BM = Bilgisayar Müh.)
+        { "SENG", (0xE9, 0xDD, 0xF2) },  // soft purple
+        { "ISE",  (0xE9, 0xDD, 0xF2) },  // soft purple
+        { "IE",   (0xFE, 0xF2, 0xC8) },  // soft yellow
+        { "EEE",  (0xD9, 0xEC, 0xF0) },  // soft cyan
+        // Temel bilimler
+        { "MATH", (0xFC, 0xE4, 0xD4) },  // soft orange (matematik)
+        { "MAT",  (0xFC, 0xE4, 0xD4) },  // soft orange
+        { "PHY",  (0xE4, 0xF1, 0xD9) },  // soft green (fizik)
+        { "FIZ",  (0xE4, 0xF1, 0xD9) },  // soft green
+        { "BIO",  (0xFB, 0xD9, 0xD9) },  // soft pink (biyoloji)
+        { "CHEM", (0xFB, 0xD9, 0xD9) },  // soft pink
+        { "KIM",  (0xFB, 0xD9, 0xD9) },  // soft pink
+        // Dil ve sosyal
+        { "ENG",  (0xE0, 0xE8, 0xE0) },  // soft sage
+        { "TURK", (0xF5, 0xE6, 0xD9) },  // soft beige
+        { "HIST", (0xF5, 0xE6, 0xD9) },  // soft beige
+        { "TAR",  (0xF5, 0xE6, 0xD9) },  // soft beige
+        // İSG, OHS ve diğer ortak dersler
+        { "OHS",  (0xF1, 0xE2, 0xCB) },  // soft tan
+        { "ISG",  (0xF1, 0xE2, 0xCB) },  // soft tan
+        { "TE",   (0xE6, 0xE0, 0xF5) },  // soft lavender (Teknik Elektif)
+    };
+
+    // 16-renk fallback paleti — prefix dictionary'de bulunmayan ders kodları için
+    // hash-bazlı tutarlı renk ataması. Frontend CalendarGrid paletiyle aynı tonlarda.
+    private static readonly (int r, int g, int b)[] FallbackCardPalette = new[]
+    {
+        (0xDB, 0xE7, 0xF5),  (0xE4, 0xF1, 0xD9),  (0xE9, 0xDD, 0xF2),  (0xFC, 0xE4, 0xD4),
+        (0xFB, 0xD9, 0xD9),  (0xD9, 0xEC, 0xF0),  (0xF5, 0xE6, 0xD9),  (0xE6, 0xE0, 0xF5),
+        (0xE0, 0xE8, 0xE0),  (0xF5, 0xDB, 0xE7),  (0xFE, 0xF2, 0xC8),  (0xF1, 0xE2, 0xCB),
+        (0xDD, 0xF0, 0xE5),  (0xF0, 0xDD, 0xE0),  (0xFE, 0xF1, 0xD6),  (0xE5, 0xDD, 0xEF),
+    };
+
+    /// <summary>
+    /// Ders kodundan harf prefix'ini çıkarıp sabit renk döner. Prefix dictionary'de
+    /// yoksa kod hash'inden 16-renk fallback paletinden seçer (deterministik).
+    /// </summary>
+    private static (int r, int g, int b) GetCourseCardColor(string courseCodeWithSection)
+    {
+        // "CENG 213-1" → "CENG", "MATH101-2" → "MATH"
+        string prefix = "";
+        foreach (var ch in courseCodeWithSection)
+        {
+            if (char.IsLetter(ch)) prefix += ch;
+            else break;
+        }
+
+        if (!string.IsNullOrEmpty(prefix) && CourseCardColors.TryGetValue(prefix.ToUpperInvariant(), out var color))
+            return color;
+
+        // Deterministik hash → 16-renk paletinden tutarlı seçim
+        int hash = Math.Abs(courseCodeWithSection.GetHashCode());
+        return FallbackCardPalette[hash % FallbackCardPalette.Length];
+    }
 }

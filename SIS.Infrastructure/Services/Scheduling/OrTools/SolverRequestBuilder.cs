@@ -187,17 +187,13 @@ public sealed class SolverRequestBuilder
             var (courseSemestersByDept, courseAccessibleDepts) =
                 await LoadCohortMetadataAsync(cohortCourseIds, cancellationToken);
 
-            // Project SectionInput → SectionSnapshot for v1 CohortBuilder reuse.
-            var sectionSnapshots = sections.Select(s => new SectionSnapshot
-            {
-                SectionId = s.Id,
-                SectionNumber = s.SectionNumber,
-                CourseId = s.CourseId,
-                CourseCode = s.CourseCode
-            }).ToList();
+            // Project SectionInput → CohortSectionRef (CohortBuilder needs only SectionId, SectionNumber, CourseId).
+            var cohortRefs = sections
+                .Select(s => new CohortSectionRef(s.Id, s.SectionNumber, s.CourseId))
+                .ToList();
 
             var cohortBuilder = new CohortBuilder();
-            cohortAssignment = cohortBuilder.Build(sectionSnapshots, courseSemestersByDept, courseAccessibleDepts);
+            cohortAssignment = cohortBuilder.Build(cohortRefs, courseSemestersByDept, courseAccessibleDepts);
 
             cohortConflictPairs = cohortAssignment.ConflictPairs
                 .Select(p => (p.SectionId1, p.SectionId2))
@@ -206,7 +202,15 @@ public sealed class SolverRequestBuilder
 
         // 10) Plan 8 Task 2 — SoftThresholds (~25 SystemConfig key) + S4 CoEnrollmentPairs (port v1)
         //     + S20 AdjacentYearSoftPairs (cohort assignment'tan).
-        var softThresholds = await LoadSoftThresholdsAsync(cancellationToken);
+        // Plan 13 — S2/S8 clock-hour: slot ortalama dakikası SoftThresholds'a inject edilir.
+        var loadedSoftThresholds = await LoadSoftThresholdsAsync(cancellationToken);
+        var averageSlotDurationMinutes = timeSlots.Count > 0
+            ? (int)Math.Round(timeSlots.Average(s => (s.EndTime - s.StartTime).TotalMinutes))
+            : 50;
+        var softThresholds = loadedSoftThresholds with
+        {
+            AverageSlotDurationMinutes = averageSlotDurationMinutes,
+        };
         var coEnrollmentPairs = await LoadCoEnrollmentPairsAsync(
             termId, softThresholds.S4MinCoPairThreshold, cancellationToken);
 
@@ -248,9 +252,10 @@ public sealed class SolverRequestBuilder
         var s1Weight = await _systemConfigProvider.GetIntAsync("Schedule.S1Weight", 1, ct);
 
         // S2 DailyLoadSoft
-        // Plan 9 Issue 5 — credit-hour cap (was 6). DB seed'i 6 olarak migration üzerinden
-        // kalıyor; admin DB değiştirmemişse fallback default 7 = SoftThresholds default ile parite.
-        var s2MaxDaily = await _systemConfigProvider.GetIntAsync("SoftConstraint.S2.MaxDailyHours", 7, ct);
+        // Plan 13 (2026-05-15) — V2 encoder V1 ile birebir clock-hour hesabı yapar
+        // (kullanıcı A seçeneği). Cap admin için "saat" cinsinden okunur (default 6),
+        // encoder içinde × 60 dakikaya çevrilir.
+        var s2MaxDaily = await _systemConfigProvider.GetIntAsync("SoftConstraint.S2.MaxDailyHours", 6, ct);
         var s2Weight = await _systemConfigProvider.GetIntAsync("Schedule.S2Weight", 10, ct);
 
         // S3 SlotCongestion

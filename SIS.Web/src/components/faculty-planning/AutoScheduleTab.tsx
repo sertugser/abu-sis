@@ -1,12 +1,12 @@
 // SIS.Web/src/components/faculty-planning/AutoScheduleTab.tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlotAssignDialog } from './SlotAssignDialog';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  CheckCircle2, XCircle, ChevronDown,
+  CheckCircle2, XCircle,
   RotateCcw, Trash2,
 } from 'lucide-react';
 import {
@@ -16,21 +16,33 @@ import {
 } from '../../hooks/useFacultyPlanning';
 import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
 import { CalendarGrid } from './CalendarGrid';
-import { ScheduleResultModal } from './ScheduleResultModal';
 import { AutoScheduleProgressModal } from './AutoScheduleProgressModal';
 import InlineConfirmButton from './InlineConfirmButton';
-import { cn } from '@/lib/utils';
 
 interface AutoScheduleTabProps {
   facultyId: number;
   termId: number | null;
   filterDept?: number;
+  /** Parent'tan gelen "şimdi çalıştır" sinyali; her artış yeni bir run başlatır. */
   triggerRun?: number;
+  /**
+   * Parent state'inde tutulan "son işlenen trigger" değeri. Tab değişiminde bu komponent
+   * unmount + remount olabiliyor; consumed bilgisi local state'te tutulursa kayboluyor ve
+   * remount'ta useEffect aynı triggerRun'ı yeniden tetikleyip "iptal ettim ama tab dönünce
+   * kendiliğinden başladı" bug'ına yol açıyor. Parent state'i kalıcı → sorun yok.
+   */
+  consumedTriggerRun?: number;
+  /** Trigger işlendiğinde parent'ı bilgilendir — parent <c>consumedTriggerRun</c>'u günceller. */
+  onTriggerConsumed?: (value: number) => void;
   onRunStateChange?: (isPending: boolean) => void;
   actionBarPortal?: HTMLElement | null;
 }
 
-export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onRunStateChange, actionBarPortal }: AutoScheduleTabProps) {
+export function AutoScheduleTab({
+  facultyId, termId, filterDept,
+  triggerRun, consumedTriggerRun, onTriggerConsumed,
+  onRunStateChange, actionBarPortal,
+}: AutoScheduleTabProps) {
   const previewMutation = useAutoSchedulePreview();
   const applyMutation = useApplySchedule();
   const batchUnassign = useBatchUnassignSections();
@@ -46,9 +58,7 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
   const timeSlots: FacultyPlanningTimeSlot[] = timeSlotsQuery.data ?? [];
 
   const [userSelectedRunId, setUserSelectedRunId] = useState<number | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
-  const [lastTrigger, setLastTrigger] = useState(0);
   const [showResultModal, setShowResultModal] = useState(false);
   const [assignSlot, setAssignSlot] = useState<{
     day: number;
@@ -71,61 +81,32 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
   const isPending = previewMutation.isPending;
   const hasPreview = !!previewData;
 
-  const previewPct = useMemo(() => {
-    if (!previewData) return 0;
-    const total = previewData.assignments.length + previewData.failures.length;
-    return total > 0 ? Math.round((previewData.assignments.length / total) * 100) : 0;
-  }, [previewData]);
-
   const successCount = previewData?.assignments.length ?? 0;
   const failureCount = previewData?.failures.length ?? 0;
-
-  const allSelected = previewData
-    ? previewData.assignments.length > 0 && previewData.assignments.every(a => selectedIds.has(a.sectionId))
-    : false;
-
-  const runHistory = useMemo(() => {
-    if (!runsQuery.data || runsQuery.data.length <= 1) return [];
-    return runsQuery.data.slice(0, 3).map(r => {
-      const total = r.successCount + r.failedCount;
-      return {
-        id: r.id,
-        pct: total > 0 ? Math.round((r.successCount / total) * 100) : 0,
-        isActive: r.id === selectedRunId,
-      };
-    });
-  }, [runsQuery.data, selectedRunId]);
 
   // Notify parent about pending state
   useEffect(() => {
     onRunStateChange?.(isPending);
   }, [isPending, onRunStateChange]);
 
-  // Parent triggered run
+  // Parent triggered run.
+  // "Consumed" bilgisi parent state'inde (consumedTriggerRun) — bu komponentin unmount/remount
+  // döngüsünden sağ çıkar. Tab değişimlerinde useEffect aynı triggerRun'ı tekrar tetiklemez.
   /* eslint-disable react-hooks/set-state-in-effect -- resetting local state when parent triggers a new run; intentional sync */
   useEffect(() => {
-    if (triggerRun && triggerRun !== lastTrigger && termId && !previewMutation.isPending) {
-      setLastTrigger(triggerRun);
+    if (triggerRun && triggerRun !== consumedTriggerRun && termId && !previewMutation.isPending) {
+      onTriggerConsumed?.(triggerRun);
       setUserSelectedRunId(null);
-      setSelectedIds(new Set());
       setLastAppliedIds([]);
       applyMutation.reset();
       previewMutation.mutate({ facultyId, termId }, {
         onSuccess: () => setShowResultModal(true),
       });
     }
-  }, [triggerRun, lastTrigger, termId, facultyId, previewMutation, applyMutation]);
+  }, [triggerRun, consumedTriggerRun, onTriggerConsumed, termId, facultyId, previewMutation, applyMutation]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Handlers
-  const handleRunSelect = useCallback((id: number) => {
-    setUserSelectedRunId(id);
-    previewMutation.reset();
-    setSelectedIds(new Set());
-    setLastAppliedIds([]);
-    applyMutation.reset();
-  }, [previewMutation, applyMutation]);
-
   const handleApplyAll = useCallback(() => {
     const items = (previewData?.assignments ?? []).map(a => ({
       sectionId: a.sectionId,
@@ -143,43 +124,9 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
     }
   }, [previewData, applyMutation]);
 
-  const handleApplySelected = useCallback(() => {
-    const source = previewData?.assignments ?? [];
-    const items = (selectedIds.size > 0
-      ? source.filter(a => selectedIds.has(a.sectionId))
-      : source
-    ).map(a => ({
-      sectionId: a.sectionId,
-      classroomId: a.classroomId,
-      scheduleSlots: a.scheduleSlots,
-      instructorId: a.instructorId ?? undefined,
-    }));
-    if (items.length > 0) {
-      applyMutation.mutate({ assignments: items }, {
-        onSuccess: () => setLastAppliedIds(items.map(a => a.sectionId)),
-      });
-    }
-  }, [previewData, selectedIds, applyMutation]);
-
-  const handleToggleAll = useCallback(() => {
-    if (!previewData) return;
-    const allIds = previewData.assignments.map(a => a.sectionId);
-    const allSel = allIds.every(id => selectedIds.has(id));
-    setSelectedIds(allSel ? new Set() : new Set(allIds));
-  }, [previewData, selectedIds]);
-
-  const toggleCheck = useCallback((id: number) => {
-    setSelectedIds(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      return n;
-    });
-  }, []);
-
   const clearPreview = useCallback(() => {
     previewMutation.reset();
     setUserSelectedRunId(null);
-    setSelectedIds(new Set());
     setLastAppliedIds([]);
     applyMutation.reset();
     setShowResultModal(false);
@@ -191,128 +138,55 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
 
   const actionBar = actionBarVisible ? (
         <div className="flex items-center gap-2">
-          {/* Sonuç: popover ile seçici uygulama */}
+          {/* Önizleme rozeti — tıkla → sonuç modal'ı aç. Kısmi seçim popover'u kaldırıldı:
+              pratikte kimse 34 şubeyi tek tek seçmiyor; "Tümünü Uygula" zaten ana eylem. */}
           {hasPreview && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1.5">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                  {successCount} başarılı
-                  {failureCount > 0 && <span className="text-red-500">· {failureCount} başarısız</span>}
-                  <ChevronDown className="h-3 w-3 text-slate-400" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[520px] p-0" align="start" sideOffset={4}>
-                <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100">
-                  <span className="text-xs font-medium text-slate-600">
-                    %{previewPct} başarı · {successCount} atanabilir · {failureCount} başarısız
-                  </span>
-                  {runHistory.length > 0 && (
-                    <>
-                      <div className="flex-1" />
-                      <div className="flex items-center gap-1">
-                        {runHistory.map(r => (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={() => handleRunSelect(r.id)}
-                            className={cn(
-                              'px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors',
-                              r.isActive
-                                ? 'bg-[#003366] text-white'
-                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200',
-                            )}
-                          >
-                            %{r.pct}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <ScrollArea className="max-h-[300px]">
-                  <div className="flex flex-wrap gap-1.5 p-3">
-                    {(previewData?.assignments ?? []).map(a => (
-                      <label
-                        key={a.sectionId}
-                        className={cn(
-                          'flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs cursor-pointer transition-colors',
-                          selectedIds.has(a.sectionId)
-                            ? 'bg-emerald-50 border-emerald-300'
-                            : 'bg-white border-slate-200 hover:border-emerald-300',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(a.sectionId)}
-                          onChange={() => toggleCheck(a.sectionId)}
-                          className="rounded accent-[#003366] h-3 w-3"
-                        />
-                        <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-                        <span className="font-semibold text-slate-700">{a.courseCode}</span>
-                        <span className="text-slate-400 text-[10px]">{a.classroomName}</span>
-                      </label>
-                    ))}
-                    {(previewData?.failures ?? []).map(f => (
-                      <div
-                        key={f.sectionId}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-red-200 bg-red-50/50 text-xs opacity-70"
-                      >
-                        <XCircle className="h-3 w-3 text-red-400 shrink-0" />
-                        <span className="font-semibold text-slate-500">{f.courseCode}</span>
-                        <span className="text-red-400 text-[10px]">Atanamadı</span>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-
-                <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={handleToggleAll}
-                      className="rounded accent-[#003366] h-3.5 w-3.5"
-                    />
-                    <span className="text-xs text-slate-500">Tümünü Seç</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px]"
-                      onClick={() => setShowResultModal(true)}
-                    >
-                      Detaylı Rapor
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleApplySelected}
-                      disabled={applyMutation.isPending}
-                      className="h-7 text-[11px] px-4 bg-[#003366] hover:bg-[#002244]"
-                    >
-                      {applyMutation.isPending
-                        ? 'Uygulanıyor...'
-                        : selectedIds.size > 0
-                          ? `Uygula (${selectedIds.size})`
-                          : 'Tümünü Uygula'}
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResultModal(true)}
+              className="h-7 text-[11px] gap-1.5"
+              title="Sonuç özetini aç"
+            >
+              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              {successCount} önerildi
+              {failureCount > 0 && <span className="text-red-500">· {failureCount} atanamadı</span>}
+            </Button>
           )}
 
-          {/* Uygulama sonucu */}
+          {/* Apply sonucu — hata varsa errors listesi popover ile yüzeylenir
+              ("neden yazılamadı" cevabı kullanıcıya buradan ulaşır). */}
           {applyMutation.data && (
-            <span className={cn(
-              'text-[11px]',
-              applyMutation.data.failedCount > 0 ? 'text-amber-600' : 'text-emerald-600',
-            )}>
-              {applyMutation.data.successCount} başarılı
-              {applyMutation.data.failedCount > 0 && `, ${applyMutation.data.failedCount} başarısız`}
-            </span>
+            applyMutation.data.failedCount > 0 ? (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-[11px] text-amber-600 hover:text-amber-700 underline underline-offset-2 decoration-amber-300 hover:decoration-amber-500 transition-colors"
+                    aria-label="Uygulanamayan şubelerin sebeplerini göster"
+                  >
+                    {applyMutation.data.successCount} uygulandı · {applyMutation.data.failedCount} hata
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-96 p-3" align="start" sideOffset={4}>
+                  <p className="text-xs font-semibold text-slate-700 mb-2">Uygulanamayan şubeler</p>
+                  <ScrollArea className="max-h-60">
+                    <ul className="space-y-1.5">
+                      {(applyMutation.data.errors ?? []).map((err, i) => (
+                        <li key={i} className="text-[11px] text-slate-600 flex items-start gap-1.5">
+                          <XCircle className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
+                          <span>{err}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <span className="text-[11px] text-emerald-600">
+                {applyMutation.data.successCount} uygulandı
+              </span>
+            )
           )}
 
           {/* Geri al */}
@@ -369,39 +243,42 @@ export function AutoScheduleTab({ facultyId, termId, filterDept, triggerRun, onR
       {/* Aksiyon bar: portal varsa toolbar'a, yoksa yerinde */}
       {actionBar && (actionBarPortal ? createPortal(actionBar, actionBarPortal) : actionBar)}
 
-      {/* ── Takvim — tam alan ── */}
-      <div className="flex-1 min-h-0 relative">
+      {/* ── Takvim — tam alan ──
+          overflow-auto: CalendarGrid içerik-bazlı boyutlanıyor; uzun gridlerde dikey scroll
+          burada sağlanır (CalendarGrid'in kendi içinde scroll yok — dnd-kit measuring stratejisi
+          için tek-katman scroll). */}
+      <div className="flex-1 min-h-0 relative overflow-auto">
         <CalendarGrid
           sections={sections}
           timeSlots={timeSlots}
+          cardDensity="normal"
+          maxBlocksPerCell={4}
           onEmptyCellClick={(day, slotOrder, startTime, endTime, allowedMode) => {
             setAssignSlot({ day, slotOrder, startTime, endTime, allowedMode });
           }}
         />
       </div>
 
-      {/* ── Canlı progress modalı — algoritma çalışırken gösterilir ── */}
+      {/* ── Otomatik Programlama modalı ──
+          Tek modal iki state'i kapsar:
+            - isPending → progress UI (stage indicator + animated bar)
+            - complete + previewData → sonuç paneli (yerleştirilen/yerleşemeyen + apply/view butonları)
+          Eski ScheduleResultModal birleştirildi; iki ardışık dialog → tek dialog.
+      */}
       <AutoScheduleProgressModal
-        open={isPending}
+        open={isPending || (showResultModal && !!previewData)}
+        isPending={isPending}
         onCancel={() => {
           // Backend Hub.Cancel() zaten CancellationTokenSource'u tetikledi.
           // Mutation'ı reset edip UI state'i temizliyoruz; preview hata olarak
           // OperationCanceledException dönecek ve isPending false olacak.
           previewMutation.reset();
         }}
+        previewData={previewData ?? null}
+        onApplyAll={handleApplyAll}
+        applyPending={applyMutation.isPending}
+        onDismiss={() => setShowResultModal(false)}
       />
-
-      {/* ── Sonuç Modalı — hesaplama bitince otomatik açılır ── */}
-      {previewData && (
-        <ScheduleResultModal
-          open={showResultModal}
-          onClose={() => setShowResultModal(false)}
-          previewData={previewData}
-          onApplyAll={handleApplyAll}
-          onViewCalendar={() => setShowResultModal(false)}
-          applyPending={applyMutation.isPending}
-        />
-      )}
 
       {assignSlot && termId && (
         <SlotAssignDialog

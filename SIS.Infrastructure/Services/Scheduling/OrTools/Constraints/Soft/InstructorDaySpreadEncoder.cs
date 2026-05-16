@@ -28,11 +28,11 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// totalHours hesabına dahil olur ama gün dağılımı sayılmaz; Plan 9'a deferred.
 /// </para>
 /// <para>
-/// NOTE (v1 unit divergence — Plan 9 tune): v1 evaluator gerçek clock-hour'u
-/// kullanırken bu encoder credit-hour (<c>section.TheoryHours + section.LabHours</c>)
-/// kullanıyor (DailyLoadSoftEncoder ile aynı semantik). <see cref="SoftThresholds.S2MaxDailyHours"/>
-/// burada da credit-hour cinsinden okunur — admin Plan 9 sonrası real DB smoke ile tune
-/// edebilir.
+/// V1 alignment (Plan 13, 2026-05-15): V1 evaluator gerçek clock-hour kullanıyor;
+/// V2 encoder artık <c>SoftThresholds.AverageSlotDurationMinutes</c> ile section'ın
+/// kredi saatlerini gerçek dakikaya çevirip <c>minPossibleDays = ceil(totalMinutes / capMinutes)</c>
+/// hesaplar (DailyLoadSoftEncoder ile aynı semantik). Integer model float kayıp:
+/// ceil yukarı yuvarlar, V1 ile aynı min gün sayısı çıkar.
 /// </para>
 /// </remarks>
 public sealed class InstructorDaySpreadEncoder : IConstraintEncoder
@@ -56,15 +56,19 @@ public sealed class InstructorDaySpreadEncoder : IConstraintEncoder
 
         if (sectionsByInstructor.Count == 0) return;
 
+        // Plan 13 V1 alignment — clock-hour: section'ın kredi saatlerini gerçek dakikaya çevir.
+        var slotMinutes = t.AverageSlotDurationMinutes > 0 ? t.AverageSlotDurationMinutes : 50;
+        var capMinutes = t.S2MaxDailyHours * 60;
+
         foreach (var grp in sectionsByInstructor)
         {
-            var totalHours = grp.Sum(s => s.TheoryHours + s.LabHours);
-            if (totalHours <= 0) continue;
+            var totalMinutes = grp.Sum(s => (s.TheoryHours + s.LabHours) * slotMinutes);
+            if (totalMinutes <= 0) continue;
 
-            // Integer ceiling: (totalHours + cap - 1) / cap; floor at 1.
+            // V1 paritesi: minPossibleDays = ceil(totalMinutes / capMinutes); floor at 1.
             var minPossibleDays = Math.Max(
                 1,
-                (int)Math.Ceiling((double)totalHours / t.S2MaxDailyHours));
+                (int)Math.Ceiling((double)totalMinutes / capMinutes));
 
             // dayUsed[d] = OR over sections of "lecture is on day d" (bidirectional reify).
             var dayUsedLits = new List<BoolVar>();

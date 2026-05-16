@@ -26,11 +26,18 @@ public sealed record SoftThresholds
     public int S1Weight { get; init; } = 1;
 
     // S2 DailyLoadSoft
-    // Plan 9 Issue 5 — credit-hour cap. v1 evaluator clock-hour topluyor; v2 encoder
-    // credit-hour kullanıyor. 50dk slot grid'inde 7 credit ≈ 5.8 clock ≈ v1 default 6 clock.
-    // Admin gerektiğinde Schedule.S2.MaxDailyHours'u real DB tune sonrası override eder.
-    public int S2MaxDailyHours { get; init; } = 7;
+    // Plan 13 (2026-05-15, kullanıcı A seçeneği): V2 encoder V1 ile birebir clock-hour
+    // hesabı yapar. Per-section clock-minute = (TheoryHours + LabHours) × AverageSlotDurationMinutes.
+    // Cap = S2MaxDailyHours × 60 minute (integer model). Default 6 saat — V1 default ile uyumlu.
+    public int S2MaxDailyHours { get; init; } = 6;
     public int S2Weight { get; init; } = 10;
+
+    /// <summary>
+    /// Plan 13 — V2 encoder clock-hour migration: section'ın TheoryHours + LabHours
+    /// kredi sayısını gerçek dakikaya çevirmek için slot ortalaması. Production'da
+    /// genellikle 50dk. SolverRequestBuilder slot grid'inden hesaplar.
+    /// </summary>
+    public int AverageSlotDurationMinutes { get; init; } = 50;
 
     // S3 SlotCongestion
     public int S3MaxSectionsPerSlot { get; init; } = 5;

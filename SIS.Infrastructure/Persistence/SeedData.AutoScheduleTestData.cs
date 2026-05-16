@@ -661,10 +661,19 @@ public static partial class SeedData
     {
         // SADECE eksik test kurslarını ekler. Mevcut kursları DOKUNMAZ — admin UI'dan
         // saat/isim/tip değiştirilebilsin diye seed override etmiyor (DB authoritative).
+        //
+        // Code karşılaştırması whitespace-insensitive: TestCourseDef listesinde "CENG 213"
+        // (boşluklu) yazılı, DB'deki canonical "CENG213" (boşluksuz). Naif equality "var mı"
+        // sorusuna yanlış cevap verip duplikat Course üretiyordu (2026-05-16 cleanup bug'ı).
+        // Normalize → boşlukları yok say → mevcut canonical bulunur, atlanır.
+        static string NormalizeCode(string code) =>
+            System.Text.RegularExpressions.Regex.Replace(code ?? string.Empty, @"\s+", string.Empty);
+
         var existingCodes = (await context.Courses
             .AsNoTracking()
             .Select(c => c.Code)
             .ToListAsync())
+            .Select(NormalizeCode)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var deptByCode = await context.Departments
@@ -674,7 +683,7 @@ public static partial class SeedData
         var added = 0;
         foreach (var def in _testCourses)
         {
-            if (existingCodes.Contains(def.Code)) continue;
+            if (existingCodes.Contains(NormalizeCode(def.Code))) continue;
             if (!deptByCode.TryGetValue(def.DeptCode, out var deptId))
             {
                 throw new InvalidOperationException(
@@ -702,7 +711,7 @@ public static partial class SeedData
                 });
                 await context.SaveChangesAsync();
                 added++;
-                existingCodes.Add(def.Code);
+                existingCodes.Add(NormalizeCode(def.Code));
             }
             catch (DbUpdateException)
             {
@@ -714,7 +723,14 @@ public static partial class SeedData
 
     private static async Task<int> EnsureSectionsAsync(AppDbContext context)
     {
-        var courseByCode = await context.Courses.ToDictionaryAsync(c => c.Code, c => c.Id);
+        static string NormalizeCode(string code) =>
+            System.Text.RegularExpressions.Regex.Replace(code ?? string.Empty, @"\s+", string.Empty);
+
+        // Whitespace-insensitive lookup — TestSectionDef.CourseCode boşluklu olsa bile
+        // canonical Course'a (boşluksuz) bağlanır.
+        var courseByCode = (await context.Courses.ToListAsync())
+            .GroupBy(c => NormalizeCode(c.Code))
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
 
         var fallTermId = await context.AcademicTerms
             .Where(t => t.Year == 2024 && t.TermType == TermType.Fall)
@@ -729,14 +745,17 @@ public static partial class SeedData
                 "Fall 2024-25 or Spring 2025-26 term not found. Run terms seed first.");
         }
 
-        var testCourseCodes = _testCourses.Select(c => c.Code).ToHashSet();
+        var testCourseCodesNormalized = _testCourses.Select(c => NormalizeCode(c.Code)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Mevcut tüm test section'larını çek — capacity update için tam liste lazım
-        var existingTestSections = await context.CourseSections
+        // Mevcut tüm test section'larını çek — capacity update için tam liste lazım.
+        // Filter client-side: EF translate edemediği için (Regex.Replace inline) önce çek, sonra filtrele.
+        var allCandidateSections = await context.CourseSections
             .Include(s => s.Course)
-            .Where(s => (s.TermId == fallTermId || s.TermId == springTermId)
-                        && testCourseCodes.Contains(s.Course.Code))
+            .Where(s => s.TermId == fallTermId || s.TermId == springTermId)
             .ToListAsync();
+        var existingTestSections = allCandidateSections
+            .Where(s => testCourseCodesNormalized.Contains(NormalizeCode(s.Course.Code)))
+            .ToList();
 
         // (TermId, CourseId) → mevcut section'lar listesi
         var existingByKey = existingTestSections
@@ -752,7 +771,7 @@ public static partial class SeedData
 
         foreach (var def in _testSections)
         {
-            if (!courseByCode.TryGetValue(def.CourseCode, out var courseId)) continue;
+            if (!courseByCode.TryGetValue(NormalizeCode(def.CourseCode), out var courseId)) continue;
             var termId = def.Type == TermType.Fall ? fallTermId : springTermId;
             var key = (termId, courseId);
 

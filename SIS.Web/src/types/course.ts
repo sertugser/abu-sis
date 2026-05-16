@@ -63,6 +63,35 @@ export interface SectionDetailDto {
   };
 }
 
+export interface CourseDetailRefDto {
+  courseId: number;
+  code: string;
+  name: string;
+}
+
+export interface CourseDetailDto {
+  id: number;
+  code: string;
+  name: string;
+  englishName: string | null;
+  description: string | null;
+  ects: number;
+  nationalCredit: number;
+  theoryHours: number;
+  labHours: number;
+  applicationHours: number | null;
+  language: string;
+  level: string;
+  teachingMethod: string;
+  status: string;
+  isNonGpa: boolean;
+  departmentName: string | null;
+  facultyName: string | null;
+  examType: string | null;
+  prerequisites: CourseDetailRefDto[];
+  equivalencies: CourseDetailRefDto[];
+}
+
 export interface ActiveTermDto {
   id: number;
   name: string;

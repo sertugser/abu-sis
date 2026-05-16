@@ -3,9 +3,6 @@ using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.Scheduling.Solver;
-using SIS.Infrastructure.Services.Scheduling.Evaluators;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 using SIS.Infrastructure.Services.Scheduling.OrTools;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints;
 using SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
@@ -23,40 +20,12 @@ public static class SchedulingServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddSchedulingConstraints(this IServiceCollection services)
     {
-        // Hard constraint evaluators
-        services.AddScoped<IConstraintEvaluator, CapacityEvaluator>();
-        services.AddScoped<IConstraintEvaluator, ClassroomTypeEvaluator>();
-        services.AddScoped<IConstraintEvaluator, FacultyClassroomEvaluator>();
-        services.AddScoped<IConstraintEvaluator, ClassroomConflictEvaluator>();
-        services.AddScoped<IConstraintEvaluator, InstructorConflictEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CurriculumConflictEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CourseComponentEvaluator>();
-        services.AddScoped<IConstraintEvaluator, SameCourseSectionEvaluator>();
-        services.AddScoped<IConstraintEvaluator, WeeklyLoadEvaluator>();
-        services.AddScoped<IConstraintEvaluator, DailyLoadEvaluator>();
-        services.AddScoped<IConstraintEvaluator, NoDayOffEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CorequisiteEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CreditHourEvaluator>();
-        services.AddScoped<IConstraintEvaluator, LunchBreakEvaluator>();
-        services.AddScoped<IConstraintEvaluator, MaxConsecutiveHoursEvaluator>();
-        services.AddScoped<IConstraintEvaluator, TheoryLabDaySplitEvaluator>();
-        services.AddScoped<IConstraintEvaluator, FaceToFaceSlotRestrictionEvaluator>();
+        // Plan 11 + 12 — V1 ConstraintEvaluationService ve evaluator chain silindi (2026-05-15).
+        // Hard validation 17 IRulePredicate (Rules/Hard/H*.cs), soft validation 9 ISoftRulePredicate
+        // (Rules/Soft/S*.cs) + DIST hybrid; tüm orchestration RuleEngine'da. ConstraintState
+        // loader ayrı bir servise (IConstraintStateLoader) extract edildi.
 
-        // Soft constraint evaluators
-        services.AddScoped<IConstraintEvaluator, OccupancyEvaluator>();
-        services.AddScoped<IConstraintEvaluator, DailyLoadSoftEvaluator>();
-        services.AddScoped<IConstraintEvaluator, SlotCongestionEvaluator>();
-        services.AddScoped<IConstraintEvaluator, CoEnrollmentEvaluator>();
-        services.AddScoped<IConstraintEvaluator, LunchBreakSoftEvaluator>();
-        services.AddScoped<IConstraintEvaluator, StudentGapEvaluator>();
-        services.AddScoped<IConstraintEvaluator, InstructorDaySpreadEvaluator>();
-        services.AddScoped<IConstraintEvaluator, WeekdayBalanceEvaluator>();
-        services.AddScoped<IConstraintEvaluator, AdjacentYearConflictEvaluator>();
-        // Distribution constraint evaluator (hard/soft depending on preference level)
-        services.AddScoped<IConstraintEvaluator, DistributionConstraintEvaluator>();
-
-        // Orchestrator
-        services.AddScoped<ConstraintEvaluationService>();
+        services.AddScoped<IConstraintStateLoader, ConstraintStateLoader>();
 
         // Auto-schedule engine
         services.AddScoped<AutoScheduleEngine>();
@@ -167,6 +136,44 @@ public static class SchedulingServiceCollectionExtensions
 
         // Engine
         services.AddScoped<ISolverEngine, CpSatSolverEngine>();
+
+        // ── Plan 11 — RuleEngine (Faz 2.4) ─────────────────────────────
+        // IRulePredicate'lar Faz 3'te per-rule eklendikçe DI'a register edilir.
+        // RuleEngine boş predicate seti ile bile boş violation döner — safe scaffold.
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRuleEngine, Rules.RuleEngine>();
+
+        // Faz 3 — IRulePredicate kayıtları (17 hard kural)
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H1_ClassroomConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H2_InstructorConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H3_CapacityRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H4_ClassroomTypeRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H5_CurriculumConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H6_TheoryLabComponentRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H8_SameCourseSectionRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H10_FacultyClassroomRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H11_CorequisiteRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H12_CreditHourRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H13_LunchBreakRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H15_MaxConsecutiveHoursRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H16_TheoryLabDaySplitRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.H17_FaceToFaceSlotRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HDL_DailyLoadRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HDO_NoDayOffRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hard.HWL_WeeklyLoadRule>();
+
+        // Plan 12 Faz 2 — Soft IRulePredicate kayıtları (ISoftRulePredicate de IRulePredicate
+        // implement ettiği için IRulePredicate seti olarak kayıt; RuleEngine dispatch Faz 4'te
+        // ResolveCategory'ye göre Evaluate (hard, boş) veya CalculatePenalty (soft) çağırır).
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S1_OccupancyRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S2_DailyLoadSoftRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S3_SlotCongestionRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S4_CoEnrollmentRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S5_LunchBreakSoftRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S7_StudentGapRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S8_InstructorDaySpreadRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S12_WeekdayBalanceRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S20_AdjacentYearConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hybrid.DIST_DistributionRule>();
 
         return services;
     }

@@ -48,7 +48,8 @@ public sealed class CpSatSolverEngine : ISolverEngine
 
     public async Task<SolverResult> SolveAsync(
         SolverRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<SolverProgressInfo>? onProgress = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -157,7 +158,16 @@ public sealed class CpSatSolverEngine : ISolverEngine
         CpSolverStatus status;
         try
         {
-            status = await Task.Run(() => solver.Solve(build.Model), cancellationToken);
+            status = await Task.Run(() =>
+            {
+                if (onProgress is null)
+                {
+                    return solver.Solve(build.Model);
+                }
+                var callback = new ProgressSolutionCallback(
+                    onProgress, cancellationToken, maxTimeSeconds: timeLimit, _logger);
+                return solver.Solve(build.Model, callback);
+            }, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -253,5 +263,69 @@ public sealed class CpSatSolverEngine : ISolverEngine
         double elapsedSeconds)
     {
         return _mapper.MapTimeout(solver, build, request, elapsedSeconds);
+    }
+
+    /// <summary>
+    /// CP-SAT solver her improving solution bulduğunda tetiklenen callback.
+    /// Solver kendi thread'inden senkron çağırır → blocking iş yok, throttle + try/catch
+    /// ile native interop'a exception sızdırmıyoruz.
+    ///
+    /// Throttle: <see cref="MinIntervalMs"/> ms'den hızlı clusters'ı (özellikle ilk
+    /// saniyelerde) yutar. Aksi halde milisaniye aralıkla 5-10 improving solution
+    /// hub'a 5-10 ardışık SignalR push üretir — UI flicker + gereksiz network.
+    /// </summary>
+    private sealed class ProgressSolutionCallback : CpSolverSolutionCallback
+    {
+        private const int MinIntervalMs = 400;
+
+        private readonly Action<SolverProgressInfo> _onProgress;
+        private readonly CancellationToken _ct;
+        private readonly double _maxTimeSeconds;
+        private readonly ILogger<CpSatSolverEngine>? _logger;
+        private int _solutionsFound;
+        private long _lastReportedAtMs;
+
+        public ProgressSolutionCallback(
+            Action<SolverProgressInfo> onProgress,
+            CancellationToken ct,
+            double maxTimeSeconds,
+            ILogger<CpSatSolverEngine>? logger)
+        {
+            _onProgress = onProgress;
+            _ct = ct;
+            _maxTimeSeconds = maxTimeSeconds;
+            _logger = logger;
+        }
+
+        public override void OnSolutionCallback()
+        {
+            // Tüm gövde try/catch — OR-Tools .NET binding'inin callback exception
+            // davranışı dokümante değil. SEHException / native interop crash riskini
+            // sıfırlamak için her şeyi yutuyoruz, yalnızca log'a düşürüyoruz.
+            try
+            {
+                _solutionsFound++;
+
+                if (_ct.IsCancellationRequested) return;
+
+                var nowMs = Environment.TickCount64;
+                if (nowMs - _lastReportedAtMs < MinIntervalMs) return;
+                _lastReportedAtMs = nowMs;
+
+                var info = new SolverProgressInfo(
+                    WallTimeSeconds: WallTime(),
+                    MaxTimeSeconds: _maxTimeSeconds,
+                    ObjectiveValue: ObjectiveValue(),
+                    BestObjectiveBound: BestObjectiveBound(),
+                    NumSolutionsFound: _solutionsFound,
+                    Source: "solver");
+                _onProgress(info);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex,
+                    "ProgressSolutionCallback exception swallowed (solver akışı korunur).");
+            }
+        }
     }
 }

@@ -24,15 +24,14 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// alınamadığı için silently skip olur.
 /// </para>
 /// <para>
-/// NOTE (v1 unit divergence — Plan 9 Issue 5 — CLOSED): v1 evaluator gerçek clock-hour
+/// NOTE (v1 unit divergence): v1 evaluator gerçek clock-hour
 /// (<c>slot.EndTime - slot.StartTime</c>) topluyor; bu encoder credit-hour
-/// (<c>section.TheoryHours + section.LabHours</c>) kullanıyor. Plan 9'da kararlaştırıldı:
-/// real clock-hour implementasyonu model karmaşıklığını artırır (slot duration × slot count
-/// per-instructor reified literal). Yerine default cap 6 → 7 credit-hour'a yükseltildi
-/// (50dk slot grid'inde 7 credit ≈ 5.8 clock ≈ v1 default 6 clock). Admin
-/// <c>Schedule.S2.MaxDailyHours</c>'u real DB tune sonrası override edebilir; DB seed
-/// migration üzerinden 6 olarak kalıyor (kod default 7 yalnız config eksik fresh test
-/// senaryolarında devreye girer).
+/// (<c>section.TheoryHours + section.LabHours</c>) kullanıyor. Plan 9'da
+/// kararlaştırıldı: real clock-hour implementasyonu model karmaşıklığını artırır.
+/// Default cap 6 → 7 credit-hour'a yükseltilmişti workaround olarak. Plan 12
+/// "birebir tutsun" kararı sonrası clock-hour migration **Plan 13'e ertelendi**
+/// — CP-SAT block-level slot duration aggregation gerektiriyor (her block için
+/// duration IntVar). InstructorDaySpreadEncoder (S8) ile aynı kapsam.
 /// </para>
 /// </remarks>
 public sealed class DailyLoadSoftEncoder : IConstraintEncoder
@@ -61,9 +60,15 @@ public sealed class DailyLoadSoftEncoder : IConstraintEncoder
 
         if (sectionsByInstructor.Count == 0) return;
 
+        // Plan 13 — clock-minute hesabı: section'ın kredi saatleri × ortalama slot dakikası.
+        // Cap S2MaxDailyHours × 60 dakikaya çevrilir. Bu V1 evaluator'ın clock-hour mantığı
+        // ile aynı sayısal sonucu üretir (slot grid uniform iken).
+        var slotMinutes = t.AverageSlotDurationMinutes > 0 ? t.AverageSlotDurationMinutes : 50;
+        var capMinutes = t.S2MaxDailyHours * 60;
+
         foreach (var instructorGroup in sectionsByInstructor)
         {
-            // For each weekday (0..6), aggregate hours-of-sections-starting-that-day.
+            // For each weekday (0..6), aggregate clock-minutes-of-sections-starting-that-day.
             for (int day = 0; day < 7; day++)
             {
                 var dailyTerms = new List<LinearExpr>();
@@ -78,24 +83,29 @@ public sealed class DailyLoadSoftEncoder : IConstraintEncoder
                     ctx.Model.Add(dayVar == day).OnlyEnforceIf(lit);
                     ctx.Model.Add(dayVar != day).OnlyEnforceIf(lit.Not());
 
-                    var hours = section.TheoryHours + section.LabHours;
-                    if (hours > 0)
-                        dailyTerms.Add(LinearExpr.Term(lit, hours));
+                    var sectionMinutes = (section.TheoryHours + section.LabHours) * slotMinutes;
+                    if (sectionMinutes > 0)
+                        dailyTerms.Add(LinearExpr.Term(lit, sectionMinutes));
                 }
 
                 if (dailyTerms.Count == 0) continue;
 
-                var dailyHours = LinearExpr.Sum(dailyTerms.ToArray());
-                var maxPossible = instructorGroup.Sum(s => s.TheoryHours + s.LabHours);
-                var excess = ctx.Model.NewIntVar(
-                    0, maxPossible, $"s2_excess_i{instructorGroup.Key}_d{day}");
-                ctx.Model.AddMaxEquality(excess, new[]
+                var dailyMinutes = LinearExpr.Sum(dailyTerms.ToArray());
+                var maxPossibleMinutes = instructorGroup.Sum(s => (s.TheoryHours + s.LabHours) * slotMinutes);
+                var excessMinutes = ctx.Model.NewIntVar(
+                    0, maxPossibleMinutes, $"s2_excessMin_i{instructorGroup.Key}_d{day}");
+                ctx.Model.AddMaxEquality(excessMinutes, new[]
                 {
-                    dailyHours - LinearExpr.Constant(t.S2MaxDailyHours),
+                    dailyMinutes - LinearExpr.Constant(capMinutes),
                     LinearExpr.Constant(0)
                 });
-                // (long) cast: overflow safety for large weight × large excess.
-                ctx.Penalties.Add(excess * (long)t.S2Weight);
+
+                // V1 paritesi: penalty = excessHours × Weight. Integer div ile minute → hour.
+                var maxPossibleHours = (maxPossibleMinutes / 60) + 1;
+                var excessHours = ctx.Model.NewIntVar(0, maxPossibleHours,
+                    $"s2_excessHr_i{instructorGroup.Key}_d{day}");
+                ctx.Model.AddDivisionEquality(excessHours, excessMinutes, 60);
+                ctx.Penalties.Add(excessHours * (long)t.S2Weight);
             }
         }
     }

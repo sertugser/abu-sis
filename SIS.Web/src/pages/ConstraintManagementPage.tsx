@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,12 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-  Tooltip, TooltipContent, TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  AlertCircle, BarChart3, FlaskConical, Pencil,
-} from 'lucide-react';
+import { AlertCircle, Pencil } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '@/components/ui/global-toast';
 import {
@@ -32,11 +26,9 @@ import {
 } from '../components/constraint/helpers';
 import { useUpdateConstraintParameters } from '../hooks/useConstraints';
 import { Input } from '@/components/ui/input';
-import ProfileSelector from '../components/constraint/ProfileSelector';
 import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
 import AlgorithmParametersPanel from '../components/constraint/AlgorithmParametersPanel';
 import ApprovalPanel from '../components/constraint/ApprovalPanel';
-import SimulationDrawer from '../components/constraint/SimulationDrawer';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
 // ─── Constraint Row ─────────────────────────────────────────────
@@ -397,10 +389,8 @@ export default function ConstraintManagementPage() {
   const { user } = useAuth();
   const isAdmin = user?.roles.includes('SystemAdministrator') ?? false;
 
-  const [simulationOpen, setSimulationOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'constraints' | 'algorithm' | 'pairing'>('constraints');
   const [view, setView] = useState<'all' | 'hard' | 'soft'>('all');
-  const toast = useToast();
 
   // Default to the active term, fallback to latest
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
@@ -410,9 +400,6 @@ export default function ConstraintManagementPage() {
     const active = terms.find(t => t.isActive);
     return active ? active.id : terms[0].id;
   }, [selectedTermId, terms]);
-
-  // Skor analizi (trend, heatmap, bottlenecks) artık ayrı sayfada:
-  // /ders-programi-skor-analizi — bu sayfa kısıt yönetimine odaklanıyor.
 
   // useMemo ile stable referans (logical || [] her render'da yeni array yaratırdı)
   const items = useMemo(() => constraints ?? [], [constraints]);
@@ -492,50 +479,6 @@ export default function ConstraintManagementPage() {
                 </>
               )}
 
-              <div className="w-px h-6 bg-gray-200 mx-1" />
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span><ProfileSelector onApplied={(msg) => toast.showSuccess('Profil uygulandı', msg)} /></span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  Hazır kısıt setleri (örn. &ldquo;Yaz Okulu&rdquo;, &ldquo;Yoğun Dönem&rdquo;).
-                  Seçtiğin profil tüm 27 kısıdın aç/kapat ve ağırlık ayarlarını tek tıkla uygular.
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-                    onClick={() => setSimulationOpen(true)}
-                  >
-                    <FlaskConical className="h-3.5 w-3.5" />
-                    Simülasyon
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  &ldquo;Bu kısıdın ağırlığını değiştirsem ne olur?&rdquo; testi.
-                  Gerçek programa dokunmadan kısıt değişikliğinin sonucunu yan-yana gösterir.
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    to="/ders-programi-skor-analizi"
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 h-7 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-                  >
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    Skor Analizi
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  Mevcut programın sağlığı: en sorunlu kısıtlar, gün/saat ısı haritası,
-                  zaman içinde toplam ihlal trendi. Salt-okunur, kısıt düzenlemez.
-                </TooltipContent>
-              </Tooltip>
             </>
           )}
         </div>
@@ -602,15 +545,6 @@ export default function ConstraintManagementPage() {
           </TabsContent>
         )}
       </Tabs>
-
-
-      {/* Simulation Drawer */}
-      <SimulationDrawer
-        open={simulationOpen}
-        onOpenChange={setSimulationOpen}
-        termId={effectiveTermId}
-        constraints={items}
-      />
     </div>
   );
 }

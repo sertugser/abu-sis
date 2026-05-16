@@ -14,6 +14,8 @@ import CourseCatalogPage from './pages/CourseCatalogPage';
 import SmartPlanningPage from './pages/SmartPlanningPage';
 import RegistrationPlanPage from './pages/RegistrationPlanPage';
 import MyCoursesPage from './pages/MyCoursesPage';
+import AdvisorInfoPage from './pages/AdvisorInfoPage';
+import OpenedDepartmentCoursesPage from './pages/OpenedDepartmentCoursesPage';
 import GradeListPage from './pages/GradeListPage';
 import AttendanceStatusPage from './pages/AttendanceStatusPage';
 import CurriculumStatusPage from './pages/CurriculumStatusPage';
@@ -29,6 +31,7 @@ import QrAttendancePage from './pages/QrAttendancePage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
+import SchedulingEditorPage from './pages/SchedulingEditorPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
 
@@ -73,7 +76,6 @@ import FacultySignatureUploadPage from './pages/FacultySignatureUploadPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
-import ScheduleScoreAnalyticsPage from './pages/ScheduleScoreAnalyticsPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import ElectiveConfigurationPage from './pages/ElectiveConfigurationPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
@@ -131,8 +133,14 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.plan.view" />}>
                     <Route path="plan" element={<RegistrationPlanPage />} />
                   </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.danisman-bilgileri.view" />}>
+                    <Route path="danisman-bilgileri" element={<AdvisorInfoPage />} />
+                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.alinan-dersler.view" />}>
                     <Route path="alinan-dersler" element={<MyCoursesPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.acilan-bolum-dersleri.view" />}>
+                    <Route path="acilan-bolum-dersleri" element={<OpenedDepartmentCoursesPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.not-listesi.view" />}>
                     <Route path="not-listesi" element={<GradeListPage />} />
@@ -304,7 +312,6 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-programi-kisitlamalari.view" />}>
                     <Route path="ders-programi-kisitlamalari" element={<ConstraintManagementPage />} />
-                    <Route path="ders-programi-skor-analizi" element={<ScheduleScoreAnalyticsPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-islemleri.view" />}>
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
@@ -374,6 +381,11 @@ export default function App() {
 
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
+                </Route>
+
+                {/* AppLayout dışı: tam-ekran düzenleyici sayfası, sidebar/topbar görünmez */}
+                <Route element={<RoleProtectedRoute permission="menu.ders-programi-olusturma.view" />}>
+                  <Route path="ders-programi-olusturma/duzenle" element={<SchedulingEditorPage />} />
                 </Route>
               </Route>
             </Routes>

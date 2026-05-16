@@ -76,10 +76,10 @@ public partial class SchedulingService
             return response;
         }
 
-        var existingSnapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
+        var existingSnapshot = await BuildRuntimeSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
-        var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
+        var constraintState = await _constraintStateLoader.LoadConstraintStateAsync(
             instructorId, section.Course.DepartmentId, section.Id, section.TermId, cancellationToken);
         var candidateCourseMetadata = await LoadCourseSchedulingMetadataAsync(section.TermId, [section.CourseId], cancellationToken);
         var currentBlocks = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
@@ -145,33 +145,31 @@ public partial class SchedulingService
         {
             foreach (var classroom in classrooms)
             {
-                var candidate = BuildCandidateSnapshot(
+                var candidate = BuildCandidateRuntime(
                     section,
                     instructor,
                     instructorName,
                     classroom,
                     slotCombination.Slots,
-                    requiredHours,
-                    new List<string>(),
                     suggestedSemester: candidateCourseMetadata.MinSuggestedSemesters.TryGetValue(section.CourseId, out var suggestedSemester)
                         ? suggestedSemester
                         : null,
                     suggestedSemestersByDepartment: GetSuggestedSemestersByDepartment(section.CourseId, candidateCourseMetadata.SuggestedSemestersByDepartment),
                     accessibleDepartmentIds: GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, candidateCourseMetadata.AccessibleDepartments));
 
-                var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, existingSnapshot, softConfig, hardConfig, constraintState);
+                var (conflicts, softNotes) = await EvaluateCandidateConflictsAsync(
+                    candidate, existingSnapshot, softConfig, hardConfig, constraintState, cancellationToken);
                 if (conflicts.Count > 0)
                 {
                     continue;
                 }
 
-                var candidateWeeklyHours = ResolveWeeklyHours(candidate.TimeBlocks, section.Course);
+                var candidateWeeklyHours = ResolveWeeklyHours(slotCombination.Slots, section.Course);
                 response.IsFeasible = true;
                 response.SuggestedClassroomId = classroom.Id;
                 response.SuggestedClassroomName = classroom.Name;
-                response.SuggestedSlots = candidate.TimeBlocks.Select(MapTimeBlock).ToList();
+                response.SuggestedSlots = slotCombination.Slots.Select(MapTimeBlock).ToList();
                 response.EstimatedWeeklyHoursImpact = candidateWeeklyHours - currentWeeklyHours;
-                response.Notes.AddRange(candidate.Notes);
                 response.Notes.AddRange(softNotes);
                 response.Notes.Add("Slotlar zaman grid'inden uygun kombinasyon olarak seçildi.");
                 response.Notes.Add($"Derslik secimi kapasite uyumu esas alinarak yapildi ({classroom.Capacity}/{requiredCapacity}).");

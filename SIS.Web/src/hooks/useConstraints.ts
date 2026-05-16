@@ -7,7 +7,6 @@ import {
   updateConstraintParameters,
   addConstraintException,
   deleteConstraintException,
-  getScoreBreakdown,
   updateConstraintWeight,
   createExceptionRequest,
   getPendingExceptionRequests,
@@ -89,15 +88,6 @@ export function useDeleteConstraintException() {
       // Invalidate all constraint details
       qc.invalidateQueries({ queryKey: ['constraints', 'detail'] });
     },
-  });
-}
-
-export function useScoreBreakdown(termId: number | null) {
-  return useQuery({
-    queryKey: [...QUERY_KEYS.constraints, 'score-breakdown', termId],
-    queryFn: () => getScoreBreakdown(termId!),
-    enabled: termId != null,
-    staleTime: 30 * 1000,
   });
 }
 

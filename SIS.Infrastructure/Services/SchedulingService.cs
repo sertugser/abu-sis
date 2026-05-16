@@ -1,11 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Rules;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services.Scheduling;
+using SIS.Infrastructure.Services.Scheduling.Rules;
 
 namespace SIS.Infrastructure.Services;
 
@@ -22,23 +25,37 @@ namespace SIS.Infrastructure.Services;
 public partial class SchedulingService : ISchedulingService
 {
     private readonly AppDbContext _context;
-    private readonly ConstraintEvaluationService _constraintEvaluation;
+    private readonly IConstraintStateLoader _constraintStateLoader;
     private readonly IScheduleWriter _scheduleWriter;
+    private readonly IRuleEngine _ruleEngine;
 
     public SchedulingService(
         AppDbContext context,
-        ConstraintEvaluationService constraintEvaluation,
-        IScheduleWriter scheduleWriter)
+        IConstraintStateLoader constraintStateLoader,
+        IScheduleWriter scheduleWriter,
+        IRuleEngine ruleEngine)
     {
         _context = context;
-        _constraintEvaluation = constraintEvaluation;
+        _constraintStateLoader = constraintStateLoader;
         _scheduleWriter = scheduleWriter;
+        _ruleEngine = ruleEngine;
     }
 
     public async Task<List<SchedulingConflictDto>> GetConflictsAsync(int? termId = null, CancellationToken cancellationToken = default)
     {
-        var validation = await ValidateExistingAsync(termId, cancellationToken);
-        return validation.Conflicts;
+        // Plan 11 Faz 5 — RuleEngine her zaman aktif (V1 hard evaluator silindi 2026-05-15).
+        var resolvedTerm = await ResolveTermAsync(termId, cancellationToken);
+        if (resolvedTerm == null) return new List<SchedulingConflictDto>();
+
+        var rawConfig = await LoadSystemConfigAsync(cancellationToken);
+        var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
+
+        var runtimeSnapshot = await BuildRuntimeSnapshotAsync(
+            resolvedTerm.Id, null, null, cancellationToken);
+
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, resolvedTerm.Id, cancellationToken);
+        var conflicts = await _ruleEngine.EvaluateAllExistingAsync(runtimeSnapshot, fullCfg, state, cancellationToken);
+        return conflicts.ToList();
     }
 
     public async Task<List<SchedulingConflictDto>> GetConflictsByDepartmentAsync(int departmentId, int? termId = null, CancellationToken cancellationToken = default)
@@ -98,18 +115,21 @@ public partial class SchedulingService : ISchedulingService
 
     public async Task<ScoreBreakdownDto> GetScoreBreakdownAsync(int termId, CancellationToken cancellationToken = default)
     {
-        var snapshot = await BuildTermSnapshotAsync(termId, null, null, cancellationToken);
+        // Plan 12 Faz 5 — RuleEngine delegasyonu. V1 ConstraintEvaluationService.EvaluateWithBreakdown
+        // yerine V2 RuleEngine.EvaluateWithBreakdownAsync. Per-section dispatch, hard+soft toggle,
+        // weighted soft penalty + ConstraintScoreItemDto üretimi RuleEngine içinde.
+        // V1 ConstraintEvaluationService hâlâ DI'da (Faz 7'de silinecek); SimulationService gibi
+        // diğer caller'lar Faz 6'da delege edilecek.
+        // BuildRuntimeSnapshotAsync zaten S4Enabled durumunda CoEnrollmentPairs yükler ve
+        // curriculumConflictMode'a göre Cohort/Enrollment veri ön-yüklemesini yapar.
+        var runtimeSnapshot = await BuildRuntimeSnapshotAsync(termId, null, null, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
 
-        if (softConfig.S4Enabled)
-            snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, cancellationToken);
-
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
-        var weightMap = state.Definitions.ToDictionary(d => d.Key, d => d.Value.Weight);
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, termId, cancellationToken);
 
-        return _constraintEvaluation.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        return await _ruleEngine.EvaluateWithBreakdownAsync(runtimeSnapshot, config, state, cancellationToken);
     }
 
     // ── Private helpers ──────────────────────────────────────────────────
@@ -131,6 +151,9 @@ public partial class SchedulingService : ISchedulingService
             TheoryLabSplitThreshold = hard?.TheoryLabSplitThreshold ?? 4,
             AllowSameCourseSectionOverlap = hard?.AllowSameCourseSectionOverlap ?? false,
             CurriculumConflictMode = hard?.CurriculumConflictMode ?? "curriculum",
+            // Plan 11 — V2 encoder paritesi
+            MaxDailyHours = hard?.MaxDailyHours ?? 9,
+            AmphiThresholdEnabled = hard?.AmphiThresholdEnabled ?? false,
             S1Enabled = soft.S1Enabled,
             S1MinOccupancy = soft.S1MinOccupancy,
             S1MaxOccupancy = soft.S1MaxOccupancy,
@@ -485,8 +508,6 @@ public partial class SchedulingService : ISchedulingService
 
     private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, Course course) => SchedulingHelpers.ResolveWeeklyHours(slots, course);
 
-    private static decimal ResolveWeeklyHours(IReadOnlyList<TimeBlock> slots, SectionSnapshot section) => SchedulingHelpers.ResolveWeeklyHours(slots, section);
-
     private static ScheduleSlotDto MapTimeBlock(TimeBlock slot) =>
         new()
         {
@@ -494,18 +515,6 @@ public partial class SchedulingService : ISchedulingService
             StartTime = slot.StartTime,
             EndTime = slot.EndTime
         };
-
-    private static SchedulingConflictDto BuildConflict(
-        SectionSnapshot section,
-        string conflictType,
-        string message,
-        TimeBlock? slot,
-        int? relatedSectionId) => SchedulingHelpers.BuildConflict(section, conflictType, message, slot, relatedSectionId);
-
-    private static bool TryGetSharedCurriculumDepartment(
-        SectionSnapshot first,
-        SectionSnapshot second,
-        out int sharedDepartmentId) => SchedulingHelpers.TryGetSharedCurriculumDepartment(first, second, out sharedDepartmentId);
 
     private static Dictionary<int, int> GetSuggestedSemestersByDepartment(
         int courseId,

@@ -12,8 +12,6 @@ using SIS.Infrastructure.Persistence;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
 
@@ -34,15 +32,17 @@ public class FacultyPlanningServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        var constraintService = CreateConstraintEvaluationService();
+        var stateLoader = new ConstraintStateLoader(_context);
         var autoScheduleEngine = new AutoScheduleEngine(_context, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
         var scheduleWriter = new ScheduleWriter(_context);
+        var ruleEngine = SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine();
         _service = new FacultyPlanningService(
             _context,
-            new SchedulingService(_context, constraintService, scheduleWriter),
+            new SchedulingService(_context, stateLoader, scheduleWriter, ruleEngine),
             new HttpContextAccessor(),
             autoScheduleEngine,
-            scheduleWriter);
+            scheduleWriter,
+            new NullSystemConfigProvider());
 
         SeedBaseData();
     }
@@ -138,6 +138,69 @@ public class FacultyPlanningServiceTests : IDisposable
             .ToListAsync();
 
         writtenSchedules.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssignSectionAsync_MoveToDifferentSlots_RewritesSectionSchedules()
+    {
+        // Regresyon: SchedulingEditorPage drag-drop ile atanmış section başka boş hücreye taşındığında
+        // backend slot kayıtlarını güncellemeli. Önceki guard "aynı classroom + yeni slot" senaryosunu
+        // kaçırıyordu; endpoint 200 dönüyor ama SectionSchedules eski yerinde kalıyordu.
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(10, 0), 1);
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(11, 0), 2);
+        AddTimeSlot(TermId, DayOfWeek.Tuesday, new TimeOnly(13, 0), new TimeOnly(14, 0), 3);
+        AddTimeSlot(TermId, DayOfWeek.Tuesday, new TimeOnly(14, 0), new TimeOnly(15, 0), 4);
+
+        var classroom = AddClassroom(1, "C101", 30);
+        var course = AddCourse(1, "CENG201", theoryHours: 2);
+        var section = AddSection(1, course.Id, instructorId: null, capacity: 25);
+
+        // 1. atama — Pazartesi 09:00-11:00
+        var firstAssign = await _service.AssignSectionAsync(new AssignSectionRequest
+        {
+            SectionId = section.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = (int)DayOfWeek.Monday,
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(11, 0)
+                }
+            ]
+        }, "999");
+        firstAssign.Success.Should().BeTrue();
+
+        // Taşıma — aynı classroom, farklı slotlar (Sal 13:00-15:00). Frontend SchedulingEditorPage'in
+        // gönderdiği payload ile birebir aynı: classroomId aynı, scheduleSlots yeni hücreyi tarif eder.
+        var moveResult = await _service.AssignSectionAsync(new AssignSectionRequest
+        {
+            SectionId = section.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = (int)DayOfWeek.Tuesday,
+                    StartTime = new TimeOnly(13, 0),
+                    EndTime = new TimeOnly(15, 0)
+                }
+            ]
+        }, "999");
+        moveResult.Success.Should().BeTrue();
+
+        var writtenSchedules = await _context.SectionSchedules
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == section.Id)
+            .OrderBy(ss => ss.TimeSlot.StartTime)
+            .ToListAsync();
+
+        writtenSchedules.Should().HaveCount(2);
+        writtenSchedules.Should().OnlyContain(ss => ss.TimeSlot.DayOfWeek == DayOfWeek.Tuesday,
+            because: "taşıma sonrası tüm slot kayıtları yeni güne ait olmalı");
+        writtenSchedules.Select(ss => ss.TimeSlot.StartTime)
+            .Should().Equal(new TimeOnly(13, 0), new TimeOnly(14, 0));
     }
 
     [Fact]
@@ -432,36 +495,8 @@ public class FacultyPlanningServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        var evaluators = new IConstraintEvaluator[]
-        {
-            new CapacityEvaluator(),
-            new ClassroomTypeEvaluator(),
-            new FacultyClassroomEvaluator(),
-            new ClassroomConflictEvaluator(),
-            new InstructorConflictEvaluator(),
-            new CurriculumConflictEvaluator(),
-            new CourseComponentEvaluator(),
-            new SameCourseSectionEvaluator(),
-            new WeeklyLoadEvaluator(),
-            new DailyLoadEvaluator(),
-            new NoDayOffEvaluator(),
-            new CorequisiteEvaluator(),
-            new CreditHourEvaluator(),
-            new LunchBreakEvaluator(),
-            new MaxConsecutiveHoursEvaluator(),
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new WeekdayBalanceEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, _context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi; SchedulingService artık
+    // ConstraintStateLoader + RuleEngine ile kuruluyor.
 
     public void Dispose()
     {

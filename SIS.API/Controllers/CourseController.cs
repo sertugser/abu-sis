@@ -148,23 +148,23 @@ public class CourseController : ControllerBase
         // 1. Authenticated student
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
-            return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
+            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
 
         var student = await _context.Students
             .Include(s => s.StudentPrograms)
             .FirstOrDefaultAsync(s => s.UserId == userId);
         if (student == null)
-            return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
+            return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
         var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
         if (activeProgram == null)
-            return NotFound(new { error = "Aktif program bulunamadi." });
+            return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
 
         // 2. Active term
         var nowCatalog = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowCatalog && t.TermEnd >= nowCatalog);
         if (activeTerm == null)
-            return NotFound(new { error = "Aktif donem bulunamadi." });
+            return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
 
         // 3. Curriculum data — which courses are in the student's program
         var curriculumCourses = await _context.CurriculumCourses
@@ -462,6 +462,81 @@ public class CourseController : ControllerBase
             }
         });
     }
+
+    /// <summary>
+    /// GET api/course/{id}/detail — "Ders Bilgileri" görünümü için ders katalog detayı.
+    /// Course tüm alanları + Prerequisites + Equivalencies + Department/Faculty bilgisi.
+    /// Öğrenci "Alınan Dersler" sayfasındaki dişli ikonundan açar.
+    /// </summary>
+    [HttpGet("{id}/detail")]
+    [RequirePermission("lookup.course")]
+    public async Task<IActionResult> GetCourseDetail(int id, CancellationToken ct)
+    {
+        var course = await _context.Courses
+            .AsNoTracking()
+            .Include(c => c.Department)
+                .ThenInclude(d => d!.Faculty)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (course == null)
+            return NotFound(new { error = "Ders bulunamadı." });
+
+        var prerequisites = await _context.CoursePrerequisites
+            .AsNoTracking()
+            .Where(p => p.CourseId == id)
+            .Join(_context.Courses, p => p.RequiredCourseId, c => c.Id, (p, c) => new
+            {
+                CourseId = c.Id,
+                c.Code,
+                c.Name
+            })
+            .ToListAsync(ct);
+
+        var equivalencies = await _context.CourseEquivalencies
+            .AsNoTracking()
+            .Where(e => e.CourseId == id)
+            .Join(_context.Courses, e => e.EquivalentCourseId, c => c.Id, (e, c) => new
+            {
+                CourseId = c.Id,
+                c.Code,
+                c.Name
+            })
+            .ToListAsync(ct);
+
+        return Ok(new
+        {
+            Id = course.Id,
+            Code = course.Code,
+            Name = course.Name,
+            EnglishName = course.EnglishName,
+            Description = course.Description,
+            Ects = course.Ects,
+            NationalCredit = course.NationalCredit,
+            TheoryHours = course.TheoryHours,
+            LabHours = course.LabHours,
+            ApplicationHours = course.ApplicationHours,
+            Language = FormatCourseLanguage(course.Language),
+            Level = course.Level.ToString(),
+            TeachingMethod = course.TeachingMethod.ToString(),
+            Status = course.Status.ToString(),
+            IsNonGpa = course.IsNonGpa,
+            DepartmentName = course.Department?.Name,
+            FacultyName = course.Department?.Faculty?.Name,
+            ExamType = course.ExamType,
+            Prerequisites = prerequisites,
+            Equivalencies = equivalencies
+        });
+    }
+
+    private static string FormatCourseLanguage(SIS.Domain.Enums.CourseLanguage language) => language switch
+    {
+        SIS.Domain.Enums.CourseLanguage.Turkish => "Türkçe",
+        SIS.Domain.Enums.CourseLanguage.English => "İngilizce",
+        SIS.Domain.Enums.CourseLanguage.French  => "Fransızca",
+        SIS.Domain.Enums.CourseLanguage.German  => "Almanca",
+        SIS.Domain.Enums.CourseLanguage.Arabic  => "Arapça",
+        _ => language.ToString()
+    };
 
     /// <summary>
     /// GET api/course/terms/active — get the active term info.

@@ -5,8 +5,12 @@ namespace SIS.Infrastructure.Services.Announcement;
 
 /// <summary>
 /// <see cref="AnnouncementSettings"/>'i <see cref="IWebModuleSettingsProvider"/> üzerinden
-/// WebModuleSettings tablosundan üretir. Her çağrı 6 anahtarı paralel okur — her anahtar
-/// kendi 5 dakikalık cache'inde olduğundan çağrı maliyeti düşüktür.
+/// WebModuleSettings tablosundan üretir. Her anahtar 5 dakikalık cache'de olduğundan
+/// sıcak (warm) çağrılarda maliyet ~0; ilk (soğuk) çağrı 11 anahtarı sırayla okur.
+///
+/// DİKKAT: Sequential olmak ZORUNLU — request-scoped tek DbContext üzerinden bu provider
+/// çağrıları yapılıyor; Task.WhenAll ile paralel çekmek "A second operation was started
+/// on this context instance" InvalidOperationException'ı fırlatır.
 /// </summary>
 public sealed class AnnouncementSettingsProvider : IAnnouncementSettingsProvider
 {
@@ -35,34 +39,29 @@ public sealed class AnnouncementSettingsProvider : IAnnouncementSettingsProvider
 
     public async Task<AnnouncementSettings> GetAsync(CancellationToken ct = default)
     {
-        var maxTitleTask        = _webSettings.GetIntAsync(ModuleKey, "MaxTitleLength",        FallbackMaxTitleLength,        ct);
-        var maxContentTask      = _webSettings.GetIntAsync(ModuleKey, "MaxContentLength",      FallbackMaxContentLength,      ct);
-        var topCountTask        = _webSettings.GetIntAsync(ModuleKey, "StudentTopCount",       FallbackStudentTopCount,       ct);
-        var pinnedFirstTask     = _webSettings.GetBoolAsync(ModuleKey, "PinnedAnnouncementsFirst", FallbackPinnedFirst,        ct);
-        var allowImagesTask     = _webSettings.GetBoolAsync(ModuleKey, "AllowImagesInContent",     FallbackAllowImagesInContent, ct);
-        var allowTablesTask     = _webSettings.GetBoolAsync(ModuleKey, "AllowTablesInContent",     FallbackAllowTablesInContent, ct);
-        var yearMinTask         = _webSettings.GetIntAsync(ModuleKey, "StudentYearFilterMin",      FallbackStudentYearFilterMin, ct);
-        var yearMaxTask         = _webSettings.GetIntAsync(ModuleKey, "StudentYearFilterMax",      FallbackStudentYearFilterMax, ct);
-        var attachEnabledTask   = _webSettings.GetBoolAsync(ModuleKey, "AttachmentsEnabled",       FallbackAttachmentsEnabled,  ct);
-        var attachMaxSizeTask   = _webSettings.GetIntAsync(ModuleKey, "AttachmentMaxSizeMB",       FallbackAttachmentMaxSizeMB, ct);
-        var attachMaxCountTask  = _webSettings.GetIntAsync(ModuleKey, "AttachmentMaxCount",        FallbackAttachmentMaxCount,  ct);
-
-        await Task.WhenAll(
-            maxTitleTask, maxContentTask, topCountTask, pinnedFirstTask,
-            allowImagesTask, allowTablesTask, yearMinTask, yearMaxTask,
-            attachEnabledTask, attachMaxSizeTask, attachMaxCountTask);
+        var maxTitle        = await _webSettings.GetIntAsync(ModuleKey, "MaxTitleLength",            FallbackMaxTitleLength,        ct);
+        var maxContent      = await _webSettings.GetIntAsync(ModuleKey, "MaxContentLength",          FallbackMaxContentLength,      ct);
+        var topCount        = await _webSettings.GetIntAsync(ModuleKey, "StudentTopCount",           FallbackStudentTopCount,       ct);
+        var pinnedFirst     = await _webSettings.GetBoolAsync(ModuleKey, "PinnedAnnouncementsFirst", FallbackPinnedFirst,           ct);
+        var allowImages     = await _webSettings.GetBoolAsync(ModuleKey, "AllowImagesInContent",     FallbackAllowImagesInContent,  ct);
+        var allowTables     = await _webSettings.GetBoolAsync(ModuleKey, "AllowTablesInContent",     FallbackAllowTablesInContent,  ct);
+        var yearMin         = await _webSettings.GetIntAsync(ModuleKey, "StudentYearFilterMin",      FallbackStudentYearFilterMin,  ct);
+        var yearMax         = await _webSettings.GetIntAsync(ModuleKey, "StudentYearFilterMax",      FallbackStudentYearFilterMax,  ct);
+        var attachEnabled   = await _webSettings.GetBoolAsync(ModuleKey, "AttachmentsEnabled",       FallbackAttachmentsEnabled,    ct);
+        var attachMaxSize   = await _webSettings.GetIntAsync(ModuleKey, "AttachmentMaxSizeMB",       FallbackAttachmentMaxSizeMB,   ct);
+        var attachMaxCount  = await _webSettings.GetIntAsync(ModuleKey, "AttachmentMaxCount",        FallbackAttachmentMaxCount,    ct);
 
         return new AnnouncementSettings(
-            MaxTitleLength:        maxTitleTask.Result,
-            MaxContentLength:      maxContentTask.Result,
-            StudentTopCount:       topCountTask.Result,
-            PinnedFirst:           pinnedFirstTask.Result,
-            AllowImagesInContent:  allowImagesTask.Result,
-            AllowTablesInContent:  allowTablesTask.Result,
-            StudentYearFilterMin:  yearMinTask.Result,
-            StudentYearFilterMax:  yearMaxTask.Result,
-            AttachmentsEnabled:    attachEnabledTask.Result,
-            AttachmentMaxSizeMB:   attachMaxSizeTask.Result,
-            AttachmentMaxCount:    attachMaxCountTask.Result);
+            MaxTitleLength:        maxTitle,
+            MaxContentLength:      maxContent,
+            StudentTopCount:       topCount,
+            PinnedFirst:           pinnedFirst,
+            AllowImagesInContent:  allowImages,
+            AllowTablesInContent:  allowTables,
+            StudentYearFilterMin:  yearMin,
+            StudentYearFilterMax:  yearMax,
+            AttachmentsEnabled:    attachEnabled,
+            AttachmentMaxSizeMB:   attachMaxSize,
+            AttachmentMaxCount:    attachMaxCount);
     }
 }

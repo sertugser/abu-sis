@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Rules;
 
 namespace SIS.Infrastructure.Services;
 
@@ -35,20 +36,26 @@ public partial class SchedulingService
             return result;
         }
 
-        var snapshot = await BuildTermSnapshotAsync(section.TermId, section.Id, null, cancellationToken);
-        var candidate = await BuildCandidateSnapshotAsync(section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
+        var (candidate, candidateNotes) = await BuildCandidateRuntimeAsync(
+            section, request.InstructorId, request.ClassroomId, request.ScheduleSlots, cancellationToken);
         var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
         var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
-        var constraintState = await _constraintEvaluation.LoadConstraintStateAsync(
+        var constraintState = await _constraintStateLoader.LoadConstraintStateAsync(
             candidate.InstructorId, candidate.DepartmentId, candidate.SectionId, section.TermId, cancellationToken);
 
-        result.Notes.Add($"Degerlendirilen donem: {snapshot.TermName}");
-        result.Notes.AddRange(candidate.Notes);
+        var runtimeSnapshot = await BuildRuntimeSnapshotAsync(
+            section.TermId, section.Id, null, cancellationToken);
 
-        var (conflicts, softNotes) = EvaluateCandidateConflicts(candidate, snapshot, softConfig, hardConfig, constraintState);
-        result.Conflicts = conflicts;
-        result.Notes.AddRange(softNotes);
-        result.IsValid = conflicts.Count == 0;
+        result.Notes.Add($"Degerlendirilen donem: {runtimeSnapshot.TermName}");
+        result.Notes.AddRange(candidateNotes);
+
+        var fullCfg = BuildConstraintConfig(softConfig, hardConfig);
+
+        var ruleConflicts = await _ruleEngine.EvaluateCandidateAsync(
+            candidate, runtimeSnapshot, fullCfg, constraintState, cancellationToken);
+
+        result.Conflicts = ruleConflicts.ToList();
+        result.IsValid = ruleConflicts.Count == 0;
         return result;
     }
 
@@ -66,7 +73,7 @@ public partial class SchedulingService
             return result;
         }
 
-        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
+        var snapshot = await BuildRuntimeSnapshotAsync(resolvedTerm.Id, null, null, cancellationToken);
         var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
 
         evaluation.Notes.Insert(0, $"Degerlendirilen donem: {snapshot.TermName}");
@@ -93,47 +100,60 @@ public partial class SchedulingService
             return result;
         }
 
-        var snapshot = await BuildTermSnapshotAsync(resolvedTerm.Id, null, departmentId, cancellationToken);
+        var snapshot = await BuildRuntimeSnapshotAsync(resolvedTerm.Id, null, departmentId, cancellationToken);
         var evaluation = await EvaluateExistingConflictsAsync(snapshot, cancellationToken);
         evaluation.Notes.Insert(0, $"Degerlendirilen donem: {snapshot.TermName}");
         evaluation.Notes.Insert(1, $"Kapsam: {snapshot.ScopeName}");
         return evaluation;
     }
 
-    private async Task<ScheduleValidationResultDto> EvaluateExistingConflictsAsync(TermSnapshot snapshot, CancellationToken ct)
+    private async Task<ScheduleValidationResultDto> EvaluateExistingConflictsAsync(RuntimeSnapshot snapshot, CancellationToken ct)
     {
         var softConfig = await LoadSoftConstraintConfigAsync(ct);
         var hardConfig = await LoadHardConstraintConfigAsync(ct);
-
-        if (softConfig.S4Enabled)
-            snapshot.CoEnrollmentPairs = await LoadCoEnrollmentPairsAsync(snapshot.TermId, softConfig.S4MinCoPairThreshold, ct);
-
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var state = await _constraintEvaluation.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
-        var (conflicts, notes) = _constraintEvaluation.EvaluateAllExisting(snapshot, config, state);
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
+
+        // Plan 12 Faz 5 — Hard + soft validation RuleEngine üzerinden. Soft note'lar
+        // EvaluateWithBreakdownAsync ConstraintScoreItemDto.SampleViolations'tan toplanır.
+        var hardConflicts = await _ruleEngine.EvaluateAllExistingAsync(snapshot, config, state, ct);
+        var breakdown = await _ruleEngine.EvaluateWithBreakdownAsync(snapshot, config, state, ct);
+
+        var softNotes = breakdown.Constraints
+            .Where(item => item.Category == "Soft")
+            .SelectMany(item => item.SampleViolations)
+            .ToList();
 
         return new ScheduleValidationResultDto
         {
-            IsValid = conflicts.Count == 0,
-            Conflicts = conflicts
+            IsValid = hardConflicts.Count == 0,
+            Conflicts = hardConflicts
                 .OrderBy(conflict => conflict.SectionId)
                 .ThenBy(conflict => conflict.ConflictType)
                 .ThenBy(conflict => conflict.Day)
                 .ThenBy(conflict => conflict.StartTime)
                 .ToList(),
-            Notes = notes.Distinct().OrderBy(note => note).ToList()
+            Notes = softNotes.Distinct().OrderBy(note => note).ToList()
         };
     }
 
-    private (List<SchedulingConflictDto> Conflicts, List<string> SoftNotes) EvaluateCandidateConflicts(
-        SectionSnapshot candidate,
-        TermSnapshot snapshot,
+    private async Task<(List<SchedulingConflictDto> Conflicts, List<string> SoftNotes)> EvaluateCandidateConflictsAsync(
+        RuntimeCandidate candidate,
+        RuntimeSnapshot snapshot,
         SoftConstraintConfig softConfig,
-        HardConstraintConfig? hardConfig = null,
-        ConstraintState? state = null)
+        HardConstraintConfig? hardConfig,
+        ConstraintState? state,
+        CancellationToken ct)
     {
+        // Plan 12 Faz 7 — V1 ConstraintEvaluationService.EvaluateCandidate yerine RuleEngine
+        // delegasyonu. SuggestAsync path'i için kullanılır (manuel slot önerisi).
         var config = BuildConstraintConfig(softConfig, hardConfig);
-        var (conflicts, notes, _) = _constraintEvaluation.EvaluateCandidate(candidate, snapshot, config, state);
-        return (conflicts, notes);
+
+        var conflicts = (await _ruleEngine.EvaluateCandidateAsync(candidate, snapshot, config, state, ct)).ToList();
+
+        // Soft notes — SuggestAsync feasibility için sadece bilgilendirici, ihlal değil.
+        // CalculatePenaltyAsync skalar dönüyor; tek candidate için detaylı breakdown
+        // SuggestAsync hızı için skipped (UI'da kabul edilebilir trade).
+        return (conflicts, new List<string>());
     }
 }

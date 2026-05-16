@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Application.Scheduling.DTOs;
@@ -26,6 +27,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly AutoScheduleEngine _autoScheduleEngine;
     private readonly IScheduleWriter _scheduleWriter;
+    private readonly ISystemConfigProvider _systemConfig;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -36,13 +38,15 @@ public partial class FacultyPlanningService : IFacultyPlanningService
         ISchedulingService schedulingService,
         IHttpContextAccessor httpContextAccessor,
         AutoScheduleEngine autoScheduleEngine,
-        IScheduleWriter scheduleWriter)
+        IScheduleWriter scheduleWriter,
+        ISystemConfigProvider systemConfig)
     {
         _context = context;
         _schedulingService = schedulingService;
         _httpContextAccessor = httpContextAccessor;
         _autoScheduleEngine = autoScheduleEngine;
         _scheduleWriter = scheduleWriter;
+        _systemConfig = systemConfig;
     }
 
     public async Task<int> ResolveFacultyForUserAsync(string userId, CancellationToken ct = default)
@@ -259,13 +263,22 @@ public partial class FacultyPlanningService : IFacultyPlanningService
             .ToDictionary(g => g.Key, g => g.ToList());
         var sectionPageHasSchedule = sectionPageScheduleMap.Keys.ToHashSet();
 
-        // Load SuggestedSemester from CurriculumCourse for year-level coloring
+        // Load SuggestedSemester from CurriculumCourse for year-level coloring.
+        // SuggestedSemester=0 anlamı: "seçmeli havuz/placeholder" — gerçek yarıyıl bilgisi
+        // değil. Naif MIN(...) çağrısı 0'lı seçmeli kayıtla zorunlu kayıtları karıştırıp
+        // 0 döndürüyordu (örn. CENG 213 → 4 kayıt: 3,3,3,0 → MIN=0 → mavi). 0'ları filtreleyip
+        // pozitif yarıyılların min'ini alıyoruz; hiç pozitif yoksa fallback 0 (eski davranış).
         var courseIds = allSections.Select(s => s.CourseId).Distinct().ToList();
         var semesterMap = await _context.Set<CurriculumCourse>()
             .AsNoTracking()
             .Where(cc => courseIds.Contains(cc.CourseId))
             .GroupBy(cc => cc.CourseId)
-            .Select(g => new { CourseId = g.Key, Semester = g.Min(cc => cc.SuggestedSemester) })
+            .Select(g => new
+            {
+                CourseId = g.Key,
+                Semester = g.Where(cc => cc.SuggestedSemester > 0)
+                            .Min(cc => (int?)cc.SuggestedSemester) ?? 0
+            })
             .ToDictionaryAsync(x => x.CourseId, x => x.Semester, ct);
 
         foreach (var group in grouped)
@@ -373,7 +386,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
     public async Task<AutoSchedulePreviewDto> AutoSchedulePreviewAsync(AutoScheduleRequest request, string userId, CancellationToken ct = default)
     {
         // userId'yi RunAsync'e geçir → IScheduleProgressReporter SignalR ile o kullanıcıya
-        // canlı stage event'leri yayınlasın (started → construction → sa → lns → complete).
+        // canlı stage event'leri yayınlasın (started → v2-building-request → v2-solving → complete).
         var result = await _autoScheduleEngine.RunAsync(request, userId, ct);
 
         // Save run to DB

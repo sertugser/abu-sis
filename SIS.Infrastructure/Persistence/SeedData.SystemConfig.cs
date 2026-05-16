@@ -66,6 +66,10 @@ public static partial class SeedData
             new() { Key = "Schedule.OrTools.SearchStrategy", Value = "auto", Category = "Schedule", DataType = "string", Description = "CP-SAT search strategy: 'auto', 'fixed', 'portfolio'." },
             new() { Key = "Schedule.OrTools.UnsatCoreEnabled", Value = "true", Category = "Schedule", DataType = "bool", Description = "Infeasible çözümde UNSAT core extraction yap. Performance penalty küçük, default true." },
 
+            // ── Plan 11 Faz 5 — RuleEngine her zaman aktif (V1 evaluator silindi 2026-05-15).
+            // Schedule.UseV2RuntimeRules flag'i artık gereksiz; RemoveUseV2RuntimeRulesFlag
+            // migration ile mevcut DB'lerden de düşürüldü.
+
             // ── Algoritma Parametreleri (eski SchedulingAlgorithmConfigs'tan merge — 2026-05-09) ─
             // Hard threshold flag'leri — admin panel'inden toggle edilir, solver SystemConfigs'i okur.
             new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: öğle arasına ders koyulamaz (zorunlu). KAPALI: koyulabilir ama ceza alır (tercihli)." },

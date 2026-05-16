@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, Calendar, Download, FileText, LayoutList, Search, Upload, Wand2 } from 'lucide-react';
+import { AlertCircle, Calendar, Download, FileText, LayoutList, Maximize2, Search, Upload, Wand2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { STATUS_CONFIG } from '../components/faculty-planning/sectionUtils';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,7 @@ type TabKey = 'list' | 'auto-schedule';
 const PAGE_SIZES = [10, 25, 50, 100];
 
 export default function FacultyPlanningPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabKey>('auto-schedule');
   const [importOpen, setImportOpen] = useState(false);
   const contextQuery = useAcademicOperationsContext();
@@ -34,6 +36,12 @@ export default function FacultyPlanningPage() {
   const exportPdf = useExportPdf();
 
   const [triggerRun, setTriggerRun] = useState(0);
+  // Hangi triggerRun değeri çocuk komponentte işlendi.
+  // Tab değişimlerinde AutoScheduleTab unmount + remount oluyor; "consumed" bilgisi
+  // çocukta tutulursa kayboluyor ve remount'ta useEffect aynı trigger'ı yeniden tetikleyip
+  // "iptal ettim ama tab dönünce kendiliğinden başladı" bug'ına yol açıyor. Parent state'i
+  // remount'tan sağ çıkar → trigger bir kez işlendi mi bilgisi kalıcı.
+  const [consumedTriggerRun, setConsumedTriggerRun] = useState(0);
   const [autoIsPending, setAutoIsPending] = useState(false);
 
   // Liste filtreleri (toolbar'da gösterilir)
@@ -188,6 +196,30 @@ export default function FacultyPlanningPage() {
         {/* Separator */}
         <div className="w-px h-5 bg-slate-200" />
 
+        {/* Düzenleyiciyi Aç — ayrı tam-ekran sayfaya geçiş */}
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => {
+                  if (termId == null) return;
+                  navigate(`/ders-programi-olusturma/duzenle?facultyId=${facultyId}&termId=${termId}`);
+                }}
+                disabled={termId == null}
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+                Düzenleyici
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Tam ekran sürükle-bırak düzenleyici
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
         {/* Otomatik Programla */}
         <Button
           size="sm"
@@ -234,6 +266,8 @@ export default function FacultyPlanningPage() {
               termId={termId}
               filterDept={undefined}
               triggerRun={triggerRun}
+              consumedTriggerRun={consumedTriggerRun}
+              onTriggerConsumed={setConsumedTriggerRun}
               onRunStateChange={handleRunStateChange}
               actionBarPortal={actionBarNode}
             />

@@ -54,12 +54,12 @@ public sealed class AutoScheduleEngine
 
         try
         {
-            await ReportAsync("started", 0, detail: "Auto-schedule başlatılıyor...");
+            await ReportAsync("started", 0, detail: "Program oluşturma başlatılıyor...");
 
             var seed = request.Seed ?? (int)(DateTime.UtcNow.Ticks % int.MaxValue);
 
             await ReportAsync("v2-building-request", 10,
-                detail: "v2-ortools: SolverRequest DB'den inşa ediliyor...");
+                detail: "Dersler, derslikler ve zaman dilimleri yükleniyor...");
 
             var requestBuilder = new OrTools.SolverRequestBuilder(_context, _configProvider);
             var solverRequest = await requestBuilder.BuildAsync(
@@ -69,13 +69,83 @@ public sealed class AutoScheduleEngine
                 request.Seed,
                 ct);
 
-            await ReportAsync("v2-solving", 50,
-                detail: $"v2-ortools: CP-SAT çözücü çalışıyor ({solverRequest.Sections.Count} section)...");
+            var sectionCount = solverRequest.Sections.Count;
 
-            var solverResult = await _solverEngine.SolveAsync(solverRequest, ct);
+            await ReportAsync("v2-solving", 50,
+                detail: $"{sectionCount} ders için en uygun program aranıyor...");
+
+            // ── Solver progress wiring (v2-solving aşaması, 50→90) ──
+            // İki kaynak monotonik olarak yüzdeyi günceller:
+            //   1) CP-SAT improving solution callback (her iyileşmede)
+            //   2) Heartbeat task (sessiz solver / UNSAT senaryosu için zamana göre fake ilerleme)
+            // Her ikisi de aynı state'i (lastEmittedPercent) lock altında günceller; geriye
+            // sayım yok → frontend smooth interpolation rahat takip eder.
+            var progressLock = new object();
+            var lastEmittedPercent = 50;
+
+            var solveTimeLimit = await _configProvider.GetIntAsync(
+                "Schedule.OrTools.TimeLimitSeconds", 30, ct);
+            if (solveTimeLimit <= 0) solveTimeLimit = 30;
+
+            void EmitSolvingProgress(int percent, string detail, int current)
+            {
+                if (string.IsNullOrEmpty(userId)) return;
+                lock (progressLock)
+                {
+                    if (percent <= lastEmittedPercent) return;
+                    lastEmittedPercent = percent;
+                }
+                // Fire-and-forget: solver thread'i veya heartbeat task'ı blokumayalım.
+                // SignalRScheduleProgressReporter zaten exception swallow ediyor.
+                _ = _progressReporter.ReportAsync(userId,
+                    new ScheduleProgressEvent("v2-solving", percent, current, sectionCount, detail), ct);
+            }
+
+            void OnSolverProgress(SolverProgressInfo info)
+            {
+                var ratio = info.MaxTimeSeconds > 0
+                    ? Math.Min(1.0, info.WallTimeSeconds / info.MaxTimeSeconds)
+                    : 0.0;
+                var percent = 50 + (int)(ratio * 40); // 50..90
+                var detail = $"{info.NumSolutionsFound} çözüm bulundu, iyileştiriliyor... ({sectionCount} ders)";
+                EmitSolvingProgress(percent, detail, current: info.NumSolutionsFound);
+            }
+
+            using var heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var heartbeatStarted = DateTime.UtcNow;
+            var heartbeatTask = Task.Run(async () =>
+            {
+                try
+                {
+                    // İlk tick'i 1.5s sonra at — solver hızlıca biterse heartbeat hiç emit etmesin.
+                    while (!heartbeatCts.IsCancellationRequested)
+                    {
+                        await Task.Delay(1500, heartbeatCts.Token);
+                        if (heartbeatCts.IsCancellationRequested) break;
+                        var elapsedSec = (DateTime.UtcNow - heartbeatStarted).TotalSeconds;
+                        var ratio = Math.Min(1.0, elapsedSec / solveTimeLimit);
+                        var percent = 50 + (int)(ratio * 40);
+                        EmitSolvingProgress(percent,
+                            $"En uygun program aranıyor... ({sectionCount} ders)",
+                            current: 0);
+                    }
+                }
+                catch (OperationCanceledException) { /* normal shutdown */ }
+            }, heartbeatCts.Token);
+
+            SolverResult solverResult;
+            try
+            {
+                solverResult = await _solverEngine.SolveAsync(solverRequest, ct, OnSolverProgress);
+            }
+            finally
+            {
+                heartbeatCts.Cancel();
+                try { await heartbeatTask; } catch (OperationCanceledException) { }
+            }
 
             await ReportAsync("complete", 100,
-                detail: $"v2-ortools tamamlandı ({solverResult.Status}, {solverResult.Diagnostics.ElapsedSeconds:F2}s).");
+                detail: $"Program oluşturuldu ({FormatSolverStatus(solverResult.Status)}, {solverResult.Diagnostics.ElapsedSeconds:F1} sn).");
 
             return MapSolverResultToPreviewDto(solverResult, solverRequest, seed);
         }
@@ -92,6 +162,21 @@ public sealed class AutoScheduleEngine
                 _cancelRegistry?.Unregister(userId);
         }
     }
+
+    /// <summary>
+    /// SolverStatus → kullanıcı dostu Türkçe metin. "complete" event'inde detail mesajına gömülür.
+    /// İngilizce enum isimleri ("Optimal", "Feasible"…) son kullanıcı için anlamsız; bu mapping
+    /// solver sonucunu insan diline çevirir.
+    /// </summary>
+    private static string FormatSolverStatus(SolverStatus status) => status switch
+    {
+        SolverStatus.Optimal    => "en iyi sonuç",
+        SolverStatus.Feasible   => "uygun çözüm",
+        SolverStatus.Infeasible => "çözüm bulunamadı",
+        SolverStatus.Timeout    => "süre doldu",
+        SolverStatus.Error      => "hata",
+        _ => status.ToString().ToLowerInvariant()
+    };
 
     /// <summary>
     /// SolverResult → AutoSchedulePreviewDto mapping. CP-SAT'ın ürettiği Assignment ve Failure
@@ -173,6 +258,23 @@ public sealed class AutoScheduleEngine
             });
         }
 
+        // Sonuç paneli istatistikleri — frontend hardcoded sayım yapmaz, hepsi buradan gelir.
+        // DistinctCourseCount: işlenen tüm şubelerin (success + failure) kapsadığı ayrık Course sayısı.
+        // UsedClassroomCount: başarılı atamaların değdiği ayrık Classroom sayısı (failure'ların odası yok).
+        var distinctCourseCount = result.Assignments
+            .Select(a => sectionLookup.TryGetValue(a.SectionId, out var s) ? (int?)s.CourseId : null)
+            .Concat(result.Failures
+                .Select(f => sectionLookup.TryGetValue(f.SectionId, out var s) ? (int?)s.CourseId : null))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .Count();
+
+        var usedClassroomCount = result.Assignments
+            .SelectMany(a => a.Slots.Select(s => s.ClassroomId))
+            .Distinct()
+            .Count();
+
         return new AutoSchedulePreviewDto
         {
             Seed = seed,
@@ -184,7 +286,9 @@ public sealed class AutoScheduleEngine
             Failures = failureDtos,
             Stats = new AutoScheduleStats
             {
-                ElapsedSeconds = result.Diagnostics.ElapsedSeconds
+                ElapsedSeconds = result.Diagnostics.ElapsedSeconds,
+                DistinctCourseCount = distinctCourseCount,
+                UsedClassroomCount = usedClassroomCount
             }
         };
     }

@@ -1,36 +1,9 @@
-using SIS.Domain.Entities;
-using SIS.Domain.Enums;
-using SIS.Infrastructure.Services.Scheduling;
-
 namespace SIS.Infrastructure.Services;
 
-public sealed class TermSnapshot
-{
-    public int TermId { get; init; }
-    public string TermName { get; init; } = string.Empty;
-    public string ScopeName { get; init; } = string.Empty;
-    public List<SectionSnapshot> Sections { get; init; } = new();
-    public List<ClassroomTermAssignment> ClassroomAssignments { get; init; } = new(); // for H10
-    public Dictionary<int, int> DeptFacultyMap { get; init; } = new();                // for H10
-    public List<CoursePrerequisite> Corequisites { get; init; } = new();              // for H11
-    public List<CoEnrollmentPair> CoEnrollmentPairs { get; set; } = new();            // for S4
-    public HashSet<(int SectionId1, int SectionId2)>? CohortConflictPairs { get; set; }
-
-    /// <summary>
-    /// Komşu yıl SOFT pair'leri — aynı bölüm, |year_diff| == 1 ders çiftlerinden
-    /// modulo eşleşme. AdjacentYearConflictEvaluator (S20) bu set'i kullanır.
-    /// </summary>
-    public HashSet<(int SectionId1, int SectionId2)>? AdjacentYearSoftPairs { get; set; }
-    public EnrollmentConflictMatrix? EnrollmentConflicts { get; set; }
-    public List<DistributionConstraint>? DistributionConstraints { get; set; }
-    public Dictionary<int, Dictionary<int, int>> CourseSuggestedSemestersByDepartment { get; init; } = new();
-    public Dictionary<int, HashSet<int>> CourseAccessibleDepartments { get; init; } = new();
-    /// <summary>
-    /// (DayOfWeek, StartTime) -> TimeSlot.AllowedMode. FaceToFaceSlotRestriction evaluator'ı için.
-    /// </summary>
-    public Dictionary<(DayOfWeek Day, TimeOnly StartTime), TimeSlotAllowedMode> SlotAllowedModes { get; init; } = new();
-}
-
+/// <summary>
+/// SchedulingService.LoadCourseSchedulingMetadataAsync iç result tipi — kursun min suggested
+/// semester'ı + per-department mapping + accessible departments.
+/// </summary>
 internal sealed class CourseSchedulingMetadata
 {
     public Dictionary<int, int> MinSuggestedSemesters { get; init; } = new();
@@ -38,42 +11,16 @@ internal sealed class CourseSchedulingMetadata
     public Dictionary<int, HashSet<int>> AccessibleDepartments { get; init; } = new();
 }
 
+/// <summary>
+/// S4 CoEnrollment için ortak alınan ders çiftleri (course-level). SchedulingService ve
+/// SolverRequestBuilder LoadCoEnrollmentPairsAsync üretici, RuntimeSnapshot inşaası ile
+/// CoEnrollmentRuntimePair'e çevirilir.
+/// </summary>
 public sealed class CoEnrollmentPair
 {
     public int CourseId1 { get; init; }
     public int CourseId2 { get; init; }
     public int StudentCount { get; init; }
-}
-
-public sealed class SectionSnapshot
-{
-    public int SectionId { get; init; }
-    public int SectionNumber { get; init; }
-    public int CourseId { get; init; }
-    public string CourseCode { get; init; } = string.Empty;
-    public string CourseName { get; init; } = string.Empty;
-    public int TermId { get; init; }
-    public TeachingMethod TeachingMethod { get; init; } = TeachingMethod.FaceToFace;
-    public int TheoryHours { get; init; }
-    public int LabHours { get; init; }
-    public int Capacity { get; init; }
-    public int EnrolledCount { get; init; }
-    public int? ClassroomId { get; init; }
-    public string ClassroomName { get; init; } = string.Empty;
-    public int ClassroomCapacity { get; init; }
-    public ClassroomType ClassroomType { get; init; }         // for H4
-    public ClassroomType? TheoryClassroomType { get; init; }
-    public ClassroomType? LabClassroomType { get; init; }
-    public int? InstructorId { get; init; }
-    public string InstructorName { get; init; } = string.Empty;
-    public int InstructorMaxWeeklyHours { get; init; }
-    public int? DepartmentId { get; init; }                    // for H5, H8
-    public int? SuggestedSemester { get; init; }               // for H5 (curriculum year)
-    public Dictionary<int, int> SuggestedSemestersByDepartment { get; init; } = new();
-    public HashSet<int> AccessibleDepartmentIds { get; init; } = new();
-    public int AssignedTimeSlotCount { get; init; }
-    public List<TimeBlock> TimeBlocks { get; init; } = new();
-    public List<string> Notes { get; init; } = new();
 }
 
 internal sealed class ScheduleParseResult

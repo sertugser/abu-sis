@@ -26,19 +26,42 @@ export async function submitRegistration(courseSectionIds: number[]): Promise<Re
 }
 
 export async function getMyRegistrations(): Promise<StudentRegistrationDto[]> {
-  const response = await apiClient.get<StudentRegistrationDto[]>('/registrations/my');
-  return response.data;
+  try {
+    const response = await apiClient.get<StudentRegistrationDto[]>('/registrations/my');
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, 'Kayitlar yuklenemedi.');
+  }
 }
 
 export async function getMyAttendanceStatus(termId?: number | null): Promise<StudentAttendanceStatusDto> {
-  const response = await apiClient.get<StudentAttendanceStatusDto>('/registrations/attendance-status', {
-    params: termId ? { termId } : undefined,
-  });
-  return response.data;
+  try {
+    const response = await apiClient.get<StudentAttendanceStatusDto>('/registrations/attendance-status', {
+      params: termId ? { termId } : undefined,
+    });
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, 'Devamsizlik durumu yuklenemedi.');
+  }
 }
 
 export async function getCourseHistory(): Promise<CourseHistoryTermDto[]> {
-  const response = await apiClient.get<CourseHistoryTermDto[]>('/registrations/history');
+  try {
+    const response = await apiClient.get<CourseHistoryTermDto[]>('/registrations/history');
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, 'Ders gecmisi yuklenemedi.');
+  }
+}
+
+/**
+ * "Alınan Dersler" PDF dosyasını indir. Backend QuestPDF ile resmî görünüm üretir.
+ * Browser yeni sekmede açar veya download tetikler.
+ */
+export async function downloadCourseHistoryPdf(): Promise<Blob> {
+  const response = await apiClient.get<Blob>('/registrations/history/pdf', {
+    responseType: 'blob',
+  });
   return response.data;
 }
 
@@ -52,6 +75,10 @@ export async function dropCourse(registrationId: number): Promise<RegistrationRe
 }
 
 export async function withdrawCourse(registrationId: number): Promise<RegistrationResponseDto> {
-  const response = await apiClient.post<RegistrationResponseDto>(`/registrations/${registrationId}/withdraw`);
-  return response.data;
+  try {
+    const response = await apiClient.post<RegistrationResponseDto>(`/registrations/${registrationId}/withdraw`);
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, 'Ders cekilemedi.');
+  }
 }

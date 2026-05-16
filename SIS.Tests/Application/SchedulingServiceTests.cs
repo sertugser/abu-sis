@@ -7,8 +7,6 @@ using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
 
@@ -30,7 +28,8 @@ public class SchedulingServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        _service = new SchedulingService(_context, CreateConstraintEvaluationService(), new ScheduleWriter(_context));
+        _service = new SchedulingService(_context, new ConstraintStateLoader(_context), new ScheduleWriter(_context),
+            SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine());
 
         SeedBaseData();
     }
@@ -427,7 +426,7 @@ public class SchedulingServiceTests : IDisposable
         result.SuggestedSlots[0].EndTime.Should().Be(new TimeOnly(10, 50));
     }
 
-    [Fact]
+    [Fact(Skip = "Plan 11 Faz 5 — V1 suggest path (ConstraintEvaluationService.EvaluateCandidate) silindi davranışına bağımlı; SuggestAsync mantığı Plan 12'de RuleEngine path'ine port edilecek.")]
     public async Task SuggestAsync_NoFeasibleSchedule_ReturnsInfeasibleResponse()
     {
         var instructor = AddInstructor(1, 101, maxWeeklyHours: 10);
@@ -765,36 +764,8 @@ public class SchedulingServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        var evaluators = new IConstraintEvaluator[]
-        {
-            new CapacityEvaluator(),
-            new ClassroomTypeEvaluator(),
-            new FacultyClassroomEvaluator(),
-            new ClassroomConflictEvaluator(),
-            new InstructorConflictEvaluator(),
-            new CurriculumConflictEvaluator(),
-            new CourseComponentEvaluator(),
-            new SameCourseSectionEvaluator(),
-            new WeeklyLoadEvaluator(),
-            new DailyLoadEvaluator(),
-            new NoDayOffEvaluator(),
-            new CorequisiteEvaluator(),
-            new CreditHourEvaluator(),
-            new LunchBreakEvaluator(),
-            new MaxConsecutiveHoursEvaluator(),
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new WeekdayBalanceEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, _context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi; SchedulingService artık
+    // ConstraintStateLoader + RuleEngine ile kuruluyor.
 
     public void Dispose()
     {

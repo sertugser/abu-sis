@@ -26,13 +26,13 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Soft;
 /// deferred.
 /// </para>
 /// <para>
-/// NOTE (v1 divergence — Plan 8 simplification): v1 evaluator
-/// <c>(max - min) > avg × S12MaxImbalancePercent / 100</c> threshold'u sonrası penalty
-/// uyguluyordu. Plan 8 CP-SAT için reified threshold gereksiz karmaşıklık olarak
-/// değerlendirilip kaldırıldı; artık always-on penalty <c>(max - min) × S12Weight</c>.
-/// Threshold equivalent solver'ın doğal denge eğilimi ile zaten ortaya çıkıyor (plan
-/// kararı, Task 10 lines 2059-2060). <see cref="SoftThresholds.S12MaxImbalancePercent"/>
-/// alanı encoder tarafından okunmuyor — yalnızca v1 evaluator paritesi için tutuluyor.
+/// V1 alignment (Plan 12 Faz 9 — 2026-05-15, kullanıcı "birebir tutsun" kararı):
+/// V1 evaluator <c>(max − min) > avg × S12MaxImbalancePercent / 100</c> threshold guard
+/// uyguluyor. Plan 8'de "gereksiz karmaşıklık" diye kaldırılmıştı; Plan 12'de geri
+/// eklendi — küçük dengesizliklere optimize'ı zorlamamak için. Reified linear
+/// constraint: <c>triggered ⇔ diff × 700 > sumOfDays × percent</c> (avg=sumOfDays/7
+/// çapraz çarpımı, integer-safe). triggered=true ise penalty <c>diff × S12Weight</c>,
+/// değilse 0.
 /// </para>
 /// </remarks>
 public sealed class WeekdayBalanceEncoder : IConstraintEncoder
@@ -89,7 +89,22 @@ public sealed class WeekdayBalanceEncoder : IConstraintEncoder
         var diff = ctx.Model.NewIntVar(0, maxSections, "s12_diff");
         ctx.Model.Add(diff == maxV - minV);
 
-        // (long) cast: overflow safety for large weight × large diff.
-        ctx.Penalties.Add(diff * (long)t.S12Weight);
+        // Plan 12 Faz 9 V1 alignment — threshold guard.
+        // V1: diff > avg × percent / 100 = (sumOfDays/7) × percent / 100
+        // Cross-multiply (integer-safe): diff × 700 > sumOfDays × percent
+        var percent = t.S12MaxImbalancePercent > 0 ? t.S12MaxImbalancePercent : 20;
+        var sumOfDays = ctx.Model.NewIntVar(0, maxSections * 7, "s12_sumOfDays");
+        ctx.Model.Add(sumOfDays == LinearExpr.Sum(dayCountVars));
+
+        var triggered = ctx.Model.NewBoolVar("s12_triggered");
+        ctx.Model.Add(diff * 700 > sumOfDays * percent).OnlyEnforceIf(triggered);
+        ctx.Model.Add(diff * 700 <= sumOfDays * percent).OnlyEnforceIf(triggered.Not());
+
+        // effectivePenalty = triggered ? (diff × weight) : 0
+        var maxEffective = (long)maxSections * t.S12Weight;
+        var effective = ctx.Model.NewIntVar(0, maxEffective, "s12_effective");
+        ctx.Model.Add(effective == diff * (long)t.S12Weight).OnlyEnforceIf(triggered);
+        ctx.Model.Add(effective == 0).OnlyEnforceIf(triggered.Not());
+        ctx.Penalties.Add(effective);
     }
 }

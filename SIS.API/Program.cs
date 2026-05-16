@@ -216,6 +216,7 @@ builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidatio
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<RegistrationCleanupJob>();
 builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();
@@ -233,6 +234,8 @@ builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
+builder.Services.AddScoped<SIS.Application.AdvisorInfo.Services.IAdvisorInfoService, SIS.Infrastructure.Services.AdvisorInfoService>();
+builder.Services.AddScoped<SIS.Application.OpenedDepartmentCourses.Services.IOpenedDepartmentCourseService, SIS.Infrastructure.Services.OpenedDepartmentCourseService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
 builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
 builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();

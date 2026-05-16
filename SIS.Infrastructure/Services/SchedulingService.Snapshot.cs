@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Rules;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Services.Scheduling;
@@ -8,21 +9,79 @@ using SIS.Infrastructure.Services.Scheduling;
 namespace SIS.Infrastructure.Services;
 
 /// <summary>
-/// SchedulingService'in TermSnapshot / SectionSnapshot inşa eden partial bölümü.
-/// Auto-schedule motoru ile ApplyScheduleAsync (manuel atama) AYNI snapshot yapısını
-/// kullanmalı; bu dosya ortak inşa kodunu izole eder.
+/// SchedulingService'in <see cref="RuntimeSnapshot"/> / <see cref="RuntimeCandidate"/>
+/// inşa eden partial bölümü. Auto-schedule motoru ile ApplyScheduleAsync (manuel atama)
+/// AYNI snapshot yapısını kullanır; bu dosya ortak inşa kodunu izole eder.
 ///
 /// Method'lar:
-///   - BuildTermSnapshotAsync       (TermSnapshot inşası, mode-aware ConflictPairsBuilder çağırır)
-///   - BuildExistingSectionSnapshot (DB'deki section'dan SectionSnapshot)
-///   - BuildCandidateSnapshotAsync  (validate için aday section)
-///   - BuildCandidateSnapshot       (saf inşa, IO yok)
+///   - BuildRuntimeSnapshotAsync          (term-scope read-only snapshot, ConflictPairsBuilder integrated)
+///   - BuildExistingRuntimeCandidate      (DB'deki section'dan RuntimeCandidate)
+///   - BuildCandidateRuntimeAsync         (validate için aday section, notes ayrı tuple)
+///   - BuildCandidateRuntime              (saf inşa, IO yok)
 /// </summary>
 public partial class SchedulingService
 {
-    internal async Task<TermSnapshot> BuildTermSnapshotAsync(int termId, int? excludedSectionId, int? departmentId, CancellationToken cancellationToken)
+    internal async Task<RuntimeSnapshot> BuildRuntimeSnapshotAsync(
+        int termId,
+        int? excludedSectionId,
+        int? departmentId,
+        CancellationToken cancellationToken)
     {
-        var sectionsQuery = _context.CourseSections
+        var sections = await LoadActiveSectionsAsync(termId, excludedSectionId, departmentId, cancellationToken);
+        var (termName, scopeName) = await LoadTermAndScopeNamesAsync(termId, departmentId, cancellationToken);
+
+        var instructorIds = sections
+            .Where(section => section.InstructorId.HasValue)
+            .Select(section => section.InstructorId!.Value)
+            .Distinct()
+            .ToList();
+        var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
+        var courseMetadata = await LoadCourseSchedulingMetadataAsync(
+            termId, sections.Select(section => section.CourseId), cancellationToken);
+
+        var (classroomAssignments, deptFacultyMap) = await LoadFacultyClassroomDataAsync(termId, cancellationToken);
+        var corequisites = await LoadCorequisitePairsAsync(cancellationToken);
+
+        var softCfg = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var coEnrollmentRuntimePairs = await LoadCoEnrollmentRuntimePairsAsync(termId, softCfg, cancellationToken);
+
+        var distributionConstraints = await LoadDistributionConstraintsAsync(termId, cancellationToken);
+        var slotAllowedModes = await LoadSlotAllowedModesAsync(termId, cancellationToken);
+
+        var candidates = ProjectRuntimeCandidates(sections, instructorNameMap, courseMetadata);
+
+        var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
+        var rawConfig = await LoadSystemConfigAsync(cancellationToken);
+        var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
+        var curriculumConflictMode = hardCfg?.CurriculumConflictMode ?? "curriculum";
+
+        var conflictData = await BuildConflictPairsAsync(
+            candidates, courseMetadata, curriculumConflictMode,
+            fullCfg.EnrollmentConflictHardThreshold, termId, cancellationToken);
+
+        return new RuntimeSnapshot
+        {
+            TermId = termId,
+            TermName = termName,
+            ScopeName = scopeName,
+            Sections = candidates,
+            ClassroomAssignments = classroomAssignments,
+            DeptFacultyMap = deptFacultyMap,
+            Corequisites = corequisites,
+            SlotAllowedModes = slotAllowedModes,
+            CohortConflictPairs = conflictData.CohortConflictPairs ?? new HashSet<(int, int)>(),
+            CurriculumConflictMode = curriculumConflictMode,
+            EnrollmentConflicts = conflictData.EnrollmentConflicts,
+            CoEnrollmentPairs = coEnrollmentRuntimePairs,
+            AdjacentYearSoftPairs = conflictData.AdjacentYearSoftPairs ?? new HashSet<(int, int)>(),
+            DistributionConstraints = distributionConstraints,
+        };
+    }
+
+    private async Task<List<CourseSection>> LoadActiveSectionsAsync(
+        int termId, int? excludedSectionId, int? departmentId, CancellationToken ct)
+    {
+        var query = _context.CourseSections
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
@@ -33,153 +92,198 @@ public partial class SchedulingService
 
         if (departmentId.HasValue)
         {
-            sectionsQuery = sectionsQuery.Where(cs =>
+            query = query.Where(cs =>
                 cs.Course.DepartmentId == departmentId.Value
                 || (cs.Instructor != null && cs.Instructor.DepartmentId == departmentId.Value));
         }
 
-        var sections = await sectionsQuery.ToListAsync(cancellationToken);
+        return await query.ToListAsync(ct);
+    }
 
+    private async Task<(string TermName, string ScopeName)> LoadTermAndScopeNamesAsync(
+        int termId, int? departmentId, CancellationToken ct)
+    {
         var termName = await _context.AcademicTerms
             .AsNoTracking()
             .Where(t => t.Id == termId)
             .Select(t => t.Name)
-            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+            .FirstOrDefaultAsync(ct) ?? string.Empty;
 
         var scopeName = departmentId.HasValue
             ? await _context.Departments
                 .AsNoTracking()
-                .Where(department => department.Id == departmentId.Value)
-                .Select(department => department.Name)
-                .FirstOrDefaultAsync(cancellationToken) ?? "Bolum"
+                .Where(d => d.Id == departmentId.Value)
+                .Select(d => d.Name)
+                .FirstOrDefaultAsync(ct) ?? "Bolum"
             : "Tum sistem";
 
-        var instructorIds = sections
-            .Where(section => section.InstructorId.HasValue)
-            .Select(section => section.InstructorId!.Value)
-            .Distinct()
-            .ToList();
+        return (termName, scopeName);
+    }
 
-        var instructorNameMap = await LoadInstructorNameMapAsync(instructorIds, cancellationToken);
-
-        var courseMetadata = await LoadCourseSchedulingMetadataAsync(
-            termId,
-            sections.Select(section => section.CourseId),
-            cancellationToken);
-
-        // Load classroom-term assignments for H10
-        var classroomAssignments = await _context.ClassroomTermAssignments
+    /// <summary>H10 — ClassroomTermAssignment listesi + dept→faculty map.</summary>
+    private async Task<(List<ClassroomTermAssignmentInfo> Assignments, Dictionary<int, int> DeptFacultyMap)>
+        LoadFacultyClassroomDataAsync(int termId, CancellationToken ct)
+    {
+        var entities = await _context.ClassroomTermAssignments
             .AsNoTracking()
             .Where(cta => cta.TermId == termId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(ct);
 
-        // Load department→faculty mapping for H10
+        var assignments = entities
+            .Select(cta => new ClassroomTermAssignmentInfo(cta.ClassroomId, cta.FacultyId))
+            .ToList();
+
         var deptFacultyMap = await _context.Departments
             .AsNoTracking()
-            .ToDictionaryAsync(d => d.Id, d => d.FacultyId, cancellationToken);
+            .ToDictionaryAsync(d => d.Id, d => d.FacultyId, ct);
 
-        // Load corequisite relationships for H11
-        var corequisites = await _context.CoursePrerequisites
+        return (assignments, deptFacultyMap);
+    }
+
+    /// <summary>H11 — Corequisite course çiftleri.</summary>
+    private async Task<List<CorequisitePair>> LoadCorequisitePairsAsync(CancellationToken ct) =>
+        await _context.CoursePrerequisites
             .AsNoTracking()
             .Where(cp => cp.IsCorequisite)
-            .ToListAsync(cancellationToken);
+            .Select(cp => new CorequisitePair(cp.CourseId, cp.RequiredCourseId))
+            .ToListAsync(ct);
 
-        // Load co-enrollment pairs for S4 (using default threshold, will be filtered by config later)
-        var softCfg = await LoadSoftConstraintConfigAsync(cancellationToken);
-        var coEnrollmentPairs = softCfg.S4Enabled
-            ? await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, cancellationToken)
-            : new List<CoEnrollmentPair>();
+    /// <summary>S4 — Co-enrollment pairs (config-aware: S4 kapalıysa boş döner).</summary>
+    private async Task<List<CoEnrollmentRuntimePair>> LoadCoEnrollmentRuntimePairsAsync(
+        int termId, SoftConstraintConfig softCfg, CancellationToken ct)
+    {
+        if (!softCfg.S4Enabled)
+            return new List<CoEnrollmentRuntimePair>();
 
-        // Load distribution constraints for DIST evaluator
-        var distributionConstraints = await _context.DistributionConstraints
+        var rawPairs = await LoadCoEnrollmentPairsAsync(termId, softCfg.S4MinCoPairThreshold, ct);
+        return rawPairs
+            .Select(p => new CoEnrollmentRuntimePair(p.CourseId1, p.CourseId2, p.StudentCount))
+            .ToList();
+    }
+
+    /// <summary>DIST — Distribution constraints (DistributionType + PreferenceLevel + Courses).</summary>
+    private async Task<List<RuntimeDistributionConstraint>> LoadDistributionConstraintsAsync(
+        int termId, CancellationToken ct)
+    {
+        var entities = await _context.DistributionConstraints
             .AsNoTracking()
             .Include(d => d.Courses)
             .Where(d => d.TermId == termId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(ct);
 
-        // H17 FaceToFaceSlotRestriction için slot allowed mode haritası.
-        // Bu dict boş kalırsa H17 evaluator bypass olur ve FaceToFace dersler OnlineOnly slot'lara yerleşebilir.
-        // Duplicate (Day, StartTime) pair'leri varsa (test fixture veya bozuk veri) son değer üstüne yazılır;
-        // çakışma durumunda OnlineOnly'yi tercih et (daha kısıtlayıcı, güvenli).
+        return entities
+            .Select(dc => new RuntimeDistributionConstraint(
+                DistributionType: dc.DistributionType,
+                PreferenceLevel: dc.PreferenceLevel,
+                Courses: dc.Courses
+                    .OrderBy(c => c.SortOrder)
+                    .Select(c => new DistributionConstraintCourseInfo(c.CourseId, c.CourseSectionId, c.SortOrder))
+                    .ToList()))
+            .ToList();
+    }
+
+    /// <summary>
+    /// H17 — FaceToFaceSlotRestriction için (Day, StartTime) → AllowedMode lookup.
+    /// Duplicate (Day, StartTime) için OnlineOnly daha kısıtlayıcıdır → onu tercih et.
+    /// </summary>
+    private async Task<Dictionary<(int Day, TimeOnly StartTime), TimeSlotAllowedMode>>
+        LoadSlotAllowedModesAsync(int termId, CancellationToken ct)
+    {
         var slotRecords = await _context.TimeSlots
             .AsNoTracking()
             .Where(ts => ts.TermId == termId)
             .Select(ts => new { ts.DayOfWeek, ts.StartTime, ts.AllowedMode })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(ct);
 
-        var slotAllowedModes = new Dictionary<(DayOfWeek, TimeOnly), TimeSlotAllowedMode>();
+        var result = new Dictionary<(int Day, TimeOnly StartTime), TimeSlotAllowedMode>();
         foreach (var slot in slotRecords)
         {
-            var key = (slot.DayOfWeek, slot.StartTime);
-            if (!slotAllowedModes.TryGetValue(key, out var existing)
+            var key = ((int)slot.DayOfWeek, slot.StartTime);
+            if (!result.TryGetValue(key, out _)
                 || slot.AllowedMode == TimeSlotAllowedMode.OnlineOnly)
             {
-                slotAllowedModes[key] = slot.AllowedMode;
+                result[key] = slot.AllowedMode;
             }
         }
+        return result;
+    }
 
-        var snapshots = sections
-            .Select(section => BuildExistingSectionSnapshot(
+    /// <summary>
+    /// Loaded section entity'lerini paralel-split-aware RuntimeCandidate listesine çevirir.
+    /// Classroom lookup: query'de Include edilen Classroom'lardan inşa edilir (primary kapasite hesabı için).
+    /// </summary>
+    private static List<RuntimeCandidate> ProjectRuntimeCandidates(
+        List<CourseSection> sections,
+        IReadOnlyDictionary<int, string> instructorNameMap,
+        CourseSchedulingMetadata courseMetadata)
+    {
+        var classroomLookup = sections
+            .Where(s => s.Classroom != null)
+            .GroupBy(s => s.Classroom!.Id)
+            .ToDictionary(g => g.Key, g => g.First().Classroom!);
+
+        return sections
+            .Select(section => BuildExistingRuntimeCandidate(
                 section,
                 instructorNameMap,
                 courseMetadata.MinSuggestedSemesters,
                 courseMetadata.SuggestedSemestersByDepartment,
-                courseMetadata.AccessibleDepartments))
+                courseMetadata.AccessibleDepartments,
+                classroomLookup))
             .ToList();
-
-        var snapshot = new TermSnapshot
-        {
-            TermId = termId,
-            TermName = termName,
-            ScopeName = scopeName,
-            Sections = snapshots,
-            ClassroomAssignments = classroomAssignments,
-            DeptFacultyMap = deptFacultyMap,
-            Corequisites = corequisites,
-            CoEnrollmentPairs = coEnrollmentPairs,
-            CourseSuggestedSemestersByDepartment = courseMetadata.SuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = courseMetadata.AccessibleDepartments,
-            DistributionConstraints = distributionConstraints,
-            SlotAllowedModes = slotAllowedModes,
-        };
-
-        // Manuel atama (Apply) yolu da AutoScheduleEngine ile AYNI mode'u kullanmalı.
-        // Tek otorite ConflictPairsBuilder; mode-branching tek yer.
-        var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
-        var rawConfig = await LoadSystemConfigAsync(cancellationToken);
-        var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
-        await ConflictPairsBuilder.ApplyToSnapshotAsync(
-            snapshot,
-            hardCfg.CurriculumConflictMode,
-            snapshots,
-            courseMetadata.SuggestedSemestersByDepartment,
-            courseMetadata.AccessibleDepartments,
-            fullCfg.EnrollmentConflictHardThreshold,
-            _context, termId, cancellationToken);
-
-        return snapshot;
     }
 
-    private static SectionSnapshot BuildExistingSectionSnapshot(
+    /// <summary>
+    /// Manuel atama (Apply) yolu da AutoScheduleEngine ile AYNI mode'u kullanır.
+    /// ConflictPairsBuilder mode-branching tek otoritedir.
+    /// </summary>
+    private async Task<ConflictPairsResult> BuildConflictPairsAsync(
+        IReadOnlyList<RuntimeCandidate> candidates,
+        CourseSchedulingMetadata courseMetadata,
+        string curriculumConflictMode,
+        int enrollmentThreshold,
+        int termId,
+        CancellationToken ct)
+    {
+        var cohortRefs = candidates
+            .Select(c => new CohortSectionRef(c.SectionId, c.SectionNumber, c.CourseId))
+            .ToList();
+
+        return await ConflictPairsBuilder.BuildAsync(
+            curriculumConflictMode,
+            cohortRefs,
+            courseMetadata.SuggestedSemestersByDepartment,
+            courseMetadata.AccessibleDepartments,
+            enrollmentThreshold,
+            _context, termId, ct);
+    }
+
+    private static RuntimeCandidate BuildExistingRuntimeCandidate(
         CourseSection section,
         IReadOnlyDictionary<int, string> instructorNameMap,
         IReadOnlyDictionary<int, int> semesterMap,
         IReadOnlyDictionary<int, Dictionary<int, int>> suggestedSemestersByDepartment,
-        IReadOnlyDictionary<int, HashSet<int>> accessibleDepartments)
+        IReadOnlyDictionary<int, HashSet<int>> accessibleDepartments,
+        IReadOnlyDictionary<int, Classroom>? classroomLookup)
     {
         var timeBlocks = ScheduleHelper.ToTimeBlocks(section.SectionSchedules);
         var instructorName = section.InstructorId.HasValue
             && instructorNameMap.TryGetValue(section.InstructorId.Value, out var n) ? n : string.Empty;
         var suggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : (int?)null;
 
-        return SectionSnapshotFactory.FromCourseSection(
-            section, section.Classroom, section.Instructor, instructorName,
-            timeBlocks, suggestedSemester,
+        return ProjectRuntimeCandidate(
+            section,
+            section.Classroom,
+            section.Instructor,
+            instructorName,
+            timeBlocks,
+            suggestedSemester,
             GetSuggestedSemestersByDepartment(section.CourseId, suggestedSemestersByDepartment),
-            GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, accessibleDepartments));
+            GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, accessibleDepartments),
+            classroomLookup);
     }
 
-    private async Task<SectionSnapshot> BuildCandidateSnapshotAsync(
+    private async Task<(RuntimeCandidate Candidate, IReadOnlyList<string> Notes)> BuildCandidateRuntimeAsync(
         CourseSection section,
         int? instructorIdOverride,
         int? classroomIdOverride,
@@ -231,28 +335,27 @@ public partial class SchedulingService
         }
 
         var scheduleSlots = new List<TimeBlock>();
-        var assignedTimeSlotCount = 0;
-        string? parseError = null;
 
         if (scheduleSlotOverrides != null)
         {
+            // Plan 11 sonrası: H1 ClassroomConflict per-block ClassroomId üzerinden eşleşir
+            // (paralel-lab desteği). Manuel atama akışında dto.ClassroomId boş gelirse top-level
+            // request.ClassroomId yansıtılır — aksi halde block.ClassroomId null kalır.
             var overrideValidation = ValidateTimeBlocks(scheduleSlotOverrides
                 .Select(dto => new TimeBlock
                 {
                     Day = (DayOfWeek)dto.Day,
                     StartTime = dto.StartTime,
-                    EndTime = dto.EndTime
+                    EndTime = dto.EndTime,
+                    ClassroomId = dto.ClassroomId ?? classroomId
                 })
                 .ToList());
 
             scheduleSlots = overrideValidation.Slots;
-            parseError = overrideValidation.ErrorMessage;
-            assignedTimeSlotCount = await CountMatchedTimeSlotsAsync(section.TermId, scheduleSlots, cancellationToken);
         }
         else
         {
             scheduleSlots = await LoadSectionTimeBlocksAsync(section.Id, cancellationToken);
-            assignedTimeSlotCount = ResolveAssignedTimeSlotCount(scheduleSlots);
         }
 
         if (scheduleSlots.Count == 0)
@@ -265,40 +368,167 @@ public partial class SchedulingService
             ? semester
             : (int?)null;
 
-        return BuildCandidateSnapshot(
+        var candidate = BuildCandidateRuntime(
             section,
             instructor,
             instructorName,
             classroom,
             scheduleSlots,
-            assignedTimeSlotCount,
-            notes,
             suggestedSemester,
             GetSuggestedSemestersByDepartment(section.CourseId, courseMetadata.SuggestedSemestersByDepartment),
             GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, courseMetadata.AccessibleDepartments));
+
+        return (candidate, notes);
     }
 
-    private static SectionSnapshot BuildCandidateSnapshot(
+    private static RuntimeCandidate BuildCandidateRuntime(
         CourseSection section,
         Instructor? instructor,
         string instructorName,
         Classroom? classroom,
         IReadOnlyList<TimeBlock> scheduleSlots,
-        int assignedTimeSlotCount,
-        List<string> notes,
         int? suggestedSemester = null,
         Dictionary<int, int>? suggestedSemestersByDepartment = null,
         HashSet<int>? accessibleDepartmentIds = null)
     {
-        // Not: Buradaki assignedTimeSlotCount caller'dan geliyor (genelde
-        // ResolveAssignedTimeSlotCount). Factory paralel-split aware kendi hesaplar
-        // ama caller'ı korumak için override etmiyoruz; sadece field-by-field clone.
-        return SectionSnapshotFactory.FromCourseSection(
+        return ProjectRuntimeCandidate(
             section, classroom, instructor, instructorName,
             scheduleSlots, suggestedSemester,
             suggestedSemestersByDepartment ?? new Dictionary<int, int>(),
             accessibleDepartmentIds ?? new HashSet<int>(),
-            classroomLookup: null,
-            notes: notes);
+            classroomLookup: null);
+    }
+
+    /// <summary>
+    /// CourseSection + classroom + instructor + time blocks → RuntimeCandidate.
+    /// V1 <c>SectionSnapshotFactory.FromCourseSection</c> portu — paralel-split-aware primary
+    /// classroom kapasite hesabı + RuntimeBlock listesi inşası.
+    /// </summary>
+    private static RuntimeCandidate ProjectRuntimeCandidate(
+        CourseSection section,
+        Classroom? classroom,
+        Instructor? instructor,
+        string instructorName,
+        IReadOnlyList<TimeBlock> timeBlocks,
+        int? suggestedSemester,
+        Dictionary<int, int> suggestedSemestersByDept,
+        HashSet<int> accessibleDepts,
+        IReadOnlyDictionary<int, Classroom>? classroomLookup)
+    {
+        var (primaryId, primaryName, primaryCapacity, primaryType)
+            = ResolvePrimaryClassroomMetadata(classroom, timeBlocks, classroomLookup);
+
+        var blocks = timeBlocks.Select(b => BuildRuntimeBlock(b, classroomLookup, primaryName, primaryType, primaryCapacity)).ToList();
+
+        return new RuntimeCandidate
+        {
+            SectionId = section.Id,
+            SectionNumber = section.SectionNumber,
+            CourseId = section.CourseId,
+            CourseCode = section.Course.Code,
+            CourseName = section.Course.Name,
+            DepartmentId = section.Course.DepartmentId,
+            InstructorId = instructor?.Id,
+            InstructorName = instructorName,
+            InstructorMaxWeeklyHours = instructor?.MaxWeeklyHours ?? 0,
+            Capacity = section.Capacity,
+            EnrolledCount = section.EnrolledCount,
+            TheoryHours = section.Course.TheoryHours,
+            LabHours = section.Course.LabHours,
+            TeachingMethod = section.Course.TeachingMethod,
+            RequiredTheoryClassroomType = (int?)section.Course.TheoryClassroomType,
+            RequiredLabClassroomType = (int?)section.Course.LabClassroomType,
+            SuggestedSemester = suggestedSemester,
+            SuggestedSemestersByDepartment = suggestedSemestersByDept,
+            AccessibleDepartmentIds = accessibleDepts,
+            PrimaryClassroomId = primaryId,
+            PrimaryClassroomName = primaryName,
+            PrimaryClassroomCapacity = primaryCapacity,
+            PrimaryClassroomType = primaryType,
+            Blocks = blocks,
+        };
+    }
+
+    private static RuntimeBlock BuildRuntimeBlock(
+        TimeBlock b,
+        IReadOnlyDictionary<int, Classroom>? classroomLookup,
+        string primaryName,
+        ClassroomType primaryType,
+        int primaryCapacity)
+    {
+        // Block kendi classroom'unu çözer (paralel-split: her block farklı oda olabilir).
+        string blockName = primaryName;
+        ClassroomType blockType = primaryType;
+        int blockCapacity = primaryCapacity;
+
+        if (b.ClassroomId.HasValue && classroomLookup != null
+            && classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr))
+        {
+            blockName = cr.Name;
+            blockType = cr.Type;
+            blockCapacity = cr.Capacity;
+        }
+
+        return new RuntimeBlock(
+            Day: (int)b.Day,
+            StartTime: b.StartTime,
+            EndTime: b.EndTime,
+            ClassroomId: b.ClassroomId,
+            ClassroomName: blockName,
+            ClassroomType: blockType,
+            ClassroomCapacity: blockCapacity);
+    }
+
+    /// <summary>
+    /// Primary window (ilk blok) classroom metadata'sı. Paralel-split: aynı (Day, Start, End)
+    /// penceresinde birden çok oda → kapasite toplamı. Bloklar boş ise primaryClassroom fallback.
+    /// V1 <c>SectionSnapshotFactory.ResolveClassroomMetadata</c> portu.
+    /// </summary>
+    private static (int? Id, string Name, int Capacity, ClassroomType Type) ResolvePrimaryClassroomMetadata(
+        Classroom? primaryClassroom,
+        IReadOnlyList<TimeBlock> blocks,
+        IReadOnlyDictionary<int, Classroom>? classroomLookup)
+    {
+        if (blocks.Count == 0)
+        {
+            return (
+                primaryClassroom?.Id,
+                primaryClassroom?.Name ?? string.Empty,
+                primaryClassroom?.Capacity ?? 0,
+                primaryClassroom?.Type ?? ClassroomType.Lecture
+            );
+        }
+
+        var firstBlock = blocks[0];
+        var primaryId = firstBlock.ClassroomId ?? primaryClassroom?.Id;
+
+        Classroom? resolvedPrimary = primaryClassroom;
+        if (resolvedPrimary == null && primaryId.HasValue && classroomLookup != null)
+            classroomLookup.TryGetValue(primaryId.Value, out resolvedPrimary);
+
+        var name = resolvedPrimary?.Name ?? string.Empty;
+        var type = resolvedPrimary?.Type ?? ClassroomType.Lecture;
+
+        var primaryWindowBlocks = blocks
+            .Where(b => b.Day == firstBlock.Day
+                && b.StartTime == firstBlock.StartTime
+                && b.EndTime == firstBlock.EndTime)
+            .ToList();
+
+        var combinedCapacity = 0;
+        foreach (var b in primaryWindowBlocks)
+        {
+            if (b.ClassroomId.HasValue && classroomLookup != null
+                && classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr))
+            {
+                combinedCapacity += cr.Capacity;
+            }
+        }
+
+        var capacity = combinedCapacity > 0
+            ? combinedCapacity
+            : (resolvedPrimary?.Capacity ?? 0);
+
+        return (primaryId, name, capacity, type);
     }
 }

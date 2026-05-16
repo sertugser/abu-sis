@@ -36,8 +36,10 @@ public class DailyLoadSoftEncoderTests
     [Fact]
     public void Encode_DailyHoursOverCap_PenaltyAdded()
     {
-        // 2 sections × 4h = 8h, cap = 6 → excess 2 → penalty = 2 × 10 = 20
-        var (model, ctx) = BuildScenario(s2Enabled: true, hoursPerSection: 4, sectionsForInstructor: 2, allMonday: true);
+        // Plan 13 V1 alignment (clock-hour): 50dk slot × 5 kredi = 250dk per section.
+        // 2 sections aynı gün = 500dk daily. Cap 6 saat = 360dk. Excess = 140dk.
+        // V1 paritesi: excessHours = floor(140/60) = 2. Penalty = 2 × 10 = 20.
+        var (model, ctx) = BuildScenario(s2Enabled: true, hoursPerSection: 5, sectionsForInstructor: 2, allMonday: true);
         new DailyLoadSoftEncoder().Encode(ctx);
         FinishModel(model, ctx);
         var solver = new CpSolver();

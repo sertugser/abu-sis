@@ -64,7 +64,9 @@ public partial class FacultyPlanningService
 
                 // H17 koruması: ders öğretim yöntemi ile slot AllowedMode uyumlu olmalı.
                 // TeachingMethodPolicy + SlotAllowedModePolicy üzerinden tek otorite kontrol.
-                if (!Scheduling.TeachingMethodPolicy.CanUseOnlineOnlySlots(section.Course.TeachingMethod)
+                // Plan 11 Faz 1.3 — SkipHardValidation true ise V2 zaten enforce etti, manuel duplicate skip.
+                if (!request.SkipHardValidation
+                    && !Scheduling.TeachingMethodPolicy.CanUseOnlineOnlySlots(section.Course.TeachingMethod)
                     && request.ScheduleSlots is { Count: > 0 })
                 {
                     var requestedSlotKeys = request.ScheduleSlots
@@ -127,9 +129,14 @@ public partial class FacultyPlanningService
                     throw new KeyNotFoundException("Ogretim uyesi bulunamadi.");
                 section.InstructorId = request.InstructorId.Value;
 
-                // K1: Hoca günlük yük limiti kontrolü
-                if (request.ScheduleSlots is { Count: > 0 })
+                // K1: Hoca günlük yük limiti kontrolü.
+                // Plan 11 Faz 1.1 — hardcoded 9 yerine SystemConfig'ten okur (V2 DailyLoadEncoder ile parite).
+                // Plan 11 Faz 1.3 — SkipHardValidation true ise V2 zaten enforce etti, manuel duplicate skip.
+                if (!request.SkipHardValidation && request.ScheduleSlots is { Count: > 0 })
                 {
+                    var maxDailyHours = await _systemConfig.GetIntAsync(
+                        "Schedule.MaxDailyHoursPerInstructor", 9, ct);
+
                     var instrId = request.InstructorId.Value;
                     var requestDays = request.ScheduleSlots.Select(s => s.Day).Distinct();
                     var existingInstructorSchedules = await _context.SectionSchedules
@@ -148,9 +155,9 @@ public partial class FacultyPlanningService
                         var newHours = request.ScheduleSlots
                             .Where(s => s.Day == day)
                             .Sum(s => (s.EndTime - s.StartTime).TotalHours);
-                        if (existingHours + newHours > 9)
+                        if (existingHours + newHours > maxDailyHours)
                             throw new InvalidOperationException(
-                                $"Ogretim uyesinin {day} gunundeki toplam yuku {existingHours + newHours:F1} saate ulasacak (limit: 9 saat). Atama reddedildi.");
+                                $"Ogretim uyesinin {day} gunundeki toplam yuku {existingHours + newHours:F1} saate ulasacak (limit: {maxDailyHours} saat). Atama reddedildi.");
                     }
                 }
             }
@@ -177,32 +184,38 @@ public partial class FacultyPlanningService
                 }
             }
 
-            // Write schedule records only if this is a NEW schedule assignment.
             // Online dersler için classroomId null kabul edilir (slot kayıtları classroom'suz yazılır).
             // TeachingMethodPolicy.RequiresClassroom tek otorite — Online ise classroomsuz da yaz.
             var hasSlotLevelClassrooms = request.ScheduleSlots?.Any(s => s.ClassroomId.HasValue) == true;
             var isOnlineCourse = !Scheduling.TeachingMethodPolicy.RequiresClassroom(section.Course.TeachingMethod);
             if ((request.ClassroomId.HasValue || hasSlotLevelClassrooms || isOnlineCourse) && request.ScheduleSlots is { Count: > 0 })
             {
-                var existingScheduleCount = await _context.SectionSchedules
-                    .CountAsync(ss => ss.CourseSectionId == section.Id, ct);
-
-                var classroomChanged = request.ClassroomId.HasValue && previousClassroomId != request.ClassroomId.Value;
-                var isNewSchedule = existingScheduleCount == 0;
-
-                if (isNewSchedule || classroomChanged || isOnlineCourse)
-                {
-                    await _scheduleWriter.WriteAsync(
-                        section.Id,
-                        section.TermId,
-                        request.ClassroomId ?? section.ClassroomId,
-                        request.ScheduleSlots,
-                        ct);
-                }
+                // WriteAsync clear-before-write idempotent (ScheduleWriter.cs:33). Eski iç guard
+                // (isNewSchedule || classroomChanged || isOnlineCourse) "aynı classroom + yeni slot"
+                // taşıma senaryosunu kaçırıyordu: endpoint 200 dönüyor, SectionSchedules güncellenmiyordu.
+                // Dış wrapper koşulu zaten "yazma niyetini" doğruluyor — koşulsuz çağırmak güvenli.
+                await _scheduleWriter.WriteAsync(
+                    section.Id,
+                    section.TermId,
+                    request.ClassroomId ?? section.ClassroomId,
+                    request.ScheduleSlots,
+                    ct);
             }
 
-            var conflicts = await _schedulingService.GetConflictsAsync(section.TermId, ct);
-            var sectionConflicts = conflicts.Where(c => c.SectionId == section.Id || c.RelatedSectionId == section.Id).ToList();
+            // Plan 11 Faz 1.3 — V2 apply path SkipHardValidation=true ise V1 evaluator
+            // zincirini de atla (paralel-lab ve V4 Amphi gibi drift kaynaklarına yol açıyordu).
+            // V2 encoder zaten tüm hard kuralları enforce etti; manuel atama (Skip=false) için
+            // tam V1 conflict listesi korunur.
+            List<SchedulingConflictDto> sectionConflicts;
+            if (request.SkipHardValidation)
+            {
+                sectionConflicts = new List<SchedulingConflictDto>();
+            }
+            else
+            {
+                var conflicts = await _schedulingService.GetConflictsAsync(section.TermId, ct);
+                sectionConflicts = conflicts.Where(c => c.SectionId == section.Id || c.RelatedSectionId == section.Id).ToList();
+            }
             result.Conflicts = sectionConflicts;
             result.Success = sectionConflicts.Count == 0;
 

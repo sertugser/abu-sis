@@ -134,13 +134,17 @@ export interface AutoSchedulePreview {
   stats: AutoScheduleStats;
 }
 
+/**
+ * Auto-schedule sonuç istatistikleri. Backend kanonik kaynak — frontend hardcoded sayı türetmez.
+ * v2-ortools tek-geçişli CP-SAT olduğu için v1'in (Greedy/SA/LNS) aşama bazlı alanları kaldırıldı.
+ */
 export interface AutoScheduleStats {
-  constructionPlaced: number;
-  constructionFailed: number;
-  saIterations: number;
-  saInitialPenalty: number;
-  saFinalPenalty: number;
+  /** Solver toplam çalışma süresi (saniye). */
   elapsedSeconds: number;
+  /** İşlenen şubelerin kapsadığı farklı `Course` sayısı (success + failure birleşik). */
+  distinctCourseCount: number;
+  /** Başarılı atamaların kullandığı farklı `Classroom` sayısı. */
+  usedClassroomCount: number;
 }
 
 export interface AutoSchedulePreviewItem {
