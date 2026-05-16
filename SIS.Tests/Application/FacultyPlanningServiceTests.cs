@@ -141,6 +141,69 @@ public class FacultyPlanningServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AssignSectionAsync_MoveToDifferentSlots_RewritesSectionSchedules()
+    {
+        // Regresyon: SchedulingEditorPage drag-drop ile atanmış section başka boş hücreye taşındığında
+        // backend slot kayıtlarını güncellemeli. Önceki guard "aynı classroom + yeni slot" senaryosunu
+        // kaçırıyordu; endpoint 200 dönüyor ama SectionSchedules eski yerinde kalıyordu.
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(10, 0), 1);
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(11, 0), 2);
+        AddTimeSlot(TermId, DayOfWeek.Tuesday, new TimeOnly(13, 0), new TimeOnly(14, 0), 3);
+        AddTimeSlot(TermId, DayOfWeek.Tuesday, new TimeOnly(14, 0), new TimeOnly(15, 0), 4);
+
+        var classroom = AddClassroom(1, "C101", 30);
+        var course = AddCourse(1, "CENG201", theoryHours: 2);
+        var section = AddSection(1, course.Id, instructorId: null, capacity: 25);
+
+        // 1. atama — Pazartesi 09:00-11:00
+        var firstAssign = await _service.AssignSectionAsync(new AssignSectionRequest
+        {
+            SectionId = section.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = (int)DayOfWeek.Monday,
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(11, 0)
+                }
+            ]
+        }, "999");
+        firstAssign.Success.Should().BeTrue();
+
+        // Taşıma — aynı classroom, farklı slotlar (Sal 13:00-15:00). Frontend SchedulingEditorPage'in
+        // gönderdiği payload ile birebir aynı: classroomId aynı, scheduleSlots yeni hücreyi tarif eder.
+        var moveResult = await _service.AssignSectionAsync(new AssignSectionRequest
+        {
+            SectionId = section.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = (int)DayOfWeek.Tuesday,
+                    StartTime = new TimeOnly(13, 0),
+                    EndTime = new TimeOnly(15, 0)
+                }
+            ]
+        }, "999");
+        moveResult.Success.Should().BeTrue();
+
+        var writtenSchedules = await _context.SectionSchedules
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == section.Id)
+            .OrderBy(ss => ss.TimeSlot.StartTime)
+            .ToListAsync();
+
+        writtenSchedules.Should().HaveCount(2);
+        writtenSchedules.Should().OnlyContain(ss => ss.TimeSlot.DayOfWeek == DayOfWeek.Tuesday,
+            because: "taşıma sonrası tüm slot kayıtları yeni güne ait olmalı");
+        writtenSchedules.Select(ss => ss.TimeSlot.StartTime)
+            .Should().Equal(new TimeOnly(13, 0), new TimeOnly(14, 0));
+    }
+
+    [Fact]
     public async Task AssignSectionAsync_AllowsPlanningStage()
     {
         SetTermStatus(TermStatus.Active);

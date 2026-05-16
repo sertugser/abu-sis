@@ -184,28 +184,22 @@ public partial class FacultyPlanningService
                 }
             }
 
-            // Write schedule records only if this is a NEW schedule assignment.
             // Online dersler için classroomId null kabul edilir (slot kayıtları classroom'suz yazılır).
             // TeachingMethodPolicy.RequiresClassroom tek otorite — Online ise classroomsuz da yaz.
             var hasSlotLevelClassrooms = request.ScheduleSlots?.Any(s => s.ClassroomId.HasValue) == true;
             var isOnlineCourse = !Scheduling.TeachingMethodPolicy.RequiresClassroom(section.Course.TeachingMethod);
             if ((request.ClassroomId.HasValue || hasSlotLevelClassrooms || isOnlineCourse) && request.ScheduleSlots is { Count: > 0 })
             {
-                var existingScheduleCount = await _context.SectionSchedules
-                    .CountAsync(ss => ss.CourseSectionId == section.Id, ct);
-
-                var classroomChanged = request.ClassroomId.HasValue && previousClassroomId != request.ClassroomId.Value;
-                var isNewSchedule = existingScheduleCount == 0;
-
-                if (isNewSchedule || classroomChanged || isOnlineCourse)
-                {
-                    await _scheduleWriter.WriteAsync(
-                        section.Id,
-                        section.TermId,
-                        request.ClassroomId ?? section.ClassroomId,
-                        request.ScheduleSlots,
-                        ct);
-                }
+                // WriteAsync clear-before-write idempotent (ScheduleWriter.cs:33). Eski iç guard
+                // (isNewSchedule || classroomChanged || isOnlineCourse) "aynı classroom + yeni slot"
+                // taşıma senaryosunu kaçırıyordu: endpoint 200 dönüyor, SectionSchedules güncellenmiyordu.
+                // Dış wrapper koşulu zaten "yazma niyetini" doğruluyor — koşulsuz çağırmak güvenli.
+                await _scheduleWriter.WriteAsync(
+                    section.Id,
+                    section.TermId,
+                    request.ClassroomId ?? section.ClassroomId,
+                    request.ScheduleSlots,
+                    ct);
             }
 
             // Plan 11 Faz 1.3 — V2 apply path SkipHardValidation=true ise V1 evaluator
