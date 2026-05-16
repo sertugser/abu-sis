@@ -25,9 +25,10 @@ const DISTRIBUTION_TYPES = [
   { value: 'Precedence', label: 'S\u0131ralama', desc: 'Dersler belirli bir s\u0131rada programlanmal\u0131' },
 ] as const;
 
+// DistributionConstraintEncoder Preferred/StronglyPreferred tier'larını encode etmiyor
+// (pozitif bonus yok — bkz. DistributionConstraintEncoder.cs:48). Kullanıcı bu seçenekleri
+// işaretlerse solver sessizce yutardı; bu yüzden UI seviyesinde kaldırıldı.
 const PREFERENCE_LEVELS = [
-  { value: 'Preferred', label: 'Tercih Edilir', color: 'border-green-400 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 dark:border-green-600' },
-  { value: 'StronglyPreferred', label: 'Kesinlikle Tercih Edilir', color: 'border-green-600 bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200 dark:border-green-500' },
   { value: 'Discouraged', label: 'Tercih Edilmez', color: 'border-yellow-400 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-600' },
   { value: 'StronglyDiscouraged', label: 'Kesinlikle Tercih Edilmez', color: 'border-yellow-500 bg-yellow-100 text-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-200 dark:border-yellow-500' },
   { value: 'Unavailable', label: 'Kesin Yasak (Hard)', color: 'border-red-400 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-600' },
@@ -54,7 +55,14 @@ export default function DistributionConstraintForm({
   open, onOpenChange, termId, onSubmit, isPending, editing,
 }: DistributionConstraintFormProps) {
   const [distType, setDistType] = useState(editing?.distributionType ?? 'SameDay');
-  const [prefLevel, setPrefLevel] = useState(editing?.preferenceLevel ?? 'Discouraged');
+  // Eski kayıtlar Preferred/StronglyPreferred ile gelirse listede olmadığından Select
+  // boş görünür ve solver'a yutulan bir değer geri gönderilir; bu yüzden açılışta
+  // desteklenen tier'a (Discouraged) düşürüyoruz.
+  const supportedPrefLevels = PREFERENCE_LEVELS.map(p => p.value) as readonly string[];
+  const initialPrefLevel = editing?.preferenceLevel && supportedPrefLevels.includes(editing.preferenceLevel)
+    ? editing.preferenceLevel
+    : 'Discouraged';
+  const [prefLevel, setPrefLevel] = useState(initialPrefLevel);
   const [reason, setReason] = useState(editing?.reason ?? '');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCourses, setSelectedCourses] = useState<SelectedCourse[]>(() => {

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AlertCircle, Pencil } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useToast } from '@/components/ui/global-toast';
 import {
   useConstraints,
@@ -44,12 +44,14 @@ function ConstraintRow({
   constraint,
   groupLabel,
   groupKey,
-  isAdmin,
+  canEdit,
+  canToggle,
 }: {
   constraint: ConstraintDefinitionDto;
   groupLabel: string;
   groupKey: string;
-  isAdmin: boolean;
+  canEdit: boolean;
+  canToggle: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
@@ -99,7 +101,7 @@ function ConstraintRow({
             variant="ghost"
             className="h-8 w-8"
             onClick={() => setEditOpen(true)}
-            disabled={!isAdmin}
+            disabled={!canEdit && !canToggle}
             aria-label="Düzenle"
           >
             <Pencil className="h-4 w-4" />
@@ -111,7 +113,8 @@ function ConstraintRow({
         open={editOpen}
         onOpenChange={setEditOpen}
         constraint={constraint}
-        isAdmin={isAdmin}
+        canEdit={canEdit}
+        canToggle={canToggle}
       />
     </>
   );
@@ -122,12 +125,14 @@ function ConstraintEditDialog({
   open,
   onOpenChange,
   constraint,
-  isAdmin,
+  canEdit,
+  canToggle,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   constraint: ConstraintDefinitionDto;
-  isAdmin: boolean;
+  canEdit: boolean;
+  canToggle: boolean;
 }) {
   const toggleMutation = useToggleConstraint();
   const categoryMutation = useUpdateConstraintCategory();
@@ -206,7 +211,7 @@ function ConstraintEditDialog({
                     onError: (e) => notifyError(e, 'Durum değiştirilemedi.'),
                   });
                 }}
-                disabled={!isAdmin || toggleMutation.isPending || constraint.isEnabled}
+                disabled={!canToggle || toggleMutation.isPending || constraint.isEnabled}
               >
                 Aktif
               </Button>
@@ -226,7 +231,7 @@ function ConstraintEditDialog({
                     onError: (e) => notifyError(e, 'Durum değiştirilemedi.'),
                   });
                 }}
-                disabled={!isAdmin || toggleMutation.isPending || !constraint.isEnabled}
+                disabled={!canToggle || toggleMutation.isPending || !constraint.isEnabled}
               >
                 Pasif
               </Button>
@@ -276,7 +281,7 @@ function ConstraintEditDialog({
                         },
                       );
                     }}
-                    disabled={!isAdmin || categoryMutation.isPending || constraint.category === 'Hard'}
+                    disabled={!canEdit || categoryMutation.isPending || constraint.category === 'Hard'}
                     className={constraint.category === 'Hard' ? 'bg-red-600 hover:bg-red-700' : ''}
                   >
                     Zorunlu
@@ -300,7 +305,7 @@ function ConstraintEditDialog({
                         },
                       );
                     }}
-                    disabled={!isAdmin || categoryMutation.isPending || constraint.category === 'Soft'}
+                    disabled={!canEdit || categoryMutation.isPending || constraint.category === 'Soft'}
                     className={constraint.category === 'Soft' ? 'bg-amber-500 hover:bg-amber-600' : ''}
                   >
                     Tercihli
@@ -327,7 +332,7 @@ function ConstraintEditDialog({
                 value={constraint.weight}
                 onChange={(e) => weightMutation.mutate({ id: constraint.id, weight: Number(e.target.value) })}
                 className="w-full accent-amber-500"
-                disabled={!isAdmin}
+                disabled={!canEdit}
               />
               <p className="text-[11px] text-muted-foreground">
                 1 = az önemli, 10 = çok önemli. Yüksek ağırlık ihlal cezasını artırır.
@@ -348,7 +353,7 @@ function ConstraintEditDialog({
                     min={field.min}
                     max={field.max}
                     onChange={(e) => setParamDraft(d => ({ ...d, [field.key]: e.target.value }))}
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                   />
                   {field.suffix && (
                     <p className="text-[10px] text-muted-foreground">Birim: {field.suffix}</p>
@@ -358,7 +363,7 @@ function ConstraintEditDialog({
               <Button
                 size="sm"
                 onClick={saveParameters}
-                disabled={!isAdmin || paramsMutation.isPending}
+                disabled={!canEdit || paramsMutation.isPending}
               >
                 {paramsMutation.isPending ? 'Kaydediliyor…' : 'Parametreleri Kaydet'}
               </Button>
@@ -386,8 +391,12 @@ function ConstraintEditDialog({
 export default function ConstraintManagementPage() {
   const { data: constraints, isLoading, isError } = useConstraints();
   const { data: terms } = useAdminTerms();
-  const { user } = useAuth();
-  const isAdmin = user?.roles.includes('SystemAdministrator') ?? false;
+  // DB-driven permission gate (SystemAdmin için shortcut PermissionContext'te zaten var).
+  //   .edit   → kategori / ağırlık / parametre düzenleme (Dean, DepartmentManager, SysAdmin)
+  //   .toggle → Aktif/Pasif (yalnız SysAdmin)
+  const { hasPermission } = usePermissions();
+  const canEdit = hasPermission('menu.ders-programi-kisitlamalari.edit');
+  const canToggle = hasPermission('menu.ders-programi-kisitlamalari.toggle');
 
   const [activeTab, setActiveTab] = useState<'constraints' | 'algorithm' | 'pairing'>('constraints');
   const [view, setView] = useState<'all' | 'hard' | 'soft'>('all');
@@ -443,11 +452,11 @@ export default function ConstraintManagementPage() {
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <TabsList className="shrink-0">
             <TabsTrigger value="constraints">Kısıtlar</TabsTrigger>
-            {isAdmin && <TabsTrigger value="algorithm">Algoritma Parametreleri</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="pairing">Ders Eşleştirme Kuralları</TabsTrigger>}
+            {canEdit && <TabsTrigger value="algorithm">Algoritma Parametreleri</TabsTrigger>}
+            {canEdit && <TabsTrigger value="pairing">Ders Eşleştirme Kuralları</TabsTrigger>}
           </TabsList>
 
-          {isAdmin && terms && terms.length > 0 && (
+          {canEdit && terms && terms.length > 0 && (
             <>
               <div className="w-px h-6 bg-gray-200 mx-1" />
 
@@ -513,7 +522,8 @@ export default function ConstraintManagementPage() {
                           constraint={c}
                           groupLabel={group.label}
                           groupKey={group.key}
-                          isAdmin={isAdmin}
+                          canEdit={canEdit}
+                          canToggle={canToggle}
                         />
                       ))
                     )}
@@ -525,13 +535,13 @@ export default function ConstraintManagementPage() {
           )}
         </TabsContent>
 
-        {isAdmin && (
+        {canEdit && (
           <TabsContent value="algorithm" className="mt-3">
             <AlgorithmParametersPanel />
           </TabsContent>
         )}
 
-        {isAdmin && (
+        {canEdit && (
           <TabsContent value="pairing" className="mt-3">
             {effectiveTermId ? (
               <DistributionConstraintPanel termId={effectiveTermId} />
