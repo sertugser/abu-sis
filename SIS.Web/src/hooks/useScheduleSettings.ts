@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useSystemConfigs } from './useSystemConfig';
-import { useSchedulingAlgorithmConfigs } from './useSchedulingAlgorithmConfig';
-import type { DayOfWeekName, TimeSlotAllowedMode } from './useTimeSlots';
+import type { DayOfWeekName } from './useTimeSlots';
 
 /**
  * Schedule.* SystemConfig anahtarlarını tipli bir nesnede toparlar.
@@ -37,14 +36,10 @@ const DEFAULTS: Omit<ScheduleSettings, 'isLoading'> = {
 
 export function useScheduleSettings(): ScheduleSettings {
   const { data: configs, isLoading: systemLoading } = useSystemConfigs();
-  // LunchBreakStart/End SchedulingAlgorithmConfigs tablosunda — algoritma ile tek otorite.
-  const { data: algorithmConfigs, isLoading: algorithmLoading } = useSchedulingAlgorithmConfigs();
 
   return useMemo(() => {
     const map = new Map((configs ?? []).map(c => [c.key, c.value]));
-    const algorithmMap = new Map((algorithmConfigs ?? []).map(c => [c.key, c.value]));
     const get = (key: string, fallback: string): string => map.get(key) ?? fallback;
-    const getFromAlgorithm = (key: string, fallback: string): string => algorithmMap.get(key) ?? fallback;
     const getInt = (key: string, fallback: number): number => {
       const v = map.get(key);
       if (!v) return fallback;
@@ -61,16 +56,16 @@ export function useScheduleSettings(): ScheduleSettings {
       slotDurationMinutes:      getInt('Schedule.SlotDurationMinutes',      DEFAULTS.slotDurationMinutes),
       breakBetweenSlotsMinutes: getInt('Schedule.BreakBetweenSlotsMinutes', DEFAULTS.breakBetweenSlotsMinutes),
       morningStartTime:         get   ('Schedule.MorningStartTime',          DEFAULTS.morningStartTime),
-      lunchBreakStart:          getFromAlgorithm('Schedule.LunchBreakStart', DEFAULTS.lunchBreakStart),
-      lunchBreakEnd:            getFromAlgorithm('Schedule.LunchBreakEnd',   DEFAULTS.lunchBreakEnd),
+      lunchBreakStart:          get   ('Schedule.LunchBreakStart',           DEFAULTS.lunchBreakStart),
+      lunchBreakEnd:            get   ('Schedule.LunchBreakEnd',             DEFAULTS.lunchBreakEnd),
       afternoonEndTime:         get   ('Schedule.AfternoonEndTime',          DEFAULTS.afternoonEndTime),
       eveningStartTime:         get   ('Schedule.EveningStartTime',          DEFAULTS.eveningStartTime),
       eveningSlotCount:         getInt('Schedule.EveningSlotCount',          DEFAULTS.eveningSlotCount),
       faceToFaceCutoffTime:     get   ('Schedule.FaceToFaceCutoffTime',      DEFAULTS.faceToFaceCutoffTime),
       weekendOnlineOnly:        getBool('Schedule.WeekendOnlineOnly',        DEFAULTS.weekendOnlineOnly),
-      isLoading: systemLoading || algorithmLoading,
+      isLoading: systemLoading,
     };
-  }, [configs, algorithmConfigs, systemLoading, algorithmLoading]);
+  }, [configs, systemLoading]);
 }
 
 // ── Zaman yardımcıları ────────────────────────────────────────────────
@@ -93,95 +88,9 @@ export function normalizeTime(time: string): string {
   return time.length >= 5 ? time.substring(0, 5) : time;
 }
 
-/** Gün hafta sonu mu? */
+/** Gün hafta sonu mu? (System.DayOfWeek: Sun=0, Sat=6) */
 export function isWeekendDay(day: DayOfWeekName): boolean {
-  return day === 'Saturday' || day === 'Sunday';
-}
-
-/**
- * Config kurallarına göre (start, day) için varsayılan AllowedMode hesapla.
- * - Başlangıç ≥ faceToFaceCutoff → OnlineOnly
- * - weekendOnlineOnly && hafta sonu → OnlineOnly
- * - Diğer → Both
- */
-export function computeSuggestedMode(
-  startTime: string,
-  day: DayOfWeekName,
-  settings: ScheduleSettings
-): TimeSlotAllowedMode {
-  const startMin = parseTimeToMinutes(startTime);
-  const cutoffMin = parseTimeToMinutes(settings.faceToFaceCutoffTime);
-  if (startMin >= cutoffMin) return 'OnlineOnly';
-  if (settings.weekendOnlineOnly && isWeekendDay(day)) return 'OnlineOnly';
-  return 'Both';
-}
-
-// ── Akıllı öner algoritması ──────────────────────────────────────────
-
-export interface SlotSuggestion {
-  startTime: string;    // "HH:mm"
-  endTime: string;
-  allowedMode: TimeSlotAllowedMode;
-  reason: string;       // "Öğle arasından sonra", "Akşam slotu" gibi açıklama
-}
-
-/**
- * Verilen gün için bir sonraki slot önerisi.
- * - O gün slot yoksa → morningStart'tan başla
- * - Son slot varsa → bitiş + mola
- * - Öğle arasına denk gelirse → lunchEnd'e atla
- * - Afternoon cutoff'u geçerse → evening'e atla
- */
-export function suggestNextSlot(
-  day: DayOfWeekName,
-  daySlotsStartEnd: Array<{ startTime: string; endTime: string }>,
-  settings: ScheduleSettings,
-  overrideDurationMinutes?: number
-): SlotSuggestion {
-  const duration = overrideDurationMinutes ?? settings.slotDurationMinutes;
-  const breakMin = settings.breakBetweenSlotsMinutes;
-  const lunchStart = parseTimeToMinutes(settings.lunchBreakStart);
-  const lunchEnd = parseTimeToMinutes(settings.lunchBreakEnd);
-  const afternoonEnd = parseTimeToMinutes(settings.afternoonEndTime);
-  const eveningStart = parseTimeToMinutes(settings.eveningStartTime);
-
-  const sorted = [...daySlotsStartEnd].sort((a, b) =>
-    a.startTime.localeCompare(b.startTime)
-  );
-
-  let startMin: number;
-  let reason: string;
-
-  if (sorted.length === 0) {
-    startMin = parseTimeToMinutes(settings.morningStartTime);
-    reason = 'Günün ilk slotu';
-  } else {
-    const last = sorted[sorted.length - 1];
-    startMin = parseTimeToMinutes(normalizeTime(last.endTime)) + breakMin;
-    reason = `Son slot (${normalizeTime(last.endTime)}) sonrası + ${breakMin} dk mola`;
-  }
-
-  let endMin = startMin + duration;
-
-  // Öğle arasına denk düşüyor mu? (start < lunchEnd && end > lunchStart)
-  if (startMin < lunchEnd && endMin > lunchStart) {
-    startMin = lunchEnd;
-    endMin = startMin + duration;
-    reason = 'Öğle arası atlandı';
-  }
-
-  // Öğleden sonra bitişini geçiyor mu ve akşam başlangıcından önceysek sıçra
-  if (endMin > afternoonEnd && startMin < eveningStart) {
-    startMin = eveningStart;
-    endMin = startMin + duration;
-    reason = 'Akşam slot başlangıcına sıçrandı';
-  }
-
-  const startTime = minutesToTime(startMin);
-  const endTime = minutesToTime(endMin);
-  const allowedMode = computeSuggestedMode(startTime, day, settings);
-
-  return { startTime, endTime, allowedMode, reason };
+  return day === 0 || day === 6;
 }
 
 // ── Çakışma kontrolü ─────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2, RefreshCw, AlertTriangle, Sparkles, Coffee, Sunset, Moon, Copy, Settings } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, AlertTriangle, Sparkles, Coffee, Sunset, Moon, Copy, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -14,14 +14,12 @@ import {
   useRegenerateTimeSlots,
   ALLOWED_MODE_OPTIONS,
   DAY_OF_WEEK_OPTIONS,
-  allowedModeLabel,
   type TimeSlotDto,
   type TimeSlotAllowedMode,
   type DayOfWeekName,
 } from '../hooks/useTimeSlots';
 import {
   useScheduleSettings,
-  suggestNextSlot,
   findOverlappingSlot,
   parseTimeToMinutes,
   minutesToTime,
@@ -40,18 +38,18 @@ interface SlotFormState {
 }
 
 function emptyForm(): SlotFormState {
-  return { dayOfWeek: 'Monday', startTime: '09:00', endTime: '09:50', allowedMode: 'Both' };
+  // Saat alanları boş açılır — kullanıcı kendi doldurur, dialog açılırken çakışma uyarısı tetiklenmez.
+  return { dayOfWeek: 1, startTime: '', endTime: '', allowedMode: 'Both' };
 }
+
+// Takvim ekseni ölçeği — 1.4 px / dk → 50 dk slot ≈ 70px (tıklanabilir, okunabilir)
+const PX_PER_MIN = 1.4;
+// Üst/alt tampon — ilk saat etiketi (örn. 09:00) translateY(-50%) ile çerçeve dışına taşmasın diye.
+const TIMELINE_TOP_PAD = 8;
 
 function formatTime(time: string): string {
   // Backend sends TimeOnly as "HH:mm:ss" — strip seconds
   return time?.length >= 5 ? time.substring(0, 5) : time;
-}
-
-function modeBadgeClass(mode: TimeSlotAllowedMode): string {
-  if (mode === 'OnlineOnly') return 'bg-sky-100 text-sky-700 border-sky-200';
-  if (mode === 'FaceToFaceOnly') return 'bg-amber-100 text-amber-700 border-amber-200';
-  return 'bg-slate-100 text-slate-700 border-slate-200';
 }
 
 function modeShortLabel(mode: TimeSlotAllowedMode): string {
@@ -86,7 +84,6 @@ export default function TimeSlotManagementPage() {
   const [copyFromDay, setCopyFromDay] = useState<DayOfWeekName | null>(null);
   const [form, setForm] = useState<SlotFormState>(emptyForm());
   const [formError, setFormError] = useState('');
-  const [suggestionMessage, setSuggestionMessage] = useState<string>('');
 
   const selectedTerm = useMemo(
     () => terms.find(t => t.id === selectedTermId) ?? null,
@@ -107,45 +104,68 @@ export default function TimeSlotManagementPage() {
     return map;
   }, [slots]);
 
+  // Takvim ekseni: tüm slotların min/max'inden hesapla, saat sınırlarına yuvarla.
+  // Slot yoksa 09–18 default göster (boş durum).
+  const { axisStartMin, axisEndMin, hourMarks } = useMemo(() => {
+    if (slots.length === 0) {
+      return {
+        axisStartMin: 9 * 60,
+        axisEndMin: 18 * 60,
+        hourMarks: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+      };
+    }
+    let minStart = 24 * 60;
+    let maxEnd = 0;
+    for (const s of slots) {
+      const start = parseTimeToMinutes(normalizeTime(s.startTime));
+      const end = parseTimeToMinutes(normalizeTime(s.endTime));
+      if (start < minStart) minStart = start;
+      if (end > maxEnd) maxEnd = end;
+    }
+    const startHour = Math.floor(minStart / 60);
+    const endHour = Math.ceil(maxEnd / 60);
+    const marks: number[] = [];
+    for (let h = startHour; h <= endHour; h++) marks.push(h);
+    return {
+      axisStartMin: startHour * 60,
+      axisEndMin: endHour * 60,
+      hourMarks: marks,
+    };
+  }, [slots]);
+
+  const timelineHeight = (axisEndMin - axisStartMin) * PX_PER_MIN + TIMELINE_TOP_PAD * 2;
+
+  // Öğle arası bandının pozisyon hesabı — sadece slot'u olan gün kolonlarında çizilecek.
+  // null dönerse hiç çizilmez (config geçersiz veya eksen dışı).
+  const lunchInfo = useMemo(() => {
+    const startMin = parseTimeToMinutes(normalizeTime(settings.lunchBreakStart));
+    const endMin = parseTimeToMinutes(normalizeTime(settings.lunchBreakEnd));
+    if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return null;
+    if (endMin <= startMin) return null;
+    if (endMin <= axisStartMin || startMin >= axisEndMin) return null;
+    const clampedStart = Math.max(startMin, axisStartMin);
+    const clampedEnd = Math.min(endMin, axisEndMin);
+    return {
+      top: (clampedStart - axisStartMin) * PX_PER_MIN + TIMELINE_TOP_PAD,
+      height: (clampedEnd - clampedStart) * PX_PER_MIN,
+      label: `${normalizeTime(settings.lunchBreakStart)}–${normalizeTime(settings.lunchBreakEnd)}`,
+    };
+  }, [settings.lunchBreakStart, settings.lunchBreakEnd, axisStartMin, axisEndMin]);
+
   // Tüm 7 günü sırayla göster — admin hafta sonu için de slot ekleyebilsin.
-  // Sıralama: Pzt, Sal, Çar, Per, Cuma, Cts, Paz.
-  const DAY_ORDER: DayOfWeekName[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  // Sıralama: Pzt, Sal, Çar, Per, Cuma, Cts, Paz. (System.DayOfWeek: Sun=0..Sat=6)
+  const DAY_ORDER: DayOfWeekName[] = [1, 2, 3, 4, 5, 6, 0];
   const visibleDays = DAY_ORDER.map(d => ({
     value: d,
     label: DAY_OF_WEEK_OPTIONS.find(o => o.value === d)!.label,
   }));
 
-  /** Akıllı Öner: seçili gün için bir sonraki slotu hesapla, form'a doldur + reason mesajı göster */
-  function applySuggestion(forDay?: DayOfWeekName, durationMinutes?: number) {
-    const day = forDay ?? form.dayOfWeek;
-    const daySlots = (slotsByDay.get(day) ?? []).map(s => ({
-      startTime: normalizeTime(s.startTime),
-      endTime: normalizeTime(s.endTime),
-    }));
-    const suggestion = suggestNextSlot(day, daySlots, settings, durationMinutes);
-    const dayLabel = DAY_OF_WEEK_OPTIONS.find(o => o.value === day)?.label ?? day;
-
-    setForm(f => ({
-      ...f,
-      dayOfWeek: day,
-      startTime: suggestion.startTime,
-      endTime: suggestion.endTime,
-      allowedMode: suggestion.allowedMode,
-    }));
-    setSuggestionMessage(
-      `${dayLabel} ${suggestion.startTime}–${suggestion.endTime} önerildi (${suggestion.reason}).`
-    );
-    setFormError('');
-  }
-
   function openCreate(presetDay?: DayOfWeekName) {
-    // Dialog'u BOŞ aç — kullanıcı Akıllı Öner butonuna basınca form dolsun
     setForm({
       ...emptyForm(),
-      dayOfWeek: presetDay ?? 'Monday',
+      dayOfWeek: presetDay ?? 1,
     });
     setFormError('');
-    setSuggestionMessage('');
     setCreateOpen(true);
   }
 
@@ -201,10 +221,9 @@ export default function TimeSlotManagementPage() {
       if (closeAfter) {
         setCreateOpen(false);
       } else {
-        // "Kaydet ve Yeni Ekle" — aynı gün için bir sonraki öneriyi hazırla
-        // Not: slots listesi React-Query invalidate'inden sonra güncellenir, bu satır
-        // bir önceki (stale) listeden öneri üretir. Kullanıcı istediğinde yeniden "Öner" basar.
-        applySuggestion(form.dayOfWeek);
+        // "Kaydet ve Yeni Ekle" — aynı güne hızlı ekleme için zamanları temizle, gün kalsın.
+        setForm(f => ({ ...f, startTime: '', endTime: '' }));
+        setFormError('');
       }
     } catch (e: unknown) {
       setFormError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Slot oluşturulamadı.');
@@ -312,12 +331,6 @@ export default function TimeSlotManagementPage() {
           ))}
         </select>
 
-        {slots.length > 0 && (
-          <span className="text-xs text-slate-500 tabular-nums">
-            Toplam <strong className="text-slate-700">{slots.length}</strong> slot · {visibleDays.length} gün
-          </span>
-        )}
-
         <div className="ml-auto flex items-center gap-2">
           <Button
             size="sm"
@@ -332,11 +345,17 @@ export default function TimeSlotManagementPage() {
             variant="outline"
             disabled={!isTermEditable || regenerateSlots.isPending}
             onClick={handleRegenerateClick}
+            title="Mevcut tüm ders saatlerini siler ve Şablon Ayarları'na göre baştan oluşturur."
           >
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${regenerateSlots.isPending ? 'animate-spin' : ''}`} />
             Yeniden Üret
           </Button>
-          <Button size="sm" disabled={!isTermEditable} onClick={() => openCreate()}>
+          <Button
+            size="sm"
+            disabled={!isTermEditable}
+            onClick={() => openCreate()}
+            title="Bu döneme tek bir yeni ders saati ekle"
+          >
             <Plus className="h-3.5 w-3.5 mr-1" /> Yeni Slot
           </Button>
         </div>
@@ -367,54 +386,131 @@ export default function TimeSlotManagementPage() {
           )}
         </div>
       ) : (
-        <div className="flex-1 grid gap-2 overflow-auto"
-             style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
-          {visibleDays.map(day => {
-            const daySlots = slotsByDay.get(day.value) ?? [];
-            return (
-              <div key={day.value} className="flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden min-h-0 group/col">
-                <div className="bg-slate-50 border-b border-slate-200 px-2.5 py-1.5 flex items-center justify-between shrink-0 gap-1">
+        <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden min-h-0">
+          {/* Sticky gün başlıkları */}
+          <div className="grid border-b border-slate-200 bg-slate-50 shrink-0"
+               style={{ gridTemplateColumns: `60px repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
+            <div className="border-r border-slate-200" />
+            {visibleDays.map(day => {
+              const daySlots = slotsByDay.get(day.value) ?? [];
+              // Mod dağılımı tooltipi: "5 her ikisi · 3 online · 1 yüz-yüze" (sıfırlar atlanır)
+              const bothCount = daySlots.filter(s => s.allowedMode === 'Both').length;
+              const onlineCount = daySlots.filter(s => s.allowedMode === 'OnlineOnly').length;
+              const f2fCount = daySlots.filter(s => s.allowedMode === 'FaceToFaceOnly').length;
+              const parts: string[] = [];
+              if (bothCount > 0) parts.push(`${bothCount} her ikisi`);
+              if (onlineCount > 0) parts.push(`${onlineCount} online`);
+              if (f2fCount > 0) parts.push(`${f2fCount} yüz-yüze`);
+              const tooltip = parts.length > 0 ? parts.join(' · ') : 'Slot yok';
+              return (
+                <div key={day.value} className="px-2.5 py-1.5 flex items-center justify-between border-r border-slate-200 last:border-r-0 group/col">
                   <span className="text-sm font-semibold text-slate-700 truncate">{day.label}</span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[11px] text-slate-400 tabular-nums">{daySlots.length}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[11px] text-slate-500 tabular-nums" title={tooltip}>{daySlots.length} slot</span>
                     {isTermEditable && (
                       <>
                         <button
                           onClick={() => openCreate(day.value)}
-                          className="h-5 w-5 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 opacity-0 group-hover/col:opacity-100 transition"
-                          title={`${day.label} gününe yeni slot ekle (akıllı öner)`}
+                          className="h-6 w-6 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 opacity-40 group-hover/col:opacity-100 transition-opacity"
+                          title={`${day.label} gününe yeni slot ekle`}
                         >
-                          <Plus className="h-3 w-3" />
+                          <Plus className="h-3.5 w-3.5" />
                         </button>
                         {daySlots.length > 0 && (
                           <button
                             onClick={() => setCopyFromDay(day.value)}
-                            className="h-5 w-5 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 opacity-0 group-hover/col:opacity-100 transition"
+                            className="h-6 w-6 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 opacity-40 group-hover/col:opacity-100 transition-opacity"
                             title={`${day.label} gününün slotlarını başka güne kopyala`}
                           >
-                            <Copy className="h-3 w-3" />
+                            <Copy className="h-3.5 w-3.5" />
                           </button>
                         )}
                       </>
                     )}
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto divide-y divide-slate-100">
-                  {daySlots.length === 0 ? (
-                    <div className="px-3 py-8 text-center text-xs text-slate-400">Slot yok</div>
-                  ) : daySlots.map(slot => (
-                    <SlotRow
-                      key={slot.id}
-                      slot={slot}
-                      editable={isTermEditable}
-                      onEdit={() => openEdit(slot)}
-                      onDelete={() => handleDeleteClick(slot)}
-                    />
-                  ))}
-                </div>
+              );
+            })}
+          </div>
+
+          {/* Scroll'lanabilir takvim ızgarası */}
+          <div className="flex-1 overflow-auto">
+            <div className="grid relative bg-white"
+                 style={{
+                   gridTemplateColumns: `60px repeat(${visibleDays.length}, minmax(0, 1fr))`,
+                   height: `${timelineHeight}px`,
+                 }}>
+              {/* Saat ekseni (sol kolon) */}
+              <div className="relative border-r border-slate-200 bg-slate-50/40">
+                {hourMarks.map(h => (
+                  <div
+                    key={h}
+                    className="absolute left-0 right-0 text-[11px] text-slate-500 tabular-nums px-1.5"
+                    style={{ top: `${(h * 60 - axisStartMin) * PX_PER_MIN + TIMELINE_TOP_PAD}px`, transform: 'translateY(-50%)' }}
+                  >
+                    {String(h).padStart(2, '0')}:00
+                  </div>
+                ))}
               </div>
-            );
-          })}
+
+              {/* Gün kolonları (her biri saat ızgarası + slot blokları) */}
+              {(() => {
+                // Etiket sadece orta dolu günde — diğerlerinde sadece amber bant.
+                const filledIndices = visibleDays
+                  .map((d, i) => ((slotsByDay.get(d.value)?.length ?? 0) > 0 ? i : -1))
+                  .filter(i => i >= 0);
+                const labelDayIdx = filledIndices.length > 0
+                  ? filledIndices[Math.floor(filledIndices.length / 2)]
+                  : -1;
+                return visibleDays.map((day, dayIdx) => {
+                  const daySlots = slotsByDay.get(day.value) ?? [];
+                  return (
+                  <div key={day.value} className="relative border-r border-slate-200 last:border-r-0">
+                    {/* Saat çizgileri */}
+                    {hourMarks.map(h => (
+                      <div
+                        key={h}
+                        className="absolute left-0 right-0 border-t border-slate-100"
+                        style={{ top: `${(h * 60 - axisStartMin) * PX_PER_MIN + TIMELINE_TOP_PAD}px` }}
+                      />
+                    ))}
+                    {/* Öğle arası bandı — sadece slot'u olan günlerde, çerçevesiz amber dolgu.
+                        Etiket sadece ilk dolu günde görünür (tekrar gürültüsü olmasın). */}
+                    {lunchInfo && daySlots.length > 0 && (
+                      <div
+                        className="absolute pointer-events-none bg-amber-50/70 left-0 right-0 flex items-center justify-center overflow-hidden"
+                        style={{ top: `${lunchInfo.top}px`, height: `${lunchInfo.height}px` }}
+                      >
+                        {dayIdx === labelDayIdx && (
+                          <span className="text-[11px] font-medium text-amber-800 tabular-nums px-2 py-0.5 rounded bg-white/90 border border-amber-200 shadow-sm whitespace-nowrap">
+                            Öğle Arası · {lunchInfo.label}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Boş gün mesajı */}
+                    {daySlots.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-300 pointer-events-none">
+                        Slot yok
+                      </div>
+                    )}
+                    {/* Slot blokları */}
+                    {daySlots.map(slot => (
+                      <SlotBlock
+                        key={slot.id}
+                        slot={slot}
+                        axisStartMin={axisStartMin}
+                        editable={isTermEditable}
+                        onEdit={() => openEdit(slot)}
+                        onDelete={() => handleDeleteClick(slot)}
+                      />
+                    ))}
+                  </div>
+                );
+                });
+              })()}
+            </div>
+          </div>
         </div>
       )}
 
@@ -422,37 +518,20 @@ export default function TimeSlotManagementPage() {
       <Dialog open={createOpen || !!editItem} onOpenChange={o => { if (!o) { setCreateOpen(false); setEditItem(null); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between pr-6">
-              <span>{editItem ? 'Slot Düzenle' : 'Yeni Slot'}</span>
-              {!editItem && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => applySuggestion()}
-                  className="gap-1.5"
-                  title="Seçili gün için bir sonraki slotu hesapla"
-                >
-                  <Sparkles className="h-3.5 w-3.5" /> Akıllı Öner
-                </Button>
-              )}
+            <DialogTitle>
+              {editItem
+                ? 'Slot Düzenle'
+                : `${DAY_OF_WEEK_OPTIONS.find(d => d.value === form.dayOfWeek)?.label ?? ''} · Yeni Slot`}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3">
-            {/* Öneri feedback mesajı — Akıllı Öner tıklandığında görünür */}
-            {suggestionMessage && (
-              <div className="rounded-md bg-sky-50 border border-sky-200 px-3 py-2 text-xs text-sky-800 flex items-start gap-2">
-                <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0 text-sky-500" />
-                <span>{suggestionMessage}</span>
-              </div>
-            )}
-
             <div>
               <label className="text-sm font-medium block mb-1">Gün</label>
               <select
                 className={SELECT_CLS}
                 value={form.dayOfWeek}
-                onChange={e => { setForm({ ...form, dayOfWeek: e.target.value as DayOfWeekName }); setSuggestionMessage(''); }}
+                onChange={e => setForm({ ...form, dayOfWeek: Number(e.target.value) as DayOfWeekName })}
               >
                 {DAY_OF_WEEK_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
@@ -461,39 +540,46 @@ export default function TimeSlotManagementPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium block mb-1">Başlangıç</label>
-                <Input type="time" value={form.startTime} onChange={e => { setForm({ ...form, startTime: e.target.value }); setSuggestionMessage(''); }} />
+                <Input type="time" value={form.startTime} onChange={e => setForm({ ...form, startTime: e.target.value })} />
               </div>
               <div>
                 <label className="text-sm font-medium block mb-1">Bitiş</label>
-                <Input type="time" value={form.endTime} onChange={e => { setForm({ ...form, endTime: e.target.value }); setSuggestionMessage(''); }} />
+                <Input type="time" value={form.endTime} onChange={e => setForm({ ...form, endTime: e.target.value })} />
               </div>
             </div>
 
-            {/* Süre preset'leri */}
+            {/* Süre preset'leri — config'teki varsayılan süre küçük yıldız ile işaretli */}
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1.5">Süre</label>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {DURATION_PRESETS.map(p => {
                   const currentDur = parseTimeToMinutes(form.endTime) - parseTimeToMinutes(form.startTime);
                   const active = currentDur === p.minutes;
+                  const isConfigDefault = p.minutes === settings.slotDurationMinutes;
                   return (
                     <button
                       key={p.minutes}
                       type="button"
                       onClick={() => applyDuration(p.minutes)}
-                      className={`px-2.5 py-1 text-xs rounded-md border transition ${
+                      title={isConfigDefault ? 'Şablon varsayılanı (Schedule.SlotDurationMinutes)' : undefined}
+                      className={`px-2.5 py-1 text-xs rounded-md border transition inline-flex items-center gap-1 ${
                         active
                           ? 'bg-slate-900 text-white border-slate-900'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
                       }`}
                     >
                       {p.label}
+                      {isConfigDefault && (
+                        <span
+                          className={active ? 'text-amber-300' : 'text-amber-500'}
+                          aria-label="Şablon varsayılanı"
+                        >
+                          ★
+                        </span>
+                      )}
                     </button>
                   );
                 })}
-                <span className="ml-auto text-[11px] text-slate-400 tabular-nums">
-                  {Math.max(0, parseTimeToMinutes(form.endTime) - parseTimeToMinutes(form.startTime))} dk
-                </span>
               </div>
             </div>
 
@@ -506,7 +592,13 @@ export default function TimeSlotManagementPage() {
               >
                 {ALLOWED_MODE_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
-              <p className="text-xs text-muted-foreground mt-1">{allowedModeLabel(form.allowedMode)}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {form.allowedMode === 'OnlineOnly'
+                  ? 'Bu slotta yalnızca online ders açılabilir (örn. 18:00 sonrası).'
+                  : form.allowedMode === 'FaceToFaceOnly'
+                  ? 'Bu slotta yalnızca yüz-yüze ders açılabilir.'
+                  : 'Bu slotta hem yüz-yüze hem online ders açılabilir.'}
+              </p>
             </div>
 
             {/* Canlı çakışma uyarısı */}
@@ -531,10 +623,11 @@ export default function TimeSlotManagementPage() {
             </Button>
             {!editItem && (
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => handleCreate(false)}
                 disabled={createSlot.isPending}
-                title="Bu slotu kaydet ve dialog açık kalsın — bir sonraki slot otomatik önerilir"
+                title="Bu slotu kaydet ve dialog açık kalsın — aynı güne hızlı ekleme"
+                className="text-slate-600"
               >
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 Kaydet ve Yeni Ekle
@@ -590,12 +683,13 @@ export default function TimeSlotManagementPage() {
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-sm text-foreground">
-              Mevcut tüm slotlar silinip SystemConfig parametrelerinden yeniden üretilecek.
+              Bu dönemdeki <strong>tüm ders saatleri silinecek</strong> ve Şablon Ayarları'ndaki değerlere göre yeniden oluşturulacak.
+              Elle eklediğin/değiştirdiğin her şey kaybolur.
             </p>
             {regenerateConfirm && regenerateConfirm.dependentCount > 0 && (
               <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-                Bu dönemde <strong>{regenerateConfirm.dependentCount}</strong> ders programı kaydı var.
-                Onaylarsan bu atamalar da silinir.
+                Dikkat: Bu dönemde <strong>{regenerateConfirm.dependentCount}</strong> ders programı ataması var.
+                Onaylarsan bu atamalar da silinir; ders şubelerinin slot bağlantısı kopar.
               </div>
             )}
           </div>
@@ -684,49 +778,69 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
-// ── Slot satırı — kompakt, hover'da aksiyon butonları ────────────────────
+// ── Slot bloğu — takvim ekseninde absolute pozisyonlu, tıklayınca düzenle ─
 
-interface SlotRowProps {
+interface SlotBlockProps {
   slot: TimeSlotDto;
+  axisStartMin: number;
   editable: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function SlotRow({ slot, editable, onEdit, onDelete }: SlotRowProps) {
+function SlotBlock({ slot, axisStartMin, editable, onEdit, onDelete }: SlotBlockProps) {
+  const startMin = parseTimeToMinutes(normalizeTime(slot.startTime));
+  const endMin = parseTimeToMinutes(normalizeTime(slot.endTime));
+  // Saat çizgileriyle hizalı kalmak için aynı üst tamponu uygula.
+  const top = (startMin - axisStartMin) * PX_PER_MIN + TIMELINE_TOP_PAD;
+  // Bitişikteki bloklar arasında 2px ayrım için yüksekliği biraz kırp; min 22px (kısa slotlar okunsun).
+  const height = Math.max((endMin - startMin) * PX_PER_MIN - 2, 22);
+
+  const colorClass =
+    slot.allowedMode === 'OnlineOnly'    ? 'bg-sky-50 border-sky-200 hover:bg-sky-100'    :
+    slot.allowedMode === 'FaceToFaceOnly' ? 'bg-amber-50 border-amber-200 hover:bg-amber-100' :
+                                            'bg-slate-50/70 border-slate-200 hover:bg-slate-100';
+  const accentClass =
+    slot.allowedMode === 'OnlineOnly'    ? 'bg-sky-400'    :
+    slot.allowedMode === 'FaceToFaceOnly' ? 'bg-amber-400'  :
+                                            'bg-slate-300';
+
   return (
-    <div className="group px-2.5 py-1.5 hover:bg-slate-50/80 transition-colors">
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-semibold text-slate-800 tabular-nums">
-              {formatTime(slot.startTime)}–{formatTime(slot.endTime)}
-            </span>
-            <span className="text-[11px] text-slate-400 tabular-nums">#{slot.slotOrder}</span>
-          </div>
-          <span className={`inline-flex items-center mt-0.5 px-1.5 py-0 rounded text-[10px] font-medium border ${modeBadgeClass(slot.allowedMode)}`}>
-            {modeShortLabel(slot.allowedMode)}
+    <div
+      className={`absolute left-1 right-1 z-10 rounded-md border ${colorClass} transition-colors group overflow-hidden ${editable ? 'cursor-pointer' : ''}`}
+      style={{ top: `${top + 1}px`, height: `${height}px` }}
+      onClick={editable ? onEdit : undefined}
+      title={`${formatTime(slot.startTime)}–${formatTime(slot.endTime)} · ${modeShortLabel(slot.allowedMode)}`}
+    >
+      {/* Sol mod şeridi */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${accentClass}`} />
+
+      <div className="h-full w-full flex items-center justify-center gap-2 px-2">
+        <span className="text-base font-semibold text-slate-900 tabular-nums">
+          {formatTime(slot.startTime)}–{formatTime(slot.endTime)}
+        </span>
+        {slot.allowedMode !== 'Both' && (
+          <span
+            className={
+              slot.allowedMode === 'OnlineOnly'
+                ? 'text-[11px] font-medium uppercase tracking-wide text-sky-700'
+                : 'text-[11px] font-medium uppercase tracking-wide text-amber-700'
+            }
+          >
+            {slot.allowedMode === 'OnlineOnly' ? 'Online' : 'Yüz-Yüze'}
           </span>
-        </div>
-        {editable && (
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <button
-              onClick={onEdit}
-              className="h-6 w-6 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-600"
-              title="Düzenle"
-            >
-              <Edit2 className="h-3 w-3" />
-            </button>
-            <button
-              onClick={onDelete}
-              className="h-6 w-6 inline-flex items-center justify-center rounded hover:bg-red-50 text-red-600"
-              title="Sil"
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
-          </div>
         )}
       </div>
+      {editable && (
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(); }}
+          className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 h-6 w-6 inline-flex items-center justify-center rounded-full bg-white/80 backdrop-blur-sm text-slate-500 ring-1 ring-slate-200/80 shadow-sm hover:bg-red-500 hover:text-white hover:ring-red-500 hover:shadow-md hover:scale-110 transition-all duration-150 ease-out"
+          title="Sil"
+          aria-label="Slotu sil"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
