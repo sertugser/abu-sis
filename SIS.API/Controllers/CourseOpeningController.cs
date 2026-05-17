@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -72,13 +73,30 @@ public class CourseOpeningController(
     }
 
     [HttpGet("instructors")]
-    [RequirePermission("menu.ders-acma-islemleri.view")]
-    public async Task<IActionResult> GetDepartmentInstructors([FromQuery] int departmentId, [FromQuery] int? termId = null, CancellationToken ct = default)
+    [RequireAnyPermission(
+        "menu.ders-acma-islemleri.view",
+        "menu.ogretim-elemani-atama.view",
+        "menu.ders-veren-ogretim-uyeleri.view",
+        "menu.toplu-danisman-atama.view")]
+    public async Task<IActionResult> GetDepartmentInstructors([FromQuery] int? departmentId = null, [FromQuery] int? termId = null, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
-        if (!await HasDepartmentAccessAsync(userId, departmentId, ct)) return Forbid();
 
-        var result = await _queryService.GetDepartmentInstructorsAsync(departmentId, termId, ct);
+        var roles = User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToList();
+        IReadOnlyCollection<int> scopedDepartmentIds;
+
+        if (departmentId.HasValue)
+        {
+            if (!await HasDepartmentAccessAsync(userId, departmentId.Value, ct)) return Forbid();
+            scopedDepartmentIds = [departmentId.Value];
+        }
+        else
+        {
+            scopedDepartmentIds = await ResolveAccessibleDepartmentIdsAsync(userId, roles, ct);
+            if (scopedDepartmentIds.Count == 0) return Ok(Array.Empty<InstructorOptionDto>());
+        }
+
+        var result = await _queryService.GetDepartmentInstructorsAsync(scopedDepartmentIds, termId, ct);
         return Ok(result);
     }
 
@@ -242,6 +260,87 @@ public class CourseOpeningController(
         }
     }
 
+    /// <summary>
+    /// Hard-delete: Dersin tüm şubelerini DB'den fiziksel siler (geri alınamaz).
+    /// Aktif/Tamamlanmış kayıt, değerlendirme veya yoklama varsa reddedilir.
+    /// </summary>
+    [HttpDelete("course/{courseId}/hard")]
+    [RequirePermission("menu.ders-acma-islemleri.close-all")]
+    public async Task<IActionResult> DeleteAllSectionsHard(int courseId, [FromQuery] int termId, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == courseId, ct);
+        if (course == null) return NotFound(new { error = "Ders bulunamadı." });
+        if (course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            var result = await _lifecycleService.DeleteAllSectionsHardAsync(courseId, termId, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("auto-split")]
+    [RequirePermission("menu.subelendirme-islemleri.auto-split")]
+    public async Task<IActionResult> AutoSplitCourse(
+        [FromBody] AutoSplitCourseRequest request,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var course = await _context.Courses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId, ct);
+
+        if (course == null) return NotFound(new { error = "Ders bulunamadı." });
+        if (course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            var result = await _lifecycleService.AutoSplitCourseAsync(request, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("transfer-students")]
+    [RequirePermission("menu.subelendirme-islemleri.transfer")]
+    public async Task<IActionResult> TransferStudentsBetweenSections(
+        [FromBody] TransferStudentsToSectionRequest request,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var sourceSection = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == request.SourceSectionId, ct);
+
+        if (sourceSection == null) return NotFound(new { error = "Kaynak şube bulunamadı." });
+        if (sourceSection.Course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, sourceSection.Course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            var result = await _lifecycleService.TransferStudentsBetweenSectionsAsync(request, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPut("section/{id}/reactivate")]
     [RequirePermission("menu.ders-acma-islemleri.reactivate")]
     public async Task<IActionResult> ReactivateSection(int id, CancellationToken ct)
@@ -284,21 +383,60 @@ public class CourseOpeningController(
     }
 
     [HttpGet("instructors/{instructorId}/workload")]
-    [RequirePermission("menu.ogretim-elemani-atama.view")]
-    public async Task<IActionResult> GetInstructorWorkload(int instructorId, [FromQuery] int termId, CancellationToken ct)
+    [RequireAnyPermission("menu.ogretim-elemani-atama.view", "menu.ders-veren-ogretim-uyeleri.view")]
+    public async Task<IActionResult> GetInstructorWorkload(
+        int instructorId,
+        [FromQuery] int termId,
+        [FromQuery] int? departmentId,
+        CancellationToken ct)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
         var instructor = await _context.Instructors
             .AsNoTracking()
+            .Include(i => i.Department)
             .FirstOrDefaultAsync(i => i.Id == instructorId, ct);
 
         if (instructor == null)
             return NotFound(new { error = "Öğretim üyesi bulunamadı." });
 
-        if (!await HasDepartmentAccessAsync(userId, instructor.DepartmentId, ct))
-            return Forbid();
+        var roles = User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToList();
+        IReadOnlyCollection<int> scopedDepartmentIds;
 
+        if (departmentId.HasValue)
+        {
+            if (!await HasDepartmentAccessAsync(userId, departmentId.Value, ct))
+                return Forbid();
+
+            var requestedFacultyId = await _context.Departments
+                .AsNoTracking()
+                .Where(department => department.Id == departmentId.Value)
+                .Select(department => (int?)department.FacultyId)
+                .FirstOrDefaultAsync(ct);
+
+            if (!requestedFacultyId.HasValue)
+                return NotFound(new { error = "Bölüm bulunamadı." });
+
+            scopedDepartmentIds = [departmentId.Value];
+
+            if (instructor.Department?.FacultyId != requestedFacultyId.Value
+                && !await InstructorHasVisibleSectionAsync(instructorId, termId, scopedDepartmentIds, ct))
+                return Forbid();
+        }
+        else
+        {
+            scopedDepartmentIds = await ResolveAccessibleDepartmentIdsAsync(userId, roles, ct);
+            if (scopedDepartmentIds.Count == 0)
+                return Forbid();
+
+            var instructorHasVisibleSection = scopedDepartmentIds.Contains(instructor.DepartmentId)
+                || await InstructorHasVisibleSectionAsync(instructorId, termId, scopedDepartmentIds, ct);
+
+            if (!instructorHasVisibleSection)
+                return Forbid();
+        }
+
+        var scopedDepartmentIdList = scopedDepartmentIds.ToList();
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == instructor.UserId, ct);
@@ -309,8 +447,16 @@ public class CourseOpeningController(
 
         var sections = await _context.CourseSections
             .AsNoTracking()
-            .Include(cs => cs.Course)
-            .Where(cs => cs.InstructorId == instructorId && cs.TermId == termId && cs.IsActive)
+            .Include(cs => cs.Course).ThenInclude(course => course.Department)
+            .Where(cs => cs.InstructorId == instructorId
+                && cs.TermId == termId
+                && cs.Status == CourseSectionStatus.Active
+                && ((cs.Course.DepartmentId.HasValue && scopedDepartmentIdList.Contains(cs.Course.DepartmentId.Value))
+                    || _context.CourseAccessPolicies.Any(cap =>
+                        cap.CourseId == cs.CourseId
+                        && cap.TermId == termId
+                        && cap.DepartmentId.HasValue
+                        && scopedDepartmentIdList.Contains(cap.DepartmentId.Value))))
             .OrderBy(cs => cs.Course.Code).ThenBy(cs => cs.SectionNumber)
             .ToListAsync(ct);
 
@@ -319,6 +465,9 @@ public class CourseOpeningController(
             SectionId = cs.Id,
             CourseCode = cs.Course.Code,
             CourseName = cs.Course.Name,
+            DepartmentId = cs.Course.DepartmentId,
+            DepartmentName = cs.Course.Department?.Name,
+            DepartmentCode = cs.Course.Department?.Code,
             SectionNumber = cs.SectionNumber,
             WeeklyHours = cs.Course.TheoryHours + cs.Course.LabHours,
             Capacity = cs.Capacity,
@@ -388,6 +537,64 @@ public class CourseOpeningController(
         return claim != null && int.TryParse(claim, out userId);
     }
 
+    private async Task<List<int>> ResolveAccessibleDepartmentIdsAsync(int userId, IReadOnlyCollection<string> roles, CancellationToken ct)
+    {
+        if (roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff"))
+        {
+            return await _context.Departments
+                .AsNoTracking()
+                .OrderBy(department => department.Name)
+                .Select(department => department.Id)
+                .ToListAsync(ct);
+        }
+
+        var instructor = await _context.Instructors
+            .AsNoTracking()
+            .Include(current => current.Department)
+            .FirstOrDefaultAsync(current => current.UserId == userId, ct);
+
+        if (instructor == null)
+            return [];
+
+        if (roles.Contains("Dean"))
+        {
+            return await _context.Departments
+                .AsNoTracking()
+                .Where(department => department.FacultyId == instructor.Department.FacultyId)
+                .OrderBy(department => department.Name)
+                .Select(department => department.Id)
+                .ToListAsync(ct);
+        }
+
+        if (roles.Contains("DepartmentManager") || roles.Contains("Instructor") || roles.Contains("AcademicAdvisor"))
+            return [instructor.DepartmentId];
+
+        return [];
+    }
+
+    private async Task<bool> InstructorHasVisibleSectionAsync(int instructorId, int termId, IReadOnlyCollection<int> departmentIds, CancellationToken ct)
+    {
+        var scopedDepartmentIds = departmentIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        if (scopedDepartmentIds.Count == 0)
+            return false;
+
+        return await _context.CourseSections
+            .AsNoTracking()
+            .AnyAsync(cs => cs.InstructorId == instructorId
+                && cs.TermId == termId
+                && cs.Status == CourseSectionStatus.Active
+                && ((cs.Course.DepartmentId.HasValue && scopedDepartmentIds.Contains(cs.Course.DepartmentId.Value))
+                    || _context.CourseAccessPolicies.Any(cap =>
+                        cap.CourseId == cs.CourseId
+                        && cap.TermId == termId
+                        && cap.DepartmentId.HasValue
+                        && scopedDepartmentIds.Contains(cap.DepartmentId.Value))), ct);
+    }
+
     private async Task<bool> HasDepartmentAccessAsync(int userId, int departmentId, CancellationToken ct)
     {
         var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
@@ -409,7 +616,7 @@ public class CourseOpeningController(
             return department != null && department.FacultyId == instructor.Department.FacultyId;
         }
 
-        if (roles.Contains("DepartmentManager"))
+        if (roles.Contains("DepartmentManager") || roles.Contains("Instructor") || roles.Contains("AcademicAdvisor"))
             return instructor.DepartmentId == departmentId;
 
         return false;

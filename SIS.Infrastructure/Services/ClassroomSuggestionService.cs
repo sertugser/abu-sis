@@ -27,7 +27,16 @@ public class ClassroomSuggestionService
         var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new KeyNotFoundException($"Dönem bulunamadı: {termId}");
 
-        var amphiThreshold = await _config.GetIntAsync("Classroom.AmphiThreshold", 100, ct);
+        var opts = await LoadOptionsAsync(ct);
+        var amphiThreshold = opts.AmphiThreshold;
+
+        // Haftalık slot sayısını TimeSlot grid'inden oku (hardcoded 30 yerine).
+        // Her dönemde TimeSlot grid'i ayrı; admin slot ekleyip/çıkarabilir, hesap dinamik kalır.
+        var availableWeeklySlotsPerClassroom = await _context.TimeSlots
+            .Where(ts => ts.TermId == termId)
+            .CountAsync(ct);
+        if (availableWeeklySlotsPerClassroom <= 0)
+            availableWeeklySlotsPerClassroom = 30; // TimeSlot grid'i henüz oluşturulmamışsa fallback
 
         // ── 1. Temel veriler ──────────────────────────────────────────────
         var faculties = await _context.Faculties
@@ -134,9 +143,6 @@ public class ClassroomSuggestionService
                 })
                 .ToList();
 
-            // Haftada kullanılabilir ders saati sayısı (tipik: 5 gün × 6 slot = 30)
-            const int availableWeeklySlotsPerClassroom = 30;
-
             // ── 2c. Haftalık ders saati ihtiyacı ─────────────────────────
             int totalWeeklyTheoryHours = 0;
             int totalWeeklyLabHours = 0;
@@ -169,7 +175,7 @@ public class ClassroomSuggestionService
                 }
                 else
                 {
-                    estimatedDemand = Math.Max(1, (int)(courseStudentBase / yearCount * 0.35));
+                    estimatedDemand = Math.Max(1, (int)(courseStudentBase / yearCount * opts.ElectiveDemandRatio));
                 }
 
                 // Teori section sayısı → derslik/amfi kapasitesine göre
@@ -275,15 +281,19 @@ public class ClassroomSuggestionService
             }
 
             // ── 2f. Final ihtiyaç hesabı ─────────────────────────────────
-            // Tarihsel veriyle tahminleri harmanlama (varsa)
+            // Tarihsel veriyle tahminleri harmanlama (varsa).
+            // Ağırlıklar SystemConfig'ten: HistoricalWeight = tarihsel veriye verilen pay.
+            var historicalWeight = (double)opts.HistoricalWeight;
+            var predictionWeight = 1.0 - historicalWeight;
+            var anomalyCap = (double)opts.HistoricalAnomalyCap;
+
             int finalClassroomNeed;
             if (historicalClassroomUsage > 0)
             {
-                // Tarihsel veri: %60 ağırlık, müfredat tahmini: %40 ağırlık
                 var blendedClassroom = (int)Math.Ceiling(
-                    historicalClassroomUsage * 0.6 + parallelClassroomNeed * 0.4);
-                // Tarihsel veri, tahminin 2 katını geçemez (anomali koruması)
-                finalClassroomNeed = Math.Min(blendedClassroom, parallelClassroomNeed * 2);
+                    historicalClassroomUsage * historicalWeight + parallelClassroomNeed * predictionWeight);
+                // Tarihsel veri, tahminin anomalyCap katını geçemez (anomali koruması)
+                finalClassroomNeed = Math.Min(blendedClassroom, (int)Math.Ceiling(parallelClassroomNeed * anomalyCap));
             }
             else
             {
@@ -295,16 +305,15 @@ public class ClassroomSuggestionService
             if (historicalLabClassroomUsage > 0)
             {
                 var blendedLab = (int)Math.Ceiling(
-                    historicalLabClassroomUsage * 0.6 + parallelLabNeed * 0.4);
-                // Tarihsel veri, tahminin 2 katını geçemez (anomali koruması)
-                finalLabNeed = Math.Min(blendedLab, parallelLabNeed * 2);
+                    historicalLabClassroomUsage * historicalWeight + parallelLabNeed * predictionWeight);
+                finalLabNeed = Math.Min(blendedLab, (int)Math.Ceiling(parallelLabNeed * anomalyCap));
             }
             else
             {
                 finalLabNeed = Math.Max(parallelLabNeed, labCourseCount > 0 ? 1 : 0);
             }
 
-            facultyDemands.Add(new FacultyDemandAnalysis
+            var analysis = new FacultyDemandAnalysis
             {
                 FacultyId = faculty.Id,
                 FacultyName = faculty.Name,
@@ -321,7 +330,9 @@ public class ClassroomSuggestionService
                 ParallelLabNeed = finalLabNeed,
                 HistoricalSectionCount = historicalSectionCount,
                 HistoricalClassroomUsage = historicalClassroomUsage,
-            });
+            };
+            analysis.ComputeDemandScore(opts);
+            facultyDemands.Add(analysis);
         }
 
         // ── 3. Derslik dağıtım algoritması ───────────────────────────────
@@ -343,7 +354,19 @@ public class ClassroomSuggestionService
             return BuildResult(term, classrooms, existingAssignments, suggestions, facultyDemands, totalDemandScore);
         }
 
+        // ── Faz arası feedback için fakülte başına toplam atama sayacı ──
+        // Amfi ve lab fazlarında atanan dersliklerin toplamı; Aşama 3c'de
+        // (normal sınıflar) DemandScore'a feedback olarak yansıtılır.
+        var totalAssignedPerFaculty = rankedFaculties.ToDictionary(f => f.FacultyId, _ => 0);
+
+        // Soft threshold bandının alt sınırı — bu bandda olan amfiler "soft"
+        // işaretiyle önerilir (admin kararı için gri bölgeyi gösterir).
+        var softAmphiLowerBound = (int)Math.Round(
+            amphiThreshold * (1m - opts.SoftThresholdBandPercent / 100m));
+
         // ── 3a. Amfiler → amfi ihtiyacı en yüksek fakülteye ─────────────
+        // Sert eşik + soft band: kapasite >= amphiThreshold zorunlu amfi,
+        // [softLower, amphiThreshold) arasındaki büyük sınıflar "soft amphi".
         var amphitheaters = remaining
             .Where(c => c.Type == ClassroomType.Amphitheater || c.Capacity >= amphiThreshold)
             .OrderByDescending(c => c.Capacity)
@@ -355,37 +378,45 @@ public class ClassroomSuggestionService
             .ThenByDescending(f => f.StudentCount)
             .ToList();
 
-        // Her fakülteye paralel amfi ihtiyacı kadar dağıt
-        foreach (var faculty in amphiFaculties)
-        {
-            var needed = faculty.ParallelAmphiNeed;
-            var assigned = 0;
-            foreach (var amfi in amphitheaters.ToList())
+        // Round-robin ile dağıt — bir fakülteye tüm amfileri yığmak yerine
+        // sırayla 1'er amfi ver, böylece kıt kaynak adil paylaşılır.
+        DistributeRoundRobin(
+            classroomsToAssign: amphitheaters,
+            faculties: amphiFaculties,
+            getNeeded: f => f.ParallelAmphiNeed,
+            buildSuggestion: (cr, faculty) => new ClassroomAssignmentItemDto
             {
-                if (assigned >= needed) break;
-
-                suggestions.Add(new ClassroomAssignmentItemDto
-                {
-                    ClassroomId = amfi.Id,
-                    ClassroomName = amfi.Name,
-                    ClassroomCapacity = amfi.Capacity,
-                    ClassroomType = amfi.Type.ToString(),
-                    FacultyId = faculty.FacultyId,
-                    FacultyName = faculty.FacultyName,
-                    Reason = $"{faculty.AmphiCourseCount} ders {amphiThreshold}+ öğrenciye sahip, haftalık programa göre {faculty.ParallelAmphiNeed} amfi aynı anda gerekli",
-                    Priority = "high"
-                });
-                remaining.Remove(amfi);
-                amphitheaters.Remove(amfi);
-                assigned++;
-            }
-        }
+                ClassroomId = cr.Id,
+                ClassroomName = cr.Name,
+                ClassroomCapacity = cr.Capacity,
+                ClassroomType = cr.Type.ToString(),
+                FacultyId = faculty.FacultyId,
+                FacultyName = faculty.FacultyName,
+                Reason = $"{faculty.AmphiCourseCount} ders {amphiThreshold}+ öğrenciye sahip, haftalık programa göre {faculty.ParallelAmphiNeed} amfi aynı anda gerekli",
+                Priority = "high",
+            },
+            sink: cr =>
+            {
+                suggestions.Add(cr.suggestion);
+                remaining.Remove(cr.classroom);
+                amphitheaters.Remove(cr.classroom);
+                totalAssignedPerFaculty[cr.facultyId]++;
+            });
 
         // Kalan amfiler → en yoğun fakülteye
         foreach (var amfi in amphitheaters.ToList())
         {
             var target = rankedFaculties.FirstOrDefault();
             if (target == null) break;
+
+            // Soft threshold işareti: kapasite < amphiThreshold ama yine
+            // amfi sınıfı olarak değerlendirilen sınıflar için gerekçeyi farklılaştır.
+            var isSoftAmphi = amfi.Type != ClassroomType.Amphitheater
+                && amfi.Capacity < amphiThreshold
+                && amfi.Capacity >= softAmphiLowerBound;
+            var reasonSuffix = isSoftAmphi
+                ? $" [soft-amfi: kapasite {amfi.Capacity}, eşik {amphiThreshold} altında ama yakın]"
+                : "";
 
             suggestions.Add(new ClassroomAssignmentItemDto
             {
@@ -395,10 +426,11 @@ public class ClassroomSuggestionService
                 ClassroomType = amfi.Type.ToString(),
                 FacultyId = target.FacultyId,
                 FacultyName = target.FacultyName,
-                Reason = $"Kalan amfi → en yoğun fakülte ({target.StudentCount} öğrenci, {target.EstimatedSectionCount} tahmini section)",
+                Reason = $"Kalan amfi → en yoğun fakülte ({target.StudentCount} öğrenci, {target.EstimatedSectionCount} tahmini section){reasonSuffix}",
                 Priority = "medium"
             });
             remaining.Remove(amfi);
+            totalAssignedPerFaculty[target.FacultyId]++;
         }
 
         // ── 3b. Lab/Bilgisayar derslikler → lab dersi olan fakültelere ──
@@ -416,31 +448,30 @@ public class ClassroomSuggestionService
         // Lab atama sayısını fakülte bazında takip et
         var labAssignedCount = rankedFaculties.ToDictionary(f => f.FacultyId, _ => 0);
 
-        foreach (var faculty in labFaculties)
-        {
-            var needed = faculty.ParallelLabNeed;
-            var assigned = 0;
-            foreach (var lab in labClassrooms.ToList())
+        // Lab dağıtımı da round-robin — eşit ihtiyaçlı fakülteler dönüşümlü alır
+        DistributeRoundRobin(
+            classroomsToAssign: labClassrooms,
+            faculties: labFaculties,
+            getNeeded: f => f.ParallelLabNeed,
+            buildSuggestion: (cr, faculty) => new ClassroomAssignmentItemDto
             {
-                if (assigned >= needed) break;
-
-                suggestions.Add(new ClassroomAssignmentItemDto
-                {
-                    ClassroomId = lab.Id,
-                    ClassroomName = lab.Name,
-                    ClassroomCapacity = lab.Capacity,
-                    ClassroomType = lab.Type.ToString(),
-                    FacultyId = faculty.FacultyId,
-                    FacultyName = faculty.FacultyName,
-                    Reason = $"Lab ihtiyacı: {faculty.LabCourseCount} lab dersi, tahmini {faculty.ParallelLabNeed} paralel lab dersliği gerekli",
-                    Priority = "high"
-                });
-                remaining.Remove(lab);
-                labClassrooms.Remove(lab);
-                assigned++;
-                labAssignedCount[faculty.FacultyId]++;
-            }
-        }
+                ClassroomId = cr.Id,
+                ClassroomName = cr.Name,
+                ClassroomCapacity = cr.Capacity,
+                ClassroomType = cr.Type.ToString(),
+                FacultyId = faculty.FacultyId,
+                FacultyName = faculty.FacultyName,
+                Reason = $"Lab ihtiyacı: {faculty.LabCourseCount} lab dersi, tahmini {faculty.ParallelLabNeed} paralel lab dersliği gerekli",
+                Priority = "high",
+            },
+            sink: cr =>
+            {
+                suggestions.Add(cr.suggestion);
+                remaining.Remove(cr.classroom);
+                labClassrooms.Remove(cr.classroom);
+                labAssignedCount[cr.facultyId]++;
+                totalAssignedPerFaculty[cr.facultyId]++;
+            });
 
         // Kalan lab derslikler → en çok lab eksiği olan fakülteye (deficit-based dağıtım)
         foreach (var lab in labClassrooms.ToList())
@@ -454,6 +485,7 @@ public class ClassroomSuggestionService
             if (target == null) break;
 
             labAssignedCount[target.FacultyId] = labAssignedCount.GetValueOrDefault(target.FacultyId) + 1;
+            totalAssignedPerFaculty[target.FacultyId]++;
 
             suggestions.Add(new ClassroomAssignmentItemDto
             {
@@ -469,49 +501,108 @@ public class ClassroomSuggestionService
             remaining.Remove(lab);
         }
 
-        // ── 3c. Normal sınıflar → oransal dağıtım ───────────────────────
+        // ── 3c. Normal sınıflar → oransal dağıtım (faz feedback + fairness) ──
         var normalClassrooms = remaining
             .Where(c => c.Type == ClassroomType.Lecture || c.Type == ClassroomType.Seminar)
             .OrderByDescending(c => c.Capacity)
             .ToList();
 
-        // Her fakültenin payını hesapla
-        var facultyShares = rankedFaculties.Select(f => new
+        // Faz arası FEEDBACK: amfi/lab fazında çok atama almış fakültenin
+        // DemandScore'unu kısmen düşür ki normal sınıf payı şişmesin.
+        // feedbackWeight = 1.0 → tam düş; 0.0 → hiç düşme; 0.5 → yarısı (dengeli)
+        var feedbackWeight = (double)opts.PhaseFeedbackWeight;
+        double EffectiveDemand(FacultyDemandAnalysis f)
         {
-            Faculty = f,
-            Share = (double)f.DemandScore / totalDemandScore,
-            TargetCount = (int)Math.Round((double)f.DemandScore / totalDemandScore * normalClassrooms.Count),
-            Assigned = 0
+            if (!opts.PhaseFeedbackEnabled) return f.DemandScore;
+            // Her atanan derslik DemandScore'dan düşülür (avg=1 atama puanı eşdeğeri)
+            // — fakat tam düşmek aşırı agresif olur, weight ile yumuşat
+            var penalty = totalAssignedPerFaculty.GetValueOrDefault(f.FacultyId) * feedbackWeight;
+            // Talep puanının yarısının altına inmesin (lower bound)
+            return Math.Max(f.DemandScore * 0.5, f.DemandScore - penalty * (f.DemandScore / Math.Max(1, f.CurriculumCourseCount + f.StudentCount / 100.0)));
+        }
+
+        // Yeni efektif talep payları
+        var effectiveDemands = rankedFaculties.ToDictionary(f => f.FacultyId, EffectiveDemand);
+        var totalEffective = effectiveDemands.Values.Sum();
+        if (totalEffective <= 0) totalEffective = 1;
+
+        // Her fakültenin yeniden hesaplanmış payı + MIN FAIRNESS garantisi
+        var facultyShares = rankedFaculties.Select(f =>
+        {
+            var rawShare = effectiveDemands[f.FacultyId] / totalEffective;
+            var rawTarget = (int)Math.Round(rawShare * normalClassrooms.Count);
+            // Minimum fairness: her aktif fakülte en az MinFairnessGuarantee derslik alır
+            // (yeterli derslik varsa)
+            var withGuarantee = Math.Max(rawTarget, opts.MinFairnessGuarantee);
+            return new { Faculty = f, Share = rawShare, TargetCount = withGuarantee };
         }).ToList();
 
-        // Yuvarlama farkını düzelt
+        // Toplam hedef > mevcut → en yoğun fakültelerden eksilt (fairness'ı koru)
         var totalTarget = facultyShares.Sum(s => s.TargetCount);
-        var diff = normalClassrooms.Count - totalTarget;
-        // Fark varsa en yoğun fakülteye ekle
-        var adjustedShares = facultyShares.Select((s, i) => new
+        if (totalTarget > normalClassrooms.Count)
         {
-            s.Faculty,
-            s.Share,
-            TargetCount = i == 0 ? s.TargetCount + diff : s.TargetCount,
-            s.Assigned
-        }).ToList();
+            // Yoğun fakültelerden 1'er azalt — fairness garantisini bozmadan
+            var excess = totalTarget - normalClassrooms.Count;
+            var sortedDesc = facultyShares
+                .Where(s => s.TargetCount > opts.MinFairnessGuarantee)
+                .OrderByDescending(s => s.TargetCount)
+                .Select(s => s.Faculty.FacultyId)
+                .ToList();
+            var adjusted = facultyShares.ToDictionary(s => s.Faculty.FacultyId, s => s.TargetCount);
+            var idx = 0;
+            while (excess > 0 && sortedDesc.Count > 0)
+            {
+                var fid = sortedDesc[idx % sortedDesc.Count];
+                if (adjusted[fid] > opts.MinFairnessGuarantee)
+                {
+                    adjusted[fid]--;
+                    excess--;
+                }
+                idx++;
+                if (idx > sortedDesc.Count * 100) break; // safety
+            }
+            facultyShares = facultyShares.Select(s => new
+            {
+                s.Faculty,
+                s.Share,
+                TargetCount = adjusted[s.Faculty.FacultyId],
+            }).ToList();
+        }
+        else if (totalTarget < normalClassrooms.Count)
+        {
+            // Yuvarlama eksiği var → en yoğun fakülteye ekle
+            var diff = normalClassrooms.Count - totalTarget;
+            var topFid = facultyShares.OrderByDescending(s => s.Share).First().Faculty.FacultyId;
+            facultyShares = facultyShares.Select(s => new
+            {
+                s.Faculty,
+                s.Share,
+                TargetCount = s.Faculty.FacultyId == topFid ? s.TargetCount + diff : s.TargetCount,
+            }).ToList();
+        }
 
-        var assignedPerFaculty = adjustedShares.ToDictionary(s => s.Faculty.FacultyId, s => 0);
+        var assignedPerFaculty = facultyShares.ToDictionary(s => s.Faculty.FacultyId, _ => 0);
 
         foreach (var classroom in normalClassrooms)
         {
-            // En çok eksiği olan fakülteyi seç
-            var target = adjustedShares
+            // En çok eksiği olan fakülteyi seç — tie durumunda round-robin için
+            // toplam atama sayısı en düşük olan tercih edilir (eşit puanlı fakültelere
+            // dönüşümlü dağılım sağlar).
+            var target = facultyShares
                 .OrderByDescending(s => s.TargetCount - assignedPerFaculty[s.Faculty.FacultyId])
+                .ThenBy(s => totalAssignedPerFaculty.GetValueOrDefault(s.Faculty.FacultyId))
                 .ThenByDescending(s => s.Faculty.DemandScore)
                 .FirstOrDefault();
 
             if (target == null) break;
 
             assignedPerFaculty[target.Faculty.FacultyId]++;
+            totalAssignedPerFaculty[target.Faculty.FacultyId]++;
 
-            var currentAssigned = assignedPerFaculty[target.Faculty.FacultyId];
             var sharePercent = (int)Math.Round(target.Share * 100);
+            var feedbackNote = opts.PhaseFeedbackEnabled && totalAssignedPerFaculty[target.Faculty.FacultyId] > assignedPerFaculty[target.Faculty.FacultyId]
+                ? " (önceki fazlardaki atamalar dikkate alındı)"
+                : "";
 
             suggestions.Add(new ClassroomAssignmentItemDto
             {
@@ -523,7 +614,7 @@ public class ClassroomSuggestionService
                 FacultyName = target.Faculty.FacultyName,
                 Reason = $"Oransal dağıtım (%{sharePercent} pay): {target.Faculty.StudentCount} öğrenci, "
                     + $"~{target.Faculty.EstimatedSectionCount} section, "
-                    + $"haftalık {target.Faculty.TotalWeeklyTheoryHours + target.Faculty.TotalWeeklyLabHours} saat ders yükü",
+                    + $"haftalık {target.Faculty.TotalWeeklyTheoryHours + target.Faculty.TotalWeeklyLabHours} saat ders yükü{feedbackNote}",
                 Priority = "normal"
             });
             remaining.Remove(classroom);
@@ -610,11 +701,15 @@ public class ClassroomSuggestionService
         /// <summary>
         /// Talep puanı: sadece bağımsız (birbirinden türetilmemiş) metrikler.
         /// EstimatedSectionCount ve WeeklyHours zaten StudentCount'tan türüyor → dahil edilmez.
+        /// Katsayılar SystemConfig'ten geliyor (admin paneli üzerinden ayarlanabilir);
+        /// analiz oluşturulurken bir kez hesaplanıp burada saklanır.
         /// </summary>
-        public double DemandScore =>
-            StudentCount * 1.0
-            + CurriculumCourseCount * 3.0
-            + LabCourseCount * 2.0;
+        public double DemandScore { get; set; }
+
+        public void ComputeDemandScore(SuggestionOptions opts) =>
+            DemandScore = StudentCount * (double)opts.DemandWeightStudent
+                + CurriculumCourseCount * (double)opts.DemandWeightCurriculum
+                + LabCourseCount        * (double)opts.DemandWeightLab;
 
         public static FacultyDemandAnalysis Empty(int facultyId, string facultyName) => new()
         {
@@ -622,6 +717,88 @@ public class ClassroomSuggestionService
             FacultyName = facultyName
         };
     }
+
+    /// <summary>
+    /// Servisin SystemConfig'ten okuduğu ayarların kapsayıcısı.
+    /// Tek bir SuggestAssignmentsAsync çağrısının başında bir kez yüklenir,
+    /// böylece her hesapta tekrar tekrar DB sorgusu yapılmaz.
+    /// </summary>
+    private sealed class SuggestionOptions
+    {
+        public int AmphiThreshold { get; init; }
+        public decimal ElectiveDemandRatio { get; init; }
+        public decimal HistoricalWeight { get; init; }
+        public decimal HistoricalAnomalyCap { get; init; }
+        public decimal DemandWeightStudent { get; init; }
+        public decimal DemandWeightCurriculum { get; init; }
+        public decimal DemandWeightLab { get; init; }
+
+        // ── İyileştirilmiş Greedy parametreleri ───────────────────────────
+        /// <summary>Her aktif fakülteye garanti minimum derslik (0 = garanti yok).</summary>
+        public int MinFairnessGuarantee { get; init; }
+        /// <summary>Amfi eşiğinin ±%X bandı — bu banttaki dersler "soft" işaretli.</summary>
+        public decimal SoftThresholdBandPercent { get; init; }
+        /// <summary>Açıksa amfi/lab dağıtımı sonrası DemandScore güncellenir.</summary>
+        public bool PhaseFeedbackEnabled { get; init; }
+        /// <summary>Faz feedback gücü (0-1). 1=tam düş, 0.5=yarısını düş.</summary>
+        public decimal PhaseFeedbackWeight { get; init; }
+    }
+
+    /// <summary>
+    /// Round-robin dağıtım yardımcısı: bir fakülteye ihtiyacı kadar derslik
+    /// peşpeşe vermek yerine, sırayla 1'er derslik dolaşır. Böylece kıt
+    /// kaynaklarda (örn. 3 amfi, 5 fakülte istiyor) hiçbir fakülte sıfırlanmaz.
+    /// </summary>
+    private static void DistributeRoundRobin(
+        List<Classroom> classroomsToAssign,
+        List<FacultyDemandAnalysis> faculties,
+        Func<FacultyDemandAnalysis, int> getNeeded,
+        Func<Classroom, FacultyDemandAnalysis, ClassroomAssignmentItemDto> buildSuggestion,
+        Action<(Classroom classroom, int facultyId, ClassroomAssignmentItemDto suggestion)> sink)
+    {
+        if (classroomsToAssign.Count == 0 || faculties.Count == 0) return;
+
+        var assigned = faculties.ToDictionary(f => f.FacultyId, _ => 0);
+        var active = faculties.ToList();
+        // Snapshot — döngü sırasında listeyi modifiye etmemek için
+        var pool = classroomsToAssign.ToList();
+
+        while (pool.Count > 0 && active.Count > 0)
+        {
+            // Bu round'da ihtiyacı olan fakültelerin sırasıyla dolaş
+            var roundActive = active.Where(f => assigned[f.FacultyId] < getNeeded(f)).ToList();
+            if (roundActive.Count == 0) break;
+
+            foreach (var faculty in roundActive)
+            {
+                if (pool.Count == 0) break;
+                if (assigned[faculty.FacultyId] >= getNeeded(faculty)) continue;
+
+                var cr = pool[0];
+                pool.RemoveAt(0);
+                assigned[faculty.FacultyId]++;
+                sink((cr, faculty.FacultyId, buildSuggestion(cr, faculty)));
+            }
+
+            // İhtiyacı doymuş fakülteleri çıkar
+            active = active.Where(f => assigned[f.FacultyId] < getNeeded(f)).ToList();
+        }
+    }
+
+    private async Task<SuggestionOptions> LoadOptionsAsync(CancellationToken ct) => new()
+    {
+        AmphiThreshold           = await _config.GetIntAsync("Classroom.AmphiThreshold", 100, ct),
+        ElectiveDemandRatio      = await _config.GetDecimalAsync("Suggestion.ElectiveDemandRatio", 0.35m, ct),
+        HistoricalWeight         = await _config.GetDecimalAsync("Suggestion.HistoricalWeight", 0.6m, ct),
+        HistoricalAnomalyCap     = await _config.GetDecimalAsync("Suggestion.HistoricalAnomalyCap", 2.0m, ct),
+        DemandWeightStudent      = await _config.GetDecimalAsync("Suggestion.DemandWeight.Student", 1.0m, ct),
+        DemandWeightCurriculum   = await _config.GetDecimalAsync("Suggestion.DemandWeight.Curriculum", 3.0m, ct),
+        DemandWeightLab          = await _config.GetDecimalAsync("Suggestion.DemandWeight.Lab", 2.0m, ct),
+        MinFairnessGuarantee     = await _config.GetIntAsync("Suggestion.MinFairnessGuarantee", 1, ct),
+        SoftThresholdBandPercent = await _config.GetDecimalAsync("Suggestion.SoftThresholdBandPercent", 10m, ct),
+        PhaseFeedbackEnabled     = await _config.GetBoolAsync("Suggestion.PhaseFeedbackEnabled", true, ct),
+        PhaseFeedbackWeight      = await _config.GetDecimalAsync("Suggestion.PhaseFeedbackWeight", 0.5m, ct),
+    };
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────

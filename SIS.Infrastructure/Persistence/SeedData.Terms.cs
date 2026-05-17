@@ -86,11 +86,11 @@ public static partial class SeedData
                 ("C 036", 80, ClassroomType.Lecture),
                 ("C 054", 30, ClassroomType.Lecture),
                 ("C 005", 50, ClassroomType.Lecture),
-                ("L139 Ceng Lab-1", 30, ClassroomType.Lab),
-                ("L141 Ceng Lab-2", 30, ClassroomType.Lab),
-                ("Ceng Lab-3 (Kat 0)", 30, ClassroomType.Lab),
-                ("L140 EEE LAB", 30, ClassroomType.Lab),
-                ("L143 PHY LAB", 30, ClassroomType.Lab),
+                ("L139 Ceng Lab-1", 40, ClassroomType.Lab),
+                ("L141 Ceng Lab-2", 40, ClassroomType.Lab),
+                ("Ceng Lab-3 (Kat 0)", 40, ClassroomType.Lab),
+                ("L140 EEE LAB", 40, ClassroomType.Lab),
+                ("L143 PHY LAB", 40, ClassroomType.Lab),
             };
 
             foreach (var (name, capacity, type) in classrooms)

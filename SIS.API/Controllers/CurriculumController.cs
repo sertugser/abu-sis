@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -175,7 +176,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 c.Status,
                 c.CurriculumCourses.Count,
                 c.CurriculumCourses.Sum(cc => cc.Course.Ects),
-                c.CurriculumCourses.Sum(cc => cc.Course.NationalCredit ?? 0),
+                c.CurriculumCourses.Sum(cc => cc.Course.NationalCredit),
                 c.CurriculumCourses.Count(cc => cc.IsCompulsory),
                 c.CurriculumCourses.Count(cc => !cc.IsCompulsory),
                 context.StudentPrograms.Count(sp => sp.CurriculumId == c.Id && sp.IsActive),
@@ -235,7 +236,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.OpeningReasonId,
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                    cc.Course.NationalCredit ?? 0,
+                    cc.Course.NationalCredit,
                     // Phase 2 — flags
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
@@ -400,7 +401,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 cc.OpeningReasonId,
                 cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                 cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                cc.Course.NationalCredit ?? 0,
+                cc.Course.NationalCredit,
                 // Phase 2
                 cc.IsMainGroupCourse, cc.IsFormationCourse,
                 cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
@@ -502,7 +503,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             saved.OpeningReasonId,
             saved.OpeningReason != null ? saved.OpeningReason.Code : null,
             saved.OpeningReason != null ? saved.OpeningReason.Name : null,
-            saved.Course.NationalCredit ?? 0,
+            saved.Course.NationalCredit,
             // Phase 2
             saved.IsMainGroupCourse, saved.IsFormationCourse,
             saved.ExcludedFromCreditTotal, saved.ExcludedFromTranscriptTotal,
@@ -725,7 +726,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.OpeningReasonId,
                     cc.OpeningReason != null ? cc.OpeningReason.Code : null,
                     cc.OpeningReason != null ? cc.OpeningReason.Name : null,
-                    cc.Course.NationalCredit ?? 0,
+                    cc.Course.NationalCredit,
                     // Phase 2 — flags
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
@@ -1113,10 +1114,27 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         bool IsFulfilled);
 
     [HttpGet("student/{studentId:int}/pool-status")]
+    [RequireAnyPermission("menu.ders-kayit.view", "menu.mufredat-islemleri.view")]
     // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
     public async Task<IActionResult> GetPoolStatus(int studentId, CancellationToken ct)
     {
         // Öğrencinin aktif ana müfredatı
+        if (User.IsInRole("Student"))
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            var ownStudentId = await context.Students
+                .AsNoTracking()
+                .Where(s => s.UserId == userId)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (ownStudentId == 0 || ownStudentId != studentId)
+                return Forbid();
+        }
+
         var studentProgram = await context.StudentPrograms
             .AsNoTracking()
             .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)

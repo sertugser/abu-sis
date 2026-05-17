@@ -8,15 +8,17 @@ namespace SIS.API.Middleware;
 public class ErrorLoggingMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly ILogger<ErrorLoggingMiddleware> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
     };
 
-    public ErrorLoggingMiddleware(RequestDelegate next)
+    public ErrorLoggingMiddleware(RequestDelegate next, ILogger<ErrorLoggingMiddleware> logger)
     {
         _next = next;
+        _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext httpContext)
@@ -37,6 +39,12 @@ public class ErrorLoggingMiddleware
         }
         catch (Exception ex)
         {
+            _logger.LogError(
+                ex,
+                "Unhandled exception for {Method} {Path}. TraceId={TraceId}",
+                httpContext.Request.Method,
+                httpContext.Request.Path.Value,
+                httpContext.TraceIdentifier);
             await LogExceptionAsync(httpContext, ex);
             throw;
         }
@@ -63,8 +71,7 @@ public class ErrorLoggingMiddleware
                 NewValue = JsonSerializer.Serialize(new
                 {
                     exceptionType = ex.GetType().Name,
-                    message = ex.Message,
-                    stackTrace = ex.StackTrace?[..Math.Min(ex.StackTrace.Length, 2000)],
+                    traceId = httpContext.TraceIdentifier,
                     endpoint,
                     method,
                 }, JsonOptions),

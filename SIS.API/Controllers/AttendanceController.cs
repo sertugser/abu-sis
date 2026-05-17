@@ -3,8 +3,10 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.API.Security;
 using SIS.Application.Attendance.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -206,6 +208,8 @@ public class AttendanceController : ControllerBase
 
     [HttpGet("qr/{token}")]
     [AllowAnonymous]
+    [EnableRateLimiting("PublicAttendanceQr")]
+    [PublicEndpointJustification("QR attendance links are opened by students without an existing session; token expiry and rate limiting constrain use.")]
     public async Task<IActionResult> GetQrSession(string token)
     {
         var session = await _context.AttendanceSessions
@@ -232,8 +236,10 @@ public class AttendanceController : ControllerBase
     }
 
     [HttpPost("qr/{token}/submit")]
-    [AllowAnonymous]
-    public async Task<IActionResult> SubmitQr(string token, [FromBody] SubmitQrAttendanceRequest request)
+    [Authorize]
+    [RequirePermission("menu.devamsizlik-durumu.view")]
+    [EnableRateLimiting("PublicAttendanceQr")]
+    public async Task<IActionResult> SubmitQr(string token, [FromBody] SubmitQrAttendanceRequest? request = null)
     {
         var session = await _context.AttendanceSessions
             .Include(s => s.CourseSection)
@@ -246,18 +252,21 @@ public class AttendanceController : ControllerBase
         if (!IsQrActive(session))
             return BadRequest(new SubmitQrAttendanceResponse { Message = "Yoklama formu kapali veya suresi dolmus." });
 
-        var studentNumber = request.StudentNumber.Trim();
-        if (string.IsNullOrWhiteSpace(studentNumber)
-            || string.IsNullOrWhiteSpace(request.FirstName)
-            || string.IsNullOrWhiteSpace(request.LastName))
-        {
-            return BadRequest(new SubmitQrAttendanceResponse { Message = "Ad, soyad ve okul numarasi zorunludur." });
-        }
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var student = await _context.Students
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+
+        if (student == null)
+            return Forbid();
 
         var registration = await _context.CourseRegistrations
             .Include(r => r.Student)
             .FirstOrDefaultAsync(r => r.CourseSectionId == session.CourseSectionId
-                && r.Student.StudentNumber == studentNumber
+                && r.StudentId == student.Id
                 && IncludedRegistrationStatuses.Contains(r.Status));
 
         if (registration == null)
@@ -269,10 +278,6 @@ public class AttendanceController : ControllerBase
 
         var expectedFirstName = user?.FirstName ?? string.Empty;
         var expectedLastName = user?.LastName ?? string.Empty;
-        if (!NamesMatch(expectedFirstName, request.FirstName) || !NamesMatch(expectedLastName, request.LastName))
-        {
-            return BadRequest(new SubmitQrAttendanceResponse { Message = "Girilen ad soyad ogrenci kaydiyla eslesmedi." });
-        }
 
         var now = DateTime.UtcNow;
         var record = await _context.AttendanceRecords

@@ -1,7 +1,9 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Badge } from '@/components/ui/badge';
-import { ChevronDown, AlertTriangle, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { ChevronRight, AlertTriangle, RotateCcw, CheckCircle2 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import SectionRow from './SectionRow';
 import type { StudentCourseDto } from '../../types/course';
@@ -27,105 +29,116 @@ export default function CourseCard({
   const isAlttan = course.takeStatus === 'Alttan';
   const isPreviouslyTaken = course.takeStatus === 'OncedenAlindi';
 
+  const handleAddToPlanFromDialog = (sectionId: number) => {
+    onAddToPlan(sectionId);
+    // Plana eklenince modal kapansın — kullanıcı sonucu üst sayfada görsün
+    setIsOpen(false);
+  };
+
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className={cn(
-        "rounded-xl border bg-card overflow-hidden transition-all duration-200 hover:shadow-md",
-        isAlttan ? "border-destructive/40 bg-destructive/5" : "border-border",
-        !course.prerequisitesMet && !isAlttan && "border-warning/40 bg-warning/5"
-      )}>
-        <CollapsibleTrigger asChild>
-          <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors text-left cursor-pointer">
-            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-              <span className="font-mono text-sm font-semibold text-primary">{course.code}</span>
-              <span className="text-foreground font-medium">{course.name}</span>
-              <Badge variant="default" className="text-[11px] font-mono">{course.ects} AKTS</Badge>
+    <>
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className={cn(
+          'w-full flex items-center justify-between gap-4 rounded-md border bg-card p-4 text-left transition-all duration-200 hover:shadow-sm hover:bg-muted/30',
+          isAlttan ? 'border-destructive/40 bg-destructive/5 hover:bg-destructive/10' : 'border-border/70',
+          !course.prerequisitesMet && !isAlttan && 'border-warning/40 bg-warning/5 hover:bg-warning/10'
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+          <span className="font-mono text-sm font-semibold text-primary">{course.code}</span>
+          <span className="text-foreground font-medium">{course.name}</span>
+          <Badge variant="default" className="text-[11px] font-mono">{course.ects} AKTS</Badge>
 
-              {/* Müfredat tipi */}
-              {course.curriculumType === 'Zorunlu' && (
-                <Badge variant="accent" className="text-[11px]">Zorunlu</Badge>
-              )}
-              {course.curriculumType === 'Secmeli' && (
-                <Badge variant="secondary" className="text-[11px]">Secmeli</Badge>
-              )}
+          {course.curriculumType === 'Zorunlu' && (
+            <Badge variant="accent" className="text-[11px]">Zorunlu</Badge>
+          )}
+          {course.curriculumType === 'Secmeli' && (
+            <Badge variant="secondary" className="text-[11px]">Seçmeli</Badge>
+          )}
 
-              {/* Alttan — kirmizi, zorunlu tekrar */}
-              {isAlttan && (
-                <Badge variant="destructive" className="text-[11px] gap-1">
-                  <RotateCcw className="h-3 w-3" />
-                  Alttan ({course.previousGrade})
-                </Badge>
-              )}
+          {isAlttan && (
+            <Badge variant="destructive" className="text-[11px] gap-1">
+              <RotateCcw className="h-3 w-3" />
+              Alttan ({course.previousGrade})
+            </Badge>
+          )}
 
-              {/* Onceden alinmis — onceki notu goster */}
-              {isPreviouslyTaken && course.previousGrade && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-muted px-2 py-0.5 rounded-md font-medium">
-                  <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
-                  Onceki Not: <strong className="text-foreground">{course.previousGrade}</strong>
-                </span>
-              )}
+          {isPreviouslyTaken && course.previousGrade && (
+            <span className="inline-flex items-center gap-1 text-[11px] bg-muted px-2 py-0.5 rounded-md font-medium">
+              <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
+              Önceki Not: <strong className="text-foreground">{course.previousGrade}</strong>
+            </span>
+          )}
 
-              {/* Donem bilgisi */}
-              {course.suggestedSemester > 0 && (
-                <span className="text-[11px] text-muted-foreground">{course.suggestedSemester}. Donem</span>
-              )}
+          {course.suggestedSemester > 0 && (
+            <span className="text-[11px] text-muted-foreground">{course.suggestedSemester}. Dönem</span>
+          )}
 
-              {/* Onkosul uyarisi */}
-              {!course.prerequisitesMet && (
-                <span className="flex items-center gap-1 text-[11px] text-warning font-medium">
-                  <AlertTriangle className="h-3 w-3" />
-                  Onkosul eksik
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0 ml-4">
-              <span className="text-xs text-muted-foreground">{course.sections.length} sube</span>
-              <ChevronDown className={cn(
-                "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                isOpen && "rotate-180"
-              )} />
-            </div>
-          </button>
-        </CollapsibleTrigger>
+          {!course.prerequisitesMet && (
+            <span className="flex items-center gap-1 text-[11px] text-warning font-medium">
+              <AlertTriangle className="h-3 w-3" />
+              Önkoşul eksik
+            </span>
+          )}
+        </div>
 
-        <CollapsibleContent>
-          <div className="px-4 pb-4 space-y-2 border-t border-border pt-3">
-            {/* Alttan uyarisi */}
+        <div className="flex items-center gap-2 shrink-0 ml-4">
+          <span className="text-xs text-muted-foreground">{course.sections.length} şube</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </button>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-primary">{course.code}</span>
+              <span className="text-foreground">{course.name}</span>
+              <Badge variant="default" className="font-mono">{course.ects} AKTS</Badge>
+            </DialogTitle>
+            <DialogDescription>
+              {course.sections.length} şube · Şubeden birini seçip plana ekleyebilirsin.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
             {isAlttan && (
-              <div className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
-                Bu dersten <strong>{course.previousGrade}</strong> aldiniz. Tekrar almaniz zorunludur.
+              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                Bu dersten <strong>{course.previousGrade}</strong> aldınız. Tekrar almanız zorunludur.
               </div>
             )}
 
-            {/* Onceden alinmis bilgilendirme */}
             {isPreviouslyTaken && (
-              <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
-                Bu dersi daha once <strong>{course.previousGrade}</strong> notu ile gecmissiniz. Notunuzu yukseltmek isterseniz tekrar alabilirsiniz.
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                Bu dersi daha önce <strong>{course.previousGrade}</strong> notu ile geçmişsiniz. Notunuzu yükseltmek isterseniz tekrar alabilirsiniz.
               </div>
             )}
 
-            {/* Onkosul uyarisi */}
             {!course.prerequisitesMet && (
-              <div className="text-xs text-warning bg-warning/10 rounded-lg px-3 py-2">
-                Bu dersin onkosul(lar)i karsilanmamistir. Kayit sirasinda reddedilebilir.
+              <div className="rounded-md bg-warning/10 px-3 py-2 text-sm text-warning">
+                Bu dersin önkoşul(lar)ı karşılanmamıştır. Kayıt sırasında reddedilebilir.
               </div>
             )}
 
-            {course.sections.map(section => (
-              <SectionRow
-                key={section.sectionId}
-                section={section}
-                onAddToPlan={onAddToPlan}
-                isAdding={isAdding}
-                isInPlan={registeredSectionIds.includes(section.sectionId)}
-                isCourseRegistered={courseHasRegistration && !registeredSectionIds.includes(section.sectionId)}
-                prerequisitesMet={course.prerequisitesMet}
-                registrationActionsOpen={registrationActionsOpen}
-              />
-            ))}
+            <div className="space-y-2">
+              {course.sections.map(section => (
+                <SectionRow
+                  key={section.sectionId}
+                  section={section}
+                  onAddToPlan={handleAddToPlanFromDialog}
+                  isAdding={isAdding}
+                  isInPlan={registeredSectionIds.includes(section.sectionId)}
+                  isCourseRegistered={courseHasRegistration && !registeredSectionIds.includes(section.sectionId)}
+                  prerequisitesMet={course.prerequisitesMet}
+                  registrationActionsOpen={registrationActionsOpen}
+                />
+              ))}
+            </div>
           </div>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

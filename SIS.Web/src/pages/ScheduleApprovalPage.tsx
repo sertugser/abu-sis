@@ -527,7 +527,7 @@ export default function ScheduleApprovalPage() {
             {/* Body */}
             <div className="flex-1 min-h-0 overflow-hidden">
               {viewTab === 'calendar' ? (
-                <div className="h-full p-3">
+                <div className="h-full overflow-auto p-3">
                   {allSectionsQuery.isLoading || timeSlotsQuery.isLoading ? (
                     <Skeleton className="h-full rounded-xl" />
                   ) : (

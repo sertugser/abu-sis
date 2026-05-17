@@ -3,9 +3,12 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import RoleInvalidationBanner from './RoleInvalidationBanner';
+import PopupAnnouncementGate from '../announcements/PopupAnnouncementGate';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AppLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const { user } = useAuth();
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -27,6 +30,9 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Login sonrası bekleyen kritik pop-up duyurular (Madde 6) */}
+      <PopupAnnouncementGate enabled={!!user} />
     </div>
   );
 }

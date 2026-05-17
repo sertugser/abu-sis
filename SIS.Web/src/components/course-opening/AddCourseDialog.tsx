@@ -55,7 +55,7 @@ export function AddCourseDialog({
   const [search, setSearch] = useState('');
   const [selectedDeptIds, setSelectedDeptIds] = useState<number[]>([]);
 
-  const workloadQuery = useInstructorWorkload(instructorId ? Number(instructorId) : null, termId);
+  const workloadQuery = useInstructorWorkload(instructorId ? Number(instructorId) : null, termId, departmentId);
 
   const handleSelectCourse = (course: CurriculumCourseForOpeningDto) => {
     setSelectedCourse(course);
@@ -158,7 +158,21 @@ export function AddCourseDialog({
                         ) : course.canOpen ? (
                           <Badge variant="success" className="text-[10px]">Açılabilir</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px]">Açılamaz</Badge>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] cursor-help"
+                            title={
+                              course.blockReason === 'TermNotInPlanning'
+                                ? 'Dönem henüz planlama aşamasında değil — açılamaz.'
+                                : course.blockReason === 'CourseUnassigned'
+                                  ? 'Bu derse sahip bölüm atanmamış.'
+                                  : course.blockReason === 'NotOwner'
+                                    ? 'Bu ders başka bir bölüme ait — sahibi açabilir.'
+                                    : 'Açılamaz'
+                            }
+                          >
+                            Açılamaz
+                          </Badge>
                         )}
                       </TableCell>
                     </TableRow>

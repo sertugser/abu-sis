@@ -108,6 +108,7 @@ export interface DepartmentSectionStudent {
 
 export interface DepartmentSectionClassList {
   sectionId: number;
+  sectionNumber: number;
   courseId: number;
   courseCode: string;
   courseName: string;
@@ -115,10 +116,14 @@ export interface DepartmentSectionClassList {
   classroomName: string | null;
   scheduleSummary: string | null;
   capacity: number;
+  internalQuota: number | null;
+  externalQuota: number | null;
   enrolledCount: number;
   activeStudentCount: number;
   isActive: boolean;
   students: DepartmentSectionStudent[];
+  crossListGroupId: number | null;
+  crossListPeerCodes: string[];
 }
 
 export interface DepartmentClassList {
@@ -183,3 +188,70 @@ export interface BulkAcademicLevelDto {
 }
 
 export type PlanningConflict = SchedulingConflict;
+
+export interface DepartmentStudentListItem {
+  studentId: number;
+  studentNumber: string;
+  studentName: string;
+  email: string;
+  status: string;
+  cgpa: number;
+  completedSemesters: number;
+  programId: number;
+  programName: string;
+  programCode: string;
+  curriculumId: number;
+  curriculumVersion: string;
+  curriculumName: string;
+  advisorId: number | null;
+  advisorName: string | null;
+}
+
+export interface DepartmentStudentList {
+  departmentId: number;
+  departmentName: string;
+  totalStudents: number;
+  students: DepartmentStudentListItem[];
+  notes: string[];
+}
+
+export interface DepartmentCurriculumOption {
+  curriculumId: number;
+  programId: number;
+  programName: string;
+  programCode: string;
+  curriculumVersion: string;
+  curriculumName: string;
+  isActive: boolean;
+  status: number | string;
+  activeStudentCount: number;
+}
+
+export interface BulkAcademicOperationResultItem {
+  studentId: number;
+  studentNumber: string;
+  studentName: string;
+  success: boolean;
+  message: string;
+}
+
+export interface BulkAcademicOperationResult {
+  requestedCount: number;
+  successCount: number;
+  failedCount: number;
+  results: BulkAcademicOperationResultItem[];
+  errors: string[];
+}
+
+export interface BulkAdvisorAssignmentRequest {
+  departmentId: number;
+  advisorId: number;
+  replaceExisting: boolean;
+  studentIds: number[];
+}
+
+export interface BulkCurriculumAssignmentRequest {
+  departmentId: number;
+  curriculumId: number;
+  studentIds: number[];
+}

@@ -44,10 +44,24 @@ export interface CourseHistoryTermDto {
 export interface CourseHistoryItemDto {
   registrationId: number;
   courseSectionId: number;
+  courseId: number;
   sectionNumber: number;
   courseCode: string;
   courseName: string;
   ects: number;
+  /** Ulusal/yerel kredi (NationalCredit). Snapshot varsa o değer. */
+  nationalCredit: number;
+  theoryHours: number;
+  labHours: number;
+  applicationHours: number | null;
+  /** Dersin müfredattaki sınıfı (1-4). Aktif curriculum'da yoksa null. */
+  classYear: number | null;
+  /** "Zorunlu" / "Seçmeli" / "Alttan FF" / "Devamlı Alttan NA" gibi. */
+  acquisitionType: string;
+  /** Dersi sahiplenen birim adı (örn. "Ortak Dersler", "Bilgisayar Müh."). */
+  ownerDepartmentName: string | null;
+  /** "Türkçe" / "İngilizce" / "Fransızca" / "Almanca" / "Arapça" */
+  languageDisplay: string;
   instructorName: string;
   grade: string | null;
   status: string;

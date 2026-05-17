@@ -56,6 +56,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GeneratedCalendarDraft> GeneratedCalendarDrafts => Set<GeneratedCalendarDraft>();
     public DbSet<TimeSlot> TimeSlots => Set<TimeSlot>();
     public DbSet<SectionSchedule> SectionSchedules => Set<SectionSchedule>();
+    public DbSet<ScheduleImportSession> ScheduleImportSessions => Set<ScheduleImportSession>();
     public DbSet<ClassroomTermAssignment> ClassroomTermAssignments => Set<ClassroomTermAssignment>();
     public DbSet<CourseAccessPolicy> CourseAccessPolicies => Set<CourseAccessPolicy>();
     public DbSet<RegistrationPlan> RegistrationPlans => Set<RegistrationPlan>();
@@ -79,9 +80,13 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<ScheduleRun> ScheduleRuns => Set<ScheduleRun>();
     public DbSet<EvaluationPeriod> EvaluationPeriods => Set<EvaluationPeriod>();
     public DbSet<EvaluationQuestion> EvaluationQuestions => Set<EvaluationQuestion>();
+    public DbSet<EvaluationPeriodQuestion> EvaluationPeriodQuestions => Set<EvaluationPeriodQuestion>();
     public DbSet<EvaluationResponse> EvaluationResponses => Set<EvaluationResponse>();
     public DbSet<EvaluationAnswer> EvaluationAnswers => Set<EvaluationAnswer>();
     public DbSet<InternalAnnouncement> InternalAnnouncements => Set<InternalAnnouncement>();
+    public DbSet<AnnouncementRead> AnnouncementReads => Set<AnnouncementRead>();
+    public DbSet<AnnouncementCategory> AnnouncementCategories => Set<AnnouncementCategory>();
+    public DbSet<AnnouncementAttachment> AnnouncementAttachments => Set<AnnouncementAttachment>();
     public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
     public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
     public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
@@ -515,20 +520,44 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         });
 
         // ── GradeComponent ─────────────────────────────────────
-        builder.Entity<GradeComponent>(e =>
-        {
-            e.Property(gc => gc.Weight).HasPrecision(5, 2);
+builder.Entity<GradeComponent>(e =>
+{
+    e.Property(gc => gc.Name)
+     .HasMaxLength(100)
+     .IsRequired();
 
-            e.HasOne(gc => gc.Course)
-             .WithMany()
-             .HasForeignKey(gc => gc.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
+    e.Property(gc => gc.ExamType)
+     .HasMaxLength(40)
+     .HasDefaultValue("Other")
+     .IsRequired();
 
-            e.HasOne(gc => gc.AcademicTerm)
-             .WithMany()
-             .HasForeignKey(gc => gc.AcademicTermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
+    e.Property(gc => gc.Weight)
+     .HasPrecision(5, 2);
+
+    e.Property(gc => gc.MinimumScore)
+     .HasPrecision(5, 2);
+
+    e.Property(gc => gc.IsRequired)
+     .HasDefaultValue(true);
+
+    e.Property(gc => gc.RequiresAttendanceEligibility)
+     .HasDefaultValue(false);
+
+    e.HasOne(gc => gc.Course)
+     .WithMany()
+     .HasForeignKey(gc => gc.CourseId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.AcademicTerm)
+     .WithMany()
+     .HasForeignKey(gc => gc.AcademicTermId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.PrerequisiteGradeComponent)
+     .WithMany(gc => gc.DependentComponents)
+     .HasForeignKey(gc => gc.PrerequisiteGradeComponentId)
+     .OnDelete(DeleteBehavior.Restrict);
+});
 
         // ── StudentGrade ──────────────────────────────────────
         builder.Entity<StudentGrade>(e =>
@@ -550,21 +579,26 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         });
 
         // ── GradingCriteria ─────────────────────────────────────
-        builder.Entity<GradingCriteria>(e =>
-        {
-            // Bir ders bir dönemde tek aralık tanımına sahip olur
-            e.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId }).IsUnique();
+builder.Entity<GradingCriteria>(e =>
+{
+    // Bir ders bir dönemde tek aralık tanımına sahip olur
+    e.HasIndex(gc => new { gc.CourseId, gc.AcademicTermId }).IsUnique();
 
-            e.HasOne(gc => gc.Course)
-             .WithMany()
-             .HasForeignKey(gc => gc.CourseId)
-             .OnDelete(DeleteBehavior.Restrict);
+    e.Property(gc => gc.CalculationMethod)
+     .HasMaxLength(30)
+     .HasDefaultValue("Absolute")
+     .IsRequired();
 
-            e.HasOne(gc => gc.AcademicTerm)
-             .WithMany()
-             .HasForeignKey(gc => gc.AcademicTermId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
+    e.HasOne(gc => gc.Course)
+     .WithMany()
+     .HasForeignKey(gc => gc.CourseId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    e.HasOne(gc => gc.AcademicTerm)
+     .WithMany()
+     .HasForeignKey(gc => gc.AcademicTermId)
+     .OnDelete(DeleteBehavior.Restrict);
+});
 
         // ── CourseSectionApproval ──────────────────────────────
         builder.Entity<CourseSectionApproval>(e =>
@@ -701,6 +735,25 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         });
 
         // ── ClassroomTermAssignment ──────────────────────────────
+        // Schedule import sessions keep server-validated import rows out of client-controlled apply requests.
+        builder.Entity<ScheduleImportSession>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.RowsJson).HasColumnType("jsonb").IsRequired();
+            e.HasIndex(s => new { s.CreatedByUserId, s.FacultyId, s.TermId, s.ExpiresAt });
+            e.HasIndex(s => s.ConsumedAt);
+
+            e.HasOne(s => s.Faculty)
+             .WithMany()
+             .HasForeignKey(s => s.FacultyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(s => s.Term)
+             .WithMany()
+             .HasForeignKey(s => s.TermId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<ClassroomTermAssignment>(e =>
         {
             e.HasIndex(cta => new { cta.TermId, cta.ClassroomId }).IsUnique();
@@ -1043,6 +1096,22 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(q => new { q.Category, q.SortOrder });
         });
 
+        // ── EvaluationPeriodQuestion (snapshot join) ─────────────
+        builder.Entity<EvaluationPeriodQuestion>(e =>
+        {
+            e.HasKey(pq => new { pq.EvaluationPeriodId, pq.EvaluationQuestionId });
+
+            e.HasOne(pq => pq.Period)
+             .WithMany()
+             .HasForeignKey(pq => pq.EvaluationPeriodId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(pq => pq.Question)
+             .WithMany()
+             .HasForeignKey(pq => pq.EvaluationQuestionId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
         // ── EvaluationResponse ───────────────────────────────────
         builder.Entity<EvaluationResponse>(e =>
         {
@@ -1085,18 +1154,79 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         // ── InternalAnnouncement ─────────────────────────────────
         builder.Entity<InternalAnnouncement>(e =>
         {
-            e.Property(a => a.Title).HasMaxLength(200);
-            e.Property(a => a.Content).HasMaxLength(5000);
+            // Title / Content max uzunlukları uygulama katmanında (WebModuleSettings) sınırlanır.
+            // DB tarafında geniş tutuluyor ki admin limiti artırırsa şema müdahalesi gerekmesin.
+            e.Property(a => a.Title).HasMaxLength(500);
+            e.Property(a => a.Content).HasColumnType("text");
+            e.Property(a => a.ContentFormat).HasMaxLength(10).HasDefaultValue("plain");
             e.Property(a => a.CreatedBy).HasMaxLength(100);
             e.Property(a => a.CreatedByName).HasMaxLength(200);
 
             e.HasIndex(a => new { a.IsActive, a.StartsAt, a.ExpiresAt });
             e.HasIndex(a => a.TargetAudience);
+            e.HasIndex(a => a.TargetStudentYear);
 
             e.HasOne(a => a.TargetDepartment)
              .WithMany()
              .HasForeignKey(a => a.TargetDepartmentId)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.TargetFaculty)
+             .WithMany()
+             .HasForeignKey(a => a.TargetFacultyId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.TargetSection)
+             .WithMany()
+             .HasForeignKey(a => a.TargetSectionId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(a => a.Category)
+             .WithMany()
+             .HasForeignKey(a => a.CategoryId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasIndex(a => a.CategoryId);
+        });
+
+        // ── AnnouncementCategory ─────────────────────────────────
+        builder.Entity<AnnouncementCategory>(e =>
+        {
+            e.Property(c => c.Name).HasMaxLength(100).IsRequired();
+            e.Property(c => c.ColorHex).HasMaxLength(7).IsRequired();
+            e.Property(c => c.IconName).HasMaxLength(50);
+            e.HasIndex(c => c.Name).IsUnique();
+            e.HasIndex(c => c.SortOrder);
+        });
+
+        // ── AnnouncementAttachment ───────────────────────────────
+        builder.Entity<AnnouncementAttachment>(e =>
+        {
+            e.Property(a => a.FileName).HasMaxLength(260).IsRequired();
+            e.Property(a => a.StorageFileName).HasMaxLength(300).IsRequired();
+            e.Property(a => a.MimeType).HasMaxLength(150).IsRequired();
+            e.Property(a => a.UploadedBy).HasMaxLength(100).IsRequired();
+
+            e.HasOne(a => a.Announcement)
+             .WithMany(p => p.Attachments)
+             .HasForeignKey(a => a.AnnouncementId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(a => a.AnnouncementId);
+        });
+
+        // ── AnnouncementRead (composite PK: AnnouncementId + UserId) ──────
+        builder.Entity<AnnouncementRead>(e =>
+        {
+            e.HasKey(r => new { r.AnnouncementId, r.UserId });
+
+            e.HasOne(r => r.Announcement)
+             .WithMany()
+             .HasForeignKey(r => r.AnnouncementId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Kullanıcının okunmamış duyurularını sorgularken UserId üzerinden index gerekli
+            e.HasIndex(r => r.UserId);
         });
 
         // ── OsymRegistrationCalendar ───────────────────────────

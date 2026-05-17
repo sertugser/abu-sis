@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Archive } from 'lucide-react';
 import { CurriculumPanel } from '../components/course-opening/CurriculumPanel';
 import { CurriculumPanelFilters } from '../components/course-opening/CurriculumPanelFilters';
 import { CourseDetailModal } from '../components/course-opening/CourseDetailModal';
@@ -10,6 +10,7 @@ import { OpenedCoursesPanelFilters } from '../components/course-opening/OpenedCo
 import { FreeCourseOpenDialog } from '../components/course-opening/FreeCourseOpenDialog';
 import { ExternalCoursesDrawer } from '../components/course-opening/ExternalCoursesDrawer';
 import { PoolCandidatesDialog } from '../components/course-opening/PoolCandidatesDialog';
+import { BulkOpenResultDialog } from '../components/course-opening/BulkOpenResultDialog';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminTerms } from '../hooks/useAdminTerms';
@@ -22,6 +23,7 @@ import {
   useBulkOpenCourses,
   useCloseSection,
   useCloseAllSections,
+  useDeleteAllSectionsHard,
   useReactivateSection,
   useCurriculumCoursesForOpening,
   usePoolSlotsForOpening,
@@ -73,6 +75,8 @@ export default function CourseOpeningPage() {
   const [freeCourseDialogOpen, setFreeCourseDialogOpen] = useState(false);
   const [externalDrawerOpen, setExternalDrawerOpen] = useState(false);
   const [activePoolSlot, setActivePoolSlot] = useState<PoolSlotForOpeningDto | null>(null);
+  // Bulk açma sonucu modal'ı — kullanıcı X'e basınca veya overlay'a tıklayınca kapanır.
+  const [bulkResultDialogOpen, setBulkResultDialogOpen] = useState(false);
 
   // İlk açılışta erişilebilir ilk bölümü ve aktif dönemi varsayılan seç
   useEffect(() => {
@@ -108,7 +112,7 @@ export default function CourseOpeningPage() {
   const poolSlotsQuery = usePoolSlotsForOpening(curriculumId, targetTermId);
   const { data: forecastData } = useDepartmentForecast(deptId);
   const instructorsQuery = useDepartmentInstructors(deptId);
-  const workloadQuery = useInstructorWorkload(selectedInstructorId, targetTermId);
+  const workloadQuery = useInstructorWorkload(selectedInstructorId, targetTermId, deptId);
   const externalCoursesQuery = useExternalCourses(deptId, targetTermId);
 
   const openMutation = useOpenCourse(deptId ?? 0, targetTermId ?? 0);
@@ -116,6 +120,7 @@ export default function CourseOpeningPage() {
   const updateMutation = useUpdateOpenedSection(deptId ?? 0, targetTermId ?? 0);
   const closeMutation = useCloseSection(deptId ?? 0, targetTermId ?? 0);
   const closeAllMutation = useCloseAllSections(deptId ?? 0, targetTermId ?? 0);
+  const deleteAllHardMutation = useDeleteAllSectionsHard(deptId ?? 0, targetTermId ?? 0);
   const reactivateMutation = useReactivateSection(deptId ?? 0, targetTermId ?? 0);
 
   const forecastMap = useMemo(() => {
@@ -195,7 +200,16 @@ export default function CourseOpeningPage() {
           };
         }),
       },
-      { onSuccess: () => setSelectedIds(new Set()) },
+      {
+        onSuccess: () => {
+          setSelectedIds(new Set());
+          setBulkResultDialogOpen(true);
+        },
+        onError: () => {
+          // Hata path'inde de modal aç — exception mesajı içinde gösterilir.
+          setBulkResultDialogOpen(true);
+        },
+      },
     );
   }, [deptId, targetTermId, selectedIds, curriculumQuery.data, bulkMutation]);
 
@@ -214,6 +228,10 @@ export default function CourseOpeningPage() {
   const handleCloseAllSections = useCallback(
     (courseId: number) => closeAllMutation.mutateAsync(courseId),
     [closeAllMutation],
+  );
+  const handleDeleteAllSectionsHard = useCallback(
+    (courseId: number) => deleteAllHardMutation.mutateAsync(courseId),
+    [deleteAllHardMutation],
   );
   const handleReactivateSection = useCallback(
     (sectionId: number) => reactivateMutation.mutateAsync(sectionId),
@@ -280,6 +298,43 @@ export default function CourseOpeningPage() {
         </Alert>
       )}
 
+      {!targetTermIsCancelled && isTargetTermHistorical && (
+        <Alert className="mb-3 shrink-0 border-amber-200 bg-amber-50 text-amber-900">
+          <Archive className="h-4 w-4 text-amber-700" />
+          <AlertTitle>Geçmiş dönem — salt görüntü</AlertTitle>
+          <AlertDescription>
+            {targetTerm?.name} dönemi aktif değil. Şubeler görüntülenebilir, ancak yeni şube açma veya düzenleme yapılamaz.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <BulkOpenResultDialog
+        open={bulkResultDialogOpen}
+        onOpenChange={(o) => {
+          setBulkResultDialogOpen(o);
+          if (!o) bulkMutation.reset();
+        }}
+        result={bulkMutation.data}
+        exceptionMessage={
+          bulkMutation.error
+            ? (() => {
+                const e = bulkMutation.error as {
+                  response?: { data?: { error?: string; detail?: string; title?: string } };
+                  message?: string;
+                };
+                return (
+                  e?.response?.data?.error ??
+                  e?.response?.data?.detail ??
+                  e?.response?.data?.title ??
+                  e?.message ??
+                  'Bilinmeyen hata'
+                );
+              })()
+            : null
+        }
+      />
+
+
       <div
         className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] rounded-xl border border-gray-200 shadow-sm bg-white"
         style={{ overflow: 'hidden' }}
@@ -339,6 +394,7 @@ export default function CourseOpeningPage() {
           onUpdateSection={handleUpdateSection}
           onCloseSection={handleCloseSection}
           onCloseAllSections={handleCloseAllSections}
+          onDeleteAllSectionsHard={handleDeleteAllSectionsHard}
           onReactivateSection={handleReactivateSection}
           onAddSection={handleAddSection}
           updatePending={updateMutation.isPending}

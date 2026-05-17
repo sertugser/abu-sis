@@ -10,7 +10,10 @@ public interface ICourseOpeningQueryService
 {
     Task<OpenedCourseListDto> GetOpenedCoursesAsync(int departmentId, int termId, CancellationToken cancellationToken = default);
     Task<List<CurriculumCourseForOpeningDto>> GetCurriculumCoursesForOpeningAsync(int departmentId, int termId, bool showAll = false, int? curriculumId = null, bool includeUnmapped = false, CancellationToken cancellationToken = default);
-    Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(int departmentId, int? termId = null, CancellationToken cancellationToken = default);
+    Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(
+        IReadOnlyCollection<int> departmentIds,
+        int? termId = null,
+        CancellationToken cancellationToken = default);
     Task<List<ExternalCourseDto>> GetExternalCoursesAsync(int departmentId, int termId, CancellationToken cancellationToken = default);
     Task<List<PoolSlotForOpeningDto>> GetPoolSlotsForOpeningAsync(int curriculumId, int termId, CancellationToken cancellationToken = default);
     Task<List<PoolCandidateDto>> GetPoolCandidatesAsync(int poolId, int termId, CancellationToken cancellationToken = default);

@@ -1,58 +1,13 @@
-import type { ScheduleSlot } from '../types/scheduling';
-
 const GRID_START_HOUR = 9;
 const GRID_END_HOUR = 18;
 const SLOT_HEIGHT_PER_MINUTE = 2; // px per minute
 
 export { GRID_START_HOUR, GRID_END_HOUR, SLOT_HEIGHT_PER_MINUTE };
 
-/**
- * Turkish day name → DayOfWeek number mapping.
- * Handles both full names (Pazartesi) and short names (Pzt).
- */
-const TURKISH_DAY_MAP: Record<string, number> = {
-  pazar: 0,
-  paz: 0,
-  pazartesi: 1,
-  pzt: 1,
-  sali: 2,
-  sal: 2,
-  carsamba: 3,
-  car: 3,
-  persembe: 4,
-  per: 4,
-  cuma: 5,
-  cum: 5,
-  cumartesi: 6,
-  cmt: 6,
-};
-
-/**
- * Parse a backend scheduleSummary string into structured ScheduleSlot[].
- * Expected format: "Pazartesi 09:00-09:50, Carsamba 13:00-16:00"
- */
-export function parseScheduleSummary(summary: string | null | undefined): ScheduleSlot[] {
-  if (!summary || !summary.trim()) {
-    return [];
-  }
-
-  const parts = summary.split(',').map(p => p.trim()).filter(Boolean);
-  const slots: ScheduleSlot[] = [];
-
-  for (const part of parts) {
-    // Match: "DayName HH:mm-HH:mm"
-    const match = part.match(/^(\S+)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
-    if (!match) continue;
-
-    const dayStr = match[1].toLowerCase();
-    const day = TURKISH_DAY_MAP[dayStr];
-    if (day === undefined) continue;
-
-    slots.push({ day, startTime: match[2], endTime: match[3] });
-  }
-
-  return slots;
-}
+// 2026-05-10 — Plan E: parseScheduleSummary helper'ı silindi.
+// Eskiden frontend backend'in Türkçe schedule string'ini regex'le ayrıştırıyordu —
+// tek source-of-truth artık backend'in `schedules` ScheduleBlockDto array'i. Frontend
+// component'ler doğrudan tüketir, kayıp veri yok (BlockType + per-block classroom).
 
 /**
  * Convert a time string (HH:mm) to the grid row position (px offset from top).

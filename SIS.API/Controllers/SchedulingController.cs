@@ -154,46 +154,9 @@ public class SchedulingController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("batch-auto-schedule")]
-    [RequirePermission("menu.ders-programi-olusturma.auto-schedule")]
-    public async Task<IActionResult> BatchAutoSchedule([FromBody] BatchAutoScheduleRequestDto request, CancellationToken cancellationToken)
-    {
-        if (request.TermId.HasValue && request.TermId <= 0)
-            return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
-
-        if (request.DepartmentId.HasValue && request.DepartmentId <= 0)
-            return BadRequest(new { error = "Gecerli bir departmentId gonderilmelidir." });
-
-        if (request.FacultyId.HasValue && request.FacultyId <= 0)
-            return BadRequest(new { error = "Gecerli bir facultyId gonderilmelidir." });
-
-        if (request.DepartmentId.HasValue && request.FacultyId.HasValue)
-            return BadRequest(new { error = "departmentId ve facultyId ayni anda gonderilemez." });
-
-        if (!TryGetAuthenticatedUser(out var userId, out var roles))
-            return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
-
-        var context = await _academicOperationsService.GetContextAsync(userId, roles, cancellationToken);
-
-        if (request.DepartmentId.HasValue)
-        {
-            var hasDepartmentAccess = context.AccessibleDepartments
-                .Any(department => department.DepartmentId == request.DepartmentId.Value);
-
-            if (!hasDepartmentAccess)
-                return Forbid();
-        }
-        else if (!context.CanViewAllDepartments)
-        {
-            if (!context.DefaultDepartmentId.HasValue)
-                return BadRequest(new { error = "Bu kullanici icin erisilebilir bolum bulunamadi." });
-
-            request.DepartmentId = context.DefaultDepartmentId.Value;
-        }
-
-        var result = await _schedulingService.BatchAutoScheduleAsync(request, cancellationToken);
-        return Ok(result);
-    }
+    // 2026-05-10: V1 batch-auto-schedule endpoint silindi (ölü kod). Faculty Planning UI
+    // /faculty-planning/auto-schedule (V2 CP-SAT) kullanıyor. Bu endpoint hiçbir frontend'den
+    // çağrılmıyordu, BatchAuto.cs ~500 satır V1 backtracking mantığı atıl kalmıştı.
 
     // ── Swap Endpoint ────────────────────────────────────────────────────
 
@@ -264,14 +227,14 @@ public class SchedulingController : ControllerBase
         var slotsSource2 = request.SwapSlots ? swapSchedules1 : swapSchedules2;
         var slots1 = slotsSource1.Select(ss => new ScheduleSlotDto
         {
-            Day = ss.TimeSlot.DayOfWeek,
+            Day = (int)ss.TimeSlot.DayOfWeek,
             StartTime = ss.TimeSlot.StartTime,
             EndTime = ss.TimeSlot.EndTime,
             ClassroomId = ss.ClassroomId
         }).ToList();
         var slots2 = slotsSource2.Select(ss => new ScheduleSlotDto
         {
-            Day = ss.TimeSlot.DayOfWeek,
+            Day = (int)ss.TimeSlot.DayOfWeek,
             StartTime = ss.TimeSlot.StartTime,
             EndTime = ss.TimeSlot.EndTime,
             ClassroomId = ss.ClassroomId
@@ -434,7 +397,7 @@ public class SchedulingController : ControllerBase
             {
                 entries.Add(new TimetableEntryDto
                 {
-                    Day = ss.TimeSlot.DayOfWeek,
+                    Day = (int)ss.TimeSlot.DayOfWeek,
                     StartTime = ss.TimeSlot.StartTime,
                     EndTime = ss.TimeSlot.EndTime,
                     CourseCode = section.Course.Code,

@@ -4,9 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
@@ -18,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   AlertCircle, BarChart3, Building2, Edit2, MoreHorizontal,
-  Plus, Search, Trash2,
+  Plus, Search, Trash2, X,
 } from 'lucide-react';
 import { useClassrooms, useCreateClassroom, useUpdateClassroom, useDeleteClassroom } from '../hooks/useClassrooms';
 import type { ClassroomDto, CreateClassroomDto } from '../api/classroom.api';
@@ -27,6 +24,7 @@ import {
   CLASSROOM_TYPE_CODES,
   getClassroomTypeLabel,
   getClassroomTypeBadgeClass,
+  getClassroomTypeBarClass,
 } from '../lib/classroomTypeUtils';
 
 const emptyForm: CreateClassroomDto = {
@@ -48,6 +46,10 @@ function formatLocation(buildingName: string | null | undefined, floor: number |
   return '—';
 }
 
+// ── Stat card ──────────────────────────────────────────────────────────────
+
+// ── Page ───────────────────────────────────────────────────────────────────
+
 export default function ClassroomManagementAdminPage() {
   const { data: classrooms, isLoading, isError } = useClassrooms();
   const createMutation = useCreateClassroom();
@@ -55,6 +57,8 @@ export default function ClassroomManagementAdminPage() {
   const deleteMutation = useDeleteClassroom();
 
   const [filterType, setFilterType] = useState<string>('all');
+  const [filterBuilding, setFilterBuilding] = useState<string>('all');
+  const [filterFloor, setFilterFloor] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
@@ -124,70 +128,154 @@ export default function ClassroomManagementAdminPage() {
     }, {} as Record<string, number>);
   }, [all]);
 
+  // Tip dropdown'u DB'den gelen tiplerden türetilir; backend enum'una yeni tip
+  // eklendiğinde o tipte derslik oluşturulur oluşturulmaz dropdown'da görünür.
+  // Bilinen tipleri enum sırasında, bilinmeyenleri sonuna ekler.
+  const sortedTypes = useMemo(() => {
+    const known = (CLASSROOM_TYPE_CODES as readonly string[]).filter(t => (typeCounts[t] || 0) > 0);
+    const knownSet = new Set<string>(CLASSROOM_TYPE_CODES);
+    const extras = Object.keys(typeCounts)
+      .filter(t => !knownSet.has(t))
+      .sort((a, b) => getClassroomTypeLabel(a).localeCompare(getClassroomTypeLabel(b), 'tr'));
+    return [...known, ...extras];
+  }, [typeCounts]);
+
+  const buildings = useMemo(() => {
+    const set = new Set<string>();
+    all.forEach(c => { const b = c.buildingName?.trim(); if (b) set.add(b); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [all]);
+
+  const floors = useMemo(() => {
+    const set = new Set<number>();
+    all.forEach(c => { if (c.floor !== null && c.floor !== undefined) set.add(c.floor); });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [all]);
+
+  const maxCapacity = useMemo(() => all.reduce((m, c) => Math.max(m, c.capacity || 0), 0), [all]);
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return all.filter(c => {
       if (filterType !== 'all' && c.type !== filterType) return false;
+      if (filterBuilding !== 'all' && (c.buildingName?.trim() ?? '') !== filterBuilding) return false;
+      if (filterFloor !== 'all' && String(c.floor ?? '') !== filterFloor) return false;
       if (q) {
         const haystack = `${c.name} ${c.buildingName ?? ''}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     });
-  }, [all, filterType, searchQuery]);
+  }, [all, filterType, filterBuilding, filterFloor, searchQuery]);
 
-  const isFiltered = filterType !== 'all' || searchQuery.trim().length > 0;
+  const isFiltered = filterType !== 'all' || filterBuilding !== 'all' || filterFloor !== 'all' || searchQuery.trim().length > 0;
+  const clearFilters = () => {
+    setFilterType('all');
+    setFilterBuilding('all');
+    setFilterFloor('all');
+    setSearchQuery('');
+  };
+
+  const floorLabel = (f: number) => (f === 0 ? 'Zemin Kat' : `Kat ${f}`);
+
+  // ── Render ────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-4">
-      {/* Compact toolbar: count · filter · search · analiz · yeni */}
-      <div className="flex flex-wrap items-center gap-2 bg-white border rounded-xl px-3 py-2">
-        <div className="flex items-center gap-2 pr-3 mr-1 border-r">
-          <Building2 className="h-4 w-4 text-[#003366]" />
-          <span className="text-sm font-semibold tabular-nums">
-            {isFiltered ? `${filtered.length} / ${all.length}` : all.length}
-          </span>
-          <span className="text-xs text-muted-foreground">derslik</span>
+      {/* Toolbar */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+          <div className="relative flex-1 min-w-[200px] max-w-[340px]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Derslik adı veya bina ara..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="h-9 pl-8 pr-8 text-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Aramayı temizle"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="h-9 w-[180px] text-xs">
+              <SelectValue placeholder="Tüm Tipler" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Tipler ({all.length})</SelectItem>
+              {sortedTypes.map(t => (
+                <SelectItem key={t} value={t}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${getClassroomTypeBarClass(t)}`} />
+                    {getClassroomTypeLabel(t)} ({typeCounts[t] || 0})
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterBuilding} onValueChange={setFilterBuilding}>
+            <SelectTrigger className="h-9 w-[180px] text-xs">
+              <SelectValue placeholder="Tüm Binalar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Binalar ({buildings.length})</SelectItem>
+              {buildings.map(b => (
+                <SelectItem key={b} value={b}>{b}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterFloor} onValueChange={setFilterFloor}>
+            <SelectTrigger className="h-9 w-[150px] text-xs">
+              <SelectValue placeholder="Tüm Katlar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Katlar ({floors.length})</SelectItem>
+              {floors.map(f => (
+                <SelectItem key={f} value={String(f)}>{floorLabel(f)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs font-medium text-slate-500 underline underline-offset-2 hover:text-slate-700"
+            >
+              Filtreleri temizle
+            </button>
+          )}
+
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAnalyticsOpen(true)}
+              className="h-9 gap-1.5 border-slate-200 hover:border-violet-300 hover:bg-violet-50/60 hover:text-violet-700"
+              disabled={all.length === 0}
+            >
+              <BarChart3 className="h-4 w-4" /> Analiz
+            </Button>
+            <Button
+              onClick={openCreate}
+              size="sm"
+              className="h-9 gap-1.5 bg-gradient-to-br from-[#003366] to-[#004080] text-white shadow-sm hover:from-[#002a52] hover:to-[#003366] hover:shadow-md"
+            >
+              <Plus className="h-4 w-4" /> Yeni Derslik
+            </Button>
+          </div>
         </div>
 
-        <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="h-8 w-[180px] text-xs">
-            <SelectValue placeholder="Tüm Tipler" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tüm Tipler ({all.length})</SelectItem>
-            {CLASSROOM_TYPE_CODES.map(t => (
-              <SelectItem key={t} value={t}>
-                {getClassroomTypeLabel(t)} ({typeCounts[t] || 0})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="relative flex-1 min-w-[160px] max-w-[280px]">
-          <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Derslik adı veya bina ara..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="h-8 pl-8 text-xs"
-          />
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAnalyticsOpen(true)}
-            className="gap-1.5 h-8"
-            disabled={all.length === 0}
-          >
-            <BarChart3 className="h-4 w-4" /> Analiz
-          </Button>
-          <Button onClick={openCreate} size="sm" className="gap-1.5 h-8">
-            <Plus className="h-4 w-4" /> Yeni Derslik
-          </Button>
-        </div>
       </div>
 
       {/* Table */}
@@ -199,61 +287,76 @@ export default function ClassroomManagementAdminPage() {
           <AlertDescription>Derslikler yüklenemedi.</AlertDescription>
         </Alert>
       ) : all.length === 0 ? (
-        <div className="text-center py-16 bg-white border rounded-xl">
-          <Building2 className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-          <p className="text-muted-foreground">Henüz derslik tanımlanmamış.</p>
-          <Button variant="outline" className="mt-4" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-1" /> İlk Dersliği Ekle
+        <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-blue-50/30 py-16 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
+            <Building2 className="h-7 w-7" />
+          </div>
+          <p className="text-slate-700">Henüz derslik tanımlanmamış.</p>
+          <Button
+            variant="outline"
+            className="mt-4 border-blue-200 hover:border-blue-300 hover:bg-blue-50"
+            onClick={openCreate}
+          >
+            <Plus className="mr-1 h-4 w-4" /> İlk Dersliği Ekle
           </Button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 bg-white border rounded-xl">
-          <Search className="h-10 w-10 mx-auto text-gray-300 mb-3" />
-          <p className="text-sm text-muted-foreground">Filtrelere uyan derslik bulunamadı.</p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-3"
-            onClick={() => { setFilterType('all'); setSearchQuery(''); }}
-          >
+        <div className="rounded-xl border border-slate-200 bg-white py-12 text-center">
+          <Search className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <p className="text-sm text-slate-600">Filtrelere uyan derslik bulunamadı.</p>
+          <Button variant="ghost" size="sm" className="mt-3" onClick={clearFilters}>
             Filtreleri Temizle
           </Button>
         </div>
       ) : (
-        <div className="bg-white border rounded-xl overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50/50">
-                <TableHead className="font-semibold">Derslik Adı</TableHead>
-                <TableHead className="font-semibold">Konum</TableHead>
-                <TableHead className="font-semibold text-center w-32">Kapasite</TableHead>
-                <TableHead className="font-semibold">Derslik Tipi</TableHead>
-                <TableHead className="font-semibold text-right w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-50/40">
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Derslik Adı</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Konum</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Kapasite</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Derslik Tipi</th>
+                <th className="w-12 px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
               {filtered.map(c => {
                 const location = formatLocation(c.buildingName, c.floor);
+                const barClass = getClassroomTypeBarClass(c.type);
+                const widthPct = maxCapacity > 0 ? Math.max(8, Math.round((c.capacity / maxCapacity) * 100)) : 0;
                 return (
-                  <TableRow key={c.id} className="group hover:bg-gray-50/50">
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{location}</TableCell>
-                    <TableCell className="text-center">
-                      <span className="font-mono font-semibold">{c.capacity}</span>
-                      <span className="text-xs text-muted-foreground ml-1">kişi</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`text-xs px-2.5 py-1 rounded-full border ${getClassroomTypeBadgeClass(c.type)}`}>
+                  <tr
+                    key={c.id}
+                    className="group border-l-2 border-l-transparent transition-colors duration-150 hover:border-l-[#003366]/40 hover:bg-slate-50/60"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{location}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className={`h-full ${barClass} transition-all duration-300`}
+                            style={{ width: `${widthPct}%` }}
+                          />
+                        </div>
+                        <span className="font-mono text-xs font-semibold tabular-nums text-slate-700">{c.capacity}</span>
+                        <span className="text-[11px] text-slate-400">kişi</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${getClassroomTypeBadgeClass(c.type)}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${barClass}`} />
                         {getClassroomTypeLabel(c.type)}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-right">
+                    </td>
+                    <td className="px-4 py-3 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                            className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100"
                             aria-label={`${c.name} işlemleri`}
                           >
                             <MoreHorizontal className="h-4 w-4" />
@@ -261,23 +364,23 @@ export default function ClassroomManagementAdminPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
                           <DropdownMenuItem onClick={() => openEdit(c)}>
-                            <Edit2 className="h-3.5 w-3.5 mr-2" /> Düzenle
+                            <Edit2 className="mr-2 h-3.5 w-3.5" /> Düzenle
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => confirmDelete(c)}
                             className="text-destructive focus:text-destructive"
                           >
-                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Sil
+                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Sil
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 );
               })}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -285,7 +388,12 @@ export default function ClassroomManagementAdminPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingClassroom ? 'Derslik Düzenle' : 'Yeni Derslik Ekle'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                <Building2 className="h-4 w-4" />
+              </span>
+              {editingClassroom ? 'Derslik Düzenle' : 'Yeni Derslik Ekle'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -318,7 +426,8 @@ export default function ClassroomManagementAdminPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Kapasite *</label>
                 <Input
-                  type="number" min={1}
+                  type="number"
+                  min={1}
                   value={form.capacity}
                   onChange={e => setForm({ ...form, capacity: Number(e.target.value) })}
                 />
@@ -348,6 +457,7 @@ export default function ClassroomManagementAdminPage() {
             <Button
               onClick={handleSubmit}
               disabled={createMutation.isPending || updateMutation.isPending}
+              className="bg-gradient-to-br from-[#003366] to-[#004080] text-white hover:from-[#002a52] hover:to-[#003366]"
             >
               {createMutation.isPending || updateMutation.isPending ? 'Kaydediliyor...' : editingClassroom ? 'Güncelle' : 'Oluştur'}
             </Button>
@@ -359,10 +469,15 @@ export default function ClassroomManagementAdminPage() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Derslik Sil</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-red-600">
+                <Trash2 className="h-4 w-4" />
+              </span>
+              Derslik Sil
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            <strong>{deleteTarget?.name}</strong> dersliğini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
+          <p className="text-sm text-slate-600">
+            <strong className="text-slate-900">{deleteTarget?.name}</strong> dersliğini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>İptal</Button>

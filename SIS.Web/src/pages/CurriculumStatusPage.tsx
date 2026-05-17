@@ -7,8 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useCurriculumStatus } from '../hooks/useCurriculumStatus';
 import { useStudentInfo } from '../hooks/useStudentInfo';
-import { useStudentPoolStatus } from '../hooks/useStudentPoolStatus';
-import { AlertCircle, Printer, BookX, AlertTriangle, Search, CheckCircle2, CircleAlert } from 'lucide-react';
+import { AlertCircle, Printer, BookX, AlertTriangle, Search } from 'lucide-react';
 import type { CurriculumStatusDto, CurriculumCourseStatusDto, CurriculumSemesterDto } from '../types/curriculum';
 import type { StudentInfoDto } from '../types/student';
 
@@ -24,7 +23,6 @@ function getGradeBadgeVariant(grade: string | null, status: string | null): 'suc
 export default function CurriculumStatusPage() {
   const { data, isLoading, error } = useCurriculumStatus();
   const studentQuery = useStudentInfo();
-  const { data: poolStatus = [] } = useStudentPoolStatus(studentQuery.data?.id ?? null);
   const [searchTerm, setSearchTerm] = useState('');
 
   if (isLoading) {
@@ -98,83 +96,6 @@ export default function CurriculumStatusPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Seçmeli Havuz Durumu (Madde 17) */}
-        {poolStatus.length > 0 && (
-          <Card>
-            <CardContent className="px-5 py-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-sm text-foreground">Seçmeli Havuz Tamamlama Durumu</h3>
-                <Badge variant="secondary" className="text-xs">
-                  {poolStatus.filter(p => p.isFulfilled).length}/{poolStatus.length} tamamlandı
-                </Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {poolStatus.map(pool => {
-                  const courseProgress = pool.requiredCourseCount > 0
-                    ? Math.min(100, (pool.completedCourseCount / pool.requiredCourseCount) * 100)
-                    : 0;
-                  const ectsProgress = pool.requiredEcts > 0
-                    ? Math.min(100, (pool.earnedEcts / pool.requiredEcts) * 100)
-                    : 0;
-                  return (
-                    <div
-                      key={pool.poolId}
-                      className={`border rounded-lg p-3 ${pool.isFulfilled ? 'border-success/40 bg-success/5' : 'border-border'}`}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        {pool.isFulfilled
-                          ? <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
-                          : <CircleAlert className="h-4 w-4 text-amber-500 shrink-0" />
-                        }
-                        <span className="text-xs font-mono font-bold text-foreground">
-                          {pool.poolCode}
-                          {pool.slotName && (
-                            <span className="text-violet-700 font-semibold"> / {pool.slotName}</span>
-                          )}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate">{pool.poolName}</span>
-                      </div>
-                      {pool.requiredCourseCount > 0 && (
-                        <div className="space-y-1 mb-1.5">
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground">Ders</span>
-                            <span className="tabular-nums font-medium">{pool.completedCourseCount}/{pool.requiredCourseCount}</span>
-                          </div>
-                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${pool.isFulfilled ? 'bg-success' : 'bg-primary'}`}
-                              style={{ width: `${courseProgress}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      {pool.requiredEcts > 0 && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground">AKTS</span>
-                            <span className="tabular-nums font-medium">{pool.earnedEcts}/{pool.requiredEcts}</span>
-                          </div>
-                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${pool.isFulfilled ? 'bg-success' : 'bg-primary'}`}
-                              style={{ width: `${ectsProgress}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      {pool.ectsPerCourse != null && (
-                        <p className="text-[10px] text-muted-foreground mt-1.5">
-                          Havuz kuralı: her ders {pool.ectsPerCourse} AKTS sayılır
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Search */}
         <div className="relative">

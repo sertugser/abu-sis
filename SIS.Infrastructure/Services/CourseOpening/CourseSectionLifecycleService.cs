@@ -282,8 +282,32 @@ public class CourseSectionLifecycleService(
             {
                 currentCourse = courseReq;
                 var created = await OpenCourseAsync(departmentId, termId, courseReq, ct);
-                result.TotalCoursesOpened++;
-                result.TotalSectionsCreated += created.Count;
+                if (created.Count == 0) continue;
+
+                // Cross-list ya da müfredat dışı paralel açılışlarda dönüş listesi
+                // birden fazla CourseId içerebilir — her biri için ayrı özet üretiyoruz.
+                foreach (var grp in created.GroupBy(s => s.CourseId))
+                {
+                    var first = grp.First();
+                    var instructorNames = grp
+                        .Select(s => s.InstructorName)
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .Distinct()
+                        .ToList();
+
+                    result.OpenedCourses.Add(new OpenedCourseSummaryDto
+                    {
+                        CourseId = grp.Key,
+                        CourseCode = first.CourseCode,
+                        CourseName = first.CourseName,
+                        SectionCount = grp.Count(),
+                        SectionNumbers = grp.Select(s => s.SectionNumber).OrderBy(n => n).ToList(),
+                        TotalCapacity = grp.Sum(s => s.Capacity),
+                        InstructorName = instructorNames.Count == 1 ? instructorNames[0] : null,
+                    });
+                    result.TotalCoursesOpened++;
+                    result.TotalSectionsCreated += grp.Count();
+                }
             }
 
             if (transaction != null)
@@ -295,6 +319,7 @@ public class CourseSectionLifecycleService(
                 await transaction.RollbackAsync(ct);
             result.TotalCoursesOpened = 0;
             result.TotalSectionsCreated = 0;
+            result.OpenedCourses.Clear();
             result.Errors.Add($"Ders ID {currentCourse?.CourseId}: {ex.Message} Toplu işlem geri alındı.");
         }
         catch
@@ -537,6 +562,340 @@ public class CourseSectionLifecycleService(
 
         await _context.SaveChangesAsync(ct);
         _forecastCacheInvalidator.InvalidateForecastContext();
+    }
+
+    /// <summary>
+    /// Bir dersin tüm şubelerini DB'den fiziksel siler (hard delete).
+    /// CloseAllSectionsAsync'in aksine geri alınamaz; ders "hiç açılmamış gibi" olur.
+    /// </summary>
+    public async Task<DeleteAllSectionsResultDto> DeleteAllSectionsHardAsync(int courseId, int termId, CancellationToken ct = default)
+    {
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
+            ?? throw new InvalidOperationException("Dönem bulunamadı.");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("İptal edilmiş dönemde silme yapılamaz.");
+
+        // Tüm şubeleri (Aktif + Cancelled dahil) topla — komple temizlik amaçlı
+        var sections = await _context.CourseSections
+            .Where(cs => cs.CourseId == courseId && cs.TermId == termId)
+            .ToListAsync(ct);
+
+        if (sections.Count == 0)
+            throw new InvalidOperationException("Bu ders için silinecek şube bulunamadı.");
+
+        var sectionIds = sections.Select(s => s.Id).ToList();
+
+        // Safety 1: Aktif kayıtlı öğrenci varsa sil
+        var activeRegistrationCount = await _context.CourseRegistrations
+            .CountAsync(cr => sectionIds.Contains(cr.CourseSectionId)
+                && cr.Status == RegistrationStatus.Active, ct);
+        if (activeRegistrationCount > 0)
+            throw new InvalidOperationException(
+                $"Bu derste {activeRegistrationCount} aktif kayıtlı öğrenci var. Önce öğrencilerin kaydı düşürülmeli.");
+
+        // Safety 2: Tamamlanmış (Completed) kayıtlar geçmiş not olarak korunmalı — silinmez
+        var completedRegistrationCount = await _context.CourseRegistrations
+            .CountAsync(cr => sectionIds.Contains(cr.CourseSectionId)
+                && cr.Status == RegistrationStatus.Completed, ct);
+        if (completedRegistrationCount > 0)
+            throw new InvalidOperationException(
+                $"Bu derste {completedRegistrationCount} tamamlanmış öğrenci kaydı var (transcript'te görünür) — silinemez.");
+
+        // Safety 3: Ders değerlendirmesi yapılmış mı? (öğrenci ders evaluation'ı)
+        var evaluationCount = await _context.EvaluationResponses
+            .CountAsync(er => sectionIds.Contains(er.CourseSectionId), ct);
+        if (evaluationCount > 0)
+            throw new InvalidOperationException(
+                $"Bu ders için {evaluationCount} adet ders değerlendirmesi yapılmış — silinemez.");
+
+        // Safety 4: Yoklama oturumu kaydı varsa sil (geçmiş yoklama silinmemeli)
+        var attendanceSessionCount = await _context.AttendanceSessions
+            .CountAsync(asn => sectionIds.Contains(asn.CourseSectionId), ct);
+        if (attendanceSessionCount > 0)
+            throw new InvalidOperationException(
+                $"Bu derste {attendanceSessionCount} yoklama oturumu kaydı var — silinemez.");
+
+        // Hard-delete: Restrict FK olan satırları manuel temizle
+        var allRegistrations = await _context.CourseRegistrations
+            .Where(cr => sectionIds.Contains(cr.CourseSectionId))
+            .ToListAsync(ct);
+        _context.CourseRegistrations.RemoveRange(allRegistrations);
+
+        // SchedulingAuditLog (Restrict FK) — log kayıtları silinir, geçmiş audit'i kaybederiz ama bu kabul edilebilir
+        var auditLogs = await _context.SchedulingAuditLogs
+            .Where(log => sectionIds.Contains(log.SectionId))
+            .ToListAsync(ct);
+        _context.SchedulingAuditLogs.RemoveRange(auditLogs);
+
+        // Course-level CourseAccessPolicy temizliği
+        var accessPolicies = await _context.CourseAccessPolicies
+            .Where(cap => cap.CourseId == courseId && cap.TermId == termId)
+            .ToListAsync(ct);
+        _context.CourseAccessPolicies.RemoveRange(accessPolicies);
+
+        // CourseSection silinince:
+        //   - SectionSchedule (Cascade) → otomatik silinir
+        //   - AttendanceSession (Cascade) → safety 4 zaten 0 olduğunu garanti etti
+        //   - ConstraintEvaluation (SetNull) → otomatik null'lanır
+        //   - ConstraintException (SetNull) → otomatik null'lanır
+        //   - DistributionConstraintCourse (SetNull) → otomatik null'lanır
+        _context.CourseSections.RemoveRange(sections);
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+
+        return new DeleteAllSectionsResultDto(
+            DeletedSectionCount: sections.Count,
+            DeletedRegistrationCount: allRegistrations.Count,
+            DeletedAccessPolicyCount: accessPolicies.Count
+        );
+    }
+
+    public async Task<AutoSplitCourseResultDto> AutoSplitCourseAsync(AutoSplitCourseRequest request, CancellationToken ct = default)
+    {
+        var maxSections = await _systemConfig.GetIntAsync(MaxSectionsKey, MaxSectionsFallback, ct);
+        if (request.TargetSectionCount <= 0 || request.TargetSectionCount > maxSections)
+            throw new InvalidOperationException($"Hedef şube sayısı 1 ile {maxSections} arasında olmalıdır.");
+
+        if (request.Strategy == AutoSplitStrategy.ModOddEven && request.TargetSectionCount != 2)
+            throw new InvalidOperationException("MOD Tek/Çift stratejisi yalnızca 2 şube ile kullanılır.");
+
+        var term = await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == request.TermId, ct)
+            ?? throw new InvalidOperationException("Dönem bulunamadı.");
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Şubelendirme için dönem iptal edilmemiş olmalıdır.");
+
+        var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.CourseId, ct)
+            ?? throw new InvalidOperationException("Ders bulunamadı.");
+
+        var allSections = await _context.CourseSections
+            .Where(cs => cs.CourseId == request.CourseId && cs.TermId == request.TermId)
+            .OrderBy(cs => cs.SectionNumber)
+            .ToListAsync(ct);
+
+        var activeSections = allSections.Where(s => s.Status == CourseSectionStatus.Active).ToList();
+
+        var registrations = await _context.CourseRegistrations
+            .Include(cr => cr.Student)
+            .Where(cr => cr.Status == RegistrationStatus.Active
+                && cr.CourseSection.CourseId == request.CourseId
+                && cr.CourseSection.TermId == request.TermId)
+            .ToListAsync(ct);
+
+        // Hedef şube listesi (mevcut aktif + gerekirse yeni)
+        var k = request.TargetSectionCount;
+        var n = activeSections.Count;
+
+        var defaultCapacity = request.DefaultCapacityPerSection
+            ?? (activeSections.Count > 0
+                ? (int)Math.Round(activeSections.Average(s => (double)s.Capacity))
+                : 40);
+        if (defaultCapacity <= 0) defaultCapacity = 40;
+
+        var targetSections = new List<CourseSection>();
+        var createdCount = 0;
+        var closedCount = 0;
+
+        if (k >= n)
+        {
+            targetSections.AddRange(activeSections);
+            var maxSectionNumber = allSections.Count > 0 ? allSections.Max(s => s.SectionNumber) : 0;
+            for (var i = 0; i < k - n; i++)
+            {
+                var newSection = new CourseSection
+                {
+                    CourseId = request.CourseId,
+                    TermId = request.TermId,
+                    SectionNumber = maxSectionNumber + i + 1,
+                    Capacity = defaultCapacity,
+                    InternalQuota = null,
+                    ExternalQuota = null,
+                    InstructorId = null,
+                    EnrolledCount = 0,
+                    Status = CourseSectionStatus.Active,
+                    IsFinalized = false,
+                };
+                _context.CourseSections.Add(newSection);
+                targetSections.Add(newSection);
+                createdCount++;
+            }
+        }
+        else
+        {
+            // K < N: en az öğrenciye sahip (N-K) şube boşaltılıp Closed yapılır
+            var ordered = activeSections
+                .OrderBy(s => registrations.Count(r => r.CourseSectionId == s.Id))
+                .ThenByDescending(s => s.SectionNumber)
+                .ToList();
+
+            var toClose = ordered.Take(n - k).ToList();
+            targetSections.AddRange(activeSections.Except(toClose).OrderBy(s => s.SectionNumber));
+
+            // Kapatılacak şubelerdeki Draft/PendingAdvisorApproval kayıtları Dropped'a çek
+            var closingSectionIds = toClose.Select(s => s.Id).ToList();
+            var pendingRegs = await _context.CourseRegistrations
+                .Where(cr => closingSectionIds.Contains(cr.CourseSectionId)
+                    && (cr.Status == RegistrationStatus.Draft || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+                .ToListAsync(ct);
+            foreach (var reg in pendingRegs)
+            {
+                reg.Status = RegistrationStatus.Dropped;
+                reg.UpdatedAt = DateTime.UtcNow;
+            }
+
+            foreach (var section in toClose)
+            {
+                section.Status = CourseSectionStatus.Cancelled;
+                section.EnrolledCount = 0;
+                closedCount++;
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        // ── Dağıtım ──
+        var redistributed = DistributeRegistrations(registrations, targetSections, request.Strategy);
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+
+        var summaries = targetSections
+            .OrderBy(s => s.SectionNumber)
+            .Select(s => new AutoSplitSectionSummary(
+                s.Id,
+                s.SectionNumber,
+                registrations.Count(r => r.CourseSectionId == s.Id)))
+            .ToList();
+
+        return new AutoSplitCourseResultDto(
+            FinalSectionCount: targetSections.Count,
+            CreatedSectionCount: createdCount,
+            ClosedSectionCount: closedCount,
+            RedistributedRegistrationCount: redistributed,
+            Sections: summaries);
+    }
+
+    private static int DistributeRegistrations(
+        List<CourseRegistration> registrations,
+        List<CourseSection> targetSections,
+        AutoSplitStrategy strategy)
+    {
+        if (registrations.Count == 0 || targetSections.Count == 0) return 0;
+        var sorted = targetSections.OrderBy(s => s.SectionNumber).ToList();
+
+        switch (strategy)
+        {
+            case AutoSplitStrategy.Equal:
+                {
+                    var ordered = registrations.OrderBy(r => r.Student.StudentNumber).ToList();
+                    for (var i = 0; i < ordered.Count; i++)
+                        ordered[i].CourseSectionId = sorted[i % sorted.Count].Id;
+                    return ordered.Count;
+                }
+            case AutoSplitStrategy.EqualRepeat:
+                {
+                    var repeaters = registrations
+                        .Where(r => r.IsRepeated)
+                        .OrderBy(r => r.Student.StudentNumber)
+                        .ToList();
+                    var normals = registrations
+                        .Where(r => !r.IsRepeated)
+                        .OrderBy(r => r.Student.StudentNumber)
+                        .ToList();
+
+                    var idx = 0;
+                    foreach (var r in repeaters)
+                    {
+                        r.CourseSectionId = sorted[idx % sorted.Count].Id;
+                        idx++;
+                    }
+                    foreach (var r in normals)
+                    {
+                        r.CourseSectionId = sorted[idx % sorted.Count].Id;
+                        idx++;
+                    }
+                    return repeaters.Count + normals.Count;
+                }
+            case AutoSplitStrategy.ModOddEven:
+                {
+                    // sorted.Count == 2 (validated at entry)
+                    var first = sorted[0].Id;
+                    var second = sorted[1].Id;
+                    foreach (var r in registrations)
+                    {
+                        var lastChar = r.Student.StudentNumber.Length > 0
+                            ? r.Student.StudentNumber[^1]
+                            : '0';
+                        var isEven = char.IsDigit(lastChar) && (lastChar - '0') % 2 == 0;
+                        r.CourseSectionId = isEven ? first : second;
+                    }
+                    return registrations.Count;
+                }
+            default:
+                throw new InvalidOperationException($"Bilinmeyen strateji: {strategy}");
+        }
+    }
+
+    public async Task<TransferStudentsToSectionResultDto> TransferStudentsBetweenSectionsAsync(
+        TransferStudentsToSectionRequest request,
+        CancellationToken ct = default)
+    {
+        if (request.SourceSectionId == request.TargetSectionId)
+            throw new InvalidOperationException("Kaynak ve hedef şube aynı olamaz.");
+
+        if (request.StudentIds.Count == 0)
+            throw new InvalidOperationException("Taşınacak öğrenci seçilmedi.");
+
+        var sourceSection = await _context.CourseSections
+            .FirstOrDefaultAsync(cs => cs.Id == request.SourceSectionId, ct)
+            ?? throw new InvalidOperationException("Kaynak şube bulunamadı.");
+
+        var targetSection = await _context.CourseSections
+            .FirstOrDefaultAsync(cs => cs.Id == request.TargetSectionId, ct)
+            ?? throw new InvalidOperationException("Hedef şube bulunamadı.");
+
+        if (sourceSection.CourseId != targetSection.CourseId)
+            throw new InvalidOperationException("Şubeler aynı derse ait olmalıdır.");
+
+        if (sourceSection.TermId != targetSection.TermId)
+            throw new InvalidOperationException("Şubeler aynı döneme ait olmalıdır.");
+
+        if (targetSection.Status != CourseSectionStatus.Active)
+            throw new InvalidOperationException("Hedef şube aktif değil.");
+
+        var registrations = await _context.CourseRegistrations
+            .Where(cr => cr.CourseSectionId == request.SourceSectionId
+                && cr.Status == RegistrationStatus.Active
+                && request.StudentIds.Contains(cr.StudentId))
+            .ToListAsync(ct);
+
+        if (registrations.Count == 0)
+            throw new InvalidOperationException("Taşınabilir öğrenci kaydı bulunamadı.");
+
+        var currentTargetActive = await _context.CourseRegistrations
+            .CountAsync(cr => cr.CourseSectionId == request.TargetSectionId
+                && cr.Status == RegistrationStatus.Active, ct);
+
+        if (currentTargetActive + registrations.Count > targetSection.Capacity)
+        {
+            var available = Math.Max(0, targetSection.Capacity - currentTargetActive);
+            throw new InvalidOperationException(
+                $"Hedef şubenin yeterli kapasitesi yok. Mevcut: {currentTargetActive}/{targetSection.Capacity}, " +
+                $"taşınması istenen: {registrations.Count}, kalan kapasite: {available}.");
+        }
+
+        foreach (var registration in registrations)
+        {
+            registration.CourseSectionId = request.TargetSectionId;
+        }
+
+        await _context.SaveChangesAsync(ct);
+        _forecastCacheInvalidator.InvalidateForecastContext();
+
+        return new TransferStudentsToSectionResultDto(
+            RequestedCount: request.StudentIds.Count,
+            TransferredCount: registrations.Count,
+            TransferredStudentIds: registrations.Select(r => r.StudentId).ToList());
     }
 
 }

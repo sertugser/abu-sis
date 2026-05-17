@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Rules;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services.Scheduling;
@@ -9,31 +10,34 @@ public sealed class SimulationService : ISimulationService
 {
     private readonly AppDbContext _context;
     private readonly SchedulingService _schedulingService;
-    private readonly ConstraintEvaluationService _evaluationService;
+    private readonly IConstraintStateLoader _constraintStateLoader;
+    private readonly IRuleEngine _ruleEngine;
 
     public SimulationService(
         AppDbContext context,
         SchedulingService schedulingService,
-        ConstraintEvaluationService evaluationService)
+        IConstraintStateLoader constraintStateLoader,
+        IRuleEngine ruleEngine)
     {
         _context = context;
         _schedulingService = schedulingService;
-        _evaluationService = evaluationService;
+        _constraintStateLoader = constraintStateLoader;
+        _ruleEngine = ruleEngine;
     }
 
     public async Task<SimulationResult> SimulateMoveAsync(SimulateMoveRequest request, CancellationToken ct)
     {
-        var (snapshot, config, state, weightMap) = await LoadEvaluationContextAsync(request.TermId, ct);
+        var (snapshot, config, state) = await LoadEvaluationContextAsync(request.TermId, ct);
 
-        // Evaluate BEFORE
-        var beforeBreakdown = _evaluationService.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        // BEFORE
+        var beforeBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(snapshot, config, state, ct);
         var before = new SimulationBreakdown(beforeBreakdown.TotalHardViolations, beforeBreakdown.TotalSoftPenalty);
 
-        // Create modified snapshot with the virtual move
+        // Modified snapshot with the virtual move
         var modifiedSnapshot = CloneSnapshotWithMove(snapshot, request);
 
-        // Evaluate AFTER
-        var afterBreakdown = _evaluationService.EvaluateWithBreakdown(modifiedSnapshot, config, state, weightMap);
+        // AFTER
+        var afterBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(modifiedSnapshot, config, state, ct);
         var after = new SimulationBreakdown(afterBreakdown.TotalHardViolations, afterBreakdown.TotalSoftPenalty);
 
         return BuildSimulationResult(before, after, beforeBreakdown, afterBreakdown);
@@ -42,18 +46,16 @@ public sealed class SimulationService : ISimulationService
     public async Task<IReadOnlyList<SuggestionItem>> GetSuggestionsAsync(
         int sectionId, int termId, int limit, CancellationToken ct)
     {
-        var (snapshot, config, state, _) = await LoadEvaluationContextAsync(termId, ct);
+        var (snapshot, config, state) = await LoadEvaluationContextAsync(termId, ct);
 
         var section = snapshot.Sections.FirstOrDefault(s => s.SectionId == sectionId);
         if (section == null) return Array.Empty<SuggestionItem>();
 
-        // Evaluate current state for this section
         var filteredSnapshot = BuildFilteredSnapshot(snapshot, sectionId);
-        var currentResult = _evaluationService.EvaluateCandidate(section, filteredSnapshot, config, state);
-        var currentHard = currentResult.Conflicts.Count;
-        var currentPenalty = currentResult.SoftPenalty;
+        var currentHardConflicts = await _ruleEngine.EvaluateCandidateAsync(section, filteredSnapshot, config, state, ct);
+        var currentPenalty = await _ruleEngine.CalculateCandidatePenaltyAsync(section, filteredSnapshot, config, state, ct);
+        var currentHard = currentHardConflicts.Count;
 
-        // Load available classrooms (limit for performance)
         var classrooms = await _context.Classrooms.AsNoTracking()
             .Where(c => c.Capacity >= section.Capacity)
             .OrderBy(c => Math.Abs(c.Capacity - section.Capacity))
@@ -61,19 +63,16 @@ public sealed class SimulationService : ISimulationService
             .Select(c => new { c.Id, c.Name, c.Capacity })
             .ToListAsync(ct);
 
-        // Load time slots for this term
         var timeSlots = await _context.TimeSlots.AsNoTracking()
             .Where(ts => ts.TermId == termId)
             .Select(ts => new { ts.DayOfWeek, ts.StartTime, ts.EndTime })
             .Distinct()
             .ToListAsync(ct);
 
-        // Determine required block count from current section
-        var requiredBlockCount = section.TimeBlocks.Count;
+        var requiredBlockCount = section.Blocks.Count;
         if (requiredBlockCount == 0) requiredBlockCount = section.TheoryHours + section.LabHours;
         if (requiredBlockCount == 0) requiredBlockCount = 1;
 
-        // Group time slots by day, find consecutive slot combinations
         var slotsByDay = timeSlots
             .GroupBy(ts => ts.DayOfWeek)
             .ToDictionary(g => g.Key, g => g.OrderBy(ts => ts.StartTime).ToList());
@@ -82,7 +81,6 @@ public sealed class SimulationService : ISimulationService
 
         foreach (var (day, daySlots) in slotsByDay)
         {
-            // Generate starting positions for consecutive blocks
             for (var startIdx = 0; startIdx <= daySlots.Count - requiredBlockCount; startIdx++)
             {
                 var candidateSlots = daySlots.Skip(startIdx).Take(requiredBlockCount).ToList();
@@ -90,40 +88,40 @@ public sealed class SimulationService : ISimulationService
 
                 foreach (var classroom in classrooms)
                 {
-                    var newTimeBlocks = candidateSlots.Select(ts => new TimeBlock
+                    var newBlocks = candidateSlots.Select(ts => new RuntimeBlock(
+                        Day: (int)ts.DayOfWeek,
+                        StartTime: ts.StartTime,
+                        EndTime: ts.EndTime,
+                        ClassroomId: classroom.Id,
+                        ClassroomName: classroom.Name,
+                        ClassroomType: section.PrimaryClassroomType,
+                        ClassroomCapacity: classroom.Capacity)).ToList();
+
+                    var movedSection = CloneSectionWithNewSchedule(section, newBlocks, classroom.Id, classroom.Name, classroom.Capacity);
+
+                    var hardConflicts = await _ruleEngine.EvaluateCandidateAsync(
+                        movedSection, filteredSnapshot, config, state, ct);
+                    var softPenalty = await _ruleEngine.CalculateCandidatePenaltyAsync(
+                        movedSection, filteredSnapshot, config, state, ct);
+
+                    if (hardConflicts.Count <= currentHard)
                     {
-                        Day = ts.DayOfWeek,
-                        StartTime = ts.StartTime,
-                        EndTime = ts.EndTime,
-                        ClassroomId = classroom.Id,
-                    }).ToList();
-
-                    // Build a candidate section snapshot with the new time/classroom
-                    var movedSection = CloneSectionWithNewSchedule(
-                        section, newTimeBlocks, classroom.Id, classroom.Name, classroom.Capacity);
-
-                    var result = _evaluationService.EvaluateCandidate(movedSection, filteredSnapshot, config, state);
-
-                    // Only include feasible (no hard violations) or better-than-current suggestions
-                    if (result.Conflicts.Count <= currentHard)
-                    {
-                        var improvement = currentPenalty - result.SoftPenalty;
+                        var improvement = currentPenalty - softPenalty;
                         suggestions.Add(new SuggestionItem(
                             0,
                             (int)day,
                             startTime.ToString("HH:mm"),
                             classroom.Id,
                             classroom.Name,
-                            result.Conflicts.Count,
-                            Math.Round(result.SoftPenalty, 1),
+                            hardConflicts.Count,
+                            Math.Round(softPenalty, 1),
                             Math.Round(improvement, 1),
-                            result.Notes.Take(3).ToList()));
+                            hardConflicts.Take(3).Select(c => c.Message).ToList()));
                     }
                 }
             }
         }
 
-        // Sort: fewer hard violations first, then lower penalty, assign ranks
         return suggestions
             .OrderBy(s => s.HardViolations)
             .ThenBy(s => s.SoftPenalty)
@@ -135,13 +133,15 @@ public sealed class SimulationService : ISimulationService
     public async Task<SimulationResult> SimulateConstraintChangeAsync(
         SimulateConstraintChangeRequest request, CancellationToken ct)
     {
-        var (snapshot, config, state, weightMap) = await LoadEvaluationContextAsync(request.TermId, ct);
+        var (snapshot, config, state) = await LoadEvaluationContextAsync(request.TermId, ct);
 
-        // Evaluate BEFORE
-        var beforeBreakdown = _evaluationService.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        // BEFORE
+        var beforeBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(snapshot, config, state, ct);
         var before = new SimulationBreakdown(beforeBreakdown.TotalHardViolations, beforeBreakdown.TotalSoftPenalty);
 
-        // Apply virtual changes to constraint definitions (in-memory only)
+        // Apply virtual changes to constraint definitions (in-memory only).
+        // ConstraintState.Definitions mutable — bu blok V1'den port edildi; Plan 13'te
+        // ConstraintState immutable record'a çevrilince `state with { ... }` haline gelir.
         foreach (var change in request.Changes)
         {
             var def = state.Definitions.Values.FirstOrDefault(d => d.Id == change.ConstraintId);
@@ -153,9 +153,7 @@ public sealed class SimulationService : ISimulationService
                     def.IsEnabled = Convert.ToBoolean(change.Value);
                     break;
                 case "weight":
-                    var newWeight = Convert.ToInt32(change.Value);
-                    def.Weight = newWeight;
-                    weightMap[def.Code] = newWeight;
+                    def.Weight = Convert.ToInt32(change.Value);
                     break;
                 case "parameters":
                     def.Parameters = change.Value?.ToString();
@@ -163,8 +161,8 @@ public sealed class SimulationService : ISimulationService
             }
         }
 
-        // Evaluate AFTER with modified state
-        var afterBreakdown = _evaluationService.EvaluateWithBreakdown(snapshot, config, state, weightMap);
+        // AFTER (mutated state)
+        var afterBreakdown = await _ruleEngine.EvaluateWithBreakdownAsync(snapshot, config, state, ct);
         var after = new SimulationBreakdown(afterBreakdown.TotalHardViolations, afterBreakdown.TotalSoftPenalty);
 
         return BuildSimulationResult(before, after, beforeBreakdown, afterBreakdown);
@@ -172,27 +170,22 @@ public sealed class SimulationService : ISimulationService
 
     // ── Private helpers ──────────────────────────────────────────────────
 
-    private async Task<(TermSnapshot Snapshot, SchedulingConstraintConfig Config, ConstraintState State, Dictionary<string, int> WeightMap)>
+    private async Task<(RuntimeSnapshot Snapshot, SchedulingConstraintConfig Config, ConstraintState State)>
         LoadEvaluationContextAsync(int termId, CancellationToken ct)
     {
-        var snapshot = await _schedulingService.BuildTermSnapshotAsync(termId, null, null, ct);
+        var snapshot = await _schedulingService.BuildRuntimeSnapshotAsync(termId, null, null, ct);
         var softConfig = await _schedulingService.LoadSoftConstraintConfigAsync(ct);
         var hardConfig = await _schedulingService.LoadHardConstraintConfigAsync(ct);
 
-        if (softConfig.S4Enabled)
-            snapshot.CoEnrollmentPairs = await _schedulingService.LoadCoEnrollmentPairsAsync(
-                snapshot.TermId, softConfig.S4MinCoPairThreshold, ct);
-
         var config = _schedulingService.BuildConstraintConfig(softConfig, hardConfig);
-        var state = await _evaluationService.LoadConstraintStateAsync(null, null, null, termId, ct);
-        var weightMap = state.Definitions.ToDictionary(d => d.Key, d => d.Value.Weight);
+        var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, termId, ct);
 
-        return (snapshot, config, state, weightMap);
+        return (snapshot, config, state);
     }
 
-    private static TermSnapshot BuildFilteredSnapshot(TermSnapshot snapshot, int excludeSectionId)
+    private static RuntimeSnapshot BuildFilteredSnapshot(RuntimeSnapshot snapshot, int excludeSectionId)
     {
-        return new TermSnapshot
+        return new RuntimeSnapshot
         {
             TermId = snapshot.TermId,
             TermName = snapshot.TermName,
@@ -201,79 +194,58 @@ public sealed class SimulationService : ISimulationService
             ClassroomAssignments = snapshot.ClassroomAssignments,
             DeptFacultyMap = snapshot.DeptFacultyMap,
             Corequisites = snapshot.Corequisites,
-            CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
-            CourseSuggestedSemestersByDepartment = snapshot.CourseSuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = snapshot.CourseAccessibleDepartments,
-            DistributionConstraints = snapshot.DistributionConstraints,
             SlotAllowedModes = snapshot.SlotAllowedModes,
+            CohortConflictPairs = snapshot.CohortConflictPairs,
+            CurriculumConflictMode = snapshot.CurriculumConflictMode,
+            EnrollmentConflicts = snapshot.EnrollmentConflicts,
+            CoEnrollmentPairs = snapshot.CoEnrollmentPairs,
+            AdjacentYearSoftPairs = snapshot.AdjacentYearSoftPairs,
+            DistributionConstraints = snapshot.DistributionConstraints,
         };
     }
 
-    private static TermSnapshot CloneSnapshotWithMove(TermSnapshot original, SimulateMoveRequest move)
+    private static RuntimeSnapshot CloneSnapshotWithMove(RuntimeSnapshot original, SimulateMoveRequest move)
     {
-        var newDay = (DayOfWeek)move.NewDayOfWeek;
+        var newDay = move.NewDayOfWeek;
         var newStart = TimeOnly.Parse(move.NewTimeSlotStart);
 
         var sections = original.Sections.Select(s =>
         {
             if (s.SectionId != move.SectionId) return s;
 
-            // Calculate new time blocks by shifting all blocks to the new day/start time
-            var duration = s.TimeBlocks.Count > 0
-                ? s.TimeBlocks[0].EndTime - s.TimeBlocks[0].StartTime
+            var duration = s.Blocks.Count > 0
+                ? s.Blocks[0].EndTime - s.Blocks[0].StartTime
                 : TimeSpan.FromMinutes(50);
 
-            var newBlocks = new List<TimeBlock>();
-            var currentStart = newStart;
-            var blockCount = s.TimeBlocks.Count > 0 ? s.TimeBlocks.Count : Math.Max(s.TheoryHours + s.LabHours, 1);
+            var blockCount = s.Blocks.Count > 0 ? s.Blocks.Count : Math.Max(s.TheoryHours + s.LabHours, 1);
+            var classroomId = move.NewClassroomId ?? s.PrimaryClassroomId;
+            var classroomName = classroomId != s.PrimaryClassroomId ? $"Derslik #{classroomId}" : s.PrimaryClassroomName;
 
+            var newBlocks = new List<RuntimeBlock>();
+            var currentStart = newStart;
             for (var i = 0; i < blockCount; i++)
             {
-                newBlocks.Add(new TimeBlock
-                {
-                    Day = newDay,
-                    StartTime = currentStart,
-                    EndTime = currentStart.Add(duration),
-                    ClassroomId = move.NewClassroomId ?? s.ClassroomId,
-                });
+                newBlocks.Add(new RuntimeBlock(
+                    Day: newDay,
+                    StartTime: currentStart,
+                    EndTime: currentStart.Add(duration),
+                    ClassroomId: classroomId,
+                    ClassroomName: classroomName,
+                    ClassroomType: s.PrimaryClassroomType,
+                    ClassroomCapacity: s.PrimaryClassroomCapacity));
                 // Next block starts after a 10-minute break
                 currentStart = currentStart.Add(duration).Add(TimeSpan.FromMinutes(10));
             }
 
-            var classroomId = move.NewClassroomId ?? s.ClassroomId;
-
-            return new SectionSnapshot
+            return s with
             {
-                SectionId = s.SectionId,
-                SectionNumber = s.SectionNumber,
-                CourseId = s.CourseId,
-                CourseCode = s.CourseCode,
-                CourseName = s.CourseName,
-                TermId = s.TermId,
-                TheoryHours = s.TheoryHours,
-                LabHours = s.LabHours,
-                Capacity = s.Capacity,
-                EnrolledCount = s.EnrolledCount,
-                ClassroomId = classroomId,
-                ClassroomName = classroomId != s.ClassroomId ? $"Derslik #{classroomId}" : s.ClassroomName,
-                ClassroomCapacity = s.ClassroomCapacity,
-                ClassroomType = s.ClassroomType,
-                TheoryClassroomType = s.TheoryClassroomType,
-                LabClassroomType = s.LabClassroomType,
-                InstructorId = s.InstructorId,
-                InstructorName = s.InstructorName,
-                InstructorMaxWeeklyHours = s.InstructorMaxWeeklyHours,
-                DepartmentId = s.DepartmentId,
-                SuggestedSemester = s.SuggestedSemester,
-                SuggestedSemestersByDepartment = s.SuggestedSemestersByDepartment,
-                AccessibleDepartmentIds = s.AccessibleDepartmentIds,
-                AssignedTimeSlotCount = newBlocks.Count,
-                TimeBlocks = newBlocks,
-                Notes = new List<string>(),
+                PrimaryClassroomId = classroomId,
+                PrimaryClassroomName = classroomName,
+                Blocks = newBlocks,
             };
         }).ToList();
 
-        return new TermSnapshot
+        return new RuntimeSnapshot
         {
             TermId = original.TermId,
             TermName = original.TermName,
@@ -282,51 +254,29 @@ public sealed class SimulationService : ISimulationService
             ClassroomAssignments = original.ClassroomAssignments,
             DeptFacultyMap = original.DeptFacultyMap,
             Corequisites = original.Corequisites,
-            CoEnrollmentPairs = original.CoEnrollmentPairs,
-            CohortConflictPairs = original.CohortConflictPairs,
-            EnrollmentConflicts = original.EnrollmentConflicts,
-            CourseSuggestedSemestersByDepartment = original.CourseSuggestedSemestersByDepartment,
-            CourseAccessibleDepartments = original.CourseAccessibleDepartments,
-            DistributionConstraints = original.DistributionConstraints,
             SlotAllowedModes = original.SlotAllowedModes,
+            CohortConflictPairs = original.CohortConflictPairs,
+            CurriculumConflictMode = original.CurriculumConflictMode,
+            EnrollmentConflicts = original.EnrollmentConflicts,
+            CoEnrollmentPairs = original.CoEnrollmentPairs,
+            AdjacentYearSoftPairs = original.AdjacentYearSoftPairs,
+            DistributionConstraints = original.DistributionConstraints,
         };
     }
 
-    private static SectionSnapshot CloneSectionWithNewSchedule(
-        SectionSnapshot original,
-        List<TimeBlock> newBlocks,
+    private static RuntimeCandidate CloneSectionWithNewSchedule(
+        RuntimeCandidate original,
+        List<RuntimeBlock> newBlocks,
         int classroomId,
         string classroomName,
         int classroomCapacity)
     {
-        return new SectionSnapshot
+        return original with
         {
-            SectionId = original.SectionId,
-            SectionNumber = original.SectionNumber,
-            CourseId = original.CourseId,
-            CourseCode = original.CourseCode,
-            CourseName = original.CourseName,
-            TermId = original.TermId,
-            TheoryHours = original.TheoryHours,
-            LabHours = original.LabHours,
-            Capacity = original.Capacity,
-            EnrolledCount = original.EnrolledCount,
-            ClassroomId = classroomId,
-            ClassroomName = classroomName,
-            ClassroomCapacity = classroomCapacity,
-            ClassroomType = original.ClassroomType,
-            TheoryClassroomType = original.TheoryClassroomType,
-            LabClassroomType = original.LabClassroomType,
-            InstructorId = original.InstructorId,
-            InstructorName = original.InstructorName,
-            InstructorMaxWeeklyHours = original.InstructorMaxWeeklyHours,
-            DepartmentId = original.DepartmentId,
-            SuggestedSemester = original.SuggestedSemester,
-            SuggestedSemestersByDepartment = original.SuggestedSemestersByDepartment,
-            AccessibleDepartmentIds = original.AccessibleDepartmentIds,
-            AssignedTimeSlotCount = newBlocks.Count,
-            TimeBlocks = newBlocks,
-            Notes = new List<string>(),
+            PrimaryClassroomId = classroomId,
+            PrimaryClassroomName = classroomName,
+            PrimaryClassroomCapacity = classroomCapacity,
+            Blocks = newBlocks,
         };
     }
 

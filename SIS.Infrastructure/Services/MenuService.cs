@@ -111,6 +111,8 @@ public class MenuService : IMenuService
                 // Item'a bağlı permission'lardan EN AZ BIRI user'da varsa (OR mantığı)
                 .Where(i => i.MenuItemPermissions.Any(mip =>
                     mip.Permission != null && permissions.Contains(mip.Permission.Key)))
+                // Ders Değerlendirme yalnızca Student rolüne açık; SysAdmin shortcut'ı atlar.
+                .Where(i => !(i.Slug == "ders-degerlendirme" && userRoles.Contains("SystemAdministrator")))
                 .OrderBy(i => i.SortOrder)
                 .Select(i => new MenuItemDto
                 {

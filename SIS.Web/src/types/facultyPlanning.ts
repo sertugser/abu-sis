@@ -43,6 +43,23 @@ export interface RecentAssignment {
 
 export type SectionStatus = 'Unscheduled' | 'Scheduled' | 'Conflicted' | 'Partial';
 
+export type TeachingMethod = 'FaceToFace' | 'Online' | 'Hybrid';
+
+export type ScheduleBlockType = 'Theory' | 'Lab';
+
+export interface ScheduleBlock {
+  /** .NET DayOfWeek: 0=Sunday … 1=Monday … 6=Saturday */
+  day: number;
+  /** "HH:mm:ss" */
+  startTime: string;
+  /** "HH:mm:ss" */
+  endTime: string;
+  blockType: ScheduleBlockType;
+  classroomId: number | null;
+  classroomName: string | null;
+  classroomType: string | null;
+}
+
 export interface FacultyPlanningSection {
   sectionId: number;
   courseId: number;
@@ -57,12 +74,14 @@ export interface FacultyPlanningSection {
   instructorId: number | null;
   instructorName: string | null;
   scheduleSummary: string;
+  schedules: ScheduleBlock[];
   status: SectionStatus;
   theoryHours: number;
   labHours: number;
   sectionIndex: number;
   isPinned: boolean;
   suggestedSemester: number;
+  teachingMethod: TeachingMethod;
 }
 
 export interface FacultyPlanningSectionPage {
@@ -115,13 +134,17 @@ export interface AutoSchedulePreview {
   stats: AutoScheduleStats;
 }
 
+/**
+ * Auto-schedule sonuç istatistikleri. Backend kanonik kaynak — frontend hardcoded sayı türetmez.
+ * v2-ortools tek-geçişli CP-SAT olduğu için v1'in (Greedy/SA/LNS) aşama bazlı alanları kaldırıldı.
+ */
 export interface AutoScheduleStats {
-  constructionPlaced: number;
-  constructionFailed: number;
-  saIterations: number;
-  saInitialPenalty: number;
-  saFinalPenalty: number;
+  /** Solver toplam çalışma süresi (saniye). */
   elapsedSeconds: number;
+  /** İşlenen şubelerin kapsadığı farklı `Course` sayısı (success + failure birleşik). */
+  distinctCourseCount: number;
+  /** Başarılı atamaların kullandığı farklı `Classroom` sayısı. */
+  usedClassroomCount: number;
 }
 
 export interface AutoSchedulePreviewItem {

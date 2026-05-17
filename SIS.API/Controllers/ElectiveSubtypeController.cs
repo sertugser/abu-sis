@@ -38,6 +38,7 @@ public class ElectiveSubtypeController(AppDbContext context) : ControllerBase
     // NOT: Code immutable (Karar #14) — Update DTO'da Code alanı YOK.
 
     [HttpGet]
+    [RequirePermission("lookup.elective-subtype")]
     // Faz B B3c-3: Patch 2A pattern — read-only lookup multi-role'a açık.
     // Karar #1 (memory) sadece CRUD'u SysAdmin'e kısıtlar; List sadece okuma,
     // ElectiveGroup form'u açan herkes (Dean, BölümBaşkanı) tip dropdown'unu görür.

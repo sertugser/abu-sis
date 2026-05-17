@@ -6,9 +6,9 @@ import { ROUTES } from '@/lib/constants';
 import { AlertTriangle, Calendar, RefreshCcw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSchedulingErrorMessage } from '../api/instructorScheduling.api';
+import type { InstructorSection } from '../api/instructor.api';
 import WeeklyTimetableGrid, { type TimetableEntry } from '../components/scheduling/WeeklyTimetableGrid';
 import { useInstructorSections } from '../hooks/useInstructorSections';
-import { parseScheduleSummary } from '../lib/scheduleUtils';
 
 export default function InstructorSchedulingPage() {
   const navigate = useNavigate();
@@ -92,22 +92,18 @@ export default function InstructorSchedulingPage() {
   );
 }
 
-function buildTimetableEntries(
-  sections: Array<{
-    sectionId: number;
-    courseCode: string;
-    courseName: string;
-    classroomName: string;
-    schedule?: string;
-  }>,
-): TimetableEntry[] {
+function buildTimetableEntries(sections: InstructorSection[]): TimetableEntry[] {
+  // 2026-05-10 — Plan E: backend'in yapısal `schedules` array'ini kullan, string parse etme.
+  // Eski parseScheduleSummary helper'ı silindi (tek source-of-truth: backend BuildScheduleBlocks).
   const entries: TimetableEntry[] = [];
 
   for (const section of sections) {
-    const slots = parseScheduleSummary(section.schedule);
-    if (slots.length === 0) {
-      continue;
-    }
+    const slots = (section.schedules ?? []).map(b => ({
+      day: b.day,
+      startTime: b.startTime.slice(0, 5),
+      endTime: b.endTime.slice(0, 5),
+    }));
+    if (slots.length === 0) continue;
 
     entries.push({
       id: String(section.sectionId),

@@ -463,41 +463,78 @@
 
 ---
 
-### Sınıf Listeleri
+### Sınıf Listeleri — KALDIRILDI (2026-05-11)
+
+Eski `/sinif-listeleri` (ClassListsPage.tsx) sayfası `Şubelendirme İşlemleri` (`/subelendirme-islemleri`, SectioningPage.tsx) ile aynı `useDepartmentClassLists` hook'unu paylaşıyordu ve aynı veriyi gösteriyordu. Tek kaynak olarak Şubelendirme İşlemleri korundu, görsel dili eski Sınıf Listeleri'nden alındı. Cleanup SQL: `scripts/2026-05-11-sinif-listeleri-removal.sql`.
+
+---
+
+### Şubelendirme İşlemleri (Proliz parity, 2026-05-12)
 
 | | |
 |---|---|
-| **Route** | `/sinif-listeleri` |
-| **Dosya** | `SIS.Web/src/pages/ClassListsPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+| **Route** | `/subelendirme-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/SectioningPage.tsx` (orkestrasyon, ~360 satır) |
+| **Modül dizini** | `SIS.Web/src/pages/sectioning/` — types, constants, hooks, components |
+| **Roller** | SystemAdmin (shortcut), DepartmentManager, Dean, AdministrativeStaff, Instructor (sadece view) |
+| **Layout** | 4-panel grid: filtreler (sol üst), şubeler (sağ üst), dersler (sol alt), öğrenciler (sağ alt) + alt toolbar |
 
-**Veri kancaları (5):**
-- `useAcademicOperationsContext()`
-- `useDepartmentClassLists()`
-- `useActiveTerm()`
-- `useAdminFaculties()`
-- `useAdminDepartmentsByStructure()`
+**Permission key'leri (3):**
+- `menu.subelendirme-islemleri.view` — sayfaya erişim
+- `menu.subelendirme-islemleri.transfer` — şubeler arası öğrenci taşıma (Faz 4)
+- `menu.subelendirme-islemleri.auto-split` — otomatik şubelendirme (Faz 3)
 
-**API endpoint'leri (18):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `GET /academicLevel/department/${departmentId}`
-- `GET /academicoperations/class-lists`
+**Veri kancaları (8):**
+- `useAcademicOperationsContext()` — yetkili kapsam
+- `useActiveTerm()` — aktif dönem
+- `useAdminFaculties()` + `useAdminDepartmentsByStructure()` — filtreler
+- `useDepartmentClassLists()` — şube + öğrenci verisi (ortak class-lists endpoint)
+- `useUpdateOpenedSection()` — hoca / kontenjan güncelleme
+- `useBulkAssignInstructor()` — tüm şubelere toplu hoca atama
+- `useCloseSection()` / `useReactivateSection()` / `useDeleteAllSectionsHard()` — şube yaşam döngüsü
+- `useOpenCourse()` — yeni şube ekleme (sectionCount=1)
+- `useAutoSplitCourse()` — otomatik şubelendirme (Faz 3)
+- `useTransferStudentsBetweenSections()` — şubeler arası öğrenci taşıma (Faz 4)
+- `useDepartmentInstructors()` — hoca dropdown (atama dialog'larında)
+
+**API endpoint'leri (10):**
 - `GET /academicoperations/context`
-- `GET /academicoperations/curriculum-overview`
-- `GET /academicoperations/planning-summary`
-- `GET /academicprogression/grade-lock-readiness/${departmentId}`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
+- `GET /academicoperations/class-lists` — şube + öğrenci listesi
+- `PUT /course-opening/section` — tek şube güncelleme (hoca / kontenjan)
+- `POST /course-opening/bulk-assign-instructor` — toplu hoca atama
+- `POST /course-opening/open` — yeni şube açma (sectionCount=1)
+- `POST /course-opening/auto-split` — otomatik şubelendirme (3 strateji)
+- `POST /course-opening/transfer-students` — şubeler arası öğrenci taşıma
+- `DELETE /course-opening/section/{id}` — şubeyi kapat (Status=Cancelled)
+- `PUT /course-opening/section/{id}/reactivate` — şubeyi yeniden aktifleştir
+- `DELETE /course-opening/course/{courseId}/hard` — dersin tüm şubelerini hard delete
+
+**Modal sayısı (8):**
+- `AddSectionDialog` — yeni şube ekleme (capacity + quotas + instructor)
+- `AssignInstructorDialog` — tek şube hoca değiştirme
+- `BulkAssignInstructorDialog` — tüm şubelere toplu hoca atama
+- `EditCapacityDialog` — kontenjan düzenleme (toplam + iç + dış)
+- `AutoSplitConfirmDialog` — otomatik şubelendirme onayı (delta + uyarı)
+- `ConfirmActionDialog` — kapatma / yeniden açma / tümünü silme onayları (3 ayrı kullanım)
+
+**Auto-split stratejileri (3):**
+- **Equal** — öğrenci numarasına göre round-robin
+- **EqualRepeat** — `CourseRegistration.IsRepeated` true olanları önce homojen dağıt, normal öğrenciler sonra
+- **ModOddEven** — son hane çift→şube1, tek→şube2 (yalnızca K=2 ile)
+
+**Şu an placeholder olan (yapılmadı):**
+- 3 ek strateji: Öğrenci Tipi / Grubu / Programlarına Göre (dropdown'dan çıkarıldı, backend'de yok)
+
+**SQL migrationlar:**
+- `scripts/2026-05-12-subelendirme-transfer-permission.sql` — Faz 4 permission grant
+- `scripts/2026-05-12-subelendirme-auto-split-permission.sql` — Faz 3 permission grant
+- `scripts/2026-05-12-sectiontransfer-removal.sql` — stub SectionTransferPage sayfası silindi
+
+---
+
+### Şubeler Arası Öğrenci Transfer — KALDIRILDI (2026-05-12)
+
+Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfaydı (hiç implement edilmedi). İşlev `Şubelendirme İşlemleri` sayfasına taşındı (Faz 4 — `menu.subelendirme-islemleri.transfer` permission'ı + alt toolbar "Şubeye Taşı" butonu). Cleanup SQL: `scripts/2026-05-12-sectiontransfer-removal.sql`.
 
 ---
 

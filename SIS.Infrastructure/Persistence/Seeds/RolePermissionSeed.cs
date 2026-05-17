@@ -30,17 +30,19 @@ public static class RolePermissionSeed
         new Dictionary<string, IReadOnlyList<string>>
         {
             // ═══════════════════════════════════════════════════════════════════════════
-            // Student — 29 permission (15 view + 14 action)
+            // Student — 31 permission (17 view + 14 action)
             // Sidebar: Sık Kullanılanlar + Ders ve Dönem İşlemleri + Anketler + Hesabım
             // ═══════════════════════════════════════════════════════════════════════════
             ["Student"] = new[]
             {
-                // ── View permissions (15) ──
+                // ── View permissions (17) ──
                 "menu.ana-sayfa.view",
                 "menu.akademik-takvim.view",
                 "menu.duyurular.view",
                 "menu.alinan-dersler.view",
                 "menu.raporlarim.view",
+                "menu.danisman-bilgileri.view",
+                "menu.acilan-bolum-dersleri.view",
                 "menu.ders-kayit.view",
                 "menu.akilli-planlama.view",
                 "menu.plan.view",
@@ -76,7 +78,7 @@ public static class RolePermissionSeed
             // ═══════════════════════════════════════════════════════════════════════════
             ["Instructor"] = new[]
             {
-                // ── View permissions (9) ──
+                // ── View permissions ──
                 "menu.ana-sayfa.view",
                 "menu.akademik-takvim.view",
                 "menu.duyurular.view",
@@ -86,7 +88,6 @@ public static class RolePermissionSeed
                 "menu.ders-programim.view",
                 "menu.not-girisi.view",
                 "menu.danisman-ders-kisitlari.view",
-                "menu.sinif-listeleri.view",
                 "menu.degerlendirme-sonuclari.view",
                 "menu.sifre-degistir.view",
                 // Patch 2B: "Bölüm İşlemleri" modülü için (Proliz tarzı hoca paneli)
@@ -94,8 +95,10 @@ public static class RolePermissionSeed
                 "menu.ders-veren-ogretim-uyeleri.view",
                 "menu.toplu-danisman-atama.view",
                 "menu.toplu-mufredat-atama.view",
+                // Hiyerarşik duyuru: hoca kendi ders şubesi öğrencilerine duyuru yayınlayabilir
+                "menu.duyuru-yonetimi.view",
 
-                // ── Action permissions (17) ──
+                // ── Action permissions ──
                 "menu.not-girisi.edit",
                 "menu.not-girisi.submit",
                 "menu.not-girisi.export",
@@ -106,14 +109,15 @@ public static class RolePermissionSeed
                 "menu.danisman-ders-kisitlari.create",
                 "menu.danisman-ders-kisitlari.edit",
                 "menu.danisman-ders-kisitlari.delete",
-                "menu.ders-degerlendirme.view",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
-                // "Ders ve Dönem İşlemleri" modülü sadece Student için (sidebar görünürlüğü).
-                // Backend Course/Eligibility/Curriculum endpoint'leri permission'sız (multi-rol authenticated).
                 "menu.akilli-planlama.difficulty",
+                // Hiyerarşik duyuru CRUD
+                "menu.duyuru-yonetimi.create",
+                "menu.duyuru-yonetimi.edit",
+                "menu.duyuru-yonetimi.delete",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -131,7 +135,6 @@ public static class RolePermissionSeed
                 "menu.derslerim.view",
                 "menu.yoklama-girisi.view",
                 "menu.ders-programim.view",
-                "menu.sinif-listeleri.view",
                 "menu.ders-kayit-duzenleme.view",
                 "menu.ogrenci-rehberi.view",
                 "menu.ogrenci-rehberi.eligibility",
@@ -144,12 +147,16 @@ public static class RolePermissionSeed
                 "menu.danisman-ders-kisitlari.edit",
                 "menu.danisman-ders-kisitlari.delete",
                 "menu.degerlendirme-sonuclari.view",
-                "menu.ders-degerlendirme.view",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
                 "menu.akilli-planlama.difficulty",
+                // Hiyerarşik duyuru: danışman öğrencilere duyuru yayınlayabilir
+                "menu.duyuru-yonetimi.view",
+                "menu.duyuru-yonetimi.create",
+                "menu.duyuru-yonetimi.edit",
+                "menu.duyuru-yonetimi.delete",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -174,8 +181,12 @@ public static class RolePermissionSeed
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
                 "menu.derslik-doluluk.view",
+                "menu.subelendirme-islemleri.view",
+                "menu.subelendirme-islemleri.transfer",
+                "menu.subelendirme-islemleri.auto-split",
                 "menu.ders-veren-ogretim-uyeleri.view",
-                "menu.sinif-listeleri.view",
+                "menu.toplu-danisman-atama.view",
+                "menu.toplu-mufredat-atama.view",
                 "menu.ders-programi-kisitlamalari.view",
                 "menu.ogrenci-rehberi.view",
                 "menu.duyuru-yonetimi.view",
@@ -249,6 +260,7 @@ public static class RolePermissionSeed
                 // ── Öğrenci & Personel CRUD ──
                 "menu.ogrenci-rehberi.create",
                 "menu.toplu-danisman-atama.assign",
+                "menu.toplu-mufredat-atama.assign",
                 "menu.personel-listesi.create",
 
                 // ── Duyuru Yönetimi CRUD ──
@@ -259,7 +271,7 @@ public static class RolePermissionSeed
                 // ── Cross-cutting (authenticated) ──
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı (sidebar Ders ve Dönem
                 // sadece Student'ta gözükür; backend Course/Eligibility/Curriculum permission'sız).
-                "menu.ders-degerlendirme.view",
+                // ders-degerlendirme.view Student-only (2026-05-02).
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
@@ -291,8 +303,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.view",
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
+                "menu.subelendirme-islemleri.view",
+                "menu.subelendirme-islemleri.transfer",
+                "menu.subelendirme-islemleri.auto-split",
                 "menu.ders-veren-ogretim-uyeleri.view",
-                "menu.sinif-listeleri.view",
                 "menu.donem-kapatma.view",
                 "menu.derslerim.view",
                 "menu.yoklama-girisi.view",
@@ -306,6 +320,8 @@ public static class RolePermissionSeed
                 "menu.personel-listesi.view",
                 "menu.sifre-degistir.view",
                 "menu.sinif-atlatma-islemleri.view",
+                "menu.toplu-danisman-atama.view",
+                "menu.toplu-mufredat-atama.view",
 
                 // ── Müfredat (publish/archive DAHIL) ──
                 "menu.mufredat-islemleri.create",
@@ -381,15 +397,22 @@ public static class RolePermissionSeed
 
                 // ── Öğrenci ──
                 "menu.toplu-danisman-atama.assign",
+                "menu.toplu-mufredat-atama.assign",
 
                 // ── Duyuru Yönetimi CRUD ──
                 "menu.duyuru-yonetimi.create",
                 "menu.duyuru-yonetimi.edit",
                 "menu.duyuru-yonetimi.delete",
 
+                // ── Duyuru Kategorileri CRUD ──
+                "menu.duyuru-kategorileri.view",
+                "menu.duyuru-kategorileri.create",
+                "menu.duyuru-kategorileri.edit",
+                "menu.duyuru-kategorileri.delete",
+
                 // ── Cross-cutting (authenticated) ──
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
-                "menu.ders-degerlendirme.view",
+                // ders-degerlendirme.view Student-only (2026-05-02).
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
@@ -424,9 +447,11 @@ public static class RolePermissionSeed
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
                 "menu.derslik-doluluk.view",
+                "menu.subelendirme-islemleri.view",
+                "menu.subelendirme-islemleri.transfer",
+                "menu.subelendirme-islemleri.auto-split",
                 "menu.ders-veren-ogretim-uyeleri.view",
                 "menu.program-onayi.view",
-                "menu.sinif-listeleri.view",
                 "menu.donem-kapatma.view",
                 "menu.derslerim.view",
                 "menu.yoklama-girisi.view",
@@ -440,6 +465,8 @@ public static class RolePermissionSeed
                 "menu.sinif-atlatma-islemleri.view",
 
                 // ── Program Kontenjan ──
+                "menu.toplu-danisman-atama.view",
+                "menu.toplu-mufredat-atama.view",
                 "menu.program-kontenjan.create",
                 "menu.program-kontenjan.edit",
                 "menu.program-kontenjan.delete",
@@ -520,14 +547,24 @@ public static class RolePermissionSeed
                 // ── Derslik Export ──
                 "menu.derslik-doluluk.export",
 
+                // ── Öğrenci ──
+                "menu.toplu-danisman-atama.assign",
+                "menu.toplu-mufredat-atama.assign",
+
                 // ── Duyuru Yönetimi CRUD ──
                 "menu.duyuru-yonetimi.create",
                 "menu.duyuru-yonetimi.edit",
                 "menu.duyuru-yonetimi.delete",
 
+                // ── Duyuru Kategorileri CRUD ──
+                "menu.duyuru-kategorileri.view",
+                "menu.duyuru-kategorileri.create",
+                "menu.duyuru-kategorileri.edit",
+                "menu.duyuru-kategorileri.delete",
+
                 // ── Cross-cutting (authenticated) ──
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
-                "menu.ders-degerlendirme.view",
+                // ders-degerlendirme.view Student-only (2026-05-02).
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",

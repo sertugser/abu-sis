@@ -1,3 +1,4 @@
+using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Domain.Entities;
 
 namespace SIS.Infrastructure.Services;
@@ -79,41 +80,67 @@ public static class ScheduleHelper
     }
 
     /// <summary>
-    /// Formats SectionSchedule records into a short summary.
+    /// Formats SectionSchedule records into a short summary. BlockType-aware:
+    /// theory + lab on the same day are kept as separate ranges so the summary
+    /// reflects the structural split (mixed courses).
     /// Example: "Pzt 09:00-09:50, Car 13:00-13:50"
     /// </summary>
     public static string FormatScheduleSummary(IEnumerable<SectionSchedule> schedules)
+    {
+        var blocks = BuildScheduleBlocks(schedules);
+        if (blocks.Count == 0) return "Zamanlanmamis";
+        return string.Join(", ", blocks.Select(b =>
+            $"{DayOfWeekToTurkishShort((DayOfWeek)b.Day)} {b.StartTime:HH:mm}-{b.EndTime:HH:mm}"));
+    }
+
+    /// <summary>
+    /// Converts SectionSchedule records into structured block list, merging consecutive
+    /// slots ONLY when they share the same day, classroom, AND BlockType. A theory
+    /// slot followed by a lab slot on the same day stays as two separate blocks.
+    /// </summary>
+    public static List<ScheduleBlockDto> BuildScheduleBlocks(IEnumerable<SectionSchedule> schedules)
     {
         var slots = schedules
             .OrderBy(ss => ss.TimeSlot.DayOfWeek)
             .ThenBy(ss => ss.TimeSlot.StartTime)
             .ToList();
 
-        if (slots.Count == 0)
-            return "Zamanlanmamis";
-
-        // Group consecutive slots on the same day into ranges
-        var ranges = new List<(DayOfWeek Day, TimeOnly Start, TimeOnly End)>();
+        var blocks = new List<ScheduleBlockDto>();
         foreach (var slot in slots)
         {
             var day = slot.TimeSlot.DayOfWeek;
             var start = slot.TimeSlot.StartTime;
             var end = slot.TimeSlot.EndTime;
+            var classroomId = slot.ClassroomId;
+            var blockType = slot.BlockType;
 
-            if (ranges.Count > 0)
+            if (blocks.Count > 0)
             {
-                var last = ranges[^1];
-                if (last.Day == day && start <= last.End.AddMinutes(10))
+                var last = blocks[^1];
+                // Merge contiguous slots only when day + classroom + block type all match.
+                // Theory→Lab transitions on the same day stay split.
+                if (last.Day == (int)day
+                    && last.ClassroomId == classroomId
+                    && last.BlockType == blockType
+                    && start <= last.EndTime.AddMinutes(10))
                 {
-                    ranges[^1] = (day, last.Start, end > last.End ? end : last.End);
+                    last.EndTime = end > last.EndTime ? end : last.EndTime;
                     continue;
                 }
             }
-            ranges.Add((day, start, end));
-        }
 
-        return string.Join(", ", ranges.Select(r =>
-            $"{DayOfWeekToTurkishShort(r.Day)} {r.Start:HH:mm}-{r.End:HH:mm}"));
+            blocks.Add(new ScheduleBlockDto
+            {
+                Day = (int)day,
+                StartTime = start,
+                EndTime = end,
+                BlockType = blockType,
+                ClassroomId = classroomId,
+                ClassroomName = slot.Classroom?.Name,
+                ClassroomType = slot.Classroom?.Type.ToString(),
+            });
+        }
+        return blocks;
     }
 
     private static string DayOfWeekToTurkish(DayOfWeek day) => day switch

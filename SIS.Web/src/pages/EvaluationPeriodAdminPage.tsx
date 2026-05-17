@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -40,7 +39,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { CalendarClock, Lock, Unlock, Plus, Pencil, Trash2, AlertCircle } from 'lucide-react';
+import {
+  CalendarClock,
+  Lock,
+  Unlock,
+  Plus,
+  Pencil,
+  Trash2,
+  AlertCircle,
+  Info,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+} from 'lucide-react';
 import {
   useActiveEvaluationPeriod,
   useAllEvaluationQuestions,
@@ -48,6 +62,7 @@ import {
   useCreateEvaluationQuestion,
   useDeleteEvaluationQuestion,
   useOpenEvaluationPeriod,
+  useRestoreEvaluationQuestion,
   useUpdateEvaluationQuestion,
 } from '../hooks/useCourseEvaluation';
 import { useAdminTerms } from '../hooks/useAdminTerms';
@@ -65,24 +80,60 @@ export default function EvaluationPeriodAdminPage() {
 
   const openMutation = useOpenEvaluationPeriod();
   const closeMutation = useCloseEvaluationPeriod();
+  const toggleActiveMutation = useUpdateEvaluationQuestion();
+  const deleteQuestionMutation = useDeleteEvaluationQuestion();
+  const restoreQuestionMutation = useRestoreEvaluationQuestion();
 
   // Open-period form state
   const [selectedTermId, setSelectedTermId] = useState<string>('');
   const [closesAt, setClosesAt] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Close confirmation
+  // Confirm dialogs
+  const [openPeriodConfirmOpen, setOpenPeriodConfirmOpen] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
 
   // Question CRUD state
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<EvaluationQuestion | null>(null);
-  const [deletingQuestionId, setDeletingQuestionId] = useState<number | null>(null);
+  const [deletingQuestion, setDeletingQuestion] = useState<EvaluationQuestion | null>(null);
+
+  // Deleted questions section
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const isOpen = periodData?.isOpen === true;
   const activePeriod = periodData?.period;
 
-  async function handleOpenPeriod() {
+  const liveQuestions = (questions ?? []).filter((q) => !q.isDeleted);
+  const deletedQuestions = (questions ?? []).filter((q) => q.isDeleted);
+
+  async function handleToggleActive(q: EvaluationQuestion) {
+    await toggleActiveMutation.mutateAsync({
+      id: q.id,
+      payload: {
+        text: q.text,
+        category: q.category,
+        questionType: q.questionType,
+        sortOrder: q.sortOrder,
+        isActive: !q.isActive,
+      },
+    });
+  }
+
+  async function handleDeleteConfirmed() {
+    if (!deletingQuestion) return;
+    try {
+      await deleteQuestionMutation.mutateAsync(deletingQuestion.id);
+    } finally {
+      setDeletingQuestion(null);
+    }
+  }
+
+  async function handleRestore(id: number) {
+    await restoreQuestionMutation.mutateAsync(id);
+  }
+
+  function handleOpenPeriodClick() {
     setFormError(null);
     if (!selectedTermId) {
       setFormError('Lütfen bir dönem seçin.');
@@ -92,6 +143,11 @@ export default function EvaluationPeriodAdminPage() {
       setFormError('Lütfen kapanış tarihini seçin.');
       return;
     }
+    setOpenPeriodConfirmOpen(true);
+  }
+
+  async function handleOpenPeriodConfirmed() {
+    setOpenPeriodConfirmOpen(false);
     try {
       await openMutation.mutateAsync({
         termId: Number(selectedTermId),
@@ -115,150 +171,150 @@ export default function EvaluationPeriodAdminPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-xl font-bold">Değerlendirme Dönemi Yönetimi</h1>
-        <p className="text-sm text-muted-foreground">
-          Ders değerlendirme anket dönemini açın veya kapatın, soruları yönetin.
-        </p>
-      </div>
-
-      {/* Period Status Section */}
+    <div className="space-y-4">
       {periodLoading ? (
-        <Skeleton className="h-32 rounded-xl" />
-      ) : isOpen && activePeriod ? (
-        <Card className="border-l-4 border-l-emerald-500">
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <Unlock className="h-8 w-8 text-emerald-600" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Aktif Değerlendirme Dönemi</p>
-                <p className="text-xs text-muted-foreground">
-                  {activePeriod.termName} · Kapanış: {formatDate(activePeriod.closesAt)}
-                </p>
-              </div>
-              <Badge variant="success">AÇIK</Badge>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Açılma: {formatDate(activePeriod.openedAt)}
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setCloseConfirmOpen(true)}
-              disabled={closeMutation.isPending}
-            >
-              <Lock className="h-4 w-4 mr-1.5" />
-              Dönemi Kapat
-            </Button>
-          </CardContent>
-        </Card>
+        <Skeleton className="h-96 rounded-xl" />
       ) : (
-        <Card className="border-l-4 border-l-slate-400">
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <Lock className="h-8 w-8 text-slate-500" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Aktif Değerlendirme Dönemi Yok</p>
+        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+          {/* Period Status Section — accent left border on whole container is too heavy;
+              use a slim colored bar inside instead */}
+          {isOpen && activePeriod ? (
+            <div className="flex flex-wrap items-center gap-3 border-l-4 border-l-emerald-500 bg-emerald-50/40 px-5 py-4">
+              <Unlock className="h-7 w-7 text-emerald-600" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold">Aktif Değerlendirme Dönemi</p>
+                  <Badge variant="success">AÇIK</Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Öğrencilerin ders değerlendirme yapabilmesi için yeni bir dönem açın.
+                  {activePeriod.termName} · Açılma: {formatDate(activePeriod.openedAt)} · Kapanış: {formatDate(activePeriod.closesAt)}
                 </p>
               </div>
-              <Badge variant="secondary">KAPALI</Badge>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setCloseConfirmOpen(true)}
+                disabled={closeMutation.isPending}
+              >
+                <Lock className="h-4 w-4 mr-1.5" />
+                Dönemi Kapat
+              </Button>
+            </div>
+          ) : (
+            <div className="border-l-4 border-l-slate-400 bg-slate-50/50 px-5 py-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <Lock className="h-7 w-7 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold">Aktif Değerlendirme Dönemi Yok</p>
+                    <Badge variant="secondary">KAPALI</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Öğrencilerin ders değerlendirme yapabilmesi için yeni bir dönem açın.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Dönem</Label>
+                  <Select value={selectedTermId} onValueChange={setSelectedTermId}>
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="Dönem seçin..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {terms?.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>
+                          {t.name} {t.isActive ? '(Aktif)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Kapanış Tarihi ve Saati</Label>
+                  <Input
+                    type="datetime-local"
+                    value={closesAt}
+                    onChange={(e) => setClosesAt(e.target.value)}
+                    className="bg-white"
+                  />
+                </div>
+                <Button onClick={handleOpenPeriodClick} disabled={openMutation.isPending}>
+                  <CalendarClock className="h-4 w-4 mr-1.5" />
+                  {openMutation.isPending ? 'Açılıyor...' : 'Dönemi Aç'}
+                </Button>
+              </div>
+
+              {formError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{formError}</AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+
+          {/* Questions Section — same container, no internal Card */}
+          <div className="border-t border-slate-100">
+            <div className="flex items-center justify-between gap-3 flex-wrap px-5 py-3">
+              <div>
+                <h2 className="font-heading text-base font-bold leading-tight">Değerlendirme Soruları</h2>
+                <p className="text-xs text-muted-foreground">
+                  Öğrencilere sorulacak anket sorularını yönetin.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingQuestion(null);
+                  setQuestionDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                Yeni Soru
+              </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
-              <div className="space-y-1.5">
-                <Label>Dönem</Label>
-                <Select value={selectedTermId} onValueChange={setSelectedTermId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Dönem seçin..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {terms?.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>
-                        {t.name} {t.isActive ? '(Aktif)' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Kapanış Tarihi ve Saati</Label>
-                <Input
-                  type="datetime-local"
-                  value={closesAt}
-                  onChange={(e) => setClosesAt(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {formError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{formError}</AlertDescription>
+            {isOpen && (
+              <Alert className="mx-5 mb-3 border-amber-200 bg-amber-50">
+                <Clock className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800 text-xs">
+                  <span className="font-medium">Dönem açık:</span> Yapacağınız değişiklikler şu anki anketi etkilemez; bir sonraki dönem açıldığında geçerli olur.
+                </AlertDescription>
               </Alert>
             )}
 
-            <Button onClick={handleOpenPeriod} disabled={openMutation.isPending}>
-              <CalendarClock className="h-4 w-4 mr-1.5" />
-              {openMutation.isPending ? 'Açılıyor...' : 'Değerlendirme Dönemini Aç'}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Questions Management Section */}
-      <div className="pt-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
-            <h2 className="font-heading text-lg font-bold">Değerlendirme Soruları</h2>
-            <p className="text-xs text-muted-foreground">
-              Öğrencilere sorulacak anket sorularını yönetin.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditingQuestion(null);
-              setQuestionDialogOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-1.5" />
-            Yeni Soru
-          </Button>
-        </div>
-
-        {questionsLoading ? (
-          <Skeleton className="h-64 rounded-xl" />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
+            {questionsLoading ? (
+              <div className="px-5 pb-5">
+                <Skeleton className="h-48 rounded-lg" />
+              </div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">Sıra</TableHead>
+                    <TableHead className="w-12 pl-5">Sıra</TableHead>
                     <TableHead>Soru</TableHead>
                     <TableHead>Kategori</TableHead>
                     <TableHead>Tip</TableHead>
                     <TableHead>Durum</TableHead>
-                    <TableHead className="text-right">İşlem</TableHead>
+                    <TableHead className="text-right pr-5">İşlem</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(questions ?? []).length === 0 ? (
+                  {liveQuestions.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                         Henüz soru tanımlanmamış.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    questions
-                      ?.slice()
+                    liveQuestions
+                      .slice()
                       .sort((a, b) => a.sortOrder - b.sortOrder)
                       .map((q) => (
                         <TableRow key={q.id}>
-                          <TableCell className="text-xs text-muted-foreground">
+                          <TableCell className="text-xs text-muted-foreground pl-5">
                             {q.sortOrder}
                           </TableCell>
                           <TableCell className="text-sm">{q.text}</TableCell>
@@ -279,7 +335,7 @@ export default function EvaluationPeriodAdminPage() {
                               <Badge variant="secondary">Pasif</Badge>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right pr-5">
                             <div className="flex justify-end gap-1">
                               <Button
                                 size="icon"
@@ -289,14 +345,39 @@ export default function EvaluationPeriodAdminPage() {
                                   setEditingQuestion(q);
                                   setQuestionDialogOpen(true);
                                 }}
+                                title="Düzenle"
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
+                              {q.isActive ? (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8"
+                                  disabled={toggleActiveMutation.isPending}
+                                  onClick={() => handleToggleActive(q)}
+                                  title="Pasife Al"
+                                >
+                                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8"
+                                  disabled={toggleActiveMutation.isPending}
+                                  onClick={() => handleToggleActive(q)}
+                                  title="Aktife Al"
+                                >
+                                  <Eye className="h-4 w-4 text-green-600" />
+                                </Button>
+                              )}
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8"
-                                onClick={() => setDeletingQuestionId(q.id)}
+                                onClick={() => setDeletingQuestion(q)}
+                                title="Sil"
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
@@ -307,36 +388,116 @@ export default function EvaluationPeriodAdminPage() {
                   )}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            )}
+          </div>
+
+          {/* Deleted questions — inside same container */}
+          {!questionsLoading && deletedQuestions.length > 0 && (
+            <div className="border-t border-slate-100 bg-slate-50/40">
+              <button
+                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full px-5 py-2.5"
+                onClick={() => setShowDeleted((v) => !v)}
+              >
+                {showDeleted ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+                Silinmiş Sorular ({deletedQuestions.length})
+              </button>
+
+              {showDeleted && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12 pl-5">Sıra</TableHead>
+                      <TableHead>Soru</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead>Tip</TableHead>
+                      <TableHead className="text-right pr-5">İşlem</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {deletedQuestions.map((q) => (
+                      <TableRow key={q.id} className="opacity-60">
+                        <TableCell className="text-xs text-muted-foreground pl-5">
+                          {q.sortOrder}
+                        </TableCell>
+                        <TableCell className="text-sm line-through">{q.text}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px]">
+                            {q.category === 'Course' ? 'Ders' : 'Öğretim Üyesi'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px]">
+                            {q.questionType === 'Rating' ? 'Puan' : 'Metin'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1.5"
+                            disabled={restoreQuestionMutation.isPending}
+                            onClick={() => handleRestore(q.id)}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Geri Yükle
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Question Form Dialog */}
       <QuestionFormDialog
+        key={editingQuestion ? `edit-${editingQuestion.id}` : 'new'}
         open={questionDialogOpen}
         onOpenChange={setQuestionDialogOpen}
         editing={editingQuestion}
+        periodIsOpen={isOpen}
       />
 
-      {/* Delete Question Confirmation */}
+      {/* Soft Delete Confirmation */}
       <AlertDialog
-        open={deletingQuestionId != null}
-        onOpenChange={(open) => !open && setDeletingQuestionId(null)}
+        open={deletingQuestion != null}
+        onOpenChange={(open) => { if (!open && !deleteQuestionMutation.isPending) setDeletingQuestion(null); }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Soruyu sil?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bu soru kalıcı olarak silinecek. Daha önce bu soruya verilmiş yanıtlar etkilenebilir.
+            <AlertDialogTitle>Soru silinsin mi?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">{deletingQuestion?.text}</span>
+                </p>
+                <p>
+                  Soru silinir; geçmiş yanıtlar korunur. İstediğiniz zaman geri yükleyebilirsiniz.
+                </p>
+                {isOpen && (
+                  <p className="text-amber-700">
+                    Dönem açık olduğu için bu değişiklik bir sonraki dönemde geçerli olur.
+                  </p>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>İptal</AlertDialogCancel>
-            <DeleteQuestionButton
-              id={deletingQuestionId}
-              onDone={() => setDeletingQuestionId(null)}
-            />
+            <AlertDialogCancel disabled={deleteQuestionMutation.isPending}>İptal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirmed}
+              disabled={deleteQuestionMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteQuestionMutation.isPending ? 'Siliniyor...' : 'Sil'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -347,8 +508,7 @@ export default function EvaluationPeriodAdminPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Değerlendirme dönemini kapat?</AlertDialogTitle>
             <AlertDialogDescription>
-              Dönem kapatıldığında öğrenciler artık değerlendirme yapamaz. Mevcut yanıtlar
-              korunur.
+              Dönem kapatıldığında öğrenciler artık değerlendirme yapamaz. Mevcut yanıtlar korunur.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -359,24 +519,35 @@ export default function EvaluationPeriodAdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
 
-function DeleteQuestionButton({ id, onDone }: { id: number | null; onDone: () => void }) {
-  const deleteMutation = useDeleteEvaluationQuestion();
-  async function handleDelete() {
-    if (id == null) return;
-    try {
-      await deleteMutation.mutateAsync(id);
-    } finally {
-      onDone();
-    }
-  }
-  return (
-    <AlertDialogAction onClick={handleDelete} disabled={deleteMutation.isPending}>
-      Sil
-    </AlertDialogAction>
+      {/* Open Period Confirmation */}
+      <AlertDialog open={openPeriodConfirmOpen} onOpenChange={setOpenPeriodConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Değerlendirme dönemi açılsın mı?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Dönem açıldığında <strong className="text-foreground">şu anda aktif olan sorular</strong> fotoğraflanır
+                  ve öğrencilere bu sorular sunulur.
+                </p>
+                <p>
+                  Dönem açık iken soru ekleyebilir, düzenleyebilir veya silebilirsiniz; bu değişiklikler
+                  yalnızca bir <strong className="text-foreground">sonraki dönem</strong> açıldığında ankete yansır.
+                </p>
+                <p>Devam etmek istiyor musunuz?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleOpenPeriodConfirmed} disabled={openMutation.isPending}>
+              Dönemi Aç
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -384,25 +555,25 @@ function QuestionFormDialog({
   open,
   onOpenChange,
   editing,
+  periodIsOpen,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: EvaluationQuestion | null;
+  periodIsOpen: boolean;
 }) {
   const createMutation = useCreateEvaluationQuestion();
   const updateMutation = useUpdateEvaluationQuestion();
 
-  const [text, setText] = useState('');
-  const [category, setCategory] = useState<EvaluationQuestionCategory>('Course');
-  const [questionType, setQuestionType] = useState<EvaluationQuestionType>('Rating');
-  const [sortOrder, setSortOrder] = useState<string>('0');
-  const [isActive, setIsActive] = useState(true);
+  const [text, setText] = useState(editing?.text ?? '');
+  const [category, setCategory] = useState<EvaluationQuestionCategory>(editing?.category ?? 'Course');
+  const [questionType, setQuestionType] = useState<EvaluationQuestionType>(editing?.questionType ?? 'Rating');
+  const [sortOrder, setSortOrder] = useState<string>(editing ? String(editing.sortOrder) : '0');
+  const [isActive, setIsActive] = useState(editing?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync form with editing
-  const [lastEditingId, setLastEditingId] = useState<number | null>(null);
-  if (open && editing?.id !== lastEditingId) {
-    setLastEditingId(editing?.id ?? null);
+  useEffect(() => {
+    if (!open) return;
     if (editing) {
       setText(editing.text);
       setCategory(editing.category);
@@ -417,7 +588,8 @@ function QuestionFormDialog({
       setIsActive(true);
     }
     setError(null);
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editing?.id]);
 
   async function handleSubmit() {
     setError(null);
@@ -463,6 +635,15 @@ function QuestionFormDialog({
             Öğrencilere sorulacak soru metnini ve tipini belirleyin.
           </DialogDescription>
         </DialogHeader>
+
+        {periodIsOpen && (
+          <Alert className="border-amber-200 bg-amber-50 py-2">
+            <Info className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 text-xs">
+              Bu değişiklik bir sonraki dönemde ankete yansır.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="space-y-4">
           <div className="space-y-1.5">

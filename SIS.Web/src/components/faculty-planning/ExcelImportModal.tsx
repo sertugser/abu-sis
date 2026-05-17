@@ -59,9 +59,12 @@ export function ExcelImportModal({ open, onClose, facultyId, termId }: ExcelImpo
 
   const handleApply = () => {
     if (!preview) return;
-    const applicableRows = preview.rows.filter(r => r.status !== 'Error');
+    const rowNumbers = preview.rows
+      .filter(r => r.status === 'Valid' || r.status === 'Warning')
+      .map(r => r.rowNumber);
+
     applyMutation.mutate(
-      { facultyId, termId, rows: applicableRows },
+      { facultyId, termId, importSessionId: preview.importSessionId, rowNumbers },
       { onSuccess: setResult },
     );
   };

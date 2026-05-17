@@ -9,6 +9,7 @@ public interface ICourseRegistrationService
     Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId);
     Task<StudentAttendanceStatusDto?> GetStudentAttendanceStatusAsync(int studentId, int? termId = null);
     Task<List<CourseHistoryTermDto>> GetCourseHistoryAsync(int studentId);
+    Task<CourseHistoryReportDto?> GetCourseHistoryReportAsync(int studentId);
     Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId);
     Task<RegistrationResponseDto> WithdrawCourseAsync(int studentId, int registrationId);
 

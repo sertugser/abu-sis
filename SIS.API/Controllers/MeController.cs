@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using SIS.API.Authorization;
 using SIS.Application.Identity.DTOs;
 using SIS.Application.Identity.Services;
 using SIS.Infrastructure.Persistence;
@@ -35,6 +36,7 @@ public class MeController : ControllerBase
     /// Frontend PermissionContext bunu 5 dk cache'ler (Karar 6 — JWT'de claim yok).
     /// </summary>
     [HttpGet("permissions")]
+    [RequirePermission("lookup.me")]
     public async Task<ActionResult<List<string>>> GetMyPermissions(CancellationToken ct)
     {
         if (!TryGetUserId(out var userId))
@@ -55,6 +57,7 @@ public class MeController : ControllerBase
     /// olmadığını doğrular; yoksa union davranışına düşer.
     /// </summary>
     [HttpGet("menu")]
+    [RequirePermission("lookup.me")]
     public async Task<ActionResult<List<MenuModuleDto>>> GetMyMenu(
         [FromQuery] string? role,
         CancellationToken ct)

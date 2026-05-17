@@ -61,7 +61,24 @@ export function BulkOpenDialog({
 
   const courses = curriculumQuery.data ?? [];
   const unopenedCourses = courses.filter(course => !course.alreadyOpened && course.canOpen);
-  const blockedUnopenedCount = courses.filter(course => !course.alreadyOpened && !course.canOpen).length;
+  const blockedCourses = courses.filter(course => !course.alreadyOpened && !course.canOpen);
+  const blockedUnopenedCount = blockedCourses.length;
+  const blockedReasonBreakdown = (() => {
+    const counts: Record<string, number> = {};
+    for (const c of blockedCourses) {
+      const key = c.blockReason ?? 'Other';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    const labels: Record<string, string> = {
+      TermNotInPlanning: 'Dönem planlamada değil',
+      CourseUnassigned: 'Sahip bölüm atanmamış',
+      NotOwner: 'Başka bölümün dersi',
+      Other: 'Diğer',
+    };
+    return Object.entries(counts)
+      .map(([key, count]) => `${labels[key] ?? key}: ${count}`)
+      .join(' • ');
+  })();
 
   const [initialized, setInitialized] = useState(false);
   if (!initialized && unopenedCourses.length > 0) {
@@ -172,7 +189,10 @@ export function BulkOpenDialog({
               </Button>
               <span className="text-sm text-muted-foreground">{selectedIds.size} ders seçili</span>
               {blockedUnopenedCount > 0 && (
-                <span className="text-xs text-amber-700">
+                <span
+                  className="text-xs text-amber-700 cursor-help"
+                  title={blockedReasonBreakdown || undefined}
+                >
                   {blockedUnopenedCount} ders toplu açmaya dahil edilmedi
                 </span>
               )}
@@ -323,7 +343,21 @@ export function BulkOpenDialog({
         {bulkMutation.isError && (
           <Alert variant="destructive" className="mt-2">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>Toplu ders açma işlemi başarısız oldu.</AlertDescription>
+            <AlertDescription>
+              {(() => {
+                const e = bulkMutation.error as {
+                  response?: { data?: { error?: string; detail?: string; title?: string } };
+                  message?: string;
+                };
+                return (
+                  e?.response?.data?.error ??
+                  e?.response?.data?.detail ??
+                  e?.response?.data?.title ??
+                  e?.message ??
+                  'Toplu ders açma işlemi başarısız oldu.'
+                );
+              })()}
+            </AlertDescription>
           </Alert>
         )}
 

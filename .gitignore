@@ -37,6 +37,7 @@ project.nuget.cache
 *.csproj.nuget.*
 .dotnet-cli/
 .dotnet-cli */
+.tmp-build/
 .tmp_pypdf/
 
 # ASP.NET Core secrets / environment-specific
@@ -69,6 +70,7 @@ SIS.Web/dist-ssr/
 
 # Claude Code settings (contains local session data)
 .claude/
+CLAUDE.md
 
 # Superpowers planning docs (dev-only, not part of project)
 docs/superpowers/
@@ -83,8 +85,9 @@ backup_*.sql
 .env.*
 !.env.example
 
-# Internal planning docs (not for repo)
-docs/superpowers/
-
 # Local analysis reports (codemap-diff, audit reports vb.)
 .reports/
+
+*.exe
+
+OWASP_Application_Security_Verification_Standard_5.0.0_tr.pdf

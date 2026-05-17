@@ -6,8 +6,6 @@ using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application.Constraints;
 
@@ -32,7 +30,7 @@ public abstract class SchedulingTestBase : IDisposable
 
     protected AppDbContext Context { get; }
     protected SchedulingService Service { get; }
-    protected ConstraintEvaluationService ConstraintService { get; }
+    protected IConstraintStateLoader ConstraintStateLoader { get; }
 
     protected SchedulingTestBase()
     {
@@ -41,8 +39,9 @@ public abstract class SchedulingTestBase : IDisposable
             .Options;
 
         Context = new AppDbContext(options);
-        ConstraintService = CreateConstraintEvaluationService();
-        Service = new SchedulingService(Context, ConstraintService);
+        ConstraintStateLoader = new ConstraintStateLoader(Context);
+        Service = new SchedulingService(Context, ConstraintStateLoader, new ScheduleWriter(Context),
+            SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine());
 
         SeedBaseData();
         SeedSchedulingDefaults();
@@ -214,6 +213,17 @@ public abstract class SchedulingTestBase : IDisposable
 
     protected void SetSystemConfig(string key, string value)
     {
+        // H4/H13/H15/H16 parametre eşikleri artık ConstraintDefinitions.Parameters JSON'unda
+        // yaşıyor (RemoveDualChannelKisitParameters migration). Test'in niyeti korunsun diye
+        // bu key'leri ConstraintEvaluationService'in okuyacağı yere yönlendir.
+        if (ConstraintParameterKeys.TryGetValue(key, out var mapping))
+        {
+            SetConstraintParameter(mapping.ConstraintCode, mapping.ParamKey, value);
+            return;
+        }
+
+        // 2026-05-09: Tek tablo (SystemConfigs) — eski SchedulingAlgorithmConfigs/SystemConfigs duality kaldırıldı.
+        var category = AlgorithmConfigKeys.Contains(key) ? "Other" : "Scheduling";
         var config = Context.SystemConfigs.SingleOrDefault(item => item.Key == key);
         if (config == null)
         {
@@ -221,7 +231,7 @@ public abstract class SchedulingTestBase : IDisposable
             {
                 Key = key,
                 Value = value,
-                Category = "Scheduling",
+                Category = category,
                 DataType = "string"
             });
         }
@@ -233,13 +243,71 @@ public abstract class SchedulingTestBase : IDisposable
         Context.SaveChanges();
     }
 
+    private static readonly Dictionary<string, (string ConstraintCode, string ParamKey)> ConstraintParameterKeys =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Classroom.AmphiThreshold"] = ("H4", "AmphiThreshold"),
+            ["Schedule.LunchBreakStart"] = ("H13", "LunchBreakStart"),
+            ["Schedule.LunchBreakEnd"] = ("H13", "LunchBreakEnd"),
+            ["Schedule.MaxConsecutiveHours"] = ("H15", "MaxConsecutiveHours"),
+            ["Schedule.TheoryLabSplitThreshold"] = ("H16", "TheoryLabSplitThreshold"),
+        };
+
+    private void SetConstraintParameter(string code, string paramKey, string value)
+    {
+        var definition = Context.ConstraintDefinitions.SingleOrDefault(d => d.Code == code);
+        if (definition == null)
+        {
+            definition = new ConstraintDefinition
+            {
+                Code = code,
+                Name = code,
+                Category = "Hard",
+                Scope = "Scheduling",
+                IsEnabled = true,
+            };
+            Context.ConstraintDefinitions.Add(definition);
+        }
+
+        // Mevcut Parameters JSON'unu key/value haritası olarak yükle (varsa).
+        var paramDict = new Dictionary<string, object?>();
+        if (!string.IsNullOrWhiteSpace(definition.Parameters))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(definition.Parameters);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    paramDict[prop.Name] = prop.Value.ValueKind switch
+                    {
+                        System.Text.Json.JsonValueKind.Number => prop.Value.GetInt32(),
+                        System.Text.Json.JsonValueKind.True => true,
+                        System.Text.Json.JsonValueKind.False => false,
+                        System.Text.Json.JsonValueKind.String => prop.Value.GetString(),
+                        _ => prop.Value.GetRawText()
+                    };
+                }
+            }
+            catch { /* malformed JSON → sıfırdan başla */ }
+        }
+
+        // Yeni değeri uygun tiple yaz: int parse edilebilirse number, değilse string.
+        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var intVal))
+            paramDict[paramKey] = intVal;
+        else
+            paramDict[paramKey] = value;
+
+        definition.Parameters = System.Text.Json.JsonSerializer.Serialize(paramDict);
+        Context.SaveChanges();
+    }
+
     protected static List<ScheduleSlotDto> Slots(
         params (DayOfWeek Day, int StartHour, int StartMinute, int EndHour, int EndMinute)[] slots)
     {
         return slots
             .Select(slot => new ScheduleSlotDto
             {
-                Day = slot.Day,
+                Day = (int)slot.Day,
                 StartTime = new TimeOnly(slot.StartHour, slot.StartMinute),
                 EndTime = new TimeOnly(slot.EndHour, slot.EndMinute)
             })
@@ -390,7 +458,6 @@ public abstract class SchedulingTestBase : IDisposable
         AddConfig("SoftConstraint.S5.Enabled", "false");
         AddConfig("SoftConstraint.S7.Enabled", "false");
         AddConfig("SoftConstraint.S8.Enabled", "false");
-        AddConfig("SoftConstraint.S9.Enabled", "false");
         AddConfig("SoftConstraint.S12.Enabled", "false");
         AddConfig("Classroom.OccupancyTarget.Min", "60");
         AddConfig("Classroom.OccupancyTarget.Max", "85");
@@ -400,17 +467,57 @@ public abstract class SchedulingTestBase : IDisposable
         AddConfig("Schedule.MaxConsecutiveHours", "12");
         AddConfig("Schedule.BreakDurationMinutes", "5");
         AddConfig("Classroom.AmphiThreshold", "100");
+        // Plan 11 Faz 1.4 — V1 ClassroomTypeEvaluator artık flag-gated. Test'lerde eski Amphi
+        // davranışı (her zaman uygula) korunacak şekilde default true setliyoruz; flag-spesifik
+        // test'ler SetSystemConfig ile override edebilir.
+        AddConfig("Schedule.AmphiThresholdEnabled", "true");
         AddConfig("Schedule.TheoryLabSplitThreshold", "4");
         Context.SaveChanges();
     }
 
+    // Algoritma config key'leri SchedulingAlgorithmConfigs tablosuna,
+    // diğer SystemConfig key'leri SystemConfigs tablosuna yazılır.
+    private static readonly HashSet<string> AlgorithmConfigKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Classroom.AmphiThreshold",
+        "Classroom.OccupancyTarget.Min",
+        "Classroom.OccupancyTarget.Max",
+        "SoftConstraint.S2.MaxDailyHours",
+        "SoftConstraint.S3.MaxSectionsPerSlot",
+        "SoftConstraint.S4.MinCoPairThreshold",
+        "SoftConstraint.S7.MaxGapSlots",
+        "Schedule.LunchBreak.IsHard",
+        "Schedule.LunchBreakStart",
+        "Schedule.LunchBreakEnd",
+        "Schedule.MaxConsecutiveHours",
+        "Scheduling.MaxBacktrackingDepth",
+        "Schedule.TheoryLabSplitThreshold",
+        "Schedule.SplittableBlockTypes",
+        "Schedule.SA.MaxIterations",
+        "Schedule.SA.InitialTemperature",
+        "Schedule.SA.TimeoutSeconds",
+        "Schedule.SA.StagnationLimit",
+        "Schedule.SA.BacktrackLimit",
+        "Schedule.SA.RelocateWeight",
+        "Schedule.SA.SwapWeight",
+        "Schedule.SA.ChainWeight",
+        "Schedule.LNS.MaxIterations",
+        "Schedule.LNS.TimeoutSeconds",
+        "Schedule.LNS.DestroySize",
+        "Schedule.MRV.ClassroomWeight",
+        "Schedule.MRV.SlotWeight",
+        "Schedule.MRV.LabWeight",
+        "Schedule.MRV.CapacityWeight",
+    };
+
     private void AddConfig(string key, string value)
     {
+        // 2026-05-09: Tek tablo (SystemConfigs).
         Context.SystemConfigs.Add(new SystemConfig
         {
             Key = key,
             Value = value,
-            Category = "Scheduling",
+            Category = AlgorithmConfigKeys.Contains(key) ? "Other" : "Scheduling",
             DataType = "string"
         });
     }
@@ -451,40 +558,8 @@ public abstract class SchedulingTestBase : IDisposable
         return timeSlot;
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        var evaluators = new IConstraintEvaluator[]
-        {
-            // Hard
-            new CapacityEvaluator(),
-            new ClassroomTypeEvaluator(),
-            new FacultyClassroomEvaluator(),
-            new ClassroomConflictEvaluator(),
-            new InstructorConflictEvaluator(),
-            new CurriculumConflictEvaluator(),
-            new CourseComponentEvaluator(),
-            new SameCourseSectionEvaluator(),
-            new WeeklyLoadEvaluator(),
-            new DailyLoadEvaluator(),
-            new NoDayOffEvaluator(),
-            new CorequisiteEvaluator(),
-            new CreditHourEvaluator(),
-            new LunchBreakEvaluator(),
-            new MaxConsecutiveHoursEvaluator(),
-            new TheoryLabDaySplitEvaluator(),
-            // Soft
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new EarlyLateEvaluator(),
-            new WeekdayBalanceEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, Context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi. Test base artık doğrudan
+    // ConstraintStateLoader + RuleEngine (TestRuleHelpers.BuildEngine) kullanır.
 
     public void Dispose()
     {

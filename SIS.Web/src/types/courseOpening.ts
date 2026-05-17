@@ -23,7 +23,7 @@ export interface PoolCandidateDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
-  nationalCredit: number | null;
+  nationalCredit: number;
   ects: number;
   alreadyOpened: boolean;
   existingSectionCount: number;
@@ -55,6 +55,8 @@ export interface OpenedCourseSectionDto {
   departmentId: number | null;
   departmentName: string | null;
   crossListGroupId: number | null;
+  /** Z (zorunlu) / S (seçmeli) — bölümün aktif müfredatından alınır. */
+  isCompulsory: boolean;
 }
 
 export interface OpenedCourseListDto {
@@ -79,7 +81,7 @@ export interface CurriculumCourseForOpeningDto {
   courseName: string;
   theoryHours: number;
   labHours: number;
-  nationalCredit?: number | null;
+  nationalCredit: number;
   ects: number;
   suggestedSemester: number;
   isCompulsory: boolean;
@@ -108,8 +110,17 @@ export interface CurriculumCourseForOpeningDto {
 export interface InstructorOptionDto {
   instructorId: number;
   fullName: string;
+  departmentId: number;
+  departmentName: string;
+  departmentCode: string;
   maxWeeklyHours: number;
   assignedWeeklyHours: number;
+  /** Toplu danışman atamasında bu hocaya verilebilecek max öğrenci sayısı. null = sınırsız. */
+  advisorAssignmentCapacity: number | null;
+  /** Toplu danışman atamasına bu hoca dahil edilsin mi. */
+  isAvailableForAdvisorAssignment: boolean;
+  /** Bu hocaya şu an atanmış öğrenci sayısı. */
+  currentStudentCount: number;
 }
 
 // ── Request Types ──
@@ -130,9 +141,20 @@ export interface BulkOpenCoursesRequest {
   courses: OpenCourseRequest[];
 }
 
+export interface OpenedCourseSummaryDto {
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  sectionCount: number;
+  sectionNumbers: number[];
+  totalCapacity: number;
+  instructorName: string | null;
+}
+
 export interface BulkOpenCoursesResultDto {
   totalCoursesOpened: number;
   totalSectionsCreated: number;
+  openedCourses: OpenedCourseSummaryDto[];
   errors: string[];
 }
 
@@ -154,6 +176,46 @@ export interface BulkAssignInstructorResultDto {
   successCount: number;
   failedCount: number;
   errors: string[];
+}
+
+// ── Section-to-Section Student Transfer ──
+
+export interface TransferStudentsToSectionRequest {
+  sourceSectionId: number;
+  targetSectionId: number;
+  studentIds: number[];
+}
+
+export interface TransferStudentsToSectionResultDto {
+  requestedCount: number;
+  transferredCount: number;
+  transferredStudentIds: number[];
+}
+
+// ── Auto-Split (Otomatik Şubelendirme) ──
+
+export type AutoSplitStrategy = 'Equal' | 'EqualRepeat' | 'ModOddEven';
+
+export interface AutoSplitCourseRequest {
+  courseId: number;
+  termId: number;
+  targetSectionCount: number;
+  strategy: AutoSplitStrategy;
+  defaultCapacityPerSection?: number;
+}
+
+export interface AutoSplitSectionSummary {
+  sectionId: number;
+  sectionNumber: number;
+  assignedStudentCount: number;
+}
+
+export interface AutoSplitCourseResultDto {
+  finalSectionCount: number;
+  createdSectionCount: number;
+  closedSectionCount: number;
+  redistributedRegistrationCount: number;
+  sections: AutoSplitSectionSummary[];
 }
 
 // ── Term Transfer ──
@@ -228,6 +290,9 @@ export interface AssignedSectionDto {
   sectionId: number;
   courseCode: string;
   courseName: string;
+  departmentId: number | null;
+  departmentName: string | null;
+  departmentCode: string | null;
   sectionNumber: number;
   weeklyHours: number;
   capacity: number;

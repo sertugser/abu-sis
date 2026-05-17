@@ -469,13 +469,13 @@ function GradeEntryCard({
 const QUICK_LINKS_STORAGE_KEY = 'sis-dashboard-quick-links';
 
 const DEFAULT_QUICK_LINKS = [
-  ROUTES.CLASS_LISTS,
+  ROUTES.SECTIONING,
   ROUTES.SCHEDULE_CREATION,
 ];
 
 /** Icon overrides for well-known routes */
 const ROUTE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  [ROUTES.CLASS_LISTS]: ClipboardList,
+  [ROUTES.SECTIONING]: ClipboardList,
   [ROUTES.SCHEDULE_CREATION]: CalendarRange,
   [ROUTES.INSTRUCTOR_SECTIONS]: Layers,
 };

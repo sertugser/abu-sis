@@ -12,6 +12,7 @@ import { useDropCourse } from '../hooks/useDropCourse';
 import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useStudentPoolStatus } from '../hooks/useStudentPoolStatus';
+import { ApiError } from '../lib/apiError';
 import type { ValidationError } from '../types/registration';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Trash2, Send, CheckCircle2, ClipboardList, BookOpen, Loader2 } from 'lucide-react';
@@ -36,14 +37,26 @@ export default function RegistrationPlanPage() {
   const rejectedItems = registrations?.filter(r => r.status === 'Rejected') || [];
   const advisorNote = rejectedItems.length > 0 ? rejectedItems[0]?.advisorNote : undefined;
   const totalEcts = planItems.reduce((sum, r) => sum + r.ects, 0);
-  const ectsLimit = student?.ectsLimit ?? 30;
-  const ectsPercent = Math.min((totalEcts / ectsLimit) * 100, 100);
+  // Backend EctsLimit non-nullable; loading durumunda 0 göster.
+  const ectsLimit = student?.ectsLimit ?? 0;
+  const ectsPercent = ectsLimit > 0 ? Math.min((totalEcts / ectsLimit) * 100, 100) : 0;
 
   // Eksik (boş) slot'lar — fulfillment durumuna göre
   const emptySlots = poolStatus.filter(p => !p.isFulfilled);
 
   const handleRemove = (registrationId: number) => {
-    dropCourse.mutate(registrationId);
+    setValidationErrors([]);
+    setValidationWarnings([]);
+    dropCourse.mutate(registrationId, {
+      onError: (error) => {
+        if (error instanceof ApiError && error.validationErrors.length > 0) {
+          setValidationErrors(error.validationErrors);
+          setValidationWarnings(error.validationWarnings);
+        } else {
+          setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Ders kaldirilamadi.' }]);
+        }
+      },
+    });
   };
 
   // Asıl submit logic — dialog onayından sonra veya direkt çağrılır
@@ -54,18 +67,19 @@ export default function RegistrationPlanPage() {
     const sectionIds = planItems.map(r => r.courseSectionId);
     submitRegistration.mutate(sectionIds, {
       onSuccess: (data) => {
-        if (data.validationResult && !data.validationResult.isValid) {
-          setValidationErrors(data.validationResult.errors);
-          setValidationWarnings(data.validationResult.warnings ?? []);
-        } else if (data.success) {
+        if (data.success) {
           setSubmitSuccess(true);
           setValidationErrors([]);
           setValidationWarnings(data.validationResult?.warnings ?? []);
         }
       },
       onError: (error) => {
-        setValidationWarnings([]);
-        setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Kayit sirasinda bir hata olustu.' }]);
+        if (error instanceof ApiError && error.validationErrors.length > 0) {
+          setValidationErrors(error.validationErrors);
+          setValidationWarnings(error.validationWarnings);
+        } else {
+          setValidationErrors([{ rule: 'System', message: error instanceof Error ? error.message : 'Kayit sirasinda bir hata olustu.' }]);
+        }
       },
     });
   };
