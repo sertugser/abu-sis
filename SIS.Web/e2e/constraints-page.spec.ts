@@ -7,7 +7,7 @@
  *   H4 default: isEnabled=true, parameters={"AmphiThreshold":100}, weight=5.
  *   DIST tablosu term 7'de boş — testler kendi kayıtlarını üretip temizliyor.
  */
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const API_BASE = 'http://localhost:5213/api';
 const ADMIN_EMAIL = 'admin@ankarabilim.edu.tr';
@@ -221,7 +221,6 @@ test('Test 3 — Algoritma Parametreleri sekmesi config update SystemConfigs cac
 
   // Yeni değer "Evet"/"Hayır" badge'ı olarak görünmeli
   const expectedBadge = newValue === 'true' ? 'Evet' : 'Hayır';
-  const row = page.locator('tr', { hasText: target!.key.split('.').pop() ?? target!.key });
   // description ile arama daha güvenilir olabilir; .first() ile genişlet
   await expect(page.locator('table').getByText(expectedBadge).first()).toBeVisible({ timeout: 10_000 });
 
@@ -285,13 +284,9 @@ test('Test 4 — DIST Edit butonu update yerine duplicate kayıt yaratıyor (BUG
     }
   });
 
-  // Edit butonunu bul (kalem ikonu) ve tıkla
-  const row = page.locator('text=/Ayni Gun|SameDay/').first().locator('..');
-  // Daha güvenli: kalem ikonu olan butona tıkla — DistributionRow içinde "Pencil" ikon, h-7 w-7 size icon button.
-  // Sadece bir DIST var, sayfadaki ilk Pencil icon'u onun edit butonu.
-  const allEditButtons = page.locator('button:has(svg.lucide-pencil)');
-  // Birden fazla olabilir (constraint listesinde de var) — son tıklanan tab Ders Eşleştirme, scope o.
-  // Daha sağlam: DistributionConstraintPanel'in kapsadığı bölüm — başlık "İlişkisel Kısıtlamalar"
+  // Edit butonunu bul (kalem ikonu) ve tıkla.
+  // Daha sağlam: DistributionConstraintPanel'in kapsadığı bölüm — başlık "İlişkisel Kısıtlamalar".
+  // Birden fazla pencil icon olabilir (constraint listesinde de var); scope'u DIST paneline daralt.
   const distSection = page.locator('div').filter({ hasText: 'Iliskisel Kisitlamalar' }).first();
   await expect(distSection).toBeVisible({ timeout: 10_000 });
 
