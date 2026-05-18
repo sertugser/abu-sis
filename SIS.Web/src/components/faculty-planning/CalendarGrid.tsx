@@ -104,7 +104,7 @@ function BlockTypeBadge({ blockType, className }: { blockType: ScheduleBlockType
  * <td> yalnız semantic ve grid layout için kullanılır.
  */
 function CalendarCell({
-  isRestricted, dropId, isDropDisabled, isSuggested, rowHeightPx, children,
+  isRestricted, dropId, isDropDisabled, isSuggested, rowHeightPx, children, invalidReason,
 }: {
   isRestricted: boolean;
   dropId: string;
@@ -114,6 +114,8 @@ function CalendarCell({
   /** Density'ye göre değişen satır yüksekliği (px). */
   rowHeightPx: number;
   children: React.ReactNode;
+  /** Geçersiz hücre üzerinde fareyle gezinince gösterilecek sebep (backend RuleEngine mesajı). */
+  invalidReason?: string;
 }) {
   // KRİTİK: useDroppable HER hücrede register edilir; `disabled` bağlamı yok.
   // Sebep: term Inactive/Test ise editable=false geliyordu ve isDroppable=false → disabled=true
@@ -126,6 +128,7 @@ function CalendarCell({
     <td
       className="relative border-r-2 border-r-slate-300 border-b border-b-slate-300 p-0 align-top"
       style={{ minHeight: rowHeightPx }}
+      title={isDropDisabled && invalidReason ? invalidReason : undefined}
     >
       {/* Drop target: absolute+inset:0 — table-layout:fixed altında doğru rect ölçümü için zorunlu
           (normal-flow rect 0 anomalisi). pointer-events kaldırılmadı (default auto) — eski
@@ -243,7 +246,7 @@ type ContinuationPosition = 'standalone' | 'first' | 'middle' | 'last';
 
 function SectionBlock({
   section, block, rowSpan, isContinuation, continuationPosition, editable, dimmed, onSectionClick,
-  isSelected, onToggleSelect, cardDensity, hoveredSectionId, onHoverSection,
+  isSelected, onToggleSelect, cardDensity, hoveredSectionId, onHoverSection, conflictMessages,
 }: {
   section: FacultyPlanningSection;
   /** The specific schedule block (theory or lab) this card represents in the grid. */
@@ -267,6 +270,9 @@ function SectionBlock({
   hoveredSectionId: number | null;
   /** Hover state'i değiştirmek için parent callback. mouseEnter ile section.sectionId, mouseLeave ile null çağrılır. */
   onHoverSection: (sectionId: number | null) => void;
+  /** Section conflict halindeyse backend'den gelen ihlal mesajları. Tooltip'te gösterilir.
+   *  Boş veya undefined ise tooltip yok. Mesajlar DB-driven (section/derslik/hoca/saat ile). */
+  conflictMessages?: string[];
 }) {
   const color = getBlockColor(section.suggestedSemester, section.status);
   // isContinuation=true → bu kart bir başka satırdaki "ana" blok'un alt satırı; sürüklenemez (üst kartı taşırsın).
@@ -331,6 +337,11 @@ function SectionBlock({
       data-section-id={section.sectionId}
       onMouseEnter={isCompactDensity ? () => onHoverSection(section.sectionId) : undefined}
       onMouseLeave={isCompactDensity ? () => onHoverSection(null) : undefined}
+      title={
+        conflictMessages && conflictMessages.length > 0
+          ? `Çakışma sebepleri:\n• ${conflictMessages.join('\n• ')}`
+          : undefined
+      }
       className={cn(
         'relative transition-all duration-150 ease-out',
         borderRadiusClass,
@@ -535,6 +546,13 @@ export interface CalendarGridProps {
   /** Sürükleme esnasında kırmızı vurgulanacak hücrelerin dropId set'i. Parent hesaplar.
    *  dropId formatı: "cell-{day}-{slotOrder}". */
   invalidDropIds?: Set<string>;
+  /** Geçersiz hücrelerin backend gerekçe haritası (`dropId` → mesaj). Tooltip için kullanılır.
+   *  Parent backend bulk-validate cevabından doldurur. */
+  invalidDropReasons?: Map<string, string>;
+  /** Section bazında aktif conflict mesajları (sectionId → backend RuleEngine mesajları).
+   *  Kart kırmızıyken üstüne fareyle gelince tooltip'te neden çakışmalı olduğunu gösterir.
+   *  Parent useFacultyPlanningConflicts hook'undan toplar. */
+  sectionConflicts?: Map<number, string[]>;
   /** Smart suggestion — drag esnasında en uygun 3 hücre, parıltılı highlight ile. */
   suggestedDropIds?: Set<string>;
   /** Conflict-only modu — yalnız çakışmalı/atanmamış section'ları göster, diğerleri silikleştir. */
@@ -557,7 +575,7 @@ export interface CalendarGridProps {
 
 export function CalendarGrid({
   sections, timeSlots, onEmptyCellClick, editable = false,
-  invalidDropIds, suggestedDropIds, highlightedSectionIds, onSectionClick, maxBlocksPerCell,
+  invalidDropIds, invalidDropReasons, sectionConflicts, suggestedDropIds, highlightedSectionIds, onSectionClick, maxBlocksPerCell,
   selectedSectionIds, onSectionToggleSelect,
   cardDensity = 'spacious',
 }: CalendarGridProps) {
@@ -794,6 +812,7 @@ export function CalendarGrid({
                       const dropId = `cell-${wd.day}-${row.slotOrder}`;
                       const dropDisabled = invalidDropIds?.has(dropId) ?? false;
                       const isSuggested = (suggestedDropIds?.has(dropId) ?? false) && !dropDisabled;
+                      const invalidReason = invalidDropReasons?.get(dropId);
 
                     return (
                       <CalendarCell
@@ -803,6 +822,7 @@ export function CalendarGrid({
                         isDropDisabled={dropDisabled}
                         isSuggested={isSuggested}
                         rowHeightPx={rowHeightPx}
+                        invalidReason={invalidReason}
                       >
                         <div
                           className={cn(
@@ -857,6 +877,7 @@ export function CalendarGrid({
                                       cardDensity={cardDensity}
                                       hoveredSectionId={hoveredSectionId}
                                       onHoverSection={setHoveredSectionId}
+                                      conflictMessages={sectionConflicts?.get(b.sectionId)}
                                     />
                                   );
                                 })}

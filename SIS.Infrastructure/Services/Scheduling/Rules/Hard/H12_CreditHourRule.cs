@@ -29,7 +29,12 @@ public sealed class H12_CreditHourRule : IRulePredicate
             .GroupBy(b => (b.Day, b.StartTime, b.EndTime))
             .Sum(g => (int)Math.Ceiling((g.Key.EndTime - g.Key.StartTime).TotalHours));
 
-        if (assignedHours == expectedHours)
+        // Faz: kısmi atama desteği — eksik atama Partial olarak izinli, sadece FAZLA atama fail.
+        // Section atanmamış tek block'unu sürüklediğinde (örn 3T+2L dersin sadece Teori bloğu)
+        // assignedHours = 3, expectedHours = 5 → eskiden H12 fail veriyordu, Partial atama imkansızdı.
+        // Yeni mantık: assignedHours > expectedHours → kullanıcı fazla slot eklemiş, fail;
+        // assignedHours <= expectedHours → OK (eksik kısım kullanıcı tarafından sonra atanır).
+        if (assignedHours <= expectedHours)
             return Array.Empty<RuleViolation>();
 
         return new[]
@@ -37,7 +42,7 @@ public sealed class H12_CreditHourRule : IRulePredicate
             new RuleViolation(
                 Code: Code,
                 ConflictType: "CreditHourMismatch",
-                Message: $"Dersin haftalik slot gereksinimine uygun atama yapilmamis ({c.CourseCode}: beklenen {expectedHours} slot, atanan {assignedHours} slot).",
+                Message: $"Dersin haftalik slot gereksinimi aşıldı ({c.CourseCode}: beklenen {expectedHours} slot, atanan {assignedHours} slot).",
                 SectionId: c.SectionId)
         };
     }

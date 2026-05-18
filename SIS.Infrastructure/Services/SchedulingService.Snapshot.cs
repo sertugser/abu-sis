@@ -432,7 +432,17 @@ public partial class SchedulingService
         var (primaryId, primaryName, primaryCapacity, primaryType)
             = ResolvePrimaryClassroomMetadata(classroom, timeBlocks, classroomLookup);
 
-        var blocks = timeBlocks.Select(b => BuildRuntimeBlock(b, classroomLookup, primaryName, primaryType, primaryCapacity)).ToList();
+        // BlockType atama — timeBlocks listesi sırasıyla (ScheduleWriter ile aynı politika):
+        // ilk TheoryHours kadar slot Theory, gerisi Lab. Frontend slot listesini Theory önce, Lab
+        // sonra gönderir; ScheduleWriter da bu sıraya güvenir. Bu sırayı koruyarak BlockType
+        // atamak, HSO kuralının "Theory ve Lab aynı zaman aralığına yazıldığında çakışıyor"
+        // durumunu doğru yakalamasını sağlar (aynı pencere farklı BlockType → fail).
+        var theoryHours = section.Course.TheoryHours;
+        var blocks = timeBlocks
+            .Select((b, idx) => BuildRuntimeBlock(
+                b, classroomLookup, primaryName, primaryType, primaryCapacity,
+                idx < theoryHours ? ScheduleBlockType.Theory : ScheduleBlockType.Lab))
+            .ToList();
 
         return new RuntimeCandidate
         {
@@ -468,18 +478,19 @@ public partial class SchedulingService
         IReadOnlyDictionary<int, Classroom>? classroomLookup,
         string primaryName,
         ClassroomType primaryType,
-        int primaryCapacity)
+        int primaryCapacity,
+        ScheduleBlockType? blockType = null)
     {
         // Block kendi classroom'unu çözer (paralel-split: her block farklı oda olabilir).
         string blockName = primaryName;
-        ClassroomType blockType = primaryType;
+        ClassroomType classroomType = primaryType;
         int blockCapacity = primaryCapacity;
 
         if (b.ClassroomId.HasValue && classroomLookup != null
             && classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr))
         {
             blockName = cr.Name;
-            blockType = cr.Type;
+            classroomType = cr.Type;
             blockCapacity = cr.Capacity;
         }
 
@@ -489,8 +500,9 @@ public partial class SchedulingService
             EndTime: b.EndTime,
             ClassroomId: b.ClassroomId,
             ClassroomName: blockName,
-            ClassroomType: blockType,
-            ClassroomCapacity: blockCapacity);
+            ClassroomType: classroomType,
+            ClassroomCapacity: blockCapacity,
+            BlockType: blockType);
     }
 
     /// <summary>

@@ -289,6 +289,12 @@ var app = builder.Build();
 
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
+// Global exception handler — her iki ortamda da. Exception'ı JSON body olarak
+// {error, status, type, traceId, details?} formatında döndürür ve AuditLog'a yazar.
+// Eski env-koşullu UseExceptionHandler bloğu (prod-only generic title + dev'de body'siz
+// plain-text stack trace) bu middleware ile değiştirildi.
+app.UseMiddleware<SIS.API.Middleware.GlobalExceptionMiddleware>();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -297,21 +303,6 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseExceptionHandler(errorApp =>
-    {
-        errorApp.Run(async context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            context.Response.ContentType = "application/problem+json";
-            await context.Response.WriteAsJsonAsync(new
-            {
-                type = "about:blank",
-                title = "An unexpected error occurred.",
-                status = StatusCodes.Status500InternalServerError,
-                traceId = context.TraceIdentifier,
-            });
-        });
-    });
     app.UseHsts();
 }
 

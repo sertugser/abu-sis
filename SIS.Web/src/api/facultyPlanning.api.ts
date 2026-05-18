@@ -2,6 +2,7 @@ import apiClient from './axios';
 import type {
   ApplyScheduleRequest, ApplyScheduleResult, AssignmentResult, AssignSectionRequest,
   AutoSchedulePreview, AutoScheduleRequest, AvailableClassroom,
+  BulkValidateCellsRequest, BulkValidateCellsResult,
   FacultyPlanningOverview, FacultyPlanningSectionPage, FacultyPlanningTimeSlot,
   ScheduleRunDetail, ScheduleRunSummary,
 } from '../types/facultyPlanning';
@@ -97,5 +98,19 @@ export async function validateSectionSchedule(request: {
   scheduleSlots?: ScheduleSlot[];
 }): Promise<ScheduleValidationResult> {
   const { data } = await apiClient.post<ScheduleValidationResult>('/scheduling/validate', request);
+  return data;
+}
+
+/**
+ * Düzenleyici drag-start akışında çağrılır. N aday hücreyi tek HTTP isteğinde
+ * backend RuleEngine ile değerlendirip per-cell {isValid, reason} döndürür.
+ */
+export async function validateCellsBulk(
+  request: BulkValidateCellsRequest,
+): Promise<BulkValidateCellsResult> {
+  const { data } = await apiClient.post<BulkValidateCellsResult>(
+    '/faculty-planning/validate-cells',
+    request,
+  );
   return data;
 }

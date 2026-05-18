@@ -73,43 +73,25 @@ public sealed class ScheduleWriter : IScheduleWriter
                 allMatchedSlots.Add((ts, effectiveClassroomId));
         }
 
-        // Validate slot count matches course hours (defense in depth — solver should already enforce).
-        var courseHours = await _context.CourseSections
+        // Slot sayısı (theory+lab) kontrolü kaldırıldı — V2 RuleEngine H12_CreditHourRule aynı
+        // kontrolü yapar ve Force=true ile override edilebilir. ScheduleWriter sadece "yaz"
+        // sorumluluğuna odaklanır.
+
+        // H1 defansif kontrolü kaldırıldı — V2 RuleEngine H1_ClassroomConflictRule aynı
+        // kontrolü yapıyor; Force=false ile çağrıldığında AssignSectionAsync conflict
+        // listesini dialog'a yansıtır, Force=true ile override edilirse yazılır. Defansif
+        // check Force akışını blokluyordu.
+
+        // TheoryHours — BlockType heuristik için (ilk N slot Theory, gerisi Lab).
+        var theoryHours = await _context.CourseSections
             .AsNoTracking()
             .Where(cs => cs.Id == sectionId)
-            .Select(cs => new { cs.Course.TheoryHours, cs.Course.LabHours })
+            .Select(cs => cs.Course.TheoryHours)
             .FirstOrDefaultAsync(ct);
-
-        var theoryHours = courseHours?.TheoryHours ?? 0;
-        var labHours = courseHours?.LabHours ?? 0;
-        var expectedSlotCount = theoryHours + labHours;
-        if (expectedSlotCount > 0 && allMatchedSlots.Count != expectedSlotCount)
-        {
-            throw new InvalidOperationException(
-                $"Slot sayısı uyumsuz: section {sectionId} için {expectedSlotCount} slot gerekli, {allMatchedSlots.Count} slot eşleşti.");
-        }
-
-        // H1 (classroom no-overlap) defensive check: V2 encoder enforces this in the solver,
-        // but apply path may be invoked manually. Skip when constraint is disabled or non-Hard.
-        var enforceClassroomConflict = await IsConstraintHardAsync("H1", defaultIsHard: true, ct);
 
         var slotIndex = 0;
         foreach (var (timeSlot, effectiveClassroomId) in allMatchedSlots)
         {
-            if (enforceClassroomConflict && effectiveClassroomId.HasValue)
-            {
-                var alreadyOccupied = await _context.SectionSchedules
-                    .AnyAsync(ss => ss.ClassroomId == effectiveClassroomId.Value
-                        && ss.TimeSlotId == timeSlot.Id
-                        && ss.CourseSectionId != sectionId, ct);
-
-                if (alreadyOccupied)
-                {
-                    throw new InvalidOperationException(
-                        $"Derslik çakışması: {DayLabel(timeSlot.DayOfWeek)} {timeSlot.StartTime:HH\\:mm}-{timeSlot.EndTime:HH\\:mm} slotunda derslik zaten dolu.");
-                }
-            }
-
             // BlockType heuristic: first TheoryHours slots → Theory, rest → Lab.
             // Solver/scheduler emits theory blocks before lab blocks, so slot order matches.
             var blockType = slotIndex < theoryHours

@@ -20,12 +20,25 @@ public sealed class H12_CreditHourRuleTests
     }
 
     [Fact]
-    public void AssignedHoursLessThanExpected_Reports()
+    public void AssignedHoursLessThanExpected_NoConflict()
     {
+        // Kısmi atama desteği: H12 artık eksik atamayı izinli sayar — section'ın atanmamış
+        // bölümü (örn 3T+2L'in Lab parçası) henüz drag edilmemiş olabilir; bu durum section'ı
+        // "Partial" status'a düşürür, hard violation üretmez.
         var rule = new H12_CreditHourRule();
-        // 3T beklendi, 2 saat atandı
         var c = Candidate(id: 1, courseId: 100, theory: 3, lab: 0,
             blocks: Block(day: 1, startHour: 9, durationHours: 2));
+        var ctx = new RuleContext { Candidate = c, Snapshot = Snapshot(c), Config = DefaultConfig() };
+        rule.Evaluate(ctx).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AssignedHoursMoreThanExpected_Reports()
+    {
+        // Fazla atama hâlâ HARD fail — kullanıcı yanlışlıkla fazla slot eklediğinde sistem reddeder.
+        var rule = new H12_CreditHourRule();
+        var c = Candidate(id: 1, courseId: 100, theory: 3, lab: 0,
+            blocks: Block(day: 1, startHour: 9, durationHours: 5));
         var ctx = new RuleContext { Candidate = c, Snapshot = Snapshot(c), Config = DefaultConfig() };
         rule.Evaluate(ctx).Should().Contain(v => v.ConflictType == "CreditHourMismatch");
     }

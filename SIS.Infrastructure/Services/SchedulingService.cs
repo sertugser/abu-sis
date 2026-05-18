@@ -462,12 +462,12 @@ public partial class SchedulingService : ISchedulingService
 
     private static ScheduleParseResult ValidateTimeBlocks(List<TimeBlock> slots)
     {
-        var normalizedSlots = slots
-            .OrderBy(slot => slot.Day)
-            .ThenBy(slot => slot.StartTime)
-            .ToList();
-
-        foreach (var slot in normalizedSlots)
+        // ÖNEMLİ: Sıralama yapılmaz — caller'ın gönderdiği orijinal slot sırası korunur.
+        // Sebep: ProjectRuntimeCandidate ilk TheoryHours kadar slot'u Theory, gerisini Lab olarak
+        // işaretler (ScheduleWriter ile aynı politika). Frontend Theory bloğunu önce, Lab bloğunu
+        // sonra gönderdiği için bu sıralama HSO kuralının "Theory ve Lab aynı saate yazıldı"
+        // durumunu tespit etmesinde belirleyici.
+        foreach (var slot in slots)
         {
             if (slot.EndTime <= slot.StartTime)
             {
@@ -478,23 +478,12 @@ public partial class SchedulingService : ISchedulingService
             }
         }
 
-        for (var i = 0; i < normalizedSlots.Count; i++)
-        {
-            for (var j = i + 1; j < normalizedSlots.Count; j++)
-            {
-                if (SlotsOverlap(normalizedSlots[i], normalizedSlots[j]))
-                {
-                    return new ScheduleParseResult
-                    {
-                        ErrorMessage = "Aynı section içindeki slotlar birbiriyle çakışamaz."
-                    };
-                }
-            }
-        }
+        // Slot overlap kontrolü kaldırıldı: HSO_SameSectionOverlapRule (RuleEngine) bu kontrolü
+        // yapıyor ve Force=true ile override edilebilir.
 
         return new ScheduleParseResult
         {
-            Slots = normalizedSlots
+            Slots = slots
         };
     }
 
@@ -523,6 +512,26 @@ public partial class SchedulingService : ISchedulingService
         return suggestedSemestersByDepartment.TryGetValue(courseId, out var values)
             ? values.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
             : new Dictionary<int, int>();
+    }
+
+    /// <summary>
+    /// Üniversite ders kodlama kuralı (kullanıcı: 1xx=1.sınıf, 2xx=2.sınıf, 3xx=3.sınıf, 4xx=4.sınıf):
+    /// kod içindeki ilk sayısal grubun ilk hanesi sınıf seviyesini verir. Yarıyıl olarak sınıfın
+    /// güz yarıyılı (year*2-1) döndürülür — CohortBuilder year hesabı `(semester-1)/2` formülüyle
+    /// aynı yıla düşer (semester=5 → year=2 → 3.sınıf).
+    ///
+    /// CurriculumCourse.SuggestedSemester=0 olan (müfredata yarıyılsız eklenmiş seçmeli veya seed'i
+    /// eksik kalmış) dersler için fallback. Gerçek SuggestedSemester varsa o tercih edilir.
+    /// </summary>
+    internal static int? TryDeriveSemesterFromCourseCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(code, @"\d+");
+        if (!match.Success) return null;
+        if (!int.TryParse(match.Value, out var num) || num <= 0) return null;
+        var year = num / 100;
+        if (year < 1 || year > 8) return null;
+        return year * 2 - 1;
     }
 
     private static HashSet<int> GetAccessibleDepartments(
@@ -579,11 +588,15 @@ public partial class SchedulingService : ISchedulingService
         var minSuggestedSemesters = suggestedSemestersByDepartment
             .ToDictionary(item => item.Key, item => item.Value.Values.Min());
 
-        var courseDepartmentIds = await _context.Courses
+        var courseRows = await _context.Courses
             .AsNoTracking()
             .Where(course => ids.Contains(course.Id))
-            .Select(course => new { course.Id, course.DepartmentId })
-            .ToDictionaryAsync(course => course.Id, course => course.DepartmentId, cancellationToken);
+            .Select(course => new { course.Id, course.DepartmentId, course.Code })
+            .ToListAsync(cancellationToken);
+        var courseDepartmentIds = courseRows
+            .ToDictionary(c => c.Id, c => c.DepartmentId);
+        var courseCodes = courseRows
+            .ToDictionary(c => c.Id, c => c.Code ?? string.Empty);
 
         var policyRows = await _context.CourseAccessPolicies
             .AsNoTracking()
@@ -644,6 +657,37 @@ public partial class SchedulingService : ISchedulingService
             }
 
             accessibleDepartments[courseId] = departmentIds;
+        }
+
+        // Fallback: ders kodu kuralından sınıf çıkarımı (1xx=1.sınıf, ..., 4xx=4.sınıf).
+        // Müfredata SuggestedSemester=0 ile (yarıyılsız) eklenmiş veya hiç eklenmemiş dersler için
+        // ders kodundan türetilmiş yarıyılı her erişilebilir bölüme yazıyoruz. Gerçek bir
+        // SuggestedSemester değeri (>0) varsa o korunur; sadece eksikleri tamamlar.
+        // Bu sayede CohortBuilder ve H5 CurriculumConflict kuralı komşu yıl çakışmalarını
+        // EEE322 (3.sınıf) ↔ EEE222 (2.sınıf) gibi seçmeli/havuz derslerde de yakalar.
+        foreach (var courseId in ids)
+        {
+            if (!courseCodes.TryGetValue(courseId, out var code)) continue;
+            var fallbackSemester = TryDeriveSemesterFromCourseCode(code);
+            if (fallbackSemester is null) continue;
+
+            if (!suggestedSemestersByDepartment.TryGetValue(courseId, out var deptSemMap))
+            {
+                deptSemMap = new Dictionary<int, int>();
+                suggestedSemestersByDepartment[courseId] = deptSemMap;
+            }
+
+            if (!accessibleDepartments.TryGetValue(courseId, out var accDepts)) continue;
+            foreach (var deptId in accDepts)
+            {
+                if (!deptSemMap.TryGetValue(deptId, out var existing) || existing <= 0)
+                    deptSemMap[deptId] = fallbackSemester.Value;
+            }
+
+            // MinSuggestedSemesters yansıması — fallback ekledikten sonra yeniden hesapla
+            var positive = deptSemMap.Values.Where(s => s > 0).ToList();
+            if (positive.Count > 0)
+                minSuggestedSemesters[courseId] = positive.Min();
         }
 
         return new CourseSchedulingMetadata

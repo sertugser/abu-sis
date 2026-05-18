@@ -1,8 +1,4 @@
-import { Loader2 } from 'lucide-react';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { DelayedConfirmDialog } from '@/components/ui/delayed-confirm-dialog';
 
 interface Props {
   target: { id: number; label: string } | null;
@@ -11,29 +7,23 @@ interface Props {
   isPending: boolean;
 }
 
+/**
+ * Müfredat silme — kalıcı işlem, müfredata bağlı tüm course-curriculum kayıtları kopar.
+ * 5sn delay zorunlu (kullanıcının yanlış müfredatı silmesini önler).
+ */
 export default function DeleteCurriculumDialog({ target, onCancel, onConfirm, isPending }: Props) {
   return (
-    <AlertDialog open={target !== null} onOpenChange={(open) => !open && onCancel()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Müfredat silinsin mi?</AlertDialogTitle>
-          <AlertDialogDescription>
-            <span className="font-medium">{target?.label}</span> müfredatı silinecek.
-            Bu işlem geri alınamaz. Müfredata bağlı öğrenci varsa silme işlemi reddedilir.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>İptal</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            disabled={isPending}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            {isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Sil
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DelayedConfirmDialog
+      open={target !== null}
+      onOpenChange={(open) => { if (!open) onCancel(); }}
+      title={`Müfredat silinsin mi: ${target?.label ?? ''}`}
+      description="Bu müfredat ve içindeki tüm ders ilişkileri (zorunlu/seçmeli/önkoşul bağları) kalıcı olarak silinecek."
+      footnote="Bu işlem geri alınamaz. Müfredata bağlı öğrenci varsa silme işlemi backend tarafından reddedilir."
+      confirmLabel={isPending ? 'Siliniyor...' : 'Müfredatı sil'}
+      delaySeconds={5}
+      severity="danger"
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }

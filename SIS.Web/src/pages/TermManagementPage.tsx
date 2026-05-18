@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { DelayedConfirmDialog } from '@/components/ui/delayed-confirm-dialog';
 import {
   useAdminTerms,
   useCreateTerm,
@@ -436,27 +437,18 @@ export default function TermManagementPage() {
         </div>
       </div>
 
-      {/* Cancel Confirmation Dialog */}
-      <AlertDialog open={!!confirmCancelTarget} onOpenChange={(open) => !open && setConfirmCancelTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Dönemi İptal Et</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{confirmCancelTarget?.name}</strong> dönemini iptal etmek istediğinize emin misiniz?
-              Bu işlem geri alınabilir, ancak aktif kayıtları etkileyebilir.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmCancel}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              İptal Et
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Cancel Confirmation Dialog — yıkıcı (cascade: section'lar Cancelled olur), 5sn delay. */}
+      <DelayedConfirmDialog
+        open={!!confirmCancelTarget}
+        onOpenChange={(open) => !open && setConfirmCancelTarget(null)}
+        title={`Dönemi iptal et: ${confirmCancelTarget?.name ?? ''}`}
+        description="Bu dönemin tüm section'ları otomatik olarak 'Cancelled' durumuna geçecek. Aktif kayıtlar, atamalar ve programlar etkilenecek."
+        footnote="İptal sonradan geri alınabilir (Uncancel), ancak aktif öğrenci kayıtları/atamalar bu süre içinde dondurulur."
+        confirmLabel="Dönemi iptal et"
+        delaySeconds={5}
+        severity="danger"
+        onConfirm={handleConfirmCancel}
+      />
 
       {/* Create Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>

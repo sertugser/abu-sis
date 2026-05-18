@@ -267,7 +267,9 @@ public partial class FacultyPlanningService : IFacultyPlanningService
         // SuggestedSemester=0 anlamı: "seçmeli havuz/placeholder" — gerçek yarıyıl bilgisi
         // değil. Naif MIN(...) çağrısı 0'lı seçmeli kayıtla zorunlu kayıtları karıştırıp
         // 0 döndürüyordu (örn. CENG 213 → 4 kayıt: 3,3,3,0 → MIN=0 → mavi). 0'ları filtreleyip
-        // pozitif yarıyılların min'ini alıyoruz; hiç pozitif yoksa fallback 0 (eski davranış).
+        // pozitif yarıyılların min'ini alıyoruz; hiç pozitif yoksa ders kodu kuralına
+        // (kullanıcı: 1xx=1.sınıf, ..., 4xx=4.sınıf) fallback yapıyoruz — aksi halde frontend
+        // kartı 0 görüp mavi (1.sınıf gibi) renderlıyor, gerçek sınıf bilinmiyor.
         var courseIds = allSections.Select(s => s.CourseId).Distinct().ToList();
         var semesterMap = await _context.Set<CurriculumCourse>()
             .AsNoTracking()
@@ -280,6 +282,23 @@ public partial class FacultyPlanningService : IFacultyPlanningService
                             .Min(cc => (int?)cc.SuggestedSemester) ?? 0
             })
             .ToDictionaryAsync(x => x.CourseId, x => x.Semester, ct);
+
+        // Kod tabanlı fallback — SuggestedSemester 0 olan (veya hiç kayıt olmayan) dersler için
+        // ders kodundan sınıf seviyesini türet. SchedulingService.TryDeriveSemesterFromCourseCode
+        // ile aynı kural; cohort hesabı ve kart rengi arasında tutarlılık sağlar.
+        var courseCodeMap = allSections
+            .Select(s => new { s.CourseId, s.Course.Code })
+            .GroupBy(c => c.CourseId)
+            .ToDictionary(g => g.Key, g => g.First().Code ?? string.Empty);
+        foreach (var courseId in courseIds)
+        {
+            var current = semesterMap.GetValueOrDefault(courseId, 0);
+            if (current > 0) continue;
+            if (!courseCodeMap.TryGetValue(courseId, out var code)) continue;
+            var derived = SchedulingService.TryDeriveSemesterFromCourseCode(code);
+            if (derived.HasValue)
+                semesterMap[courseId] = derived.Value;
+        }
 
         foreach (var group in grouped)
         {
@@ -295,10 +314,20 @@ public partial class FacultyPlanningService : IFacultyPlanningService
                 // Online ders → ClassroomId her zaman null (sınıf yok); schedule varsa
                 // "Scheduled" sayılmalı. Aksi halde online dersler hep "Unscheduled" gözüküyordu.
                 var isOnlineCourse = s.Course.TeachingMethod == TeachingMethod.Online;
+
+                // Kısmi atama desteği — section'ın schedule slot sayısı beklenen (TheoryHours+LabHours)
+                // değerinden az ise "Partial". Eski mantık hasSchedule'ı tek bit olarak tutuyordu,
+                // 3T+2L dersin sadece Teori bloğu atanmışsa "Scheduled" diyordu (yanlış). Yeni mantık:
+                // expected ile karşılaştır, eksik atama Partial olarak işaretlenir.
+                var assignedSlotCount = sectionPageScheduleMap.TryGetValue(s.Id, out var ss) ? ss.Count : 0;
+                var expectedSlotCount = s.Course.TheoryHours + s.Course.LabHours;
+                var isFullyScheduled = expectedSlotCount > 0 && assignedSlotCount >= expectedSlotCount;
+                var isPartiallyScheduled = assignedSlotCount > 0 && assignedSlotCount < expectedSlotCount;
+
                 string sectionStatus;
                 if (hasConflict) sectionStatus = "Conflicted";
-                else if (hasSchedule && (hasClassroom || isOnlineCourse)) sectionStatus = "Scheduled";
-                else if (hasClassroom || hasInstructor) sectionStatus = "Partial";
+                else if (isFullyScheduled && (hasClassroom || isOnlineCourse)) sectionStatus = "Scheduled";
+                else if (isPartiallyScheduled || hasClassroom || hasInstructor) sectionStatus = "Partial";
                 else sectionStatus = "Unscheduled";
 
                 if (status != null && !string.Equals(sectionStatus, status, StringComparison.OrdinalIgnoreCase))

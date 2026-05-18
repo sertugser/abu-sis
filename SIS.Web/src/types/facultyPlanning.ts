@@ -107,12 +107,53 @@ export interface AssignSectionRequest {
   classroomId?: number;
   scheduleSlots?: ScheduleSlot[];
   instructorId?: number;
+  /**
+   * Kullanıcı override — true ise hard rule ihlalleri olsa bile atama yazılır (warning olarak
+   * işaretlenir). Varsayılan false. Force=false ile gönderilen istekte conflict varsa backend
+   * `requiresConfirmation: true` döndürür; frontend uyarı dialog'u açıp kullanıcı "Devam Et"
+   * derse aynı request Force=true ile tekrar yollanır.
+   */
+  force?: boolean;
+}
+
+/**
+ * Düzenleyici drag-start akışında çağrılır: bir section için N aday hücreyi tek HTTP
+ * çağrısında RuleEngine ile değerlendirip per-cell {isValid, reason} döndürür.
+ */
+export interface BulkValidateCellsRequest {
+  sectionId: number;
+  instructorId?: number;
+  classroomId?: number;
+  candidates: BulkValidateCellCandidate[];
+}
+
+export interface BulkValidateCellCandidate {
+  /** Frontend hücre kimliği (`cell-{day}-{slotOrder}`); response'ta birebir geri yansır. */
+  cellKey: string;
+  scheduleSlots: ScheduleSlot[];
+}
+
+export interface BulkValidateCellsResult {
+  results: BulkValidateCellResult[];
+}
+
+export interface BulkValidateCellResult {
+  cellKey: string;
+  isValid: boolean;
+  /** Geçersiz ise ilk conflict mesajı; geçerli ise null. Tooltip'te gösterilir. */
+  reason: string | null;
 }
 
 export interface AssignmentResult {
   success: boolean;
   warnings: string[];
   conflicts: SchedulingConflict[];
+  /**
+   * Override akışı — true ise atama YAZILMADI; backend conflict listesini döndürdü ve kullanıcının
+   * onayını bekliyor. Frontend dialog ile conflict mesajlarını gösterir; "Devam Et" derse aynı
+   * request `force: true` ile tekrar yollanır.
+   */
+  requiresConfirmation?: boolean;
 }
 
 export interface AutoScheduleRequest {

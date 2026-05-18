@@ -5,6 +5,11 @@ using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Middleware;
 
+/// <summary>
+/// Sadece 401/403 status code'larını AuditLog'a yazar. Unhandled exception'lar
+/// pipeline'da daha üstteki <see cref="GlobalExceptionMiddleware"/> tarafından
+/// yakalanır; burada exception handling yapılmaz.
+/// </summary>
 public class ErrorLoggingMiddleware
 {
     private readonly RequestDelegate _next;
@@ -23,67 +28,16 @@ public class ErrorLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext httpContext)
     {
-        try
+        await _next(httpContext);
+
+        if (httpContext.Response.StatusCode is 401 or 403)
         {
-            await _next(httpContext);
+            // Login endpoint kendi LoginFailed logunu yaziyor, cifte log olmasin
+            var path = httpContext.Request.Path.Value;
+            if (path != null && path.Contains("/auth/login", StringComparison.OrdinalIgnoreCase))
+                return;
 
-            if (httpContext.Response.StatusCode is 401 or 403)
-            {
-                // Login endpoint kendi LoginFailed logunu yaziyor, cifte log olmasin
-                var path = httpContext.Request.Path.Value;
-                if (path != null && path.Contains("/auth/login", StringComparison.OrdinalIgnoreCase))
-                    return;
-
-                await LogStatusCodeAsync(httpContext);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Unhandled exception for {Method} {Path}. TraceId={TraceId}",
-                httpContext.Request.Method,
-                httpContext.Request.Path.Value,
-                httpContext.TraceIdentifier);
-            await LogExceptionAsync(httpContext, ex);
-            throw;
-        }
-    }
-
-    private async Task LogExceptionAsync(HttpContext httpContext, Exception ex)
-    {
-        try
-        {
-            using var scope = httpContext.RequestServices.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-            var userId = GetUserId(httpContext);
-            var endpoint = httpContext.Request.Path.Value;
-            var method = httpContext.Request.Method;
-
-            context.AuditLogs.Add(new AuditLog
-            {
-                UserId = userId,
-                Action = "SystemError",
-                EntityType = "System",
-                EntityId = null,
-                OldValue = null,
-                NewValue = JsonSerializer.Serialize(new
-                {
-                    exceptionType = ex.GetType().Name,
-                    traceId = httpContext.TraceIdentifier,
-                    endpoint,
-                    method,
-                }, JsonOptions),
-                Timestamp = DateTime.UtcNow,
-                IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
-            });
-
-            await context.SaveChangesAsync();
-        }
-        catch
-        {
-            // Loglama hatasi ana istegi bozmasin
+            await LogStatusCodeAsync(httpContext);
         }
     }
 
@@ -115,9 +69,10 @@ public class ErrorLoggingMiddleware
 
             await context.SaveChangesAsync();
         }
-        catch
+        catch (Exception ex)
         {
             // Loglama hatasi ana istegi bozmasin
+            _logger.LogWarning(ex, "ErrorLoggingMiddleware: status code log yazılamadı.");
         }
     }
 

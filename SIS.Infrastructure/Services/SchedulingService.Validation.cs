@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Rules;
+using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services;
 
@@ -11,6 +12,130 @@ namespace SIS.Infrastructure.Services;
 /// </summary>
 public partial class SchedulingService
 {
+    /// <summary>
+    /// N aday hücreyi tek HTTP çağrısında değerlendirir. Düzenleyici drag-start'ta tüm
+    /// boş hücreler için per-cell {isValid, reason} döndürür. Snapshot/config/state yalnız
+    /// bir kez yüklenir; her aday sadece BuildCandidateRuntime + RuleEngine maliyeti yaşar.
+    /// </summary>
+    public async Task<BulkValidateCellsResultDto> ValidateCellsBulkAsync(
+        BulkValidateCellsRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var result = new BulkValidateCellsResultDto();
+
+        if (request.SectionId <= 0 || request.Candidates.Count == 0)
+        {
+            return result;
+        }
+
+        var section = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .Include(cs => cs.Instructor)
+            .Include(cs => cs.Classroom)
+            .FirstOrDefaultAsync(cs => cs.Id == request.SectionId, cancellationToken);
+
+        if (section == null)
+        {
+            // Bilinmeyen section → tüm adaylar invalid olarak işaretle.
+            foreach (var c in request.Candidates)
+            {
+                result.Results.Add(new BulkValidateCellResultDto
+                {
+                    CellKey = c.CellKey,
+                    IsValid = false,
+                    Reason = "Section bulunamadı."
+                });
+            }
+            return result;
+        }
+
+        // Savunma katmanı: Pool drag-start akışında frontend section'ın atanmış classroomId'sini
+        // bilmez (henüz atanmamış section). Bu durumda request.ClassroomId null gelir; backend
+        // null classroom için H4 ClassroomType kuralını skip eder → tüm hücreler yanlışlıkla
+        // yeşil gözükür → drop sırasında frontend tip-uygun classroom seçer ama bulk validate
+        // yanlış classroom'u test etmiş olur. Çözüm: classroomId null geldiğinde section type'a
+        // göre uygun ilk classroom'u seçip her aday'a inject et — bulk validate'in test ettiği
+        // classroom drop'ta seçilenle tip olarak eşleşir.
+        if (request.ClassroomId == null && Scheduling.TeachingMethodPolicy.RequiresClassroom(section.Course.TeachingMethod))
+        {
+            // Assignment.cs:60-61 ile birebir aynı türetim: pür-lab dersler Lab tipi bekler, diğerleri Lecture.
+            var expectedType = section.Course.LabHours > 0 && section.Course.TheoryHours == 0
+                ? ClassroomType.Lab : ClassroomType.Lecture;
+
+            var fallbackClassroomId = await _context.Classrooms
+                .AsNoTracking()
+                .Where(c => c.Type == expectedType && c.Capacity >= section.Capacity)
+                .OrderBy(c => c.Id)
+                .Select(c => (int?)c.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (fallbackClassroomId.HasValue)
+            {
+                request.ClassroomId = fallbackClassroomId;
+                foreach (var c in request.Candidates)
+                {
+                    foreach (var slot in c.ScheduleSlots)
+                    {
+                        slot.ClassroomId ??= fallbackClassroomId;
+                    }
+                }
+            }
+        }
+
+        // Ortak ağır işler: snapshot + config + state — yalnız bir kez.
+        var softConfig = await LoadSoftConstraintConfigAsync(cancellationToken);
+        var hardConfig = await LoadHardConstraintConfigAsync(cancellationToken);
+        var runtimeSnapshot = await BuildRuntimeSnapshotAsync(
+            section.TermId, section.Id, null, cancellationToken);
+        var fullCfg = BuildConstraintConfig(softConfig, hardConfig);
+
+        foreach (var candidate in request.Candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                var (runtimeCandidate, _) = await BuildCandidateRuntimeAsync(
+                    section,
+                    request.InstructorId,
+                    request.ClassroomId,
+                    candidate.ScheduleSlots,
+                    cancellationToken);
+
+                // State candidate'in InstructorId/DepartmentId'sine göre yüklenir;
+                // bu nedenle her aday için ayrı state (instructor değişebilir).
+                var state = await _constraintStateLoader.LoadConstraintStateAsync(
+                    runtimeCandidate.InstructorId,
+                    runtimeCandidate.DepartmentId,
+                    runtimeCandidate.SectionId,
+                    section.TermId,
+                    cancellationToken);
+
+                var conflicts = await _ruleEngine.EvaluateCandidateAsync(
+                    runtimeCandidate, runtimeSnapshot, fullCfg, state, cancellationToken);
+
+                result.Results.Add(new BulkValidateCellResultDto
+                {
+                    CellKey = candidate.CellKey,
+                    IsValid = conflicts.Count == 0,
+                    Reason = conflicts.Count > 0 ? conflicts[0].Message : null
+                });
+            }
+            catch (Exception ex)
+            {
+                // Tek aday başarısız olursa diğerleri etkilenmesin — onu invalid işaretle, gerekçe ex.Message.
+                result.Results.Add(new BulkValidateCellResultDto
+                {
+                    CellKey = candidate.CellKey,
+                    IsValid = false,
+                    Reason = ex.Message
+                });
+            }
+        }
+
+        return result;
+    }
+
     public async Task<ScheduleValidationResultDto> ValidateAsync(ScheduleValidationRequestDto request, CancellationToken cancellationToken = default)
     {
         var result = new ScheduleValidationResultDto { IsValid = true };

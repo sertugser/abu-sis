@@ -11,7 +11,9 @@ import {
   AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, CheckSquare,
   Loader2, Maximize2, Minimize2, Search, Trash2, X,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DelayedConfirmDialog } from '@/components/ui/delayed-confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,14 +24,15 @@ import {
   useAssignSection, useFacultyPlanningConflicts, useFacultyPlanningSections,
   useFacultyPlanningTimeSlots, useUnassignSection,
 } from '../hooks/useFacultyPlanning';
-import { getAvailableClassrooms } from '../api/facultyPlanning.api';
+import { getAvailableClassrooms, validateCellsBulk } from '../api/facultyPlanning.api';
 import { useFullscreen } from '../hooks/useFullscreen';
 import { CalendarGrid } from '../components/faculty-planning/CalendarGrid';
 import { UnassignedSectionsPanel, UNASSIGNED_POOL_DROP_ID } from '../components/faculty-planning/UnassignedSectionsPanel';
 import type {
+  AssignSectionRequest,
   FacultyPlanningSection, FacultyPlanningTimeSlot, ScheduleBlockType, TeachingMethod, TimeSlotAllowedMode,
 } from '../types/facultyPlanning';
-import type { ScheduleSlot } from '../types/scheduling';
+import type { ScheduleSlot, SchedulingConflict } from '../types/scheduling';
 
 interface DragData {
   /** 'block' = grid'deki atanmış kart taşınıyor; 'pool' = atanmamış havuzdan yeni atama. */
@@ -232,6 +235,137 @@ interface FeedbackState {
   message: string;
 }
 
+interface BulkCandidate {
+  cellKey: string;
+  scheduleSlots: ScheduleSlot[];
+}
+
+/**
+ * Drag-start akışında backend bulk-validate'e gönderilecek aday hücre listesini hazırlar.
+ *
+ * Her görünür slot için section'ın o hücreye gitmesi durumundaki TAM schedule slot listesini üretir:
+ *   - kind='pool'   → sadece aday block (section atanmamıştı, başka block yok)
+ *   - kind='block'  → section'ın sürüklenen block dışındaki diğer blokları + aday block
+ *
+ * Dolu hücreler (başka section o slotta) atlanır — backend bulk validate'te sırasız hızlandırma.
+ * Gün sonuna sığmayan veya ardışıklığı bozan adaylar da atlanır — backend yine kıyaslar ama
+ * önden eler, bant genişliği israfı olmasın.
+ */
+function buildBulkCandidates(
+  draggedData: DragData,
+  draggedSection: FacultyPlanningSection,
+  allSections: FacultyPlanningSection[],
+  timeSlots: FacultyPlanningTimeSlot[],
+): BulkCandidate[] {
+  const candidates: BulkCandidate[] = [];
+  const durationMin = draggedData.durationMinutes;
+  const targetClassroomId = draggedData.classroomId ?? draggedSection.classroomId ?? undefined;
+
+  // Section'ın korunacak blokları:
+  //  - block (taşıma): sürüklenen block hariç tüm mevcut bloklar
+  //  - pool (yeni atama, kısmi destek): section'ın mevcut tüm bloklar korunur (Teori bloğu daha önce
+  //    atanmışsa Lab bloğu eklerken Teori bloğu yerinde kalmalı; aksi halde tek block ezerek section'ı
+  //    yeniden başlatır)
+  const otherBlocks = draggedData.kind === 'block'
+    ? draggedSection.schedules.filter(b => !(
+        b.day === draggedData.currentDay
+        && b.startTime.slice(0, 5) === draggedData.currentStartTime?.slice(0, 5)
+        && b.blockType === draggedData.blockType
+      ))
+    : draggedSection.schedules;
+
+  const otherBlockSlots: ScheduleSlot[] = otherBlocks.map(b => ({
+    day: b.day,
+    startTime: b.startTime.slice(0, 5),
+    endTime: b.endTime.slice(0, 5),
+    classroomId: b.classroomId ?? targetClassroomId,
+  }));
+
+  // Hücre yoğunluk lookup — başka section'lar veya KENDİ korunan bloklar bir hücreye düşüyorsa
+  // bu hücre aday olamaz (dolu hücreye drop bloklanır + section kendi diğer bloğunun zamanına gidemez).
+  const cellLoadMap = new Set<string>();
+  for (const s of allSections) {
+    for (const b of s.schedules) {
+      // Section'ın sürüklenen kendi bloğu hesaba katılmasın (taşımada kendi yerini boşaltıyor sayılır)
+      if (
+        draggedData.kind === 'block'
+        && s.sectionId === draggedSection.sectionId
+        && b.day === draggedData.currentDay
+        && b.startTime.slice(0, 5) === draggedData.currentStartTime?.slice(0, 5)
+        && b.blockType === draggedData.blockType
+      ) {
+        continue;
+      }
+      const blockStart = timeToMinutes(b.startTime.slice(0, 5));
+      const blockEnd = timeToMinutes(b.endTime.slice(0, 5));
+      for (const ts of timeSlots) {
+        if (ts.day !== b.day) continue;
+        const slotStart = timeToMinutes(ts.startTime.slice(0, 5));
+        const slotEnd = timeToMinutes(ts.endTime.slice(0, 5));
+        if (slotStart < blockEnd && slotEnd > blockStart) {
+          cellLoadMap.add(`cell-${ts.day}-${ts.slotOrder}`);
+        }
+      }
+    }
+  }
+
+  // Gün başına slot'ları sırala — ardışıklık kontrolü için
+  const slotsByDay = new Map<number, FacultyPlanningTimeSlot[]>();
+  for (const ts of timeSlots) {
+    const list = slotsByDay.get(ts.day) ?? [];
+    list.push(ts);
+    slotsByDay.set(ts.day, list);
+  }
+  for (const list of slotsByDay.values()) {
+    list.sort((a, b) => a.slotOrder - b.slotOrder);
+  }
+
+  for (const [day, daySlots] of slotsByDay) {
+    for (let i = 0; i < daySlots.length; i += 1) {
+      const startSlot = daySlots[i];
+      const cellKey = `cell-${day}-${startSlot.slotOrder}`;
+
+      // Dolu hücre — drop bloklanır, backend'e sormaya gerek yok
+      if (cellLoadMap.has(cellKey)) continue;
+
+      const startHm = startSlot.startTime.slice(0, 5);
+      const startMin = timeToMinutes(startHm);
+      const slotSizeMin = timeToMinutes(startSlot.endTime.slice(0, 5)) - startMin;
+      const needed = slotSizeMin > 0 ? Math.max(1, Math.round(durationMin / slotSizeMin)) : 1;
+
+      // Gün sonu — sığmıyor
+      if (i + needed > daySlots.length) continue;
+
+      // Ardışıklık (öğle arası slot atlaması)
+      let consecutive = true;
+      for (let k = 1; k < needed; k += 1) {
+        if (daySlots[i + k].slotOrder !== daySlots[i + k - 1].slotOrder + 1) {
+          consecutive = false;
+          break;
+        }
+      }
+      if (!consecutive) continue;
+
+      const endHm = daySlots[i + needed - 1].endTime.slice(0, 5);
+
+      candidates.push({
+        cellKey,
+        scheduleSlots: [
+          ...otherBlockSlots,
+          {
+            day,
+            startTime: startHm,
+            endTime: endHm,
+            classroomId: targetClassroomId,
+          },
+        ],
+      });
+    }
+  }
+
+  return candidates;
+}
+
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -349,16 +483,74 @@ export default function SchedulingEditorPage() {
 
   const conflictCount = conflictsQuery.data?.length ?? 0;
 
+  /**
+   * Section bazında backend conflict mesajları haritası. Kart kırmızıyken kullanıcı fareyle
+   * üstüne gelince hangi kuralı ihlal ettiğini tooltip'te görür. Mesajlar tamamen DB-driven
+   * (section adı, derslik kodu, hoca, saat ile RuleEngine'den geliyor — hardcoded yok).
+   * Conflict her iki section'a (sectionId + relatedSectionId) yansıtılır.
+   */
+  const sectionConflicts = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const c of conflictsQuery.data ?? []) {
+      const push = (sid: number) => {
+        const list = map.get(sid) ?? [];
+        if (!list.includes(c.message)) list.push(c.message);
+        map.set(sid, list);
+      };
+      push(c.sectionId);
+      if (c.relatedSectionId) push(c.relatedSectionId);
+    }
+    return map;
+  }, [conflictsQuery.data]);
+
   const termStatus = activeTerm?.status;
   const isTermEditable = termStatus === 'Active';
 
+  /**
+   * Override akışı state — backend Force=false ile çağrıldığında conflict varsa atama yazılmaz
+   * ve requiresConfirmation=true döner. Bu state dolduğunda AlertDialog açılır; kullanıcı
+   * "Devam Et" derse aynı request Force=true ile tekrar gönderilir.
+   *
+   * `request` ve `successMessage` orijinal payload'u + feedback metnini saklar → onay sonrası
+   * aynısı tekrar kullanılır. `conflicts` backend'den gelen tam RuleEngine mesajları (hardcoded
+   * metin yok, hepsi DB'deki section/derslik/hoca bilgisinden üretilmiş).
+   */
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    request: AssignSectionRequest;
+    conflicts: SchedulingConflict[];
+    successMessage: string;
+  } | null>(null);
+
+  /**
+   * Toplu unassign onay state'i. Yıkıcı işlem (N section'ın atamasını silmek) — kullanıcının
+   * yanlışlıkla tıklayıp veri kaybetmesini önlemek için DelayedConfirmDialog ile onay alınır.
+   * Etkilenecek section listesi DB-driven mesajlarla gösterilir (kod + ad + program özeti).
+   */
+  const [pendingBulkUnassign, setPendingBulkUnassign] = useState<{
+    eligibleIds: number[];
+    skippedCount: number;
+    preview: FacultyPlanningSection[];
+  } | null>(null);
+
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
   const [invalidDropIds, setInvalidDropIds] = useState<Set<string>>(new Set());
+  /**
+   * Backend bulk-validate cevabından doldurulur — dropId → ilk conflict mesajı.
+   * Tooltip'te kırmızı hücre üzerinde gösterilir. Drag start'ta sıfırlanır,
+   * backend cevabı gelince doldurulur, drag end/cancel'da temizlenir.
+   */
+  const [cellReasons, setCellReasons] = useState<Map<string, string>>(new Map());
   const [suggestedDropIds, setSuggestedDropIds] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedSectionIds, setSelectedSectionIds] = useState<Set<number>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
+
+  /**
+   * Aktif drag'in sectionId'sini takip eder. Async bulk-validate cevabı dönerken kullanıcı
+   * sürüklemeyi iptal etmiş veya başka bir section'a geçmişse geç gelen cevap atılır.
+   */
+  const activeDragSectionRef = useRef<number | null>(null);
 
   // 8px activation distance → tıklama Popover açar, sürükleyince drag başlar
   const sensors = useSensors(
@@ -446,19 +638,30 @@ export default function SchedulingEditorPage() {
     setSelectedSectionIds(new Set());
   }, []);
 
-  /** Seçili tüm kartların atamasını paralel kaldırır (pinli olanlar atlanır). */
-  const handleBulkUnassign = useCallback(async () => {
+  /** Seçili kartların atamasını paralel kaldırır — onay dialog'u açar. Asıl mutate handleConfirmBulkUnassign'da. */
+  const handleBulkUnassign = useCallback(() => {
     if (selectedSectionIds.size === 0) return;
     const ids = Array.from(selectedSectionIds);
-    const eligibleIds = ids.filter(id => {
-      const s = sections.find(x => x.sectionId === id);
-      return s != null && !s.isPinned && s.status !== 'Unscheduled';
-    });
-    const skippedCount = ids.length - eligibleIds.length;
-    if (eligibleIds.length === 0) {
+    const eligibleSections = sections.filter(s =>
+      ids.includes(s.sectionId) && !s.isPinned && s.status !== 'Unscheduled'
+    );
+    const skippedCount = ids.length - eligibleSections.length;
+    if (eligibleSections.length === 0) {
       setFeedback({ kind: 'error', message: 'Seçili kartların hepsi pinli veya zaten atanmamış.' });
       return;
     }
+    setPendingBulkUnassign({
+      eligibleIds: eligibleSections.map(s => s.sectionId),
+      skippedCount,
+      preview: eligibleSections,
+    });
+  }, [selectedSectionIds, sections]);
+
+  /** Kullanıcı onay verince mutate eder. 5 sn delay sonrası tıklanabilir buton tetikler. */
+  const handleConfirmBulkUnassign = useCallback(async () => {
+    if (!pendingBulkUnassign) return;
+    const { eligibleIds, skippedCount } = pendingBulkUnassign;
+    setPendingBulkUnassign(null);
     setBulkPending(true);
     const results = await Promise.allSettled(
       eligibleIds.map(id => unassignMutation.mutateAsync(id)),
@@ -471,30 +674,74 @@ export default function SchedulingEditorPage() {
       message: `${okCount} şube kaldırıldı${errCount > 0 ? `, ${errCount} hata` : ''}${skippedCount > 0 ? ` · ${skippedCount} pinli/atanmamış atlandı` : ''}`,
     });
     exitMultiSelect();
-  }, [selectedSectionIds, sections, unassignMutation, exitMultiSelect]);
+  }, [pendingBulkUnassign, unassignMutation, exitMultiSelect]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const data = event.active.data.current as DragData | undefined;
     if (!data) return;
     const section = sections.find(s => s.sectionId === data.sectionId);
     if (!section) return;
+
     setDragPreview({ section, data });
+    setCellReasons(new Map());
+    activeDragSectionRef.current = section.sectionId;
+
+    // 1) Anlık (sync) frontend pre-check — kullanıcı için gecikme yok, ilk renkler hemen çıkar
     const invalid = computeInvalidDropIds(data, section, sections, timeSlots);
     setInvalidDropIds(invalid);
     setSuggestedDropIds(computeSmartSuggestions(section, invalid, timeSlots, sections));
+
+    // 2) Backend bulk-validate — kesin RuleEngine doğrulaması, ~200-500ms sonra renkler güncellenir
+    const candidates = buildBulkCandidates(data, section, sections, timeSlots);
+    if (candidates.length === 0) return;
+
+    const requestedSectionId = section.sectionId;
+    validateCellsBulk({
+      sectionId: section.sectionId,
+      instructorId: section.instructorId ?? undefined,
+      classroomId: data.classroomId ?? section.classroomId ?? undefined,
+      candidates,
+    }).then(result => {
+      // Race-condition guard: drag iptal edildi veya başka section'a geçildiyse cevabı yok say
+      if (activeDragSectionRef.current !== requestedSectionId) return;
+
+      const newInvalid = new Set<string>(invalid);
+      const newReasons = new Map<string, string>();
+
+      for (const r of result.results) {
+        if (!r.isValid) {
+          newInvalid.add(r.cellKey);
+          if (r.reason) newReasons.set(r.cellKey, r.reason);
+        } else {
+          // Backend yeşil diyorsa frontend pre-check'in over-restrictive kararını gevşet
+          newInvalid.delete(r.cellKey);
+        }
+      }
+
+      setInvalidDropIds(newInvalid);
+      setCellReasons(newReasons);
+      setSuggestedDropIds(computeSmartSuggestions(section, newInvalid, timeSlots, sections));
+    }).catch(() => {
+      // Backend hata verirse hızlı pre-check sonucu kalır — sessiz fallback
+    });
   }, [sections, timeSlots]);
 
   const handleDragCancel = useCallback(() => {
     setDragPreview(null);
     setInvalidDropIds(new Set());
+    setCellReasons(new Map());
     setSuggestedDropIds(new Set());
+    activeDragSectionRef.current = null;
   }, []);
 
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     setDragPreview(null);
     const stashedInvalid = invalidDropIds;
+    const stashedReasons = cellReasons;
     setInvalidDropIds(new Set());
+    setCellReasons(new Map());
     setSuggestedDropIds(new Set());
+    activeDragSectionRef.current = null;
     const { active, over } = event;
     // Geçici debug — drop hedefi bulunamıyorsa kullanıcıya banner ile bildir, sessiz kalmasın.
     if (!over) {
@@ -535,25 +782,20 @@ export default function SchedulingEditorPage() {
     const targetDay = Number(dayStr);
     const targetSlotOrder = Number(slotOrderStr);
 
-    // Hedef hücre dolu mu? Dolu hücreye drop bloklanır (artık useDroppable her hücreyi register ediyor).
-    const targetCellHasBlock = sections.some(s => s.schedules.some(b =>
-      b.day === targetDay
-      && timeSlots.some(ts =>
-        ts.day === targetDay
-        && ts.slotOrder === targetSlotOrder
-        && ts.startTime.slice(0, 5) === b.startTime.slice(0, 5)
-      )
-    ));
-    if (targetCellHasBlock) {
-      setFeedback({ kind: 'error', message: 'Hedef hücre boş değil. Önce mevcut atamayı kaldırın.' });
-      return;
-    }
+    // NOT: Paralel section'lar aynı hücrede koexistirler (örn CENG223 -1 ile CENG101 -3
+    // aynı saatte farklı dersliklerde). Frontend dolu hücreye drop'u önceden bloklamaz —
+    // backend H1 (derslik çakışması), H2 (hoca çakışması), H8 (aynı dersin section'ları)
+    // ile karar verir. Bulk-validate sonucu zaten invalidDropIds'te yansır.
 
     // Frontend pre-check: invalid hücreye bırakıldıysa banner uyarısı, backend'e gitme.
+    // Backend bulk-validate cevabı geldiyse spesifik RuleEngine mesajını kullan; yoksa generic.
     if (stashedInvalid.has(dropId)) {
+      const backendReason = stashedReasons.get(dropId);
       setFeedback({
         kind: 'error',
-        message: 'Bu hücre uygun değil (hoca/derslik çakışması, slot tipi uyumsuz veya gün sonu).',
+        message: backendReason
+          ? backendReason
+          : 'Bu hücre uygun değil (hoca/derslik çakışması, slot tipi uyumsuz veya gün sonu).',
       });
       return;
     }
@@ -600,14 +842,20 @@ export default function SchedulingEditorPage() {
           setFeedback({ kind: 'error', message: 'Aktif dönem bulunamadı, atama yapılamaz.' });
           return;
         }
+        // Backend Assignment.cs:60-61 ile birebir aynı türetim: pür-lab dersler "Lab", diğerleri
+        // "Lecture" derslik bekler. type=undefined geçmek getAvailableClassrooms'i tüm tiplere açar
+        // ve ilk dönen yanlış tipte olunca H4 ClassroomType backend assign'da reddeder
+        // ("Teori dersi (X) Lab/uzman tipi dersliğe atanamaz") → kullanıcı yeşil hücreye drop yapar,
+        // dropta sessizce yanlış derslik seçilir, backend reddeder.
+        const requiredType = section.labHours > 0 && section.theoryHours === 0 ? 'Lab' : 'Lecture';
         try {
           const available = await getAvailableClassrooms(
-            termId, targetDay, startHm, endHm, section.capacity, undefined,
+            termId, targetDay, startHm, endHm, section.capacity, requiredType,
           );
           if (available.length === 0) {
             setFeedback({
               kind: 'error',
-              message: `${section.courseCode}: uygun derslik yok. Boş hücreye tıklayıp manuel atama yapın.`,
+              message: `${section.courseCode}: uygun derslik yok (${requiredType} tipi). Boş hücreye tıklayıp manuel atama yapın.`,
             });
             return;
           }
@@ -618,25 +866,43 @@ export default function SchedulingEditorPage() {
         }
       }
 
-      assignMutation.mutate(
-        {
-          sectionId: section.sectionId,
-          classroomId,
-          instructorId: section.instructorId ?? undefined,
-          scheduleSlots: [{ day: targetDay, startTime: startHm, endTime: endHm, classroomId }],
-        },
-        {
-          onSuccess: () => {
-            setFeedback({
-              kind: 'success',
-              message: `${section.courseCode} atandı: ${startHm}-${endHm}${classroomId ? '' : ' (online)'}`,
+      // Kısmi atama desteği — section'ın mevcut blokları korunur, yeni block (data.blockType
+      // ile gelen Teori veya Lab) eklenir. Pool drag handle artık tek bölüm olarak çalışır
+      // (3T+2L dersin Teori bloğu ayrı, Lab bloğu ayrı drag).
+      const existingSlots: ScheduleSlot[] = section.schedules.map(b => ({
+        day: b.day,
+        startTime: b.startTime.slice(0, 5),
+        endTime: b.endTime.slice(0, 5),
+        classroomId: b.classroomId ?? section.classroomId ?? undefined,
+      }));
+      const newSlot: ScheduleSlot = { day: targetDay, startTime: startHm, endTime: endHm, classroomId };
+
+      const poolRequest: AssignSectionRequest = {
+        sectionId: section.sectionId,
+        classroomId,
+        instructorId: section.instructorId ?? undefined,
+        scheduleSlots: [...existingSlots, newSlot],
+      };
+      const blockLabel = data.blockType === 'Theory' ? ' (Teori)' : data.blockType === 'Lab' ? ' (Lab)' : '';
+      const poolSuccessMessage = `${section.courseCode}${blockLabel} atandı: ${startHm}-${endHm}${classroomId ? '' : ' (online)'}`;
+
+      assignMutation.mutate(poolRequest, {
+        onSuccess: (result) => {
+          if (result.requiresConfirmation) {
+            // Backend conflict gördü, yazmadı → dialog aç, kullanıcı override karar versin
+            setPendingConfirmation({
+              request: poolRequest,
+              conflicts: result.conflicts,
+              successMessage: poolSuccessMessage,
             });
-          },
-          onError: (error) => {
-            setFeedback({ kind: 'error', message: extractError(error, 'Atama başarısız.') });
-          },
+            return;
+          }
+          setFeedback({ kind: 'success', message: poolSuccessMessage });
         },
-      );
+        onError: (error) => {
+          setFeedback({ kind: 'error', message: extractError(error, 'Atama başarısız.') });
+        },
+      });
       return;
     }
 
@@ -671,26 +937,66 @@ export default function SchedulingEditorPage() {
       },
     ];
 
-    assignMutation.mutate(
-      {
-        sectionId: section.sectionId,
-        classroomId: data.classroomId ?? section.classroomId ?? undefined,
-        instructorId: section.instructorId ?? undefined,
-        scheduleSlots: newScheduleSlots,
-      },
-      {
-        onSuccess: () => {
-          setFeedback({
-            kind: 'success',
-            message: `${section.courseCode} taşındı: ${startHm}-${endHm}`,
+    const moveRequest: AssignSectionRequest = {
+      sectionId: section.sectionId,
+      classroomId: data.classroomId ?? section.classroomId ?? undefined,
+      instructorId: section.instructorId ?? undefined,
+      scheduleSlots: newScheduleSlots,
+    };
+    const moveSuccessMessage = `${section.courseCode} taşındı: ${startHm}-${endHm}`;
+
+    assignMutation.mutate(moveRequest, {
+      onSuccess: (result) => {
+        if (result.requiresConfirmation) {
+          setPendingConfirmation({
+            request: moveRequest,
+            conflicts: result.conflicts,
+            successMessage: moveSuccessMessage,
           });
+          return;
+        }
+        setFeedback({ kind: 'success', message: moveSuccessMessage });
+      },
+      onError: (error) => {
+        setFeedback({ kind: 'error', message: extractError(error, 'Taşıma başarısız.') });
+      },
+    });
+  }, [sections, timeSlots, assignMutation, unassignMutation, invalidDropIds, cellReasons, termId]);
+
+  /**
+   * Override onay handler — kullanıcı dialog'da "Yine de devam et" derse aynı request'i
+   * force=true ile tekrar gönderir. Backend force=true ile çağrıldığında conflict'leri
+   * warning olarak yansıtır ve atamayı yazar.
+   */
+  const handleConfirmOverride = useCallback(() => {
+    if (!pendingConfirmation) return;
+    const { request, successMessage } = pendingConfirmation;
+    setPendingConfirmation(null);
+    assignMutation.mutate(
+      { ...request, force: true },
+      {
+        onSuccess: (result) => {
+          if (result.warnings.length > 0) {
+            // Override sonrası backend warning listesi döndü — kullanıcıya başarılı + uyarı
+            setFeedback({
+              kind: 'success',
+              message: `${successMessage} (${result.warnings.length} uyarıyla)`,
+            });
+          } else {
+            setFeedback({ kind: 'success', message: successMessage });
+          }
         },
         onError: (error) => {
-          setFeedback({ kind: 'error', message: extractError(error, 'Taşıma başarısız.') });
+          setFeedback({ kind: 'error', message: extractError(error, 'Atama başarısız.') });
         },
       },
     );
-  }, [sections, timeSlots, assignMutation, unassignMutation, invalidDropIds, termId]);
+  }, [pendingConfirmation, assignMutation]);
+
+  const handleCancelOverride = useCallback(() => {
+    setPendingConfirmation(null);
+    setFeedback({ kind: 'error', message: 'Atama iptal edildi.' });
+  }, []);
 
   if (termLoading || facultiesLoading) {
     return (
@@ -1004,6 +1310,8 @@ export default function SchedulingEditorPage() {
                     // sonuç backend'den banner mesajıyla döner.
                     editable={!multiSelectMode}
                     invalidDropIds={invalidDropIds}
+                    invalidDropReasons={cellReasons}
+                    sectionConflicts={sectionConflicts}
                     suggestedDropIds={suggestedDropIds}
                     highlightedSectionIds={focusedSectionIds}
                     maxBlocksPerCell={3}
@@ -1021,6 +1329,45 @@ export default function SchedulingEditorPage() {
           Yerine kartlar useDraggable.transform ile in-place hareket eder (SectionBlock +
           UnassignedSectionCard içinde uygulanır). */}
     </DndContext>
+
+    {/* Override Onay Dialog'u — backend Force=false ile çağrıldığında conflict varsa açılır.
+        Conflict mesajları backend RuleEngine'den geliyor (hardcoded değil — section adı, derslik
+        kodu, hoca, saat gibi DB'deki o anki state'ten dinamik üretilmiş). */}
+    <DelayedConfirmDialog
+      open={pendingConfirmation != null}
+      onOpenChange={(open) => { if (!open) handleCancelOverride(); }}
+      title="Bu atama planlama kurallarına aykırı"
+      description="Devam ederseniz aşağıdaki durumlar oluşacak:"
+      items={(pendingConfirmation?.conflicts ?? []).map((c, idx) => ({
+        key: idx,
+        label: c.message,
+      }))}
+      footnote='İstersen iptal edip farklı bir hücreye taşıyabilir, ya da bu kuralları yok sayarak devam edebilirsin. Devam edersen section "Çakışmalı" olarak işaretlenir.'
+      confirmLabel="Yine de devam et"
+      onConfirm={handleConfirmOverride}
+      onCancel={handleCancelOverride}
+      severity="warning"
+    />
+
+    {/* Toplu unassign onay dialog'u — yıkıcı işlem, kırmızı tema + 5sn delay.
+        Etkilenecek section'lar DB'den gelen kod + ad ile listelenir. */}
+    <DelayedConfirmDialog
+      open={pendingBulkUnassign != null}
+      onOpenChange={(open) => { if (!open) setPendingBulkUnassign(null); }}
+      title={`${pendingBulkUnassign?.eligibleIds.length ?? 0} şubenin ataması kaldırılacak`}
+      description="Aşağıdaki şubelerin program atamaları silinecek (hoca/derslik/zaman boş kalır):"
+      items={(pendingBulkUnassign?.preview ?? []).map(s => ({
+        key: s.sectionId,
+        label: `${s.courseCode} -${s.sectionIndex} · ${s.courseName} · ${s.scheduleSummary || '(zamansız)'}`,
+      }))}
+      footnote={pendingBulkUnassign?.skippedCount
+        ? `Bu işlem geri alınamaz. (${pendingBulkUnassign.skippedCount} kart pinli/atanmamış olduğu için atlanacak.)`
+        : 'Bu işlem geri alınamaz.'}
+      confirmLabel="Atamaları kaldır"
+      onConfirm={handleConfirmBulkUnassign}
+      onCancel={() => setPendingBulkUnassign(null)}
+      severity="danger"
+    />
     </>
   );
 }

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { ChevronDown, ChevronUp, GripVertical, Inbox, Search, Trash2, Users } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, FlaskConical, GripVertical, Inbox, Search, Trash2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-import type { FacultyPlanningSection } from '../../types/facultyPlanning';
+import type { FacultyPlanningSection, ScheduleBlockType } from '../../types/facultyPlanning';
 
 export const UNASSIGNED_POOL_DROP_ID = 'unassigned-pool';
 export const POOL_DRAG_ID_PREFIX = 'pool-section-';
@@ -47,8 +47,19 @@ export function UnassignedSectionsPanel({
     id: UNASSIGNED_POOL_DROP_ID,
   });
 
+  // Atanmamış havuz — tamamen unscheduled VEYA Partial (kısmen atanmış) section'ları içerir.
+  // Partial section'ların yalnız atanmamış bölümü (Teori veya Lab) drag edilebilir; kart UI
+  // her bölüm için ayrı drag handle gösterir.
   const unscheduled = useMemo(
-    () => sections.filter(s => s.status === 'Unscheduled'),
+    () => sections.filter(s => {
+      if (s.status === 'Conflicted' || s.status === 'Scheduled') return false;
+      // Bölümlerden en az biri atanmamışsa havuzda göster
+      const theoryAssigned = s.schedules.some(b => b.blockType === 'Theory');
+      const labAssigned = s.schedules.some(b => b.blockType === 'Lab');
+      const theoryPending = s.theoryHours > 0 && !theoryAssigned;
+      const labPending = s.labHours > 0 && !labAssigned;
+      return theoryPending || labPending;
+    }),
     [sections],
   );
 
@@ -223,51 +234,41 @@ export function UnassignedSectionsPanel({
   );
 }
 
-/** Kompakt sürüklenebilir kart — atanmamış section bilgisi. Drop sonrası backend `assign` çağrılır. */
+/**
+ * Atanmamış section kartı — Teori ve Lab bölümleri için AYRI drag handle.
+ *
+ * Sebebi: 3T+2L gibi karma derslerde "5 ardışık slot" bulmak çoğu durumda imkansız. Önceden tek
+ * drag tüm 5 slot'u tek block olarak yerleştirmeye çalışıyor, neredeyse her hücre invalid çıkıyordu.
+ * Yeni davranış: kullanıcı Teori bloğunu bir yere (3 slot), Lab bloğunu başka bir yere (2 slot)
+ * ayrı ayrı bırakır. Section "Partial" status'a düşer, geri kalan bölüm havuzda görünür kalır.
+ *
+ * Pure-Theory veya pure-Lab dersler tek handle ile (eski davranış) gösterilir.
+ */
 function UnassignedSectionCard({ section, slotMinutes }: { section: FacultyPlanningSection; slotMinutes: number }) {
   const totalHours = section.theoryHours + section.labHours;
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `${POOL_DRAG_ID_PREFIX}${section.sectionId}`,
-    disabled: section.isPinned,
-    data: {
-      kind: 'pool',
-      sectionId: section.sectionId,
-      classroomId: null,
-      // KRİTİK: "1 ders saati = 1 slot" varsayımı. theoryHours+labHours kadar slot gerekli.
-      // Hardcoded 60 yerine gerçek slotMinutes — yoksa 3T+0L (180dk) sistemde 50dk slot'a 4 slot
-      // hesaplanıyor ve "ardışık değil" hatası tüm hücreleri invalid yapıyordu.
-      durationMinutes: totalHours * slotMinutes,
-    },
-  });
-
-  // Transform-based drag — DragOverlay yerine kart kendisi hareket eder (grid kart fix'iyle tutarlı).
-  const dragTransformStyle = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
-    : undefined;
+  const theoryAssigned = section.schedules.some(b => b.blockType === 'Theory');
+  const labAssigned = section.schedules.some(b => b.blockType === 'Lab');
+  const theoryPending = section.theoryHours > 0 && !theoryAssigned;
+  const labPending = section.labHours > 0 && !labAssigned;
+  const isPartial = theoryAssigned !== labAssigned && (section.theoryHours > 0 && section.labHours > 0);
 
   return (
     <div
-      ref={setNodeRef}
-      style={dragTransformStyle}
-      {...attributes}
-      {...listeners}
       className={cn(
         'relative rounded-md border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all px-2.5 py-2',
-        section.isPinned ? 'cursor-not-allowed opacity-60' : 'cursor-grab active:cursor-grabbing',
-        isDragging && 'opacity-40 ring-2 ring-[#003366]',
+        section.isPinned && 'opacity-60',
       )}
     >
-      {/* Görsel sürükle ipucu — listener tüm kartta, bu sadece ikon */}
-      {!section.isPinned && (
-        <span className="absolute top-1 right-1 text-slate-300 pointer-events-none" aria-hidden="true">
-          <GripVertical className="h-3 w-3" />
-        </span>
-      )}
-      <div className="flex items-baseline gap-1.5 min-w-0 pr-4">
+      <div className="flex items-baseline gap-1.5 min-w-0">
         <span className="font-mono font-bold text-xs text-slate-800 shrink-0">
           {section.courseCode}
         </span>
         <span className="text-[10px] text-slate-400 shrink-0">·{section.sectionIndex}</span>
+        {isPartial && (
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-100 px-1 py-px rounded shrink-0">
+            Kısmi
+          </span>
+        )}
         <span className="text-[10px] text-slate-400 ml-auto bg-slate-50 px-1 py-0.5 rounded shrink-0">
           {section.departmentCode}
         </span>
@@ -286,6 +287,94 @@ function UnassignedSectionCard({ section, slotMinutes }: { section: FacultyPlann
           <span className="ml-auto truncate max-w-[100px]">{section.instructorName.split(' ').pop()}</span>
         )}
       </div>
+
+      {/* Bölüm bazlı drag handle'lar — yalnız atanmamış bölümler için görünür. */}
+      <div className="mt-1.5 flex gap-1.5">
+        {theoryPending && (
+          <PoolDragHandle
+            section={section}
+            blockType="Theory"
+            hours={section.theoryHours}
+            slotMinutes={slotMinutes}
+            icon={<BookOpen className="h-3 w-3" />}
+            label="Teori"
+            colorClass="bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-800"
+          />
+        )}
+        {labPending && (
+          <PoolDragHandle
+            section={section}
+            blockType="Lab"
+            hours={section.labHours}
+            slotMinutes={slotMinutes}
+            icon={<FlaskConical className="h-3 w-3" />}
+            label="Lab"
+            colorClass="bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-800"
+          />
+        )}
+        {theoryAssigned && (
+          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+            ✓ Teori atandı
+          </span>
+        )}
+        {labAssigned && (
+          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+            ✓ Lab atandı
+          </span>
+        )}
+      </div>
     </div>
+  );
+}
+
+/** Tek bölüm için (Teori veya Lab) sürüklenebilir buton. DragData.blockType ile backend'e doğru block türü gider. */
+function PoolDragHandle({
+  section, blockType, hours, slotMinutes, icon, label, colorClass,
+}: {
+  section: FacultyPlanningSection;
+  blockType: ScheduleBlockType;
+  hours: number;
+  slotMinutes: number;
+  icon: React.ReactNode;
+  label: string;
+  colorClass: string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `${POOL_DRAG_ID_PREFIX}${section.sectionId}-${blockType}`,
+    disabled: section.isPinned,
+    data: {
+      kind: 'pool',
+      sectionId: section.sectionId,
+      classroomId: null,
+      blockType,
+      // Bu bölüm için saat sayısı × slot süresi — kısmi atama için kritik
+      durationMinutes: hours * slotMinutes,
+    },
+  });
+
+  const dragTransformStyle = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
+    : undefined;
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={dragTransformStyle}
+      {...attributes}
+      {...listeners}
+      type="button"
+      className={cn(
+        'flex items-center gap-1 text-[10px] font-medium border rounded px-1.5 py-0.5 transition-all',
+        colorClass,
+        section.isPinned ? 'cursor-not-allowed opacity-50' : 'cursor-grab active:cursor-grabbing',
+        isDragging && 'opacity-40 ring-2 ring-[#003366]',
+      )}
+      aria-label={`${section.courseCode} ${label} bloğunu sürükle (${hours} saat)`}
+    >
+      <GripVertical className="h-2.5 w-2.5 text-slate-400" aria-hidden="true" />
+      {icon}
+      <span>{label}</span>
+      <span className="text-slate-500">({hours}sa)</span>
+    </button>
   );
 }
