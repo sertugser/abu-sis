@@ -245,8 +245,22 @@ public partial class SchedulingService
         int termId,
         CancellationToken ct)
     {
+        // 2026-05-17 — CohortBuilder komşu yıl hard pair filtresi için Course → IsCompulsory.
+        // Heuristic: bir ders birden çok müfredatta yer alıyorsa "en az birinde zorunlu" ise true.
+        var courseIds = candidates.Select(c => c.CourseId).Distinct().ToList();
+        var courseCompulsoryMap = courseIds.Count == 0
+            ? new Dictionary<int, bool>()
+            : await _context.CurriculumCourses
+                .AsNoTracking()
+                .Where(cc => courseIds.Contains(cc.CourseId))
+                .GroupBy(cc => cc.CourseId)
+                .Select(g => new { CourseId = g.Key, IsCompulsory = g.Any(cc => cc.IsCompulsory) })
+                .ToDictionaryAsync(x => x.CourseId, x => x.IsCompulsory, ct);
+
         var cohortRefs = candidates
-            .Select(c => new CohortSectionRef(c.SectionId, c.SectionNumber, c.CourseId))
+            .Select(c => new CohortSectionRef(
+                c.SectionId, c.SectionNumber, c.CourseId,
+                courseCompulsoryMap.GetValueOrDefault(c.CourseId, false)))
             .ToList();
 
         return await ConflictPairsBuilder.BuildAsync(

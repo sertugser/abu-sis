@@ -21,12 +21,6 @@ public sealed class SchedulingConstraintConfig
     public bool AllowSameCourseSectionOverlap { get; set; }
 
     /// <summary>
-    /// Kapasite yetersiz olduğunda paralel oda split'i yapılabilen block tipleri.
-    /// Varsayılan: sadece Lab. Config: "Schedule.SplittableBlockTypes".
-    /// </summary>
-    public HashSet<BlockType> SplittableBlockTypes { get; set; } = new() { BlockType.Lab };
-
-    /// <summary>
     /// Plan 11 Faz 1.2 — Hoca günlük max ders saati. V2 DailyLoadEncoder ile ortak kaynak.
     /// SystemConfig: <c>Schedule.MaxDailyHoursPerInstructor</c> (default 9).
     /// ConstraintParameterMapping üzerinden ConstraintDefinition.Parameters JSON
@@ -87,8 +81,6 @@ public sealed class SchedulingConstraintConfig
             LunchBreakIsHard = GetBool(config, "Schedule.LunchBreak.IsHard", false),
             BreakDurationMinutes = GetInt(config, "Schedule.BreakDurationMinutes", 5),
             AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
-            SplittableBlockTypes = ParseSplittableBlockTypes(
-                config.TryGetValue("Schedule.SplittableBlockTypes", out var sbt) ? sbt : "Lab"),
 
             // Default değerler (kısıt kartı Parameters JSON'u override eder)
             LunchBreakStart = new TimeOnly(11, 40),
@@ -133,18 +125,4 @@ public sealed class SchedulingConstraintConfig
 
     private static double GetDouble(IReadOnlyDictionary<string, string> config, string key, double defaultValue) =>
         config.TryGetValue(key, out var v) && double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var r) ? r : defaultValue;
-
-    private static HashSet<BlockType> ParseSplittableBlockTypes(string value)
-    {
-        var result = new HashSet<BlockType>();
-        if (string.IsNullOrWhiteSpace(value))
-            return result;
-
-        foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (Enum.TryParse<BlockType>(token, ignoreCase: true, out var bt))
-                result.Add(bt);
-        }
-        return result;
-    }
 }

@@ -264,12 +264,12 @@ public static partial class SeedData
             new()
             {
                 Code = "S20",
-                Name = "Komşu Yıl Çakışma",
-                Description = "Aynı bölüm içinde komşu yıl (1-2, 2-3, 3-4) ders çiftleri arasında çakışma penalty'si. Kalan/önden ders alan öğrenciler için section alternatifi kalmasını teşvik eder.",
-                Category = "Soft",
+                Name = "Komşu Yıl Çakışma Garantisi",
+                Description = "Komşu sınıfların (1-2, 2-3, 3-4) zorunlu dersleri arasında öğrencinin alabileceği en az bir alternatif şube kombinasyonu kalmalı. Bir öğrenci alttan kalan veya üstten almak istediği zorunlu bir dersin en az bir şubesi, kendi sınıfının zorunlu dersleriyle çakışmamalı. Seçmeli dersler bu kuralın dışında.",
+                Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"Weight": 1, "PenaltyPerPair": 5.0}""",
+                Parameters = null,
                 SortOrder = 110
             },
             new()

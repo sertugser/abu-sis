@@ -145,7 +145,10 @@ function ConstraintEditDialog({
     toast.showError('Kaydedilemedi', err instanceof Error ? err.message : fallback);
 
   const [paramDraft, setParamDraft] = useState<Record<string, string>>({});
-  const schema = PARAMETER_SCHEMAS[constraint.code] ?? [];
+  // PARAMETER_SCHEMAS[code] entry yoksa `?? []` her render'da yeni [] referansı yaratır →
+  // useEffect dep değişti sanır → setState → re-render → loop ("Maximum update depth exceeded").
+  // useMemo ile constraint.code'a göre stable referans tutuyoruz.
+  const schema = useMemo(() => PARAMETER_SCHEMAS[constraint.code] ?? [], [constraint.code]);
 
   useEffect(() => {
     if (!open) return;

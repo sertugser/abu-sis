@@ -492,7 +492,6 @@ public abstract class SchedulingTestBase : IDisposable
         "Schedule.MaxConsecutiveHours",
         "Scheduling.MaxBacktrackingDepth",
         "Schedule.TheoryLabSplitThreshold",
-        "Schedule.SplittableBlockTypes",
         "Schedule.SA.MaxIterations",
         "Schedule.SA.InitialTemperature",
         "Schedule.SA.TimeoutSeconds",

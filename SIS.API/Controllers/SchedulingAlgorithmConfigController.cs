@@ -13,6 +13,12 @@ public record UpdateSchedulingAlgorithmConfigDto(string Value);
 public record SchedulingAlgorithmConfigGroupDto(string Category, string DisplayName, string? Description, string? BadgeClass, int SortOrder);
 
 /// <summary>
+/// Dropdown'larda gösterilecek enum seçeneği. Disabled=true seçenekler UI'da görünür
+/// ama seçilemez (örn. "Enrollment — henüz desteklenmiyor").
+/// </summary>
+public record EnumOptionDto(string Value, string Label, bool Disabled, string? HelpText);
+
+/// <summary>
 /// Otomatik programlama algoritmasını etkileyen ayarlar (kısıt eşikleri, soft constraint
 /// katsayıları, eski V1 algoritma parametreleri). /ders-programi-kisitlamalari sayfasındaki
 /// "Algoritma Parametreleri" sekmesinden yönetilir.
@@ -47,8 +53,29 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
         ["Schedule.MaxConsecutiveHours"] = (1, 12),
 
         ["Schedule.TheoryLabSplitThreshold"] = (1, 20),
+        // Lab parçalama: min 2 (1 saçma; her saat farklı güne yayılır), max 6 (uzun bloklar
+        // pratikte slot bulamaz; default 2).
+        ["Schedule.MaxLabBlockHours"] = (2, 6),
         // V1 algoritma limit'leri (Schedule.SA.*, LNS.*, MRV.*, Construction.*, Candidate.*)
         // Plan 9 V1 silinmesi sonrası atıl olduğu için 2026-05-10'da migration ile kaldırıldı.
+    };
+
+    /// <summary>
+    /// Sabit değer kümeli string parametreler için dropdown seçenekleri. Bu sözlükteki
+    /// key'ler için PUT validasyonu sadece listedeki Value'lara izin verir (Disabled olanlar
+    /// hariç). Frontend GET /enum-options ile bu listeyi çekip dropdown render eder.
+    /// </summary>
+    private static readonly Dictionary<string, EnumOptionDto[]> EnumOptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Schedule.CurriculumConflictMode"] = new[]
+        {
+            new EnumOptionDto("cohort", "Cohort (önerilen)", false,
+                "Section'ların alternatif olduğunu bilir, gerçek üniversite gibi çakışma kontrolü yapar."),
+            new EnumOptionDto("curriculum", "Curriculum", false,
+                "Section sayısını umursamaz, daha agresif. Çoğu durumda program oluşmaz (UNSAT)."),
+            new EnumOptionDto("enrollment", "Enrollment (desteklenmiyor)", Disabled: true,
+                "Gerçek kayıt verisinden çakışma matrisi. Encoder henüz tamamlanmadı, seçilirse program çöker."),
+        },
     };
 
     // Eski SchedulingAlgorithmConfigGroups tablosu kaldırıldı (2026-05-09); UI metadatası burada hardcoded.
@@ -117,6 +144,14 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
 
         return Ok(limits);
     }
+
+    /// <summary>
+    /// Dropdown render edilecek string parametreler için izin verilen değer listesi.
+    /// Frontend bu sözlükte key'i bulduğu config için Edit dialog'unu Select olarak açar.
+    /// </summary>
+    [HttpGet("enum-options")]
+    [RequirePermission("menu.ders-programi-kisitlamalari.view")]
+    public IActionResult GetEnumOptions() => Ok(EnumOptions);
 
     [HttpPut("{id:int}")]
     [RequirePermission("menu.ders-programi-kisitlamalari.edit")]
@@ -239,6 +274,25 @@ public class SchedulingAlgorithmConfigController(AppDbContext context, ISystemCo
                         error = "Saat değeri HH:mm formatında girilmelidir (ör. 11:40, 12:20).";
                         return false;
                     }
+                }
+                if (EnumOptions.TryGetValue(key, out var allowedOptions))
+                {
+                    var enumCandidate = rawValue.Trim();
+                    var match = allowedOptions.FirstOrDefault(o =>
+                        string.Equals(o.Value, enumCandidate, StringComparison.OrdinalIgnoreCase));
+                    if (match is null)
+                    {
+                        var valid = string.Join(", ", allowedOptions.Where(o => !o.Disabled).Select(o => $"'{o.Value}'"));
+                        error = $"Geçersiz değer. İzin verilen: {valid}.";
+                        return false;
+                    }
+                    if (match.Disabled)
+                    {
+                        error = $"'{match.Value}' seçeneği şu an desteklenmiyor: {match.HelpText}";
+                        return false;
+                    }
+                    normalizedValue = match.Value;
+                    return true;
                 }
                 normalizedValue = rawValue.Trim();
                 return true;

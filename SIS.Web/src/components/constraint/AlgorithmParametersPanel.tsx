@@ -13,11 +13,14 @@ import {
 } from '@/components/ui/table';
 import { AlertCircle, Pencil } from 'lucide-react';
 import type {
+  EnumOptionDto,
   SchedulingAlgorithmConfigDto,
+  SchedulingAlgorithmConfigEnumOptions,
   SchedulingAlgorithmConfigGroupDto,
   SchedulingAlgorithmConfigLimits,
 } from '../../api/schedulingAlgorithmConfig.api';
 import {
+  useSchedulingAlgorithmConfigEnumOptions,
   useSchedulingAlgorithmConfigGroups,
   useSchedulingAlgorithmConfigLimits,
   useSchedulingAlgorithmConfigs,
@@ -33,6 +36,7 @@ export default function AlgorithmParametersPanel() {
   const { data: configs, isLoading: configsLoading, isError: configsError } = useSchedulingAlgorithmConfigs();
   const { data: groups, isLoading: groupsLoading, isError: groupsError } = useSchedulingAlgorithmConfigGroups();
   const { data: limits } = useSchedulingAlgorithmConfigLimits();
+  const { data: enumOptions } = useSchedulingAlgorithmConfigEnumOptions();
 
   const groupsByCategory = useMemo(() => {
     const map = new Map<string, SchedulingAlgorithmConfigGroupDto>();
@@ -92,6 +96,7 @@ export default function AlgorithmParametersPanel() {
                     groupTitle={groupTitle}
                     badgeClass={badgeClass}
                     limits={limits}
+                    enumOptions={enumOptions}
                   />
                 ))}
               </TableBody>
@@ -109,12 +114,14 @@ interface ParameterRowProps {
   groupTitle: string;
   badgeClass: string;
   limits?: SchedulingAlgorithmConfigLimits;
+  enumOptions?: SchedulingAlgorithmConfigEnumOptions;
 }
 
-function ParameterRow({ config, groupTitle, badgeClass, limits }: ParameterRowProps) {
+function ParameterRow({ config, groupTitle, badgeClass, limits, enumOptions }: ParameterRowProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const isBool = config.dataType === 'bool';
+  const enumChoices = enumOptions?.[config.key];
 
   function renderDisplayValue() {
     if (isBool) {
@@ -127,6 +134,11 @@ function ParameterRow({ config, groupTitle, badgeClass, limits }: ParameterRowPr
           {checked ? 'Evet' : 'Hayır'}
         </Badge>
       );
+    }
+    if (enumChoices) {
+      // Etiketi göster, ham değeri değil (örn. "Cohort (önerilen)" değil "cohort").
+      const match = enumChoices.find(opt => opt.value.toLowerCase() === config.value.toLowerCase());
+      return <span className="text-base font-medium">{match?.label ?? config.value}</span>;
     }
     return <span className="text-base font-medium">{config.value}</span>;
   }
@@ -157,6 +169,7 @@ function ParameterRow({ config, groupTitle, badgeClass, limits }: ParameterRowPr
           onOpenChange={setDialogOpen}
           config={config}
           limits={limits}
+          enumChoices={enumChoices}
         />
       </TableCell>
     </TableRow>
@@ -174,9 +187,10 @@ interface ParameterEditDialogProps {
   onOpenChange: (open: boolean) => void;
   config: SchedulingAlgorithmConfigDto;
   limits?: SchedulingAlgorithmConfigLimits;
+  enumChoices?: EnumOptionDto[];
 }
 
-function ParameterEditDialog({ open, onOpenChange, config, limits }: ParameterEditDialogProps) {
+function ParameterEditDialog({ open, onOpenChange, config, limits, enumChoices }: ParameterEditDialogProps) {
   const [draft, setDraft] = useState(config.value);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const updateMutation = useUpdateSchedulingAlgorithmConfig();
@@ -191,6 +205,7 @@ function ParameterEditDialog({ open, onOpenChange, config, limits }: ParameterEd
   }, [open, config.value]);
 
   const isBool = config.dataType === 'bool';
+  const isEnum = !!enumChoices && enumChoices.length > 0;
   const isNumeric = config.dataType === 'int' || config.dataType === 'decimal';
   const isTime = TIME_VALUE_KEYS.has(config.key);
   const limit = limits?.[config.key];
@@ -238,6 +253,39 @@ function ParameterEditDialog({ open, onOpenChange, config, limits }: ParameterEd
           >
             Hayır
           </Button>
+        </div>
+      );
+    }
+    if (isEnum && enumChoices) {
+      const selected = enumChoices.find(opt => opt.value.toLowerCase() === draft.toLowerCase());
+      return (
+        <div className="space-y-2">
+          <div className="space-y-1.5">
+            {enumChoices.map(opt => {
+              const isSelected = opt.value === selected?.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => !opt.disabled && setDraft(opt.value)}
+                  disabled={opt.disabled}
+                  className={
+                    'w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ' +
+                    (opt.disabled
+                      ? 'cursor-not-allowed opacity-50 border-gray-200 bg-gray-50 '
+                      : isSelected
+                        ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/30 '
+                        : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-900 ')
+                  }
+                >
+                  <div className="font-medium">{opt.label}</div>
+                  {opt.helpText && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground leading-snug">{opt.helpText}</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       );
     }

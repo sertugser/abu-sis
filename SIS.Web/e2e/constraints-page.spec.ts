@@ -382,3 +382,152 @@ test('Test 6 — ConstraintController.UpdateParameters/Weight cache invalidate �
   // SystemConfigProvider'ın internal cache'sine erişim gerektirir → atlıyoruz.
   test.skip(true, 'Cache invalidation observable değil — kod denetimi yeterli (ConstraintController.cs:23 ISystemConfigProvider inject yok)');
 });
+
+// ────────────────────────────────────────────────────────────────
+// TEST 7 — Atıl algoritma parametreleri DB'den/UI'dan kaldırıldı
+//   Düzeltme: Schedule.Lab.MaxBlockHours ve Schedule.SplittableBlockTypes
+//   hiçbir encoder/builder okumadığı için 2026-05-17'de migration ile DB'den silindi
+//   + SeedData'dan + SchedulingConstraintConfig property'sinden temizlendi.
+// ────────────────────────────────────────────────────────────────
+test('Test 7 — Atıl scheduling config keyleri DB\'de yok', async () => {
+  const configs = await fetchJson<Array<{ key: string }>>(token, '/admin/scheduling-algorithm-config');
+  const keys = configs.map(c => c.key);
+  expect(keys, 'Schedule.Lab.MaxBlockHours kaldırılmalı').not.toContain('Schedule.Lab.MaxBlockHours');
+  expect(keys, 'Schedule.SplittableBlockTypes kaldırılmalı').not.toContain('Schedule.SplittableBlockTypes');
+  // S20 Soft → Hard dönüşümüyle ceza puanı atıllaştı, sayfadan kaldırıldı
+  expect(keys, 'SoftConstraint.S20.PenaltyPerPair kaldırılmalı (S20 Hard, ceza puanı anlamsız)').not.toContain('SoftConstraint.S20.PenaltyPerPair');
+  // Diğer satırlar yerinde olmalı + yeni MaxLabBlockHours eklendi
+  expect(keys).toContain('Schedule.CurriculumConflictMode');
+  expect(keys).toContain('Schedule.MaxLabBlockHours');
+});
+
+// ────────────────────────────────────────────────────────────────
+// TEST 9 — Schedule.MaxLabBlockHours yeni ayar (default 2, aralık 2-6)
+//   Düzeltme: CpSatSolverEngine bu key'i okuyordu (default 2 fallback) ama DB'de yoktu.
+//   Şimdi seed + UI'da düzenlenebilir, sayı kutusu min/max ile.
+// ────────────────────────────────────────────────────────────────
+test('Test 9 — Schedule.MaxLabBlockHours DB\'de var, validasyonu çalışıyor', async () => {
+  const configs = await fetchJson<Array<{ id: number; key: string; value: string }>>(token, '/admin/scheduling-algorithm-config');
+  const target = configs.find(c => c.key === 'Schedule.MaxLabBlockHours');
+  expect(target, 'MaxLabBlockHours config bulunmalı').toBeTruthy();
+  const originalValue = target!.value;
+
+  // Limits endpoint 2-6 aralığı dönmeli
+  const limits = await fetchJson<Record<string, { min: number; max: number }>>(token, '/admin/scheduling-algorithm-config/limits');
+  expect(limits['Schedule.MaxLabBlockHours']).toEqual({ min: 2, max: 6 });
+
+  // Min/max ihlali reddedilmeli
+  const tooLow = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
+    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: '1' }),
+  });
+  expect(tooLow.status, '1 reddedilmeli (min 2)').toBe(400);
+
+  const tooHigh = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
+    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: '7' }),
+  });
+  expect(tooHigh.status, '7 reddedilmeli (max 6)').toBe(400);
+
+  // Aralık içi kabul edilmeli
+  const valid = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
+    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: '3' }),
+  });
+  expect(valid.status, '3 kabul edilmeli').toBe(200);
+
+  // CLEANUP
+  await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
+    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: originalValue }),
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// TEST 8 — Schedule.CurriculumConflictMode için backend enum doğrulaması
+//   Düzeltme: SchedulingAlgorithmConfigController.EnumOptions ile izinli değer kontrolü
+//   + GET /enum-options endpoint frontend dropdown render'ı için seçenek listesi döner.
+// ────────────────────────────────────────────────────────────────
+test('Test 8 — CurriculumConflictMode için enum validasyonu ve UI dropdown davranışı', async ({ page }) => {
+  // Backend: enum-options endpoint 3 seçenek dönüyor (cohort, curriculum, enrollment-disabled)
+  const enumOptions = await fetchJson<Record<string, Array<{ value: string; label: string; disabled: boolean }>>>(
+    token, '/admin/scheduling-algorithm-config/enum-options');
+  const modeOptions = enumOptions['Schedule.CurriculumConflictMode'];
+  expect(modeOptions, 'CurriculumConflictMode enum options gelmeli').toBeTruthy();
+  expect(modeOptions.map(o => o.value)).toEqual(['cohort', 'curriculum', 'enrollment']);
+  expect(modeOptions.find(o => o.value === 'enrollment')?.disabled, 'enrollment disabled olmalı').toBe(true);
+  expect(modeOptions.find(o => o.value === 'cohort')?.disabled).toBe(false);
+
+  // Backend: geçersiz değer → 400
+  const configs = await fetchJson<Array<{ id: number; key: string; value: string }>>(token, '/admin/scheduling-algorithm-config');
+  const modeConfig = configs.find(c => c.key === 'Schedule.CurriculumConflictMode')!;
+  const originalValue = modeConfig.value;
+
+  const invalidRes = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${modeConfig.id}`, {
+    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: 'asdf' }),
+  });
+  expect(invalidRes.status, 'Geçersiz değer reddedilmeli').toBe(400);
+
+  const disabledRes = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${modeConfig.id}`, {
+    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: 'enrollment' }),
+  });
+  expect(disabledRes.status, 'Disabled enrollment reddedilmeli').toBe(400);
+
+  // UI: dropdown render edildi mi (cohort + curriculum + enrollment görünür, enrollment disabled)
+  await page.goto(CONSTRAINTS_ROUTE);
+  await page.getByRole('tab', { name: 'Algoritma Parametreleri' }).click();
+  // CurriculumConflictMode satırını "Cohort (önerilen)" label'ından bul (DataType=string + enum
+  // olduğu için label render ediliyor; description metni güncellenebilir, label stabil).
+  const modeRow = page.locator('tr', { hasText: 'Cohort (önerilen)' });
+  await expect(modeRow).toBeVisible({ timeout: 10_000 });
+  await modeRow.getByRole('button', { name: 'Düzenle' }).click();
+
+  const dialog = page.getByRole('dialog');
+  // Button locator (dialog içinde 3 seçenek button olarak render edilir)
+  await expect(dialog.getByRole('button', { name: /Cohort \(önerilen\)/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /^Curriculum/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Enrollment \(desteklenmiyor\)/ })).toBeVisible();
+  // Disabled olan button → disabled attribute
+  await expect(dialog.getByRole('button', { name: /Enrollment \(desteklenmiyor\)/ })).toBeDisabled();
+
+  // Kapat (değer değiştirmeden)
+  await dialog.getByRole('button', { name: 'İptal' }).click();
+
+  // CLEANUP: orijinal değeri geri yükle (olmazsa bile aynı kalmış olmalı)
+  if (originalValue !== modeConfig.value) {
+    await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${modeConfig.id}`, {
+      method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: originalValue }),
+    });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────
+// TEST 10 — S20 (Komşu Yıl Çakışma Garantisi) satırı UI'da görünür ve
+//   Düzenle butonu crash etmiyor.
+//   Regression: PARAMETER_SCHEMAS[code] undefined olan kurallar için
+//   `?? []` her render'da yeni array → useEffect dep değişti sanır →
+//   "Maximum update depth exceeded" (infinite loop). Düzeltme: useMemo.
+// ────────────────────────────────────────────────────────────────
+test('Test 10 — S20 Komşu Yıl Çakışma Garantisi UI\'da görünür, Düzenle crash etmiyor', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(`[pageerror] ${err.message}`));
+
+  await page.goto(CONSTRAINTS_ROUTE);
+
+  // S20 satırı Müfredat & Ders Kısıtlamaları grubunda görünmeli
+  const s20Row = page.locator('tr', { hasText: 'Komşu Yıl Çakışma Garantisi' });
+  await expect(s20Row, 'S20 satırı CONSTRAINT_GROUPS içinde olmalı').toBeVisible({ timeout: 10_000 });
+  await expect(s20Row.getByText('Zorunlu', { exact: true })).toBeVisible();
+
+  // Düzenle'ye bas — infinite loop sayfa crash ediyordu
+  await s20Row.getByRole('button', { name: 'Düzenle' }).click();
+  await page.waitForTimeout(1500);
+
+  // Sayfa crash olmamalı (rootLen > 10k threshold)
+  const rootLen = (await page.locator('#root').innerHTML()).length;
+  expect(rootLen, 'Sayfa "Maximum update depth" hatasıyla crash olmamalı').toBeGreaterThan(10_000);
+
+  // Dialog açıldı, "Zorunlu (sabit)" görünür (capability=hard-only)
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Zorunlu (sabit)')).toBeVisible();
+
+  // Hiçbir runtime hata olmamalı
+  expect(errors, `Sayfa runtime hatası vermemeli (varsa: ${errors.join('\\n')})`).toHaveLength(0);
+});

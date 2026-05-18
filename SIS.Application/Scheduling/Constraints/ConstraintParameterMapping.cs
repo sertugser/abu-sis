@@ -112,7 +112,12 @@ public static class ConstraintParameterMapping
         ["S7"] = CategoryCapability.SoftOnly,
         ["S8"] = CategoryCapability.SoftOnly,
         ["S12"] = CategoryCapability.SoftOnly,
-        ["S20"] = CategoryCapability.SoftOnly,
+        // S20 (2026-05-17): SoftOnly → HardOnly. Komşu yıl çakışma kuralı artık
+        // CohortBuilder içinde aynı-yıl section-aware mantığıyla aynı şekilde hard pair
+        // olarak üretiliyor. AdjacentYearEncoder eski soft pair listesi boş → atıl.
+        // Kullanıcı isteği: alttan/üstten ders alan öğrencinin alabileceği bir yol kalmalı,
+        // soft penalty yetersiz.
+        ["S20"] = CategoryCapability.HardOnly,
     };
 
     public static CategoryCapability GetCategoryCapability(string code)

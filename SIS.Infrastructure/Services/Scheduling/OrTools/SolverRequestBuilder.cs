@@ -117,6 +117,21 @@ public sealed class SolverRequestBuilder
             })
             .ToDictionaryAsync(x => x.CourseId, x => (x.MinSemester - 1) / 2, cancellationToken);
 
+        // 2026-05-17 — Course → IsCompulsory mapping. Komşu yıl hard pair'leri için
+        // CohortBuilder bu bilgiyi kullanıyor (seçmeli dersler hariç tutulur).
+        // Heuristic: bir ders birden çok müfredatta yer alıyorsa "en az birinde zorunlu"
+        // ise zorunlu sayılır (Any). Müfredat yokluğunda default false (seçmeli muamelesi).
+        var courseCompulsoryMap = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => courseIds.Contains(cc.CourseId))
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new
+            {
+                CourseId = g.Key,
+                IsCompulsory = g.Any(cc => cc.IsCompulsory)
+            })
+            .ToDictionaryAsync(x => x.CourseId, x => x.IsCompulsory, cancellationToken);
+
         var sections = sectionEntities
             .Select(cs => MapSection(cs, labClassroomCapacities, instructorMaxHours, courseYearMap))
             .ToList();
@@ -187,9 +202,13 @@ public sealed class SolverRequestBuilder
             var (courseSemestersByDept, courseAccessibleDepts) =
                 await LoadCohortMetadataAsync(cohortCourseIds, cancellationToken);
 
-            // Project SectionInput → CohortSectionRef (CohortBuilder needs only SectionId, SectionNumber, CourseId).
+            // Project SectionInput → CohortSectionRef. CohortBuilder komşu yıl hard pair
+            // filtresi için IsCompulsory bilgisini de okur (yalnızca her iki tarafı da
+            // zorunlu olan ders çiftleri komşu yıl hard pair'ine girer — seçmeli hariç).
             var cohortRefs = sections
-                .Select(s => new CohortSectionRef(s.Id, s.SectionNumber, s.CourseId))
+                .Select(s => new CohortSectionRef(
+                    s.Id, s.SectionNumber, s.CourseId,
+                    courseCompulsoryMap.GetValueOrDefault(s.CourseId, false)))
                 .ToList();
 
             var cohortBuilder = new CohortBuilder();

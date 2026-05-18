@@ -45,7 +45,9 @@ export const CATEGORY_CAPABILITY: Record<string, CategoryCapability> = {
   'S7':   'soft-only',
   'S8':   'soft-only',
   'S12':  'soft-only',
-  'S20':  'soft-only',
+  // S20 (2026-05-17): soft → hard. Komşu yıl çakışma kuralı section-aware hard
+  // pair üretiyor; ağırlık/ceza puanı yerine alttan/üstten alma yolu hard garanti.
+  'S20':  'hard-only',
 };
 
 export function getCategoryCapability(code: string): CategoryCapability {
@@ -86,7 +88,10 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'curriculum',
     label: 'Müfredat & Ders Kısıtlamaları',
     icon: 'BookOpen',
-    codes: ['H5', 'H6', 'H8', 'H11', 'H12', 'H16', 'S4'],
+    // S20 (2026-05-17): Komşu yıl çakışma garantisi — alttan/üstten ders alan öğrencinin
+    // alabileceği bir şube kombinasyonu kalmasını garanti eder. Müfredattaki zorunlu dersler
+    // arasındaki ilişkiyi yönettiği için bu grup altında listelenir.
+    codes: ['H5', 'H6', 'H8', 'H11', 'H12', 'H16', 'S4', 'S20'],
   },
   {
     key: 'time',

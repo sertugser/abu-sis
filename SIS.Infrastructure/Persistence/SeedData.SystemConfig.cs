@@ -72,20 +72,25 @@ public static partial class SeedData
 
             // ── Algoritma Parametreleri (eski SchedulingAlgorithmConfigs'tan merge — 2026-05-09) ─
             // Hard threshold flag'leri — admin panel'inden toggle edilir, solver SystemConfigs'i okur.
-            new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: öğle arasına ders koyulamaz (zorunlu). KAPALI: koyulabilir ama ceza alır (tercihli)." },
-            new() { Key = "Schedule.AmphiThresholdEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: kontenjan ≥ amfi eşiği olan derslere amfi zorunlu (H4). KAPALI: kural devre dışı (varsayılan — amfi envanteri olmayan ortamda UNSAT'i önler)." },
-            new() { Key = "Schedule.ClassroomTypeRequirementEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: dersin RequiredTheoryClassroomType / RequiredLabClassroomType alanları zorunlu (H4). KAPALI: kural devre dışı." },
-            new() { Key = "Schedule.AllowSameCourseSectionOverlap", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: aynı dersin farklı şubeleri aynı slotta paralel açılabilir (H8 kapalı). KAPALI (varsayılan): şubeler farklı slotta olmalı." },
+            new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "Öğle arası saatlerine ders konulması yasak mı? Açık: bu saatlere hiç ders yerleştirilemez (varsayılan). Kapalı: yerleştirilebilir ama programın puanı düşer." },
+            new() { Key = "Schedule.AmphiThresholdEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "Kalabalık dersler amfiye yerleştirilmek zorunda olsun mu? Açık: belirlenen eşikten kalabalık şubelere amfi şart koşulur. Kapalı: amfi tercih edilir ama zorunlu değil (varsayılan — amfi sayınız yetersizse programın oluşmasını engellemez)." },
+            new() { Key = "Schedule.ClassroomTypeRequirementEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "Ders kataloğunda tanımlı derslik tipi (laboratuvar, amfi, normal sınıf) zorunlu olsun mu? Açık: ders yalnızca tanımlanan tipte bir derslikte açılabilir. Kapalı: derslik tipi tercih edilir ama farklı tipler de kabul edilir (varsayılan)." },
+            new() { Key = "Schedule.AllowSameCourseSectionOverlap", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "Aynı dersin farklı şubeleri aynı saatte birden fazla derslikte paralel açılabilsin mi? Açık: paralel açılır (aynı anda farklı hoca/derslik). Kapalı: şubeler farklı saatlere yerleşir, öğrenci bir alternatifi seçer (varsayılan)." },
 
             // V1 silindiğinde 19 atıl key migration `RemoveAtilV1AlgorithmKeys` ile DB'den kaldırıldı
             // (2026-05-10). Bonus: aynı gün BatchAuto.cs ölü kod silinmesi sonrası
             // Scheduling.MaxBacktrackingDepth de migration `RemoveBatchAutoConfigKey` ile düştü.
             // Geriye kalan key'ler V2 scheduler tarafından hâlâ okunan canlı ayarlar.
-            new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Other", DataType = "string", Description = "Bir derslik yetmediğinde hangi tip dersler aynı saatte iki ayrı dersliğe bölünebilir." },
-            new() { Key = "Schedule.Lab.MaxBlockHours", Value = "2", Category = "Other", DataType = "int", Description = "Lab dersi kaç saatlik bloklara bölünsün." },
-            new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "H5 müfredat çakışma kontrolü modu. 'cohort' önerilen — section'ların alternatif olduğunu bilir." },
+            // Schedule.SplittableBlockTypes ve Schedule.Lab.MaxBlockHours kaldırıldı (2026-05-17):
+            // hiçbir encoder/builder okumuyordu (atıl). DB temizliği migration ile yapıldı.
+            // CpSatSolverEngine'in gerçekten okuduğu key Schedule.MaxLabBlockHours — eskiden DB'de
+            // yoktu, kod default 2'ye düşüyordu (kullanıcı değiştiremiyordu). Şimdi seed + UI.
+            new() { Key = "Schedule.MaxLabBlockHours", Value = "2", Category = "Other", DataType = "int", Description = "Bir laboratuvar dersi tek seferde en fazla kaç saat sürebilir? Daha uzun lab'lar bu süreye bölünüp farklı günlere dağıtılır. Örnek: 4 saatlik bir lab, ayar 2 ise → 2 saat Salı + 2 saat Perşembe şeklinde yerleşir; ayar 4 ise tek seferde 4 saat olarak verilir. Varsayılan: 2 saat (çoğu üniversitede standart)." },
+            new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "Aynı sınıftaki öğrencilerin alması gereken dersler arasında çakışma nasıl kontrol edilsin? Cohort (önerilen): aynı dersin birden fazla şubesi varsa, öğrenci için en az bir çakışmasız şube kombinasyonu kalır — gerçek üniversite mantığı. Curriculum: şube sayısını dikkate almaz, tüm dersleri farklı saatlere zorlar — büyük programlarda program oluşturmayı imkansız hale getirebilir. Enrollment: gerçek kayıt verisinden çakışma haritası — henüz hazır değil." },
 
-            new() { Key = "SoftConstraint.S20.PenaltyPerPair", Value = "5.0", Category = "Soft", DataType = "decimal", Description = "S20: Komşu yıl ders çiftinde modulo eşi çakışırsa pair başına eklenen ceza puanı." },
+            // SoftConstraint.S20.PenaltyPerPair kaldırıldı (2026-05-17): S20 Soft → Hard
+            // dönüşümüyle ceza puanı anlamsızlaştı (encoder soft path'i çalışmıyor, hard
+            // path zaten section-aware NoOverlap). DB temizliği migration ile yapıldı.
 
             // ── Akıllı Derslik Atama Önerisi (ClassroomSuggestionService) ─────
             new() { Key = "Classroom.AmphiThreshold", Value = "100", Category = "Suggestion", DataType = "int", Description = "Bir dersi amfi gerektiren öğrenci eşiği. Tahmini talep bu değerin üzerindeyse ders amfide verilmeli sayılır." },
